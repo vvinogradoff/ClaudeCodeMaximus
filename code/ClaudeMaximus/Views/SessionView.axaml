@@ -7,10 +7,10 @@
              x:Class="ClaudeMaximus.Views.SessionView"
              x:DataType="vm:SessionViewModel">
 
-    <DockPanel>
+    <Grid RowDefinitions="Auto,*,5,150">
 
-        <!-- Session name header -->
-        <Border DockPanel.Dock="Top"
+        <!-- Row 0: Session name header -->
+        <Border Grid.Row="0"
                 Padding="12,8"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,0,0,1">
@@ -19,31 +19,9 @@
                        FontWeight="SemiBold"/>
         </Border>
 
-        <!-- Input area -->
-        <Border DockPanel.Dock="Bottom"
-                Padding="8"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                BorderThickness="0,1,0,0">
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBox Grid.Column="0"
-                         x:Name="InputBox"
-                         Text="{Binding InputText}"
-                         AcceptsReturn="True"
-                         MinHeight="80"
-                         MaxHeight="200"
-                         Watermark="Type a message… (Ctrl+Enter to send)"
-                         TextWrapping="Wrap"
-                         FontFamily="Cascadia Code,Consolas,monospace"/>
-                <Button Grid.Column="1"
-                        Content="Send"
-                        VerticalAlignment="Stretch"
-                        Margin="8,0,0,0"
-                        Command="{Binding SendCommand}"/>
-            </Grid>
-        </Border>
-
-        <!-- Message list -->
-        <ScrollViewer x:Name="MessageScroller"
+        <!-- Row 1: Message list -->
+        <ScrollViewer Grid.Row="1"
+                      x:Name="MessageScroller"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
             <StackPanel>
@@ -142,6 +120,32 @@
             </StackPanel>
         </ScrollViewer>
 
-    </DockPanel>
+        <!-- Row 2: Vertical splitter -->
+        <GridSplitter Grid.Row="2"
+                      ResizeDirection="Rows"
+                      Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+
+        <!-- Row 3: Input area -->
+        <Border Grid.Row="3"
+                Padding="8"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBox Grid.Column="0"
+                         x:Name="InputBox"
+                         Text="{Binding InputText}"
+                         AcceptsReturn="True"
+                         Watermark="Type a message… (Ctrl+Enter to send)"
+                         TextWrapping="Wrap"
+                         FontFamily="Cascadia Code,Consolas,monospace"/>
+                <Button Grid.Column="1"
+                        Content="Send"
+                        VerticalAlignment="Stretch"
+                        Margin="8,0,0,0"
+                        Command="{Binding SendCommand}"/>
+            </Grid>
+        </Border>
+
+    </Grid>
 
 </UserControl>
