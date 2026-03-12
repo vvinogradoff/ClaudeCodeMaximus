@@ -22,6 +22,10 @@ public sealed class SessionViewModel : ViewModelBase
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
+	private bool _isMarkdownMode = true;
+	private string _thinkingDuration = string.Empty;
+	private DispatcherTimer? _thinkingTimer;
+	private DateTimeOffset _thinkingStartedAt;
 
 	public string Name
 	{
@@ -45,9 +49,55 @@ public sealed class SessionViewModel : ViewModelBase
 		private set => this.RaiseAndSetIfChanged(ref _isBusy, value);
 	}
 
+	public string ThinkingDuration
+	{
+		get => _thinkingDuration;
+		private set => this.RaiseAndSetIfChanged(ref _thinkingDuration, value);
+	}
+
+	public bool IsMarkdownMode
+	{
+		get => _isMarkdownMode;
+		set => this.RaiseAndSetIfChanged(ref _isMarkdownMode, value);
+	}
+
+	public double AssistantFontSize
+	{
+		get => _appSettings.Settings.AssistantFontSize;
+		set
+		{
+			_appSettings.Settings.AssistantFontSize = value;
+			this.RaisePropertyChanged();
+			_appSettings.Save();
+		}
+	}
+
+	public double UserFontSize
+	{
+		get => _appSettings.Settings.UserFontSize;
+		set
+		{
+			_appSettings.Settings.UserFontSize = value;
+			this.RaisePropertyChanged();
+			_appSettings.Save();
+		}
+	}
+
+	public double InputFontSize
+	{
+		get => _appSettings.Settings.InputFontSize;
+		set
+		{
+			_appSettings.Settings.InputFontSize = value;
+			this.RaisePropertyChanged();
+			_appSettings.Save();
+		}
+	}
+
 	public ObservableCollection<MessageEntryViewModel> Messages { get; } = [];
 
 	public ReactiveCommand<Unit, Unit> SendCommand { get; }
+	public ReactiveCommand<Unit, Unit> ToggleMarkdownCommand { get; }
 
 	public SessionViewModel(
 		SessionNodeViewModel node,
@@ -65,8 +115,8 @@ public sealed class SessionViewModel : ViewModelBase
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 
-		// Fire-and-forget: synchronous command so ReactiveUI never disables it while SendAsync runs
-		SendCommand = ReactiveCommand.Create(() => { _ = SendAsync(); });
+		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
+		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
 	}
 
 	public void LoadFromFile()
@@ -74,7 +124,6 @@ public sealed class SessionViewModel : ViewModelBase
 		var entries = _fileService.ReadEntries(_node.FileName);
 		foreach (var entry in entries)
 		{
-			// Skip assistant/user/system entries with no content — they produce empty bubbles
 			if (entry.Role != Constants.SessionFile.RoleCompaction
 			    && string.IsNullOrWhiteSpace(entry.Content))
 				continue;
@@ -82,10 +131,9 @@ public sealed class SessionViewModel : ViewModelBase
 			Messages.Add(EntryToViewModel(entry));
 		}
 
-		// Restore any unsent draft for this session
 		var draft = _draftService.LoadDraft(_node.FileName);
 		if (draft is not null)
-			_inputText = draft;   // set backing field directly to avoid re-saving on load
+			_inputText = draft;
 	}
 
 	private async System.Threading.Tasks.Task SendAsync()
@@ -94,12 +142,16 @@ public sealed class SessionViewModel : ViewModelBase
 		if (string.IsNullOrEmpty(message))
 			return;
 
-		// Everything before the first await runs synchronously on the UI thread.
 		InputText = string.Empty;
 		_draftService.DeleteDraft(_node.FileName);
 
 		IsBusy = true;
 		_node.IsRunning = true;
+		_thinkingStartedAt = DateTimeOffset.UtcNow;
+		ThinkingDuration = "0:00";
+		_thinkingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+		_thinkingTimer.Tick += OnThinkingTimerTick;
+		_thinkingTimer.Start();
 
 		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message);
 		Messages.Add(new MessageEntryViewModel
@@ -109,11 +161,10 @@ public sealed class SessionViewModel : ViewModelBase
 			Timestamp = DateTimeOffset.UtcNow,
 		});
 
-		// Visible thinking placeholder — updated in-place by task_progress events, removed on result.
 		Messages.Add(new MessageEntryViewModel
 		{
 			Role       = Constants.SessionFile.RoleSystem,
-			Content    = "Claude is thinking…",
+			Content    = "Claude is thinking...",
 			Timestamp  = DateTimeOffset.UtcNow,
 			IsProgress = true,
 		});
@@ -129,7 +180,10 @@ public sealed class SessionViewModel : ViewModelBase
 		}
 		finally
 		{
-			// Continuation also runs on UI thread via SynchronizationContext.
+			var t = _thinkingTimer;
+			_thinkingTimer = null;
+			t?.Stop();
+			ThinkingDuration = string.Empty;
 			IsBusy = false;
 			_node.IsRunning = false;
 		}
@@ -137,7 +191,6 @@ public sealed class SessionViewModel : ViewModelBase
 
 	private void HandleStreamEvent(ClaudeStreamEvent evt)
 	{
-		// File writes happen on the background thread (safe — append + flush)
 		switch (evt.Type)
 		{
 			case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
@@ -155,7 +208,6 @@ public sealed class SessionViewModel : ViewModelBase
 				break;
 		}
 
-		// UI updates must be on the UI thread
 		Dispatcher.UIThread.Post(() =>
 		{
 			switch (evt.Type)
@@ -180,7 +232,6 @@ public sealed class SessionViewModel : ViewModelBase
 
 				case "system" when evt.Subtype is "task_progress" or "task_started"
 				                   && !string.IsNullOrWhiteSpace(evt.Content):
-					// Live progress: update the last progress entry in-place to avoid flooding
 					var last = Messages.Count > 0 ? Messages[^1] : null;
 					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
 						last.Content = evt.Content;
@@ -204,7 +255,6 @@ public sealed class SessionViewModel : ViewModelBase
 					break;
 
 				case "result":
-					// Remove the temporary tool-progress bubble — the response is complete
 					for (var i = Messages.Count - 1; i >= 0; i--)
 					{
 						if (Messages[i].IsProgress)
@@ -221,6 +271,12 @@ public sealed class SessionViewModel : ViewModelBase
 			_draftService.DeleteDraft(_node.FileName);
 		else
 			_draftService.SaveDraft(_node.FileName, text);
+	}
+
+	private void OnThinkingTimerTick(object? sender, EventArgs e)
+	{
+		var elapsed = DateTimeOffset.UtcNow - _thinkingStartedAt;
+		ThinkingDuration = $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:D2}";
 	}
 
 	private static MessageEntryViewModel EntryToViewModel(SessionEntryModel entry)

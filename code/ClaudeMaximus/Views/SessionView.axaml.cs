@@ -1,9 +1,11 @@
+using System;
 using System.Collections.Specialized;
-using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using ClaudeMaximus.ViewModels;
 using Serilog;
 
@@ -13,28 +15,35 @@ namespace ClaudeMaximus.Views;
 public partial class SessionView : UserControl
 {
 	private static readonly ILogger _log = Log.ForContext<SessionView>();
+	private SessionViewModel? _subscribedVm;
 
 	public SessionView()
 	{
 		InitializeComponent();
 
-		// Use tunneling (Preview) so we capture Ctrl+Enter before the TextBox
-		// processes it as a newline (AcceptsReturn=True consumes Enter on bubble phase).
+		// Ctrl+Enter / plain Enter handling
 		InputBox.AddHandler(KeyDownEvent, OnInputKeyDown, RoutingStrategies.Tunnel);
 
-		// Auto-scroll to bottom when new messages arrive
-		MessageList.Items.CollectionChanged += OnMessagesChanged;
+		// Ctrl+scroll changes font size; tunnel so we intercept before the scroller scrolls
+		MessageScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnScrollerWheel, RoutingStrategies.Tunnel);
+		InputBox.AddHandler(InputElement.PointerWheelChangedEvent, OnInputBoxWheel, RoutingStrategies.Tunnel);
 	}
 
-	protected override void OnDataContextChanged(System.EventArgs e)
+	protected override void OnDataContextChanged(EventArgs e)
 	{
 		base.OnDataContextChanged(e);
 
-		if (DataContext is SessionViewModel vm)
+		// Unsubscribe from the previous session's messages (fixes cross-session scroll leak)
+		if (_subscribedVm != null)
+			_subscribedVm.Messages.CollectionChanged -= OnMessagesChanged;
+
+		_subscribedVm = DataContext as SessionViewModel;
+
+		if (_subscribedVm != null)
 		{
-			// Re-subscribe auto-scroll to the new Messages collection
-			MessageList.Items.CollectionChanged -= OnMessagesChanged;
-			vm.Messages.CollectionChanged += OnMessagesChanged;
+			_subscribedVm.Messages.CollectionChanged += OnMessagesChanged;
+			// Scroll to bottom once when switching to a session, not on every new message
+			Dispatcher.UIThread.Post(() => MessageScroller.ScrollToEnd(), DispatcherPriority.Background);
 		}
 	}
 
@@ -52,8 +61,7 @@ public partial class SessionView : UserControl
 		}
 		else if (e.KeyModifiers == KeyModifiers.None && sender is TextBox tb)
 		{
-			// On Windows, Avalonia inserts \r\n for Enter, requiring two backspaces to undo.
-			// Intercept and insert \n only so one backspace removes the newline.
+			// On Windows, Avalonia inserts \r\n for Enter; intercept and insert \n only
 			e.Handled = true;
 			var pos  = tb.CaretIndex;
 			var text = tb.Text ?? string.Empty;
@@ -62,9 +70,44 @@ public partial class SessionView : UserControl
 		}
 	}
 
-	private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+	// No-op: user controls their own scroll position. Subscription kept to track collection changes if needed.
+	private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e) { }
+
+	private void OnScrollerWheel(object? sender, PointerWheelEventArgs e)
 	{
-		if (e.Action == NotifyCollectionChangedAction.Add)
-			MessageScroller.ScrollToEnd();
+		if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+		if (DataContext is not SessionViewModel vm) return;
+
+		var delta = e.Delta.Y > 0 ? 1.0 : -1.0;
+		var msgVm = FindMessageViewModel(e.Source);
+
+		if (msgVm?.IsAssistant == true)
+			vm.AssistantFontSize = Math.Clamp(vm.AssistantFontSize + delta, 8, 32);
+		else if (msgVm?.IsUser == true)
+			vm.UserFontSize = Math.Clamp(vm.UserFontSize + delta, 8, 32);
+
+		e.Handled = true;
+	}
+
+	private void OnInputBoxWheel(object? sender, PointerWheelEventArgs e)
+	{
+		if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+		if (DataContext is not SessionViewModel vm) return;
+
+		var delta = e.Delta.Y > 0 ? 1.0 : -1.0;
+		vm.InputFontSize = Math.Clamp(vm.InputFontSize + delta, 8, 32);
+		e.Handled = true;
+	}
+
+	private static MessageEntryViewModel? FindMessageViewModel(object? source)
+	{
+		var visual = source as Visual;
+		while (visual != null)
+		{
+			if (visual is StyledElement { DataContext: MessageEntryViewModel vm })
+				return vm;
+			visual = visual.GetVisualParent();
+		}
+		return null;
 	}
 }

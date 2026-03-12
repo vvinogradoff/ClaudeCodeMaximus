@@ -1,133 +1,154 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ClaudeMaximus.ViewModels"
+             xmlns:converters="using:ClaudeMaximus.Converters"
+             xmlns:md="using:Markdown.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              x:Class="ClaudeMaximus.Views.SessionView"
+             x:Name="Root"
              x:DataType="vm:SessionViewModel">
+
+    <UserControl.Resources>
+        <converters:InverseBooleanConverter x:Key="InverseBool"/>
+    </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*,Auto,5,150">
 
-        <!-- Row 0: Session name header -->
-        <Border Grid.Row="0"
-                Padding="12,8"
+        <Border Grid.Row="0" Padding="12,6"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,0,0,1">
-            <TextBlock Text="{Binding Name}"
-                       FontSize="16"
-                       FontWeight="SemiBold"/>
+            <DockPanel>
+                <ToggleButton DockPanel.Dock="Right"
+                              IsChecked="{Binding IsMarkdownMode}"
+                              Content="MD"
+                              ToolTip.Tip="Toggle markdown rendering"
+                              Padding="8,3" FontSize="11"
+                              VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Name}"
+                           FontSize="16" FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
         </Border>
 
-        <!-- Row 1: Message list -->
-        <ScrollViewer Grid.Row="1"
-                      x:Name="MessageScroller"
+        <ScrollViewer Grid.Row="1" x:Name="MessageScroller"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
             <ItemsControl x:Name="MessageList"
                           ItemsSource="{Binding Messages}"
+                          Tag="{Binding IsMarkdownMode}"
                           Margin="0,4,0,4">
                 <ItemsControl.DataTemplates>
-
-                    <!-- Single template; each role's panel is shown/hidden via IsVisible.
-                         Avalonia uses the first matching DataTemplate per type, so all
-                         variants must live inside one template. -->
-                    <DataTemplate x:DataType="vm:MessageEntryViewModel">
+                    <DataTemplate x:DataType="vm:MessageEntryViewModel"
+                                  x:CompileBindings="False">
                         <Panel>
 
-                            <!-- User message -->
-                            <Border IsVisible="{Binding IsUser}"
-                                    Margin="60,4,8,4"
-                                    Padding="10,7"
-                                    CornerRadius="8"
-                                    Background="#1E3A5F">
-                                <StackPanel>
-                                    <TextBlock Text="You"
-                                               FontSize="11"
-                                               Foreground="White"
-                                               Opacity="0.6"
-                                               Margin="0,0,0,3"/>
-                                    <SelectableTextBlock Text="{Binding Content}"
-                                                         TextWrapping="Wrap"
-                                                         Foreground="White"
-                                                         FontFamily="Cascadia Code,Consolas,monospace"
-                                                         FontSize="13"/>
-                                </StackPanel>
-                            </Border>
+                            <!-- User message: timestamp left, bubble right -->
+                            <Grid IsVisible="{Binding IsUser}" Margin="0,4,8,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="52"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding FormattedTime}"
+                                           FontSize="10" Opacity="0.35"
+                                           VerticalAlignment="Bottom"
+                                           HorizontalAlignment="Right"
+                                           Margin="0,0,6,5"/>
+                                <Border Grid.Column="1" Padding="10,7" CornerRadius="8" Background="#1E3A5F">
+                                    <StackPanel>
+                                        <TextBlock Text="You" FontSize="11" Foreground="White" Opacity="0.6" Margin="0,0,0,3"/>
+                                        <SelectableTextBlock Text="{Binding Content}"
+                                                             TextWrapping="Wrap"
+                                                             Foreground="White"
+                                                             FontFamily="Cascadia Code,Consolas,monospace"
+                                                             FontSize="{Binding DataContext.UserFontSize, ElementName=Root}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
 
-                            <!-- Assistant message -->
-                            <SelectableTextBlock IsVisible="{Binding IsAssistant}"
-                                                 Text="{Binding Content}"
-                                                 Margin="8,6,60,6"
-                                                 TextWrapping="Wrap"
-                                                 FontFamily="Cascadia Code,Consolas,monospace"
-                                                 FontSize="13"/>
+                            <!-- Assistant message: text left, timestamp right -->
+                            <Grid IsVisible="{Binding IsAssistant}" Margin="8,6,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="52"/>
+                                </Grid.ColumnDefinitions>
+                                <md:MarkdownScrollViewer
+                                    Grid.Column="0"
+                                    IsVisible="{Binding Tag, ElementName=MessageList}"
+                                    Markdown="{Binding Content}"
+                                    Margin="0,0,8,0"/>
+                                <SelectableTextBlock
+                                    Grid.Column="0"
+                                    IsVisible="{Binding Tag, ElementName=MessageList, Converter={StaticResource InverseBool}}"
+                                    Text="{Binding Content}"
+                                    TextWrapping="Wrap"
+                                    FontFamily="Cascadia Code,Consolas,monospace"
+                                    FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"
+                                    Margin="0,0,8,0"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding FormattedTime}"
+                                           FontSize="10" Opacity="0.35"
+                                           VerticalAlignment="Bottom"
+                                           HorizontalAlignment="Left"
+                                           Margin="4,0,8,2"/>
+                            </Grid>
 
                             <!-- System message -->
-                            <Border IsVisible="{Binding IsSystem}"
-                                    Margin="20,4,20,4"
-                                    Padding="8,5"
-                                    CornerRadius="4"
-                                    Background="#505050">
-                                <SelectableTextBlock Text="{Binding Content}"
-                                                     TextWrapping="Wrap"
-                                                     FontSize="12"
-                                                     Opacity="0.7"
-                                                     FontStyle="Italic"/>
+                            <Border IsVisible="{Binding IsSystem}" Margin="20,4,20,4" Padding="8,5" CornerRadius="4" Background="#505050">
+                                <SelectableTextBlock Text="{Binding Content}" TextWrapping="Wrap" FontSize="12" Opacity="0.7" FontStyle="Italic"/>
                             </Border>
 
                             <!-- Compaction separator -->
-                            <StackPanel IsVisible="{Binding IsCompaction}"
-                                        Margin="8,8,8,8"
-                                        Orientation="Vertical"
-                                        Spacing="2">
+                            <StackPanel IsVisible="{Binding IsCompaction}" Margin="8,8,8,8" Orientation="Vertical" Spacing="2">
                                 <Separator/>
-                                <TextBlock Text="― Context compacted above ―"
-                                           HorizontalAlignment="Center"
-                                           FontSize="11"
-                                           Opacity="0.5"
-                                           FontStyle="Italic"/>
+                                <TextBlock Text="&#x2015; Context compacted above &#x2015;"
+                                           HorizontalAlignment="Center" FontSize="11" Opacity="0.5" FontStyle="Italic"/>
                                 <Separator/>
                             </StackPanel>
 
                         </Panel>
                     </DataTemplate>
-
                 </ItemsControl.DataTemplates>
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- Row 2: "Claude is thinking" indicator — outside scroll so it's always visible -->
-        <TextBlock Grid.Row="2"
-                   Text="Claude is thinking…"
-                   IsVisible="{Binding IsBusy}"
-                   Margin="8,4,60,4"
-                   Foreground="White"
-                   Opacity="0.5"
-                   FontStyle="Italic"
-                   FontSize="13"/>
+        <!-- Row 2: Thinking indicator -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    IsVisible="{Binding IsBusy}"
+                    Margin="8,3,8,3"
+                    Spacing="6">
+            <TextBlock Text="Claude is thinking…"
+                       FontStyle="Italic"
+                       Opacity="0.5"
+                       FontSize="13"/>
+            <TextBlock Text="{Binding ThinkingDuration}"
+                       FontStyle="Italic"
+                       Opacity="0.5"
+                       FontSize="13"
+                       Foreground="#888888"/>
+        </StackPanel>
 
-        <!-- Row 3: Vertical splitter -->
-        <GridSplitter Grid.Row="3"
-                      ResizeDirection="Rows"
+        <GridSplitter Grid.Row="3" ResizeDirection="Rows"
                       Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
 
-        <!-- Row 4: Input area -->
-        <Border Grid.Row="4"
-                Padding="8"
+        <Border Grid.Row="4" Padding="8"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,1,0,0">
             <Grid ColumnDefinitions="*,Auto">
-                <TextBox Grid.Column="0"
-                         x:Name="InputBox"
+                <TextBox Grid.Column="0" x:Name="InputBox"
                          Text="{Binding InputText}"
                          AcceptsReturn="True"
-                         Watermark="Type a message… (Ctrl+Enter to send)"
+                         Watermark="Type a message... (Ctrl+Enter to send)"
                          TextWrapping="Wrap"
-                         FontFamily="Cascadia Code,Consolas,monospace"/>
+                         FontFamily="Cascadia Code,Consolas,monospace"
+                         FontSize="{Binding InputFontSize}"/>
                 <Button Grid.Column="1"
                         Content="Send"
                         VerticalAlignment="Stretch"
+                        VerticalContentAlignment="Center"
                         Margin="8,0,0,0"
                         Command="{Binding SendCommand}"/>
             </Grid>
