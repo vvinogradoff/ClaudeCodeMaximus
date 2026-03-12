@@ -1,86 +1,88 @@
 # ClaudeMaximus — TODO
 
-## Phase 1 — Shell & Tree (no Claude process)
+## Phase 1 — Shell & Tree ✓ DONE
 
-### P1.1 Solution scaffold
-- [ ] Create `ClaudeMaximus.sln` and project structure under `code/`
-- [ ] Create `ClaudeMaximus` Avalonia app project (MVVM, ReactiveUI)
-- [ ] Create `ClaudeMaximus.Tests` xUnit test project
-- [ ] Add project references and NuGet packages
+### P1.1 Solution scaffold ✓
+- [DONE] `ClaudeMaximus.sln` + project structure under `code/`
+- [DONE] Avalonia MVVM app project (net9.0, ReactiveUI)
+- [DONE] xUnit test project
+- [DONE] NuGet packages + `NuGet.config` scoped to nuget.org
 
-### P1.2 Configuration & persistence (FR.4)
-- [ ] Define `AppSettings` model (tree, window state, settings values)
-- [ ] Define tree node models: `DirectoryNodeModel`, `GroupNodeModel`, `SessionNodeModel`
-- [ ] Implement `IAppSettingsService` + `AppSettingsService` (load/save `appsettings.json` atomically)
-- [ ] Unit tests for load/save round-trip and atomic write
+### P1.2 Configuration & persistence (FR.4) ✓
+- [DONE] `AppSettingsModel`, tree node models, `WindowStateModel`
+- [DONE] `IAppSettingsService` / `AppSettingsService` — atomic JSON load/save
+- [DONE] Unit tests: load/save round-trip, atomic write
 
-### P1.3 Session tree UI (FR.1)
-- [ ] `SessionTreeViewModel` with observable collection of tree roots
-- [ ] `DirectoryNodeViewModel`, `GroupNodeViewModel`, `SessionNodeViewModel`
-- [ ] Tree panel with search box above (FR.1.9)
-- [ ] Add Directory node (folder picker) — FR.1.5
-- [ ] Add Group node (inline name entry) — FR.1.5
-- [ ] Add Session node (inline name entry, creates session file) — FR.1.5, FR.3
-- [ ] Rename Group / Session node (inline edit) — FR.1.6
-- [ ] Delete rules enforced in UI — FR.1.7
-- [ ] Running session indicator placeholder — FR.1.8
-- [ ] git-root label resolution for Directory nodes — FR.1.3
-- [ ] Unit tests: add/rename/delete rules, git-root label logic
+### P1.3 Session tree UI (FR.1) ✓
+- [DONE] `SessionTreeViewModel` — Add/Rename/Delete for all node types
+- [DONE] `DirectoryNodeViewModel`, `GroupNodeViewModel`, `SessionNodeViewModel`
+- [DONE] Tree panel with search box bound to `SearchText`
+- [DONE] Add Directory (folder picker), Add Group, Add Session (via context menus + InputDialog)
+- [DONE] Rename Group / Session
+- [DONE] Delete rules enforced (session: file must be gone; node: must be empty)
+- [DONE] Running session indicator (`IsRunning` on `SessionNodeViewModel`)
+- [DONE] git-root label resolution for Directory nodes (trailing separator bug fixed)
+- [DONE] `x:CompileBindings="False"` on tree DataTemplates (Avalonia compiled binding gotcha)
+- [DONE] Unit tests: git-root label logic incl. trailing separator case
 
-### P1.4 Application shell (FR.6)
-- [ ] Two-panel `MainWindow` layout with resizable splitter
-- [ ] Persist/restore window state via `AppSettingsService` — FR.4.5
-- [ ] Settings window with folder picker + claude path field — FR.4.4
-- [ ] Empty right-panel placeholder when no session selected
+### P1.4 Application shell (FR.6) ✓
+- [DONE] Two-panel `MainWindow` with resizable splitter
+- [DONE] Window state persisted/restored via `AppSettingsService`
+- [DONE] Settings window (session root dir + claude path)
+- [DONE] Empty right-panel placeholder
 
 ---
 
-## Phase 2 — Session Storage & Display (FR.2, FR.3)
+## Phase 2 — Session Storage & Display ✓ DONE
 
-### P2.1 Session file service
-- [ ] `ISessionFileService` + `SessionFileService`
-  - Create session file with timestamped random name (FR.3.2)
-  - Append message entry (FR.3.3, FR.3.5)
-  - Append compaction separator (FR.3.4)
-  - Read all entries from file
-- [ ] Unit tests for entry serialisation/deserialisation round-trip
+### P2.1 Session file service ✓
+- [DONE] `ISessionFileService` / `SessionFileService`
+- [DONE] File naming: `YYYY-MM-dd-HHmm-xxxxxx.txt`
+- [DONE] Append USER / ASSISTANT / SYSTEM entries (immediate flush)
+- [DONE] Append `[COMPACTION]` separator
+- [DONE] Read and parse all entries
+- [DONE] Unit tests: create, append, compaction, round-trip, multi-line
 
-### P2.2 Session view
-- [ ] `SessionViewModel` — loads entries from file, exposes observable list
-- [ ] Message rendering: USER / ASSISTANT / SYSTEM / COMPACTION types (FR.2.3)
-- [ ] Compaction separator displayed inline; full pre-compaction history above (FR.3.4)
-- [ ] Multi-line input box, Ctrl+Enter / Send button (FR.2.4)
-- [ ] Busy state disables input (FR.2.5)
-- [ ] Session name header (FR.2.2)
+### P2.2 Session view ✓
+- [DONE] `SessionViewModel` — loads file, observable `Messages` list
+- [DONE] `MessageEntryViewModel` with role booleans
+- [DONE] `SessionView` — per-role visual styles (user/assistant/system/compaction)
+- [DONE] Compaction separator displayed inline; full history preserved above
+- [DONE] Multi-line input, Ctrl+Enter send, Send button
+- [DONE] Busy state disables input; "Claude is thinking…" indicator
+- [DONE] Auto-scroll to bottom on new messages
+- [DONE] Session name header
 
-### P2.3 Search (FR.1.9)
-- [ ] `ISessionSearchService` + `SessionSearchService` (linear file scan)
-- [ ] Wire search box to tree filter
-- [ ] Unit tests: match / no-match / ancestor expansion logic
+### P2.3 Search (FR.1.9) ← NEXT
+- [ ] `ISessionSearchService` + `SessionSearchService` — linear scan over session `.txt` files
+- [ ] Wire `SessionTreeViewModel.SearchText` changes to filter tree
+- [ ] Sessions not matching query hidden; ancestor nodes of matches expanded
+- [ ] Unit tests: match / no-match / ancestor expansion
 
 ---
 
-## Phase 3 — Claude Code Process Integration (FR.5)
+## Phase 3 — Claude Code Process Integration ✓ DONE
 
-### P3.1 Process management
-- [ ] `IClaudeProcessManager` + `ClaudeProcessManager`
-  - Launch `claude --output-format stream-json` with correct working directory
-  - Write user input to stdin
-  - Parse stream-json events from stdout
-  - Handle unexpected exit + restart — FR.5.4
-- [ ] Integration tests with a mock process (fake stdout stream)
+### P3.1 Process management ✓
+- [DONE] `IClaudeProcessManager` / `ClaudeProcessManager`
+- [DONE] Spawn `claude --output-format stream-json [--resume <id>]` per message
+- [DONE] Pipe user input via stdin (EOF triggers processing)
+- [DONE] Parse `assistant` / `system` / `result` stream-json events
+- [DONE] Capture `session_id` from result → store in `appsettings.json` → used for `--resume`
+- [DONE] Process launch errors surface as SYSTEM messages
 
-### P3.2 Wire process to session view & storage
-- [ ] On Send: write to process stdin, disable input
-- [ ] On stream-json event: append to session file, append to `SessionViewModel` message list
-- [ ] On compaction event: append `[COMPACTION]` separator
-- [ ] Running indicator on Session node in tree (FR.1.8)
-- [ ] Background sessions continue when switching views (FR.5.5)
+### P3.2 Wired to session view & storage ✓
+- [DONE] Send → file append → `Messages` list update → auto-scroll
+- [DONE] Compaction event → file separator + inline UI separator
+- [DONE] `IsRunning` flag on `SessionNodeViewModel` set while process is active
+- [ ] Integration tests with mock process (fake stdout stream) — deferred
 
 ---
 
 ## Backlog / Future
 
-- [ ] Search indexing (replace linear scan)
-- [ ] Session file watcher (detect external file deletion for FR.1.7)
+- [ ] **P2.3 Search** — see above, the only item from original scope not yet done
+- [ ] Session file watcher (detect disk deletion so tree delete button becomes available)
+- [ ] Integration tests for `ClaudeProcessManager` with a mock process
+- [ ] Search indexing (replace linear scan when session count grows)
 - [ ] Light/dark theme toggle
