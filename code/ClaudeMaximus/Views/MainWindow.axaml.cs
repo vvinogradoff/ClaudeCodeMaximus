@@ -1,8 +1,12 @@
+using System;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ClaudeMaximus.Views;
 
@@ -16,12 +20,25 @@ public partial class MainWindow : Window
 		InitializeComponent();
 	}
 
+	protected override void OnLoaded(RoutedEventArgs e)
+	{
+		base.OnLoaded(e);
+
+		var ws = App.Services.GetRequiredService<IAppSettingsService>().Settings.Window;
+
+		Width    = ws.Width;
+		Height   = ws.Height;
+		Position = new PixelPoint((int)ws.Left, (int)ws.Top);
+
+		MainContentGrid.ColumnDefinitions[0].Width = new GridLength(
+			Math.Clamp(ws.SplitterPosition, 180, 600));
+	}
+
 	protected override async void OnClosing(WindowClosingEventArgs e)
 	{
 		base.OnClosing(e);
 
 		if (_closeConfirmed) return;
-
 		if (DataContext is not MainWindowViewModel vm) return;
 
 		var count = vm.ActiveSessionCount;
@@ -40,6 +57,22 @@ public partial class MainWindow : Window
 		Close();
 	}
 
+	protected override void OnClosed(EventArgs e)
+	{
+		var settings = App.Services.GetRequiredService<IAppSettingsService>();
+		var ws       = settings.Settings.Window;
+
+		ws.Width             = Width;
+		ws.Height            = Height;
+		ws.Left              = Position.X;
+		ws.Top               = Position.Y;
+		ws.SplitterPosition  = MainContentGrid.ColumnDefinitions[0].Width.Value;
+
+		settings.Save();
+
+		base.OnClosed(e);
+	}
+
 	// ── Overlay: confirm dialog ───────────────────────────────────────────────
 
 	public async Task<bool> ShowConfirmOverlayAsync(string message, string okLabel = "OK")
@@ -51,8 +84,8 @@ public partial class MainWindow : Window
 		ConfirmCard.IsVisible   = true;
 		OverlayPanel.IsVisible  = true;
 
-		void OnOk(object? s, RoutedEventArgs _)     => tcs.TrySetResult(true);
-		void OnCancel(object? s, RoutedEventArgs _)  => tcs.TrySetResult(false);
+		void OnOk(object? s, RoutedEventArgs _)    => tcs.TrySetResult(true);
+		void OnCancel(object? s, RoutedEventArgs _) => tcs.TrySetResult(false);
 		void OnKeyDown(object? s, KeyEventArgs e)
 		{
 			if (e.Key == Key.Escape) tcs.TrySetResult(false);
@@ -123,29 +156,8 @@ public partial class MainWindow : Window
 
 	private void OnMenuBarPointerPressed(object? sender, PointerPressedEventArgs e)
 	{
-		if (e.Source is MenuItem) return;   // let menu items open normally
+		if (e.Source is MenuItem) return;
 		if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
 			BeginMoveDrag(e);
-	}
-
-	protected override void OnClosed(System.EventArgs e)
-	{
-		if (DataContext is MainWindowViewModel vm)
-		{
-			var settings = App.Services.GetService(typeof(Services.IAppSettingsService))
-				as Services.IAppSettingsService;
-
-			if (settings != null)
-			{
-				settings.Settings.Window.Width    = Width;
-				settings.Settings.Window.Height   = Height;
-				settings.Settings.Window.Left     = Position.X;
-				settings.Settings.Window.Top      = Position.Y;
-				settings.Settings.Window.SplitterPosition = vm.SplitterPosition;
-				settings.Save();
-			}
-		}
-
-		base.OnClosed(e);
 	}
 }
