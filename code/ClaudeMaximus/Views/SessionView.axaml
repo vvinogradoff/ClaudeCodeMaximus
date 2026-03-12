@@ -58,77 +58,78 @@
                           Margin="0,4,0,4">
                 <ItemsControl.DataTemplates>
 
-                    <!-- User message -->
+                    <!-- Single template; each role's panel is shown/hidden via IsVisible.
+                         Avalonia uses the first matching DataTemplate per type, so all
+                         variants must live inside one template. -->
                     <DataTemplate x:DataType="vm:MessageEntryViewModel">
-                        <Border IsVisible="{Binding IsUser}"
-                                Margin="60,4,8,4"
-                                Padding="10,7"
-                                CornerRadius="8"
-                                Background="#1E3A5F">
-                            <StackPanel>
-                                <TextBlock Text="You"
-                                           FontSize="11"
-                                           Foreground="White"
-                                           Opacity="0.6"
-                                           Margin="0,0,0,3"/>
+                        <Panel>
+
+                            <!-- User message -->
+                            <Border IsVisible="{Binding IsUser}"
+                                    Margin="60,4,8,4"
+                                    Padding="10,7"
+                                    CornerRadius="8"
+                                    Background="#1E3A5F">
+                                <StackPanel>
+                                    <TextBlock Text="You"
+                                               FontSize="11"
+                                               Foreground="White"
+                                               Opacity="0.6"
+                                               Margin="0,0,0,3"/>
+                                    <SelectableTextBlock Text="{Binding Content}"
+                                                         TextWrapping="Wrap"
+                                                         Foreground="White"
+                                                         FontFamily="Cascadia Code,Consolas,monospace"
+                                                         FontSize="13"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Assistant message -->
+                            <Border IsVisible="{Binding IsAssistant}"
+                                    Margin="8,4,60,4"
+                                    Padding="10,7"
+                                    CornerRadius="8"
+                                    Background="#1A2A1A">
+                                <StackPanel>
+                                    <TextBlock Text="Claude"
+                                               FontSize="11"
+                                               Opacity="0.6"
+                                               Margin="0,0,0,3"/>
+                                    <SelectableTextBlock Text="{Binding Content}"
+                                                         TextWrapping="Wrap"
+                                                         FontFamily="Cascadia Code,Consolas,monospace"
+                                                         FontSize="13"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- System message -->
+                            <Border IsVisible="{Binding IsSystem}"
+                                    Margin="20,4,20,4"
+                                    Padding="8,5"
+                                    CornerRadius="4"
+                                    Background="#2A2A2A">
                                 <SelectableTextBlock Text="{Binding Content}"
                                                      TextWrapping="Wrap"
-                                                     Foreground="White"
-                                                     FontFamily="Cascadia Code,Consolas,monospace"
-                                                     FontSize="13"/>
-                            </StackPanel>
-                        </Border>
-                    </DataTemplate>
+                                                     FontSize="12"
+                                                     Opacity="0.7"
+                                                     FontStyle="Italic"/>
+                            </Border>
 
-                    <!-- Assistant message -->
-                    <DataTemplate x:DataType="vm:MessageEntryViewModel">
-                        <Border IsVisible="{Binding IsAssistant}"
-                                Margin="8,4,60,4"
-                                Padding="10,7"
-                                CornerRadius="8"
-                                Background="#1A2A1A">
-                            <StackPanel>
-                                <TextBlock Text="Claude"
+                            <!-- Compaction separator -->
+                            <StackPanel IsVisible="{Binding IsCompaction}"
+                                        Margin="8,8,8,8"
+                                        Orientation="Vertical"
+                                        Spacing="2">
+                                <Separator/>
+                                <TextBlock Text="― Context compacted above ―"
+                                           HorizontalAlignment="Center"
                                            FontSize="11"
-                                           Opacity="0.6"
-                                           Margin="0,0,0,3"/>
-                                <SelectableTextBlock Text="{Binding Content}"
-                                                     TextWrapping="Wrap"
-                                                     FontFamily="Cascadia Code,Consolas,monospace"
-                                                     FontSize="13"/>
+                                           Opacity="0.5"
+                                           FontStyle="Italic"/>
+                                <Separator/>
                             </StackPanel>
-                        </Border>
-                    </DataTemplate>
 
-                    <!-- System message -->
-                    <DataTemplate x:DataType="vm:MessageEntryViewModel">
-                        <Border IsVisible="{Binding IsSystem}"
-                                Margin="20,4,20,4"
-                                Padding="8,5"
-                                CornerRadius="4"
-                                Background="#2A2A2A">
-                            <SelectableTextBlock Text="{Binding Content}"
-                                                 TextWrapping="Wrap"
-                                                 FontSize="12"
-                                                 Opacity="0.7"
-                                                 FontStyle="Italic"/>
-                        </Border>
-                    </DataTemplate>
-
-                    <!-- Compaction separator -->
-                    <DataTemplate x:DataType="vm:MessageEntryViewModel">
-                        <StackPanel IsVisible="{Binding IsCompaction}"
-                                    Margin="8,8,8,8"
-                                    Orientation="Vertical"
-                                    Spacing="2">
-                            <Separator/>
-                            <TextBlock Text="― Context compacted above ―"
-                                       HorizontalAlignment="Center"
-                                       FontSize="11"
-                                       Opacity="0.5"
-                                       FontStyle="Italic"/>
-                            <Separator/>
-                        </StackPanel>
+                        </Panel>
                     </DataTemplate>
 
                 </ItemsControl.DataTemplates>

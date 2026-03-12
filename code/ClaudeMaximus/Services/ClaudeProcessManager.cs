@@ -173,9 +173,19 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 
 	private static ClaudeStreamEvent ParseSystemEvent(JsonElement root, string type, string? subtype)
 	{
-		var content = root.TryGetProperty("summary", out var summary)
-			? summary.GetString()
-			: root.TryGetProperty("message", out var msg) ? msg.GetString() : null;
+		string? content = null;
+
+		if (root.TryGetProperty("summary", out var summary))
+			content = summary.GetString();
+		else if (root.TryGetProperty("message", out var msg))
+			content = msg.GetString();
+		else if (subtype is "task_progress" or "task_started")
+		{
+			// Show live tool-use descriptions as progress feedback
+			var description = root.TryGetProperty("description", out var desc) ? desc.GetString() : null;
+			var tool        = root.TryGetProperty("last_tool_name", out var tn)  ? tn.GetString()   : null;
+			content = tool != null ? $"[{tool}] {description}" : description;
+		}
 
 		return new ClaudeStreamEvent { Type = type, Subtype = subtype, Content = content };
 	}

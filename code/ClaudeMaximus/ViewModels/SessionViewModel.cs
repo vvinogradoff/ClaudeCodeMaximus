@@ -147,6 +147,22 @@ public sealed class SessionViewModel : ViewModelBase
 					});
 					break;
 
+				case "system" when evt.Subtype is "task_progress" or "task_started"
+				                   && evt.Content is not null:
+					// Live progress: update the last progress entry in-place to avoid flooding
+					var last = Messages.Count > 0 ? Messages[^1] : null;
+					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
+						last.Content = evt.Content;
+					else
+						Messages.Add(new MessageEntryViewModel
+						{
+							Role       = Constants.SessionFile.RoleSystem,
+							Content    = evt.Content,
+							Timestamp  = evt.Timestamp,
+							IsProgress = true,
+						});
+					break;
+
 				case "system" when evt.IsError && evt.Content is not null:
 					Messages.Add(new MessageEntryViewModel
 					{
