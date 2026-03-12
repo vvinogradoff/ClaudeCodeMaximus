@@ -68,8 +68,8 @@ public sealed class SessionViewModel : ViewModelBase
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 
-		// No canSend gate — allow sending at any time, even while a response is in flight
-		SendCommand = ReactiveCommand.CreateFromTask(SendAsync);
+		// Fire-and-forget: synchronous command so ReactiveUI never disables it while SendAsync runs
+		SendCommand = ReactiveCommand.Create(() => { _ = SendAsync(); });
 	}
 
 	public void LoadFromFile()
