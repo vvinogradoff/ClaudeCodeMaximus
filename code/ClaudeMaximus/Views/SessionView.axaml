@@ -57,24 +57,12 @@
                             </Border>
 
                             <!-- Assistant message -->
-                            <Border IsVisible="{Binding IsAssistant}"
-                                    Margin="8,4,60,4"
-                                    Padding="10,7"
-                                    CornerRadius="8"
-                                    Background="#2D4A2D">
-                                <StackPanel>
-                                    <TextBlock Text="Claude"
-                                               FontSize="11"
-                                               Foreground="White"
-                                               Opacity="0.6"
-                                               Margin="0,0,0,3"/>
-                                    <SelectableTextBlock Text="{Binding Content}"
-                                                         TextWrapping="Wrap"
-                                                         Foreground="White"
-                                                         FontFamily="Cascadia Code,Consolas,monospace"
-                                                         FontSize="13"/>
-                                </StackPanel>
-                            </Border>
+                            <SelectableTextBlock IsVisible="{Binding IsAssistant}"
+                                                 Text="{Binding Content}"
+                                                 Margin="8,6,60,6"
+                                                 TextWrapping="Wrap"
+                                                 FontFamily="Cascadia Code,Consolas,monospace"
+                                                 FontSize="13"/>
 
                             <!-- System message -->
                             <Border IsVisible="{Binding IsSystem}"
