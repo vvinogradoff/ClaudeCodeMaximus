@@ -1,6 +1,7 @@
 ﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ClaudeMaximus.ViewModels"
+             xmlns:views="using:ClaudeMaximus.Views"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -67,13 +68,17 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="52"/>
                                 </Grid.ColumnDefinitions>
-                                <SelectableTextBlock
-                                    Grid.Column="0"
-                                    Text="{Binding Content}"
-                                    TextWrapping="Wrap"
-                                    FontFamily="Cascadia Code,Consolas,monospace"
-                                    FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"
-                                    Margin="0,0,8,0"/>
+                                <Panel Grid.Column="0" Margin="0,0,8,0">
+                                    <views:MarkdownView
+                                        IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
+                                        Markdown="{Binding Content}"/>
+                                    <SelectableTextBlock
+                                        IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
+                                        Text="{Binding Content}"
+                                        TextWrapping="Wrap"
+                                        FontFamily="Cascadia Code,Consolas,monospace"
+                                        FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
+                                </Panel>
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding FormattedTime}"
                                            FontSize="10" Opacity="0.35"
