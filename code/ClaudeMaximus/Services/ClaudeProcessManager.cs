@@ -119,7 +119,8 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 	{
 		// -p (--print) forces non-interactive single-prompt mode.
 		// --verbose is required by claude when combining --print with stream-json output.
-		var args = "--output-format stream-json --verbose -p";
+		// --dangerously-skip-permissions suppresses all permission prompts.
+		var args = "--output-format stream-json --verbose --dangerously-skip-permissions -p";
 		if (!string.IsNullOrEmpty(sessionId))
 			args += $" --resume {sessionId}";
 		return args;
