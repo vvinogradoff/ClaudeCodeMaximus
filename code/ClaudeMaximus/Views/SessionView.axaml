@@ -24,8 +24,8 @@
                 Padding="8"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,1,0,0">
-            <Grid RowDefinitions="*,Auto">
-                <TextBox Grid.Row="0"
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBox Grid.Column="0"
                          x:Name="InputBox"
                          Text="{Binding InputText}"
                          AcceptsReturn="True"
@@ -34,18 +34,11 @@
                          Watermark="Type a message… (Ctrl+Enter to send)"
                          TextWrapping="Wrap"
                          FontFamily="Cascadia Code,Consolas,monospace"/>
-                <StackPanel Grid.Row="1"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            Spacing="8"
-                            Margin="0,4,0,0">
-                    <TextBlock Text="Claude is thinking…"
-                               VerticalAlignment="Center"
-                               Opacity="0.6"
-                               IsVisible="{Binding IsBusy}"/>
-                    <Button Content="Send"
-                            Command="{Binding SendCommand}"/>
-                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="Send"
+                        VerticalAlignment="Stretch"
+                        Margin="8,0,0,0"
+                        Command="{Binding SendCommand}"/>
             </Grid>
         </Border>
 
@@ -53,6 +46,7 @@
         <ScrollViewer x:Name="MessageScroller"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
+            <StackPanel>
             <ItemsControl x:Name="MessageList"
                           ItemsSource="{Binding Messages}"
                           Margin="0,4,0,4">
@@ -136,6 +130,16 @@
 
                 </ItemsControl.DataTemplates>
             </ItemsControl>
+
+            <!-- "Claude is thinking" indicator — sits below the last message bubble -->
+            <TextBlock Text="Claude is thinking…"
+                       IsVisible="{Binding IsBusy}"
+                       Margin="8,4,60,8"
+                       Foreground="White"
+                       Opacity="0.5"
+                       FontStyle="Italic"
+                       FontSize="13"/>
+            </StackPanel>
         </ScrollViewer>
 
     </DockPanel>
