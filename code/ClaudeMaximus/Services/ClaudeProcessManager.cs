@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
@@ -14,6 +15,19 @@ namespace ClaudeMaximus.Services;
 public sealed class ClaudeProcessManager : IClaudeProcessManager
 {
 	private static readonly ILogger _log = Log.ForContext<ClaudeProcessManager>();
+	private readonly ConcurrentDictionary<int, Process> _activeProcesses = new();
+
+	public int ActiveProcessCount => _activeProcesses.Count;
+
+	public void TerminateAll()
+	{
+		foreach (var (pid, proc) in _activeProcesses)
+		{
+			_log.Information("Terminating claude process PID={Pid}", pid);
+			try   { proc.Kill(entireProcessTree: true); }
+			catch (Exception ex) { _log.Warning(ex, "Failed to kill PID={Pid}", pid); }
+		}
+	}
 
 	public async Task SendMessageAsync(
 		string workingDirectory,
@@ -52,43 +66,51 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		}
 
 		_log.Debug("Claude process started. PID={Pid}", process.Id);
+		_activeProcesses.TryAdd(process.Id, process);
 
 		using (process)
 		{
-			_log.Debug("Writing user message to stdin ({Length} chars)", userMessage.Length);
-			await process.StandardInput.WriteLineAsync(userMessage);
-			process.StandardInput.Close();
-
-			string? line;
-			while ((line = await process.StandardOutput.ReadLineAsync(cancellationToken)) != null)
+			try
 			{
-				if (string.IsNullOrWhiteSpace(line))
-					continue;
+				_log.Debug("Writing user message to stdin ({Length} chars)", userMessage.Length);
+				await process.StandardInput.WriteLineAsync(userMessage);
+				process.StandardInput.Close();
 
-				_log.Debug("stdout: {Line}", line);
-
-				var evt = TryParseEvent(line);
-				if (evt != null)
-					onEvent(evt);
-			}
-
-			await process.WaitForExitAsync(cancellationToken);
-			_log.Debug("Claude process exited. Code={ExitCode}", process.ExitCode);
-
-			var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
-			if (!string.IsNullOrWhiteSpace(stderr))
-			{
-				_log.Warning("stderr: {Stderr}", stderr.Trim());
-				if (process.ExitCode != 0)
+				string? line;
+				while ((line = await process.StandardOutput.ReadLineAsync(cancellationToken)) != null)
 				{
-					onEvent(new ClaudeStreamEvent
-					{
-						Type    = "system",
-						Subtype = "error",
-						Content = $"claude exited with code {process.ExitCode}: {stderr.Trim()}",
-						IsError = true,
-					});
+					if (string.IsNullOrWhiteSpace(line))
+						continue;
+
+					_log.Debug("stdout: {Line}", line);
+
+					var evt = TryParseEvent(line);
+					if (evt != null)
+						onEvent(evt);
 				}
+
+				await process.WaitForExitAsync(cancellationToken);
+				_log.Debug("Claude process exited. Code={ExitCode}", process.ExitCode);
+
+				var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+				if (!string.IsNullOrWhiteSpace(stderr))
+				{
+					_log.Warning("stderr: {Stderr}", stderr.Trim());
+					if (process.ExitCode != 0)
+					{
+						onEvent(new ClaudeStreamEvent
+						{
+							Type    = "system",
+							Subtype = "error",
+							Content = $"claude exited with code {process.ExitCode}: {stderr.Trim()}",
+							IsError = true,
+						});
+					}
+				}
+			}
+			finally
+			{
+				_activeProcesses.TryRemove(process.Id, out _);
 			}
 		}
 	}

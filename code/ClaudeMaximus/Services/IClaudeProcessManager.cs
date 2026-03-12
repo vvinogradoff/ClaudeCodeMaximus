@@ -12,6 +12,9 @@ namespace ClaudeMaximus.Services;
 /// <remarks>Created by Claude</remarks>
 public interface IClaudeProcessManager
 {
+	/// <summary>Number of claude processes currently running.</summary>
+	int ActiveProcessCount { get; }
+
 	/// <summary>
 	/// Spawns a claude process for one user turn. Writes userMessage to stdin, reads
 	/// stdout as stream-json events, calls onEvent for each parsed event, then exits.
@@ -23,4 +26,7 @@ public interface IClaudeProcessManager
 		string userMessage,
 		Action<ClaudeStreamEvent> onEvent,
 		CancellationToken cancellationToken = default);
+
+	/// <summary>Kills all active claude processes immediately.</summary>
+	void TerminateAll();
 }

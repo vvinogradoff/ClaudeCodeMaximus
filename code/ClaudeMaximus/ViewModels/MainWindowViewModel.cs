@@ -75,6 +75,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ActiveSession = vm;
 	}
 
+	public int ActiveSessionCount => _processManager.ActiveProcessCount;
+
+	public void TerminateAllSessions() => _processManager.TerminateAll();
+
 	private void OpenSettings()
 	{
 		var vm     = new SettingsViewModel(_appSettings);
