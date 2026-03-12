@@ -15,6 +15,7 @@ public sealed class AppSettingsModel
 	public List<DirectoryNodeModel> Tree { get; set; } = [];
 
 	public double AssistantFontSize { get; set; } = 13.0;
+	public double AssistantMarkdownFontSize { get; set; } = 13.0;
 	public double UserFontSize { get; set; } = 13.0;
 	public double InputFontSize { get; set; } = 13.0;
 }

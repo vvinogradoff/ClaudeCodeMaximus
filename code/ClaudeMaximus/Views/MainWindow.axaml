@@ -18,14 +18,34 @@
         <!-- Main content -->
         <DockPanel>
 
-            <!-- Menu bar — also serves as drag handle for the borderless window -->
-            <Menu DockPanel.Dock="Top" PointerPressed="OnMenuBarPointerPressed">
-                <MenuItem Header="_File">
-                    <MenuItem Header="_Settings" Command="{Binding OpenSettingsCommand}"/>
-                    <Separator/>
-                    <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
-                </MenuItem>
-            </Menu>
+            <!-- Title bar: menu on left, window controls on right, drag anywhere in between -->
+            <DockPanel DockPanel.Dock="Top" LastChildFill="True"
+                       PointerPressed="OnMenuBarPointerPressed"
+                       Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                <!-- Window control buttons — docked right -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="0">
+                    <Button x:Name="MinimizeBtn" Content="&#x2013;" Width="46" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="16" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Minimize" Click="OnMinimizeClick"/>
+                    <Button x:Name="MaximizeBtn" Content="&#x25A1;" Width="46" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="14" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Maximize / Restore" Click="OnMaximizeRestoreClick"/>
+                    <Button x:Name="CloseBtn" Content="&#x2715;" Width="46" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="13" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Close" Click="OnCloseClick"/>
+                </StackPanel>
+                <!-- Menu items -->
+                <Menu Background="Transparent" BorderThickness="0">
+                    <MenuItem Header="_File">
+                        <MenuItem Header="_Settings" Command="{Binding OpenSettingsCommand}"/>
+                        <Separator/>
+                        <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
+                    </MenuItem>
+                </Menu>
+            </DockPanel>
 
             <!-- Two-panel layout -->
             <Grid x:Name="MainContentGrid">

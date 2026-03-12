@@ -71,7 +71,8 @@
                                 <Panel Grid.Column="0" Margin="0,0,8,0">
                                     <views:MarkdownView
                                         IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
-                                        Markdown="{Binding Content}"/>
+                                        Markdown="{Binding Content}"
+                                        FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
                                     <SelectableTextBlock
                                         IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
                                         Text="{Binding Content}"

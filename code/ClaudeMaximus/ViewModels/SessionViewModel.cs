@@ -26,6 +26,7 @@ public sealed class SessionViewModel : ViewModelBase
 	private string _thinkingDuration = string.Empty;
 	private DispatcherTimer? _thinkingTimer;
 	private DateTimeOffset _thinkingStartedAt;
+	private int _busyCount;
 
 	public string Name
 	{
@@ -67,6 +68,17 @@ public sealed class SessionViewModel : ViewModelBase
 		set
 		{
 			_appSettings.Settings.AssistantFontSize = value;
+			this.RaisePropertyChanged();
+			_appSettings.Save();
+		}
+	}
+
+	public double AssistantMarkdownFontSize
+	{
+		get => _appSettings.Settings.AssistantMarkdownFontSize;
+		set
+		{
+			_appSettings.Settings.AssistantMarkdownFontSize = value;
 			this.RaisePropertyChanged();
 			_appSettings.Save();
 		}
@@ -145,13 +157,19 @@ public sealed class SessionViewModel : ViewModelBase
 		InputText = string.Empty;
 		_draftService.DeleteDraft(_node.FileName);
 
+		_busyCount++;
 		IsBusy = true;
 		_node.IsRunning = true;
-		_thinkingStartedAt = DateTimeOffset.UtcNow;
-		ThinkingDuration = "0:00";
-		_thinkingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-		_thinkingTimer.Tick += OnThinkingTimerTick;
-		_thinkingTimer.Start();
+
+		// Start timer only for the first concurrent send; subsequent sends keep the running clock
+		if (_thinkingTimer == null)
+		{
+			_thinkingStartedAt = DateTimeOffset.UtcNow;
+			ThinkingDuration = "0:00";
+			_thinkingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+			_thinkingTimer.Tick += OnThinkingTimerTick;
+			_thinkingTimer.Start();
+		}
 
 		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message);
 		Messages.Add(new MessageEntryViewModel
@@ -180,12 +198,16 @@ public sealed class SessionViewModel : ViewModelBase
 		}
 		finally
 		{
-			var t = _thinkingTimer;
-			_thinkingTimer = null;
-			t?.Stop();
-			ThinkingDuration = string.Empty;
-			IsBusy = false;
-			_node.IsRunning = false;
+			_busyCount = Math.Max(0, _busyCount - 1);
+			if (_busyCount == 0)
+			{
+				var t = _thinkingTimer;
+				_thinkingTimer = null;
+				t?.Stop();
+				ThinkingDuration = string.Empty;
+				IsBusy = false;
+				_node.IsRunning = false;
+			}
 		}
 	}
 

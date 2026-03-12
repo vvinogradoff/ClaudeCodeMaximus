@@ -6,6 +6,7 @@ using Avalonia.Controls.Documents;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Markdig;
+using Markdig.Extensions.Tables;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 
@@ -26,6 +27,13 @@ public sealed class MarkdownView : ContentControl
 	private static readonly MarkdownPipeline Pipeline =
 		new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
 
+	// Light-theme code colours — always readable regardless of app accent theme
+	private static readonly IBrush CodeBlockBackground  = new SolidColorBrush(Color.FromRgb(245, 245, 245));
+	private static readonly IBrush CodeBlockForeground  = new SolidColorBrush(Color.FromRgb(32,  32,  32));
+	private static readonly IBrush InlineCodeBackground = new SolidColorBrush(Color.FromRgb(232, 232, 232));
+	private static readonly IBrush InlineCodeForeground = new SolidColorBrush(Color.FromRgb(32,  32,  32));
+	private static readonly IBrush QuoteBorderBrush     = new SolidColorBrush(Color.FromRgb(80,  100, 130));
+
 	public string? Markdown
 	{
 		get => GetValue(MarkdownProperty);
@@ -35,6 +43,14 @@ public sealed class MarkdownView : ContentControl
 	static MarkdownView()
 	{
 		MarkdownProperty.Changed.AddClassHandler<MarkdownView>((v, _) => v.Rebuild());
+	}
+
+	// Rebuild when FontSize changes so all text scales with Ctrl+scroll
+	protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+	{
+		base.OnPropertyChanged(change);
+		if (change.Property.Name == "FontSize")
+			Rebuild();
 	}
 
 	private void Rebuild()
@@ -57,34 +73,36 @@ public sealed class MarkdownView : ContentControl
 
 	// ── Block-level ──────────────────────────────────────────────────────────
 
-	private static Control BuildBlock(Block block) => block switch
+	private Control BuildBlock(Block block) => block switch
 	{
 		HeadingBlock h        => BuildHeading(h),
 		FencedCodeBlock code  => BuildCodeBlock(code),
 		CodeBlock code        => BuildCodeBlock(code),
 		QuoteBlock quote      => BuildQuote(quote),
 		ListBlock list        => BuildList(list),
+		Table table           => BuildTable(table),
 		ThematicBreakBlock    => new Separator { Margin = new Thickness(0, 4) },
 		ParagraphBlock p      => BuildParagraph(p),
-		_                     => new TextBlock { Text = block.ToString(), TextWrapping = TextWrapping.Wrap },
+		_                     => new TextBlock { Text = block.ToString(), TextWrapping = TextWrapping.Wrap, FontSize = FontSize },
 	};
 
-	private static Control BuildHeading(HeadingBlock h)
+	private Control BuildHeading(HeadingBlock h)
 	{
+		var baseSize = FontSize;
 		var (size, weight) = h.Level switch
 		{
-			1 => (20.0, FontWeight.Bold),
-			2 => (17.0, FontWeight.Bold),
-			3 => (15.0, FontWeight.SemiBold),
-			_ => (13.0, FontWeight.SemiBold),
+			1 => (baseSize + 7, FontWeight.Bold),
+			2 => (baseSize + 4, FontWeight.Bold),
+			3 => (baseSize + 2, FontWeight.SemiBold),
+			_ => (baseSize,     FontWeight.SemiBold),
 		};
 
 		var tb = new TextBlock
 		{
-			FontSize   = size,
-			FontWeight = weight,
+			FontSize     = size,
+			FontWeight   = weight,
 			TextWrapping = TextWrapping.Wrap,
-			Margin     = new Thickness(0, h.Level == 1 ? 8 : 4, 0, 2),
+			Margin       = new Thickness(0, h.Level == 1 ? 8 : 4, 0, 2),
 		};
 
 		if (h.Inline != null)
@@ -94,26 +112,28 @@ public sealed class MarkdownView : ContentControl
 		return tb;
 	}
 
-	private static Control BuildCodeBlock(LeafBlock code)
+	private Control BuildCodeBlock(LeafBlock code)
 	{
-		var text = code.Lines.ToString().TrimEnd();
+		var text     = code.Lines.ToString().TrimEnd();
+		var fontSize = Math.Max(FontSize - 1, 10);
 		return new Border
 		{
-			Background    = new SolidColorBrush(Color.FromRgb(30, 30, 30)),
-			CornerRadius  = new CornerRadius(4),
-			Padding       = new Thickness(10, 8),
-			Margin        = new Thickness(0, 2),
-			Child         = new SelectableTextBlock
+			Background   = CodeBlockBackground,
+			CornerRadius = new CornerRadius(4),
+			Padding      = new Thickness(10, 8),
+			Margin       = new Thickness(0, 2),
+			Child        = new SelectableTextBlock
 			{
-				Text        = text,
+				Text         = text,
 				TextWrapping = TextWrapping.NoWrap,
-				FontFamily  = new FontFamily("Cascadia Code,Consolas,monospace"),
-				FontSize    = 12,
+				FontFamily   = new FontFamily("Cascadia Code,Consolas,monospace"),
+				FontSize     = fontSize,
+				Foreground   = CodeBlockForeground,
 			},
 		};
 	}
 
-	private static Control BuildQuote(QuoteBlock quote)
+	private Control BuildQuote(QuoteBlock quote)
 	{
 		var inner = new StackPanel { Spacing = 4 };
 		foreach (var b in quote)
@@ -121,14 +141,14 @@ public sealed class MarkdownView : ContentControl
 
 		return new Border
 		{
-			BorderBrush     = new SolidColorBrush(Color.FromRgb(80, 100, 130)),
+			BorderBrush     = QuoteBorderBrush,
 			BorderThickness = new Thickness(3, 0, 0, 0),
 			Padding         = new Thickness(10, 4, 4, 4),
 			Child           = inner,
 		};
 	}
 
-	private static Control BuildList(ListBlock list)
+	private Control BuildList(ListBlock list)
 	{
 		var panel  = new StackPanel { Spacing = 3 };
 		var number = 1;
@@ -145,6 +165,7 @@ public sealed class MarkdownView : ContentControl
 			var bulletBlock = new TextBlock
 			{
 				Text                = bullet,
+				FontSize            = FontSize,
 				VerticalAlignment   = VerticalAlignment.Top,
 				HorizontalAlignment = HorizontalAlignment.Right,
 				Margin              = new Thickness(0, 0, 6, 0),
@@ -164,9 +185,9 @@ public sealed class MarkdownView : ContentControl
 		return panel;
 	}
 
-	private static Control BuildParagraph(ParagraphBlock p)
+	private Control BuildParagraph(ParagraphBlock p)
 	{
-		var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap };
+		var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, FontSize = FontSize };
 
 		if (p.Inline != null)
 			foreach (var inline in p.Inline)
@@ -175,9 +196,79 @@ public sealed class MarkdownView : ContentControl
 		return tb;
 	}
 
+	private static readonly IBrush TableHeaderBackground = new SolidColorBrush(Color.FromRgb(240, 240, 240));
+	private static readonly IBrush TableBorderBrush      = new SolidColorBrush(Color.FromRgb(210, 210, 210));
+
+	private Control BuildTable(Table table)
+	{
+		// Collect rows
+		var rows = new System.Collections.Generic.List<TableRow>();
+		foreach (var b in table)
+			if (b is TableRow tr) rows.Add(tr);
+
+		if (rows.Count == 0) return new Panel();
+
+		int colCount = 0;
+		foreach (var r in rows)
+			if (r.Count > colCount) colCount = r.Count;
+
+		var grid = new Grid();
+		for (var c = 0; c < colCount; c++)
+			grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+
+		for (var rowIdx = 0; rowIdx < rows.Count; rowIdx++)
+		{
+			grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+			var row = rows[rowIdx];
+
+			for (var colIdx = 0; colIdx < row.Count && colIdx < colCount; colIdx++)
+			{
+				if (row[colIdx] is not TableCell cell) continue;
+
+				// Build cell text from its paragraph children
+				var tb = new SelectableTextBlock
+				{
+					TextWrapping = TextWrapping.Wrap,
+					FontSize     = FontSize,
+				};
+				if (row.IsHeader) tb.FontWeight = FontWeight.SemiBold;
+
+				foreach (var b in cell)
+					if (b is ParagraphBlock p && p.Inline != null)
+						foreach (var inl in p.Inline)
+							AppendInline(tb.Inlines!, inl);
+
+				var cellBorder = new Border
+				{
+					Padding         = new Thickness(8, 5),
+					BorderBrush     = TableBorderBrush,
+					// Each cell draws its right and bottom border;
+					// outer wrapper draws the top and left.
+					BorderThickness = new Thickness(0, 0, 1, 1),
+					Child           = tb,
+				};
+				if (row.IsHeader)
+					cellBorder.Background = TableHeaderBackground;
+
+				Grid.SetRow(cellBorder, rowIdx);
+				Grid.SetColumn(cellBorder, colIdx);
+				grid.Children.Add(cellBorder);
+			}
+		}
+
+		// Outer border provides the top and left edges of the table
+		return new Border
+		{
+			BorderBrush     = TableBorderBrush,
+			BorderThickness = new Thickness(1, 1, 0, 0),
+			Margin          = new Thickness(0, 4),
+			Child           = grid,
+		};
+	}
+
 	// ── Inline-level ─────────────────────────────────────────────────────────
 
-	private static void AppendInline(InlineCollection col, Markdig.Syntax.Inlines.Inline inline)
+	private void AppendInline(InlineCollection col, Markdig.Syntax.Inlines.Inline inline)
 	{
 		switch (inline)
 		{
@@ -201,10 +292,11 @@ public sealed class MarkdownView : ContentControl
 			case CodeInline code:
 				col.Add(new Run
 				{
-					Text        = code.Content,
-					FontFamily  = new FontFamily("Cascadia Code,Consolas,monospace"),
-					Background  = new SolidColorBrush(Color.FromRgb(45, 45, 45)),
-					FontSize    = 12,
+					Text       = code.Content,
+					FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
+					Background = InlineCodeBackground,
+					Foreground = InlineCodeForeground,
+					FontSize   = Math.Max(FontSize - 1, 10),
 				});
 				break;
 

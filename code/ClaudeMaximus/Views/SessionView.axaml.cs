@@ -82,7 +82,12 @@ public partial class SessionView : UserControl
 		var msgVm = FindMessageViewModel(e.Source);
 
 		if (msgVm?.IsAssistant == true)
-			vm.AssistantFontSize = Math.Clamp(vm.AssistantFontSize + delta, 8, 32);
+		{
+			if (vm.IsMarkdownMode)
+				vm.AssistantMarkdownFontSize = Math.Clamp(vm.AssistantMarkdownFontSize + delta, 8, 32);
+			else
+				vm.AssistantFontSize = Math.Clamp(vm.AssistantFontSize + delta, 8, 32);
+		}
 		else if (msgVm?.IsUser == true)
 			vm.UserFontSize = Math.Clamp(vm.UserFontSize + delta, 8, 32);
 

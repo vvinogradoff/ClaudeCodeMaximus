@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -152,12 +153,35 @@ public partial class MainWindow : Window
 		return result;
 	}
 
-	// ── Window drag via menu bar ──────────────────────────────────────────────
+	// ── Window drag via title bar ─────────────────────────────────────────────
 
 	private void OnMenuBarPointerPressed(object? sender, PointerPressedEventArgs e)
 	{
-		if (e.Source is MenuItem) return;
+		if (IsTitleBarControl(e.Source)) return;
 		if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
 			BeginMoveDrag(e);
 	}
+
+	private static bool IsTitleBarControl(object? source)
+	{
+		var visual = source as Visual;
+		while (visual != null)
+		{
+			if (visual is Button or MenuItem) return true;
+			visual = visual.GetVisualParent();
+		}
+		return false;
+	}
+
+	// ── Window control buttons ────────────────────────────────────────────────
+
+	private void OnMinimizeClick(object? sender, RoutedEventArgs e) =>
+		WindowState = WindowState.Minimized;
+
+	private void OnMaximizeRestoreClick(object? sender, RoutedEventArgs e) =>
+		WindowState = WindowState == WindowState.Maximized
+			? WindowState.Normal
+			: WindowState.Maximized;
+
+	private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 }
