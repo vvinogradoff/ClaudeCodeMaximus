@@ -28,9 +28,10 @@
                   SelectionChanged="OnTreeSelectionChanged">
             <TreeView.DataTemplates>
 
-                <!-- Directory node -->
+                <!-- Directory node — reflection bindings used because compiled bindings
+                     do not correctly resolve x:DataType inside TreeView.DataTemplates -->
                 <TreeDataTemplate DataType="vm:DirectoryNodeViewModel"
-                                  x:DataType="vm:DirectoryNodeViewModel"
+                                  x:CompileBindings="False"
                                   ItemsSource="{Binding Children}">
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
                         <TextBlock Text="&#128193;" FontSize="12" VerticalAlignment="Center"/>
@@ -48,7 +49,7 @@
 
                 <!-- Group node -->
                 <TreeDataTemplate DataType="vm:GroupNodeViewModel"
-                                  x:DataType="vm:GroupNodeViewModel"
+                                  x:CompileBindings="False"
                                   ItemsSource="{Binding Children}">
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
                         <TextBlock Text="&#128194;" FontSize="12" VerticalAlignment="Center"/>
@@ -67,7 +68,7 @@
 
                 <!-- Session node -->
                 <DataTemplate DataType="vm:SessionNodeViewModel"
-                              x:DataType="vm:SessionNodeViewModel">
+                              x:CompileBindings="False">
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
                         <Ellipse Width="8" Height="8"
                                  Fill="LimeGreen"
