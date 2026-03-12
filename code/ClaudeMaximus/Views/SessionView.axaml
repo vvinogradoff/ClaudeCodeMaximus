@@ -1,18 +1,12 @@
 ﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ClaudeMaximus.ViewModels"
-             xmlns:converters="using:ClaudeMaximus.Converters"
-             xmlns:md="using:Markdown.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              x:Class="ClaudeMaximus.Views.SessionView"
              x:Name="Root"
              x:DataType="vm:SessionViewModel">
-
-    <UserControl.Resources>
-        <converters:InverseBooleanConverter x:Key="InverseBool"/>
-    </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*,Auto,5,150">
 
@@ -37,7 +31,6 @@
                       VerticalScrollBarVisibility="Auto">
             <ItemsControl x:Name="MessageList"
                           ItemsSource="{Binding Messages}"
-                          Tag="{Binding IsMarkdownMode}"
                           Margin="0,4,0,4">
                 <ItemsControl.DataTemplates>
                     <DataTemplate x:DataType="vm:MessageEntryViewModel"
@@ -74,14 +67,8 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="52"/>
                                 </Grid.ColumnDefinitions>
-                                <md:MarkdownScrollViewer
-                                    Grid.Column="0"
-                                    IsVisible="{Binding Tag, ElementName=MessageList}"
-                                    Markdown="{Binding Content}"
-                                    Margin="0,0,8,0"/>
                                 <SelectableTextBlock
                                     Grid.Column="0"
-                                    IsVisible="{Binding Tag, ElementName=MessageList, Converter={StaticResource InverseBool}}"
                                     Text="{Binding Content}"
                                     TextWrapping="Wrap"
                                     FontFamily="Cascadia Code,Consolas,monospace"
