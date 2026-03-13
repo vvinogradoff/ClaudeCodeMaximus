@@ -83,6 +83,7 @@ public sealed class MarkdownView : ContentControl
 		Table table           => BuildTable(table),
 		ThematicBreakBlock    => new Separator { Margin = new Thickness(0, 4) },
 		ParagraphBlock p      => BuildParagraph(p),
+		LinkReferenceDefinitionGroup => new Panel(),
 		_                     => new TextBlock { Text = block.ToString(), TextWrapping = TextWrapping.Wrap, FontSize = FontSize },
 	};
 
