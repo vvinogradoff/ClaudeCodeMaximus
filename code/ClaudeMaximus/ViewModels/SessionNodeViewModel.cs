@@ -9,6 +9,7 @@ public sealed class SessionNodeViewModel : ViewModelBase
 {
 	private string _name;
 	private bool _isRunning;
+	private bool _isResumable;
 
 	public SessionNodeModel Model { get; }
 
@@ -29,6 +30,13 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	{
 		get => _isRunning;
 		set => this.RaiseAndSetIfChanged(ref _isRunning, value);
+	}
+
+	/// <summary>True when Claude Code still has this session available for --resume.</summary>
+	public bool IsResumable
+	{
+		get => _isResumable;
+		set => this.RaiseAndSetIfChanged(ref _isResumable, value);
 	}
 
 	public SessionNodeViewModel(SessionNodeModel model)

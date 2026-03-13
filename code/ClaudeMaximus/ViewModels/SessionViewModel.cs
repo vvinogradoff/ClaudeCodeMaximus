@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Reactive;
+using System.Text;
 using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
@@ -27,6 +30,7 @@ public sealed class SessionViewModel : ViewModelBase
 	private DispatcherTimer? _thinkingTimer;
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
+	private bool _needsContextRetry;
 
 	public string Name
 	{
@@ -195,6 +199,34 @@ public sealed class SessionViewModel : ViewModelBase
 				sessionId:        _node.Model.ClaudeSessionId,
 				userMessage:      message,
 				onEvent:          HandleStreamEvent);
+
+			if (_needsContextRetry)
+			{
+				_needsContextRetry = false;
+				var enrichedMessage = BuildContextPreamble(message);
+
+				Dispatcher.UIThread.Post(() =>
+				{
+					var last = Messages.Count > 0 ? Messages[^1] : null;
+					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
+						last.Content = "Resuming session with conversation history...";
+					else
+						Messages.Add(new MessageEntryViewModel
+						{
+							Role       = Constants.SessionFile.RoleSystem,
+							Content    = "Resuming session with conversation history...",
+							Timestamp  = DateTimeOffset.UtcNow,
+							IsProgress = true,
+						});
+				});
+
+				await _processManager.SendMessageAsync(
+					workingDirectory: _node.Model.WorkingDirectory,
+					claudePath:       _appSettings.Settings.ClaudePath,
+					sessionId:        null,
+					userMessage:      enrichedMessage,
+					onEvent:          HandleStreamEvent);
+			}
 		}
 		finally
 		{
@@ -224,21 +256,18 @@ public sealed class SessionViewModel : ViewModelBase
 			case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
 				break;
+			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
+				&& evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase):
+				// "No conversation found" — transient infrastructure error.
+				// Set flag for auto-retry with context preamble; skip file write and UI post.
+				_log.Information("No conversation found for session {FileName} — will retry with context", _node.FileName);
+				_node.Model.ClaudeSessionId = null;
+				_appSettings.Save();
+				_needsContextRetry = true;
+				return;
 			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-				// Error result (e.g. "No conversation found with session ID: ...").
-				// Log it as a SYSTEM message but do NOT update the stored session ID —
-				// the error response's session_id is a new throwaway ID that will also
-				// fail on the next resume attempt, creating a cascading chain of broken IDs.
 				_log.Warning("Claude result error: {Error}", evt.Content);
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
-
-				// Clear the stale session ID so the next send starts a fresh conversation.
-				if (evt.Content.Contains("No conversation found", StringComparison.OrdinalIgnoreCase))
-				{
-					_log.Information("Clearing stale ClaudeSessionId for session {FileName}", _node.FileName);
-					_node.Model.ClaudeSessionId = null;
-					_appSettings.Save();
-				}
 				break;
 			case "result" when !evt.IsError && evt.SessionId is not null:
 				_node.Model.ClaudeSessionId = evt.SessionId;
@@ -329,6 +358,34 @@ public sealed class SessionViewModel : ViewModelBase
 	{
 		var elapsed = DateTimeOffset.UtcNow - _thinkingStartedAt;
 		ThinkingDuration = $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:D2}";
+	}
+
+	private string BuildContextPreamble(string currentMessage)
+	{
+		var entries = _fileService.ReadEntries(_node.FileName);
+		var conversationEntries = entries
+			.Where(e => e.Role is Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant)
+			.ToList();
+
+		if (conversationEntries.Count == 0)
+			return currentMessage;
+
+		var sb = new StringBuilder();
+		sb.AppendLine("The following is the conversation history from a previous session that is no longer available. Use it as context for continuity:");
+		sb.AppendLine("---");
+
+		foreach (var entry in conversationEntries)
+		{
+			var roleLabel = entry.Role == Constants.SessionFile.RoleUser ? "Human" : "Assistant";
+			sb.AppendLine($"[{roleLabel}]: {entry.Content}");
+			sb.AppendLine();
+		}
+
+		sb.AppendLine("---");
+		sb.AppendLine("Now, continuing the conversation:");
+		sb.AppendLine(currentMessage);
+
+		return sb.ToString();
 	}
 
 	private static MessageEntryViewModel EntryToViewModel(SessionEntryModel entry)

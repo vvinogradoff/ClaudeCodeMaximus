@@ -82,10 +82,12 @@
                             </ContextMenu>
                         </Border.ContextMenu>
                         <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
-                            <Ellipse Width="8" Height="8"
-                                     Fill="LimeGreen"
-                                     VerticalAlignment="Center"
-                                     IsVisible="{Binding IsRunning}"/>
+                            <Panel Width="8" Height="8" VerticalAlignment="Center">
+                                <Ellipse Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
+                                         IsVisible="{Binding IsResumable}"/>
+                                <Ellipse Width="8" Height="8" Fill="LimeGreen"
+                                         IsVisible="{Binding IsRunning}"/>
+                            </Panel>
                             <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>

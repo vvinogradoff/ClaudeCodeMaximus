@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
+using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
 using ReactiveUI;
@@ -15,6 +16,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly IAppSettingsService _appSettings;
 	private readonly IDirectoryLabelService _labelService;
 	private readonly ISessionFileService _sessionFileService;
+	private readonly IClaudeSessionStatusService _claudeSessionStatus;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
 
@@ -37,15 +39,25 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	public SessionTreeViewModel(
 		IAppSettingsService appSettings,
 		IDirectoryLabelService labelService,
-		ISessionFileService sessionFileService)
+		ISessionFileService sessionFileService,
+		IClaudeSessionStatusService claudeSessionStatus)
 	{
 		_appSettings = appSettings;
 		_labelService = labelService;
 		_sessionFileService = sessionFileService;
+		_claudeSessionStatus = claudeSessionStatus;
 
 		AddDirectoryCommand = ReactiveCommand.Create(PromptAddDirectory);
 
 		LoadFromSettings();
+		RefreshSessionResumability();
+
+		var timer = new DispatcherTimer
+		{
+			Interval = TimeSpan.FromSeconds(Constants.ClaudeSessions.StatusCheckIntervalSeconds),
+		};
+		timer.Tick += (_, _) => RefreshSessionResumability();
+		timer.Start();
 	}
 
 	// --- Add operations ---
@@ -188,5 +200,30 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	{
 		// Folder picker is invoked from the view's code-behind (requires Window reference).
 		// This command signals intent; the view handles the dialog.
+	}
+
+	private void RefreshSessionResumability()
+	{
+		foreach (var dir in Directories)
+			RefreshChildren(dir.Children);
+	}
+
+	private void RefreshChildren(ObservableCollection<ViewModelBase> children)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session:
+					session.IsResumable = session.Model.ClaudeSessionId is not null
+						&& _claudeSessionStatus.IsSessionResumable(
+							session.Model.WorkingDirectory,
+							session.Model.ClaudeSessionId);
+					break;
+				case GroupNodeViewModel group:
+					RefreshChildren(group.Children);
+					break;
+			}
+		}
 	}
 }

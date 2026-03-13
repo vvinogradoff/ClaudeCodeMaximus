@@ -73,6 +73,7 @@ public partial class App : Application
 		services.AddSingleton<IDraftService, DraftService>();
 		services.AddSingleton<IClaudeProcessManager, ClaudeProcessManager>();
 		services.AddSingleton<ISelfUpdateService, SelfUpdateService>();
+		services.AddSingleton<IClaudeSessionStatusService, ClaudeSessionStatusService>();
 		services.AddSingleton<SessionTreeViewModel>();
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();
