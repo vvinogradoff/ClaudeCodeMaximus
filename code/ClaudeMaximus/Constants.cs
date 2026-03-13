@@ -8,6 +8,8 @@ public static class Constants
 	public const string DefaultSessionsFolderName = "sessions";
 	public const string DraftsFolderName = "drafts";
 	public const string DraftFileExtension = ".draft";
+	public const int DraftDebounceMilliseconds = 500;
+	public const int AutocompleteDebounceMilliseconds = 150;
 	public const string SessionFileExtension = ".txt";
 	public const string SessionFileNameDateFormat = "yyyy-MM-dd-HHmm";
 	public const int SessionFileNameRandomSuffixLength = 6;

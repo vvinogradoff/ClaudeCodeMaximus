@@ -19,6 +19,7 @@ public partial class SessionView : UserControl
 	private static readonly ILogger _log = Log.ForContext<SessionView>();
 	private SessionViewModel? _subscribedVm;
 	private readonly AutocompleteTriggerParser _triggerParser = new();
+	private DispatcherTimer? _autocompleteDebounce;
 
 	public SessionView()
 	{
@@ -143,7 +144,18 @@ public partial class SessionView : UserControl
 		if (e.Property.Name is not (nameof(TextBox.Text) or nameof(TextBox.CaretIndex)))
 			return;
 
-		UpdateAutocompleteTrigger();
+		_autocompleteDebounce?.Stop();
+		_autocompleteDebounce = new DispatcherTimer
+		{
+			Interval = TimeSpan.FromMilliseconds(Constants.AutocompleteDebounceMilliseconds)
+		};
+		_autocompleteDebounce.Tick += (_, _) =>
+		{
+			_autocompleteDebounce?.Stop();
+			_autocompleteDebounce = null;
+			UpdateAutocompleteTrigger();
+		};
+		_autocompleteDebounce.Start();
 	}
 
 	private void UpdateAutocompleteTrigger()

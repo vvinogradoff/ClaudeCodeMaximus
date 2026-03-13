@@ -32,6 +32,7 @@ public sealed class SessionViewModel : ViewModelBase
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
 	private bool _needsContextRetry;
+	private DispatcherTimer? _draftDebounceTimer;
 
 	public string Name
 	{
@@ -379,10 +380,21 @@ public sealed class SessionViewModel : ViewModelBase
 
 	private void SaveDraft(string text)
 	{
-		if (string.IsNullOrEmpty(text))
-			_draftService.DeleteDraft(_node.FileName);
-		else
-			_draftService.SaveDraft(_node.FileName, text);
+		_draftDebounceTimer?.Stop();
+		_draftDebounceTimer = new DispatcherTimer
+		{
+			Interval = TimeSpan.FromMilliseconds(Constants.DraftDebounceMilliseconds)
+		};
+		_draftDebounceTimer.Tick += (_, _) =>
+		{
+			_draftDebounceTimer?.Stop();
+			_draftDebounceTimer = null;
+			if (string.IsNullOrEmpty(text))
+				_draftService.DeleteDraft(_node.FileName);
+			else
+				_draftService.SaveDraft(_node.FileName, text);
+		};
+		_draftDebounceTimer.Start();
 	}
 
 	private void OnThinkingTimerTick(object? sender, EventArgs e)
