@@ -21,102 +21,134 @@
                               ToolTip.Tip="Toggle markdown rendering"
                               Padding="8,3" FontSize="11"
                               VerticalAlignment="Center"/>
+                <TextBox DockPanel.Dock="Right"
+                         x:Name="OutputSearchBox"
+                         Watermark="Search output..."
+                         Width="180" Margin="0,0,8,0"
+                         Padding="6,3" FontSize="12"
+                         VerticalAlignment="Center"/>
                 <TextBlock Text="{Binding Name}"
                            FontSize="16" FontWeight="SemiBold"
                            VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="1" x:Name="MessageScroller"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto">
-            <ItemsControl x:Name="MessageList"
-                          ItemsSource="{Binding Messages}"
-                          Margin="0,4,0,4">
-                <ItemsControl.DataTemplates>
-                    <DataTemplate x:DataType="vm:MessageEntryViewModel"
-                                  x:CompileBindings="False">
-                        <Panel>
+        <Grid Grid.Row="1">
+            <ScrollViewer x:Name="MessageScroller"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="MessageList"
+                              ItemsSource="{Binding Messages}"
+                              Margin="0,4,0,4">
+                    <ItemsControl.DataTemplates>
+                        <DataTemplate x:DataType="vm:MessageEntryViewModel"
+                                      x:CompileBindings="False">
+                            <Panel>
 
-                            <!-- User message: timestamp left, bubble right -->
-                            <Grid IsVisible="{Binding IsUser}" Margin="0,4,8,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="62"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0"
-                                            VerticalAlignment="Bottom"
-                                            HorizontalAlignment="Right"
-                                            Margin="0,0,6,5">
-                                    <TextBlock Text="{Binding FormattedDate}"
-                                               FontSize="9" Opacity="0.3"
-                                               HorizontalAlignment="Right"/>
-                                    <TextBlock Text="{Binding FormattedTime}"
-                                               FontSize="10" Opacity="0.35"
-                                               HorizontalAlignment="Right"/>
-                                </StackPanel>
-                                <Border Grid.Column="1" Padding="10,7" CornerRadius="8"
-                                        Background="{DynamicResource CmxUserBubbleBg}">
-                                    <StackPanel>
-                                        <TextBlock Text="You" FontSize="11"
-                                                   Foreground="{DynamicResource CmxUserBubbleFg}"
-                                                   Opacity="0.6" Margin="0,0,0,3"/>
-                                        <SelectableTextBlock Text="{Binding Content}"
-                                                             TextWrapping="Wrap"
-                                                             Foreground="{DynamicResource CmxUserBubbleFg}"
-                                                             FontFamily="Cascadia Code,Consolas,monospace"
-                                                             FontSize="{Binding DataContext.UserFontSize, ElementName=Root}"/>
+                                <!-- User message: timestamp left, bubble right -->
+                                <Grid IsVisible="{Binding IsUser}" Margin="0,4,8,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="62"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0"
+                                                VerticalAlignment="Bottom"
+                                                HorizontalAlignment="Right"
+                                                Margin="0,0,6,5">
+                                        <TextBlock Text="{Binding FormattedDate}"
+                                                   FontSize="9" Opacity="0.3"
+                                                   HorizontalAlignment="Right"/>
+                                        <TextBlock Text="{Binding FormattedTime}"
+                                                   FontSize="10" Opacity="0.35"
+                                                   HorizontalAlignment="Right"/>
                                     </StackPanel>
+                                    <Border Grid.Column="1" Padding="10,7" CornerRadius="8"
+                                            Background="{DynamicResource CmxUserBubbleBg}">
+                                        <StackPanel>
+                                            <TextBlock Text="You" FontSize="11"
+                                                       Foreground="{DynamicResource CmxUserBubbleFg}"
+                                                       Opacity="0.6" Margin="0,0,0,3"/>
+                                            <SelectableTextBlock Text="{Binding Content}"
+                                                                 TextWrapping="Wrap"
+                                                                 Foreground="{DynamicResource CmxUserBubbleFg}"
+                                                                 FontFamily="Cascadia Code,Consolas,monospace"
+                                                                 FontSize="{Binding DataContext.UserFontSize, ElementName=Root}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <!-- Assistant message: text left, timestamp right -->
+                                <Grid IsVisible="{Binding IsAssistant}" Margin="8,6,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="52"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Panel Grid.Column="0" Margin="0,0,8,0">
+                                        <views:MarkdownView
+                                            IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
+                                            Markdown="{Binding Content}"
+                                            FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
+                                        <SelectableTextBlock
+                                            IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
+                                            Text="{Binding Content}"
+                                            TextWrapping="Wrap"
+                                            FontFamily="Cascadia Code,Consolas,monospace"
+                                            FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
+                                    </Panel>
+                                    <StackPanel Grid.Column="1"
+                                                VerticalAlignment="Bottom"
+                                                HorizontalAlignment="Left"
+                                                Margin="4,0,8,2">
+                                        <TextBlock Text="{Binding FormattedTime}"
+                                                   FontSize="10" Opacity="0.35"
+                                                   HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- System message -->
+                                <Border IsVisible="{Binding IsSystem}" Margin="20,4,20,4" Padding="8,5" CornerRadius="4"
+                                        Background="{DynamicResource CmxSystemBubbleBg}">
+                                    <SelectableTextBlock Text="{Binding Content}" TextWrapping="Wrap" FontSize="12" Opacity="0.7" FontStyle="Italic"/>
                                 </Border>
-                            </Grid>
 
-                            <!-- Assistant message: text left, timestamp right -->
-                            <Grid IsVisible="{Binding IsAssistant}" Margin="8,6,0,6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="52"/>
-                                </Grid.ColumnDefinitions>
-                                <Panel Grid.Column="0" Margin="0,0,8,0">
-                                    <views:MarkdownView
-                                        IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
-                                        Markdown="{Binding Content}"
-                                        FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
-                                    <SelectableTextBlock
-                                        IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
-                                        Text="{Binding Content}"
-                                        TextWrapping="Wrap"
-                                        FontFamily="Cascadia Code,Consolas,monospace"
-                                        FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
-                                </Panel>
-                                <StackPanel Grid.Column="1"
-                                            VerticalAlignment="Bottom"
-                                            HorizontalAlignment="Left"
-                                            Margin="4,0,8,2">
-                                    <TextBlock Text="{Binding FormattedTime}"
-                                               FontSize="10" Opacity="0.35"
-                                               HorizontalAlignment="Left"/>
+                                <!-- Compaction separator -->
+                                <StackPanel IsVisible="{Binding IsCompaction}" Margin="8,8,8,8" Orientation="Vertical" Spacing="2">
+                                    <Separator/>
+                                    <TextBlock Text="&#x2015; Context compacted above &#x2015;"
+                                               HorizontalAlignment="Center" FontSize="11" Opacity="0.5" FontStyle="Italic"/>
+                                    <Separator/>
                                 </StackPanel>
-                            </Grid>
 
-                            <!-- System message -->
-                            <Border IsVisible="{Binding IsSystem}" Margin="20,4,20,4" Padding="8,5" CornerRadius="4"
-                                    Background="{DynamicResource CmxSystemBubbleBg}">
-                                <SelectableTextBlock Text="{Binding Content}" TextWrapping="Wrap" FontSize="12" Opacity="0.7" FontStyle="Italic"/>
-                            </Border>
+                            </Panel>
+                        </DataTemplate>
+                    </ItemsControl.DataTemplates>
+                </ItemsControl>
+            </ScrollViewer>
 
-                            <!-- Compaction separator -->
-                            <StackPanel IsVisible="{Binding IsCompaction}" Margin="8,8,8,8" Orientation="Vertical" Spacing="2">
-                                <Separator/>
-                                <TextBlock Text="&#x2015; Context compacted above &#x2015;"
-                                           HorizontalAlignment="Center" FontSize="11" Opacity="0.5" FontStyle="Italic"/>
-                                <Separator/>
-                            </StackPanel>
-
-                        </Panel>
-                    </DataTemplate>
-                </ItemsControl.DataTemplates>
-            </ItemsControl>
-        </ScrollViewer>
+            <!-- Search results overlay (FR.10.3) -->
+            <Border x:Name="SearchOverlay"
+                    IsVisible="{Binding OutputSearchVm.IsActive}"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,8,16,0" Padding="10,5" CornerRadius="4"
+                    BorderThickness="1"
+                    BorderBrush="#CCCC00"
+                    Background="#40FFFF00"
+                    x:CompileBindings="False">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding OutputSearchVm.StatusText}"
+                               VerticalAlignment="Center" FontSize="12"/>
+                    <Button x:Name="SearchPrevBtn" Content="&lt;"
+                            Padding="6,2" FontSize="11" MinWidth="0"
+                            VerticalAlignment="Center"/>
+                    <Button x:Name="SearchNextBtn" Content="&gt;"
+                            Padding="6,2" FontSize="11" MinWidth="0"
+                            VerticalAlignment="Center"/>
+                    <Button x:Name="SearchCloseBtn" Content="X"
+                            Padding="6,2" FontSize="11" MinWidth="0"
+                            VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
 
         <!-- Row 2: Thinking indicator -->
         <StackPanel Grid.Row="2"

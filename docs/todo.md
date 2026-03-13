@@ -144,6 +144,17 @@
 
 ---
 
+## Phase 6 — Output Search (FR.10)
+
+### P6.1 Output Search
+- [DONE] `OutputSearchViewModel` — case-insensitive search, match navigation, dismiss (FR.10.1–10.5)
+- [DONE] Search TextBox in SessionView header (left of MD toggle)
+- [DONE] Floating overlay in top-right of output area (yellow stroke/fill, match count, prev/next/close)
+- [DONE] Keyboard: Enter=search/next, Ctrl+Enter=prev, Escape=dismiss (preserves search text)
+- [DONE] Scroll-to-match via `BringIntoView` on matched message container
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion

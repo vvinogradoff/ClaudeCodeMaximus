@@ -124,6 +124,7 @@ public sealed class SessionViewModel : ViewModelBase
 	public ReactiveCommand<Unit, Unit> SendCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleMarkdownCommand { get; }
 	public AutocompleteViewModel AutocompleteVm { get; }
+	public OutputSearchViewModel OutputSearchVm { get; }
 	public string WorkingDirectory => _node.Model.WorkingDirectory;
 
 	public SessionViewModel(
@@ -142,6 +143,7 @@ public sealed class SessionViewModel : ViewModelBase
 		_codeIndexService = codeIndexService;
 		_name             = node.Name;
 		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
+		OutputSearchVm    = new OutputSearchViewModel(Messages);
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 

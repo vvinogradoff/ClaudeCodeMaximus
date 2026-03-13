@@ -37,6 +37,14 @@ public partial class SessionView : UserControl
 		// Text/caret change → trigger detection
 		InputBox.PropertyChanged += OnInputBoxPropertyChanged;
 
+		// Output search box keyboard (Enter=next, Ctrl+Enter=prev, Escape=dismiss)
+		OutputSearchBox.AddHandler(KeyDownEvent, OnSearchBoxKeyDown, RoutingStrategies.Tunnel);
+
+		// Overlay buttons
+		SearchPrevBtn.Click  += (_, _) => NavigateSearch(forward: false);
+		SearchNextBtn.Click  += (_, _) => NavigateSearch(forward: true);
+		SearchCloseBtn.Click += (_, _) => DismissSearch();
+
 		// Track whether user is at the bottom of the scroller for auto-scroll
 		MessageScroller.ScrollChanged += OnScrollChanged;
 
@@ -225,6 +233,65 @@ public partial class SessionView : UserControl
 	private void ScrollToEndDeferred()
 	{
 		Dispatcher.UIThread.Post(() => MessageScroller.ScrollToEnd(), DispatcherPriority.Background);
+	}
+
+	private void OnSearchBoxKeyDown(object? sender, KeyEventArgs e)
+	{
+		if (e.Key == Key.Escape)
+		{
+			DismissSearch();
+			e.Handled = true;
+			return;
+		}
+
+		if (e.Key != Key.Enter)
+			return;
+
+		e.Handled = true;
+
+		if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+			NavigateSearch(forward: false);
+		else
+			NavigateSearch(forward: true);
+	}
+
+	private void NavigateSearch(bool forward)
+	{
+		if (DataContext is not SessionViewModel vm)
+			return;
+
+		var search = vm.OutputSearchVm;
+		int msgIndex;
+
+		if (!search.IsActive)
+		{
+			// First search or re-search after dismiss
+			msgIndex = search.Search(OutputSearchBox.Text ?? string.Empty);
+		}
+		else
+		{
+			msgIndex = forward ? search.NextMatch() : search.PreviousMatch();
+		}
+
+		if (msgIndex >= 0)
+			ScrollToMessageIndex(msgIndex);
+	}
+
+	private void DismissSearch()
+	{
+		if (DataContext is SessionViewModel vm)
+			vm.OutputSearchVm.Dismiss();
+	}
+
+	private void ScrollToMessageIndex(int index)
+	{
+		// Defer so layout has a chance to update
+		Dispatcher.UIThread.Post(() =>
+		{
+			var container = MessageList.ContainerFromIndex(index);
+			if (container is Control ctrl)
+				ctrl.BringIntoView();
+		}, DispatcherPriority.Background);
 	}
 
 	private void OnScrollerWheel(object? sender, PointerWheelEventArgs e)

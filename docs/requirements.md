@@ -259,6 +259,23 @@ Maximum 15 results displayed.
 
 ---
 
+### FR.10 — Output Search
+
+**FR.10.1** The session view header shall include a search text box positioned to the left of the Markdown toggle button. The search box searches within the currently displayed output messages.
+
+**FR.10.2 — Search navigation:** Pressing `Enter` in the search box starts a search (or advances to the next match). Pressing `Ctrl+Enter` navigates to the previous match. Pressing `Escape` dismisses the search (hides the results overlay) but preserves the search text in the box.
+
+**FR.10.3 — Results overlay:** A small floating panel is displayed in the top-right corner of the output area when a search is active. The panel has a yellow semi-transparent fill and yellow stroke. It shows:
+- Match status text: "N of M matches" (e.g., "1 of 5 matches") or "no matches"
+- Previous (`<`) and Next (`>`) navigation buttons
+- A Close (`X`) button that dismisses the search (same as Escape)
+
+**FR.10.4 — Match highlighting:** Matched messages are scrolled into view when navigating. The search is case-insensitive and matches against message content text.
+
+**FR.10.5 — Dismissal behavior:** Closing the search overlay (via `X` button or `Escape` key) hides the overlay and clears any match highlighting, but does **not** clear the search text from the search box.
+
+---
+
 ## Out of Scope (Initial Version)
 
 - Session sharing or sync across machines
