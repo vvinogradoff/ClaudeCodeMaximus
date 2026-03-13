@@ -75,6 +75,8 @@ This is equivalent to writing a custom terminal emulator or IDE plugin that runs
 - Tool use / tool result blocks
 - System messages and status lines
 
+**FR.2.3.1 — Message timestamps:** Each message bubble displays a timestamp. User messages show both date (`yyyy-MM-dd`) and time (`HH:mm`). Assistant messages show time only (`HH:mm`) — the date is omitted to reduce visual clutter.
+
 **FR.2.4** The session view shall provide a multi-line input text box at the bottom for composing and submitting prompts to Claude Code. Submission is via `Ctrl+Enter` or a dedicated Send button.
 
 **FR.2.5** When Claude Code is running (processing a prompt), the input area shall be disabled and a visual busy indicator shown.
@@ -121,11 +123,19 @@ Subsequent messages continue after the separator. The full pre-compaction histor
 
 **FR.4.3 — appsettings.json is written atomically:** On every save, write to a temporary file in the same directory then rename over the target, to prevent corruption on crash.
 
-**FR.4.4 — Settings window:** A Settings window (accessible from the main menu or toolbar) allows the user to configure:
+**FR.4.4 — Settings window:** A Settings window (accessible from the hamburger menu) allows the user to configure:
 - Session Files Root directory (folder picker)
 - `claude` CLI executable path (default: resolved from `PATH`)
+- Theme selection: Dark or Light (radio buttons)
+- Per-theme color customization (see FR.9)
 
 **FR.4.5** Application window state (size, position, left-panel splitter position) is also persisted in `appsettings.json` and restored on next launch.
+
+**FR.4.6 — Session state persistence:** The following per-session and global UI state is persisted in `appsettings.json` and restored on next launch:
+- **Active session selection:** the file name of the last selected session, so reopening the app returns to the same session.
+- **Tree expand/collapse state:** each Directory and Group node stores an `IsExpanded` flag.
+- **Scroll position:** each session stores a `ScrollOffset` value for the message output area, so returning to a session resumes at the same scroll position.
+- **Tree panel visibility:** whether the left panel is collapsed or visible.
 
 ---
 
@@ -151,7 +161,12 @@ Subsequent messages continue after the separator. The full pre-compaction histor
 
 **FR.6.2** The left panel width is adjustable via a draggable splitter.
 
-**FR.6.3** A Settings entry in the main menu opens the Settings window (FR.4.4).
+**FR.6.3** The title bar replaces the traditional menu bar with a compact toolbar of icon buttons (left-to-right):
+1. **Chevron toggle** — collapses/expands the left tree panel. Shows chevron-left when the tree is visible (click to hide), chevron-right when hidden (click to show). Collapse state is persisted in `appsettings.json`.
+2. **Hamburger menu** — opens a flyout menu with Settings and Exit entries.
+3. **Day/night toggle** — switches between dark and light themes. Shows a sun icon in dark mode (click for light), moon icon in light mode (click for dark). Theme choice is persisted in `appsettings.json`.
+
+**FR.6.4** Window control buttons (minimize, maximize/restore, close) remain on the right side of the title bar. The title bar background is draggable for window repositioning.
 
 ---
 
@@ -207,7 +222,7 @@ Maximum 15 results displayed.
 - Clicking outside dismisses the popup
 - Popup dismisses automatically when the trigger pattern is no longer present
 
-**FR.7.9 — Indexed File Types:** The file index covers: `*.cs`, `*.axaml`, `*.xaml`, `*.csproj`, `*.sln`, `*.json`, `*.md`, `*.xml`, `*.razor`. Directories `bin/`, `obj/`, `.git/`, `node_modules/`, `.vs/`, `.idea/` are excluded.
+**FR.7.9 — Indexed File Types:** The file index for `##` (file search) covers **all files** in the working directory tree. Directories `bin/`, `obj/`, `.git/`, `node_modules/`, `.vs/`, `.idea/` are excluded. Symbol extraction for `#` (code symbol search) is performed only on `*.cs` files.
 
 **FR.7.10 — C# Symbol Parsing:** Code symbols are extracted from `*.cs` files using Roslyn syntax-only parsing (`CSharpSyntaxTree.ParseText`). No full compilation or semantic analysis is performed. Supported symbol kinds: class, enum, struct, record, interface, method, property.
 
@@ -217,11 +232,37 @@ Maximum 15 results displayed.
 
 ---
 
+### FR.8 — Self-Update on Exit
+
+**FR.8.1** On application exit, the app checks whether a newer build exists in the solution's `bin\Debug\net9.0` directory (compared to the running publish directory). If a newer build is detected, a PowerShell script is spawned as a detached process to copy the updated files after the app has fully exited.
+
+**FR.8.2** The copy script retries with exponential backoff (up to 10 attempts) in case files are still locked during shutdown.
+
+**FR.8.3** If no solution root is found (e.g., running from a standalone publish), the update check is silently skipped.
+
+---
+
+### FR.9 — Theme & Color Customization
+
+**FR.9.1 — Theme variants:** The application supports Dark and Light themes. The selected theme controls the Avalonia `RequestedThemeVariant` (which affects all built-in control styling) and also selects which set of custom colors to apply.
+
+**FR.9.2 — Per-theme custom colors:** Each theme (Dark and Light) has an independent set of customizable colors stored as hex strings in `appsettings.json`:
+- Input box background and text color
+- User message bubble background and text color
+- Code block background and text color
+- Inline code background and text color
+- System message bubble background color
+
+**FR.9.3 — Color application:** Custom colors are applied as application-level dynamic resources (`CmxInputBg`, `CmxInputFg`, `CmxUserBubbleBg`, `CmxUserBubbleFg`, `CmxCodeBg`, `CmxCodeFg`, `CmxInlineCodeBg`, `CmxInlineCodeFg`, `CmxSystemBubbleBg`). These are consumed by SessionView (AXAML `DynamicResource` bindings) and MarkdownView (code-behind resource lookups). Colors are re-applied immediately when the theme is toggled or when settings are saved.
+
+**FR.9.4 — Sensible defaults:** Both themes ship with sensible default color values. Dark defaults use VS Code-inspired dark palette; Light defaults use standard light-background colors. Users can customize any color via hex input in the Settings window.
+
+---
+
 ## Out of Scope (Initial Version)
 
 - Session sharing or sync across machines
 - Diff or branching of session history
-- Custom themes beyond system light/dark
 - Deletion of session files from within the UI
 - Plugin system
 

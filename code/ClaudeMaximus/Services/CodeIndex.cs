@@ -17,9 +17,9 @@ public sealed class CodeIndex : IDisposable
 {
 	private static readonly ILogger _log = Log.ForContext<CodeIndex>();
 
-	private static readonly HashSet<string> _indexedExtensions = new(StringComparer.OrdinalIgnoreCase)
+	private static readonly HashSet<string> _symbolParsedExtensions = new(StringComparer.OrdinalIgnoreCase)
 	{
-		".cs", ".axaml", ".xaml", ".csproj", ".sln", ".json", ".md", ".xml", ".razor"
+		".cs"
 	};
 
 	private static readonly HashSet<string> _excludedDirectories = new(StringComparer.OrdinalIgnoreCase)
@@ -84,9 +84,6 @@ public sealed class CodeIndex : IDisposable
 
 			foreach (var filePath in Directory.EnumerateFiles(directory))
 			{
-				var ext = Path.GetExtension(filePath);
-				if (!_indexedExtensions.Contains(ext)) continue;
-
 				var fileName = Path.GetFileName(filePath);
 				var relativePath = Path.GetRelativePath(_workingDirectory, filePath).Replace('\\', '/');
 
@@ -97,7 +94,8 @@ public sealed class CodeIndex : IDisposable
 					AbsolutePath = filePath
 				});
 
-				if (string.Equals(ext, ".cs", StringComparison.OrdinalIgnoreCase))
+				var ext = Path.GetExtension(filePath);
+				if (_symbolParsedExtensions.Contains(ext))
 				{
 					ExtractSymbols(filePath, symbols);
 				}
@@ -298,9 +296,6 @@ public sealed class CodeIndex : IDisposable
 
 	private void ScheduleReindex(string filePath)
 	{
-		var ext = Path.GetExtension(filePath);
-		if (!_indexedExtensions.Contains(ext)) return;
-
 		// Check if file is inside an excluded directory
 		var relativePath = Path.GetRelativePath(_workingDirectory, filePath);
 		var parts = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
