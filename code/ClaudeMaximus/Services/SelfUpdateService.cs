@@ -12,8 +12,6 @@ namespace ClaudeMaximus.Services;
 /// </summary>
 public class SelfUpdateService : ISelfUpdateService
 {
-	private const string SolutionFileName    = "ClaudeMaximus.sln";
-	private const string SourceRelativePath  = @"code\ClaudeMaximus\bin\Debug\net9.0";
 	private const string AssemblyFileName    = "ClaudeMaximus.dll";
 	private const int    MaxRetries          = 10;
 
@@ -28,34 +26,42 @@ public class SelfUpdateService : ISelfUpdateService
 
 			if (solutionRoot == null)
 			{
-				Log.Debug("SelfUpdateService: solution root not found, skipping update check.");
+				Log.Information("SelfUpdateService: solution root not found from {PublishDir}, skipping.", publishDir);
 				return;
 			}
 
-			var sourceDir  = Path.Combine(solutionRoot, SourceRelativePath);
+			Log.Information("SelfUpdateService: solution root = {SolutionRoot}", solutionRoot);
+
+			// The .sln sits next to the project folder, so bin/Debug is a direct child path
+			var sourceDir  = FindBuildOutputDir(solutionRoot);
+			if (sourceDir == null)
+			{
+				Log.Information("SelfUpdateService: could not locate bin/Debug/net* output under {SolutionRoot}", solutionRoot);
+				return;
+			}
+
 			var sourceDll  = Path.Combine(sourceDir,   AssemblyFileName);
 			var publishDll = Path.Combine(publishDir,  AssemblyFileName);
 
-			if (!Directory.Exists(sourceDir))
-			{
-				Log.Debug("SelfUpdateService: source dir not found: {SourceDir}", sourceDir);
-				return;
-			}
+			Log.Information("SelfUpdateService: sourceDir = {SourceDir}, publishDir = {PublishDir}", sourceDir, publishDir);
 
 			if (!File.Exists(sourceDll))
 			{
-				Log.Debug("SelfUpdateService: source dll not found: {SourceDll}", sourceDll);
+				Log.Information("SelfUpdateService: source dll not found: {SourceDll}", sourceDll);
 				return;
 			}
 
 			if (File.Exists(publishDll)
 				&& File.GetLastWriteTimeUtc(sourceDll) <= File.GetLastWriteTimeUtc(publishDll))
 			{
-				Log.Debug("SelfUpdateService: publish is already up-to-date, no copy needed.");
+				Log.Information("SelfUpdateService: publish is up-to-date. Source={SrcTime}, Publish={PubTime}",
+					File.GetLastWriteTimeUtc(sourceDll), File.GetLastWriteTimeUtc(publishDll));
 				return;
 			}
 
-			Log.Information("SelfUpdateService: newer build detected, spawning copy process. Source: {Src}", sourceDir);
+			Log.Information("SelfUpdateService: newer build detected, spawning copy. Source={SrcTime}, Publish={PubTime}",
+				File.GetLastWriteTimeUtc(sourceDll),
+				File.Exists(publishDll) ? File.GetLastWriteTimeUtc(publishDll) : "(missing)");
 			SpawnCopyProcess(sourceDir, publishDir);
 		}
 		catch (Exception ex)
@@ -74,6 +80,35 @@ public class SelfUpdateService : ISelfUpdateService
 				return current;
 
 			current = Directory.GetParent(current)?.FullName;
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	/// Finds the bin/Debug/net* output directory by searching for the assembly DLL
+	/// under the solution root. This avoids hardcoding a relative path that can break
+	/// depending on where the .sln file sits relative to the project folder.
+	/// </summary>
+	private static string? FindBuildOutputDir(string solutionRoot)
+	{
+		// Look for ClaudeMaximus.dll in any bin/Debug/net* folder under the solution root
+		try
+		{
+			var candidates = Directory.GetFiles(solutionRoot, AssemblyFileName, SearchOption.AllDirectories);
+			foreach (var candidate in candidates)
+			{
+				var dir = Path.GetDirectoryName(candidate)!;
+				// Must be under a bin\Debug path (not publish, not test project)
+				if (dir.Contains(Path.Combine("bin", "Debug"), StringComparison.OrdinalIgnoreCase)
+					&& !dir.Contains("Tests", StringComparison.OrdinalIgnoreCase)
+					&& !dir.Contains("publish", StringComparison.OrdinalIgnoreCase))
+					return dir;
+			}
+		}
+		catch (Exception ex)
+		{
+			Log.Warning(ex, "SelfUpdateService: error searching for build output under {Root}", solutionRoot);
 		}
 
 		return null;
