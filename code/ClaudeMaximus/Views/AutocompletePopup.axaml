@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ClaudeMaximus.ViewModels"
+             xmlns:models="using:ClaudeMaximus.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="using:ClaudeMaximus.Views"
+             mc:Ignorable="d"
+             x:Class="ClaudeMaximus.Views.AutocompletePopup"
+             x:DataType="vm:AutocompleteViewModel"
+             x:CompileBindings="False">
+
+    <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+            BorderThickness="1"
+            CornerRadius="4"
+            MaxHeight="320"
+            MinWidth="400"
+            MaxWidth="700"
+            Padding="2">
+        <ListBox x:Name="SuggestionList"
+                 ItemsSource="{Binding Suggestions}"
+                 SelectedIndex="{Binding SelectedIndex}"
+                 Background="Transparent"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="models:AutocompleteSuggestionModel"
+                              x:CompileBindings="False">
+                    <Grid ColumnDefinitions="24,*,Auto" Margin="2,1">
+                        <!-- Symbol kind icon -->
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Kind, Converter={x:Static local:SymbolKindConverter.Instance}}"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{Binding Kind, Converter={x:Static local:SymbolKindColorConverter.Instance}}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Width="20"
+                                   TextAlignment="Center"/>
+
+                        <!-- Display name -->
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding DisplayText}"
+                                   FontFamily="Cascadia Code,Consolas,monospace"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                        <!-- Secondary text (namespace or path) -->
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding SecondaryText}"
+                                   FontSize="11"
+                                   Opacity="0.5"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0,4,0"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Border>
+
+</UserControl>

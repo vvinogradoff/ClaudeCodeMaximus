@@ -22,6 +22,7 @@ public sealed class SessionViewModel : ViewModelBase
 	private readonly IClaudeProcessManager _processManager;
 	private readonly IAppSettingsService _appSettings;
 	private readonly IDraftService _draftService;
+	private readonly ICodeIndexService _codeIndexService;
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -114,25 +115,34 @@ public sealed class SessionViewModel : ViewModelBase
 
 	public ReactiveCommand<Unit, Unit> SendCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleMarkdownCommand { get; }
+	public AutocompleteViewModel AutocompleteVm { get; }
+	public string WorkingDirectory => _node.Model.WorkingDirectory;
 
 	public SessionViewModel(
 		SessionNodeViewModel node,
 		ISessionFileService fileService,
 		IClaudeProcessManager processManager,
 		IAppSettingsService appSettings,
-		IDraftService draftService)
+		IDraftService draftService,
+		ICodeIndexService codeIndexService)
 	{
-		_node           = node;
-		_fileService    = fileService;
-		_processManager = processManager;
-		_appSettings    = appSettings;
-		_draftService   = draftService;
-		_name           = node.Name;
+		_node             = node;
+		_fileService      = fileService;
+		_processManager   = processManager;
+		_appSettings      = appSettings;
+		_draftService     = draftService;
+		_codeIndexService = codeIndexService;
+		_name             = node.Name;
+		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 
 		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
+
+		// Start background indexing for this session's working directory
+		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
+			_ = codeIndexService.GetOrCreateIndexAsync(WorkingDirectory);
 	}
 
 	public void LoadFromFile()
@@ -256,6 +266,18 @@ public sealed class SessionViewModel : ViewModelBase
 				_fileService.AppendCompactionSeparator(_node.FileName);
 				break;
 			case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
+				// When context retry is pending, suppress stderr-based errors (they echo the
+				// same "No conversation found" that the result event already handled).
+				if (_needsContextRetry)
+					return;
+				if (evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase))
+				{
+					_log.Information("No conversation found (system error) for session {FileName} — will retry with context", _node.FileName);
+					_node.Model.ClaudeSessionId = null;
+					_appSettings.Save();
+					_needsContextRetry = true;
+					return;
+				}
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
 				break;
 			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)

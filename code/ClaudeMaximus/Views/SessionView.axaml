@@ -141,13 +141,23 @@
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,1,0,0">
             <Grid ColumnDefinitions="*,Auto">
-                <TextBox Grid.Column="0" x:Name="InputBox"
-                         Text="{Binding InputText}"
-                         AcceptsReturn="True"
-                         Watermark="Type a message... (Ctrl+Enter to send)"
-                         TextWrapping="Wrap"
-                         FontFamily="Cascadia Code,Consolas,monospace"
-                         FontSize="{Binding InputFontSize}"/>
+                <Panel Grid.Column="0">
+                    <TextBox x:Name="InputBox"
+                             Text="{Binding InputText}"
+                             AcceptsReturn="True"
+                             Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file"
+                             TextWrapping="Wrap"
+                             FontFamily="Cascadia Code,Consolas,monospace"
+                             FontSize="{Binding InputFontSize}"/>
+                    <Popup x:Name="AutocompletePopup"
+                           PlacementTarget="{Binding ElementName=InputBox}"
+                           Placement="Top"
+                           IsOpen="{Binding AutocompleteVm.IsOpen, Mode=OneWay}"
+                           IsLightDismissEnabled="False"
+                           x:CompileBindings="False">
+                        <views:AutocompletePopup DataContext="{Binding AutocompleteVm}"/>
+                    </Popup>
+                </Panel>
                 <Button Grid.Column="1"
                         Content="Send"
                         VerticalAlignment="Stretch"

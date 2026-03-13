@@ -26,6 +26,14 @@ public static class Constants
 		public const string NoConversationFoundMarker = "No conversation found";
 	}
 
+	public static class CodeIndex
+	{
+		public const int DebounceMilliseconds = 300;
+		public const int MaxSuggestions = 15;
+		public const string SymbolTrigger = "#";
+		public const string FileTrigger = "##";
+	}
+
 	public static class ClaudeSessions
 	{
 		public const string ClaudeHomeFolderName = ".claude";

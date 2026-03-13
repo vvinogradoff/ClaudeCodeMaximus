@@ -75,6 +75,7 @@ public partial class App : Application
 		services.AddSingleton<ISelfUpdateService, SelfUpdateService>();
 		services.AddSingleton<IClaudeSessionStatusService, ClaudeSessionStatusService>();
 		services.AddSingleton<ISessionSearchService, SessionSearchService>();
+		services.AddSingleton<ICodeIndexService, CodeIndexService>();
 		services.AddSingleton<SessionTreeViewModel>();
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();

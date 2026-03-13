@@ -84,10 +84,40 @@
 
 ---
 
+## Phase 4 — Code Reference Autocomplete (FR.7)
+
+### P4.1 Background Code Indexer (FR.7.1, FR.7.9, FR.7.10, FR.7.11) ✓
+- [DONE] `CodeSymbolKind` enum, `CodeSymbolModel`, `IndexedFileModel` models
+- [DONE] `ICodeIndexService` / `CodeIndexService` — singleton, per-directory indexes, reference-counted
+- [DONE] `CodeIndex` — background scan, Roslyn syntax-only parsing, FileSystemWatcher, debounced reindex
+- [DONE] Constants for debounce, max suggestions, triggers, extensions, excluded dirs
+- [DONE] DI registration + Roslyn NuGet package
+
+### P4.2 Trigger Detection (FR.7.2, FR.7.3, FR.7.4) ✓
+- [DONE] `AutocompleteMode` enum, `AutocompleteTriggerModel`
+- [DONE] `AutocompleteTriggerParser` — scans backward from caret for `#` / `##` triggers
+
+### P4.3 Autocomplete ViewModel (FR.7.4, FR.7.5, FR.7.6, FR.7.7) ✓
+- [DONE] `AutocompleteSuggestionModel`
+- [DONE] `AutocompleteViewModel` — suggestions collection, selection, accept/dismiss
+- [DONE] 4-tier search: case-sensitive starts-with, case-insensitive starts-with, case-sensitive contains, case-insensitive contains
+- [DONE] Wired into `SessionViewModel` + `MainWindowViewModel`
+
+### P4.4 Autocomplete UI (FR.7.5, FR.7.6, FR.7.8) ✓
+- [DONE] `AutocompletePopup.axaml` + `.cs` — ListBox with symbol icon, display text, secondary text
+- [DONE] `SymbolKindConverter` + `SymbolKindColorConverter` (VS Code-style colors)
+- [DONE] Popup in `SessionView.axaml` positioned above InputBox
+- [DONE] Keyboard handling in `SessionView.axaml.cs` — Up/Down/Tab/Enter/Escape
+- [DONE] Trigger detection on text/caret change
+- [DONE] Insertion removes `#`/`##` trigger and inserts FQN (symbols) or relative path (files)
+- [ ] Unit tests for `AutocompleteTriggerParser`
+- [ ] Unit tests for `CodeIndexService` tiered search
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion
 - [ ] Session file watcher (detect disk deletion so tree delete button becomes available)
 - [ ] Integration tests for `ClaudeProcessManager` with a mock process
-- [ ] Search indexing (replace linear scan when session count grows)
 - [ ] Light/dark theme toggle

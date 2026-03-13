@@ -6,6 +6,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ClaudeMaximus.Models;
+using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
 using Serilog;
 
@@ -16,13 +18,17 @@ public partial class SessionView : UserControl
 {
 	private static readonly ILogger _log = Log.ForContext<SessionView>();
 	private SessionViewModel? _subscribedVm;
+	private readonly AutocompleteTriggerParser _triggerParser = new();
 
 	public SessionView()
 	{
 		InitializeComponent();
 
-		// Ctrl+Enter / plain Enter handling
+		// Ctrl+Enter / plain Enter handling + autocomplete keyboard
 		InputBox.AddHandler(KeyDownEvent, OnInputKeyDown, RoutingStrategies.Tunnel);
+
+		// Text/caret change → trigger detection
+		InputBox.PropertyChanged += OnInputBoxPropertyChanged;
 
 		// Ctrl+scroll changes font size; tunnel so we intercept before the scroller scrolls
 		MessageScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnScrollerWheel, RoutingStrategies.Tunnel);
@@ -49,15 +55,49 @@ public partial class SessionView : UserControl
 
 	private void OnInputKeyDown(object? sender, KeyEventArgs e)
 	{
+		if (DataContext is not SessionViewModel vm) return;
+		var acVm = vm.AutocompleteVm;
+
+		// Autocomplete keyboard handling when popup is open
+		if (acVm.IsOpen)
+		{
+			switch (e.Key)
+			{
+				case Key.Up:
+					acVm.MoveSelection(-1);
+					e.Handled = true;
+					return;
+
+				case Key.Down:
+					acVm.MoveSelection(1);
+					e.Handled = true;
+					return;
+
+				case Key.Tab:
+					AcceptAutocompleteSuggestion(vm);
+					e.Handled = true;
+					return;
+
+				case Key.Escape:
+					acVm.Dismiss();
+					e.Handled = true;
+					return;
+
+				case Key.Enter when e.KeyModifiers == KeyModifiers.None:
+					AcceptAutocompleteSuggestion(vm);
+					e.Handled = true;
+					return;
+			}
+		}
+
 		if (e.Key != Key.Enter) return;
 
 		if (e.KeyModifiers == KeyModifiers.Control)
 		{
 			_log.Debug("Ctrl+Enter pressed — sending message");
 			e.Handled = true;
-			if (DataContext is SessionViewModel vm)
-				vm.SendCommand.Execute(default)
-					.Subscribe(new System.Reactive.AnonymousObserver<System.Reactive.Unit>(_ => { }, _ => { }, () => { }));
+			vm.SendCommand.Execute(default)
+				.Subscribe(new System.Reactive.AnonymousObserver<System.Reactive.Unit>(_ => { }, _ => { }, () => { }));
 		}
 		else if (e.KeyModifiers == KeyModifiers.None && sender is TextBox tb)
 		{
@@ -68,6 +108,43 @@ public partial class SessionView : UserControl
 			tb.Text       = text.Insert(pos, "\n");
 			tb.CaretIndex = pos + 1;
 		}
+	}
+
+	private void AcceptAutocompleteSuggestion(SessionViewModel vm)
+	{
+		var text = InputBox.Text ?? string.Empty;
+		var caret = InputBox.CaretIndex;
+		var trigger = _triggerParser.Parse(text, caret);
+
+		var suggestion = vm.AutocompleteVm.AcceptSelection();
+		if (suggestion == null || trigger.Mode == AutocompleteMode.None) return;
+
+		// Replace trigger text (including # or ##) with the insert text
+		var before = text.Substring(0, trigger.TriggerStartIndex);
+		var after = text.Substring(trigger.TriggerStartIndex + trigger.TriggerLength);
+		var newText = before + suggestion.InsertText + after;
+
+		InputBox.Text = newText;
+		InputBox.CaretIndex = before.Length + suggestion.InsertText.Length;
+	}
+
+	private void OnInputBoxPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+	{
+		if (e.Property.Name is not (nameof(TextBox.Text) or nameof(TextBox.CaretIndex)))
+			return;
+
+		UpdateAutocompleteTrigger();
+	}
+
+	private void UpdateAutocompleteTrigger()
+	{
+		if (DataContext is not SessionViewModel vm) return;
+
+		var text = InputBox.Text ?? string.Empty;
+		var caret = InputBox.CaretIndex;
+		var trigger = _triggerParser.Parse(text, caret);
+
+		vm.AutocompleteVm.UpdateSuggestions(vm.WorkingDirectory, trigger);
 	}
 
 	// No-op: user controls their own scroll position. Subscription kept to track collection changes if needed.
