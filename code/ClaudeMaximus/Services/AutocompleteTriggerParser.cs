@@ -29,62 +29,51 @@ public sealed class AutocompleteTriggerParser
 
 	private AutocompleteTriggerModel? TryParsePath(string text, int caretIndex)
 	{
-		// Scan backward from caret to find a drive letter pattern: X:\
-		// The drive letter must be preceded by whitespace/newline or be at start of text
-		for (var i = caretIndex - 1; i >= 2; i--)
-		{
-			var ch = text[i];
-			// Stop at newlines — path won't span lines
-			if (ch == '\n' || ch == '\r')
-				break;
-		}
+		// Scan backward from caret to find the nearest X:\ pattern on the current line.
+		// The drive letter must be preceded by whitespace, newline, or be at start of text.
+		// Paths may contain spaces (e.g. C:\Program Files\), so we scan for the drive pattern directly.
 
-		// Find the start of the current "word" (backward to whitespace or SOL)
-		var wordStart = caretIndex;
+		// Find the start of the current line
+		var lineStart = 0;
 		for (var i = caretIndex - 1; i >= 0; i--)
 		{
-			var ch = text[i];
-			if (ch == '\n' || ch == '\r')
-				break;
-			// Allow spaces in paths only if we already have a drive pattern behind us
-			if (ch == ' ' || ch == '\t')
+			if (text[i] == '\n' || text[i] == '\r')
 			{
-				// Check if what's before is part of a path (has a backslash after the space)
-				// For simplicity: find drive letter pattern from this word boundary
-				var candidate = text.Substring(i + 1, caretIndex - (i + 1));
-				if (IsDriveLetterPath(candidate))
-				{
-					wordStart = i + 1;
-					// Continue scanning backward for more spaces that might be part of the path
-					continue;
-				}
+				lineStart = i + 1;
 				break;
 			}
-			wordStart = i;
 		}
 
-		if (wordStart >= caretIndex)
-			return null;
-
-		var segment = text.Substring(wordStart, caretIndex - wordStart);
-		if (!IsDriveLetterPath(segment))
-			return null;
-
-		// Must be preceded by whitespace, newline, or be at start of text
-		if (wordStart > 0)
+		// Scan backward from near the caret looking for X:\ pattern
+		// We need at least 3 chars for X:\, so search positions where X:\ could start
+		for (var i = caretIndex - 3; i >= lineStart; i--)
 		{
-			var before = text[wordStart - 1];
-			if (before != ' ' && before != '\t' && before != '\n' && before != '\r')
-				return null;
+			if (!char.IsLetter(text[i]) || text[i + 1] != ':')
+				continue;
+
+			if (text[i + 2] != '\\' && text[i + 2] != '/')
+				continue;
+
+			// Found a drive letter pattern at position i
+			// Must be preceded by whitespace or be at start of text/line
+			if (i > lineStart)
+			{
+				var before = text[i - 1];
+				if (before != ' ' && before != '\t')
+					continue;
+			}
+
+			var segment = text.Substring(i, caretIndex - i);
+			return new AutocompleteTriggerModel
+			{
+				Mode = AutocompleteMode.Path,
+				Query = segment,
+				TriggerStartIndex = i,
+				TriggerLength = caretIndex - i
+			};
 		}
 
-		return new AutocompleteTriggerModel
-		{
-			Mode = AutocompleteMode.Path,
-			Query = segment,
-			TriggerStartIndex = wordStart,
-			TriggerLength = caretIndex - wordStart
-		};
+		return null;
 	}
 
 	private static bool IsDriveLetterPath(string segment)
