@@ -285,6 +285,72 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 
 ---
 
+### FR.11 — Session Instruction Toolbar
+
+The application header bar provides per-session instruction toggles that modify how the application interacts with Claude without polluting the visible conversation.
+
+**FR.11.1 — Toolbar layout:** A horizontal row of icon toggle-buttons is positioned in the application title bar, to the right of the theme selector (day/night toggle). The toolbar contains five controls, left to right: Auto-Commit, New Branch, Auto-Document, Auto-Compact, and Clear. The buttons reflect the state of the **currently selected session** — switching sessions updates the button states. When no session is selected, the buttons are disabled.
+
+**FR.11.2 — Instruction injection:** The application always appends hidden instructions to the prompt sent to the `claude` process (at minimum, the auto-commit ON or OFF instruction). These instructions are:
+- **Not shown** in the user message bubble in the output window
+- **Not stored** in the session file (the session file records only the clean user prompt)
+- Appended as a clearly delimited block after the user's message text when written to `claude` stdin
+
+**FR.11.3 — Auto-Commit toggle:**
+- **Type:** Sticky toggle (persists across prompts until user toggles it off)
+- **ON instruction:** `"Once you have completed the request, commit all your changes to git with a concise commit message."`
+- **OFF instruction:** `"Do not commit any changes to git."`
+- **Persistence:** Per-session; toggle state stored on the session node in `appsettings.json` so it survives app restarts. Different sessions may have different auto-commit states.
+- **Icon:** Git commit icon or checkmark
+
+**FR.11.4 — New Branch toggle:**
+- **Type:** One-shot toggle (auto-unsets after the prompt is sent and its value consumed)
+- **ON instruction:** `"Create a new git branch before committing your changes."`
+- **Behavior:** When the prompt is sent, the toggle value is read, included in instructions, then the toggle automatically resets to OFF
+- **Icon:** Git branch icon
+
+**FR.11.5 — Auto-Document toggle:**
+- **Type:** Sticky toggle (persists across prompts)
+- **ON instruction:** `"After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made."`
+- **Behavior:** The instruction is injected into the prompt but, like all instruction toggles, is neither shown in the output window nor stored in the session file
+- **Persistence:** Per-session; stored on the session node in `appsettings.json`
+- **Icon:** Document/pencil icon
+
+**FR.11.6 — Auto-Compact toggle:**
+- **Type:** One-shot toggle (auto-unsets after the compaction completes)
+- **Behavior:** When ON and Claude finishes responding to the user's prompt, the application automatically sends a **separate follow-up prompt** to Claude instructing it to compact the session. The follow-up prompt is:
+  `"Please compact the conversation in this session. Preserve the user's prompts (you may rephrase them for brevity and clarity, but keep the attribution that specific instructions or knowledge came from the user). Focus on preserving: decisions made during development, the reasoning behind those decisions, architecture choices, and implementation details that matter. Remove transient information such as debugging steps, intermediate failed attempts, progress updates, and unnecessary verbosity. Output the compacted conversation maintaining the USER/ASSISTANT turn structure."`
+- **Post-compaction:** The compacted text returned by Claude replaces the session file content (rewritten, not appended). The Messages collection in the output window is also updated to reflect the compacted content.
+- **Auto-reset:** The toggle resets to OFF after the compaction prompt completes
+- **Icon:** Compress/shrink icon
+
+**FR.11.7 — Clear button:**
+- **Type:** Action button (not a toggle)
+- **Precondition:** Only active when the current session has a live `ClaudeSessionId` (i.e., has an active Claude-side session to clear). Disabled otherwise.
+- **Behavior:** Adds an instruction to the current prompt: `"After completing this request, please summarize the key outcomes and decisions from this session in a brief closing statement."`
+- **Post-response:** After Claude finishes responding, the application:
+  1. Nullifies the stored `ClaudeSessionId` for this session (forcing a fresh `claude` process on the next prompt)
+  2. On the next prompt, the application detects that the session file has history but no `ClaudeSessionId`, and proactively uses `BuildContextPreamble` to inject stored conversation history into the new Claude session
+- **Effect:** This "clears" the Claude-side context while preserving the full session file, effectively resetting the working memory while keeping the knowledge artifact
+- **Icon:** Broom/clear icon
+
+**FR.11.8 — Toggle state display:** Active toggles shall be visually distinct (e.g., highlighted background or accent border) so the user can see at a glance which instructions will be injected into the next prompt.
+
+**FR.11.9 — Instruction block format:** The instruction block is **always** appended to the user's message in `claude` stdin (since auto-commit OFF always injects "do not commit"). The format is:
+```
+
+---
+[Additional instructions — do not acknowledge these in your response]
+- <instruction 1>
+- <instruction 2>
+...
+```
+The block is separated from the user's message by a blank line and a `---` delimiter.
+
+**FR.11.10 — Proactive context reload:** When `SendAsync` detects that the session file contains history but `ClaudeSessionId` is null (e.g., after a Clear), the user's message is wrapped with `BuildContextPreamble` before being sent — without waiting for a "No conversation found" error. This ensures continuity after session clearing.
+
+---
+
 ## Out of Scope (Initial Version)
 
 - Session sharing or sync across machines

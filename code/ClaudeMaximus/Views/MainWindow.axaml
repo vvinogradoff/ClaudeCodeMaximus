@@ -86,6 +86,68 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Panel>
                     </Button>
+
+                    <!-- Separator -->
+                    <Border Width="1" Height="18" Margin="4,0"
+                            Background="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                            VerticalAlignment="Center"/>
+
+                    <!-- FR.11 Session Instruction Toolbar -->
+                    <!-- Auto-Commit toggle (FR.11.3) -->
+                    <ToggleButton IsChecked="{Binding IsAutoCommit}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="Auto-Commit: commit changes after each prompt">
+                        <TextBlock Text="&#x2713;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- New Branch toggle (FR.11.4) -->
+                    <ToggleButton IsChecked="{Binding IsNewBranch}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="New Branch: create a new git branch for this prompt (one-shot)">
+                        <TextBlock Text="&#x2442;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- Auto-Document toggle (FR.11.5) -->
+                    <ToggleButton IsChecked="{Binding IsAutoDocument}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="Auto-Document: update project docs after each prompt">
+                        <TextBlock Text="&#x270E;" FontSize="13"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- Auto-Compact toggle (FR.11.6) -->
+                    <ToggleButton IsChecked="{Binding IsAutoCompact}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="Auto-Compact: compact session after this prompt (one-shot)">
+                        <TextBlock Text="&#x29C9;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- Clear session button (FR.11.7) -->
+                    <Button Command="{Binding ClearSessionCommand}"
+                            IsEnabled="{Binding CanClear}"
+                            Width="30" Height="26" Padding="0"
+                            Background="Transparent" BorderThickness="1"
+                            BorderBrush="Transparent"
+                            VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Clear: terminate Claude session after this prompt">
+                        <TextBlock Text="&#x2672;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
                 </StackPanel>
                 <!-- Empty space for drag -->
                 <Border Background="Transparent"/>

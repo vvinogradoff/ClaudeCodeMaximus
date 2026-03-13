@@ -51,6 +51,14 @@ public sealed class SessionFileService : ISessionFileService
 	public bool SessionFileExists(string fileName)
 		=> File.Exists(GetFullPath(fileName));
 
+	public void RewriteSessionFile(string fileName, string content)
+	{
+		var fullPath = GetFullPath(fileName);
+		var tmpPath = fullPath + ".tmp";
+		File.WriteAllText(tmpPath, content, Encoding.UTF8);
+		File.Move(tmpPath, fullPath, overwrite: true);
+	}
+
 	private string GetFullPath(string fileName)
 		=> Path.Combine(_appSettings.Settings.SessionFilesRoot, fileName);
 

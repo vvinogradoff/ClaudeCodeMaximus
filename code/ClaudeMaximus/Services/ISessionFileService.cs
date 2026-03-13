@@ -19,4 +19,7 @@ public interface ISessionFileService
 	IReadOnlyList<SessionEntryModel> ReadEntries(string fileName);
 
 	bool SessionFileExists(string fileName);
+
+	/// <summary>Atomically rewrites the session file with new content (write .tmp then rename).</summary>
+	void RewriteSessionFile(string fileName, string content);
 }

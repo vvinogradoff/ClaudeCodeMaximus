@@ -167,6 +167,50 @@
 
 ---
 
+## Phase 8 — Session Instruction Toolbar (FR.11) ✓ DONE
+
+### P8.1 Models & Persistence ✓
+- [DONE] Add `IsAutoCommit` (bool) and `IsAutoDocument` (bool) to `SessionNodeModel` — per-session sticky toggles
+- [DONE] Persist in `appsettings.json` via existing tree serialization
+
+### P8.2 SessionViewModel — Toggle Properties & Instruction Building ✓
+- [DONE] Add properties: `IsAutoCommit`, `IsNewBranch`, `IsAutoDocument`, `IsAutoCompact` (bool, reactive)
+- [DONE] `IsAutoCommit`/`IsAutoDocument` two-way synced with `SessionNodeModel`
+- [DONE] `IsNewBranch`/`IsAutoCompact` runtime-only, default false
+- [DONE] `BuildInstructionBlock()` — reads toggle states, returns `---` delimited instruction text
+- [DONE] Always includes auto-commit instruction (ON or OFF)
+
+### P8.3 SessionViewModel — SendAsync Modifications ✓
+- [DONE] Separate clean message (stored in file + shown in UI) from augmented message (sent to claude stdin)
+- [DONE] After send: auto-reset `IsNewBranch` to false
+- [DONE] After response: if `IsAutoCompact` was set, fire compaction follow-up (P8.5)
+- [DONE] After response: if Clear was triggered, nullify `ClaudeSessionId`
+- [DONE] Proactive context reload (FR.11.10): if session file has history but `ClaudeSessionId` is null, wrap message with `BuildContextPreamble`
+
+### P8.4 Session File Rewrite ✓
+- [DONE] Add `RewriteSessionFile(string fileName, string content)` to `ISessionFileService`
+- [DONE] Atomic write (write .tmp then rename) matching existing pattern
+
+### P8.5 Auto-Compact Follow-up ✓
+- [DONE] `SendCompactionPromptAsync()` — sends compaction prompt, captures response, rewrites file, reloads UI
+
+### P8.6 Clear Session Command ✓
+- [DONE] `ClearCommand` sets `_pendingClear` flag consumed by `SendAsync` post-response
+- [DONE] Post-response: nullify `ClaudeSessionId`, save settings, raise `CanClear` changed
+
+### P8.7 Title Bar UI — Instruction Buttons ✓
+- [DONE] 4 ToggleButtons + 1 Button in `MainWindow.axaml` title bar, right of theme toggle with separator
+- [DONE] Bound to `MainWindowViewModel` forwarding properties
+- [DONE] Disabled when no session selected (`IsEnabled="{Binding HasActiveSession}"`)
+- [DONE] Tooltips on each button
+
+### P8.8 MainWindowViewModel — Forwarding ✓
+- [DONE] Forwarding properties delegate to `ActiveSession`
+- [DONE] `RaiseInstructionToolbarChanged()` on session switch
+- [DONE] `ClearSessionCommand` delegates to `ActiveSession.ClearCommand`
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion

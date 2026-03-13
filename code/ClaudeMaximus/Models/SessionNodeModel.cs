@@ -16,4 +16,10 @@ public sealed class SessionNodeModel
 	public string? ClaudeSessionId { get; set; }
 	/// <summary>Persisted vertical scroll offset for the session output area.</summary>
 	public double ScrollOffset { get; set; }
+
+	/// <summary>Per-session auto-commit toggle (FR.11.3). Persisted across app restarts.</summary>
+	public bool IsAutoCommit { get; set; }
+
+	/// <summary>Per-session auto-document toggle (FR.11.5). Persisted across app restarts.</summary>
+	public bool IsAutoDocument { get; set; }
 }

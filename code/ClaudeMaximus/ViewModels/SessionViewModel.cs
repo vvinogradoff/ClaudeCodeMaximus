@@ -32,6 +32,9 @@ public sealed class SessionViewModel : ViewModelBase
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
 	private bool _needsContextRetry;
+	private bool _pendingClear;
+	private bool _isNewBranch;
+	private bool _isAutoCompact;
 	private DispatcherTimer? _draftDebounceTimer;
 
 	public string Name
@@ -67,6 +70,47 @@ public sealed class SessionViewModel : ViewModelBase
 		get => _isMarkdownMode;
 		set => this.RaiseAndSetIfChanged(ref _isMarkdownMode, value);
 	}
+
+	/// <summary>Per-session sticky toggle (FR.11.3). Persisted in appsettings.json.</summary>
+	public bool IsAutoCommit
+	{
+		get => _node.Model.IsAutoCommit;
+		set
+		{
+			_node.Model.IsAutoCommit = value;
+			this.RaisePropertyChanged();
+			_appSettings.Save();
+		}
+	}
+
+	/// <summary>One-shot toggle (FR.11.4). Auto-resets after prompt sent.</summary>
+	public bool IsNewBranch
+	{
+		get => _isNewBranch;
+		set => this.RaiseAndSetIfChanged(ref _isNewBranch, value);
+	}
+
+	/// <summary>Per-session sticky toggle (FR.11.5). Persisted in appsettings.json.</summary>
+	public bool IsAutoDocument
+	{
+		get => _node.Model.IsAutoDocument;
+		set
+		{
+			_node.Model.IsAutoDocument = value;
+			this.RaisePropertyChanged();
+			_appSettings.Save();
+		}
+	}
+
+	/// <summary>One-shot toggle (FR.11.6). Auto-resets after compaction completes.</summary>
+	public bool IsAutoCompact
+	{
+		get => _isAutoCompact;
+		set => this.RaiseAndSetIfChanged(ref _isAutoCompact, value);
+	}
+
+	/// <summary>True when the session has a live ClaudeSessionId that can be cleared.</summary>
+	public bool CanClear => _node.Model.ClaudeSessionId is not null;
 
 	public double AssistantFontSize
 	{
@@ -123,6 +167,7 @@ public sealed class SessionViewModel : ViewModelBase
 
 	public ReactiveCommand<Unit, Unit> SendCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleMarkdownCommand { get; }
+	public ReactiveCommand<Unit, Unit> ClearCommand { get; }
 	public AutocompleteViewModel AutocompleteVm { get; }
 	public OutputSearchViewModel OutputSearchVm { get; }
 	public string WorkingDirectory => _node.Model.WorkingDirectory;
@@ -149,6 +194,7 @@ public sealed class SessionViewModel : ViewModelBase
 
 		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
+		ClearCommand          = ReactiveCommand.Create(() => { _pendingClear = true; });
 
 		// Start background indexing for this session's working directory
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
@@ -181,6 +227,19 @@ public sealed class SessionViewModel : ViewModelBase
 		InputText = string.Empty;
 		_draftService.DeleteDraft(_node.FileName);
 
+		// Capture one-shot toggle states before resetting them
+		var wasNewBranch = _isNewBranch;
+		var wasAutoCompact = _isAutoCompact;
+		var wasPendingClear = _pendingClear;
+
+		// Build augmented message with hidden instructions (FR.11.2, FR.11.9)
+		var instructionBlock = BuildInstructionBlock();
+		var augmentedMessage = message + instructionBlock;
+
+		// Reset one-shot toggles immediately
+		if (wasNewBranch) IsNewBranch = false;
+		_pendingClear = false;
+
 		_busyCount++;
 		IsBusy = true;
 		_node.IsRunning = true;
@@ -195,6 +254,7 @@ public sealed class SessionViewModel : ViewModelBase
 			_thinkingTimer.Start();
 		}
 
+		// Store only the clean user message in file and UI (FR.11.2)
 		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message);
 		var now = DateTimeOffset.UtcNow;
 		Messages.Add(new MessageEntryViewModel
@@ -214,19 +274,37 @@ public sealed class SessionViewModel : ViewModelBase
 			IsProgress = true,
 		});
 
+		// Proactive context reload (FR.11.10): if file has history but no session ID, wrap with context
+		var sessionId = _node.Model.ClaudeSessionId;
+		var messageToSend = augmentedMessage;
+		if (sessionId == null)
+		{
+			var entries = _fileService.ReadEntries(_node.FileName);
+			var hasHistory = entries.Any(e => e.Role is Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant);
+			// Exclude the message we just appended (last USER entry is the current prompt)
+			var priorEntries = entries
+				.Where(e => e.Role is Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant)
+				.ToList();
+			if (priorEntries.Count > 1) // More than just the current prompt
+			{
+				messageToSend = BuildContextPreamble(augmentedMessage);
+				_log.Information("Proactive context reload for session {FileName}", _node.FileName);
+			}
+		}
+
 		try
 		{
 			await _processManager.SendMessageAsync(
 				workingDirectory: _node.Model.WorkingDirectory,
 				claudePath:       _appSettings.Settings.ClaudePath,
-				sessionId:        _node.Model.ClaudeSessionId,
-				userMessage:      message,
+				sessionId:        sessionId,
+				userMessage:      messageToSend,
 				onEvent:          HandleStreamEvent);
 
 			if (_needsContextRetry)
 			{
 				_needsContextRetry = false;
-				var enrichedMessage = BuildContextPreamble(message);
+				var enrichedMessage = BuildContextPreamble(augmentedMessage);
 
 				Dispatcher.UIThread.Post(() =>
 				{
@@ -249,6 +327,22 @@ public sealed class SessionViewModel : ViewModelBase
 					sessionId:        null,
 					userMessage:      enrichedMessage,
 					onEvent:          HandleStreamEvent);
+			}
+
+			// Post-response: handle Clear (FR.11.7)
+			if (wasPendingClear)
+			{
+				_log.Information("Clearing Claude session for {FileName}", _node.FileName);
+				_node.Model.ClaudeSessionId = null;
+				_appSettings.Save();
+				Dispatcher.UIThread.Post(() => this.RaisePropertyChanged(nameof(CanClear)));
+			}
+
+			// Post-response: handle Auto-Compact (FR.11.6)
+			if (wasAutoCompact)
+			{
+				await SendCompactionPromptAsync();
+				IsAutoCompact = false;
 			}
 		}
 		finally
@@ -430,6 +524,97 @@ public sealed class SessionViewModel : ViewModelBase
 		sb.AppendLine("---");
 		sb.AppendLine("Now, continuing the conversation:");
 		sb.AppendLine(currentMessage);
+
+		return sb.ToString();
+	}
+
+	/// <summary>Sends a follow-up compaction prompt and rewrites the session file (FR.11.6).</summary>
+	private async System.Threading.Tasks.Task SendCompactionPromptAsync()
+	{
+		_log.Information("Starting auto-compaction for session {FileName}", _node.FileName);
+
+		Dispatcher.UIThread.Post(() =>
+		{
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role       = Constants.SessionFile.RoleSystem,
+				Content    = "Compacting session...",
+				Timestamp  = DateTimeOffset.UtcNow,
+				IsProgress = true,
+			});
+		});
+
+		var compactedContent = new StringBuilder();
+
+		await _processManager.SendMessageAsync(
+			workingDirectory: _node.Model.WorkingDirectory,
+			claudePath:       _appSettings.Settings.ClaudePath,
+			sessionId:        _node.Model.ClaudeSessionId,
+			userMessage:      Constants.Instructions.CompactionPrompt,
+			onEvent:          evt =>
+			{
+				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
+					compactedContent.AppendLine(evt.Content);
+
+				if (evt.Type == "result" && !evt.IsError && evt.SessionId is not null)
+				{
+					_node.Model.ClaudeSessionId = evt.SessionId;
+					_appSettings.Save();
+				}
+			});
+
+		var compacted = compactedContent.ToString().Trim();
+		if (!string.IsNullOrEmpty(compacted))
+		{
+			_fileService.RewriteSessionFile(_node.FileName, compacted);
+
+			Dispatcher.UIThread.Post(() =>
+			{
+				Messages.Clear();
+				var entries = _fileService.ReadEntries(_node.FileName);
+				foreach (var entry in entries)
+				{
+					if (entry.Role != Constants.SessionFile.RoleCompaction
+					    && string.IsNullOrWhiteSpace(entry.Content))
+						continue;
+					Messages.Add(EntryToViewModel(entry));
+				}
+			});
+
+			_log.Information("Session {FileName} compacted successfully", _node.FileName);
+		}
+		else
+		{
+			_log.Warning("Compaction returned empty content for session {FileName}; keeping original", _node.FileName);
+			Dispatcher.UIThread.Post(() =>
+			{
+				for (var i = Messages.Count - 1; i >= 0; i--)
+				{
+					if (Messages[i].IsProgress) Messages.RemoveAt(i);
+				}
+			});
+		}
+	}
+
+	/// <summary>Builds the hidden instruction block appended to the user's message for claude stdin (FR.11.9).</summary>
+	private string BuildInstructionBlock()
+	{
+		var sb = new StringBuilder();
+		sb.AppendLine(Constants.Instructions.Delimiter);
+
+		// Auto-commit: always inject (ON or OFF)
+		sb.AppendLine(IsAutoCommit
+			? $"- {Constants.Instructions.AutoCommitOn}"
+			: $"- {Constants.Instructions.AutoCommitOff}");
+
+		if (_isNewBranch)
+			sb.AppendLine($"- {Constants.Instructions.NewBranch}");
+
+		if (IsAutoDocument)
+			sb.AppendLine($"- {Constants.Instructions.AutoDocument}");
+
+		if (_pendingClear)
+			sb.AppendLine($"- {Constants.Instructions.Clear}");
 
 		return sb.ToString();
 	}

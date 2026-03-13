@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reactive;
+using System.Reactive.Linq;
 using ClaudeMaximus.Services;
 using ReactiveUI;
 
@@ -62,10 +63,42 @@ public sealed class MainWindowViewModel : ViewModelBase
 		}
 	}
 
+	// --- FR.11 instruction toolbar forwarding properties ---
+
+	/// <summary>Whether any session is selected (used to enable/disable toolbar buttons).</summary>
+	public bool HasActiveSession => ActiveSession is not null;
+
+	public bool IsAutoCommit
+	{
+		get => ActiveSession?.IsAutoCommit ?? false;
+		set { if (ActiveSession is not null) ActiveSession.IsAutoCommit = value; }
+	}
+
+	public bool IsNewBranch
+	{
+		get => ActiveSession?.IsNewBranch ?? false;
+		set { if (ActiveSession is not null) ActiveSession.IsNewBranch = value; }
+	}
+
+	public bool IsAutoDocument
+	{
+		get => ActiveSession?.IsAutoDocument ?? false;
+		set { if (ActiveSession is not null) ActiveSession.IsAutoDocument = value; }
+	}
+
+	public bool IsAutoCompact
+	{
+		get => ActiveSession?.IsAutoCompact ?? false;
+		set { if (ActiveSession is not null) ActiveSession.IsAutoCompact = value; }
+	}
+
+	public bool CanClear => ActiveSession?.CanClear ?? false;
+
 	public ReactiveCommand<Unit, Unit> OpenSettingsCommand { get; }
 	public ReactiveCommand<Unit, Unit> ExitCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleTreePanelCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleThemeCommand { get; }
+	public ReactiveCommand<Unit, Unit> ClearSessionCommand { get; }
 
 	public MainWindowViewModel(
 		IAppSettingsService appSettings,
@@ -89,6 +122,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ExitCommand            = ReactiveCommand.Create(Exit);
 		ToggleTreePanelCommand = ReactiveCommand.Create(() => { IsTreePanelVisible = !IsTreePanelVisible; });
 		ToggleThemeCommand     = ReactiveCommand.Create(() => { IsDarkTheme = !IsDarkTheme; });
+		ClearSessionCommand    = ReactiveCommand.Create(() => { ActiveSession?.ClearCommand.Execute().Subscribe(); });
 
 		// React to session selection changes
 		this.WhenAnyValue(x => x.SessionTree.SelectedSession)
@@ -102,6 +136,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		{
 			ActiveSession = null;
 			_appSettings.Settings.ActiveSessionFileName = null;
+			RaiseInstructionToolbarChanged();
 			return;
 		}
 
@@ -114,6 +149,17 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 		ActiveSession = vm;
 		_appSettings.Settings.ActiveSessionFileName = node.FileName;
+		RaiseInstructionToolbarChanged();
+	}
+
+	private void RaiseInstructionToolbarChanged()
+	{
+		this.RaisePropertyChanged(nameof(HasActiveSession));
+		this.RaisePropertyChanged(nameof(IsAutoCommit));
+		this.RaisePropertyChanged(nameof(IsNewBranch));
+		this.RaisePropertyChanged(nameof(IsAutoDocument));
+		this.RaisePropertyChanged(nameof(IsAutoCompact));
+		this.RaisePropertyChanged(nameof(CanClear));
 	}
 
 	public int ActiveSessionCount => _processManager.ActiveProcessCount;
