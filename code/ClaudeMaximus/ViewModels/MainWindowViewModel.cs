@@ -94,8 +94,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 		this.WhenAnyValue(x => x.SessionTree.SelectedSession)
 			.Subscribe(OnSelectedSessionChanged);
 
-		// Restore last active session
-		RestoreActiveSession();
 	}
 
 	private void OnSelectedSessionChanged(SessionNodeViewModel? node)
@@ -142,7 +140,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			lt.Shutdown();
 	}
 
-	private void RestoreActiveSession()
+	public void RestoreActiveSession()
 	{
 		var savedFileName = _appSettings.Settings.ActiveSessionFileName;
 		if (string.IsNullOrEmpty(savedFileName))
