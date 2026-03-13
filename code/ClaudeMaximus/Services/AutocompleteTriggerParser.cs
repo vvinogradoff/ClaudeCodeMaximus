@@ -18,7 +18,88 @@ public sealed class AutocompleteTriggerParser
 		if (string.IsNullOrEmpty(text) || caretIndex <= 0 || caretIndex > text.Length)
 			return _none;
 
-		// Scan backward from caret to find '#'
+		// Check for filesystem path trigger first (e.g. C:\Users\...)
+		var pathResult = TryParsePath(text, caretIndex);
+		if (pathResult != null)
+			return pathResult;
+
+		// Then check for # / ## triggers
+		return TryParseHash(text, caretIndex);
+	}
+
+	private AutocompleteTriggerModel? TryParsePath(string text, int caretIndex)
+	{
+		// Scan backward from caret to find a drive letter pattern: X:\
+		// The drive letter must be preceded by whitespace/newline or be at start of text
+		for (var i = caretIndex - 1; i >= 2; i--)
+		{
+			var ch = text[i];
+			// Stop at newlines — path won't span lines
+			if (ch == '\n' || ch == '\r')
+				break;
+		}
+
+		// Find the start of the current "word" (backward to whitespace or SOL)
+		var wordStart = caretIndex;
+		for (var i = caretIndex - 1; i >= 0; i--)
+		{
+			var ch = text[i];
+			if (ch == '\n' || ch == '\r')
+				break;
+			// Allow spaces in paths only if we already have a drive pattern behind us
+			if (ch == ' ' || ch == '\t')
+			{
+				// Check if what's before is part of a path (has a backslash after the space)
+				// For simplicity: find drive letter pattern from this word boundary
+				var candidate = text.Substring(i + 1, caretIndex - (i + 1));
+				if (IsDriveLetterPath(candidate))
+				{
+					wordStart = i + 1;
+					// Continue scanning backward for more spaces that might be part of the path
+					continue;
+				}
+				break;
+			}
+			wordStart = i;
+		}
+
+		if (wordStart >= caretIndex)
+			return null;
+
+		var segment = text.Substring(wordStart, caretIndex - wordStart);
+		if (!IsDriveLetterPath(segment))
+			return null;
+
+		// Must be preceded by whitespace, newline, or be at start of text
+		if (wordStart > 0)
+		{
+			var before = text[wordStart - 1];
+			if (before != ' ' && before != '\t' && before != '\n' && before != '\r')
+				return null;
+		}
+
+		return new AutocompleteTriggerModel
+		{
+			Mode = AutocompleteMode.Path,
+			Query = segment,
+			TriggerStartIndex = wordStart,
+			TriggerLength = caretIndex - wordStart
+		};
+	}
+
+	private static bool IsDriveLetterPath(string segment)
+	{
+		// Must match pattern: letter + : + backslash (at minimum X:\)
+		if (segment.Length < 3)
+			return false;
+
+		return char.IsLetter(segment[0])
+			&& segment[1] == ':'
+			&& (segment[2] == '\\' || segment[2] == '/');
+	}
+
+	private AutocompleteTriggerModel TryParseHash(string text, int caretIndex)
+	{
 		var searchEnd = caretIndex;
 		for (var i = caretIndex - 1; i >= 0; i--)
 		{

@@ -5,5 +5,6 @@ public enum AutocompleteMode
 {
 	None,
 	Symbol,
-	File
+	File,
+	Path
 }
