@@ -39,17 +39,27 @@ public partial class SessionView : UserControl
 	{
 		base.OnDataContextChanged(e);
 
-		// Unsubscribe from the previous session's messages (fixes cross-session scroll leak)
+		// Save scroll position of previous session
 		if (_subscribedVm != null)
+		{
+			_subscribedVm.ScrollOffset = MessageScroller.Offset.Y;
 			_subscribedVm.Messages.CollectionChanged -= OnMessagesChanged;
+		}
 
 		_subscribedVm = DataContext as SessionViewModel;
 
 		if (_subscribedVm != null)
 		{
 			_subscribedVm.Messages.CollectionChanged += OnMessagesChanged;
-			// Scroll to bottom once when switching to a session, not on every new message
-			Dispatcher.UIThread.Post(() => MessageScroller.ScrollToEnd(), DispatcherPriority.Background);
+			// Restore persisted scroll position (or bottom for new sessions)
+			var savedOffset = _subscribedVm.ScrollOffset;
+			Dispatcher.UIThread.Post(() =>
+			{
+				if (savedOffset > 0)
+					MessageScroller.Offset = new Avalonia.Vector(0, savedOffset);
+				else
+					MessageScroller.ScrollToEnd();
+			}, DispatcherPriority.Background);
 		}
 	}
 

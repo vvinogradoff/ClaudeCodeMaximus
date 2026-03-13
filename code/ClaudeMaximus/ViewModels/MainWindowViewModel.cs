@@ -17,6 +17,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
+	private bool _isTreePanelVisible;
+	private bool _isDarkTheme;
 
 	public SessionTreeViewModel SessionTree { get; }
 
@@ -36,8 +38,34 @@ public sealed class MainWindowViewModel : ViewModelBase
 		}
 	}
 
+	/// <summary>Controls tree panel visibility (false = collapsed/auto-hidden).</summary>
+	public bool IsTreePanelVisible
+	{
+		get => _isTreePanelVisible;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _isTreePanelVisible, value);
+			_appSettings.Settings.IsTreePanelCollapsed = !value;
+		}
+	}
+
+	/// <summary>True when dark theme is active.</summary>
+	public bool IsDarkTheme
+	{
+		get => _isDarkTheme;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _isDarkTheme, value);
+			_appSettings.Settings.Theme = value ? "Dark" : "Light";
+			ThemeApplicator.Apply(_appSettings.Settings);
+			_appSettings.Save();
+		}
+	}
+
 	public ReactiveCommand<Unit, Unit> OpenSettingsCommand { get; }
 	public ReactiveCommand<Unit, Unit> ExitCommand { get; }
+	public ReactiveCommand<Unit, Unit> ToggleTreePanelCommand { get; }
+	public ReactiveCommand<Unit, Unit> ToggleThemeCommand { get; }
 
 	public MainWindowViewModel(
 		IAppSettingsService appSettings,
@@ -54,13 +82,20 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_codeIndexService = codeIndexService;
 		SessionTree       = sessionTree;
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
+		_isTreePanelVisible = !appSettings.Settings.IsTreePanelCollapsed;
+		_isDarkTheme = appSettings.Settings.Theme == "Dark";
 
-		OpenSettingsCommand = ReactiveCommand.Create(OpenSettings);
-		ExitCommand         = ReactiveCommand.Create(Exit);
+		OpenSettingsCommand    = ReactiveCommand.Create(OpenSettings);
+		ExitCommand            = ReactiveCommand.Create(Exit);
+		ToggleTreePanelCommand = ReactiveCommand.Create(() => { IsTreePanelVisible = !IsTreePanelVisible; });
+		ToggleThemeCommand     = ReactiveCommand.Create(() => { IsDarkTheme = !IsDarkTheme; });
 
 		// React to session selection changes
 		this.WhenAnyValue(x => x.SessionTree.SelectedSession)
 			.Subscribe(OnSelectedSessionChanged);
+
+		// Restore last active session
+		RestoreActiveSession();
 	}
 
 	private void OnSelectedSessionChanged(SessionNodeViewModel? node)
@@ -68,6 +103,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		if (node == null)
 		{
 			ActiveSession = null;
+			_appSettings.Settings.ActiveSessionFileName = null;
 			return;
 		}
 
@@ -79,6 +115,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		}
 
 		ActiveSession = vm;
+		_appSettings.Settings.ActiveSessionFileName = node.FileName;
 	}
 
 	public int ActiveSessionCount => _processManager.ActiveProcessCount;
@@ -89,6 +126,12 @@ public sealed class MainWindowViewModel : ViewModelBase
 	{
 		var vm     = new SettingsViewModel(_appSettings);
 		var window = new Views.SettingsWindow { DataContext = vm };
+		window.Closed += (_, _) =>
+		{
+			// Sync title bar theme toggle with settings change (no re-apply needed)
+			_isDarkTheme = _appSettings.Settings.Theme == "Dark";
+			this.RaisePropertyChanged(nameof(IsDarkTheme));
+		};
 		window.Show();
 	}
 
@@ -97,5 +140,44 @@ public sealed class MainWindowViewModel : ViewModelBase
 		if (Avalonia.Application.Current?.ApplicationLifetime is
 			Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime lt)
 			lt.Shutdown();
+	}
+
+	private void RestoreActiveSession()
+	{
+		var savedFileName = _appSettings.Settings.ActiveSessionFileName;
+		if (string.IsNullOrEmpty(savedFileName))
+			return;
+
+		var node = FindSessionNode(savedFileName);
+		if (node != null)
+			SessionTree.SelectedSession = node;
+	}
+
+	private SessionNodeViewModel? FindSessionNode(string fileName)
+	{
+		foreach (var dir in SessionTree.Directories)
+		{
+			var found = FindSessionInChildren(dir.Children, fileName);
+			if (found != null)
+				return found;
+		}
+		return null;
+	}
+
+	private static SessionNodeViewModel? FindSessionInChildren(
+		System.Collections.ObjectModel.ObservableCollection<ViewModelBase> children, string fileName)
+	{
+		foreach (var child in children)
+		{
+			if (child is SessionNodeViewModel session && session.FileName == fileName)
+				return session;
+			if (child is GroupNodeViewModel group)
+			{
+				var found = FindSessionInChildren(group.Children, fileName);
+				if (found != null)
+					return found;
+			}
+		}
+		return null;
 	}
 }

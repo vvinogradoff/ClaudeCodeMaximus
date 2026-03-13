@@ -10,6 +10,7 @@ namespace ClaudeMaximus.Models;
 public sealed class GroupNodeModel
 {
 	public required string Name { get; set; }
+	public bool IsExpanded { get; set; }
 	/// <summary>Inherited from the ancestor DirectoryNode. Used when creating child sessions.</summary>
 	public string WorkingDirectory { get; set; } = string.Empty;
 	public List<GroupNodeModel> Groups { get; init; } = [];

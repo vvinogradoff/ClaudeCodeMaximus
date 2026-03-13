@@ -55,12 +55,15 @@
                                                FontSize="10" Opacity="0.35"
                                                HorizontalAlignment="Right"/>
                                 </StackPanel>
-                                <Border Grid.Column="1" Padding="10,7" CornerRadius="8" Background="#1E3A5F">
+                                <Border Grid.Column="1" Padding="10,7" CornerRadius="8"
+                                        Background="{DynamicResource CmxUserBubbleBg}">
                                     <StackPanel>
-                                        <TextBlock Text="You" FontSize="11" Foreground="White" Opacity="0.6" Margin="0,0,0,3"/>
+                                        <TextBlock Text="You" FontSize="11"
+                                                   Foreground="{DynamicResource CmxUserBubbleFg}"
+                                                   Opacity="0.6" Margin="0,0,0,3"/>
                                         <SelectableTextBlock Text="{Binding Content}"
                                                              TextWrapping="Wrap"
-                                                             Foreground="White"
+                                                             Foreground="{DynamicResource CmxUserBubbleFg}"
                                                              FontFamily="Cascadia Code,Consolas,monospace"
                                                              FontSize="{Binding DataContext.UserFontSize, ElementName=Root}"/>
                                     </StackPanel>
@@ -96,7 +99,8 @@
                             </Grid>
 
                             <!-- System message -->
-                            <Border IsVisible="{Binding IsSystem}" Margin="20,4,20,4" Padding="8,5" CornerRadius="4" Background="#505050">
+                            <Border IsVisible="{Binding IsSystem}" Margin="20,4,20,4" Padding="8,5" CornerRadius="4"
+                                    Background="{DynamicResource CmxSystemBubbleBg}">
                                 <SelectableTextBlock Text="{Binding Content}" TextWrapping="Wrap" FontSize="12" Opacity="0.7" FontStyle="Italic"/>
                             </Border>
 
@@ -145,7 +149,9 @@
                              Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file"
                              TextWrapping="Wrap"
                              FontFamily="Cascadia Code,Consolas,monospace"
-                             FontSize="{Binding InputFontSize}"/>
+                             FontSize="{Binding InputFontSize}"
+                             Background="{DynamicResource CmxInputBg}"
+                             Foreground="{DynamicResource CmxInputFg}"/>
                     <Popup x:Name="AutocompletePopup"
                            PlacementTarget="{Binding ElementName=InputBox}"
                            Placement="Top"

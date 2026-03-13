@@ -9,6 +9,7 @@ public sealed class GroupNodeViewModel : ViewModelBase
 {
 	private string _name;
 	private bool _isVisible = true;
+	private bool _isExpanded;
 
 	public GroupNodeModel Model { get; }
 
@@ -30,10 +31,22 @@ public sealed class GroupNodeViewModel : ViewModelBase
 	/// </summary>
 	public ObservableCollection<ViewModelBase> Children { get; } = [];
 
+	/// <summary>Bound to TreeViewItem.IsExpanded for persist/restore.</summary>
+	public bool IsExpanded
+	{
+		get => _isExpanded;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _isExpanded, value);
+			Model.IsExpanded = value;
+		}
+	}
+
 	public GroupNodeViewModel(GroupNodeModel model)
 	{
 		Model = model;
 		_name = model.Name;
+		_isExpanded = model.IsExpanded;
 
 		foreach (var g in model.Groups)
 			Children.Add(new GroupNodeViewModel(g));

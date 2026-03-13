@@ -111,6 +111,13 @@ public sealed class SessionViewModel : ViewModelBase
 		}
 	}
 
+	/// <summary>Persisted vertical scroll offset for the message area.</summary>
+	public double ScrollOffset
+	{
+		get => _node.Model.ScrollOffset;
+		set => _node.Model.ScrollOffset = value;
+	}
+
 	public ObservableCollection<MessageEntryViewModel> Messages { get; } = [];
 
 	public ReactiveCommand<Unit, Unit> SendCommand { get; }

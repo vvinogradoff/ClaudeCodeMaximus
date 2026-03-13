@@ -113,6 +113,35 @@
 - [ ] Unit tests for `AutocompleteTriggerParser`
 - [ ] Unit tests for `CodeIndexService` tiered search
 
+### P4.5 Filesystem Path Autocomplete (FR.7.12) ✓
+- [DONE] `AutocompleteMode.Path` enum value
+- [DONE] `AutocompleteTriggerParser` detects drive letter patterns (C:\, D:\, etc.)
+- [DONE] `AutocompleteViewModel.PopulatePathSuggestions` — lists dirs first, then files, filtered by partial name
+- [DONE] Accepting a directory appends `\` for continued drilling; accepting a file inserts full path
+
+---
+
+## Phase 5 — State Persistence & UI Polish
+
+### P5.1 Session State Persistence
+- [DONE] Persist active session selection (`ActiveSessionFileName` in appsettings.json)
+- [DONE] Persist tree expand/collapse state (`IsExpanded` on DirectoryNodeModel/GroupNodeModel)
+- [DONE] Persist scroll position per session (`ScrollOffset` on SessionNodeModel)
+
+### P5.2 Title Bar Redesign
+- [DONE] Replace File menu with hamburger icon (settings flyout menu)
+- [DONE] Add chevron left/right to toggle tree panel auto-hide
+- [DONE] Add day/night theme toggle icon (sun/moon)
+- [DONE] Tree panel collapse state persisted in `IsTreePanelCollapsed`
+
+### P5.3 Theme & Color Customization
+- [DONE] Wire `ThemeApplicator` on startup (App.axaml.cs)
+- [DONE] Theme toggle from title bar updates Avalonia ThemeVariant + custom colors
+- [DONE] Settings window: theme selection (Dark/Light radio buttons)
+- [DONE] Settings window: color customization for selected theme (input box bg/fg, user bubble bg/fg, code block bg/fg, inline code bg/fg, system bubble bg)
+- [DONE] SessionView uses DynamicResource for user bubble, system bubble, input box colors
+- [DONE] MarkdownView uses ThemeApplicator resource keys for code block/inline code colors
+
 ---
 
 ## Backlog / Future
@@ -120,4 +149,3 @@
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion
 - [ ] Session file watcher (detect disk deletion so tree delete button becomes available)
 - [ ] Integration tests for `ClaudeProcessManager` with a mock process
-- [ ] Light/dark theme toggle

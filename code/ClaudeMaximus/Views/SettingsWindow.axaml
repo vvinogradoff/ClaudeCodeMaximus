@@ -7,34 +7,102 @@
         x:Class="ClaudeMaximus.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Settings"
-        Width="500" Height="220"
+        Width="520" Height="620"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
-    <StackPanel Margin="16" Spacing="12">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16" Spacing="12">
 
-        <!-- Session files root -->
-        <StackPanel Spacing="4">
-            <TextBlock Text="Session Files Directory" FontWeight="SemiBold"/>
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBox Grid.Column="0" Text="{Binding SessionFilesRoot}" IsReadOnly="True"/>
-                <Button Grid.Column="1" Content="Browse..." Margin="4,0,0,0"
-                        Click="OnBrowseSessionRootClicked"/>
+            <!-- Session files root -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="Session Files Directory" FontWeight="SemiBold"/>
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Grid.Column="0" Text="{Binding SessionFilesRoot}" IsReadOnly="True"/>
+                    <Button Grid.Column="1" Content="Browse..." Margin="4,0,0,0"
+                            Click="OnBrowseSessionRootClicked"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Claude executable path -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="Claude CLI Path" FontWeight="SemiBold"/>
+                <TextBox Text="{Binding ClaudePath}" Watermark="claude (resolved from PATH)"/>
+            </StackPanel>
+
+            <Separator Margin="0,4"/>
+
+            <!-- Theme selection -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="Theme" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <RadioButton Content="Dark" IsChecked="{Binding IsDarkTheme}" GroupName="Theme"/>
+                    <RadioButton Content="Light" IsChecked="{Binding !IsDarkTheme}" GroupName="Theme"/>
+                </StackPanel>
+            </StackPanel>
+
+            <Separator Margin="0,4"/>
+
+            <!-- Color customization for selected theme -->
+            <TextBlock Text="Colors (for selected theme)" FontWeight="SemiBold"/>
+
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,0">
+
+                <!-- Row 0: Input box -->
+                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
+                    <TextBlock Text="Input box background" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding InputBoxBackground}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
+                    <TextBlock Text="Input box text" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding InputBoxText}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+
+                <!-- Row 1: User bubble -->
+                <StackPanel Grid.Row="1" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
+                    <TextBlock Text="User bubble background" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding UserBubbleBackground}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
+                    <TextBlock Text="User bubble text" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding UserBubbleText}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+
+                <!-- Row 2: Code block -->
+                <StackPanel Grid.Row="2" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
+                    <TextBlock Text="Code block background" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding CodeBlockBackground}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
+                    <TextBlock Text="Code block text" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding CodeBlockText}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+
+                <!-- Row 3: Inline code -->
+                <StackPanel Grid.Row="3" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
+                    <TextBlock Text="Inline code background" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding InlineCodeBackground}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Grid.Row="3" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
+                    <TextBlock Text="Inline code text" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding InlineCodeText}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+
+                <!-- Row 4: System bubble -->
+                <StackPanel Grid.Row="4" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
+                    <TextBlock Text="System bubble background" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding SystemBubbleBackground}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+
             </Grid>
+
+            <!-- Save button -->
+            <Button Content="Save"
+                    HorizontalAlignment="Right"
+                    Command="{Binding SaveCommand}"
+                    Click="OnSaveClicked"/>
+
         </StackPanel>
-
-        <!-- Claude executable path -->
-        <StackPanel Spacing="4">
-            <TextBlock Text="Claude CLI Path" FontWeight="SemiBold"/>
-            <TextBox Text="{Binding ClaudePath}" Watermark="claude (resolved from PATH)"/>
-        </StackPanel>
-
-        <!-- Save button -->
-        <Button Content="Save"
-                HorizontalAlignment="Right"
-                Command="{Binding SaveCommand}"
-                Click="OnSaveClicked"/>
-
-    </StackPanel>
+    </ScrollViewer>
 
 </Window>

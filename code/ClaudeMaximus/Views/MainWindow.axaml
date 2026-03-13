@@ -18,12 +18,14 @@
         <!-- Main content -->
         <DockPanel>
 
-            <!-- Title bar: menu on left, window controls on right, drag anywhere in between -->
+            <!-- Title bar: toolbar icons on left, window controls on right, drag anywhere in between -->
             <DockPanel DockPanel.Dock="Top" LastChildFill="True"
                        PointerPressed="OnMenuBarPointerPressed"
                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
                 <!-- Window control buttons — docked right -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="0">
+                    <TextBlock x:Name="BuildNumberText" VerticalAlignment="Center"
+                               FontSize="10" Opacity="0.4" Margin="0,0,8,0"/>
                     <Button x:Name="MinimizeBtn" Content="&#x2013;" Width="46" Height="30"
                             Background="Transparent" BorderThickness="0"
                             FontSize="16" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
@@ -37,14 +39,56 @@
                             FontSize="13" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
                             ToolTip.Tip="Close" Click="OnCloseClick"/>
                 </StackPanel>
-                <!-- Menu items -->
-                <Menu Background="Transparent" BorderThickness="0">
-                    <MenuItem Header="_File">
-                        <MenuItem Header="_Settings" Command="{Binding OpenSettingsCommand}"/>
-                        <Separator/>
-                        <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
-                    </MenuItem>
-                </Menu>
+                <!-- Toolbar icons -->
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="0">
+                    <!-- Chevron: toggle tree panel visibility -->
+                    <Button x:Name="TreeToggleBtn" Width="36" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="14" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Toggle session tree"
+                            Command="{Binding ToggleTreePanelCommand}">
+                        <Panel>
+                            <!-- Show chevron-left when tree is visible (click to hide) -->
+                            <TextBlock Text="&#x276E;" IsVisible="{Binding IsTreePanelVisible}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- Show chevron-right when tree is hidden (click to show) -->
+                            <TextBlock Text="&#x276F;" IsVisible="{Binding !IsTreePanelVisible}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Panel>
+                    </Button>
+                    <!-- Hamburger: settings menu -->
+                    <Button Width="36" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="16" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Settings">
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Settings" Command="{Binding OpenSettingsCommand}"/>
+                                <MenuItem Header="-"/>
+                                <MenuItem Header="Exit" Command="{Binding ExitCommand}"/>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                        <TextBlock Text="&#x2630;" FontSize="16"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <!-- Day/Night theme toggle -->
+                    <Button Width="36" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="15" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Toggle light/dark theme"
+                            Command="{Binding ToggleThemeCommand}">
+                        <Panel>
+                            <!-- Sun icon when dark theme active (click to switch to light) -->
+                            <TextBlock Text="&#x2600;" IsVisible="{Binding IsDarkTheme}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- Moon icon when light theme active (click to switch to dark) -->
+                            <TextBlock Text="&#x263D;" IsVisible="{Binding !IsDarkTheme}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Panel>
+                    </Button>
+                </StackPanel>
+                <!-- Empty space for drag -->
+                <Border Background="Transparent"/>
             </DockPanel>
 
             <!-- Two-panel layout -->
@@ -58,13 +102,15 @@
                 <!-- Left panel -->
                 <Border Grid.Column="0"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                        BorderThickness="0,0,1,0">
+                        BorderThickness="0,0,1,0"
+                        IsVisible="{Binding IsTreePanelVisible}">
                     <views:SessionTreeView DataContext="{Binding SessionTree}"/>
                 </Border>
 
                 <GridSplitter Grid.Column="1"
                               ResizeDirection="Columns"
-                              Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+                              Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                              IsVisible="{Binding IsTreePanelVisible}"/>
 
                 <!-- Right panel -->
                 <Panel Grid.Column="2">

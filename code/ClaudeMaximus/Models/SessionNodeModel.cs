@@ -14,4 +14,6 @@ public sealed class SessionNodeModel
 	public required string FileName { get; init; }
 	public string WorkingDirectory { get; set; } = string.Empty;
 	public string? ClaudeSessionId { get; set; }
+	/// <summary>Persisted vertical scroll offset for the session output area.</summary>
+	public double ScrollOffset { get; set; }
 }

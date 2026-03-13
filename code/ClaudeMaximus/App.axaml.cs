@@ -31,6 +31,8 @@ public partial class App : Application
 		var appSettings = Services.GetRequiredService<IAppSettingsService>();
 		appSettings.Load();
 
+		ThemeApplicator.Apply(appSettings.Settings);
+
 		if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
 		{
 			desktop.MainWindow = new MainWindow

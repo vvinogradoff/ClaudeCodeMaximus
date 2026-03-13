@@ -9,6 +9,7 @@ using Markdig;
 using Markdig.Extensions.Tables;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using ClaudeMaximus.Services;
 
 namespace ClaudeMaximus.Views;
 
@@ -27,12 +28,21 @@ public sealed class MarkdownView : ContentControl
 	private static readonly MarkdownPipeline Pipeline =
 		new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
 
-	// Light-theme code colours — always readable regardless of app accent theme
-	private static readonly IBrush CodeBlockBackground  = new SolidColorBrush(Color.FromRgb(245, 245, 245));
-	private static readonly IBrush CodeBlockForeground  = new SolidColorBrush(Color.FromRgb(32,  32,  32));
-	private static readonly IBrush InlineCodeBackground = new SolidColorBrush(Color.FromRgb(232, 232, 232));
-	private static readonly IBrush InlineCodeForeground = new SolidColorBrush(Color.FromRgb(32,  32,  32));
+	// Fallback code colours — overridden at runtime by ThemeApplicator via dynamic resources
+	private static readonly IBrush FallbackCodeBlockBg  = new SolidColorBrush(Color.FromRgb(245, 245, 245));
+	private static readonly IBrush FallbackCodeBlockFg  = new SolidColorBrush(Color.FromRgb(32,  32,  32));
+	private static readonly IBrush FallbackInlineCodeBg = new SolidColorBrush(Color.FromRgb(232, 232, 232));
+	private static readonly IBrush FallbackInlineCodeFg = new SolidColorBrush(Color.FromRgb(32,  32,  32));
 	private static readonly IBrush QuoteBorderBrush     = new SolidColorBrush(Color.FromRgb(80,  100, 130));
+
+	private static IBrush GetResource(string key, IBrush fallback) =>
+		Application.Current?.Resources.TryGetResource(key, null, out var val) == true && val is IBrush b
+			? b : fallback;
+
+	private static IBrush CodeBlockBackground  => GetResource(Services.ThemeApplicator.KeyCodeBg, FallbackCodeBlockBg);
+	private static IBrush CodeBlockForeground  => GetResource(Services.ThemeApplicator.KeyCodeFg, FallbackCodeBlockFg);
+	private static IBrush InlineCodeBackground => GetResource(Services.ThemeApplicator.KeyInlineCodeBg, FallbackInlineCodeBg);
+	private static IBrush InlineCodeForeground => GetResource(Services.ThemeApplicator.KeyInlineCodeFg, FallbackInlineCodeFg);
 
 	public string? Markdown
 	{

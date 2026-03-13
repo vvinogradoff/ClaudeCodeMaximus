@@ -11,6 +11,7 @@ namespace ClaudeMaximus.Models;
 public sealed class DirectoryNodeModel
 {
 	public required string Path { get; init; }
+	public bool IsExpanded { get; set; }
 	public List<GroupNodeModel> Groups { get; init; } = [];
 	public List<SessionNodeModel> Sessions { get; init; } = [];
 }

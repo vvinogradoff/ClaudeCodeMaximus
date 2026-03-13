@@ -10,6 +10,7 @@ public sealed class DirectoryNodeViewModel : ViewModelBase
 {
 	private readonly IDirectoryLabelService _labelService;
 	private bool _isVisible = true;
+	private bool _isExpanded;
 
 	public DirectoryNodeModel Model { get; }
 
@@ -22,10 +23,22 @@ public sealed class DirectoryNodeViewModel : ViewModelBase
 	/// </summary>
 	public ObservableCollection<ViewModelBase> Children { get; } = [];
 
+	/// <summary>Bound to TreeViewItem.IsExpanded for persist/restore.</summary>
+	public bool IsExpanded
+	{
+		get => _isExpanded;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _isExpanded, value);
+			Model.IsExpanded = value;
+		}
+	}
+
 	public DirectoryNodeViewModel(DirectoryNodeModel model, IDirectoryLabelService labelService)
 	{
 		Model = model;
 		_labelService = labelService;
+		_isExpanded = model.IsExpanded;
 
 		foreach (var g in model.Groups)
 			Children.Add(new GroupNodeViewModel(g));

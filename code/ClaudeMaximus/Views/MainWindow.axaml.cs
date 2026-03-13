@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Reflection;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -19,6 +21,7 @@ public partial class MainWindow : Window
 	public MainWindow()
 	{
 		InitializeComponent();
+		BuildNumberText.Text = GetBuildNumber();
 	}
 
 	protected override void OnLoaded(RoutedEventArgs e)
@@ -60,6 +63,9 @@ public partial class MainWindow : Window
 
 	protected override void OnClosed(EventArgs e)
 	{
+		// Save scroll position of the active session view before closing
+		SaveActiveSessionScrollPosition();
+
 		var settings = App.Services.GetRequiredService<IAppSettingsService>();
 		var ws       = settings.Settings.Window;
 
@@ -72,6 +78,14 @@ public partial class MainWindow : Window
 		settings.Save();
 
 		base.OnClosed(e);
+	}
+
+	private void SaveActiveSessionScrollPosition()
+	{
+		// Find the active SessionView and capture its scroll offset
+		var sessionView = this.FindDescendantOfType<SessionView>();
+		if (sessionView?.DataContext is SessionViewModel vm)
+			vm.ScrollOffset = sessionView.FindDescendantOfType<ScrollViewer>()?.Offset.Y ?? 0;
 	}
 
 	// ── Overlay: confirm dialog ───────────────────────────────────────────────
@@ -184,4 +198,32 @@ public partial class MainWindow : Window
 			: WindowState.Maximized;
 
 	private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+	private static string GetBuildNumber()
+	{
+		try
+		{
+			var assembly = Assembly.GetExecutingAssembly();
+			var location = assembly.Location;
+			if (!string.IsNullOrEmpty(location) && File.Exists(location))
+			{
+				var buildTime = File.GetLastWriteTime(location);
+				return buildTime.ToString("yyyyMM.dd.HHmm");
+			}
+
+			// Fallback for single-file publish: use entry assembly
+			var entry = Assembly.GetEntryAssembly();
+			if (entry?.Location is { Length: > 0 } entryLoc && File.Exists(entryLoc))
+			{
+				var buildTime = File.GetLastWriteTime(entryLoc);
+				return buildTime.ToString("yyyyMM.dd.HHmm");
+			}
+		}
+		catch
+		{
+			// Ignore — build number is cosmetic.
+		}
+
+		return string.Empty;
+	}
 }
