@@ -387,7 +387,7 @@ The input area includes a collapsible command bar for runtime configuration of t
 
 The CLI accepts short aliases (`opus`, `sonnet`, `haiku`) which automatically resolve to the latest model version in each family.
 
-**FR.12.4 — Model persistence:** The selected model index is persisted in `appsettings.json` (`SelectedModelIndex`). It is a global setting (not per-session).
+**FR.12.4 — Model persistence:** The selected model index is persisted per working directory in `appsettings.json` (stored as `SelectedModelIndex` on each `DirectoryNodeModel`). When the user switches sessions under a different directory, the model selector reflects that directory's saved choice. New directories default to index 0 (Default).
 
 **FR.12.5 — Model flag injection:** When a non-default model is selected, the `--model <id>` flag is appended to the `claude` CLI arguments for all process spawns (user messages, context retries, compaction, and mid-run corrections).
 
@@ -402,11 +402,13 @@ The CLI accepts short aliases (`opus`, `sonnet`, `haiku`) which automatically re
 
 The dropdown selection reverts to the previous value while auth is in progress, preventing the "New..." item from being persisted as the selected index.
 
-**FR.12.8 — Profile persistence:** Profiles are stored in `appsettings.json` as a list of `ClaudeProfileModel` objects with `ProfileId` (string, used as the config subdirectory name) and `DisplayName` (string, typically the account email). The selected profile index is a global setting (`SelectedProfileIndex`). Index 0 = Default (no env var), indices 1..N map to stored profiles. Each profile's auth state lives in `%APPDATA%\ClaudeMaximus\profiles\<ProfileId>\`.
+**FR.12.8 — Profile persistence:** Profiles are stored in `appsettings.json` as a list of `ClaudeProfileModel` objects with `ProfileId` (string, used as the config subdirectory name) and `DisplayName` (string, typically the account email). The selected profile index is persisted per working directory (stored as `SelectedProfileIndex` on each `DirectoryNodeModel`). Index 0 = Default (no env var), indices 1..N map to stored profiles. New directories default to index 0. Each profile's auth state lives in `%APPDATA%\ClaudeMaximus\profiles\<ProfileId>\`.
 
 **FR.12.9 — Profile config dir injection:** When a non-default profile is selected, the `CLAUDE_CONFIG_DIR` environment variable is set to the profile's config directory on all spawned `claude` CLI processes (user messages, context retries, compaction, and mid-run corrections). This isolates session IDs, auth tokens, and settings per profile.
 
 **FR.12.10 — Default profile email resolution:** On first session load, the application queries `claude auth status` (no config dir override) to retrieve the default account email. If successful, the "Default" entry in the profile dropdown is updated to show the email address instead of the generic "Default" label.
+
+**FR.12.11 — Command bar visibility persistence:** The show/hide state of the command bar (toggled via the settings gear button) is persisted per working directory in `appsettings.json` (stored as `IsCommandBarVisible` on each `DirectoryNodeModel`). When the user switches to a session under a different directory, the command bar visibility reflects that directory's saved state. New directories default to hidden.
 
 ---
 

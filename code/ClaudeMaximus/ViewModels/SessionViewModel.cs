@@ -28,6 +28,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
 	private readonly IClaudeSessionImportService _importService;
+	private readonly DirectoryNodeModel? _directoryModel;
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -229,11 +230,19 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
-	/// <summary>Whether the command bar beneath the input area is visible.</summary>
+	/// <summary>Whether the command bar beneath the input area is visible. Persisted per directory (FR.12.11).</summary>
 	public bool IsCommandBarVisible
 	{
 		get => _isCommandBarVisible;
-		set => this.RaiseAndSetIfChanged(ref _isCommandBarVisible, value);
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _isCommandBarVisible, value);
+			if (_directoryModel != null)
+			{
+				_directoryModel.IsCommandBarVisible = value;
+				_appSettings.Save();
+			}
+		}
 	}
 
 	/// <summary>Display names for the model selector.</summary>
@@ -242,13 +251,15 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>Model aliases passed to --model flag. Empty string means no flag. CLI resolves aliases to latest version.</summary>
 	private static readonly string[] ModelIds = ["", "opus", "sonnet", "haiku"];
 
-	/// <summary>Selected model index (0=Default, 1=Opus, 2=Sonnet, 3=Haiku). Persisted in appsettings.</summary>
+	/// <summary>Selected model index (0=Default, 1=Opus, 2=Sonnet, 3=Haiku). Persisted per directory (FR.12.4).</summary>
 	public int SelectedModelIndex
 	{
 		get => _selectedModelIndex;
 		set
 		{
 			this.RaiseAndSetIfChanged(ref _selectedModelIndex, value);
+			if (_directoryModel != null)
+				_directoryModel.SelectedModelIndex = value;
 			_appSettings.Settings.SelectedModelIndex = value;
 			_appSettings.Save();
 		}
@@ -263,7 +274,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>Display names for the profile selector. Rebuilt when profiles change.</summary>
 	public ObservableCollection<string> AvailableProfiles { get; } = [];
 
-	/// <summary>Selected profile index. 0=Default, 1..N=stored profiles, last="New...".</summary>
+	/// <summary>Selected profile index. 0=Default, 1..N=stored profiles, last="New...". Persisted per directory (FR.12.8).</summary>
 	public int SelectedProfileIndex
 	{
 		get => _selectedProfileIndex;
@@ -279,6 +290,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			}
 
 			this.RaiseAndSetIfChanged(ref _selectedProfileIndex, value);
+			if (_directoryModel != null)
+				_directoryModel.SelectedProfileIndex = value;
 			_appSettings.Settings.SelectedProfileIndex = value;
 			_appSettings.Save();
 		}
@@ -334,12 +347,22 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_profileService   = profileService;
 		_importService    = importService;
 		_name             = node.Name;
-		_selectedModelIndex = Math.Clamp(appSettings.Settings.SelectedModelIndex, 0, ModelIds.Length - 1);
+
+		// Find the parent DirectoryNodeModel for per-directory settings (FR.12.4, FR.12.8, FR.12.11)
+		_directoryModel = appSettings.Settings.Tree
+			.FirstOrDefault(d => string.Equals(d.Path, node.Model.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
+
+		_selectedModelIndex = Math.Clamp(
+			_directoryModel?.SelectedModelIndex ?? appSettings.Settings.SelectedModelIndex,
+			0, ModelIds.Length - 1);
+		_isCommandBarVisible = _directoryModel?.IsCommandBarVisible ?? false;
 		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
 		OutputSearchVm    = new OutputSearchViewModel(Messages);
 
 		RebuildProfileList();
-		_selectedProfileIndex = Math.Clamp(appSettings.Settings.SelectedProfileIndex, 0, Math.Max(0, AvailableProfiles.Count - 2));
+		_selectedProfileIndex = Math.Clamp(
+			_directoryModel?.SelectedProfileIndex ?? appSettings.Settings.SelectedProfileIndex,
+			0, Math.Max(0, AvailableProfiles.Count - 2));
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
@@ -1273,6 +1296,8 @@ PROJECT GLOSSARY:
 			// Select the newly added profile
 			var newIndex = _appSettings.Settings.Profiles.Count; // 1-based (0 is Default)
 			_appSettings.Settings.SelectedProfileIndex = newIndex;
+			if (_directoryModel != null)
+				_directoryModel.SelectedProfileIndex = newIndex;
 			_appSettings.Save();
 
 			Dispatcher.UIThread.Post(() =>

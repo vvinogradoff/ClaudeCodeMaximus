@@ -256,7 +256,7 @@
 ### P10.1 Model Selection & Command Bar ✓
 - [DONE] Settings toggle button (gear icon) below Send button in input area (FR.12.1)
 - [DONE] Collapsible command bar beneath text input with model ComboBox (FR.12.2, FR.12.3)
-- [DONE] `SelectedModelIndex` persisted in `AppSettingsModel` (FR.12.4)
+- [DONE] `SelectedModelIndex` persisted per directory in `DirectoryNodeModel` (FR.12.4)
 - [DONE] `--model` flag passed to all `SendMessageAsync` calls when non-default model selected (FR.12.5)
 - [DONE] `IClaudeProcessManager.SendMessageAsync` accepts optional `model` parameter
 - [DONE] `ClaudeProcessManager.BuildArguments` appends `--model` when provided
@@ -264,11 +264,17 @@
 ### P10.2 Profile Selection (FR.12.6–12.10) ✓
 - [DONE] `ClaudeProfileModel` — ProfileId + DisplayName (FR.12.8)
 - [DONE] `IClaudeProfileService` / `ClaudeProfileService` — auth status queries + interactive auth login (FR.12.7)
-- [DONE] Profile list and `SelectedProfileIndex` in `AppSettingsModel` (FR.12.8)
+- [DONE] Profile list in `AppSettingsModel`, `SelectedProfileIndex` persisted per directory in `DirectoryNodeModel` (FR.12.8)
 - [DONE] Profile ComboBox in command bar (right of model selector) with Default + stored profiles + "New..." (FR.12.6)
 - [DONE] "New..." triggers visible-terminal auth login, resolves email, adds profile (FR.12.7)
 - [DONE] `--profile` flag passed to all `SendMessageAsync` calls when non-default profile selected (FR.12.9)
 - [DONE] Default profile email resolved on first session load (FR.12.10)
+
+### P10.3 Per-Directory Command Bar Persistence (FR.12.11) ✓
+- [DONE] `IsCommandBarVisible`, `SelectedModelIndex`, `SelectedProfileIndex` added to `DirectoryNodeModel`
+- [DONE] `SessionViewModel` resolves parent `DirectoryNodeModel` by matching `WorkingDirectory` path
+- [DONE] Command bar visibility, model, and profile selections restored from directory model on session switch
+- [DONE] Changes persisted to directory model on user interaction
 
 ---
 
