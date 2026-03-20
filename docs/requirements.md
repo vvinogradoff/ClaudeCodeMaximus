@@ -326,7 +326,7 @@ The application header bar provides per-session instruction toggles that modify 
 
 **FR.11.5 — Auto-Document toggle:**
 - **Type:** Sticky toggle (persists across prompts)
-- **ON instruction:** `"After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made."`
+- **ON instruction:** `"After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made. If any new domain terms were introduced or existing terms changed, also update /docs/glossary.md."`
 - **Behavior:** The instruction is injected into the prompt but, like all instruction toggles, is neither shown in the output window nor stored in the session file
 - **Persistence:** Per-session; stored on the session node in `appsettings.json`
 - **Icon:** Document/pencil icon
@@ -334,7 +334,7 @@ The application header bar provides per-session instruction toggles that modify 
 **FR.11.6 — Auto-Compact toggle:**
 - **Type:** One-shot toggle (auto-unsets after the compaction completes)
 - **Behavior:** When ON and Claude finishes responding to the user's prompt, the application automatically sends a **separate follow-up prompt** to Claude instructing it to compact the session. The follow-up prompt is:
-  The compaction prompt instructs Claude to: preserve decisions and reasoning, architecture choices, user attribution, and **all URLs (full or partial)**; remove transient debugging steps, meta-instructions, and redundant corrections; restructure user inputs by semantic grouping (merge related follow-ups, only split on topic change); and output in session file format with `[timestamp] ROLE` headers.
+  The compaction prompt instructs Claude to: preserve decisions and reasoning, architecture choices, user attribution, and **all URLs (full or partial)**; remove transient debugging steps, meta-instructions, and redundant corrections; restructure user inputs by semantic grouping (merge related follow-ups, only split on topic change); **normalize terminology per the project glossary** (`docs/glossary.md` — attached to the prompt when available); flag new terms with `[NEW TERM]` and update the glossary; and output in session file format with `[timestamp] ROLE` headers.
 - **Post-compaction:** The compacted text returned by Claude replaces the session file content (rewritten, not appended). The Messages collection in the output window is also updated to reflect the compacted content.
 - **Auto-reset:** The toggle resets to OFF after the compaction prompt completes
 - **Icon:** Compress/shrink icon

@@ -32,6 +32,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private string _inputText = string.Empty;
 	private bool _isBusy;
 	private bool _isMarkdownMode = true;
+	private bool _isClaudeSessionView;
+	private List<MessageEntryViewModel>? _maximusMessagesSnapshot;
 	private string _thinkingDuration = string.Empty;
 	private DispatcherTimer? _thinkingTimer;
 	private DateTimeOffset _thinkingStartedAt;
@@ -89,6 +91,21 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		get => _isMarkdownMode;
 		set => this.RaiseAndSetIfChanged(ref _isMarkdownMode, value);
 	}
+
+	/// <summary>When true, displays messages from Claude CLI's JSONL session instead of the ClaudeMaximus .txt file.</summary>
+	public bool IsClaudeSessionView
+	{
+		get => _isClaudeSessionView;
+		set
+		{
+			if (_isClaudeSessionView == value) return;
+			this.RaiseAndSetIfChanged(ref _isClaudeSessionView, value);
+			SwapMessageSource(value);
+		}
+	}
+
+	/// <summary>True when the session has a linked Claude JSONL file that can be viewed.</summary>
+	public bool HasClaudeSession => !string.IsNullOrEmpty(_node.Model.ClaudeSessionId);
 
 	/// <summary>Per-session sticky toggle (FR.11.3). Persisted in appsettings.json.</summary>
 	public bool IsAutoCommit
@@ -329,7 +346,20 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
-		ClearCommand          = ReactiveCommand.Create(() => { _pendingClear = true; });
+		ClearCommand          = ReactiveCommand.Create(() =>
+		{
+			_pendingClear = true;
+			var statusMsg = IsBusy
+				? "[Clear armed — session will terminate after current prompt completes]"
+				: "[Clear armed — session will terminate after next prompt completes]";
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = statusMsg,
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+			_log.Information("Clear armed for session {FileName} (IsBusy={IsBusy})", _node.FileName, IsBusy);
+		});
 
 		// Start background indexing for this session's working directory
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
@@ -678,6 +708,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		InputText = string.Empty;
 		_draftService.DeleteDraft(_node.FileName);
 
+		// Switch back to Maximus view if currently showing Claude's JSONL
+		if (_isClaudeSessionView)
+			IsClaudeSessionView = false;
+
 		// Capture one-shot toggle states before resetting them
 		var wasNewBranch = _isNewBranch;
 		var wasAutoCompact = _isAutoCompact;
@@ -786,8 +820,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			}
 
 			// Post-response: handle Clear (FR.11.7)
-			if (wasPendingClear)
+			// Check both captured state (armed before send) and current state (armed mid-run)
+			if (wasPendingClear || _pendingClear)
 			{
+				_pendingClear = false;
 				_log.Information("Clearing Claude session for {FileName}", _node.FileName);
 				_node.Model.ClaudeSessionId = null;
 				_appSettings.Save();
@@ -862,6 +898,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			case "result" when !evt.IsError && evt.SessionId is not null:
 				_node.Model.ClaudeSessionId = evt.SessionId;
 				_appSettings.Save();
+				Dispatcher.UIThread.Post(() => this.RaisePropertyChanged(nameof(HasClaudeSession)));
 				break;
 		}
 
@@ -989,6 +1026,34 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		return sb.ToString();
 	}
 
+	/// <summary>Builds the full compaction prompt, injecting glossary content if available.</summary>
+	private string BuildCompactionPrompt()
+	{
+		var glossarySection = string.Empty;
+		try
+		{
+			var glossaryPath = Path.Combine(WorkingDirectory, "docs", "glossary.md");
+			if (File.Exists(glossaryPath))
+			{
+				var glossaryContent = File.ReadAllText(glossaryPath);
+				glossarySection = $"""
+
+PROJECT GLOSSARY:
+```
+{glossaryContent}
+```
+
+""";
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Debug("Could not read glossary for compaction: {Error}", ex.Message);
+		}
+
+		return string.Format(Constants.Instructions.CompactionPromptTemplate, glossarySection);
+	}
+
 	/// <summary>Sends a follow-up compaction prompt and rewrites the session file (FR.11.6).</summary>
 	private async System.Threading.Tasks.Task SendCompactionPromptAsync()
 	{
@@ -1011,7 +1076,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			workingDirectory: _node.Model.WorkingDirectory,
 			claudePath:       _appSettings.Settings.ClaudePath,
 			sessionId:        _node.Model.ClaudeSessionId,
-			userMessage:      Constants.Instructions.CompactionPrompt,
+			userMessage:      BuildCompactionPrompt(),
 			model:            SelectedModelId,
 			profileConfigDir: SelectedProfileConfigDir,
 			onEvent:          evt =>
@@ -1228,6 +1293,63 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		{
 			_isProfileAuthInProgress = false;
 		}
+	}
+
+	/// <summary>Switches the Messages collection between ClaudeMaximus .txt and Claude CLI JSONL sources.</summary>
+	private void SwapMessageSource(bool showClaude)
+	{
+		if (showClaude)
+		{
+			// Snapshot current Maximus messages so we can restore them
+			_maximusMessagesSnapshot = new List<MessageEntryViewModel>(Messages);
+
+			var jsonlPath = GetJsonlPath();
+			if (jsonlPath == null || !File.Exists(jsonlPath))
+			{
+				_log.Warning("Cannot show Claude session: JSONL file not found");
+				_isClaudeSessionView = false;
+				this.RaisePropertyChanged(nameof(IsClaudeSessionView));
+				return;
+			}
+
+			var entries = _importService.ParseJsonlSession(jsonlPath);
+			Messages.Clear();
+			foreach (var entry in entries)
+			{
+				if (entry.Role != Constants.SessionFile.RoleCompaction
+				    && string.IsNullOrWhiteSpace(entry.Content))
+					continue;
+				Messages.Add(EntryToViewModel(entry));
+			}
+		}
+		else
+		{
+			// Restore the Maximus messages
+			Messages.Clear();
+			if (_maximusMessagesSnapshot != null)
+			{
+				foreach (var msg in _maximusMessagesSnapshot)
+					Messages.Add(msg);
+				_maximusMessagesSnapshot = null;
+			}
+		}
+	}
+
+	/// <summary>Builds the full path to the Claude CLI JSONL session file, or null if unavailable.</summary>
+	private string? GetJsonlPath()
+	{
+		var sessionId = _node.Model.ClaudeSessionId;
+		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(WorkingDirectory))
+			return null;
+
+		var slug = Constants.ClaudeSessions.BuildProjectSlug(WorkingDirectory);
+		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		return Path.Combine(
+			userProfile,
+			Constants.ClaudeSessions.ClaudeHomeFolderName,
+			Constants.ClaudeSessions.ProjectsFolderName,
+			slug,
+			sessionId + Constants.ClaudeSessions.SessionFileExtension);
 	}
 
 	private static MessageEntryViewModel EntryToViewModel(SessionEntryModel entry)

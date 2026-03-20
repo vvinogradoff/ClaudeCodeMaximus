@@ -43,7 +43,7 @@ public static class Constants
 		public const string AutoCommitOn = "Once you have completed the request, commit all your changes to git with a concise commit message.";
 		public const string AutoCommitOff = "Do not commit any changes to git.";
 		public const string NewBranch = "Create a new git branch before committing your changes.";
-		public const string AutoDocument = "After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made.";
+		public const string AutoDocument = "After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made. If any new domain terms were introduced or existing terms changed, also update /docs/glossary.md.";
 		public const string Clear = "After completing this request, please summarize the key outcomes and decisions from this session in a brief closing statement.";
 
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
@@ -51,11 +51,11 @@ public static class Constants
 		public const string MidRunAutoCommitOff = "Correction: Ignore previous instructions about committing to git. Do not commit any changes.";
 		public const string MidRunNewBranchOn = "Additional instruction: Create a new git branch before committing your changes.";
 		public const string MidRunNewBranchOff = "Correction: Ignore previous instructions about creating a new git branch. Do not create a new branch.";
-		public const string MidRunAutoDocumentOn = "Additional instruction: After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made.";
+		public const string MidRunAutoDocumentOn = "Additional instruction: After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made. If any new domain terms were introduced or existing terms changed, also update /docs/glossary.md.";
 		public const string MidRunAutoDocumentOff = "Correction: Ignore previous instructions about updating documentation. Do not update any documentation files.";
 		public const string MidRunAutoCompactOn = "[Auto-compact has been enabled — the session will be compacted after this response completes.]";
 		public const string MidRunAutoCompactOff = "[Auto-compact has been disabled — the session will not be compacted after this response.]";
-		public const string CompactionPrompt = """
+		public const string CompactionPromptTemplate = """
 Please compact the conversation in this session.
 
 WHAT TO PRESERVE:
@@ -69,6 +69,11 @@ WHAT TO REMOVE:
 - Meta-instructions from the user such as: commit/no-commit instructions, auto-document instructions, session compaction instructions, and any other process directives unrelated to the actual development work
 - Redundant back-and-forth about minor corrections or small fixes
 
+TERMINOLOGY NORMALIZATION:
+- The project has a glossary of domain terms (included below if available).
+- When compacting, ALWAYS use the glossary term instead of informal/ad-hoc descriptions the user may have used. For example, if the glossary defines "Input Area" and the user said "the text box where I type my prompt", the compacted text must use "Input Area".
+- If the conversation introduced new domain terms or concepts not in the glossary, note them with [NEW TERM] so they can be added to the glossary later. Also update /docs/glossary.md to include the new terms.
+{0}
 HOW TO RESTRUCTURE USER PROMPTS:
 - Group user inputs by semantic topic. Do NOT preserve every individual user message as a separate entry.
 - Use the timestamp of the FIRST user message in each semantic group as the entry timestamp.
