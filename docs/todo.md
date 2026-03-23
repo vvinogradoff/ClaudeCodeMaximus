@@ -270,7 +270,13 @@
 - [DONE] `--profile` flag passed to all `SendMessageAsync` calls when non-default profile selected (FR.12.9)
 - [DONE] Default profile email resolved on first session load (FR.12.10)
 
-### P10.3 Per-Directory Command Bar Persistence (FR.12.11) ✓
+### P10.3 Effort Level Selection (FR.12.12) ✓
+- [DONE] Effort ComboBox in command bar (Default/Max/High/Medium/Low)
+- [DONE] `SelectedEffortIndex` persisted per directory in `DirectoryNodeModel`
+- [DONE] `--effort` flag passed to all `SendMessageAsync` calls when non-default effort selected
+- [DONE] `IClaudeProcessManager.SendMessageAsync` + `BuildArguments` accept optional `effort` parameter
+
+### P10.4 Per-Directory Command Bar Persistence (FR.12.11) ✓
 - [DONE] `IsCommandBarVisible`, `SelectedModelIndex`, `SelectedProfileIndex` added to `DirectoryNodeModel`
 - [DONE] `SessionViewModel` resolves parent `DirectoryNodeModel` by matching `WorkingDirectory` path
 - [DONE] Command bar visibility, model, and profile selections restored from directory model on session switch

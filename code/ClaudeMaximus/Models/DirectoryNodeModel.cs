@@ -23,4 +23,7 @@ public sealed class DirectoryNodeModel
 
 	/// <summary>Selected profile index for sessions under this directory (FR.12.8). 0=Default.</summary>
 	public int SelectedProfileIndex { get; set; }
+
+	/// <summary>Selected effort level index for sessions under this directory. 0=Default.</summary>
+	public int SelectedEffortIndex { get; set; }
 }

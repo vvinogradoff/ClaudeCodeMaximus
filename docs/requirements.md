@@ -408,6 +408,17 @@ The dropdown selection reverts to the previous value while auth is in progress, 
 
 **FR.12.10 — Default profile email resolution:** On first session load, the application queries `claude auth status` (no config dir override) to retrieve the default account email. If successful, the "Default" entry in the profile dropdown is updated to show the email address instead of the generic "Default" label.
 
+**FR.12.12 — Effort level selection:** The command bar contains an effort selector (ComboBox) with the following options:
+| Index | Label | CLI Flag |
+|---|---|---|
+| 0 | Default | (no `--effort` flag — uses Claude Code's own default) |
+| 1 | Max | `--effort max` |
+| 2 | High | `--effort high` |
+| 3 | Medium | `--effort medium` |
+| 4 | Low | `--effort low` |
+
+The selected effort index is persisted per working directory (`SelectedEffortIndex` on `DirectoryNodeModel`). When a non-default effort is selected, the `--effort` flag is appended to the `claude` CLI arguments for all process spawns.
+
 **FR.12.11 — Command bar visibility persistence:** The show/hide state of the command bar (toggled via the settings gear button) is persisted per working directory in `appsettings.json` (stored as `IsCommandBarVisible` on each `DirectoryNodeModel`). When the user switches to a session under a different directory, the command bar visibility reflects that directory's saved state. New directories default to hidden.
 
 ---

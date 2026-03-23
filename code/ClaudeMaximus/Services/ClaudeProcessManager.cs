@@ -17,6 +17,12 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 {
 	private static readonly ILogger _log = Log.ForContext<ClaudeProcessManager>();
 	private readonly ConcurrentDictionary<int, Process> _activeProcesses = new();
+	private readonly IAppSettingsService _appSettings;
+
+	public ClaudeProcessManager(IAppSettingsService appSettings)
+	{
+		_appSettings = appSettings;
+	}
 
 	public int ActiveProcessCount => _activeProcesses.Count;
 
@@ -38,9 +44,10 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		Action<ClaudeStreamEvent> onEvent,
 		string? model = null,
 		string? profileConfigDir = null,
+		string? effort = null,
 		CancellationToken cancellationToken = default)
 	{
-		var args = BuildArguments(sessionId, model);
+		var args = BuildArguments(sessionId, model, effort);
 		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir} ConfigDir={ConfigDir}",
 			claudePath, args, workingDirectory, profileConfigDir);
 
@@ -110,6 +117,13 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 						});
 					}
 				}
+			}
+			catch (OperationCanceledException)
+			{
+				_log.Information("Cancellation requested — killing claude process PID={Pid}", process.Id);
+				try { process.Kill(entireProcessTree: true); }
+				catch (Exception ex) { _log.Warning(ex, "Failed to kill cancelled process PID={Pid}", process.Id); }
+				throw;
 			}
 			finally
 			{
@@ -198,7 +212,7 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		return args;
 	}
 
-	private static string BuildArguments(string? sessionId, string? model = null)
+	private static string BuildArguments(string? sessionId, string? model = null, string? effort = null)
 	{
 		// -p (--print) forces non-interactive single-prompt mode.
 		// --verbose is required by claude when combining --print with stream-json output.
@@ -208,10 +222,12 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			args += $" --resume {sessionId}";
 		if (!string.IsNullOrEmpty(model))
 			args += $" --model {model}";
+		if (!string.IsNullOrEmpty(effort))
+			args += $" --effort {effort}";
 		return args;
 	}
 
-	private static Process? TryStartProcess(string fileName, string arguments, string workingDirectory, string? profileConfigDir = null)
+	private Process? TryStartProcess(string fileName, string arguments, string workingDirectory, string? profileConfigDir = null)
 	{
 		var psi = new ProcessStartInfo(fileName, arguments)
 		{
@@ -232,6 +248,16 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		// Set CLAUDE_CONFIG_DIR to isolate auth context for non-default profiles.
 		if (!string.IsNullOrEmpty(profileConfigDir))
 			psi.Environment["CLAUDE_CONFIG_DIR"] = profileConfigDir;
+
+		// Inject HTTPS proxy for traffic inspection (Fiddler, mitmproxy, HTTP Toolkit, etc.)
+		var httpsProxy = _appSettings.Settings.HttpsProxy;
+		if (!string.IsNullOrWhiteSpace(httpsProxy))
+		{
+			psi.Environment["HTTPS_PROXY"] = httpsProxy;
+			psi.Environment["HTTP_PROXY"] = httpsProxy;
+			psi.Environment["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
+			_log.Information("HTTPS proxy configured: {Proxy}", httpsProxy);
+		}
 
 		try
 		{

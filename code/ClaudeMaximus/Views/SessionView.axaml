@@ -16,6 +16,14 @@
                 BorderThickness="0,0,0,1">
             <DockPanel>
                 <ToggleButton DockPanel.Dock="Right"
+                              IsChecked="{Binding IsClaudeSessionView}"
+                              IsVisible="{Binding HasClaudeSession}"
+                              Content="JSONL"
+                              ToolTip.Tip="Switch between ClaudeMaximus session and Claude CLI session"
+                              Padding="8,3" FontSize="11"
+                              Margin="4,0,0,0"
+                              VerticalAlignment="Center"/>
+                <ToggleButton DockPanel.Dock="Right"
                               IsChecked="{Binding IsMarkdownMode}"
                               Content="MD"
                               ToolTip.Tip="Toggle markdown rendering"
@@ -216,7 +224,7 @@
                             <views:AutocompletePopup DataContext="{Binding AutocompleteVm}"/>
                         </Popup>
                     </Panel>
-                    <Grid Grid.Column="1" RowDefinitions="*,*" Margin="8,0,0,0">
+                    <Grid Grid.Column="1" RowDefinitions="*,Auto,*" Margin="8,0,0,0">
                         <Button Grid.Row="0"
                                 Content="Send"
                                 HorizontalAlignment="Stretch"
@@ -224,7 +232,17 @@
                                 VerticalAlignment="Stretch"
                                 VerticalContentAlignment="Center"
                                 Command="{Binding SendCommand}"/>
-                        <ToggleButton Grid.Row="1"
+                        <Button Grid.Row="1"
+                                Content="&#x25A0;"
+                                FontSize="12"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalAlignment="Stretch"
+                                VerticalContentAlignment="Center"
+                                IsVisible="{Binding IsBusy}"
+                                Command="{Binding StopCommand}"
+                                ToolTip.Tip="Stop: interrupt Claude"/>
+                        <ToggleButton Grid.Row="2"
                                       Content="&#x2699;"
                                       FontSize="16"
                                       HorizontalAlignment="Stretch"
@@ -261,6 +279,16 @@
                                   VerticalAlignment="Center"
                                   FontSize="12"
                                   MinWidth="120"
+                                  Padding="6,3"/>
+                        <TextBlock Text="Effort:"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" Opacity="0.7"
+                                   Margin="12,0,0,0"/>
+                        <ComboBox ItemsSource="{Binding AvailableEfforts}"
+                                  SelectedIndex="{Binding SelectedEffortIndex}"
+                                  VerticalAlignment="Center"
+                                  FontSize="12"
+                                  MinWidth="90"
                                   Padding="6,3"/>
                     </StackPanel>
                 </Border>

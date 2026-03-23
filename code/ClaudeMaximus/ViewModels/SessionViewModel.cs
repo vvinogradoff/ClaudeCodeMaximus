@@ -41,6 +41,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private int _busyCount;
 	private bool _needsContextRetry;
 	private bool _pendingClear;
+	private CancellationTokenSource? _sendCts;
 	private bool _isNewBranch;
 	private bool _isAutoCompact;
 	private bool _midRunAutoCompactState;
@@ -53,6 +54,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private Timer? _jsonlChangeDebounceTimer;
 	private int _lastKnownEntryCount;
 	private int _selectedProfileIndex;
+	private int _selectedEffortIndex;
 	private bool _isProfileAuthInProgress;
 
 	public string Name
@@ -105,8 +107,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
-	/// <summary>True when the session has a linked Claude JSONL file that can be viewed.</summary>
-	public bool HasClaudeSession => !string.IsNullOrEmpty(_node.Model.ClaudeSessionId);
+	/// <summary>True when the session has any linked Claude JSONL file(s) that can be viewed.</summary>
+	public bool HasClaudeSession => !string.IsNullOrEmpty(_node.Model.ClaudeSessionId)
+	                                || _node.Model.PriorClaudeSessionIds.Count > 0;
 
 	/// <summary>Per-session sticky toggle (FR.11.3). Persisted in appsettings.json.</summary>
 	public bool IsAutoCommit
@@ -271,6 +274,31 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			? ModelIds[_selectedModelIndex]
 			: null;
 
+	/// <summary>Display names for the effort selector.</summary>
+	public static string[] AvailableEfforts { get; } = ["Default", "Max", "High", "Medium", "Low"];
+
+	/// <summary>Effort values passed to --effort flag. Empty string means no flag.</summary>
+	private static readonly string[] EffortValues = ["", "max", "high", "medium", "low"];
+
+	/// <summary>Selected effort index. 0=Default. Persisted per directory.</summary>
+	public int SelectedEffortIndex
+	{
+		get => _selectedEffortIndex;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _selectedEffortIndex, value);
+			if (_directoryModel != null)
+				_directoryModel.SelectedEffortIndex = value;
+			_appSettings.Save();
+		}
+	}
+
+	/// <summary>Returns the effort value for --effort flag, or null if Default is selected.</summary>
+	public string? SelectedEffort =>
+		_selectedEffortIndex > 0 && _selectedEffortIndex < EffortValues.Length
+			? EffortValues[_selectedEffortIndex]
+			: null;
+
 	/// <summary>Display names for the profile selector. Rebuilt when profiles change.</summary>
 	public ObservableCollection<string> AvailableProfiles { get; } = [];
 
@@ -324,6 +352,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public ReactiveCommand<Unit, Unit> SendCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleMarkdownCommand { get; }
 	public ReactiveCommand<Unit, Unit> ClearCommand { get; }
+	public ReactiveCommand<Unit, Unit> StopCommand { get; }
 	public AutocompleteViewModel AutocompleteVm { get; }
 	public OutputSearchViewModel OutputSearchVm { get; }
 	public string WorkingDirectory => _node.Model.WorkingDirectory;
@@ -355,6 +384,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_selectedModelIndex = Math.Clamp(
 			_directoryModel?.SelectedModelIndex ?? appSettings.Settings.SelectedModelIndex,
 			0, ModelIds.Length - 1);
+		_selectedEffortIndex = Math.Clamp(
+			_directoryModel?.SelectedEffortIndex ?? 0,
+			0, EffortValues.Length - 1);
 		_isCommandBarVisible = _directoryModel?.IsCommandBarVisible ?? false;
 		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
 		OutputSearchVm    = new OutputSearchViewModel(Messages);
@@ -382,6 +414,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				Timestamp = DateTimeOffset.UtcNow,
 			});
 			_log.Information("Clear armed for session {FileName} (IsBusy={IsBusy})", _node.FileName, IsBusy);
+		});
+
+		StopCommand           = ReactiveCommand.Create(() =>
+		{
+			_sendCts?.Cancel();
+			_log.Information("Stop requested for session {FileName}", _node.FileName);
 		});
 
 		// Start background indexing for this session's working directory
@@ -417,6 +455,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	public void Dispose()
 	{
+		_sendCts?.Dispose();
 		_fileWatcher?.Dispose();
 		_jsonlWatcher?.Dispose();
 		_fileChangeDebounceTimer?.Dispose();
@@ -801,6 +840,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			}
 		}
 
+		_sendCts?.Dispose();
+		_sendCts = new CancellationTokenSource();
+		var ct = _sendCts.Token;
+
 		try
 		{
 			await _processManager.SendMessageAsync(
@@ -810,7 +853,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				userMessage:      messageToSend,
 				onEvent:          HandleStreamEvent,
 				model:            SelectedModelId,
-				profileConfigDir: SelectedProfileConfigDir);
+				profileConfigDir: SelectedProfileConfigDir,
+				effort:           SelectedEffort,
+				cancellationToken: ct);
 
 			if (_needsContextRetry)
 			{
@@ -839,7 +884,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					userMessage:      enrichedMessage,
 					onEvent:          HandleStreamEvent,
 					model:            SelectedModelId,
-				profileConfigDir: SelectedProfileConfigDir);
+					profileConfigDir: SelectedProfileConfigDir,
+					effort:           SelectedEffort,
+					cancellationToken: ct);
 			}
 
 			// Post-response: handle Clear (FR.11.7)
@@ -847,10 +894,20 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			if (wasPendingClear || _pendingClear)
 			{
 				_pendingClear = false;
-				_log.Information("Clearing Claude session for {FileName}", _node.FileName);
-				_node.Model.ClaudeSessionId = null;
+				var currentId = _node.Model.ClaudeSessionId;
+				if (!string.IsNullOrEmpty(currentId))
+				{
+					_log.Information("Clearing Claude session {SessionId} for {FileName} (preserving JSONL)",
+						currentId, _node.FileName);
+					_node.Model.PriorClaudeSessionIds.Add(currentId);
+					_node.Model.ClaudeSessionId = null;
+				}
 				_appSettings.Save();
-				Dispatcher.UIThread.Post(() => this.RaisePropertyChanged(nameof(CanClear)));
+				Dispatcher.UIThread.Post(() =>
+				{
+					this.RaisePropertyChanged(nameof(CanClear));
+					this.RaisePropertyChanged(nameof(HasClaudeSession));
+				});
 			}
 
 			// Post-response: handle Auto-Compact (FR.11.6)
@@ -860,6 +917,17 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				await SendCompactionPromptAsync();
 				IsAutoCompact = false;
 			}
+		}
+		catch (OperationCanceledException)
+		{
+			_log.Information("Send interrupted by user for session {FileName}", _node.FileName);
+			_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, "[Interrupted by user]");
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = "[Interrupted by user]",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
 		}
 		finally
 		{
@@ -1102,6 +1170,7 @@ PROJECT GLOSSARY:
 			userMessage:      BuildCompactionPrompt(),
 			model:            SelectedModelId,
 			profileConfigDir: SelectedProfileConfigDir,
+			effort:           SelectedEffort,
 			onEvent:          evt =>
 			{
 				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
@@ -1178,6 +1247,7 @@ PROJECT GLOSSARY:
 			userMessage:      prompt,
 			model:            SelectedModelId,
 			profileConfigDir: SelectedProfileConfigDir,
+			effort:           SelectedEffort,
 			onEvent:          evt =>
 			{
 				// Capture session ID updates but don't write to file or UI
@@ -1328,23 +1398,44 @@ PROJECT GLOSSARY:
 			// Snapshot current Maximus messages so we can restore them
 			_maximusMessagesSnapshot = new List<MessageEntryViewModel>(Messages);
 
-			var jsonlPath = GetJsonlPath();
-			if (jsonlPath == null || !File.Exists(jsonlPath))
+			var allPaths = GetAllJsonlPaths();
+			if (allPaths.Count == 0)
 			{
-				_log.Warning("Cannot show Claude session: JSONL file not found");
+				_log.Warning("Cannot show Claude session: no JSONL files found");
 				_isClaudeSessionView = false;
 				this.RaisePropertyChanged(nameof(IsClaudeSessionView));
 				return;
 			}
 
-			var entries = _importService.ParseJsonlSession(jsonlPath);
 			Messages.Clear();
-			foreach (var entry in entries)
+			for (var i = 0; i < allPaths.Count; i++)
 			{
-				if (entry.Role != Constants.SessionFile.RoleCompaction
-				    && string.IsNullOrWhiteSpace(entry.Content))
-					continue;
-				Messages.Add(EntryToViewModel(entry));
+				var (sessionId, path) = allPaths[i];
+
+				// Add a visual separator between JSONL sessions
+				if (i > 0 || allPaths.Count > 1)
+				{
+					var fileInfo = new System.IO.FileInfo(path);
+					var startedAt = fileInfo.CreationTime.ToString("yyyy-MM-dd HH:mm");
+					var label = i < allPaths.Count - 1
+						? $"── Session started {startedAt} (cleared) ──"
+						: $"── Session started {startedAt} (current) ──";
+					Messages.Add(new MessageEntryViewModel
+					{
+						Role      = Constants.SessionFile.RoleSystem,
+						Content   = label,
+						Timestamp = fileInfo.CreationTimeUtc,
+					});
+				}
+
+				var entries = _importService.ParseJsonlSession(path);
+				foreach (var entry in entries)
+				{
+					if (entry.Role != Constants.SessionFile.RoleCompaction
+					    && string.IsNullOrWhiteSpace(entry.Content))
+						continue;
+					Messages.Add(EntryToViewModel(entry));
+				}
 			}
 		}
 		else
@@ -1365,6 +1456,40 @@ PROJECT GLOSSARY:
 	{
 		var sessionId = _node.Model.ClaudeSessionId;
 		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(WorkingDirectory))
+			return null;
+
+		return BuildJsonlPathForSessionId(sessionId);
+	}
+
+	/// <summary>Returns all JSONL paths (prior + current) in chronological order, filtered to existing files.</summary>
+	private List<(string SessionId, string Path)> GetAllJsonlPaths()
+	{
+		if (string.IsNullOrEmpty(WorkingDirectory))
+			return [];
+
+		var result = new List<(string, string)>();
+
+		foreach (var priorId in _node.Model.PriorClaudeSessionIds)
+		{
+			var path = BuildJsonlPathForSessionId(priorId);
+			if (path != null && File.Exists(path))
+				result.Add((priorId, path));
+		}
+
+		var currentId = _node.Model.ClaudeSessionId;
+		if (!string.IsNullOrEmpty(currentId))
+		{
+			var path = BuildJsonlPathForSessionId(currentId);
+			if (path != null && File.Exists(path))
+				result.Add((currentId, path));
+		}
+
+		return result;
+	}
+
+	private string? BuildJsonlPathForSessionId(string sessionId)
+	{
+		if (string.IsNullOrEmpty(WorkingDirectory))
 			return null;
 
 		var slug = Constants.ClaudeSessions.BuildProjectSlug(WorkingDirectory);
