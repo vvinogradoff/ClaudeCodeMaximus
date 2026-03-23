@@ -45,6 +45,7 @@
                 <Style Selector="TreeViewItem">
                     <Setter Property="IsVisible" Value="{ReflectionBinding IsVisible}"/>
                     <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}"/>
+                    <Setter Property="Padding" Value="0"/>
                 </Style>
             </TreeView.Styles>
             <TreeView.DataTemplates>
