@@ -49,6 +49,16 @@ public sealed class MarkdownView : ContentControl
 		Application.Current?.Resources.TryGetResource(key, null, out var val) == true && val is IBrush b
 			? b : fallback;
 
+	// Theme-aware lookup — passes the active theme variant so Fluent resources resolve correctly
+	private static IBrush GetThemeResource(string key, IBrush fallback)
+	{
+		var app = Application.Current;
+		if (app is null) return fallback;
+		if (app.Resources.TryGetResource(key, app.ActualThemeVariant, out var val) && val is IBrush b)
+			return b;
+		return fallback;
+	}
+
 	private static IBrush CodeBlockBackground  => GetResource(Services.ThemeApplicator.KeyCodeBg, FallbackCodeBlockBg);
 	private static IBrush CodeBlockForeground  => GetResource(Services.ThemeApplicator.KeyCodeFg, FallbackCodeBlockFg);
 	private static IBrush InlineCodeBackground => GetResource(Services.ThemeApplicator.KeyInlineCodeBg, FallbackInlineCodeBg);
@@ -259,8 +269,9 @@ public sealed class MarkdownView : ContentControl
 		return tb;
 	}
 
-	private static readonly IBrush TableHeaderBackground = new SolidColorBrush(Color.FromRgb(240, 240, 240));
-	private static readonly IBrush TableBorderBrush      = new SolidColorBrush(Color.FromRgb(210, 210, 210));
+	private static readonly IBrush FallbackTableBorder = new SolidColorBrush(Color.FromArgb(80, 128, 128, 128));
+	private static readonly IBrush FallbackTableHeader = new SolidColorBrush(Color.FromArgb(40, 128, 128, 128));
+	private static readonly IBrush FallbackTableAltRow = new SolidColorBrush(Color.FromArgb(15, 128, 128, 128));
 
 	private Control BuildTable(Table table)
 	{
@@ -275,6 +286,21 @@ public sealed class MarkdownView : ContentControl
 		foreach (var r in rows)
 			if (r.Count > colCount) colCount = r.Count;
 
+		// Theme-aware brushes resolved at render time
+		var borderBrush = GetThemeResource("SystemControlForegroundBaseLowBrush",    FallbackTableBorder);
+		var headerBg    = GetThemeResource("SystemControlBackgroundChromeMediumBrush", FallbackTableHeader);
+		var altRowBg    = GetThemeResource("SystemControlBackgroundChromeLowBrush",    FallbackTableAltRow);
+
+		// Column alignments from Markdig
+		var alignments = new TextAlignment[colCount];
+		for (var c = 0; c < table.ColumnDefinitions.Count && c < colCount; c++)
+			alignments[c] = table.ColumnDefinitions[c].Alignment switch
+			{
+				TableColumnAlign.Center => TextAlignment.Center,
+				TableColumnAlign.Right  => TextAlignment.Right,
+				_                       => TextAlignment.Left,
+			};
+
 		var grid = new Grid();
 		for (var c = 0; c < colCount; c++)
 			grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
@@ -282,7 +308,8 @@ public sealed class MarkdownView : ContentControl
 		for (var rowIdx = 0; rowIdx < rows.Count; rowIdx++)
 		{
 			grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-			var row = rows[rowIdx];
+			var row        = rows[rowIdx];
+			var isAltRow   = !row.IsHeader && rowIdx % 2 == 0;
 
 			for (var colIdx = 0; colIdx < row.Count && colIdx < colCount; colIdx++)
 			{
@@ -293,6 +320,7 @@ public sealed class MarkdownView : ContentControl
 				{
 					TextWrapping   = TextWrapping.Wrap,
 					FontSize       = FontSize,
+					TextAlignment  = alignments[colIdx],
 					Cursor         = IBeamCursor,
 					SelectionBrush = SelectionHighlightBrush,
 				};
@@ -305,15 +333,17 @@ public sealed class MarkdownView : ContentControl
 
 				var cellBorder = new Border
 				{
-					Padding         = new Thickness(8, 5),
-					BorderBrush     = TableBorderBrush,
+					Padding         = new Thickness(10, 6),
+					BorderBrush     = borderBrush,
 					// Each cell draws its right and bottom border;
 					// outer wrapper draws the top and left.
 					BorderThickness = new Thickness(0, 0, 1, 1),
 					Child           = tb,
 				};
 				if (row.IsHeader)
-					cellBorder.Background = TableHeaderBackground;
+					cellBorder.Background = headerBg;
+				else if (isAltRow)
+					cellBorder.Background = altRowBg;
 
 				Grid.SetRow(cellBorder, rowIdx);
 				Grid.SetColumn(cellBorder, colIdx);
@@ -324,9 +354,9 @@ public sealed class MarkdownView : ContentControl
 		// Outer border provides the top and left edges of the table
 		return new Border
 		{
-			BorderBrush     = TableBorderBrush,
+			BorderBrush     = borderBrush,
 			BorderThickness = new Thickness(1, 1, 0, 0),
-			Margin          = new Thickness(0, 4),
+			Margin          = new Thickness(0, 6),
 			Child           = grid,
 		};
 	}

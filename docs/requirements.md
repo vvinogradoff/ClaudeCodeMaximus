@@ -79,6 +79,12 @@ This is equivalent to writing a custom terminal emulator or IDE plugin that runs
 
 **FR.2.3.2 — Text selectability:** All rendered text in the output panel must be selectable (copy-able) by the user, including user prompts, assistant responses (both plain text and markdown mode), headings, list items, code blocks, and system messages. Text blocks display an I-beam cursor on hover and show a visible blue selection highlight when text is selected. Cross-block selection is supported: when a pointer drag crosses from one text block into another, the selection extends across all intervening blocks. The first and last blocks receive partial selection; intermediate blocks are fully selected. Ctrl+C copies the combined cross-block text. Auto-scrolling is triggered when the pointer nears the viewport edges during a drag. This works uniformly in both plain-text mode (across messages) and markdown mode (across paragraphs, headings, code blocks within and across messages). Implementation: `CrossBlockSelectionHandler` attaches tunnel-level pointer handlers to the `MessageScroller` ScrollViewer and manages `SelectionStart`/`SelectionEnd` on each `SelectableTextBlock` in range.
 
+**FR.2.3.3 — Markdown table rendering:** Tables in markdown responses shall render with:
+- Theme-aware border and header colors that adapt correctly to both dark and light themes (using Avalonia system brushes `SystemControlForegroundBaseLowBrush` / `SystemControlBackgroundChromeMediumBrush`)
+- Column alignment (left, center, right) as specified in the markdown source via `:---`, `:---:`, `---:` syntax
+- Alternating row shading on data rows for readability
+- Header row visually distinguished with a background fill
+
 **FR.2.4** The session view shall provide a multi-line input text box at the bottom for composing and submitting prompts to Claude Code. Submission is via `Ctrl+Enter` or a dedicated Send button.
 
 **FR.2.5** When Claude Code is running (processing a prompt), the input area shall be disabled and a visual busy indicator shown.
