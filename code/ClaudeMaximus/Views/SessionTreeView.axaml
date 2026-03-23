@@ -65,10 +65,12 @@
                                 <MenuItem Header="Delete"      Tag="DeleteDirectory"        Click="OnContextMenuClicked"/>
                             </ContextMenu>
                         </Border.ContextMenu>
-                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
-                            <TextBlock Text="&#128193;" FontSize="12" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <Grid RowDefinitions="2,Auto">
+                            <Rectangle Grid.Row="0" Height="2" Fill="Gray" Margin="2,0,0,0"
+                                       HorizontalAlignment="Stretch"/>
+                            <TextBlock Grid.Row="1" Text="{Binding Label}" VerticalAlignment="Center"
+                                       Margin="4,2,2,1"/>
+                        </Grid>
                     </Border>
                 </TreeDataTemplate>
 
@@ -112,31 +114,46 @@
                                 <MenuItem Header="Delete" Tag="DeleteSession"  Click="OnContextMenuClicked"/>
                             </ContextMenu>
                         </Border.ContextMenu>
-                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
-                            <StackPanel Grid.Row="0" Grid.ColumnSpan="2"
-                                        Orientation="Horizontal" Spacing="6" Margin="2,1,2,0">
-                                <Panel Width="8" Height="8" VerticalAlignment="Center">
-                                    <Ellipse Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
-                                             IsVisible="{Binding IsResumable}"/>
-                                    <Ellipse Width="8" Height="8" Fill="LimeGreen"
-                                             IsVisible="{Binding IsRunning}"/>
-                                    <Ellipse Width="8" Height="8" Fill="Orange" Opacity="0.8"
-                                             IsVisible="{Binding IsExternallyActive}"
-                                             ToolTip.Tip="Active in external terminal"/>
-                                </Panel>
-                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                                           Foreground="{Binding MoveForeground}"/>
-                                <TextBlock Text="&#x270F;" FontSize="10" VerticalAlignment="Center"
-                                           Opacity="0.5"
-                                           IsVisible="{Binding HasDraftText}"
-                                           ToolTip.Tip="Has unsent text"/>
-                            </StackPanel>
-                            <TextBlock Grid.Row="1" Grid.Column="1"
-                                       Text="{Binding LastPromptTime}"
-                                       IsVisible="{Binding LastPromptTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                       FontSize="10" Foreground="Gray" Opacity="0.6"
-                                       HorizontalAlignment="Right"
-                                       Margin="0,0,4,1"/>
+                        <Grid>
+                            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                                <StackPanel Grid.Row="0" Grid.ColumnSpan="2"
+                                            Orientation="Horizontal" Spacing="6" Margin="2,1,2,0">
+                                    <!-- Status indicator: upper half = active, lower half = resumable -->
+                                    <Grid Width="8" Height="16" VerticalAlignment="Center" RowDefinitions="8,8">
+                                        <Panel Grid.Row="0">
+                                            <Rectangle Width="8" Height="8" Fill="LimeGreen"
+                                                       IsVisible="{Binding IsRunning}"/>
+                                            <Rectangle Width="8" Height="8" Fill="Orange" Opacity="0.8"
+                                                       IsVisible="{Binding IsExternallyActive}"
+                                                       ToolTip.Tip="Active in external terminal"/>
+                                        </Panel>
+                                        <Rectangle Grid.Row="1" Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
+                                                   IsVisible="{Binding IsResumable}"/>
+                                    </Grid>
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                               Foreground="{Binding MoveForeground}"/>
+                                    <TextBlock Text="&#x270F;" FontSize="10" VerticalAlignment="Center"
+                                               Opacity="0.5"
+                                               IsVisible="{Binding HasDraftText}"
+                                               ToolTip.Tip="Has unsent text"/>
+                                </StackPanel>
+                                <TextBlock Grid.Row="1" Grid.Column="1"
+                                           Text="{Binding LastPromptTime}"
+                                           IsVisible="{Binding LastPromptTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           FontSize="10" Foreground="Gray" Opacity="0.6"
+                                           HorizontalAlignment="Right"
+                                           Margin="0,0,4,1"/>
+                            </Grid>
+                            <!-- Dotted dark green border overlay for sessions active in last 24 hours -->
+                            <Rectangle IsVisible="{Binding IsRecentlyActive}"
+                                       Stroke="DarkGreen"
+                                       StrokeThickness="1"
+                                       StrokeDashArray="3,2"
+                                       RadiusX="3" RadiusY="3"
+                                       Fill="Transparent"
+                                       IsHitTestVisible="False"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"/>
                         </Grid>
                     </Border>
                 </DataTemplate>

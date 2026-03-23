@@ -20,6 +20,7 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private string? _lastPromptTime;
 	private DateTimeOffset? _lastPromptTimestamp;
 	private IBrush? _recencyBrush;
+	private bool _isRecentlyActive;
 
 	public SessionNodeModel Model { get; }
 
@@ -109,6 +110,13 @@ public sealed class SessionNodeViewModel : ViewModelBase
 		}
 	}
 
+	/// <summary>True when the last prompt was within the last 24 hours (drives dotted green border).</summary>
+	public bool IsRecentlyActive
+	{
+		get => _isRecentlyActive;
+		private set => this.RaiseAndSetIfChanged(ref _isRecentlyActive, value);
+	}
+
 	/// <summary>Background brush for the session node based on last prompt recency.</summary>
 	public IBrush? RecencyBrush
 	{
@@ -116,16 +124,20 @@ public sealed class SessionNodeViewModel : ViewModelBase
 		private set => this.RaiseAndSetIfChanged(ref _recencyBrush, value);
 	}
 
-	/// <summary>Recalculates the recency brush based on how long ago the last prompt was.</summary>
+	/// <summary>Recalculates the recency brush and 24-hour active flag based on how long ago the last prompt was.</summary>
 	public void RefreshRecencyBrush()
 	{
 		if (_lastPromptTimestamp is null)
 		{
 			RecencyBrush = null;
+			IsRecentlyActive = false;
 			return;
 		}
 
 		var elapsed = DateTimeOffset.UtcNow - _lastPromptTimestamp.Value;
+
+		IsRecentlyActive = elapsed.TotalHours <= 24;
+
 		string? key = elapsed.TotalMinutes switch
 		{
 			<= 15 => ThemeApplicator.KeyRecency15Min,
