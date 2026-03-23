@@ -66,10 +66,12 @@
                             </ContextMenu>
                         </Border.ContextMenu>
                         <Grid RowDefinitions="2,Auto">
-                            <Rectangle Grid.Row="0" Height="2" Fill="Gray" Margin="2,0,0,0"
+                            <Rectangle Grid.Row="0" Height="2" Fill="Black" Margin="0"
                                        HorizontalAlignment="Stretch"/>
-                            <TextBlock Grid.Row="1" Text="{Binding Label}" VerticalAlignment="Center"
-                                       Margin="4,2,2,1"/>
+                            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="2,1">
+                                <TextBlock Text="&#128194;" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </TreeDataTemplate>
@@ -90,10 +92,12 @@
                                 <MenuItem Header="Delete"      Tag="DeleteGroup"        Click="OnContextMenuClicked"/>
                             </ContextMenu>
                         </Border.ContextMenu>
-                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
-                            <TextBlock Text="&#128194;" FontSize="12" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <Grid RowDefinitions="2,Auto">
+                            <Rectangle Grid.Row="0" Height="2" Fill="LightGray" Margin="0"
+                                       HorizontalAlignment="Stretch"/>
+                            <TextBlock Grid.Row="1" Text="{Binding Name}" VerticalAlignment="Center"
+                                       Margin="4,2,2,1"/>
+                        </Grid>
                     </Border>
                 </TreeDataTemplate>
 
