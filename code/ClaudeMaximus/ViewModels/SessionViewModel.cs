@@ -40,7 +40,6 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
 	private bool _needsContextRetry;
-	private bool _pendingClear;
 	private CancellationTokenSource? _sendCts;
 	private bool _isNewBranch;
 	private bool _isAutoCompact;
@@ -351,7 +350,6 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	public ReactiveCommand<Unit, Unit> SendCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleMarkdownCommand { get; }
-	public ReactiveCommand<Unit, Unit> ClearCommand { get; }
 	public ReactiveCommand<Unit, Unit> StopCommand { get; }
 	public AutocompleteViewModel AutocompleteVm { get; }
 	public OutputSearchViewModel OutputSearchVm { get; }
@@ -401,20 +399,6 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
-		ClearCommand          = ReactiveCommand.Create(() =>
-		{
-			_pendingClear = true;
-			var statusMsg = IsBusy
-				? "[Clear armed — session will terminate after current prompt completes]"
-				: "[Clear armed — session will terminate after next prompt completes]";
-			Messages.Add(new MessageEntryViewModel
-			{
-				Role      = Constants.SessionFile.RoleSystem,
-				Content   = statusMsg,
-				Timestamp = DateTimeOffset.UtcNow,
-			});
-			_log.Information("Clear armed for session {FileName} (IsBusy={IsBusy})", _node.FileName, IsBusy);
-		});
 
 		StopCommand           = ReactiveCommand.Create(() =>
 		{
@@ -777,7 +761,6 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// Capture one-shot toggle states before resetting them
 		var wasNewBranch = _isNewBranch;
 		var wasAutoCompact = _isAutoCompact;
-		var wasPendingClear = _pendingClear;
 		_midRunAutoCompactState = _isAutoCompact;
 
 		// Build augmented message with hidden instructions (FR.11.2, FR.11.9)
@@ -786,7 +769,6 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 		// Reset one-shot toggles immediately
 		if (wasNewBranch) IsNewBranch = false;
-		_pendingClear = false;
 
 		_busyCount++;
 		IsBusy = true;
@@ -887,27 +869,6 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					profileConfigDir: SelectedProfileConfigDir,
 					effort:           SelectedEffort,
 					cancellationToken: ct);
-			}
-
-			// Post-response: handle Clear (FR.11.7)
-			// Check both captured state (armed before send) and current state (armed mid-run)
-			if (wasPendingClear || _pendingClear)
-			{
-				_pendingClear = false;
-				var currentId = _node.Model.ClaudeSessionId;
-				if (!string.IsNullOrEmpty(currentId))
-				{
-					_log.Information("Clearing Claude session {SessionId} for {FileName} (preserving JSONL)",
-						currentId, _node.FileName);
-					_node.Model.PriorClaudeSessionIds.Add(currentId);
-					_node.Model.ClaudeSessionId = null;
-				}
-				_appSettings.Save();
-				Dispatcher.UIThread.Post(() =>
-				{
-					this.RaisePropertyChanged(nameof(CanClear));
-					this.RaisePropertyChanged(nameof(HasClaudeSession));
-				});
 			}
 
 			// Post-response: handle Auto-Compact (FR.11.6)
@@ -1145,6 +1106,36 @@ PROJECT GLOSSARY:
 		return string.Format(Constants.Instructions.CompactionPromptTemplate, glossarySection);
 	}
 
+	/// <summary>
+	/// Immediately detaches the live Claude JSONL session (FR.11.7, FR.11.8).
+	/// Moves ClaudeSessionId to PriorClaudeSessionIds so the JSONL is still viewable,
+	/// but the next prompt will feed the text session as context instead of --resume.
+	/// Thread-safe; posts UI updates to the dispatcher.
+	/// </summary>
+	public void DetachSession(string displayMessage = "[Session detached — next prompt will use text session as context]")
+	{
+		var currentId = _node.Model.ClaudeSessionId;
+		if (string.IsNullOrEmpty(currentId))
+			return;
+
+		_node.Model.PriorClaudeSessionIds.Add(currentId);
+		_node.Model.ClaudeSessionId = null;
+		_appSettings.Save();
+		_log.Information("Detached Claude session {SessionId} for {FileName}", currentId, _node.FileName);
+
+		Dispatcher.UIThread.Post(() =>
+		{
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = displayMessage,
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+			this.RaisePropertyChanged(nameof(CanClear));
+			this.RaisePropertyChanged(nameof(HasClaudeSession));
+		});
+	}
+
 	/// <summary>Sends a follow-up compaction prompt and rewrites the session file (FR.11.6).</summary>
 	private async System.Threading.Tasks.Task SendCompactionPromptAsync()
 	{
@@ -1175,12 +1166,8 @@ PROJECT GLOSSARY:
 			{
 				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
 					compactedContent.AppendLine(evt.Content);
-
-				if (evt.Type == "result" && !evt.IsError && evt.SessionId is not null)
-				{
-					_node.Model.ClaudeSessionId = evt.SessionId;
-					_appSettings.Save();
-				}
+				// Session ID from the compaction response is intentionally NOT stored:
+				// after compaction the JSONL is detached (FR.11.8).
 			});
 
 		var compacted = compactedContent.ToString().Trim();
@@ -1210,7 +1197,11 @@ PROJECT GLOSSARY:
 				}
 			});
 
-			_log.Information("Session {FileName} compacted successfully", _node.FileName);
+			// Detach the JSONL session after compaction (FR.11.8):
+		// next prompt will use the compacted text session as context via BuildContextPreamble.
+		DetachSession("[Session compacted and JSONL detached — next prompt will use the compacted text session as context]");
+
+		_log.Information("Session {FileName} compacted and JSONL detached", _node.FileName);
 		}
 		else
 		{
@@ -1276,9 +1267,6 @@ PROJECT GLOSSARY:
 		if (IsAutoDocument)
 			sb.AppendLine($"- {Constants.Instructions.AutoDocument}");
 
-		if (_pendingClear)
-			sb.AppendLine($"- {Constants.Instructions.Clear}");
-
 		return sb.ToString();
 	}
 
@@ -1322,10 +1310,13 @@ PROJECT GLOSSARY:
 		_isProfileAuthInProgress = true;
 		try
 		{
-			// Generate a unique profile ID
+			// Generate a unique profile ID — check both settings and filesystem to avoid collisions
 			var existingIds = _appSettings.Settings.Profiles.Select(p => p.ProfileId).ToHashSet();
 			var profileId = "profile_1";
-			for (var i = 2; existingIds.Contains(profileId); i++)
+			for (var i = 2;
+			     existingIds.Contains(profileId)
+			     || Directory.Exists(System.IO.Path.Combine(_profileService.ProfilesRootDirectory, profileId));
+			     i++)
 				profileId = $"profile_{i}";
 
 			// Build the config directory path for this profile

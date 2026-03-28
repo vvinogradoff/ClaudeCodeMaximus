@@ -47,6 +47,8 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 
 	public async Task LaunchAuthLoginAsync(string claudePath, string configDir)
 	{
+		// Defensive trim — trailing whitespace in paths can create ghost NTFS entries
+		configDir = configDir.Trim();
 		_log.Information("Launching interactive auth login with configDir {ConfigDir}", configDir);
 
 		// Ensure the config directory exists
