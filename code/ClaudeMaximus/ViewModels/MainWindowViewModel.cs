@@ -102,7 +102,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 	public ReactiveCommand<Unit, Unit> ExitCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleTreePanelCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleThemeCommand { get; }
-	public ReactiveCommand<Unit, Unit> ClearSessionCommand { get; }
 
 	/// <summary>True when the app is running from build output — shows warning icon in title bar.</summary>
 	public bool IsRunningFromBuildOutput => _selfUpdate.IsRunningFromBuildOutput;
@@ -135,7 +134,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ExitCommand            = ReactiveCommand.Create(Exit);
 		ToggleTreePanelCommand = ReactiveCommand.Create(() => { IsTreePanelVisible = !IsTreePanelVisible; });
 		ToggleThemeCommand     = ReactiveCommand.Create(() => { IsDarkTheme = !IsDarkTheme; });
-		ClearSessionCommand    = ReactiveCommand.Create(() => { ActiveSession?.ClearCommand.Execute().Subscribe(); });
 
 		// Repair session files corrupted by the auto-compaction bug (one-time on startup)
 		var repaired = fileService.RepairCorruptedCompactions();
@@ -180,6 +178,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 		this.RaisePropertyChanged(nameof(IsAutoCompact));
 		this.RaisePropertyChanged(nameof(CanClear));
 	}
+
+	/// <summary>Immediately detaches the JSONL session for the active session (FR.11.7).</summary>
+	public void DetachActiveSession() => ActiveSession?.DetachSession();
 
 	public int ActiveSessionCount => _processManager.ActiveProcessCount;
 

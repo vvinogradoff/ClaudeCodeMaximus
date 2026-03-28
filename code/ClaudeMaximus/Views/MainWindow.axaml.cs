@@ -28,10 +28,14 @@ public partial class MainWindow : Window
 	private double _lastNormalWidth;
 	private double _lastNormalHeight;
 
+	// Saved tree panel column width so it can be restored when the panel is re-shown
+	private double _savedTreeColumnWidth = 280;
+
 	public MainWindow()
 	{
 		InitializeComponent();
 		BuildNumberText.Text = GetBuildNumber();
+		ClearSessionBtn.Click += OnClearSessionClick;
 
 		// Global hotkey handler
 		KeyDown += OnGlobalKeyDown;
@@ -57,11 +61,52 @@ public partial class MainWindow : Window
 		_lastNormalWidth     = ws.Width;
 		_lastNormalHeight    = ws.Height;
 
-		MainContentGrid.ColumnDefinitions[0].Width = new GridLength(
-			Math.Clamp(ws.SplitterPosition, 180, 600));
+		_savedTreeColumnWidth = Math.Clamp(ws.SplitterPosition, 180, 600);
+		MainContentGrid.ColumnDefinitions[0].Width = new GridLength(_savedTreeColumnWidth);
 
 		PositionChanged += OnPositionChanged;
 		Opened += OnWindowOpened;
+		DataContextChanged += OnDataContextSet;
+	}
+
+	private void OnDataContextSet(object? sender, EventArgs e)
+	{
+		DataContextChanged -= OnDataContextSet;
+		if (DataContext is MainWindowViewModel vm)
+		{
+			// Apply initial tree panel state
+			ApplyTreePanelVisibility(vm.IsTreePanelVisible);
+
+			// Subscribe to future changes
+			vm.PropertyChanged += (_, args) =>
+			{
+				if (args.PropertyName == nameof(MainWindowViewModel.IsTreePanelVisible))
+					ApplyTreePanelVisibility(vm.IsTreePanelVisible);
+			};
+		}
+	}
+
+	private void ApplyTreePanelVisibility(bool isVisible)
+	{
+		var col0 = MainContentGrid.ColumnDefinitions[0]; // tree panel
+		var col1 = MainContentGrid.ColumnDefinitions[1]; // splitter
+
+		if (isVisible)
+		{
+			col0.Width = new GridLength(_savedTreeColumnWidth);
+			col0.MinWidth = 180;
+			col0.MaxWidth = 600;
+			col1.Width = new GridLength(5);
+		}
+		else
+		{
+			// Save current width before collapsing
+			_savedTreeColumnWidth = col0.Width.Value;
+			col0.Width = new GridLength(0);
+			col0.MinWidth = 0;
+			col0.MaxWidth = 0;
+			col1.Width = new GridLength(0);
+		}
 	}
 
 	private void OnPositionChanged(object? sender, PixelPointEventArgs e)
@@ -199,7 +244,9 @@ public partial class MainWindow : Window
 			_lastNormalPosition.X, _lastNormalPosition.Y,
 			ws.Left, ws.Top, ws.Width, ws.Height, ws.IsMaximized);
 
-		ws.SplitterPosition = MainContentGrid.ColumnDefinitions[0].Width.Value;
+		// When tree panel is hidden, column width is 0 — use saved value instead
+		var currentColWidth = MainContentGrid.ColumnDefinitions[0].Width.Value;
+		ws.SplitterPosition = currentColWidth > 0 ? currentColWidth : _savedTreeColumnWidth;
 
 		settings.Save();
 
@@ -430,6 +477,19 @@ public partial class MainWindow : Window
 			: WindowState.Maximized;
 
 	private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+	private async void OnClearSessionClick(object? sender, RoutedEventArgs e)
+	{
+		if (DataContext is not MainWindowViewModel vm || !vm.CanClear)
+			return;
+
+		var confirmed = await ShowConfirmOverlayAsync(
+			"Terminate this Claude session?\n\nThe JSONL will be detached immediately. The next prompt will use your text session as context instead of resuming the CLI session.",
+			"Yes, terminate");
+
+		if (confirmed)
+			vm.DetachActiveSession();
+	}
 
 	private static string GetBuildNumber()
 	{

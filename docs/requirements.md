@@ -341,23 +341,28 @@ The application header bar provides per-session instruction toggles that modify 
 - **Type:** One-shot toggle (auto-unsets after the compaction completes)
 - **Behavior:** When ON and Claude finishes responding to the user's prompt, the application automatically sends a **separate follow-up prompt** to Claude instructing it to compact the session. The follow-up prompt is:
   The compaction prompt instructs Claude to: preserve decisions and reasoning, architecture choices, user attribution, and **all URLs (full or partial)**; remove transient debugging steps, meta-instructions, and redundant corrections; restructure user inputs by semantic grouping (merge related follow-ups, only split on topic change); **normalize terminology per the project glossary** (`docs/glossary.md` — attached to the prompt when available); flag new terms with `[NEW TERM]` and update the glossary; and output in session file format with `[timestamp] ROLE` headers.
-- **Post-compaction:** The compacted text returned by Claude replaces the session file content (rewritten, not appended). The Messages collection in the output window is also updated to reflect the compacted content.
+- **Post-compaction:** The compacted text returned by Claude replaces the session file content (rewritten, not appended). The Messages collection in the output window is also updated to reflect the compacted content. **After compaction completes, the JSONL session is automatically detached (FR.11.8).** The next prompt will use the compacted text session as context via `BuildContextPreamble` instead of `--resume`.
 - **Auto-reset:** The toggle resets to OFF after the compaction prompt completes
 - **Icon:** Compress/shrink icon
 
-**FR.11.7 — Clear button:**
-- **Type:** Action button (not a toggle)
-- **Precondition:** Only active when the current session has a live `ClaudeSessionId` (i.e., has an active Claude-side session to clear). Disabled otherwise.
-- **Behavior:** Adds an instruction to the current prompt: `"After completing this request, please summarize the key outcomes and decisions from this session in a brief closing statement."`
-- **Post-response:** After Claude finishes responding, the application:
-  1. Nullifies the stored `ClaudeSessionId` for this session (forcing a fresh `claude` process on the next prompt)
-  2. On the next prompt, the application detects that the session file has history but no `ClaudeSessionId`, and proactively uses `BuildContextPreamble` to inject stored conversation history into the new Claude session
-- **Effect:** This "clears" the Claude-side context while preserving the full session file, effectively resetting the working memory while keeping the knowledge artifact
-- **Icon:** Broom/clear icon
+**FR.11.7 — Terminate Session button:**
+- **Type:** Action button (not a toggle); previously called "Clear"
+- **Precondition:** Only active when the current session has a live `ClaudeSessionId`. Disabled otherwise.
+- **Behavior:** When clicked, shows a **confirmation dialog** asking the user to confirm the intention to terminate the session.
+- **On confirm:** The JSONL session is **immediately detached** (FR.11.8) — no prompt is sent to Claude. A system message `[Session detached — next prompt will use text session as context]` appears in the Output Panel.
+- **On cancel:** No action taken.
+- **Effect:** The `ClaudeSessionId` is moved to `PriorClaudeSessionIds` so the JSONL remains visible in JSONL view mode but is no longer used for `--resume`. The next prompt will use the text session as context via `BuildContextPreamble`.
+- **Icon:** Broom/clear icon (&#x2672;)
 
-**FR.11.8 — Toggle state display:** Active toggles shall be visually distinct (e.g., highlighted background or accent border) so the user can see at a glance which instructions will be injected into the next prompt.
+**FR.11.8 — JSONL Session Detachment:**
+- The JSONL session is detached by: moving `ClaudeSessionId` to `PriorClaudeSessionIds` and setting `ClaudeSessionId = null`.
+- Detachment occurs in two situations: (1) after Auto-Compact completes, (2) when the user confirms the Terminate Session button.
+- After detachment, the JSONL file still exists and remains accessible via the JSONL view toggle, but `--resume` is no longer used.
+- The next prompt after detachment proactively uses `BuildContextPreamble` to feed the stored text session history to Claude as context (FR.11.10).
 
-**FR.11.9 — Instruction block format:** The instruction block is **always** appended to the user's message in `claude` stdin (since auto-commit OFF always injects "do not commit"). The format is:
+**FR.11.9 — Toggle state display:** Active toggles shall be visually distinct (e.g., highlighted background or accent border) so the user can see at a glance which instructions will be injected into the next prompt.
+
+**FR.11.10 — Instruction block format:** The instruction block is **always** appended to the user's message in `claude` stdin (since auto-commit OFF always injects "do not commit"). The format is:
 ```
 
 ---
@@ -368,9 +373,9 @@ The application header bar provides per-session instruction toggles that modify 
 ```
 The block is separated from the user's message by a blank line and a `---` delimiter.
 
-**FR.11.10 — Proactive context reload:** When `SendAsync` detects that the session file contains history but `ClaudeSessionId` is null (e.g., after a Clear), the user's message is wrapped with `BuildContextPreamble` before being sent — without waiting for a "No conversation found" error. This ensures continuity after session clearing.
+**FR.11.11 — Proactive context reload:** When `SendAsync` detects that the session file contains history but `ClaudeSessionId` is null (e.g., after detachment), the user's message is wrapped with `BuildContextPreamble` before being sent — without waiting for a "No conversation found" error. This ensures continuity after session detachment or compaction.
 
-**FR.11.11 — Mid-run toggle corrections:** When the user toggles Auto-Commit, New Branch, Auto-Document, or Auto-Compact while Claude is actively processing a prompt (`IsBusy` is true):
+**FR.11.12 — Mid-run toggle corrections:** When the user toggles Auto-Commit, New Branch, Auto-Document, or Auto-Compact while Claude is actively processing a prompt (`IsBusy` is true):
 - A system message is shown in the output panel: `[{ToggleName} was {enabled|disabled} for this run]`
 - For Auto-Commit, New Branch, and Auto-Document: a follow-up prompt is sent to the active Claude session with the new instruction (enable) or a correction telling Claude to ignore the previous instruction (disable). These correction prompts are fire-and-forget and do not appear in the session file or UI beyond the system status message.
 - For Auto-Compact: no prompt is sent (compaction happens post-response). The mid-run state is tracked and used when deciding whether to compact after the response completes. If the user enables then disables auto-compact during a single run, the final state at response completion determines behavior.

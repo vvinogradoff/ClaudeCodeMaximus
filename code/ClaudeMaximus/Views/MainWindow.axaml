@@ -142,13 +142,13 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </ToggleButton>
                     <!-- Clear session button (FR.11.7) -->
-                    <Button Command="{Binding ClearSessionCommand}"
+                    <Button x:Name="ClearSessionBtn"
                             IsEnabled="{Binding CanClear}"
                             Width="30" Height="26" Padding="0"
                             Background="Transparent" BorderThickness="1"
                             BorderBrush="Transparent"
                             VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
-                            ToolTip.Tip="Clear: terminate Claude session after this prompt">
+                            ToolTip.Tip="Terminate session: detach the JSONL session immediately (with confirmation)">
                         <TextBlock Text="&#x2672;" FontSize="14"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Button>
