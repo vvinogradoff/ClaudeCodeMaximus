@@ -63,6 +63,8 @@ WHAT TO PRESERVE:
 - Architecture choices and implementation details that matter
 - The attribution that specific instructions or knowledge came from the user
 - ALL URLs (full or partial) — never drop URLs, they are important context for searching sessions later
+- ALL secrets, API keys, tokens, credentials, and connection strings — these MUST always be preserved verbatim, no exceptions
+- File names and paths: keep them whenever the surrounding context is preserved. If a segment describes work done on a specific file, the file name/path MUST stay. Only drop file names when removing the entire segment that references them
 
 WHAT TO REMOVE:
 - Transient information: debugging steps, intermediate failed attempts, progress updates, unnecessary verbosity
