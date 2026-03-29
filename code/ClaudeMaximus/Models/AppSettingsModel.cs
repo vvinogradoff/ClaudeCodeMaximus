@@ -64,4 +64,11 @@ public sealed class AppSettingsModel
 
 	/// <summary>Whether to auto-start the Tessyn daemon if not already running.</summary>
 	public bool AutoStartDaemon { get; set; } = true;
+
+	/// <summary>
+	/// When true, use the Tessyn daemon for session operations (send, load, search).
+	/// When false, use the legacy local process and file-based code paths.
+	/// Default false during migration; set to true once daemon integration is verified.
+	/// </summary>
+	public bool UseTessynDaemon { get; set; }
 }

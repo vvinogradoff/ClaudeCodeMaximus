@@ -19,6 +19,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IClaudeProfileService _profileService;
 	private readonly IClaudeSessionImportService _importService;
 	private readonly ISelfUpdateService _selfUpdate;
+	private readonly ITessynRunService? _runService;
+	private readonly ITessynDaemonService? _daemonService;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
@@ -116,7 +118,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IClaudeProfileService profileService,
 		IClaudeSessionImportService importService,
 		ISelfUpdateService selfUpdate,
-		SessionTreeViewModel sessionTree)
+		SessionTreeViewModel sessionTree,
+		ITessynRunService? runService = null,
+		ITessynDaemonService? daemonService = null)
 	{
 		_appSettings      = appSettings;
 		_fileService      = fileService;
@@ -126,6 +130,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_profileService   = profileService;
 		_importService    = importService;
 		_selfUpdate       = selfUpdate;
+		_runService       = runService;
+		_daemonService    = daemonService;
 		SessionTree       = sessionTree;
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
 		_isTreePanelVisible = !appSettings.Settings.IsTreePanelCollapsed;
@@ -170,8 +176,11 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService);
-				vm.LoadFromFile();
+				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _runService, _daemonService);
+				if (_appSettings.Settings.UseTessynDaemon && _daemonService != null && node.ExternalId != null)
+					_ = vm.LoadFromDaemonAsync();
+				else
+					vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache[cacheKey] = vm;
 			}
