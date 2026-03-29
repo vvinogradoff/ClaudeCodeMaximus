@@ -104,6 +104,27 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		public const string Send = "Send";
 	}
 
+	public static class Tessyn
+	{
+		public const int DefaultPort = 9833;
+		public const int MinProtocolVersion = 2;
+		public const int ReceiveBufferSize = 8192;
+		public const int RpcTimeoutMs = 30000;
+		public const int ReindexTimeoutMs = 60000;
+		public const int TitleGenerateTimeoutMs = 60000;
+		public const int ReconnectBaseDelayMs = 1000;
+		public const int ReconnectMaxDelayMs = 30000;
+		public const int DaemonStartupWaitMs = 5000;
+		public const int DaemonStartupPollIntervalMs = 250;
+
+		// JSON-RPC error codes
+		public const int ErrorDaemonNotReady = -32000;
+		public const int ErrorSessionNotFound = -32001;
+		public const int ErrorRunNotFound = -32002;
+		public const int ErrorRunLimitReached = -32003;
+		public const int ErrorClaudeNotAvailable = -32004;
+	}
+
 	public static class ClaudeSessions
 	{
 		public const string ClaudeHomeFolderName = ".claude";

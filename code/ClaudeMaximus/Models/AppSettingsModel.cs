@@ -55,4 +55,10 @@ public sealed class AppSettingsModel
 	/// on first load if missing.
 	/// </summary>
 	public KeyBindingsModel KeyBindings { get; set; } = KeyBindingsModel.CreateDefaults();
+
+	/// <summary>Path to the tessyn daemon executable. Default: "tessyn" (assumes on PATH).</summary>
+	public string TessynPath { get; set; } = "tessyn";
+
+	/// <summary>Whether to auto-start the Tessyn daemon if not already running.</summary>
+	public bool AutoStartDaemon { get; set; } = true;
 }
