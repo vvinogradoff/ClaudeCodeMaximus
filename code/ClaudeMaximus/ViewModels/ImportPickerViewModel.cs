@@ -22,6 +22,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeAssistService _assistService;
+	private readonly ITessynDaemonService? _daemonService;
 	private string _searchText = string.Empty;
 	private bool _isSearching;
 	private bool _isGeneratingTitles;
@@ -143,10 +144,12 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 	public ImportPickerViewModel(
 		IClaudeSessionImportService importService,
-		IClaudeAssistService assistService)
+		IClaudeAssistService assistService,
+		ITessynDaemonService? daemonService = null)
 	{
 		_importService = importService;
 		_assistService = assistService;
+		_daemonService = daemonService;
 	}
 
 	/// <summary>

@@ -807,12 +807,13 @@ public partial class SessionTreeView : UserControl
 	{
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
+		var daemonService = App.Services.GetRequiredService<ITessynDaemonService>();
 
 		var sourceDirectories = vm.BuildSourceDirectories();
 		var importTargets = vm.BuildImportTargets();
 		var alreadyImportedIds = vm.CollectAllClaudeSessionIds();
 
-		var pickerVm = new ImportPickerViewModel(importService, assistService);
+		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonService);
 		pickerVm.Initialize(sourceDirectories, importTargets, workingDirectory, initialTargetKey, alreadyImportedIds);
 
 		var picker = new ImportPickerWindow { DataContext = pickerVm };
