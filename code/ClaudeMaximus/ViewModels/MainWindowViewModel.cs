@@ -154,20 +154,32 @@ public sealed class MainWindowViewModel : ViewModelBase
 		{
 			ActiveSession = null;
 			_appSettings.Settings.ActiveSessionFileName = null;
+			_appSettings.Settings.ActiveSessionExternalId = null;
 			RaiseInstructionToolbarChanged();
 			return;
 		}
 
-		if (!_sessionCache.TryGetValue(node.FileName, out var vm))
+		var cacheKey = node.SessionKey;
+		if (!_sessionCache.TryGetValue(cacheKey, out var vm))
 		{
-			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService);
-			vm.LoadFromFile();
-			vm.ResolveDefaultProfileEmail();
-			_sessionCache[node.FileName] = vm;
+			// Check if the VM is cached under the old FileName key (ExternalId was set after caching)
+			if (node.ExternalId != null && _sessionCache.TryGetValue(node.FileName, out vm))
+			{
+				_sessionCache.Remove(node.FileName);
+				_sessionCache[cacheKey] = vm;
+			}
+			else
+			{
+				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService);
+				vm.LoadFromFile();
+				vm.ResolveDefaultProfileEmail();
+				_sessionCache[cacheKey] = vm;
+			}
 		}
 
 		ActiveSession = vm;
 		_appSettings.Settings.ActiveSessionFileName = node.FileName;
+		_appSettings.Settings.ActiveSessionExternalId = node.ExternalId;
 		RaiseInstructionToolbarChanged();
 	}
 
@@ -207,33 +219,41 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 	public void RestoreActiveSession()
 	{
+		// Try ExternalId first (new identity), fall back to FileName (legacy)
+		var savedExternalId = _appSettings.Settings.ActiveSessionExternalId;
 		var savedFileName = _appSettings.Settings.ActiveSessionFileName;
-		if (string.IsNullOrEmpty(savedFileName))
+
+		SessionNodeViewModel? node = null;
+
+		if (!string.IsNullOrEmpty(savedExternalId))
 		{
-			Log.Debug("RestoreActiveSession: no saved ActiveSessionFileName");
-			return;
+			Log.Debug("RestoreActiveSession: looking for ExternalId {ExternalId}", savedExternalId);
+			node = FindSessionByPredicate(s => s.ExternalId == savedExternalId);
 		}
 
-		Log.Debug("RestoreActiveSession: looking for {FileName} in {DirCount} directories",
-			savedFileName, SessionTree.Directories.Count);
+		if (node == null && !string.IsNullOrEmpty(savedFileName))
+		{
+			Log.Debug("RestoreActiveSession: falling back to FileName {FileName}", savedFileName);
+			node = FindSessionByPredicate(s => s.FileName == savedFileName);
+		}
 
-		var node = FindSessionNode(savedFileName);
 		if (node != null)
 		{
 			Log.Debug("RestoreActiveSession: found node '{Name}', setting selection", node.Name);
 			SessionTree.SelectedSession = node;
 		}
-		else
+		else if (!string.IsNullOrEmpty(savedExternalId) || !string.IsNullOrEmpty(savedFileName))
 		{
-			Log.Warning("RestoreActiveSession: session node not found for {FileName}", savedFileName);
+			Log.Warning("RestoreActiveSession: session node not found for ExternalId={ExternalId}, FileName={FileName}",
+				savedExternalId, savedFileName);
 		}
 	}
 
-	private SessionNodeViewModel? FindSessionNode(string fileName)
+	private SessionNodeViewModel? FindSessionByPredicate(Func<SessionNodeViewModel, bool> predicate)
 	{
 		foreach (var dir in SessionTree.Directories)
 		{
-			var found = FindSessionInChildren(dir.Children, fileName);
+			var found = FindSessionInChildren(dir.Children, predicate);
 			if (found != null)
 				return found;
 		}
@@ -241,15 +261,16 @@ public sealed class MainWindowViewModel : ViewModelBase
 	}
 
 	private static SessionNodeViewModel? FindSessionInChildren(
-		System.Collections.ObjectModel.ObservableCollection<ViewModelBase> children, string fileName)
+		System.Collections.ObjectModel.ObservableCollection<ViewModelBase> children,
+		Func<SessionNodeViewModel, bool> predicate)
 	{
 		foreach (var child in children)
 		{
-			if (child is SessionNodeViewModel session && session.FileName == fileName)
+			if (child is SessionNodeViewModel session && predicate(session))
 				return session;
 			if (child is GroupNodeViewModel group)
 			{
-				var found = FindSessionInChildren(group.Children, fileName);
+				var found = FindSessionInChildren(group.Children, predicate);
 				if (found != null)
 					return found;
 			}

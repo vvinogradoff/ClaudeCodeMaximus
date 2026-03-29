@@ -37,6 +37,10 @@ public partial class App : Application
 		var keyBindings = Services.GetRequiredService<IKeyBindingService>();
 		keyBindings.EnsureDefaults();
 
+		// One-time identity migration: populate ExternalId from ClaudeSessionId
+		var migration = new Services.SessionIdentityMigration(appSettings);
+		migration.MigrateAll();
+
 		ThemeApplicator.Apply(appSettings.Settings);
 
 		var selfUpdate = Services.GetRequiredService<ISelfUpdateService>();

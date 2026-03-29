@@ -190,6 +190,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			FileName = fileName,
 			WorkingDirectory = parent.Path,
 			ClaudeSessionId = claudeSessionId,
+			ExternalId = claudeSessionId,
 		};
 		var vm = new SessionNodeViewModel(model);
 		parent.AddSession(vm);
@@ -209,6 +210,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			FileName = fileName,
 			WorkingDirectory = parent.WorkingDirectory,
 			ClaudeSessionId = claudeSessionId,
+			ExternalId = claudeSessionId,
 		};
 		var vm = new SessionNodeViewModel(model);
 		parent.AddSession(vm);
@@ -217,7 +219,8 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	}
 
 	/// <summary>
-	/// Collects all ClaudeSessionId values from the entire tree for duplicate detection.
+	/// Collects all session identifiers from the entire tree for duplicate detection.
+	/// Includes both ExternalId and ClaudeSessionId for backward compatibility.
 	/// </summary>
 	public IReadOnlySet<string> CollectAllClaudeSessionIds()
 	{
@@ -233,8 +236,11 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		{
 			switch (child)
 			{
-				case SessionNodeViewModel session when session.Model.ClaudeSessionId is not null:
-					ids.Add(session.Model.ClaudeSessionId);
+				case SessionNodeViewModel session:
+					if (session.Model.ExternalId is not null)
+						ids.Add(session.Model.ExternalId);
+					if (session.Model.ClaudeSessionId is not null)
+						ids.Add(session.Model.ClaudeSessionId);
 					break;
 				case GroupNodeViewModel group:
 					CollectIdsFromChildren(group.Children, ids);

@@ -32,8 +32,11 @@ public sealed class AppSettingsModel
 	public ThemeColorsModel LightColors { get; set; } = new();
 	public ThemeColorsModel DarkColors { get; set; } = ThemeColorsModel.DefaultDark();
 
-	/// <summary>FileName of the last selected session, restored on startup.</summary>
+	/// <summary>FileName of the last selected session, restored on startup. Deprecated: prefer ActiveSessionExternalId.</summary>
 	public string? ActiveSessionFileName { get; set; }
+
+	/// <summary>ExternalId (daemon UUID) of the last selected session. Takes precedence over ActiveSessionFileName.</summary>
+	public string? ActiveSessionExternalId { get; set; }
 
 	/// <summary>Whether the tree panel is collapsed (auto-hidden).</summary>
 	public bool IsTreePanelCollapsed { get; set; }
