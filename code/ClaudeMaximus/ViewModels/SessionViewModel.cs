@@ -35,6 +35,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private string? _activeRunId;
 	private bool _daemonPendingClear;
 	private bool _daemonPendingAutoCompact;
+	private CancellationTokenSource? _draftSaveCts;
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -1367,10 +1368,36 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		{
 			_draftDebounceTimer?.Stop();
 			_draftDebounceTimer = null;
-			if (string.IsNullOrEmpty(text))
-				_draftService.DeleteDraft(_node.FileName);
+
+			if (UseDaemon && _node.ExternalId != null)
+			{
+				// Cancel any previous in-flight save to ensure last-write-wins ordering
+				_draftSaveCts?.Cancel();
+				var cts = new CancellationTokenSource();
+				_draftSaveCts = cts;
+				var externalId = _node.ExternalId;
+				var content = string.IsNullOrEmpty(text) ? string.Empty : text;
+
+				_ = Task.Run(async () =>
+				{
+					try
+					{
+						await _daemonService!.DraftSaveAsync(externalId, content, cts.Token);
+					}
+					catch (OperationCanceledException) { /* superseded by newer save */ }
+					catch (Exception ex)
+					{
+						_log.Debug(ex, "Failed to save draft to daemon");
+					}
+				}, cts.Token);
+			}
 			else
-				_draftService.SaveDraft(_node.FileName, text);
+			{
+				if (string.IsNullOrEmpty(text))
+					_draftService.DeleteDraft(_node.FileName);
+				else
+					_draftService.SaveDraft(_node.FileName, text);
+			}
 		};
 		_draftDebounceTimer.Start();
 	}

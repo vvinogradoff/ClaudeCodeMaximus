@@ -23,8 +23,10 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly IClaudeSessionStatusService _claudeSessionStatus;
 	private readonly ISessionSearchService _searchService;
 	private readonly IGitOriginService _gitOriginService;
+	private readonly ITessynDaemonService? _daemonService;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
+	private Dictionary<int, string>? _daemonIdToExternalIdCache;
 	private ViewModelBase? _selectedTreeItem;
 	private CancellationTokenSource? _searchCts;
 
@@ -89,7 +91,8 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		ISessionFileService sessionFileService,
 		IClaudeSessionStatusService claudeSessionStatus,
 		ISessionSearchService searchService,
-		IGitOriginService gitOriginService)
+		IGitOriginService gitOriginService,
+		ITessynDaemonService? daemonService = null)
 	{
 		_appSettings = appSettings;
 		_labelService = labelService;
@@ -97,6 +100,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		_claudeSessionStatus = claudeSessionStatus;
 		_searchService = searchService;
 		_gitOriginService = gitOriginService;
+		_daemonService = daemonService;
 
 		AddDirectoryCommand = ReactiveCommand.Create(PromptAddDirectory);
 
@@ -157,7 +161,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public SessionNodeViewModel AddSession(DirectoryNodeViewModel parent, string name)
 	{
-		var fileName = _sessionFileService.CreateSessionFile();
+		var fileName = UseDaemon
+			? $"daemon-{Guid.NewGuid():N}.pending"
+			: _sessionFileService.CreateSessionFile();
 		var model = new SessionNodeModel { Name = name, FileName = fileName, WorkingDirectory = parent.Path };
 		var vm = new SessionNodeViewModel(model);
 		parent.AddSession(vm);
@@ -167,13 +173,17 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public SessionNodeViewModel AddSessionToGroup(GroupNodeViewModel parent, string name)
 	{
-		var fileName = _sessionFileService.CreateSessionFile();
+		var fileName = UseDaemon
+			? $"daemon-{Guid.NewGuid():N}.pending"
+			: _sessionFileService.CreateSessionFile();
 		var model = new SessionNodeModel { Name = name, FileName = fileName, WorkingDirectory = parent.WorkingDirectory };
 		var vm = new SessionNodeViewModel(model);
 		parent.AddSession(vm);
 		_appSettings.Save();
 		return vm;
 	}
+
+	private bool UseDaemon => _appSettings.Settings.UseTessynDaemon && _daemonService != null;
 
 	// --- Import operations ---
 
@@ -789,28 +799,103 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		var cts = new CancellationTokenSource();
 		_searchCts = cts;
 
-		Task.Run(() =>
+		if (UseDaemon)
 		{
-			if (cts.Token.IsCancellationRequested)
-				return;
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					var response = await _daemonService!.SearchAsync(query, cancellationToken: cts.Token);
+					if (cts.Token.IsCancellationRequested) return;
 
-			var matches = _searchService.FindMatchingSessionFiles(query);
+					// Search returns numeric sessionIds — resolve to externalIds via sessions.list
+					var numericIds = response.Results.Select(r => r.SessionId).ToHashSet();
+					if (numericIds.Count == 0)
+					{
+						Dispatcher.UIThread.Post(() =>
+						{
+							foreach (var dir in Directories)
+							{
+								HideAllChildren(dir.Children);
+								dir.IsVisible = false;
+							}
+						});
+						return;
+					}
 
-			if (cts.Token.IsCancellationRequested)
-				return;
+					// Resolve numeric IDs to externalIds using cached map
+					if (_daemonIdToExternalIdCache == null)
+					{
+						var allSessions = await _daemonService.SessionsListAsync(limit: 10000, cancellationToken: cts.Token);
+						_daemonIdToExternalIdCache = new Dictionary<int, string>();
+						foreach (var s in allSessions)
+							_daemonIdToExternalIdCache[s.Id] = s.ExternalId;
+					}
 
-			Dispatcher.UIThread.Post(() =>
+					var matchingExternalIds = new HashSet<string>();
+					foreach (var nid in numericIds)
+					{
+						if (_daemonIdToExternalIdCache.TryGetValue(nid, out var eid))
+							matchingExternalIds.Add(eid);
+					}
+
+					if (cts.Token.IsCancellationRequested) return;
+
+					Dispatcher.UIThread.Post(() =>
+					{
+						if (cts.Token.IsCancellationRequested) return;
+
+						foreach (var dir in Directories)
+						{
+							var dirHasMatch = ApplyFilterToChildrenByExternalId(dir.Children, matchingExternalIds);
+							dir.IsVisible = dirHasMatch;
+						}
+					});
+				}
+				catch (OperationCanceledException) { /* expected */ }
+				catch (Exception ex)
+				{
+					if (cts.Token.IsCancellationRequested) return;
+					Serilog.Log.Warning(ex, "Daemon search failed, falling back to local");
+					var matches = _searchService.FindMatchingSessionFiles(query);
+					if (cts.Token.IsCancellationRequested) return;
+					Dispatcher.UIThread.Post(() =>
+					{
+						if (cts.Token.IsCancellationRequested) return;
+						foreach (var dir in Directories)
+						{
+							var dirHasMatch = ApplyFilterToChildren(dir.Children, matches);
+							dir.IsVisible = dirHasMatch;
+						}
+					});
+				}
+			}, cts.Token);
+		}
+		else
+		{
+			Task.Run(() =>
 			{
 				if (cts.Token.IsCancellationRequested)
 					return;
 
-				foreach (var dir in Directories)
+				var matches = _searchService.FindMatchingSessionFiles(query);
+
+				if (cts.Token.IsCancellationRequested)
+					return;
+
+				Dispatcher.UIThread.Post(() =>
 				{
-					var dirHasMatch = ApplyFilterToChildren(dir.Children, matches);
-					dir.IsVisible = dirHasMatch;
-				}
-			});
-		}, cts.Token);
+					if (cts.Token.IsCancellationRequested)
+						return;
+
+					foreach (var dir in Directories)
+					{
+						var dirHasMatch = ApplyFilterToChildren(dir.Children, matches);
+						dir.IsVisible = dirHasMatch;
+					}
+				});
+			}, cts.Token);
+		}
 	}
 
 	private static bool ApplyFilterToChildren(ObservableCollection<ViewModelBase> children, IReadOnlySet<string> matches)
@@ -835,6 +920,47 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		}
 
 		return anyVisible;
+	}
+
+	private static bool ApplyFilterToChildrenByExternalId(ObservableCollection<ViewModelBase> children, HashSet<string> matchingExternalIds)
+	{
+		var anyVisible = false;
+
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session:
+					var visible = session.ExternalId != null && matchingExternalIds.Contains(session.ExternalId);
+					session.IsVisible = visible;
+					if (visible) anyVisible = true;
+					break;
+				case GroupNodeViewModel group:
+					var groupHasMatch = ApplyFilterToChildrenByExternalId(group.Children, matchingExternalIds);
+					group.IsVisible = groupHasMatch;
+					if (groupHasMatch) anyVisible = true;
+					break;
+			}
+		}
+
+		return anyVisible;
+	}
+
+	private static void HideAllChildren(ObservableCollection<ViewModelBase> children)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session:
+					session.IsVisible = false;
+					break;
+				case GroupNodeViewModel group:
+					HideAllChildren(group.Children);
+					group.IsVisible = false;
+					break;
+			}
+		}
 	}
 
 	private void ShowAllNodes()
