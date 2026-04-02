@@ -23,6 +23,14 @@ public sealed class SessionNodeModel
 	/// </summary>
 	public string? ExternalId { get; set; }
 
+	/// <summary>
+	/// The original project path where this session's JSONL lives. Used for cross-project
+	/// imported sessions where WorkingDirectory differs from the session's origin.
+	/// When set, run.send uses this path instead of WorkingDirectory for --resume to work.
+	/// Null means WorkingDirectory is the original project (same-project session).
+	/// </summary>
+	public string? OriginalProjectPath { get; set; }
+
 	/// <summary>Persisted vertical scroll offset for the session output area.</summary>
 	public double ScrollOffset { get; set; }
 

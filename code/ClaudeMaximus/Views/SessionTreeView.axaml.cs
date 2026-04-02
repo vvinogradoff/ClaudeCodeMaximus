@@ -874,11 +874,42 @@ public partial class SessionTreeView : UserControl
 					return; // Cannot import without JSONL and without daemon
 			}
 
+			// Determine original project path for cross-project sessions
+			string? originalProjectPath = null;
+			if (!string.IsNullOrEmpty(item.Summary.JsonlPath))
+			{
+				// JSONL path is like ~/.claude/projects/<slug>/<sessionId>.jsonl
+				// The original project path is NOT directly recoverable from the slug,
+				// but we can store the slug-based path so the daemon can find the session.
+				var jsonlDir = System.IO.Path.GetDirectoryName(item.Summary.JsonlPath);
+				if (jsonlDir != null)
+				{
+					var slug = System.IO.Path.GetFileName(jsonlDir);
+					// Check if this session is from a different project than the import target
+					var targetSlug = Constants.ClaudeSessions.BuildProjectSlug(
+						dirParent?.Path ?? grpParent?.WorkingDirectory ?? string.Empty);
+					if (!string.Equals(slug, targetSlug, StringComparison.Ordinal))
+					{
+						// Cross-project: reconstruct path from slug (replace leading - with /)
+						// Slug format: -Users-aisling-...-projectName → /Users/aisling/.../projectName
+						originalProjectPath = slug.StartsWith('-') ? slug.Replace('-', '/') : slug;
+					}
+				}
+			}
+
 			// Add to tree
 			if (dirParent != null)
-				vm.ImportSession(dirParent, name, fileName, item.SessionId);
+			{
+				var node = vm.ImportSession(dirParent, name, fileName, item.SessionId);
+				if (originalProjectPath != null)
+					node.Model.OriginalProjectPath = originalProjectPath;
+			}
 			else if (grpParent != null)
-				vm.ImportSessionToGroup(grpParent, name, fileName, item.SessionId);
+			{
+				var node = vm.ImportSessionToGroup(grpParent, name, fileName, item.SessionId);
+				if (originalProjectPath != null)
+					node.Model.OriginalProjectPath = originalProjectPath;
+			}
 		}
 		catch (Exception ex)
 		{

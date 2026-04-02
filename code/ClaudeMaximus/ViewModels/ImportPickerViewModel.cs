@@ -392,11 +392,23 @@ public sealed class ImportPickerViewModel : ViewModelBase
 			}
 			else
 			{
-				// Create a virtual item from daemon data (cross-project result)
+				// Create a virtual item from daemon data (cross-project result).
+				// Store the JSONL path so the session can be resumed from its original project.
+				var jsonlPath = string.Empty;
+				if (!string.IsNullOrEmpty(session.ProjectSlug))
+				{
+					var claudeHome = System.IO.Path.Combine(
+						Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+						".claude", "projects", session.ProjectSlug);
+					var candidatePath = System.IO.Path.Combine(claudeHome, session.ExternalId + ".jsonl");
+					if (System.IO.File.Exists(candidatePath))
+						jsonlPath = candidatePath;
+				}
+
 				var summary = new ClaudeSessionSummaryModel
 				{
 					SessionId       = session.ExternalId,
-					JsonlPath       = string.Empty,
+					JsonlPath       = jsonlPath,
 					Created         = DateTimeOffset.FromUnixTimeMilliseconds(session.CreatedAt),
 					LastUsed        = DateTimeOffset.FromUnixTimeMilliseconds(session.UpdatedAt),
 					MessageCount    = session.MessageCount,

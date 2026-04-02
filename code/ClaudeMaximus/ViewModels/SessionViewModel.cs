@@ -346,6 +346,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// Start background indexing for this session's working directory
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
 			_ = codeIndexService.GetOrCreateIndexAsync(WorkingDirectory);
+
+		_log.Information("SessionViewModel created: UseDaemon={UseDaemon}, RunService={HasRun}, DaemonService={HasDaemon}, ExternalId={ExternalId}",
+			UseDaemon, _runService != null, _daemonService != null, _node.ExternalId);
 	}
 
 	public void LoadFromFile()
@@ -424,6 +427,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		var message = InputText.Trim();
 		if (string.IsNullOrEmpty(message)) return;
 
+		// For cross-project imported sessions, use the original project path for resume to work
+		var projectPath = _node.Model.OriginalProjectPath ?? _node.Model.WorkingDirectory;
+
+		_log.Information("SendViaDaemonAsync: sending to daemon. ProjectPath={Dir}, ExternalId={Id}, Model={Model}",
+			projectPath, _node.ExternalId, SelectedModelId);
+
 		InputText = string.Empty;
 
 		// Build augmented message with hidden instructions (same as legacy path)
@@ -484,7 +493,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				});
 
 			var runId = await _runService.SendAsync(
-				_node.Model.WorkingDirectory,
+				projectPath,
 				augmentedMessage,
 				_node.ExternalId,
 				SelectedModelId);
@@ -1086,12 +1095,17 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private async System.Threading.Tasks.Task SendAsync()
 	{
+		_log.Information("SendAsync: UseDaemon={UseDaemon}, RunService={HasRun}, DaemonService={HasDaemon}, Setting={Setting}",
+			UseDaemon, _runService != null, _daemonService != null, _appSettings.Settings.UseTessynDaemon);
+
 		if (UseDaemon)
 		{
+			_log.Information("SendAsync: dispatching to daemon path");
 			await SendViaDaemonAsync();
 			return;
 		}
 
+		_log.Information("SendAsync: using legacy process manager path");
 		var message = InputText.Trim();
 		if (string.IsNullOrEmpty(message))
 			return;
