@@ -132,6 +132,10 @@
                                             Orientation="Horizontal" Spacing="12" Margin="0,2,0,0">
                                     <TextBlock Text="{Binding DateRange}" FontSize="11" Opacity="0.6"/>
                                     <TextBlock Text="{Binding MessageCountText}" FontSize="11" Opacity="0.6"/>
+                                    <TextBlock Text="{Binding ProjectLabel}"
+                                               IsVisible="{Binding IsCrossProject}"
+                                               FontSize="11" Opacity="0.5" FontStyle="Italic"
+                                               Foreground="#5599DD"/>
                                 </StackPanel>
                             </Grid>
                         </Border>

@@ -380,6 +380,8 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		Items.Clear();
 		var count = 0;
+		var discoveredProjectPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
 		foreach (var sid in hitSessionIds)
 		{
 			if (!sessionMap.TryGetValue(sid, out var session)) continue;
@@ -392,9 +394,10 @@ public sealed class ImportPickerViewModel : ViewModelBase
 			}
 			else
 			{
-				// Create a virtual item from daemon data (cross-project result).
-				// Store the JSONL path so the session can be resumed from its original project.
+				// Resolve JSONL path and original project path
 				var jsonlPath = string.Empty;
+				string? originalProjectPath = null;
+
 				if (!string.IsNullOrEmpty(session.ProjectSlug))
 				{
 					var claudeHome = System.IO.Path.Combine(
@@ -403,23 +406,64 @@ public sealed class ImportPickerViewModel : ViewModelBase
 					var candidatePath = System.IO.Path.Combine(claudeHome, session.ExternalId + ".jsonl");
 					if (System.IO.File.Exists(candidatePath))
 						jsonlPath = candidatePath;
+
+					// Reverse slug to path for cross-project sessions
+					if (session.ProjectSlug.StartsWith('-'))
+						originalProjectPath = session.ProjectSlug.Replace('-', '/');
 				}
 
 				var summary = new ClaudeSessionSummaryModel
 				{
-					SessionId       = session.ExternalId,
-					JsonlPath       = jsonlPath,
-					Created         = DateTimeOffset.FromUnixTimeMilliseconds(session.CreatedAt),
-					LastUsed        = DateTimeOffset.FromUnixTimeMilliseconds(session.UpdatedAt),
-					MessageCount    = session.MessageCount,
-					FirstUserPrompt = session.FirstPrompt,
-					GeneratedTitle  = session.Title,
+					SessionId           = session.ExternalId,
+					JsonlPath           = jsonlPath,
+					Created             = DateTimeOffset.FromUnixTimeMilliseconds(session.CreatedAt),
+					LastUsed            = DateTimeOffset.FromUnixTimeMilliseconds(session.UpdatedAt),
+					MessageCount        = session.MessageCount,
+					FirstUserPrompt     = session.FirstPrompt,
+					GeneratedTitle      = session.Title,
+					OriginalProjectPath = originalProjectPath,
+					ProjectSlug         = session.ProjectSlug,
 				};
 				var isImported = _alreadyImportedIds.Contains(session.ExternalId);
 				var item = new ImportSessionItemViewModel(summary, isImported);
 				Items.Add(item);
+
+				if (originalProjectPath != null)
+					discoveredProjectPaths.Add(originalProjectPath);
 			}
 			count++;
+		}
+
+		// Auto-add original project directories to "Import into" dropdown
+		foreach (var projPath in discoveredProjectPaths)
+		{
+			var alreadyInTargets = ImportTargets.Any(t =>
+				!t.IsNewDirectoryAction &&
+				(string.Equals(t.Key, projPath, StringComparison.OrdinalIgnoreCase) ||
+				 string.Equals(t.WorkingDirectory, projPath, StringComparison.OrdinalIgnoreCase)));
+
+			if (!alreadyInTargets)
+			{
+				var dirName = System.IO.Path.GetFileName(projPath.TrimEnd('/', '\\'));
+				var target = new ImportTargetModel
+				{
+					DisplayName = $"{dirName} (from search)",
+					WorkingDirectory = projPath,
+					Key = projPath,
+					IsDirectory = true,
+					Depth = 0,
+				};
+
+				// Insert before the "New directory..." sentinel
+				var sentinelIdx = -1;
+				for (var i = 0; i < ImportTargets.Count; i++)
+					if (ImportTargets[i].IsNewDirectoryAction) { sentinelIdx = i; break; }
+
+				if (sentinelIdx >= 0)
+					ImportTargets.Insert(sentinelIdx, target);
+				else
+					ImportTargets.Add(target);
+			}
 		}
 
 		StatusMessage = $"Found {count} sessions across all projects.";
