@@ -305,6 +305,11 @@ public partial class MainWindow : Window
 			return;
 
 		var (dirNode, grpNode) = vm.SessionTree.FindTargetByKey(target.Key);
+
+		// If target is a new directory not yet in the tree, create it
+		if (dirNode == null && grpNode == null && target.IsDirectory && !string.IsNullOrEmpty(target.WorkingDirectory))
+			dirNode = vm.SessionTree.AddDirectory(target.WorkingDirectory);
+
 		var fileService = App.Services.GetRequiredService<ISessionFileService>();
 
 		foreach (var item in picker.Result)

@@ -782,6 +782,10 @@ public partial class SessionTreeView : UserControl
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
 
+		// If target is a new directory not yet in the tree, create it
+		if (dirTarget == null && grpTarget == null && !string.IsNullOrEmpty(result.Value.TargetKey))
+			dirTarget = vm.AddDirectory(result.Value.TargetKey);
+
 		foreach (var item in result.Value.Items)
 			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);
 	}
@@ -797,6 +801,10 @@ public partial class SessionTreeView : UserControl
 		var fileService = App.Services.GetRequiredService<ISessionFileService>();
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
+
+		// If target is a new directory not yet in the tree, create it
+		if (dirTarget == null && grpTarget == null && !string.IsNullOrEmpty(result.Value.TargetKey))
+			dirTarget = vm.AddDirectory(result.Value.TargetKey);
 
 		foreach (var item in result.Value.Items)
 			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);

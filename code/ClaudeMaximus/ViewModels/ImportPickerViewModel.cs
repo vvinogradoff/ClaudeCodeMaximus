@@ -137,7 +137,52 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	public ImportTargetModel? SelectedImportTarget
 	{
 		get => _selectedImportTarget;
-		set => this.RaiseAndSetIfChanged(ref _selectedImportTarget, value);
+		set
+		{
+			if (value?.IsNewDirectoryAction == true)
+			{
+				// Don't actually select the sentinel — request a new directory from the view
+				NewDirectoryRequested?.Invoke(this, EventArgs.Empty);
+				return;
+			}
+			this.RaiseAndSetIfChanged(ref _selectedImportTarget, value);
+		}
+	}
+
+	/// <summary>Raised when user selects "New directory..." — view should show folder picker.</summary>
+	public event EventHandler? NewDirectoryRequested;
+
+	/// <summary>
+	/// Called by the view after the user picks a folder. Adds the new directory to targets and selects it.
+	/// </summary>
+	public void AddNewDirectoryTarget(string path, string displayName)
+	{
+		var target = new ImportTargetModel
+		{
+			DisplayName = displayName,
+			WorkingDirectory = path,
+			Key = path,
+			IsDirectory = true,
+			Depth = 0,
+		};
+
+		// Insert before the "New directory..." sentinel
+		var sentinelIndex = -1;
+		for (var i = 0; i < ImportTargets.Count; i++)
+		{
+			if (ImportTargets[i].IsNewDirectoryAction)
+			{
+				sentinelIndex = i;
+				break;
+			}
+		}
+
+		if (sentinelIndex >= 0)
+			ImportTargets.Insert(sentinelIndex, target);
+		else
+			ImportTargets.Add(target);
+
+		SelectedImportTarget = target;
 	}
 
 	public bool HasMultipleSources => SourceDirectories.Count > 1;
@@ -184,6 +229,16 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		ImportTargets.Clear();
 		foreach (var tgt in importTargets)
 			ImportTargets.Add(tgt);
+
+		// Add "New directory..." action at the end
+		ImportTargets.Add(new ImportTargetModel
+		{
+			DisplayName = "+ New directory...",
+			WorkingDirectory = string.Empty,
+			Key = "__new_directory__",
+			IsDirectory = true,
+			IsNewDirectoryAction = true,
+		});
 
 		// Select initial source (without triggering rediscovery)
 		_selectedSource = sourceDirectories.FirstOrDefault(d =>

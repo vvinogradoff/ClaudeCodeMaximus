@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +23,31 @@ public partial class ImportPickerWindow : Window
 	{
 		InitializeComponent();
 		KeyDown += OnWindowKeyDown;
+
+		DataContextChanged += (_, _) =>
+		{
+			if (DataContext is ImportPickerViewModel vm)
+				vm.NewDirectoryRequested += OnNewDirectoryRequested;
+		};
+	}
+
+	private async void OnNewDirectoryRequested(object? sender, EventArgs e)
+	{
+		var folders = await StorageProvider.OpenFolderPickerAsync(
+			new FolderPickerOpenOptions
+			{
+				Title = "Select Working Directory for Import",
+				AllowMultiple = false,
+			});
+
+		if (folders.Count == 0) return;
+
+		var path = folders[0].Path.LocalPath;
+		var labelService = App.Services.GetRequiredService<IDirectoryLabelService>();
+		var displayName = labelService.GetLabel(path);
+
+		if (DataContext is ImportPickerViewModel vm)
+			vm.AddNewDirectoryTarget(path, displayName);
 	}
 
 	private void OnWindowKeyDown(object? sender, KeyEventArgs e)
