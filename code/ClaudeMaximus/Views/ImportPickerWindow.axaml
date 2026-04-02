@@ -33,24 +33,34 @@
                       HorizontalAlignment="Stretch"/>
         </DockPanel>
 
-        <!-- Top: Search bar -->
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-            <TextBlock DockPanel.Dock="Left" Text="Search:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <ProgressBar DockPanel.Dock="Right" Width="24" Height="24" IsIndeterminate="True"
-                         IsVisible="{Binding IsSearching}" Margin="8,0,0,0"/>
-            <Button DockPanel.Dock="Right" Content="&#x1F50D;" FontSize="13"
-                    Width="30" Height="28" Padding="0" Margin="4,0,0,0"
-                    VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
-                    ToolTip.Tip="Search" Click="OnSearchButtonClicked"/>
-            <CheckBox DockPanel.Dock="Right" Content="Global" Margin="8,0,0,0"
-                      IsChecked="{Binding IsGlobalSearch}"
-                      IsVisible="{Binding CanUseGlobalSearch}"
-                      VerticalAlignment="Center" FontSize="12"
-                      ToolTip.Tip="Search across all projects (via Tessyn daemon)"/>
-            <views:NativeTextBox x:Name="SearchBox" Text="{Binding SearchText}"
-                     Watermark="Search sessions..."
-                     KeyDown="OnSearchKeyDown"/>
-        </DockPanel>
+        <!-- Top: Search bar with inline icon -->
+        <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,8">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Text="Search:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <CheckBox DockPanel.Dock="Right" Content="Global" Margin="8,0,0,0"
+                          IsChecked="{Binding IsGlobalSearch}"
+                          IsVisible="{Binding CanUseGlobalSearch}"
+                          VerticalAlignment="Center" FontSize="12"
+                          ToolTip.Tip="Search across all projects (via Tessyn daemon)"/>
+                <!-- Search input with inline button -->
+                <Grid>
+                    <views:NativeTextBox x:Name="SearchBox" Text="{Binding SearchText}"
+                             Watermark="Search sessions..."
+                             Padding="6,5,30,5"
+                             KeyDown="OnSearchKeyDown"/>
+                    <Button Content="&#x1F50D;" FontSize="11"
+                            Width="26" Height="22" Padding="0"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Margin="0,0,3,0"
+                            Background="Transparent" BorderThickness="0"
+                            Opacity="0.5"
+                            ToolTip.Tip="Search" Click="OnSearchButtonClicked"/>
+                </Grid>
+            </DockPanel>
+            <!-- Thin progress bar spanning full width -->
+            <ProgressBar Height="2" IsIndeterminate="True"
+                         IsVisible="{Binding IsSearching}"/>
+        </StackPanel>
 
         <!-- Status bar -->
         <TextBlock DockPanel.Dock="Top" Text="{Binding StatusMessage}" Opacity="0.7" FontSize="12"

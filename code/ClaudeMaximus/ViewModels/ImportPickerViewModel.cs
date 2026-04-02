@@ -516,11 +516,14 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		try
 		{
-			// For daemon-sourced virtual items (cross-project search), JsonlPath is empty
+			// For daemon-sourced virtual items (cross-project search), load preview from daemon
 			if (string.IsNullOrEmpty(item.Summary.JsonlPath))
 			{
-				PreviewEntries.Add(new PreviewEntryViewModel("SYSTEM",
-					"Preview not available for cross-project sessions. Import to view full content."));
+				if (_daemonService != null)
+					_ = LoadPreviewFromDaemonAsync(item.Summary.SessionId);
+				else
+					PreviewEntries.Add(new PreviewEntryViewModel("SYSTEM",
+						"Preview not available without daemon connection."));
 				this.RaisePropertyChanged(nameof(HasPreview));
 				return;
 			}
@@ -549,6 +552,38 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		catch (Exception ex)
 		{
 			_log.Warning(ex, "LoadPreview: failed to parse {Path}", item.Summary.JsonlPath);
+		}
+
+		this.RaisePropertyChanged(nameof(HasPreview));
+	}
+
+	private async Task LoadPreviewFromDaemonAsync(string externalId)
+	{
+		try
+		{
+			var result = await _daemonService!.SessionsGetAsync(externalId, limit: PreviewEntryLimit * 2);
+			var conversationEntries = result.Messages
+				.Where(m => m.Role is "user" or "assistant")
+				.Select(m => (Role: m.Role.ToUpperInvariant(), m.Content))
+				.ToList();
+
+			var startIndex = Math.Max(0, conversationEntries.Count - PreviewEntryLimit);
+			for (var i = startIndex; i < conversationEntries.Count; i++)
+			{
+				var content = conversationEntries[i].Content;
+				if (content.Length > 300)
+					content = content[..297] + "...";
+
+				PreviewEntries.Add(new PreviewEntryViewModel(conversationEntries[i].Role, content));
+			}
+
+			if (PreviewEntries.Count == 0)
+				PreviewEntries.Add(new PreviewEntryViewModel("SYSTEM", "(no conversation content)"));
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Failed to load daemon preview for {ExternalId}", externalId);
+			PreviewEntries.Add(new PreviewEntryViewModel("SYSTEM", "Could not load preview."));
 		}
 
 		this.RaisePropertyChanged(nameof(HasPreview));
