@@ -139,8 +139,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IClaudeSessionImportService importService,
 		ISelfUpdateService selfUpdate,
 		SessionTreeViewModel sessionTree,
-		ITessynRunService? runService = null,
-		ITessynDaemonService? daemonService = null)
+		ITessynRunService runService,
+		ITessynDaemonService daemonService)
 	{
 		_appSettings      = appSettings;
 		_fileService      = fileService;
