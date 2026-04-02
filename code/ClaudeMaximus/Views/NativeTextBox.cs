@@ -17,6 +17,9 @@ public sealed class NativeTextBox : TextBox
 {
     private static readonly bool _isMacOS = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 
+    // Use TextBox's style template so the control renders correctly
+    protected override Type StyleKeyOverride => typeof(TextBox);
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (_isMacOS && HandleMacShortcut(e))
