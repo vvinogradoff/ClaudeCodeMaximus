@@ -124,18 +124,20 @@
                                 <CheckBox Grid.Row="0" Grid.RowSpan="2" Grid.Column="0"
                                           IsChecked="{Binding IsSelected}"
                                           IsEnabled="{Binding IsSelectable}"
-                                          VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                          VerticalAlignment="Center" Margin="0,0,8,0"
+                                          Click="OnItemCheckboxClicked"/>
 
                                 <!-- Title / preview -->
-                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <DockPanel Grid.Row="0" Grid.Column="1">
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Text="generating..."
+                                               IsVisible="{Binding IsTitlePending}"
+                                               FontSize="11" FontStyle="Italic" Opacity="0.4"
+                                               VerticalAlignment="Center" Margin="6,0,0,0"/>
                                     <TextBlock Text="{Binding DisplayTitle}"
                                                TextTrimming="CharacterEllipsis"
                                                FontWeight="SemiBold"/>
-                                    <TextBlock Text="generating..."
-                                               IsVisible="{Binding IsTitlePending}"
-                                               FontSize="11" FontStyle="Italic" Opacity="0.4"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
+                                </DockPanel>
 
                                 <!-- Status badge (already imported / empty) -->
                                 <TextBlock Grid.Row="0" Grid.Column="2"

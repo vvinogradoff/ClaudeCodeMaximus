@@ -217,6 +217,13 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		AddNewDirectoryTarget(path, dirName);
 	}
 
+	/// <summary>Called by the view when a checkbox is clicked to update warnings.</summary>
+	public void NotifySelectionChanged()
+	{
+		this.RaisePropertyChanged(nameof(HasSelection));
+		RaiseCrossProjectWarningChanged();
+	}
+
 	private void RaiseCrossProjectWarningChanged()
 	{
 		this.RaisePropertyChanged(nameof(CrossProjectWarning));
@@ -269,24 +276,10 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	public bool HasNoItems => Items.Count == 0 && !IsSearching;
 
 	/// <summary>Returns the selected (checked) items that are importable.</summary>
-	public IReadOnlyList<ImportSessionItemViewModel> SelectedItems
-	{
-		get
-		{
-			RaiseCrossProjectWarningChanged();
-			return Items.Where(i => i.IsSelected).ToList();
-		}
-	}
+	public IReadOnlyList<ImportSessionItemViewModel> SelectedItems =>
+		Items.Where(i => i.IsSelected).ToList();
 
-	public bool HasSelection
-	{
-		get
-		{
-			var has = Items.Any(i => i.IsSelected);
-			if (has) RaiseCrossProjectWarningChanged();
-			return has;
-		}
-	}
+	public bool HasSelection => Items.Any(i => i.IsSelected);
 
 	public ImportPickerViewModel(
 		IClaudeSessionImportService importService,

@@ -77,6 +77,12 @@ public partial class ImportPickerWindow : Window
 			await vm.SearchAsync();
 	}
 
+	private void OnItemCheckboxClicked(object? sender, RoutedEventArgs e)
+	{
+		if (DataContext is ImportPickerViewModel vm)
+			vm.NotifySelectionChanged();
+	}
+
 	private void OnSwitchToOriginalClicked(object? sender, RoutedEventArgs e)
 	{
 		if (DataContext is ImportPickerViewModel vm)
