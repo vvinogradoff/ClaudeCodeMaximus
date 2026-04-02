@@ -496,7 +496,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				projectPath,
 				augmentedMessage,
 				_node.ExternalId,
-				SelectedModelId);
+				SelectedModelId,
+				_appSettings.Settings.DaemonPermissionMode);
 
 			_activeRunId = runId;
 
@@ -549,6 +550,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// </summary>
 	private void HandleRunEvent(TessynRunEvent evt)
 	{
+		_log.Information("HandleRunEvent: type={Type}, runId={RunId}, error={Error}",
+			evt.Type, evt.RunId, evt.Error);
+
 		switch (evt.Type)
 		{
 			case "started":
@@ -750,7 +754,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 							await _runService.SendAsync(
 								_node.Model.WorkingDirectory,
 								Constants.Instructions.CompactionPrompt,
-								_node.ExternalId);
+								_node.ExternalId,
+								permissionMode: _appSettings.Settings.DaemonPermissionMode);
 						}
 						catch (Exception ex)
 						{

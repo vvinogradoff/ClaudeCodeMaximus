@@ -71,4 +71,11 @@ public sealed class AppSettingsModel
 	/// Default false during migration; set to true once daemon integration is verified.
 	/// </summary>
 	public bool UseTessynDaemon { get; set; }
+
+	/// <summary>
+	/// Permission mode for daemon-spawned Claude sessions.
+	/// "default" = Claude asks for tool approval (may block in headless mode).
+	/// "auto-approve" = all tools auto-approved (--dangerously-skip-permissions).
+	/// </summary>
+	public string DaemonPermissionMode { get; set; } = "auto-approve";
 }

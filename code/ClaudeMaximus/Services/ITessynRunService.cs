@@ -21,6 +21,7 @@ public interface ITessynRunService
         string prompt,
         string? externalId = null,
         string? model = null,
+        string? permissionMode = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Cancel an active run.</summary>

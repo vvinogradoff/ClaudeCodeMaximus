@@ -269,6 +269,9 @@ public sealed class TessynDaemonService : ITessynDaemonService
 
         var paramsElement = root.TryGetProperty("params", out var p) ? p.Clone() : default;
 
+        if (method.StartsWith("run.", StringComparison.Ordinal))
+            _log.Debug("Notification: {Method}", method);
+
         // Handle status notification (sent on connect and via index.state_changed)
         if (method == "status" || method == "index.state_changed")
         {
@@ -578,7 +581,7 @@ public sealed class TessynDaemonService : ITessynDaemonService
 
     public async Task<string> RunSendAsync(
         string prompt, string projectPath, string? externalId, string? model,
-        CancellationToken cancellationToken)
+        string? permissionMode, CancellationToken cancellationToken)
     {
         var p = new Dictionary<string, object?>
         {
@@ -587,6 +590,7 @@ public sealed class TessynDaemonService : ITessynDaemonService
         };
         if (externalId != null) p["externalId"] = externalId;
         if (model != null) p["model"] = model;
+        if (permissionMode != null) p["permissionMode"] = permissionMode;
 
         var result = await SendRpcAsync<JsonElement>("run.send", p, cancellationToken);
         return result.TryGetProperty("runId", out var r)

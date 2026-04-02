@@ -115,6 +115,7 @@ public interface ITessynDaemonService : IDisposable
         string projectPath,
         string? externalId = null,
         string? model = null,
+        string? permissionMode = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Cancel an active run via SIGINT.</summary>
