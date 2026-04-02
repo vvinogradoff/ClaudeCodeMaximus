@@ -368,6 +368,10 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	{
 		var summaries = _importService.DiscoverSessions(workingDirectory);
 
+		// When daemon is available, enrich with persisted titles
+		if (_daemonService != null)
+			_ = EnrichWithDaemonTitlesAsync(summaries);
+
 		_allItems = summaries.Select(s =>
 			new ImportSessionItemViewModel(s, _alreadyImportedIds.Contains(s.SessionId))
 		).ToList();
@@ -386,6 +390,52 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		// Start async title generation (only for sessions without cached titles)
 		_ = GenerateTitlesAsync();
+	}
+
+	private async Task EnrichWithDaemonTitlesAsync(IReadOnlyList<ClaudeSessionSummaryModel> summaries)
+	{
+		try
+		{
+			// Build session cache if needed
+			if (_daemonSessionCache == null)
+			{
+				var allSessions = await _daemonService!.SessionsListAsync(limit: 10000);
+				_daemonSessionCache = allSessions.ToDictionary(s => s.Id);
+			}
+
+			var byExternalId = _daemonSessionCache.Values
+				.Where(s => s.Title != null)
+				.ToDictionary(s => s.ExternalId, s => s.Title!);
+
+			var enriched = 0;
+			foreach (var summary in summaries)
+			{
+				if (summary.GeneratedTitle == null && byExternalId.TryGetValue(summary.SessionId, out var title))
+				{
+					summary.GeneratedTitle = title;
+					_importService.CacheTitle(summary.SessionId, title);
+					enriched++;
+				}
+			}
+
+			if (enriched > 0)
+			{
+				_log.Information("Enriched {Count} sessions with daemon-persisted titles", enriched);
+				// Update display titles on existing items
+				Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+				{
+					foreach (var item in _allItems)
+					{
+						if (item.IsTitlePending && item.Summary.GeneratedTitle != null)
+							item.UpdateTitle(item.Summary.GeneratedTitle);
+					}
+				});
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Debug(ex, "Failed to enrich sessions with daemon titles");
+		}
 	}
 
 	/// <summary>
@@ -538,32 +588,59 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		_titleCts = new CancellationTokenSource();
 		var ct = _titleCts.Token;
 
-		// Only generate titles for sessions that don't already have one (from cache or prior generation)
+		// Only generate titles for sessions that don't already have one
 		var pendingItems = _allItems
 			.Where(i => i.Summary.FirstUserPrompt != null && i.Summary.GeneratedTitle == null)
 			.ToList();
-		var summaries = pendingItems.Select(i => i.Summary).ToList();
 
-		if (summaries.Count == 0)
+		if (pendingItems.Count == 0)
 			return;
 
 		IsGeneratingTitles = true;
-		TitleProgressMax = summaries.Count;
+		TitleProgressMax = pendingItems.Count;
 		TitleProgressValue = 0;
-		TitleProgressText = $"Generating titles... 0/{summaries.Count}";
+		TitleProgressText = $"Generating titles... 0/{pendingItems.Count}";
 
 		try
 		{
-			await _assistService.GenerateTitlesAsync(summaries, OnBatchComplete, ct);
-
-			if (ct.IsCancellationRequested)
-				return;
-
-			// Mark any remaining items as no longer pending (title generation finished or failed)
-			foreach (var item in pendingItems)
+			if (_daemonService != null)
 			{
-				if (item.IsTitlePending)
-					item.IsTitlePending = false;
+				// Use daemon RPC — generates and persists titles server-side
+				var generated = await _daemonService.TitlesGenerateAsync(pendingItems.Count, ct);
+				_log.Information("Daemon generated {Count} titles", generated);
+
+				// Refresh titles from daemon
+				var allSessions = await _daemonService.SessionsListAsync(limit: 10000, cancellationToken: ct);
+				var titleMap = allSessions
+					.Where(s => s.Title != null)
+					.ToDictionary(s => s.ExternalId, s => s.Title!);
+
+				Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+				{
+					foreach (var item in pendingItems)
+					{
+						if (titleMap.TryGetValue(item.SessionId, out var title))
+							item.UpdateTitle(title);
+						else if (item.IsTitlePending)
+							item.IsTitlePending = false;
+					}
+					TitleProgressValue = pendingItems.Count;
+					TitleProgressText = string.Empty;
+				});
+			}
+			else
+			{
+				// Legacy: local CLI title generation
+				var summaries = pendingItems.Select(i => i.Summary).ToList();
+				await _assistService.GenerateTitlesAsync(summaries, OnBatchComplete, ct);
+
+				if (ct.IsCancellationRequested) return;
+
+				foreach (var item in pendingItems)
+				{
+					if (item.IsTitlePending)
+						item.IsTitlePending = false;
+				}
 			}
 		}
 		catch (OperationCanceledException)
