@@ -173,8 +173,8 @@ public sealed class ImportPickerViewModel : ViewModelBase
 				.ToList();
 
 			return names.Count == 1
-				? $"Selected session is from \"{names[0]}\" — importing into a different directory will break session resume."
-				: $"Selected sessions are from other projects — importing into a different directory will break session resume.";
+				? $"Selected session originates from \"{names[0]}\". You can import it here, or use its original directory."
+				: $"Selected sessions originate from other projects. You can import them here, or use their original directories.";
 		}
 	}
 
