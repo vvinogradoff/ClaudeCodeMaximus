@@ -368,10 +368,6 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	{
 		var summaries = _importService.DiscoverSessions(workingDirectory);
 
-		// When daemon is available, enrich with persisted titles
-		if (_daemonService != null)
-			_ = EnrichWithDaemonTitlesAsync(summaries);
-
 		_allItems = summaries.Select(s =>
 			new ImportSessionItemViewModel(s, _alreadyImportedIds.Contains(s.SessionId))
 		).ToList();
@@ -388,8 +384,18 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		else
 			StatusMessage = $"Found {_allItems.Count} sessions.";
 
-		// Start async title generation (only for sessions without cached titles)
-		_ = GenerateTitlesAsync();
+		// Enrich with daemon titles THEN generate remaining — sequenced, not raced
+		_ = EnrichThenGenerateTitlesAsync(summaries);
+	}
+
+	private async Task EnrichThenGenerateTitlesAsync(IReadOnlyList<ClaudeSessionSummaryModel> summaries)
+	{
+		// Step 1: Try to get persisted titles from daemon
+		if (_daemonService != null)
+			await EnrichWithDaemonTitlesAsync(summaries);
+
+		// Step 2: Generate titles for any still-untitled sessions
+		await GenerateTitlesAsync();
 	}
 
 	private async Task EnrichWithDaemonTitlesAsync(IReadOnlyList<ClaudeSessionSummaryModel> summaries)
