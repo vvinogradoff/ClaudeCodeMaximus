@@ -25,6 +25,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	private readonly ITessynDaemonService? _daemonService;
 	private string _searchText = string.Empty;
 	private bool _isSearching;
+	private bool _isGlobalSearch;
 	private bool _isGeneratingTitles;
 	private string _statusMessage = string.Empty;
 	private string _titleProgressText = string.Empty;
@@ -35,6 +36,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	private ImportTargetModel? _selectedSource;
 	private ImportTargetModel? _selectedImportTarget;
 	private IReadOnlySet<string> _alreadyImportedIds = new HashSet<string>();
+	private Dictionary<int, TessynSessionModel>? _daemonSessionCache;
 
 	/// <summary>All discovered session items (master list).</summary>
 	private List<ImportSessionItemViewModel> _allItems = [];
@@ -65,6 +67,16 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		get => _isSearching;
 		set => this.RaiseAndSetIfChanged(ref _isSearching, value);
 	}
+
+	/// <summary>When true, search across all projects via daemon FTS5 instead of local project only.</summary>
+	public bool IsGlobalSearch
+	{
+		get => _isGlobalSearch;
+		set => this.RaiseAndSetIfChanged(ref _isGlobalSearch, value);
+	}
+
+	/// <summary>Whether daemon-based global search is available.</summary>
+	public bool CanUseGlobalSearch => _daemonService != null;
 
 	public bool IsGeneratingTitles
 	{
@@ -257,24 +269,29 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		try
 		{
-			var summaries = _allItems.Select(i => i.Summary).ToList();
-			var matchedIds = await _assistService.SearchSessionsAsync(summaries, query);
-
-			if (matchedIds.Count > 0)
+			if (_isGlobalSearch && _daemonService != null)
 			{
-				// Claude-powered search succeeded: reorder by relevance
-				ReorderByIds(matchedIds);
-				StatusMessage = $"Found {matchedIds.Count} matching sessions.";
+				await SearchViaDaemonAsync(query);
 			}
 			else
 			{
-				// Fallback: local substring match
-				FallbackSubstringSearch(query);
+				var summaries = _allItems.Select(i => i.Summary).ToList();
+				var matchedIds = await _assistService.SearchSessionsAsync(summaries, query);
+
+				if (matchedIds.Count > 0)
+				{
+					ReorderByIds(matchedIds);
+					StatusMessage = $"Found {matchedIds.Count} matching sessions.";
+				}
+				else
+				{
+					FallbackSubstringSearch(query);
+				}
 			}
 		}
 		catch (Exception ex)
 		{
-			_log.Warning(ex, "SearchAsync: Claude search failed, using fallback");
+			_log.Warning(ex, "SearchAsync: search failed, using fallback");
 			FallbackSubstringSearch(query);
 		}
 		finally
@@ -283,6 +300,62 @@ public sealed class ImportPickerViewModel : ViewModelBase
 			this.RaisePropertyChanged(nameof(HasItems));
 			this.RaisePropertyChanged(nameof(HasNoItems));
 		}
+	}
+
+	private async Task SearchViaDaemonAsync(string query)
+	{
+		var response = await _daemonService!.SearchAsync(query, limit: 50);
+		if (response.Results.Count == 0)
+		{
+			StatusMessage = "No results found across all projects.";
+			Items.Clear();
+			return;
+		}
+
+		// Collect unique session IDs from search results
+		var hitSessionIds = response.Results.Select(r => r.SessionId).Distinct().ToList();
+
+		// Resolve to full session models (cached to avoid per-keystroke fetches)
+		if (_daemonSessionCache == null)
+		{
+			var allSessions = await _daemonService.SessionsListAsync(limit: 10000);
+			_daemonSessionCache = allSessions.ToDictionary(s => s.Id);
+		}
+		var sessionMap = _daemonSessionCache;
+
+		Items.Clear();
+		var count = 0;
+		foreach (var sid in hitSessionIds)
+		{
+			if (!sessionMap.TryGetValue(sid, out var session)) continue;
+
+			// Check if already in _allItems (local discovery)
+			var existing = _allItems.FirstOrDefault(i => i.Summary.SessionId == session.ExternalId);
+			if (existing != null)
+			{
+				Items.Add(existing);
+			}
+			else
+			{
+				// Create a virtual item from daemon data (cross-project result)
+				var summary = new ClaudeSessionSummaryModel
+				{
+					SessionId       = session.ExternalId,
+					JsonlPath       = string.Empty,
+					Created         = DateTimeOffset.FromUnixTimeMilliseconds(session.CreatedAt),
+					LastUsed        = DateTimeOffset.FromUnixTimeMilliseconds(session.UpdatedAt),
+					MessageCount    = session.MessageCount,
+					FirstUserPrompt = session.FirstPrompt,
+					GeneratedTitle  = session.Title,
+				};
+				var isImported = _alreadyImportedIds.Contains(session.ExternalId);
+				var item = new ImportSessionItemViewModel(summary, isImported);
+				Items.Add(item);
+			}
+			count++;
+		}
+
+		StatusMessage = $"Found {count} sessions across all projects.";
 	}
 
 	/// <summary>
@@ -443,6 +516,15 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		try
 		{
+			// For daemon-sourced virtual items (cross-project search), JsonlPath is empty
+			if (string.IsNullOrEmpty(item.Summary.JsonlPath))
+			{
+				PreviewEntries.Add(new PreviewEntryViewModel("SYSTEM",
+					"Preview not available for cross-project sessions. Import to view full content."));
+				this.RaisePropertyChanged(nameof(HasPreview));
+				return;
+			}
+
 			var entries = _importService.ParseJsonlSession(item.Summary.JsonlPath);
 
 			// Collect the last N user/assistant entries (most recent = most memorable)

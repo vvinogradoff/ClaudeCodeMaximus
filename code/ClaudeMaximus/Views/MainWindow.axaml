@@ -24,6 +24,16 @@
                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
                 <!-- Window control buttons — docked right -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="0">
+                    <!-- Tessyn daemon status indicator -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                IsVisible="{Binding IsDaemonStatusVisible}"
+                                ToolTip.Tip="{Binding DaemonStatusText}">
+                        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                 Fill="{Binding DaemonStatusColor, Converter={x:Static views:StringToBrushConverter.Instance}}"/>
+                        <TextBlock Text="{Binding DaemonStatusText}" FontSize="10"
+                                   Opacity="0.6" VerticalAlignment="Center"/>
+                    </StackPanel>
                     <TextBlock Text="&#x26A0;" VerticalAlignment="Center"
                                FontSize="13" Foreground="Orange" Margin="0,0,4,0"
                                IsVisible="{Binding IsRunningFromBuildOutput}"

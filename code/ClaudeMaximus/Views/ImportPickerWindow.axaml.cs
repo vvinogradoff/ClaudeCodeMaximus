@@ -44,6 +44,12 @@ public partial class ImportPickerWindow : Window
 			await vm.SearchAsync();
 	}
 
+	private async void OnSearchButtonClicked(object? sender, RoutedEventArgs e)
+	{
+		if (DataContext is ImportPickerViewModel vm)
+			await vm.SearchAsync();
+	}
+
 	private void OnImportClicked(object? sender, RoutedEventArgs e)
 	{
 		if (DataContext is not ImportPickerViewModel vm)
