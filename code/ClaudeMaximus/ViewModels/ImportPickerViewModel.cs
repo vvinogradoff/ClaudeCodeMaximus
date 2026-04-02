@@ -195,9 +195,9 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 	/// <summary>Returns the selected (checked) items that are importable.</summary>
 	public IReadOnlyList<ImportSessionItemViewModel> SelectedItems =>
-		_allItems.Where(i => i.IsSelected).ToList();
+		Items.Where(i => i.IsSelected).ToList();
 
-	public bool HasSelection => _allItems.Any(i => i.IsSelected);
+	public bool HasSelection => Items.Any(i => i.IsSelected);
 
 	public ImportPickerViewModel(
 		IClaudeSessionImportService importService,

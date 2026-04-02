@@ -847,21 +847,32 @@ public partial class SessionTreeView : UserControl
 	{
 		try
 		{
-			// Parse the JSONL file into session entries
-			var entries = importService.ParseJsonlSession(item.Summary.JsonlPath);
-			if (entries.Count == 0)
-				return;
-
-			// Create a new session file
-			var fileName = fileService.CreateSessionFile();
-
-			// Write all parsed entries
-			fileService.WriteSessionFile(fileName, entries);
-
-			// Determine the session name
 			var name = item.Summary.GeneratedTitle
 				?? TruncateForSessionName(item.Summary.FirstUserPrompt)
 				?? "Imported Session";
+
+			string fileName;
+
+			if (!string.IsNullOrEmpty(item.Summary.JsonlPath))
+			{
+				// Local JSONL file available — parse and create .txt session file
+				var entries = importService.ParseJsonlSession(item.Summary.JsonlPath);
+				if (entries.Count == 0)
+					return;
+
+				fileName = fileService.CreateSessionFile();
+				fileService.WriteSessionFile(fileName, entries);
+			}
+			else
+			{
+				// Daemon-sourced session (no local JSONL) — create placeholder file.
+				// Content will be loaded from daemon via sessions.get when opened.
+				var appSettings = App.Services.GetRequiredService<IAppSettingsService>();
+				if (appSettings.Settings.UseTessynDaemon)
+					fileName = $"daemon-{System.Guid.NewGuid():N}.pending";
+				else
+					return; // Cannot import without JSONL and without daemon
+			}
 
 			// Add to tree
 			if (dirParent != null)
