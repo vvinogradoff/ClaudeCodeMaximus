@@ -38,6 +38,23 @@
                       HorizontalAlignment="Stretch"/>
         </DockPanel>
 
+        <!-- Cross-project warning banner -->
+        <Border DockPanel.Dock="Top" Margin="0,0,0,6" Padding="8,5"
+                CornerRadius="4" Background="#30FF9800"
+                BorderBrush="#60FF9800" BorderThickness="1"
+                IsVisible="{Binding HasCrossProjectWarning}"
+                x:CompileBindings="False">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Use original directory"
+                        FontSize="11" Padding="8,2" Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Click="OnSwitchToOriginalClicked"/>
+                <TextBlock Text="{Binding CrossProjectWarning}"
+                           FontSize="11" TextWrapping="Wrap"
+                           VerticalAlignment="Center" Opacity="0.9"/>
+            </DockPanel>
+        </Border>
+
         <!-- Search bar with inline icon -->
         <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,8">
             <DockPanel>

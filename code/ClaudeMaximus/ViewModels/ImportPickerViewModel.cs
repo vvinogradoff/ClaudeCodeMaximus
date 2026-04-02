@@ -146,7 +146,82 @@ public sealed class ImportPickerViewModel : ViewModelBase
 				return;
 			}
 			this.RaiseAndSetIfChanged(ref _selectedImportTarget, value);
+			RaiseCrossProjectWarningChanged();
 		}
+	}
+
+	/// <summary>Warning text when selected sessions don't match the import target directory.</summary>
+	public string? CrossProjectWarning
+	{
+		get
+		{
+			var target = _selectedImportTarget;
+			if (target == null) return null;
+
+			var mismatchedProjects = Items
+				.Where(i => i.IsSelected && i.IsCrossProject)
+				.Select(i => i.OriginalProjectPath)
+				.Where(p => p != null && !string.Equals(p, target.WorkingDirectory, StringComparison.OrdinalIgnoreCase))
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
+
+			if (mismatchedProjects.Count == 0) return null;
+
+			var names = mismatchedProjects
+				.Select(p => System.IO.Path.GetFileName(p!.TrimEnd('/', '\\')))
+				.Distinct()
+				.ToList();
+
+			return names.Count == 1
+				? $"Selected session is from \"{names[0]}\" — importing elsewhere may prevent resuming."
+				: $"Selected sessions are from other projects — importing elsewhere may prevent resuming.";
+		}
+	}
+
+	/// <summary>The original project path that mismatched sessions should be imported to. Null if no mismatch.</summary>
+	public string? SuggestedOriginalPath
+	{
+		get
+		{
+			var target = _selectedImportTarget;
+			if (target == null) return null;
+
+			return Items
+				.Where(i => i.IsSelected && i.IsCrossProject)
+				.Select(i => i.OriginalProjectPath)
+				.FirstOrDefault(p => p != null && !string.Equals(p, target.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
+		}
+	}
+
+	public bool HasCrossProjectWarning => CrossProjectWarning != null;
+
+	/// <summary>Switches the import target to the suggested original project directory.</summary>
+	public void SwitchToOriginalDirectory()
+	{
+		var path = SuggestedOriginalPath;
+		if (string.IsNullOrEmpty(path)) return;
+
+		// Check if already in targets
+		var existing = ImportTargets.FirstOrDefault(t =>
+			!t.IsNewDirectoryAction &&
+			string.Equals(t.Key, path, StringComparison.OrdinalIgnoreCase));
+
+		if (existing != null)
+		{
+			SelectedImportTarget = existing;
+			return;
+		}
+
+		// Add and select
+		var dirName = System.IO.Path.GetFileName(path.TrimEnd('/', '\\'));
+		AddNewDirectoryTarget(path, dirName);
+	}
+
+	private void RaiseCrossProjectWarningChanged()
+	{
+		this.RaisePropertyChanged(nameof(CrossProjectWarning));
+		this.RaisePropertyChanged(nameof(HasCrossProjectWarning));
+		this.RaisePropertyChanged(nameof(SuggestedOriginalPath));
 	}
 
 	/// <summary>Raised when user selects "New directory..." — view should show folder picker.</summary>
@@ -194,10 +269,24 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	public bool HasNoItems => Items.Count == 0 && !IsSearching;
 
 	/// <summary>Returns the selected (checked) items that are importable.</summary>
-	public IReadOnlyList<ImportSessionItemViewModel> SelectedItems =>
-		Items.Where(i => i.IsSelected).ToList();
+	public IReadOnlyList<ImportSessionItemViewModel> SelectedItems
+	{
+		get
+		{
+			RaiseCrossProjectWarningChanged();
+			return Items.Where(i => i.IsSelected).ToList();
+		}
+	}
 
-	public bool HasSelection => Items.Any(i => i.IsSelected);
+	public bool HasSelection
+	{
+		get
+		{
+			var has = Items.Any(i => i.IsSelected);
+			if (has) RaiseCrossProjectWarningChanged();
+			return has;
+		}
+	}
 
 	public ImportPickerViewModel(
 		IClaudeSessionImportService importService,
@@ -354,6 +443,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 			IsSearching = false;
 			this.RaisePropertyChanged(nameof(HasItems));
 			this.RaisePropertyChanged(nameof(HasNoItems));
+			RaiseCrossProjectWarningChanged();
 		}
 	}
 
@@ -380,7 +470,6 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		Items.Clear();
 		var count = 0;
-		var discoveredProjectPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 		foreach (var sid in hitSessionIds)
 		{
@@ -428,42 +517,8 @@ public sealed class ImportPickerViewModel : ViewModelBase
 				var item = new ImportSessionItemViewModel(summary, isImported);
 				Items.Add(item);
 
-				if (originalProjectPath != null)
-					discoveredProjectPaths.Add(originalProjectPath);
 			}
 			count++;
-		}
-
-		// Auto-add original project directories to "Import into" dropdown
-		foreach (var projPath in discoveredProjectPaths)
-		{
-			var alreadyInTargets = ImportTargets.Any(t =>
-				!t.IsNewDirectoryAction &&
-				(string.Equals(t.Key, projPath, StringComparison.OrdinalIgnoreCase) ||
-				 string.Equals(t.WorkingDirectory, projPath, StringComparison.OrdinalIgnoreCase)));
-
-			if (!alreadyInTargets)
-			{
-				var dirName = System.IO.Path.GetFileName(projPath.TrimEnd('/', '\\'));
-				var target = new ImportTargetModel
-				{
-					DisplayName = $"{dirName} (from search)",
-					WorkingDirectory = projPath,
-					Key = projPath,
-					IsDirectory = true,
-					Depth = 0,
-				};
-
-				// Insert before the "New directory..." sentinel
-				var sentinelIdx = -1;
-				for (var i = 0; i < ImportTargets.Count; i++)
-					if (ImportTargets[i].IsNewDirectoryAction) { sentinelIdx = i; break; }
-
-				if (sentinelIdx >= 0)
-					ImportTargets.Insert(sentinelIdx, target);
-				else
-					ImportTargets.Add(target);
-			}
 		}
 
 		StatusMessage = $"Found {count} sessions across all projects.";
