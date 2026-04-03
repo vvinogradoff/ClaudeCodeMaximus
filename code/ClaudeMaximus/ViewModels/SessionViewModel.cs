@@ -347,8 +347,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
 			_ = codeIndexService.GetOrCreateIndexAsync(WorkingDirectory);
 
-		_log.Information("SessionViewModel created: UseDaemon={UseDaemon}, RunService={HasRun}, DaemonService={HasDaemon}, ExternalId={ExternalId}",
-			UseDaemon, _runService != null, _daemonService != null, _node.ExternalId);
+		_log.Debug("SessionViewModel created: UseDaemon={UseDaemon}, ExternalId={ExternalId}",
+			UseDaemon, _node.ExternalId);
 	}
 
 	public void LoadFromFile()
@@ -430,8 +430,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// For cross-project imported sessions, use the original project path for resume to work
 		var projectPath = _node.Model.OriginalProjectPath ?? _node.Model.WorkingDirectory;
 
-		_log.Information("SendViaDaemonAsync: sending to daemon. ProjectPath={Dir}, ExternalId={Id}, Model={Model}",
-			projectPath, _node.ExternalId, SelectedModelId);
+		_log.Debug("SendViaDaemonAsync: ProjectPath={Dir}, ExternalId={Id}", projectPath, _node.ExternalId);
 
 		InputText = string.Empty;
 
@@ -550,9 +549,6 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// </summary>
 	private void HandleRunEvent(TessynRunEvent evt)
 	{
-		_log.Information("HandleRunEvent: type={Type}, runId={RunId}, error={Error}",
-			evt.Type, evt.RunId, evt.Error);
-
 		switch (evt.Type)
 		{
 			case "started":
@@ -1111,17 +1107,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private async System.Threading.Tasks.Task SendAsync()
 	{
-		_log.Information("SendAsync: UseDaemon={UseDaemon}, RunService={HasRun}, DaemonService={HasDaemon}, Setting={Setting}",
-			UseDaemon, _runService != null, _daemonService != null, _appSettings.Settings.UseTessynDaemon);
-
 		if (UseDaemon)
 		{
-			_log.Information("SendAsync: dispatching to daemon path");
 			await SendViaDaemonAsync();
 			return;
 		}
-
-		_log.Information("SendAsync: using legacy process manager path");
 		var message = InputText.Trim();
 		if (string.IsNullOrEmpty(message))
 			return;
