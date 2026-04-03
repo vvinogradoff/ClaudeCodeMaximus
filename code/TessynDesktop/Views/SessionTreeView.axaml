@@ -1,0 +1,150 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TessynDesktop.ViewModels"
+             xmlns:views="using:TessynDesktop.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="TessynDesktop.Views.SessionTreeView"
+             x:DataType="vm:SessionTreeViewModel">
+
+    <DockPanel>
+
+        <!-- Search box + refresh button -->
+        <Border DockPanel.Dock="Top" Padding="4,4,4,2">
+            <Grid ColumnDefinitions="Auto,*">
+                <Button Grid.Column="0"
+                        Content="&#x21BB;"
+                        ToolTip.Tip="Refresh git origins"
+                        Width="28" Height="28"
+                        Padding="0"
+                        Margin="0,0,4,0"
+                        FontSize="16"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        Click="OnRefreshGitOriginsClicked"/>
+                <views:NativeTextBox Grid.Column="1"
+                         Text="{Binding SearchText}"
+                         Watermark="Search sessions…"/>
+            </Grid>
+        </Border>
+
+        <!-- Add Directory button -->
+        <Button DockPanel.Dock="Bottom"
+                Content="+ Add Directory"
+                HorizontalAlignment="Stretch"
+                Margin="4"
+                Click="OnAddDirectoryClicked"/>
+
+        <!-- Tree -->
+        <TreeView x:Name="Tree"
+                  ItemsSource="{Binding Directories}"
+                  SelectionChanged="OnTreeSelectionChanged"
+                  KeyDown="OnTreeKeyDown"
+                  DragDrop.AllowDrop="True">
+            <TreeView.Styles>
+                <Style Selector="TreeViewItem">
+                    <Setter Property="IsVisible" Value="{ReflectionBinding IsVisible}"/>
+                    <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}"/>
+                </Style>
+            </TreeView.Styles>
+            <TreeView.DataTemplates>
+
+                <!-- Directory node — reflection bindings used because compiled bindings
+                     do not correctly resolve x:DataType inside TreeView.DataTemplates -->
+                <TreeDataTemplate DataType="vm:DirectoryNodeViewModel"
+                                  x:CompileBindings="False"
+                                  ItemsSource="{Binding Children}">
+                    <Border HorizontalAlignment="Stretch" Background="Transparent"
+                            DragDrop.AllowDrop="True">
+                        <Border.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Add Group"   Tag="AddGroupToDirectory"   Click="OnContextMenuClicked"/>
+                                <MenuItem Header="Add Session" Tag="AddSessionToDirectory" Click="OnContextMenuClicked"/>
+                                <MenuItem Header="Import Claude Session" Tag="ImportToDirectory" Click="OnContextMenuClicked"/>
+                                <Separator/>
+                                <MenuItem Header="Delete"      Tag="DeleteDirectory"        Click="OnContextMenuClicked"/>
+                            </ContextMenu>
+                        </Border.ContextMenu>
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
+                            <TextBlock Text="&#128193;" FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </TreeDataTemplate>
+
+                <!-- Group node -->
+                <TreeDataTemplate DataType="vm:GroupNodeViewModel"
+                                  x:CompileBindings="False"
+                                  ItemsSource="{Binding Children}">
+                    <Border HorizontalAlignment="Stretch" Background="Transparent"
+                            DragDrop.AllowDrop="True">
+                        <Border.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Add Group"   Tag="AddGroupToGroup"   Click="OnContextMenuClicked"/>
+                                <MenuItem Header="Add Session" Tag="AddSessionToGroup" Click="OnContextMenuClicked"/>
+                                <MenuItem Header="Import Claude Session" Tag="ImportToGroup" Click="OnContextMenuClicked"/>
+                                <Separator/>
+                                <MenuItem Header="Rename"      Tag="RenameGroup"       Click="OnContextMenuClicked"/>
+                                <MenuItem Header="Delete"      Tag="DeleteGroup"        Click="OnContextMenuClicked"/>
+                            </ContextMenu>
+                        </Border.ContextMenu>
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
+                            <TextBlock Text="&#128194;" FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </TreeDataTemplate>
+
+                <!-- Session node -->
+                <DataTemplate DataType="vm:SessionNodeViewModel"
+                              x:CompileBindings="False">
+                    <Border HorizontalAlignment="Stretch"
+                            Background="{Binding RecencyBrush}"
+                            Opacity="{Binding MoveOpacity}"
+                            CornerRadius="3" Padding="0"
+                            PointerPressed="OnSessionPointerPressed"
+                            DragDrop.AllowDrop="True">
+                        <Border.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Rename" Tag="RenameSession" Click="OnContextMenuClicked"/>
+                                <MenuItem Header="Move"   Tag="MoveSession"   Click="OnContextMenuClicked"/>
+                                <Separator/>
+                                <MenuItem Header="Delete" Tag="DeleteSession"  Click="OnContextMenuClicked"/>
+                            </ContextMenu>
+                        </Border.ContextMenu>
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                            <StackPanel Grid.Row="0" Grid.ColumnSpan="2"
+                                        Orientation="Horizontal" Spacing="6" Margin="2,1,2,0">
+                                <Panel Width="8" Height="8" VerticalAlignment="Center">
+                                    <Ellipse Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
+                                             IsVisible="{Binding IsResumable}"/>
+                                    <Ellipse Width="8" Height="8" Fill="LimeGreen"
+                                             IsVisible="{Binding IsRunning}"/>
+                                    <Ellipse Width="8" Height="8" Fill="Orange" Opacity="0.8"
+                                             IsVisible="{Binding IsExternallyActive}"
+                                             ToolTip.Tip="Active in external terminal"/>
+                                </Panel>
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                           Foreground="{Binding MoveForeground}"/>
+                                <TextBlock Text="&#x270F;" FontSize="10" VerticalAlignment="Center"
+                                           Opacity="0.5"
+                                           IsVisible="{Binding HasDraftText}"
+                                           ToolTip.Tip="Has unsent text"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="1" Grid.Column="1"
+                                       Text="{Binding LastPromptTime}"
+                                       IsVisible="{Binding LastPromptTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                       FontSize="10" Foreground="Gray" Opacity="0.6"
+                                       HorizontalAlignment="Right"
+                                       Margin="0,0,4,1"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+
+            </TreeView.DataTemplates>
+        </TreeView>
+
+    </DockPanel>
+
+</UserControl>

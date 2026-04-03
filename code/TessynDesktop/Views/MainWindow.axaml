@@ -1,0 +1,261 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TessynDesktop.ViewModels"
+        xmlns:views="using:TessynDesktop.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="TessynDesktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Tessyn Desktop"
+        Icon="avares://TessynDesktop/Assets/avalonia-logo.ico"
+        SystemDecorations="BorderOnly"
+        Width="1400" Height="900"
+        MinWidth="800" MinHeight="500">
+
+    <Panel>
+
+        <!-- Main content -->
+        <DockPanel>
+
+            <!-- Title bar: toolbar icons on left, window controls on right, drag anywhere in between -->
+            <DockPanel DockPanel.Dock="Top" LastChildFill="True"
+                       PointerPressed="OnMenuBarPointerPressed"
+                       Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                <!-- Window control buttons — docked right -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="0">
+                    <!-- Tessyn daemon status indicator -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                IsVisible="{Binding IsDaemonStatusVisible}"
+                                ToolTip.Tip="{Binding DaemonStatusText}">
+                        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                 Fill="{Binding DaemonStatusColor, Converter={x:Static views:StringToBrushConverter.Instance}}"/>
+                        <TextBlock Text="{Binding DaemonStatusText}" FontSize="10"
+                                   Opacity="0.6" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="&#x26A0;" VerticalAlignment="Center"
+                               FontSize="13" Foreground="Orange" Margin="0,0,4,0"
+                               IsVisible="{Binding IsRunningFromBuildOutput}"
+                               ToolTip.Tip="Running from project build output — will not be updated on restart"/>
+                    <TextBlock x:Name="BuildNumberText" VerticalAlignment="Center"
+                               FontSize="10" Opacity="0.4" Margin="0,0,8,0"/>
+                    <Button x:Name="MinimizeBtn" Content="&#x2013;" Width="46" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="16" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Minimize" Click="OnMinimizeClick"/>
+                    <Button x:Name="MaximizeBtn" Content="&#x25A1;" Width="46" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="14" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Maximize / Restore" Click="OnMaximizeRestoreClick"/>
+                    <Button x:Name="CloseBtn" Content="&#x2715;" Width="46" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="13" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Close" Click="OnCloseClick"/>
+                </StackPanel>
+                <!-- Toolbar icons -->
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="0">
+                    <!-- Chevron: toggle tree panel visibility -->
+                    <Button x:Name="TreeToggleBtn" Width="36" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="14" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Toggle session tree"
+                            Command="{Binding ToggleTreePanelCommand}">
+                        <Panel>
+                            <!-- Show chevron-left when tree is visible (click to hide) -->
+                            <TextBlock Text="&#x276E;" IsVisible="{Binding IsTreePanelVisible}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- Show chevron-right when tree is hidden (click to show) -->
+                            <TextBlock Text="&#x276F;" IsVisible="{Binding !IsTreePanelVisible}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Panel>
+                    </Button>
+                    <!-- Hamburger: settings menu -->
+                    <Button Width="36" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="16" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Settings">
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Settings" Command="{Binding OpenSettingsCommand}"/>
+                                <MenuItem Header="-"/>
+                                <MenuItem Header="Exit" Command="{Binding ExitCommand}"/>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                        <TextBlock Text="&#x2630;" FontSize="16"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <!-- Day/Night theme toggle -->
+                    <Button Width="36" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="15" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Toggle light/dark theme"
+                            Command="{Binding ToggleThemeCommand}">
+                        <Panel>
+                            <!-- Sun icon when dark theme active (click to switch to light) -->
+                            <TextBlock Text="&#x2600;" IsVisible="{Binding IsDarkTheme}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- Moon icon when light theme active (click to switch to dark) -->
+                            <TextBlock Text="&#x263D;" IsVisible="{Binding !IsDarkTheme}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Panel>
+                    </Button>
+
+                    <!-- Separator -->
+                    <Border Width="1" Height="18" Margin="4,0"
+                            Background="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                            VerticalAlignment="Center"/>
+
+                    <!-- FR.11 Session Instruction Toolbar -->
+                    <!-- Auto-Commit toggle (FR.11.3) -->
+                    <ToggleButton IsChecked="{Binding IsAutoCommit}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="Auto-Commit: commit changes after each prompt">
+                        <TextBlock Text="&#x2713;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- New Branch toggle (FR.11.4) -->
+                    <ToggleButton IsChecked="{Binding IsNewBranch}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="New Branch: create a new git branch for this prompt (one-shot)">
+                        <TextBlock Text="&#x2442;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- Auto-Document toggle (FR.11.5) -->
+                    <ToggleButton IsChecked="{Binding IsAutoDocument}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="Auto-Document: update project docs after each prompt">
+                        <TextBlock Text="&#x270E;" FontSize="13"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- Auto-Compact toggle (FR.11.6) -->
+                    <ToggleButton IsChecked="{Binding IsAutoCompact}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="Auto-Compact: compact session after this prompt (one-shot)">
+                        <TextBlock Text="&#x29C9;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- Clear session button (FR.11.7) -->
+                    <Button Command="{Binding ClearSessionCommand}"
+                            IsEnabled="{Binding CanClear}"
+                            Width="30" Height="26" Padding="0"
+                            Background="Transparent" BorderThickness="1"
+                            BorderBrush="Transparent"
+                            VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Clear: terminate Claude session after this prompt">
+                        <TextBlock Text="&#x2672;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
+                <!-- Empty space for drag -->
+                <Border Background="Transparent"/>
+            </DockPanel>
+
+            <!-- Daemon missing warning banner -->
+            <Border DockPanel.Dock="Top" Padding="12,8" Background="#40F44336"
+                    IsVisible="{Binding IsDaemonMissing}" x:CompileBindings="False">
+                <TextBlock Text="{Binding DaemonMissingMessage}"
+                           FontSize="13" TextWrapping="Wrap" Foreground="#FFE0E0"
+                           HorizontalAlignment="Center"/>
+            </Border>
+
+            <!-- Two-panel layout -->
+            <Grid x:Name="MainContentGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="280" MinWidth="180" MaxWidth="600"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left panel -->
+                <Border Grid.Column="0"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="0,0,1,0"
+                        IsVisible="{Binding IsTreePanelVisible}">
+                    <views:SessionTreeView DataContext="{Binding SessionTree}"/>
+                </Border>
+
+                <GridSplitter Grid.Column="1"
+                              ResizeDirection="Columns"
+                              Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                              IsVisible="{Binding IsTreePanelVisible}"/>
+
+                <!-- Right panel -->
+                <Panel Grid.Column="2">
+                    <TextBlock Text="Select or create a session"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Opacity="0.4"
+                               FontSize="16"
+                               IsVisible="{Binding ActiveSession, Converter={x:Static ObjectConverters.IsNull}}"/>
+
+                    <ContentControl Content="{Binding ActiveSession}">
+                        <ContentControl.DataTemplates>
+                            <DataTemplate DataType="vm:SessionViewModel">
+                                <views:SessionView/>
+                            </DataTemplate>
+                        </ContentControl.DataTemplates>
+                    </ContentControl>
+                </Panel>
+
+            </Grid>
+        </DockPanel>
+
+        <!-- In-window modal overlay -->
+        <Panel x:Name="OverlayPanel" IsVisible="False" Background="#80000000">
+
+            <!-- Confirm dialog -->
+            <Border x:Name="ConfirmCard" IsVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="24,20" Width="460" MaxWidth="600">
+                <StackPanel Spacing="16">
+                    <TextBlock x:Name="ConfirmMessage" TextWrapping="Wrap" FontSize="14"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button x:Name="ConfirmCancelBtn" Content="Cancel"/>
+                        <Button x:Name="ConfirmOkBtn"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Input dialog -->
+            <Border x:Name="InputCard" IsVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="24,20" Width="340">
+                <StackPanel Spacing="10">
+                    <TextBlock x:Name="InputCardTitle" FontWeight="SemiBold" FontSize="14"/>
+                    <TextBlock x:Name="InputCardPrompt" Opacity="0.7"/>
+                    <TextBox x:Name="InputCardBox"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button x:Name="InputCancelBtn" Content="Cancel"/>
+                        <Button x:Name="InputOkBtn" Content="OK"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+        </Panel>
+
+    </Panel>
+
+</Window>

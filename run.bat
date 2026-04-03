@@ -1,10 +1,10 @@
 @echo off
 setlocal
 
-set EXE=%~dp0code\ClaudeMaximus\bin\Debug\net9.0\ClaudeMaximus.exe
-set SLN=%~dp0code\ClaudeMaximus.sln
+set EXE=%~dp0code\TessynDesktop\bin\Debug\net9.0\TessynDesktop.exe
+set SLN=%~dp0code\TessynDesktop.sln
 
-echo Starting ClaudeMaximus...
+echo Starting TessynDesktop...
 start /wait "" "%EXE%"
 
 echo.

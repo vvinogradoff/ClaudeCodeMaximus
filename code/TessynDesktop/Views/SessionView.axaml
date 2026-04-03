@@ -1,0 +1,272 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TessynDesktop.ViewModels"
+             xmlns:views="using:TessynDesktop.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="TessynDesktop.Views.SessionView"
+             x:Name="Root"
+             x:DataType="vm:SessionViewModel">
+
+    <Grid RowDefinitions="Auto,*,Auto,5,150">
+
+        <Border Grid.Row="0" Padding="12,6"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="0,0,0,1">
+            <DockPanel>
+                <ToggleButton DockPanel.Dock="Right"
+                              IsChecked="{Binding IsMarkdownMode}"
+                              Content="MD"
+                              ToolTip.Tip="Toggle markdown rendering"
+                              Padding="8,3" FontSize="11"
+                              VerticalAlignment="Center"/>
+                <views:NativeTextBox DockPanel.Dock="Right"
+                         x:Name="OutputSearchBox"
+                         Watermark="Search output..."
+                         Width="180" Margin="0,0,8,0"
+                         Padding="6,3" FontSize="12"
+                         VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Name}"
+                           FontSize="16" FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <ScrollViewer x:Name="MessageScroller"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="MessageList"
+                              ItemsSource="{Binding Messages}"
+                              Margin="0,4,0,4">
+                    <ItemsControl.DataTemplates>
+                        <DataTemplate x:DataType="vm:MessageEntryViewModel"
+                                      x:CompileBindings="False">
+                            <Panel>
+
+                                <!-- User message: timestamp left, bubble right -->
+                                <Grid IsVisible="{Binding IsUser}" Margin="0,4,8,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="62"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0"
+                                                VerticalAlignment="Bottom"
+                                                HorizontalAlignment="Right"
+                                                Margin="0,0,6,5">
+                                        <TextBlock Text="{Binding FormattedDate}"
+                                                   FontSize="9" Opacity="0.3"
+                                                   HorizontalAlignment="Right"/>
+                                        <TextBlock Text="{Binding FormattedTime}"
+                                                   FontSize="10" Opacity="0.35"
+                                                   HorizontalAlignment="Right"/>
+                                    </StackPanel>
+                                    <Border Grid.Column="1" Padding="10,7" CornerRadius="8"
+                                            Background="{DynamicResource CmxUserBubbleBg}">
+                                        <StackPanel>
+                                            <TextBlock Text="You" FontSize="11"
+                                                       Foreground="{DynamicResource CmxUserBubbleFg}"
+                                                       Opacity="0.6" Margin="0,0,0,3"/>
+                                            <views:HighlightTextBlock Text="{Binding Content}"
+                                                                 HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                                                 IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                                                 TextWrapping="Wrap"
+                                                                 Foreground="{DynamicResource CmxUserBubbleFg}"
+                                                                 FontFamily="Cascadia Code,Consolas,monospace"
+                                                                 FontSize="{Binding DataContext.UserFontSize, ElementName=Root}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <!-- Assistant message: text left, timestamp right -->
+                                <Grid IsVisible="{Binding IsAssistant}" Margin="8,6,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="52"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Panel Grid.Column="0" Margin="0,0,8,0">
+                                        <views:MarkdownView
+                                            IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
+                                            Markdown="{Binding Content}"
+                                            HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                            IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                            FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
+                                        <views:HighlightTextBlock
+                                            IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
+                                            Text="{Binding Content}"
+                                            HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                            IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                            TextWrapping="Wrap"
+                                            FontFamily="Cascadia Code,Consolas,monospace"
+                                            FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
+                                    </Panel>
+                                    <StackPanel Grid.Column="1"
+                                                VerticalAlignment="Bottom"
+                                                HorizontalAlignment="Left"
+                                                Margin="4,0,8,2">
+                                        <TextBlock Text="{Binding FormattedTime}"
+                                                   FontSize="10" Opacity="0.35"
+                                                   HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- System message -->
+                                <Border IsVisible="{Binding IsSystem}" Margin="20,4,20,4" Padding="8,5" CornerRadius="4"
+                                        Background="{DynamicResource CmxSystemBubbleBg}">
+                                    <views:HighlightTextBlock Text="{Binding Content}"
+                                                              HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                                              IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                                              TextWrapping="Wrap" FontSize="12" Opacity="0.7" FontStyle="Italic"/>
+                                </Border>
+
+                                <!-- Compaction separator -->
+                                <StackPanel IsVisible="{Binding IsCompaction}" Margin="8,8,8,8" Orientation="Vertical" Spacing="2">
+                                    <Separator/>
+                                    <TextBlock Text="&#x2015; Context compacted above &#x2015;"
+                                               HorizontalAlignment="Center" FontSize="11" Opacity="0.5" FontStyle="Italic"/>
+                                    <Separator/>
+                                </StackPanel>
+
+                            </Panel>
+                        </DataTemplate>
+                    </ItemsControl.DataTemplates>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Search results overlay (FR.10.3) -->
+            <Border x:Name="SearchOverlay"
+                    IsVisible="{Binding OutputSearchVm.IsActive}"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,8,16,0" Padding="10,5" CornerRadius="4"
+                    BorderThickness="1"
+                    BorderBrush="#CCCC00"
+                    Background="#40FFFF00"
+                    x:CompileBindings="False">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding OutputSearchVm.StatusText}"
+                               VerticalAlignment="Center" FontSize="12"/>
+                    <Button x:Name="SearchPrevBtn" Content="&lt;"
+                            Padding="6,2" FontSize="11" MinWidth="0"
+                            VerticalAlignment="Center"/>
+                    <Button x:Name="SearchNextBtn" Content="&gt;"
+                            Padding="6,2" FontSize="11" MinWidth="0"
+                            VerticalAlignment="Center"/>
+                    <Button x:Name="SearchCloseBtn" Content="X"
+                            Padding="6,2" FontSize="11" MinWidth="0"
+                            VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Row 2: Thinking indicator (local or external) -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    IsVisible="{Binding IsBusy}"
+                    Margin="8,3,8,3"
+                    Spacing="6">
+            <TextBlock Text="Claude is thinking…"
+                       FontStyle="Italic"
+                       Opacity="0.5"
+                       FontSize="13"/>
+            <TextBlock Text="{Binding ThinkingDuration}"
+                       FontStyle="Italic"
+                       Opacity="0.5"
+                       FontSize="13"
+                       Foreground="#888888"/>
+        </StackPanel>
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    IsVisible="{Binding IsExternallyActive}"
+                    Margin="8,3,8,3"
+                    Spacing="6"
+                    x:CompileBindings="False">
+            <Ellipse Width="8" Height="8" Fill="Orange" VerticalAlignment="Center"/>
+            <TextBlock Text="Active in external terminal…"
+                       FontStyle="Italic"
+                       Opacity="0.5"
+                       FontSize="13"/>
+        </StackPanel>
+
+        <GridSplitter Grid.Row="3" ResizeDirection="Rows"
+                      Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+
+        <Border Grid.Row="4" Padding="8"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid RowDefinitions="*,Auto">
+                <!-- Row 0: Input area + Send/Settings buttons -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                    <Panel Grid.Column="0">
+                        <views:NativeTextBox x:Name="InputBox"
+                                 Text="{Binding InputText}"
+                                 AcceptsReturn="True"
+                                 Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file"
+                                 TextWrapping="Wrap"
+                                 FontFamily="Cascadia Code,Consolas,monospace"
+                                 FontSize="{Binding InputFontSize}"
+                                 Background="{DynamicResource CmxInputBg}"
+                                 Foreground="{DynamicResource CmxInputFg}"/>
+                        <Popup x:Name="AutocompletePopup"
+                               PlacementTarget="{Binding ElementName=InputBox}"
+                               Placement="Top"
+                               IsOpen="{Binding AutocompleteVm.IsOpen, Mode=OneWay}"
+                               IsLightDismissEnabled="False"
+                               x:CompileBindings="False">
+                            <views:AutocompletePopup DataContext="{Binding AutocompleteVm}"/>
+                        </Popup>
+                    </Panel>
+                    <Grid Grid.Column="1" RowDefinitions="*,*" Margin="8,0,0,0">
+                        <Button Grid.Row="0"
+                                Content="Send"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalAlignment="Stretch"
+                                VerticalContentAlignment="Center"
+                                Command="{Binding SendCommand}"/>
+                        <ToggleButton Grid.Row="1"
+                                      Content="&#x2699;"
+                                      FontSize="16"
+                                      HorizontalAlignment="Stretch"
+                                      HorizontalContentAlignment="Center"
+                                      VerticalAlignment="Stretch"
+                                      VerticalContentAlignment="Center"
+                                      IsChecked="{Binding IsCommandBarVisible}"
+                                      ToolTip.Tip="Toggle command bar"/>
+                    </Grid>
+                </Grid>
+                <!-- Row 1: Command bar (model selection) -->
+                <Border Grid.Row="1"
+                        IsVisible="{Binding IsCommandBarVisible}"
+                        Padding="6,4"
+                        Margin="0,4,0,0"
+                        CornerRadius="4"
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Model:"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" Opacity="0.7"/>
+                        <ComboBox ItemsSource="{Binding AvailableModels}"
+                                  SelectedIndex="{Binding SelectedModelIndex}"
+                                  VerticalAlignment="Center"
+                                  FontSize="12"
+                                  MinWidth="100"
+                                  Padding="6,3"/>
+                        <TextBlock Text="Profile:"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" Opacity="0.7"
+                                   Margin="12,0,0,0"/>
+                        <ComboBox ItemsSource="{Binding AvailableProfiles}"
+                                  SelectedIndex="{Binding SelectedProfileIndex}"
+                                  VerticalAlignment="Center"
+                                  FontSize="12"
+                                  MinWidth="120"
+                                  Padding="6,3"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+    </Grid>
+
+</UserControl>
