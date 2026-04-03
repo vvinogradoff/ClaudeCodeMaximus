@@ -726,6 +726,17 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_runEventSubscription?.Dispose();
 		_runEventSubscription = null;
 
+		// Trigger daemon reindex so new messages are persisted in the index.
+		// Workaround: daemon's incremental reindex after run completion isn't reliable yet.
+		if (_daemonService != null)
+		{
+			_ = Task.Run(async () =>
+			{
+				try { await _daemonService.ReindexAsync(); }
+				catch (Exception ex) { _log.Debug(ex, "Post-run reindex failed"); }
+			});
+		}
+
 		// Post-run behavior: clear session and auto-compact (mirrors legacy path)
 		if (success)
 		{
