@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         x:Class="ClaudeMaximus.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="ClaudeMaximus"
+        Title="Tessyn Desktop"
         Icon="avares://ClaudeMaximus/Assets/avalonia-logo.ico"
         SystemDecorations="BorderOnly"
         Width="1400" Height="900"
@@ -166,6 +166,14 @@
                 <!-- Empty space for drag -->
                 <Border Background="Transparent"/>
             </DockPanel>
+
+            <!-- Daemon missing warning banner -->
+            <Border DockPanel.Dock="Top" Padding="12,8" Background="#40F44336"
+                    IsVisible="{Binding IsDaemonMissing}" x:CompileBindings="False">
+                <TextBlock Text="{Binding DaemonMissingMessage}"
+                           FontSize="13" TextWrapping="Wrap" Foreground="#FFE0E0"
+                           HorizontalAlignment="Center"/>
+            </Border>
 
             <!-- Two-panel layout -->
             <Grid x:Name="MainContentGrid">

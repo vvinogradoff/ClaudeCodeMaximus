@@ -84,13 +84,23 @@ public partial class App : Application
 				outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
 			.CreateLogger();
 
-		Log.Information("ClaudeMaximus starting up. Logs: {LogDir}", logDir);
+		Log.Information("Tessyn Desktop starting up. Logs: {LogDir}", logDir);
 	}
 
 	private static async Task StartTessynConnectionAsync(IAppSettingsService appSettings)
 	{
 		try
 		{
+			// Check if tessyn is installed
+			if (!IsTessynInstalled(appSettings.Settings.TessynPath))
+			{
+				Log.Warning("Tessyn daemon not found on PATH. Install with: npm install -g tessyn");
+				var mainVm = Services.GetRequiredService<MainWindowViewModel>();
+				Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+					mainVm.SetDaemonMissing("Tessyn daemon not found. Install with: npm install -g tessyn"));
+				return;
+			}
+
 			var daemon = Services.GetRequiredService<ITessynDaemonService>();
 
 			if (appSettings.Settings.AutoStartDaemon)
@@ -101,6 +111,30 @@ public partial class App : Application
 		catch (Exception ex)
 		{
 			Log.Warning(ex, "Failed to start Tessyn daemon connection (will auto-reconnect)");
+		}
+	}
+
+	private static bool IsTessynInstalled(string tessynPath)
+	{
+		try
+		{
+			var startInfo = new ProcessStartInfo
+			{
+				FileName = tessynPath,
+				Arguments = "--version",
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				UseShellExecute = false,
+				CreateNoWindow = true,
+			};
+			using var proc = Process.Start(startInfo);
+			if (proc == null) return false;
+			proc.WaitForExit(3000);
+			return proc.ExitCode == 0;
+		}
+		catch
+		{
+			return false;
 		}
 	}
 

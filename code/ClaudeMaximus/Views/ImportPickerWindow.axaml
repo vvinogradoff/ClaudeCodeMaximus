@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         x:Class="ClaudeMaximus.Views.ImportPickerWindow"
         x:DataType="vm:ImportPickerViewModel"
-        Title="Import Claude Sessions"
+        Title="Import Sessions"
         Width="700" Height="650"
         MinWidth="500" MinHeight="500"
         WindowStartupLocation="CenterOwner">

@@ -72,6 +72,32 @@ public sealed class MainWindowViewModel : ViewModelBase
 		}
 	}
 
+	private bool _isDaemonMissing;
+	private string _daemonMissingMessage = string.Empty;
+
+	/// <summary>True when tessyn binary was not found on PATH.</summary>
+	public bool IsDaemonMissing
+	{
+		get => _isDaemonMissing;
+		private set => this.RaiseAndSetIfChanged(ref _isDaemonMissing, value);
+	}
+
+	/// <summary>User-facing message about missing daemon.</summary>
+	public string DaemonMissingMessage
+	{
+		get => _daemonMissingMessage;
+		private set => this.RaiseAndSetIfChanged(ref _daemonMissingMessage, value);
+	}
+
+	/// <summary>Called when tessyn binary is not found during startup.</summary>
+	public void SetDaemonMissing(string message)
+	{
+		IsDaemonMissing = true;
+		DaemonMissingMessage = message;
+		DaemonStatusText = "Not installed";
+		DaemonStatusColor = "Red";
+	}
+
 	/// <summary>Status text for the Tessyn daemon indicator in the title bar.</summary>
 	public string DaemonStatusText
 	{
