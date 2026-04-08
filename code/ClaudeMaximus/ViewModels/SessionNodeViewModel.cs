@@ -35,6 +35,12 @@ public sealed class SessionNodeViewModel : ViewModelBase
 
 	public string FileName => Model.FileName;
 
+	/// <summary>Stable daemon-side session identifier. Null until mapped or first run.system event.</summary>
+	public string? ExternalId => Model.ExternalId;
+
+	/// <summary>Best available identity key: ExternalId if set, otherwise FileName.</summary>
+	public string SessionKey => Model.SessionKey;
+
 	/// <summary>True while a claude process is actively running for this session.</summary>
 	public bool IsRunning
 	{

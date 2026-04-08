@@ -782,6 +782,10 @@ public partial class SessionTreeView : UserControl
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
 
+		// If target is a new directory not yet in the tree, create it
+		if (dirTarget == null && grpTarget == null && !string.IsNullOrEmpty(result.Value.TargetKey))
+			dirTarget = vm.AddDirectory(result.Value.TargetKey);
+
 		foreach (var item in result.Value.Items)
 			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);
 	}
@@ -798,6 +802,10 @@ public partial class SessionTreeView : UserControl
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
 
+		// If target is a new directory not yet in the tree, create it
+		if (dirTarget == null && grpTarget == null && !string.IsNullOrEmpty(result.Value.TargetKey))
+			dirTarget = vm.AddDirectory(result.Value.TargetKey);
+
 		foreach (var item in result.Value.Items)
 			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);
 	}
@@ -807,12 +815,13 @@ public partial class SessionTreeView : UserControl
 	{
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
+		var daemonService = App.Services.GetRequiredService<ITessynDaemonService>();
 
 		var sourceDirectories = vm.BuildSourceDirectories();
 		var importTargets = vm.BuildImportTargets();
 		var alreadyImportedIds = vm.CollectAllClaudeSessionIds();
 
-		var pickerVm = new ImportPickerViewModel(importService, assistService);
+		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonService);
 		pickerVm.Initialize(sourceDirectories, importTargets, workingDirectory, initialTargetKey, alreadyImportedIds);
 
 		var picker = new ImportPickerWindow { DataContext = pickerVm };
@@ -838,27 +847,69 @@ public partial class SessionTreeView : UserControl
 	{
 		try
 		{
-			// Parse the JSONL file into session entries
-			var entries = importService.ParseJsonlSession(item.Summary.JsonlPath);
-			if (entries.Count == 0)
-				return;
-
-			// Create a new session file
-			var fileName = fileService.CreateSessionFile();
-
-			// Write all parsed entries
-			fileService.WriteSessionFile(fileName, entries);
-
-			// Determine the session name
 			var name = item.Summary.GeneratedTitle
 				?? TruncateForSessionName(item.Summary.FirstUserPrompt)
 				?? "Imported Session";
 
+			string fileName;
+
+			if (!string.IsNullOrEmpty(item.Summary.JsonlPath))
+			{
+				// Local JSONL file available — parse and create .txt session file
+				var entries = importService.ParseJsonlSession(item.Summary.JsonlPath);
+				if (entries.Count == 0)
+					return;
+
+				fileName = fileService.CreateSessionFile();
+				fileService.WriteSessionFile(fileName, entries);
+			}
+			else
+			{
+				// Daemon-sourced session (no local JSONL) — create placeholder file.
+				// Content will be loaded from daemon via sessions.get when opened.
+				var appSettings = App.Services.GetRequiredService<IAppSettingsService>();
+				if (appSettings.Settings.UseTessynDaemon)
+					fileName = $"daemon-{System.Guid.NewGuid():N}.pending";
+				else
+					return; // Cannot import without JSONL and without daemon
+			}
+
+			// Determine original project path for cross-project sessions
+			string? originalProjectPath = null;
+			if (!string.IsNullOrEmpty(item.Summary.JsonlPath))
+			{
+				// JSONL path is like ~/.claude/projects/<slug>/<sessionId>.jsonl
+				// The original project path is NOT directly recoverable from the slug,
+				// but we can store the slug-based path so the daemon can find the session.
+				var jsonlDir = System.IO.Path.GetDirectoryName(item.Summary.JsonlPath);
+				if (jsonlDir != null)
+				{
+					var slug = System.IO.Path.GetFileName(jsonlDir);
+					// Check if this session is from a different project than the import target
+					var targetSlug = Constants.ClaudeSessions.BuildProjectSlug(
+						dirParent?.Path ?? grpParent?.WorkingDirectory ?? string.Empty);
+					if (!string.Equals(slug, targetSlug, StringComparison.Ordinal))
+					{
+						// Cross-project: reconstruct path from slug (replace leading - with /)
+						// Slug format: -Users-aisling-...-projectName → /Users/aisling/.../projectName
+						originalProjectPath = slug.StartsWith('-') ? slug.Replace('-', '/') : slug;
+					}
+				}
+			}
+
 			// Add to tree
 			if (dirParent != null)
-				vm.ImportSession(dirParent, name, fileName, item.SessionId);
+			{
+				var node = vm.ImportSession(dirParent, name, fileName, item.SessionId);
+				if (originalProjectPath != null)
+					node.Model.OriginalProjectPath = originalProjectPath;
+			}
 			else if (grpParent != null)
-				vm.ImportSessionToGroup(grpParent, name, fileName, item.SessionId);
+			{
+				var node = vm.ImportSessionToGroup(grpParent, name, fileName, item.SessionId);
+				if (originalProjectPath != null)
+					node.Model.OriginalProjectPath = originalProjectPath;
+			}
 		}
 		catch (Exception ex)
 		{

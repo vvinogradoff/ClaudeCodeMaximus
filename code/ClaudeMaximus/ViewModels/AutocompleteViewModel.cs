@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
 using ReactiveUI;
@@ -16,6 +18,7 @@ public sealed class AutocompleteViewModel : ViewModelBase
 	private readonly ICodeIndexService _indexService;
 	private bool _isOpen;
 	private int _selectedIndex;
+	private List<TessynCommand> _commands = [];
 
 	public ObservableCollection<AutocompleteSuggestionModel> Suggestions { get; } = new();
 
@@ -36,9 +39,19 @@ public sealed class AutocompleteViewModel : ViewModelBase
 		_indexService = indexService;
 	}
 
+	/// <summary>Set the available slash commands for autocomplete (fetched from daemon).</summary>
+	public void SetCommands(List<TessynCommand> commands) => _commands = commands;
+
 	public void UpdateSuggestions(string workingDirectory, AutocompleteTriggerModel trigger)
 	{
-		if (trigger.Mode == AutocompleteMode.None || string.IsNullOrEmpty(trigger.Query))
+		if (trigger.Mode == AutocompleteMode.None)
+		{
+			Dismiss();
+			return;
+		}
+
+		// For commands, allow empty query (show all commands when just "/" is typed)
+		if (trigger.Mode != AutocompleteMode.Command && string.IsNullOrEmpty(trigger.Query))
 		{
 			Dismiss();
 			return;
@@ -56,6 +69,9 @@ public sealed class AutocompleteViewModel : ViewModelBase
 				break;
 			case AutocompleteMode.Path:
 				PopulatePathSuggestions(trigger.Query);
+				break;
+			case AutocompleteMode.Command:
+				PopulateCommandSuggestions(trigger.Query);
 				break;
 		}
 
@@ -191,6 +207,36 @@ public sealed class AutocompleteViewModel : ViewModelBase
 		catch (IOException ex)
 		{
 			_log.Debug(ex, "Error enumerating path {Path}", pathQuery);
+		}
+	}
+
+	private void PopulateCommandSuggestions(string query)
+	{
+		var matches = string.IsNullOrEmpty(query)
+			? _commands
+			: _commands
+				.Where(c => c.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+				.ToList();
+
+		// Sort: starts-with first, then contains
+		var ordered = matches
+			.OrderBy(c => c.Name.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+			.ThenBy(c => c.Name)
+			.Take(Constants.CodeIndex.MaxSuggestions);
+
+		foreach (var cmd in ordered)
+		{
+			var matchStart = string.IsNullOrEmpty(query) ? 0 : FindMatchIndex(cmd.Name, query);
+			Suggestions.Add(new AutocompleteSuggestionModel
+			{
+				DisplayText = $"/{cmd.Name}",
+				InsertText = $"/{cmd.Name}",
+				SecondaryText = cmd.Description ?? string.Empty,
+				Kind = null,
+				MatchStart = matchStart + 1, // +1 for the leading /
+				MatchLength = query.Length,
+				IsFileSuggestion = false,
+			});
 		}
 	}
 

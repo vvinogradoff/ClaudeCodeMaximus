@@ -20,6 +20,11 @@ public sealed class AutocompleteTriggerParser
 		if (string.IsNullOrEmpty(text) || caretIndex <= 0 || caretIndex > text.Length)
 			return _none;
 
+		// Check for / command trigger — only at the very start of text
+		var commandResult = TryParseCommand(text, caretIndex);
+		if (commandResult.Mode != AutocompleteMode.None)
+			return commandResult;
+
 		// Check for # / ## triggers first — they are unambiguous delimiters
 		var hashResult = TryParseHash(text, caretIndex);
 		if (hashResult.Mode != AutocompleteMode.None)
@@ -27,6 +32,27 @@ public sealed class AutocompleteTriggerParser
 
 		// Then check for filesystem path trigger (e.g. C:\Users\...)
 		return TryParsePath(text, caretIndex) ?? _none;
+	}
+
+	private AutocompleteTriggerModel TryParseCommand(string text, int caretIndex)
+	{
+		// Command trigger: text starts with '/' and has no spaces before the caret
+		// (i.e. the user is typing a command name, not a path or URL)
+		if (text[0] != '/')
+			return _none;
+
+		// Only trigger if we're still in the first word (no spaces yet)
+		var query = text.Substring(1, caretIndex - 1);
+		if (query.Contains(' ') || query.Contains('\n'))
+			return _none;
+
+		return new AutocompleteTriggerModel
+		{
+			Mode = AutocompleteMode.Command,
+			Query = query,
+			TriggerStartIndex = 0,
+			TriggerLength = caretIndex
+		};
 	}
 
 	private AutocompleteTriggerModel? TryParsePath(string text, int caretIndex)

@@ -32,8 +32,11 @@ public sealed class AppSettingsModel
 	public ThemeColorsModel LightColors { get; set; } = new();
 	public ThemeColorsModel DarkColors { get; set; } = ThemeColorsModel.DefaultDark();
 
-	/// <summary>FileName of the last selected session, restored on startup.</summary>
+	/// <summary>FileName of the last selected session, restored on startup. Deprecated: prefer ActiveSessionExternalId.</summary>
 	public string? ActiveSessionFileName { get; set; }
+
+	/// <summary>ExternalId (daemon UUID) of the last selected session. Takes precedence over ActiveSessionFileName.</summary>
+	public string? ActiveSessionExternalId { get; set; }
 
 	/// <summary>Whether the tree panel is collapsed (auto-hidden).</summary>
 	public bool IsTreePanelCollapsed { get; set; }
@@ -55,4 +58,30 @@ public sealed class AppSettingsModel
 	/// on first load if missing.
 	/// </summary>
 	public KeyBindingsModel KeyBindings { get; set; } = KeyBindingsModel.CreateDefaults();
+
+	/// <summary>Path to the tessyn daemon executable. Default: "tessyn" (assumes on PATH).</summary>
+	public string TessynPath { get; set; } = "tessyn";
+
+	/// <summary>Whether to auto-start the Tessyn daemon if not already running.</summary>
+	public bool AutoStartDaemon { get; set; } = true;
+
+	/// <summary>
+	/// When true, use the Tessyn daemon for session operations (send, load, search).
+	/// When false, use the legacy local process and file-based code paths.
+	/// Default false during migration; set to true once daemon integration is verified.
+	/// </summary>
+	public bool UseTessynDaemon { get; set; }
+
+	/// <summary>
+	/// Permission mode for daemon-spawned Claude sessions.
+	/// "default" = Claude asks for tool approval (may block in headless mode).
+	/// "auto-approve" = all tools auto-approved (--dangerously-skip-permissions).
+	/// </summary>
+	public string DaemonPermissionMode { get; set; } = "auto-approve";
+
+	/// <summary>
+	/// Daemon profile name to use for run.send. Null = use daemon's default profile.
+	/// Auto-detected on startup if the default profile is not authenticated.
+	/// </summary>
+	public string? DaemonProfile { get; set; }
 }
