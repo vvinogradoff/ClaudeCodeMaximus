@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ClaudeMaximus.ViewModels"
              xmlns:views="using:ClaudeMaximus.Views"
+             xmlns:models="using:ClaudeMaximus.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -21,7 +22,7 @@
                               ToolTip.Tip="Toggle markdown rendering"
                               Padding="8,3" FontSize="11"
                               VerticalAlignment="Center"/>
-                <TextBox DockPanel.Dock="Right"
+                <views:NativeTextBox DockPanel.Dock="Right"
                          x:Name="OutputSearchBox"
                          Watermark="Search output..."
                          Width="180" Margin="0,0,8,0"
@@ -33,7 +34,7 @@
             </DockPanel>
         </Border>
 
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" DragDrop.AllowDrop="True">
             <ScrollViewer x:Name="MessageScroller"
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto">
@@ -192,16 +193,73 @@
                       Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
 
         <Border Grid.Row="4" Padding="8"
+                x:Name="InputAreaRoot"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                BorderThickness="0,1,0,0">
-            <Grid RowDefinitions="*,Auto">
-                <!-- Row 0: Input area + Send/Settings buttons -->
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-                    <Panel Grid.Column="0">
-                        <TextBox x:Name="InputBox"
+                BorderThickness="0,1,0,0"
+                DragDrop.AllowDrop="True">
+            <Grid RowDefinitions="Auto,*,Auto">
+                <!-- Row 0: Attachment chips (only visible when there are attachments) -->
+                <ItemsControl Grid.Row="0"
+                              ItemsSource="{Binding PendingAttachments}"
+                              IsVisible="{Binding HasPendingAttachments}"
+                              Margin="0,0,0,4"
+                              x:CompileBindings="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:PendingAttachment">
+                            <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="6,3"
+                                    Margin="0,0,4,4">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <TextBlock Text="&#x1F4CE;" FontSize="11" VerticalAlignment="Center"
+                                               IsVisible="{Binding !IsImage}"/>
+                                    <TextBlock Text="&#x1F5BC;" FontSize="11" VerticalAlignment="Center"
+                                               IsVisible="{Binding IsImage}"/>
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               FontSize="11" VerticalAlignment="Center"
+                                               MaxWidth="200" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding SizeText}"
+                                               FontSize="10" Opacity="0.5" VerticalAlignment="Center"/>
+                                    <Button Content="&#x2715;"
+                                            FontSize="10"
+                                            Padding="4,0"
+                                            MinWidth="0" MinHeight="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Remove attachment"
+                                            Click="OnRemoveAttachmentClick"
+                                            Tag="{Binding Id}"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Row 1: Input area + Attach + Send buttons -->
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
+                    <Button Grid.Column="0"
+                            x:Name="AttachBtn"
+                            Content="&#x1F4CE;"
+                            FontSize="16"
+                            Width="36"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Margin="0,0,8,0"
+                            ToolTip.Tip="Attach file or image"
+                            Click="OnAttachClick"/>
+                    <Panel Grid.Column="1">
+                        <views:NativeTextBox x:Name="InputBox"
                                  Text="{Binding InputText}"
                                  AcceptsReturn="True"
-                                 Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file"
+                                 Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file  / command  📎 paste/drop"
                                  TextWrapping="Wrap"
                                  FontFamily="Cascadia Code,Consolas,monospace"
                                  FontSize="{Binding InputFontSize}"
@@ -216,53 +274,67 @@
                             <views:AutocompletePopup DataContext="{Binding AutocompleteVm}"/>
                         </Popup>
                     </Panel>
-                    <Grid Grid.Column="1" RowDefinitions="*,*" Margin="8,0,0,0">
-                        <Button Grid.Row="0"
-                                Content="Send"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                VerticalAlignment="Stretch"
-                                VerticalContentAlignment="Center"
-                                Command="{Binding SendCommand}"/>
-                        <ToggleButton Grid.Row="1"
-                                      Content="&#x2699;"
-                                      FontSize="16"
-                                      HorizontalAlignment="Stretch"
-                                      HorizontalContentAlignment="Center"
-                                      VerticalAlignment="Stretch"
-                                      VerticalContentAlignment="Center"
-                                      IsChecked="{Binding IsCommandBarVisible}"
-                                      ToolTip.Tip="Toggle command bar"/>
-                    </Grid>
+                    <Button Grid.Column="2"
+                            Content="Send"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            VerticalAlignment="Stretch"
+                            VerticalContentAlignment="Center"
+                            Margin="8,0,0,0"
+                            MinWidth="60"
+                            Command="{Binding SendCommand}"/>
                 </Grid>
-                <!-- Row 1: Command bar (model selection) -->
-                <Border Grid.Row="1"
-                        IsVisible="{Binding IsCommandBarVisible}"
-                        Padding="6,4"
+                <!-- Row 2: Session status bar — always visible -->
+                <Border Grid.Row="2"
+                        Padding="6,3"
                         Margin="0,4,0,0"
                         CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="Model:"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" Opacity="0.7"/>
-                        <ComboBox ItemsSource="{Binding AvailableModels}"
-                                  SelectedIndex="{Binding SelectedModelIndex}"
-                                  VerticalAlignment="Center"
-                                  FontSize="12"
-                                  MinWidth="100"
-                                  Padding="6,3"/>
-                        <TextBlock Text="Profile:"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" Opacity="0.7"
-                                   Margin="12,0,0,0"/>
-                        <ComboBox ItemsSource="{Binding AvailableProfiles}"
-                                  SelectedIndex="{Binding SelectedProfileIndex}"
-                                  VerticalAlignment="Center"
-                                  FontSize="12"
-                                  MinWidth="120"
-                                  Padding="6,3"/>
-                    </StackPanel>
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        x:CompileBindings="False">
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                        <!-- Profile -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="&#x1F464;" FontSize="11" VerticalAlignment="Center"
+                                       ToolTip.Tip="Account profile"/>
+                            <ComboBox ItemsSource="{Binding DaemonProfileNames}"
+                                      SelectedIndex="{Binding SelectedDaemonProfileIndex}"
+                                      VerticalAlignment="Center"
+                                      FontSize="11"
+                                      MinWidth="90" MaxWidth="200"
+                                      Padding="4,2"/>
+                        </StackPanel>
+                        <!-- Model -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="12,0,0,0">
+                            <TextBlock Text="Model:" FontSize="11" Opacity="0.6" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding AvailableModels}"
+                                      SelectedIndex="{Binding SelectedModelIndex}"
+                                      VerticalAlignment="Center"
+                                      FontSize="11"
+                                      MinWidth="80"
+                                      Padding="4,2"/>
+                        </StackPanel>
+                        <!-- Reasoning effort -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="12,0,0,0">
+                            <TextBlock Text="Effort:" FontSize="11" Opacity="0.6" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding AvailableEfforts}"
+                                      SelectedIndex="{Binding SelectedEffortIndex}"
+                                      VerticalAlignment="Center"
+                                      FontSize="11"
+                                      MinWidth="70"
+                                      Padding="4,2"/>
+                        </StackPanel>
+                        <!-- Spacer -->
+                        <Border Grid.Column="3"/>
+                        <!-- Context + cost (right-aligned) -->
+                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="{Binding ContextUsageText}"
+                                       FontSize="11" Opacity="0.5" VerticalAlignment="Center"
+                                       ToolTip.Tip="Context window usage"/>
+                            <TextBlock Text="{Binding SessionCostText}"
+                                       FontSize="11" Opacity="0.5" VerticalAlignment="Center"
+                                       ToolTip.Tip="Session cost"/>
+                        </StackPanel>
+                    </Grid>
                 </Border>
             </Grid>
         </Border>

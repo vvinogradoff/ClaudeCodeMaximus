@@ -1,10 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ClaudeMaximus.Models;
@@ -56,6 +61,15 @@ public partial class SessionView : UserControl
 		// Ctrl+scroll changes font size; tunnel so we intercept before the scroller scrolls
 		MessageScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnScrollerWheel, RoutingStrategies.Tunnel);
 		InputBox.AddHandler(InputElement.PointerWheelChangedEvent, OnInputBoxWheel, RoutingStrategies.Tunnel);
+
+		// Drag-and-drop for file attachments — accept on both the input area and the conversation area
+		InputAreaRoot.AddHandler(DragDrop.DragOverEvent, OnDragOver);
+		InputAreaRoot.AddHandler(DragDrop.DropEvent, OnDrop);
+		MessageScroller.AddHandler(DragDrop.DragOverEvent, OnDragOver);
+		MessageScroller.AddHandler(DragDrop.DropEvent, OnDrop);
+
+		// Clipboard paste interception (image bytes / file URIs in addition to text)
+		InputBox.AddHandler(InputElement.KeyDownEvent, OnInputPasteCheck, RoutingStrategies.Tunnel);
 	}
 
 	protected override void OnDataContextChanged(EventArgs e)
@@ -386,6 +400,209 @@ public partial class SessionView : UserControl
 				return vm;
 			visual = visual.GetVisualParent();
 		}
+		return null;
+	}
+
+	// =====================================================================
+	// Attachments: file picker, drag-drop, clipboard paste, chip removal
+	// =====================================================================
+
+	private async void OnAttachClick(object? sender, RoutedEventArgs e)
+	{
+		if (DataContext is not SessionViewModel vm) return;
+
+		var topLevel = TopLevel.GetTopLevel(this);
+		if (topLevel == null) return;
+
+		try
+		{
+			var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+			{
+				Title = "Attach files",
+				AllowMultiple = true,
+			});
+
+			foreach (var file in files)
+			{
+				var path = file.TryGetLocalPath();
+				if (!string.IsNullOrEmpty(path))
+					await vm.AddAttachmentFromFileAsync(path);
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "File picker failed");
+		}
+	}
+
+	private void OnRemoveAttachmentClick(object? sender, RoutedEventArgs e)
+	{
+		if (DataContext is not SessionViewModel vm) return;
+		if (sender is Button btn && btn.Tag is Guid id)
+			vm.RemoveAttachment(id);
+	}
+
+#pragma warning disable CS0618 // Avalonia's new IDataTransfer API is undocumented; the legacy IDataObject API still works.
+	private void OnDragOver(object? sender, DragEventArgs e)
+	{
+		// Accept files and bitmaps
+		if (e.Data.Contains(DataFormats.Files) || e.Data.Contains("image/png") || e.Data.Contains("image/jpeg"))
+			e.DragEffects = DragDropEffects.Copy;
+		else
+			e.DragEffects = DragDropEffects.None;
+	}
+
+	private async void OnDrop(object? sender, DragEventArgs e)
+	{
+		if (DataContext is not SessionViewModel vm) return;
+
+		try
+		{
+			if (e.Data.Contains(DataFormats.Files))
+			{
+				var items = e.Data.GetFiles();
+				if (items != null)
+				{
+					foreach (var item in items)
+					{
+						var path = item.TryGetLocalPath();
+						if (!string.IsNullOrEmpty(path) && File.Exists(path))
+							await vm.AddAttachmentFromFileAsync(path);
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Drop handling failed");
+		}
+	}
+#pragma warning restore CS0618
+
+	private async void OnInputPasteCheck(object? sender, KeyEventArgs e)
+	{
+		// Detect Cmd+V / Ctrl+V
+		var isPaste = e.Key == Key.V &&
+		              (e.KeyModifiers.HasFlag(KeyModifiers.Meta) || e.KeyModifiers.HasFlag(KeyModifiers.Control));
+		if (!isPaste) return;
+		if (DataContext is not SessionViewModel vm) return;
+
+		var topLevel = TopLevel.GetTopLevel(this);
+		var clipboard = topLevel?.Clipboard;
+		if (clipboard == null) return;
+
+		try
+		{
+			// Avalonia 11's IAsyncDataTransfer API exposes pasted images as a Bitmap object
+			// (decoded from whatever format the platform provided — TIFF on macOS screenshots,
+			// PNG from screenshot tools, etc.). We re-encode to PNG since Anthropic's API
+			// only accepts PNG/JPEG/GIF/WebP.
+			//
+			// We use reflection because the API isn't directly exposed in stable Avalonia headers,
+			// but the implementation has been stable for several releases.
+			var bitmap = await TryGetClipboardBitmapAsync(clipboard);
+			if (bitmap != null)
+			{
+				try
+				{
+					using var pngStream = new MemoryStream();
+					bitmap.Save(pngStream); // Avalonia's Bitmap.Save defaults to PNG
+					var name = $"clipboard-{DateTime.Now:yyyyMMdd-HHmmss}.png";
+					vm.AddAttachmentFromBytes(name, "image/png", pngStream.ToArray());
+					e.Handled = true; // suppress the default paste so the input box doesn't get binary garbage
+					return;
+				}
+				finally
+				{
+					bitmap.Dispose();
+				}
+			}
+
+			// Check if clipboard contains file paths (file URIs from Finder)
+#pragma warning disable CS0618 // Legacy IClipboard.GetFormatsAsync still functional for file detection.
+			var formats = await clipboard.GetFormatsAsync();
+			if (formats != null && formats.Contains(DataFormats.Files))
+			{
+				var fileObj = await clipboard.GetDataAsync(DataFormats.Files);
+				if (fileObj is IEnumerable<IStorageItem> items)
+				{
+					var any = false;
+					foreach (var item in items)
+					{
+						var path = item.TryGetLocalPath();
+						if (!string.IsNullOrEmpty(path) && File.Exists(path))
+						{
+							await vm.AddAttachmentFromFileAsync(path);
+							any = true;
+						}
+					}
+					if (any) e.Handled = true;
+				}
+			}
+#pragma warning restore CS0618
+		}
+		catch (Exception ex)
+		{
+			_log.Debug(ex, "Clipboard paste check failed (non-fatal)");
+		}
+	}
+
+	/// <summary>
+	/// Reads an image from the clipboard via Avalonia 11's IAsyncDataTransfer API
+	/// (accessed via reflection since it isn't exposed in stable Avalonia headers).
+	/// Returns the decoded Bitmap, or null if the clipboard doesn't contain an image.
+	/// Caller is responsible for disposing the returned Bitmap.
+	/// </summary>
+	private static async Task<Avalonia.Media.Imaging.Bitmap?> TryGetClipboardBitmapAsync(
+		Avalonia.Input.Platform.IClipboard clipboard)
+	{
+		var tryGetMethod = clipboard.GetType().GetMethod("TryGetDataAsync", System.Type.EmptyTypes);
+		if (tryGetMethod == null) return null;
+
+		var dtTask = tryGetMethod.Invoke(clipboard, null) as System.Threading.Tasks.Task;
+		if (dtTask == null) return null;
+		await dtTask;
+
+		var dataTransfer = dtTask.GetType().GetProperty("Result")?.GetValue(dtTask);
+		if (dataTransfer == null) return null;
+
+		try
+		{
+			var itemsProp = dataTransfer.GetType().GetProperty("Items");
+			if (itemsProp?.GetValue(dataTransfer) is not System.Collections.IEnumerable items)
+				return null;
+
+			foreach (var item in items)
+			{
+				var itemType = item.GetType();
+				var fmtsProp = itemType.GetProperty("Formats");
+				var tryGetRawAsync = itemType.GetMethod("TryGetRawAsync");
+				if (fmtsProp?.GetValue(item) is not System.Collections.IEnumerable fmts || tryGetRawAsync == null)
+					continue;
+
+				foreach (var fmt in fmts)
+				{
+					try
+					{
+						if (tryGetRawAsync.Invoke(item, new[] { fmt }) is not System.Threading.Tasks.Task rawTask)
+							continue;
+						await rawTask;
+						var raw = rawTask.GetType().GetProperty("Result")?.GetValue(rawTask);
+						if (raw is Avalonia.Media.Imaging.Bitmap bmp)
+							return bmp;
+					}
+					catch
+					{
+						// Try the next format
+					}
+				}
+			}
+		}
+		finally
+		{
+			(dataTransfer as IDisposable)?.Dispose();
+		}
+
 		return null;
 	}
 }
