@@ -18,6 +18,9 @@ public sealed class ImportTargetModel
 	/// <summary>True if this target is a directory node, false if it's a group node.</summary>
 	public bool IsDirectory { get; init; }
 
+	/// <summary>True for the special "New directory..." action item.</summary>
+	public bool IsNewDirectoryAction { get; init; }
+
 	/// <summary>Unique key for matching: directory path for directories, or "path|groupName" for groups.</summary>
 	public required string Key { get; init; }
 

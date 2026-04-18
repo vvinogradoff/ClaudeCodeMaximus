@@ -6,5 +6,6 @@ public enum AutocompleteMode
 	None,
 	Symbol,
 	File,
-	Path
+	Path,
+	Command
 }

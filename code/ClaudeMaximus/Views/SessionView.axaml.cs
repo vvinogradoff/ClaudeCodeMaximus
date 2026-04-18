@@ -56,6 +56,46 @@ public partial class SessionView : UserControl
 		// Ctrl+scroll changes font size; tunnel so we intercept before the scroller scrolls
 		MessageScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnScrollerWheel, RoutingStrategies.Tunnel);
 		InputBox.AddHandler(InputElement.PointerWheelChangedEvent, OnInputBoxWheel, RoutingStrategies.Tunnel);
+
+		// Click on autocomplete suggestion accepts it — find the ListBox inside the popup
+		AutocompletePopup.Opened += (_, _) =>
+		{
+			var popupContent = AutocompletePopup.Child;
+			if (popupContent is AutocompletePopup acPopup)
+			{
+				var listBox = acPopup.FindControl<ListBox>("SuggestionList");
+				if (listBox != null && listBox.Tag == null) // Tag prevents double-hooking
+				{
+					listBox.Tag = "hooked";
+					listBox.DoubleTapped += (_, _) =>
+					{
+						if (DataContext is SessionViewModel vm)
+							AcceptAutocompleteSuggestion(vm);
+					};
+					listBox.Tapped += (_, e) =>
+					{
+						// Only accept if they tapped an actual item (not whitespace)
+						if (e.Source is Avalonia.Visual v)
+						{
+							var item = v.FindAncestorOfType<ListBoxItem>();
+							if (item != null && DataContext is SessionViewModel vm)
+								AcceptAutocompleteSuggestion(vm);
+						}
+					};
+				}
+			}
+		};
+
+		// Dismiss autocomplete popup when the input loses focus (prevents topmost-over-other-apps)
+		InputBox.LostFocus += (_, _) =>
+		{
+			// Small delay — clicking a popup suggestion briefly loses input focus
+			Dispatcher.UIThread.Post(() =>
+			{
+				if (!InputBox.IsFocused && DataContext is SessionViewModel vm)
+					vm.AutocompleteVm.Dismiss();
+			}, DispatcherPriority.Background);
+		};
 	}
 
 	protected override void OnDataContextChanged(EventArgs e)
@@ -143,6 +183,13 @@ public partial class SessionView : UserControl
 			tb.Text       = text.Insert(pos, "\n");
 			tb.CaretIndex = pos + 1;
 		}
+	}
+
+	/// <summary>Called by the AutocompletePopup when a suggestion is clicked.</summary>
+	public void AcceptAutocompleteSuggestionFromPopup()
+	{
+		if (DataContext is SessionViewModel vm)
+			AcceptAutocompleteSuggestion(vm);
 	}
 
 	private void AcceptAutocompleteSuggestion(SessionViewModel vm)

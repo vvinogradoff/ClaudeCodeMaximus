@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         x:Class="ClaudeMaximus.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="ClaudeMaximus"
+        Title="Tessyn Desktop"
         Icon="avares://ClaudeMaximus/Assets/avalonia-logo.ico"
         SystemDecorations="BorderOnly"
         Width="1400" Height="900"
@@ -24,6 +24,16 @@
                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
                 <!-- Window control buttons — docked right -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="0">
+                    <!-- Tessyn daemon status indicator -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                IsVisible="{Binding IsDaemonStatusVisible}"
+                                ToolTip.Tip="{Binding DaemonStatusText}">
+                        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                 Fill="{Binding DaemonStatusColor, Converter={x:Static views:StringToBrushConverter.Instance}}"/>
+                        <TextBlock Text="{Binding DaemonStatusText}" FontSize="10"
+                                   Opacity="0.6" VerticalAlignment="Center"/>
+                    </StackPanel>
                     <TextBlock Text="&#x26A0;" VerticalAlignment="Center"
                                FontSize="13" Foreground="Orange" Margin="0,0,4,0"
                                IsVisible="{Binding IsRunningFromBuildOutput}"
@@ -97,17 +107,16 @@
                             VerticalAlignment="Center"/>
 
                     <!-- FR.11 Session Instruction Toolbar -->
-                    <!-- Auto-Commit toggle (FR.11.3) -->
-                    <ToggleButton IsChecked="{Binding IsAutoCommit}"
-                                  IsEnabled="{Binding HasActiveSession}"
-                                  Width="30" Height="26" Padding="0"
-                                  Background="Transparent" BorderThickness="1"
-                                  BorderBrush="Transparent"
-                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
-                                  ToolTip.Tip="Auto-Commit: commit changes after each prompt">
-                        <TextBlock Text="&#x2713;" FontSize="14"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </ToggleButton>
+                    <!-- Auto-Commit ternary toggle (FR.11.3) -->
+                    <Button Content="{Binding AutoCommitLabel}"
+                            Command="{Binding CycleAutoCommitCommand}"
+                            IsEnabled="{Binding HasActiveSession}"
+                            Height="26" Padding="6,0"
+                            Background="Transparent" BorderThickness="1"
+                            BorderBrush="Transparent"
+                            VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            FontSize="11"
+                            ToolTip.Tip="Cycle: commit &#x2192; no commit &#x2192; neutral"/>
                     <!-- New Branch toggle (FR.11.4) -->
                     <ToggleButton IsChecked="{Binding IsNewBranch}"
                                   IsEnabled="{Binding HasActiveSession}"
@@ -156,6 +165,22 @@
                 <!-- Empty space for drag -->
                 <Border Background="Transparent"/>
             </DockPanel>
+
+            <!-- Daemon missing warning banner -->
+            <Border DockPanel.Dock="Top" Padding="12,8" Background="#40F44336"
+                    IsVisible="{Binding IsDaemonMissing}" x:CompileBindings="False">
+                <TextBlock Text="{Binding DaemonMissingMessage}"
+                           FontSize="13" TextWrapping="Wrap" Foreground="#FFE0E0"
+                           HorizontalAlignment="Center"/>
+            </Border>
+
+            <!-- Auth warning banner -->
+            <Border DockPanel.Dock="Top" Padding="12,6" Background="#40FF9800"
+                    IsVisible="{Binding IsAuthWarningVisible}" x:CompileBindings="False">
+                <TextBlock Text="{Binding AuthWarningMessage}"
+                           FontSize="13" TextWrapping="Wrap" Foreground="#FFFFF3E0"
+                           HorizontalAlignment="Center"/>
+            </Border>
 
             <!-- Two-panel layout -->
             <Grid x:Name="MainContentGrid">
