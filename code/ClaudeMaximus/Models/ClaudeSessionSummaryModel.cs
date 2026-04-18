@@ -18,4 +18,10 @@ public sealed class ClaudeSessionSummaryModel
 
 	/// <summary>Claude-generated title, populated asynchronously. Null until generated.</summary>
 	public string? GeneratedTitle { get; set; }
+
+	/// <summary>Original project directory path where the JSONL lives. Set for cross-project daemon results.</summary>
+	public string? OriginalProjectPath { get; set; }
+
+	/// <summary>Project slug from the daemon (e.g. "-Users-aisling-...-tessyn").</summary>
+	public string? ProjectSlug { get; set; }
 }

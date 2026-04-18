@@ -21,7 +21,7 @@
                               ToolTip.Tip="Toggle markdown rendering"
                               Padding="8,3" FontSize="11"
                               VerticalAlignment="Center"/>
-                <TextBox DockPanel.Dock="Right"
+                <views:NativeTextBox DockPanel.Dock="Right"
                          x:Name="OutputSearchBox"
                          Watermark="Search output..."
                          Width="180" Margin="0,0,8,0"
@@ -85,22 +85,118 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="52"/>
                                     </Grid.ColumnDefinitions>
-                                    <Panel Grid.Column="0" Margin="0,0,8,0">
-                                        <views:MarkdownView
-                                            IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
-                                            Markdown="{Binding Content}"
-                                            HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
-                                            IsCurrentMatch="{Binding IsCurrentSearchMatch}"
-                                            FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
-                                        <views:HighlightTextBlock
-                                            IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
-                                            Text="{Binding Content}"
-                                            HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
-                                            IsCurrentMatch="{Binding IsCurrentSearchMatch}"
-                                            TextWrapping="Wrap"
-                                            FontFamily="Cascadia Code,Consolas,monospace"
-                                            FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
-                                    </Panel>
+                                    <StackPanel Grid.Column="0" Margin="0,0,8,0" Spacing="4">
+                                        <!-- Rich blocks (tool calls, thinking, text) -->
+                                        <ItemsControl ItemsSource="{Binding Blocks}"
+                                                      IsVisible="{Binding HasBlocks}"
+                                                      x:CompileBindings="False">
+                                            <ItemsControl.DataTemplates>
+                                                <!-- Text block: markdown or plain -->
+                                                <DataTemplate DataType="vm:TextBlockViewModel">
+                                                    <views:MarkdownView
+                                                        Markdown="{Binding Text}"
+                                                        FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
+                                                </DataTemplate>
+
+                                                <!-- Thinking block: dimmed, clickable to expand/collapse -->
+                                                <DataTemplate DataType="vm:ThinkingBlockViewModel">
+                                                    <Border Padding="8,4" Margin="0,2" CornerRadius="4"
+                                                            Background="#10FFFFFF" Opacity="0.6"
+                                                            Cursor="Hand"
+                                                            Tapped="OnThinkingBlockTapped">
+                                                        <StackPanel Spacing="2">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding IsExpanded, StringFormat='{}{0}'}"
+                                                                           FontSize="10" Opacity="0.5"
+                                                                           VerticalAlignment="Center"
+                                                                           Width="12">
+                                                                    <TextBlock.Text>
+                                                                        <Binding Path="IsExpanded">
+                                                                            <Binding.Converter>
+                                                                                <x:Static Member="views:BoolToArrowConverter.Instance"/>
+                                                                            </Binding.Converter>
+                                                                        </Binding>
+                                                                    </TextBlock.Text>
+                                                                </TextBlock>
+                                                                <TextBlock Text="Thinking…"
+                                                                           FontSize="11" FontWeight="SemiBold"
+                                                                           FontStyle="Italic" Opacity="0.7"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding Text}"
+                                                                       IsVisible="{Binding IsExpanded}"
+                                                                       TextWrapping="Wrap"
+                                                                       FontSize="12" FontStyle="Italic"
+                                                                       MaxHeight="300"
+                                                                       FontFamily="Cascadia Code,Consolas,monospace"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+
+                                                <!-- Tool use block: clickable header + expandable result -->
+                                                <DataTemplate DataType="vm:ToolUseBlockViewModel">
+                                                    <Border Padding="6,3" Margin="0,1" CornerRadius="3"
+                                                            Background="#15FFFFFF"
+                                                            Cursor="Hand"
+                                                            Tapped="OnToolBlockTapped">
+                                                        <StackPanel Spacing="2">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding StatusIcon}"
+                                                                           FontSize="12"
+                                                                           VerticalAlignment="Center"
+                                                                           Width="16"/>
+                                                                <TextBlock Text="{Binding ToolName}"
+                                                                           FontSize="12" FontWeight="SemiBold"
+                                                                           VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding InputSummary}"
+                                                                           FontSize="11" Opacity="0.6"
+                                                                           VerticalAlignment="Center"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           MaxWidth="600"/>
+                                                                <TextBlock Text="{Binding ResultSummary}"
+                                                                           FontSize="10" Opacity="0.4"
+                                                                           VerticalAlignment="Center"
+                                                                           Margin="4,0,0,0"/>
+                                                            </StackPanel>
+                                                            <!-- Expanded result content + copy button -->
+                                                            <Grid IsVisible="{Binding IsExpanded}" Margin="22,2,0,0">
+                                                                <TextBlock Text="{Binding ResultContent}"
+                                                                           TextWrapping="Wrap"
+                                                                           FontSize="11" Opacity="0.7"
+                                                                           MaxHeight="300"
+                                                                           FontFamily="Cascadia Code,Consolas,monospace"/>
+                                                                <Button Content="Copy"
+                                                                        HorizontalAlignment="Right"
+                                                                        VerticalAlignment="Top"
+                                                                        FontSize="10" Padding="6,2"
+                                                                        Opacity="0.5"
+                                                                        Click="OnCopyToolResultClick"
+                                                                        Tag="{Binding ResultContent}"
+                                                                        ToolTip.Tip="Copy output to clipboard"/>
+                                                            </Grid>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.DataTemplates>
+                                        </ItemsControl>
+
+                                        <!-- Fallback: flat Content for simple/historical messages -->
+                                        <Panel IsVisible="{Binding !HasBlocks}">
+                                            <views:MarkdownView
+                                                IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
+                                                Markdown="{Binding Content}"
+                                                HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                                IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                                FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
+                                            <views:HighlightTextBlock
+                                                IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
+                                                Text="{Binding Content}"
+                                                HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                                IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                                TextWrapping="Wrap"
+                                                FontFamily="Cascadia Code,Consolas,monospace"
+                                                FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
+                                        </Panel>
+                                    </StackPanel>
                                     <StackPanel Grid.Column="1"
                                                 VerticalAlignment="Bottom"
                                                 HorizontalAlignment="Left"
@@ -165,7 +261,7 @@
                     IsVisible="{Binding IsBusy}"
                     Margin="8,3,8,3"
                     Spacing="6">
-            <TextBlock Text="Claude is thinking…"
+            <TextBlock Text="{Binding ThinkingStatusText}"
                        FontStyle="Italic"
                        Opacity="0.5"
                        FontSize="13"/>
@@ -195,13 +291,13 @@
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,1,0,0">
             <Grid RowDefinitions="*,Auto">
-                <!-- Row 0: Input area + Send/Settings buttons -->
+                <!-- Row 0: Input area + Send button -->
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
                     <Panel Grid.Column="0">
-                        <TextBox x:Name="InputBox"
+                        <views:NativeTextBox x:Name="InputBox"
                                  Text="{Binding InputText}"
                                  AcceptsReturn="True"
-                                 Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file"
+                                 Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file  / command"
                                  TextWrapping="Wrap"
                                  FontFamily="Cascadia Code,Consolas,monospace"
                                  FontSize="{Binding InputFontSize}"
@@ -216,53 +312,70 @@
                             <views:AutocompletePopup DataContext="{Binding AutocompleteVm}"/>
                         </Popup>
                     </Panel>
-                    <Grid Grid.Column="1" RowDefinitions="*,*" Margin="8,0,0,0">
-                        <Button Grid.Row="0"
-                                Content="Send"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                VerticalAlignment="Stretch"
-                                VerticalContentAlignment="Center"
-                                Command="{Binding SendCommand}"/>
-                        <ToggleButton Grid.Row="1"
-                                      Content="&#x2699;"
-                                      FontSize="16"
-                                      HorizontalAlignment="Stretch"
-                                      HorizontalContentAlignment="Center"
-                                      VerticalAlignment="Stretch"
-                                      VerticalContentAlignment="Center"
-                                      IsChecked="{Binding IsCommandBarVisible}"
-                                      ToolTip.Tip="Toggle command bar"/>
-                    </Grid>
+                    <Button Grid.Column="1"
+                            Content="Send"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            VerticalAlignment="Stretch"
+                            VerticalContentAlignment="Center"
+                            Margin="8,0,0,0"
+                            MinWidth="60"
+                            Command="{Binding SendCommand}"/>
                 </Grid>
-                <!-- Row 1: Command bar (model selection) -->
+                <!-- Row 1: Session status bar — always visible -->
                 <Border Grid.Row="1"
-                        IsVisible="{Binding IsCommandBarVisible}"
-                        Padding="6,4"
+                        Padding="6,3"
                         Margin="0,4,0,0"
                         CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="Model:"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" Opacity="0.7"/>
-                        <ComboBox ItemsSource="{Binding AvailableModels}"
-                                  SelectedIndex="{Binding SelectedModelIndex}"
-                                  VerticalAlignment="Center"
-                                  FontSize="12"
-                                  MinWidth="100"
-                                  Padding="6,3"/>
-                        <TextBlock Text="Profile:"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" Opacity="0.7"
-                                   Margin="12,0,0,0"/>
-                        <ComboBox ItemsSource="{Binding AvailableProfiles}"
-                                  SelectedIndex="{Binding SelectedProfileIndex}"
-                                  VerticalAlignment="Center"
-                                  FontSize="12"
-                                  MinWidth="120"
-                                  Padding="6,3"/>
-                    </StackPanel>
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        x:CompileBindings="False">
+                    <DockPanel>
+                        <!-- Right side: context + cost -->
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="{Binding ContextUsageText}"
+                                       FontSize="11" Opacity="0.5" VerticalAlignment="Center"
+                                       ToolTip.Tip="Context window usage"/>
+                            <TextBlock Text="{Binding SessionCostText}"
+                                       FontSize="11" Opacity="0.5" VerticalAlignment="Center"
+                                       ToolTip.Tip="Session cost"/>
+                        </StackPanel>
+                        <!-- Left side: profile · model · effort -->
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <!-- Profile selector -->
+                            <ComboBox ItemsSource="{Binding DaemonProfileNames}"
+                                      SelectedIndex="{Binding SelectedDaemonProfileIndex}"
+                                      VerticalAlignment="Center"
+                                      FontSize="11"
+                                      MinWidth="100" MaxWidth="280"
+                                      Padding="4,2"
+                                      ToolTip.Tip="Account profile"/>
+                            <TextBlock Text="·" Opacity="0.3" VerticalAlignment="Center" Margin="4,0"/>
+                            <!-- Current model (bold, visible after first run.system event) -->
+                            <TextBlock Text="{Binding CurrentModelText}"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       ToolTip.Tip="Current model"
+                                       IsVisible="{Binding CurrentModelText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            <!-- Model override selector -->
+                            <ComboBox ItemsSource="{Binding AvailableModels}"
+                                      SelectedIndex="{Binding SelectedModelIndex}"
+                                      VerticalAlignment="Center"
+                                      FontSize="11"
+                                      MinWidth="70"
+                                      Padding="4,2"
+                                      ToolTip.Tip="Override model for next message"/>
+                            <TextBlock Text="·" Opacity="0.3" VerticalAlignment="Center" Margin="4,0"/>
+                            <!-- Effort selector -->
+                            <TextBlock Text="Effort:" FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding AvailableEfforts}"
+                                      SelectedIndex="{Binding SelectedEffortIndex}"
+                                      VerticalAlignment="Center"
+                                      FontSize="11"
+                                      MinWidth="70"
+                                      Padding="4,2"
+                                      ToolTip.Tip="Reasoning effort level"/>
+                        </StackPanel>
+                    </DockPanel>
                 </Border>
             </Grid>
         </Border>

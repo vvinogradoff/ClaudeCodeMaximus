@@ -56,6 +56,46 @@ public partial class SessionView : UserControl
 		// Ctrl+scroll changes font size; tunnel so we intercept before the scroller scrolls
 		MessageScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnScrollerWheel, RoutingStrategies.Tunnel);
 		InputBox.AddHandler(InputElement.PointerWheelChangedEvent, OnInputBoxWheel, RoutingStrategies.Tunnel);
+
+		// Click on autocomplete suggestion accepts it — find the ListBox inside the popup
+		AutocompletePopup.Opened += (_, _) =>
+		{
+			var popupContent = AutocompletePopup.Child;
+			if (popupContent is AutocompletePopup acPopup)
+			{
+				var listBox = acPopup.FindControl<ListBox>("SuggestionList");
+				if (listBox != null && listBox.Tag == null) // Tag prevents double-hooking
+				{
+					listBox.Tag = "hooked";
+					listBox.DoubleTapped += (_, _) =>
+					{
+						if (DataContext is SessionViewModel vm)
+							AcceptAutocompleteSuggestion(vm);
+					};
+					listBox.Tapped += (_, e) =>
+					{
+						// Only accept if they tapped an actual item (not whitespace)
+						if (e.Source is Avalonia.Visual v)
+						{
+							var item = v.FindAncestorOfType<ListBoxItem>();
+							if (item != null && DataContext is SessionViewModel vm)
+								AcceptAutocompleteSuggestion(vm);
+						}
+					};
+				}
+			}
+		};
+
+		// Dismiss autocomplete popup when the input loses focus (prevents topmost-over-other-apps)
+		InputBox.LostFocus += (_, _) =>
+		{
+			// Small delay — clicking a popup suggestion briefly loses input focus
+			Dispatcher.UIThread.Post(() =>
+			{
+				if (!InputBox.IsFocused && DataContext is SessionViewModel vm)
+					vm.AutocompleteVm.Dismiss();
+			}, DispatcherPriority.Background);
+		};
 	}
 
 	protected override void OnDataContextChanged(EventArgs e)
@@ -143,6 +183,13 @@ public partial class SessionView : UserControl
 			tb.Text       = text.Insert(pos, "\n");
 			tb.CaretIndex = pos + 1;
 		}
+	}
+
+	/// <summary>Called by the AutocompletePopup when a suggestion is clicked.</summary>
+	public void AcceptAutocompleteSuggestionFromPopup()
+	{
+		if (DataContext is SessionViewModel vm)
+			AcceptAutocompleteSuggestion(vm);
 	}
 
 	private void AcceptAutocompleteSuggestion(SessionViewModel vm)
@@ -388,4 +435,57 @@ public partial class SessionView : UserControl
 		}
 		return null;
 	}
+
+	// =====================================================================
+	// Tool / Thinking block expand/collapse
+	// =====================================================================
+
+	private void OnToolBlockTapped(object? sender, TappedEventArgs e)
+	{
+		if (sender is Avalonia.Controls.Control { DataContext: ToolUseBlockViewModel tu })
+		{
+			// Only expand if there's content to show
+			if (!string.IsNullOrEmpty(tu.ResultContent))
+				tu.IsExpanded = !tu.IsExpanded;
+		}
+	}
+
+	private async void OnCopyToolResultClick(object? sender, RoutedEventArgs e)
+	{
+		if (sender is Button { Tag: string content } && !string.IsNullOrEmpty(content))
+		{
+			var topLevel = TopLevel.GetTopLevel(this);
+			if (topLevel?.Clipboard != null)
+			{
+				await topLevel.Clipboard.SetTextAsync(content);
+				// Brief visual feedback
+				if (sender is Button btn)
+				{
+					var original = btn.Content;
+					btn.Content = "Copied!";
+					await System.Threading.Tasks.Task.Delay(1000);
+					btn.Content = original;
+				}
+			}
+		}
+		e.Handled = true; // prevent toggle
+	}
+
+	private void OnThinkingBlockTapped(object? sender, TappedEventArgs e)
+	{
+		if (sender is Avalonia.Controls.Control { DataContext: ThinkingBlockViewModel th })
+			th.IsExpanded = !th.IsExpanded;
+	}
+}
+
+/// <summary>Converts bool to ▼ (expanded) or ▶ (collapsed) arrow indicator.</summary>
+public sealed class BoolToArrowConverter : Avalonia.Data.Converters.IValueConverter
+{
+	public static readonly BoolToArrowConverter Instance = new();
+
+	public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+		=> value is true ? "▼" : "▶";
+
+	public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+		=> throw new NotSupportedException();
 }

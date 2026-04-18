@@ -45,6 +45,15 @@ public sealed class ImportSessionItemViewModel : ViewModelBase
 
 	public string MessageCountText => $"{MessageCount} messages";
 
+	/// <summary>Display label showing which project this session is from (for cross-project results).</summary>
+	public string? ProjectLabel { get; }
+
+	/// <summary>Whether this is a cross-project result (from a different project than the current scan source).</summary>
+	public bool IsCrossProject => !string.IsNullOrEmpty(Summary.OriginalProjectPath);
+
+	/// <summary>Original project path for resume. Null for same-project sessions.</summary>
+	public string? OriginalProjectPath => Summary.OriginalProjectPath;
+
 	public bool IsAlreadyImported { get; }
 
 	public bool IsEmpty => Summary.MessageCount == 0;
@@ -92,8 +101,14 @@ public sealed class ImportSessionItemViewModel : ViewModelBase
 		_displayTitle = summary.GeneratedTitle
 			?? TruncatePrompt(summary.FirstUserPrompt)
 			?? "(empty session)";
-		// Mark as pending if there's content to generate a title from and no title yet
 		_isTitlePending = summary.GeneratedTitle == null && summary.FirstUserPrompt != null;
+
+		// Derive project label from original path (show last directory component)
+		if (!string.IsNullOrEmpty(summary.OriginalProjectPath))
+		{
+			var trimmed = summary.OriginalProjectPath.TrimEnd('/', '\\');
+			ProjectLabel = System.IO.Path.GetFileName(trimmed);
+		}
 	}
 
 	/// <summary>

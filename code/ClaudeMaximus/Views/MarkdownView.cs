@@ -404,11 +404,48 @@ public sealed class MarkdownView : ContentControl
 				break;
 
 			case LinkInline link:
-				// Render link text without making it clickable for now
-				var linkSpan = new Span { TextDecorations = TextDecorations.Underline };
+				var url = link.Url;
+				// Extract plain text from the link's children
+				var linkText = new StringBuilder();
 				foreach (var child in link)
-					AppendInline(linkSpan.Inlines, child);
-				col.Add(linkSpan);
+				{
+					if (child is LiteralInline lit)
+						linkText.Append(lit.Content);
+				}
+				var linkLabel = linkText.Length > 0 ? linkText.ToString() : url ?? "link";
+
+				if (!string.IsNullOrEmpty(url))
+				{
+					var linkTb = new Avalonia.Controls.TextBlock
+					{
+						Text = linkLabel,
+						TextDecorations = TextDecorations.Underline,
+						Foreground = Avalonia.Media.Brushes.DodgerBlue,
+						Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
+						FontSize = FontSize,
+						VerticalAlignment = Avalonia.Layout.VerticalAlignment.Bottom,
+					};
+					Avalonia.Controls.ToolTip.SetTip(linkTb, url);
+					linkTb.PointerPressed += (_, e) =>
+					{
+						try
+						{
+							System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+								{ UseShellExecute = true });
+						}
+						catch { /* best effort */ }
+						e.Handled = true;
+					};
+					col.Add(new InlineUIContainer { Child = linkTb });
+				}
+				else
+				{
+					// No URL — just render underlined text
+					var linkSpan = new Span { TextDecorations = TextDecorations.Underline };
+					foreach (var child in link)
+						AppendInline(linkSpan.Inlines, child);
+					col.Add(linkSpan);
+				}
 				break;
 
 			case ContainerInline container:

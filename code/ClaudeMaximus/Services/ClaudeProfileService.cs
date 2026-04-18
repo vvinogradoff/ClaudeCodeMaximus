@@ -76,7 +76,24 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 		}
 		else
 		{
-			process = TryStartVisibleProcess(claudePath, "auth login", configDir);
+			// On macOS/Linux, UseShellExecute=true can't set env vars.
+			// Use UseShellExecute=false so we can pass CLAUDE_CONFIG_DIR.
+			// claude auth login opens the browser itself, so we don't need
+			// a visible terminal window.
+			var psi = new ProcessStartInfo(claudePath, "auth login")
+			{
+				UseShellExecute = false,
+				CreateNoWindow = true,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+			};
+			psi.Environment["CLAUDE_CONFIG_DIR"] = configDir;
+			try { process = Process.Start(psi); }
+			catch (System.ComponentModel.Win32Exception ex)
+			{
+				_log.Warning("Failed to start claude auth login: {Message}", ex.Message);
+				process = null;
+			}
 		}
 
 		if (process == null)
@@ -87,6 +104,12 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 
 		using (process)
 		{
+			// Drain output to prevent deadlocks when using RedirectStandardOutput
+			if (process.StartInfo.RedirectStandardOutput)
+			{
+				_ = process.StandardOutput.ReadToEndAsync();
+				_ = process.StandardError.ReadToEndAsync();
+			}
 			await process.WaitForExitAsync();
 			_log.Information("Auth login for configDir {ConfigDir} exited with code {ExitCode}", configDir, process.ExitCode);
 		}
