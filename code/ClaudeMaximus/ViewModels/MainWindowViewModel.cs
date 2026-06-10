@@ -18,14 +18,17 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
 	private readonly IClaudeSessionImportService _importService;
+	private readonly IClaudeModelService _modelService;
 	private readonly ISelfUpdateService _selfUpdate;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
 	private bool _isTreePanelVisible;
 	private bool _isDarkTheme;
+	private int _selectedLeftTabIndex;
 
 	public SessionTreeViewModel SessionTree { get; }
+	public RecentSessionsViewModel RecentSessions { get; }
 
 	public SessionViewModel? ActiveSession
 	{
@@ -51,6 +54,18 @@ public sealed class MainWindowViewModel : ViewModelBase
 		{
 			this.RaiseAndSetIfChanged(ref _isTreePanelVisible, value);
 			_appSettings.Settings.IsTreePanelCollapsed = !value;
+		}
+	}
+
+	/// <summary>Selected tab in the left panel (0=Tree, 1=Recent).</summary>
+	public int SelectedLeftTabIndex
+	{
+		get => _selectedLeftTabIndex;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _selectedLeftTabIndex, value);
+			if (value == 1)
+				RecentSessions.Refresh();
 		}
 	}
 
@@ -114,7 +129,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
 		IClaudeSessionImportService importService,
+		IClaudeModelService modelService,
 		ISelfUpdateService selfUpdate,
+		IDirectoryLabelService labelService,
 		SessionTreeViewModel sessionTree)
 	{
 		_appSettings      = appSettings;
@@ -124,8 +141,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_codeIndexService = codeIndexService;
 		_profileService   = profileService;
 		_importService    = importService;
+		_modelService     = modelService;
 		_selfUpdate       = selfUpdate;
 		SessionTree       = sessionTree;
+		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
 		_isTreePanelVisible = !appSettings.Settings.IsTreePanelCollapsed;
 		_isDarkTheme = appSettings.Settings.Theme == "Dark";
@@ -144,6 +163,14 @@ public sealed class MainWindowViewModel : ViewModelBase
 		this.WhenAnyValue(x => x.SessionTree.SelectedSession)
 			.Subscribe(OnSelectedSessionChanged);
 
+		// When a session is selected from the Recent tab, sync it to the tree
+		this.WhenAnyValue(x => x.RecentSessions.SelectedSession)
+			.Subscribe(node =>
+			{
+				if (node != null)
+					SessionTree.SelectedSession = node;
+			});
+
 	}
 
 	private void OnSelectedSessionChanged(SessionNodeViewModel? node)
@@ -156,13 +183,21 @@ public sealed class MainWindowViewModel : ViewModelBase
 			return;
 		}
 
+		// Pre-warm model list once (no-op after first call)
+		_ = _modelService.EnsureModelsLoadedAsync(_appSettings.Settings.ClaudePath);
+
 		if (!_sessionCache.TryGetValue(node.FileName, out var vm))
 		{
-			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService);
+			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService);
 			vm.LoadFromFile();
 			vm.ResolveDefaultProfileEmail();
 			_sessionCache[node.FileName] = vm;
 		}
+
+		// Compute and set location info for the session header
+		var (dirLabel, treePath) = SessionTree.GetSessionLocation(node);
+		vm.ProjectDirectory = dirLabel;
+		vm.TreePath = treePath;
 
 		ActiveSession = vm;
 		_appSettings.Settings.ActiveSessionFileName = node.FileName;

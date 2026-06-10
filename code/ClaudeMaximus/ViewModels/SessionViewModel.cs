@@ -28,6 +28,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
 	private readonly IClaudeSessionImportService _importService;
+	private readonly IClaudeModelService _modelService;
 	private readonly DirectoryNodeModel? _directoryModel;
 	private string _name;
 	private string _inputText = string.Empty;
@@ -47,6 +48,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private DispatcherTimer? _draftDebounceTimer;
 	private bool _isCommandBarVisible;
 	private int _selectedModelIndex;
+	private bool _isUpdatingModels;
+	private List<ClaudeModelInfo> _modelInfos = [];
 	private FileSystemWatcher? _fileWatcher;
 	private FileSystemWatcher? _jsonlWatcher;
 	private Timer? _fileChangeDebounceTimer;
@@ -55,11 +58,46 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private int _selectedProfileIndex;
 	private int _selectedEffortIndex;
 	private bool _isProfileAuthInProgress;
+	private string _projectDirectory = string.Empty;
+	private string _treePath = string.Empty;
 
 	public string Name
 	{
 		get => _name;
 		private set => this.RaiseAndSetIfChanged(ref _name, value);
+	}
+
+	/// <summary>Display label of the project directory this session belongs to.</summary>
+	public string ProjectDirectory
+	{
+		get => _projectDirectory;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _projectDirectory, value);
+			this.RaisePropertyChanged(nameof(LocationDisplay));
+		}
+	}
+
+	/// <summary>Group path within the tree (e.g. "GroupA / SubGroup"), empty if at directory root.</summary>
+	public string TreePath
+	{
+		get => _treePath;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _treePath, value);
+			this.RaisePropertyChanged(nameof(LocationDisplay));
+		}
+	}
+
+	/// <summary>Combined location line: directory + tree path for display in session header.</summary>
+	public string LocationDisplay
+	{
+		get
+		{
+			if (string.IsNullOrEmpty(_treePath))
+				return _projectDirectory;
+			return $"{_projectDirectory} / {_treePath}";
+		}
 	}
 
 	public string InputText
@@ -247,18 +285,16 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
-	/// <summary>Display names for the model selector.</summary>
-	public static string[] AvailableModels { get; } = ["Default", "Opus", "Sonnet", "Haiku"];
+	/// <summary>Display names for the model selector (populated dynamically from IClaudeModelService).</summary>
+	public ObservableCollection<string> AvailableModels { get; } = [];
 
-	/// <summary>Model aliases passed to --model flag. Empty string means no flag. CLI resolves aliases to latest version.</summary>
-	private static readonly string[] ModelIds = ["", "opus", "sonnet", "haiku"];
-
-	/// <summary>Selected model index (0=Default, 1=Opus, 2=Sonnet, 3=Haiku). Persisted per directory (FR.12.4).</summary>
+	/// <summary>Selected model index (0=Default, 1..N=model entries). Persisted per directory (FR.12.4).</summary>
 	public int SelectedModelIndex
 	{
 		get => _selectedModelIndex;
 		set
 		{
+			if (_isUpdatingModels) return;
 			this.RaiseAndSetIfChanged(ref _selectedModelIndex, value);
 			if (_directoryModel != null)
 				_directoryModel.SelectedModelIndex = value;
@@ -267,11 +303,17 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
-	/// <summary>Returns the model ID for --model flag, or null if Default is selected.</summary>
-	public string? SelectedModelId =>
-		_selectedModelIndex > 0 && _selectedModelIndex < ModelIds.Length
-			? ModelIds[_selectedModelIndex]
-			: null;
+	/// <summary>Returns the CLI alias (or full ID) for --model, or null if Default is selected.</summary>
+	public string? SelectedModelId
+	{
+		get
+		{
+			if (_selectedModelIndex <= 0 || _selectedModelIndex > _modelInfos.Count)
+				return null;
+			var info = _modelInfos[_selectedModelIndex - 1];
+			return !string.IsNullOrEmpty(info.Alias) ? info.Alias : info.Id;
+		}
+	}
 
 	/// <summary>Display names for the effort selector.</summary>
 	public static string[] AvailableEfforts { get; } = ["Default", "Max", "High", "Medium", "Low"];
@@ -363,7 +405,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
-		IClaudeSessionImportService importService)
+		IClaudeSessionImportService importService,
+		IClaudeModelService modelService)
 	{
 		_node             = node;
 		_fileService      = fileService;
@@ -373,15 +416,21 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_codeIndexService = codeIndexService;
 		_profileService   = profileService;
 		_importService    = importService;
+		_modelService     = modelService;
 		_name             = node.Name;
 
 		// Find the parent DirectoryNodeModel for per-directory settings (FR.12.4, FR.12.8, FR.12.11)
 		_directoryModel = appSettings.Settings.Tree
 			.FirstOrDefault(d => string.Equals(d.Path, node.Model.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
 
+		// Populate model list from cache (instant; may update later via ModelsUpdated event)
+		_modelInfos = new List<ClaudeModelInfo>(modelService.GetCachedModels());
+		RebuildModelList();
 		_selectedModelIndex = Math.Clamp(
 			_directoryModel?.SelectedModelIndex ?? appSettings.Settings.SelectedModelIndex,
-			0, ModelIds.Length - 1);
+			0, _modelInfos.Count);
+
+		modelService.ModelsUpdated += OnModelsUpdated;
 		_selectedEffortIndex = Math.Clamp(
 			_directoryModel?.SelectedEffortIndex ?? 0,
 			0, EffortValues.Length - 1);
@@ -439,6 +488,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	public void Dispose()
 	{
+		_modelService.ModelsUpdated -= OnModelsUpdated;
 		_sendCts?.Dispose();
 		_fileWatcher?.Dispose();
 		_jsonlWatcher?.Dispose();
@@ -1270,6 +1320,44 @@ PROJECT GLOSSARY:
 		return sb.ToString();
 	}
 
+	/// <summary>Rebuilds the AvailableModels collection from _modelInfos. Index 0 is always "Default".</summary>
+	private void RebuildModelList()
+	{
+		AvailableModels.Clear();
+		AvailableModels.Add("Default");
+		foreach (var m in _modelInfos)
+			AvailableModels.Add(m.DisplayName);
+	}
+
+	/// <summary>Called when the model service refreshes its list from the CLI.</summary>
+	private void OnModelsUpdated(object? sender, EventArgs e)
+	{
+		var newModels = _modelService.GetCachedModels();
+
+		// Save alias of currently selected model so we can re-select it after the list rebuilds
+		var currentAlias = _selectedModelIndex > 0 && _selectedModelIndex <= _modelInfos.Count
+			? _modelInfos[_selectedModelIndex - 1].Alias
+			: null;
+
+		_isUpdatingModels = true;
+		_modelInfos = new List<ClaudeModelInfo>(newModels);
+		RebuildModelList();
+
+		// Restore selection by alias; fall back to Default if the alias is no longer present
+		if (currentAlias != null)
+		{
+			var idx = _modelInfos.FindIndex(m => m.Alias == currentAlias);
+			_selectedModelIndex = idx >= 0 ? idx + 1 : 0;
+		}
+		else
+		{
+			_selectedModelIndex = Math.Clamp(_selectedModelIndex, 0, _modelInfos.Count);
+		}
+
+		_isUpdatingModels = false;
+		this.RaisePropertyChanged(nameof(SelectedModelIndex));
+	}
+
 	/// <summary>Rebuilds the AvailableProfiles list from appsettings. Always ends with "New...".</summary>
 	private void RebuildProfileList()
 	{
@@ -1403,23 +1491,20 @@ PROJECT GLOSSARY:
 			{
 				var (sessionId, path) = allPaths[i];
 
-				// Add a visual separator between JSONL sessions
-				if (i > 0 || allPaths.Count > 1)
+				// Add a visual separator header for each JSONL file
+				var fileName = System.IO.Path.GetFileName(path);
+				var fileInfo = new System.IO.FileInfo(path);
+				var startedAt = fileInfo.CreationTime.ToString("yyyy-MM-dd HH:mm");
+				var status = i < allPaths.Count - 1 ? "detached" : "current";
+				var separator = "═══════════════════════════════════════════════════════════════";
+				Messages.Add(new MessageEntryViewModel
 				{
-					var fileInfo = new System.IO.FileInfo(path);
-					var startedAt = fileInfo.CreationTime.ToString("yyyy-MM-dd HH:mm");
-					var label = i < allPaths.Count - 1
-						? $"── Session started {startedAt} (cleared) ──"
-						: $"── Session started {startedAt} (current) ──";
-					Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleSystem,
-						Content   = label,
-						Timestamp = fileInfo.CreationTimeUtc,
-					});
-				}
+					Role      = Constants.SessionFile.RoleSystem,
+					Content   = $"{separator}\n{fileName}  ({status}, started {startedAt})\n{separator}",
+					Timestamp = fileInfo.CreationTimeUtc,
+				});
 
-				var entries = _importService.ParseJsonlSession(path);
+				var entries = _importService.ParseJsonlSessionRaw(path);
 				foreach (var entry in entries)
 				{
 					if (entry.Role != Constants.SessionFile.RoleCompaction

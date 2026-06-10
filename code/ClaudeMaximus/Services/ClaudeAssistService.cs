@@ -17,11 +17,13 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 
 	private readonly IClaudeProcessManager _processManager;
 	private readonly IAppSettingsService _appSettings;
+	private readonly IClaudeModelService _modelService;
 
-	public ClaudeAssistService(IClaudeProcessManager processManager, IAppSettingsService appSettings)
+	public ClaudeAssistService(IClaudeProcessManager processManager, IAppSettingsService appSettings, IClaudeModelService modelService)
 	{
 		_processManager = processManager;
-		_appSettings = appSettings;
+		_appSettings    = appSettings;
+		_modelService   = modelService;
 	}
 
 	public async Task<Dictionary<string, string>> GenerateTitlesAsync(
@@ -148,13 +150,18 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 	/// </summary>
 	private List<string?> GetModelFallbackOrder()
 	{
-		return GetModelFallbackOrderFromIndex(_appSettings.Settings.SelectedModelIndex);
+		return GetModelFallbackOrderFromIndex(
+			_appSettings.Settings.SelectedModelIndex,
+			_modelService.GetCachedModels());
 	}
 
 	/// <summary>
-	/// Returns ordered model candidates. Testable static method.
+	/// Returns ordered model candidates. When <paramref name="availableModels"/> is provided
+	/// the alias is resolved dynamically; otherwise falls back to the legacy hardcoded mapping.
 	/// </summary>
-	public static List<string?> GetModelFallbackOrderFromIndex(int selectedModelIndex)
+	public static List<string?> GetModelFallbackOrderFromIndex(
+		int selectedModelIndex,
+		IReadOnlyList<ClaudeMaximus.Models.ClaudeModelInfo>? availableModels = null)
 	{
 		var models = new List<string?>();
 
@@ -162,13 +169,23 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 		models.Add(Constants.ClaudeAssist.PreferredModel);
 
 		// 2. User's selected model (if different from haiku and non-default)
-		var userModel = selectedModelIndex switch
+		string? userModel;
+		if (availableModels != null && selectedModelIndex > 0 && selectedModelIndex <= availableModels.Count)
 		{
-			1 => "opus",
-			2 => "sonnet",
-			3 => "haiku", // same as preferred, skip
-			_ => null,    // default: no model flag
-		};
+			var info = availableModels[selectedModelIndex - 1];
+			userModel = !string.IsNullOrEmpty(info.Alias) ? info.Alias : info.Id;
+		}
+		else
+		{
+			// Legacy fallback for callers without the model list (e.g., unit tests)
+			userModel = selectedModelIndex switch
+			{
+				1 => "opus",
+				2 => "sonnet",
+				3 => "haiku",
+				_ => null,
+			};
+		}
 
 		if (userModel != null && userModel != Constants.ClaudeAssist.PreferredModel)
 			models.Add(userModel);
