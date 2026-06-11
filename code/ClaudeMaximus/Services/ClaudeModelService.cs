@@ -44,20 +44,20 @@ public sealed class ClaudeModelService : IClaudeModelService
 
     public IReadOnlyList<ClaudeModelInfo> GetCachedModels() => _cachedModels;
 
-    public Task EnsureModelsLoadedAsync(string claudePath)
+    public Task EnsureModelsLoadedAsync(string claudePath, string? profileConfigDir = null)
     {
         lock (this)
         {
-            _fetchTask ??= FetchAndCacheAsync(claudePath);
+            _fetchTask ??= FetchAndCacheAsync(claudePath, profileConfigDir);
         }
         return _fetchTask;
     }
 
-    private async Task FetchAndCacheAsync(string claudePath)
+    private async Task FetchAndCacheAsync(string claudePath, string? profileConfigDir)
     {
         try
         {
-            var models = await FetchFromCliAsync(claudePath);
+            var models = await FetchFromCliAsync(claudePath, profileConfigDir);
             if (models != null && models.Count > 0)
             {
                 _cachedModels = models;
@@ -76,7 +76,7 @@ public sealed class ClaudeModelService : IClaudeModelService
         }
     }
 
-    private async Task<IReadOnlyList<ClaudeModelInfo>?> FetchFromCliAsync(string claudePath)
+    private async Task<IReadOnlyList<ClaudeModelInfo>?> FetchFromCliAsync(string claudePath, string? profileConfigDir)
     {
         const string prompt = """
 Output ONLY a valid JSON array. No other text before or after.
@@ -87,7 +87,7 @@ Example: [{"id":"claude-opus-4-7","alias":"opus","displayName":"Opus 4.7"},{"id"
 """;
 
         var rawOutput = await _processManager.RunPrintModeAsync(
-            claudePath, prompt, model: "haiku", timeoutMs: 30_000);
+            claudePath, prompt, model: "haiku", profileConfigDir: profileConfigDir, timeoutMs: 30_000);
 
         return string.IsNullOrEmpty(rawOutput) ? null : ParseModelsFromOutput(rawOutput);
     }

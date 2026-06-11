@@ -39,6 +39,7 @@ public interface IClaudeProcessManager
 		string claudePath,
 		string prompt,
 		string? model = null,
+		string? profileConfigDir = null,
 		int timeoutMs = 60000,
 		CancellationToken cancellationToken = default);
 

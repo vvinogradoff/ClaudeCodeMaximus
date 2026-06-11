@@ -19,7 +19,11 @@ public interface IClaudeModelService
     /// Raises <see cref="ModelsUpdated"/> on the UI thread when the list changes.
     /// Safe to call multiple times — subsequent calls are no-ops while a fetch is in progress.
     /// </summary>
-    Task EnsureModelsLoadedAsync(string claudePath);
+    /// <param name="claudePath">Path to the claude executable.</param>
+    /// <param name="profileConfigDir">
+    /// CLAUDE_CONFIG_DIR for the profile to authenticate as, or null for the default profile.
+    /// </param>
+    Task EnsureModelsLoadedAsync(string claudePath, string? profileConfigDir = null);
 
     /// <summary>Raised on the UI thread after the model list has been refreshed from the CLI.</summary>
     event EventHandler? ModelsUpdated;

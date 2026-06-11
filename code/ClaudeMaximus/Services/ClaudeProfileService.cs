@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using ClaudeMaximus.Models;
 using Serilog;
 
 namespace ClaudeMaximus.Services;
@@ -169,5 +171,14 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 			_log.Warning("Failed to start visible {FileName}: {Message}", fileName, ex.Message);
 			return null;
 		}
+	}
+
+	public string? GetConfigDirForProfile(int profileIndex, IReadOnlyList<ClaudeProfileModel> profiles)
+	{
+		var profileListIndex = profileIndex - 1;
+		if (profileListIndex < 0 || profileListIndex >= profiles.Count)
+			return null;
+
+		return Path.Combine(ProfilesRootDirectory, profiles[profileListIndex].ProfileId);
 	}
 }

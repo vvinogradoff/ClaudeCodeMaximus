@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using ClaudeMaximus.Models;
 
 namespace ClaudeMaximus.Services;
 
@@ -29,4 +31,11 @@ public interface IClaudeProfileService
 	/// Waits for the process to exit.
 	/// </summary>
 	Task LaunchAuthLoginAsync(string claudePath, string configDir);
+
+	/// <summary>
+	/// Resolves the CLAUDE_CONFIG_DIR for a profile selector index: 0 (or out of range)
+	/// means the Default profile (returns null, no env var override); 1..N maps to
+	/// <paramref name="profiles"/>[index-1].
+	/// </summary>
+	string? GetConfigDirForProfile(int profileIndex, IReadOnlyList<ClaudeProfileModel> profiles);
 }

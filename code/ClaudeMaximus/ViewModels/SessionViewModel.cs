@@ -367,19 +367,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	}
 
 	/// <summary>Returns the CLAUDE_CONFIG_DIR path for the selected profile, or null if Default is selected.</summary>
-	public string? SelectedProfileConfigDir
-	{
-		get
-		{
-			if (_selectedProfileIndex <= 0)
-				return null;
-			var profiles = _appSettings.Settings.Profiles;
-			var profileListIndex = _selectedProfileIndex - 1;
-			if (profileListIndex < 0 || profileListIndex >= profiles.Count)
-				return null;
-			return System.IO.Path.Combine(_profileService.ProfilesRootDirectory, profiles[profileListIndex].ProfileId);
-		}
-	}
+	public string? SelectedProfileConfigDir =>
+		_profileService.GetConfigDirForProfile(_selectedProfileIndex, _appSettings.Settings.Profiles);
 
 	/// <summary>Persisted vertical scroll offset for the message area.</summary>
 	public double ScrollOffset

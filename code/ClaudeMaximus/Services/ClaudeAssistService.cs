@@ -18,13 +18,23 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 	private readonly IClaudeProcessManager _processManager;
 	private readonly IAppSettingsService _appSettings;
 	private readonly IClaudeModelService _modelService;
+	private readonly IClaudeProfileService _profileService;
 
-	public ClaudeAssistService(IClaudeProcessManager processManager, IAppSettingsService appSettings, IClaudeModelService modelService)
+	public ClaudeAssistService(
+		IClaudeProcessManager processManager,
+		IAppSettingsService appSettings,
+		IClaudeModelService modelService,
+		IClaudeProfileService profileService)
 	{
 		_processManager = processManager;
 		_appSettings    = appSettings;
 		_modelService   = modelService;
+		_profileService = profileService;
 	}
+
+	/// <summary>CLAUDE_CONFIG_DIR for the user's currently selected profile, or null for the default profile.</summary>
+	private string? SelectedProfileConfigDir =>
+		_profileService.GetConfigDirForProfile(_appSettings.Settings.SelectedProfileIndex, _appSettings.Settings.Profiles);
 
 	public async Task<Dictionary<string, string>> GenerateTitlesAsync(
 		List<ClaudeSessionSummaryModel> summaries,
@@ -62,8 +72,9 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 
 					var rawOutput = await _processManager.RunPrintModeAsync(
 						claudePath, prompt, model,
-						Constants.ClaudeAssist.TimeoutMs,
-						cancellationToken);
+						profileConfigDir: SelectedProfileConfigDir,
+						timeoutMs: Constants.ClaudeAssist.TimeoutMs,
+						cancellationToken: cancellationToken);
 
 					if (rawOutput == null)
 					{
@@ -120,8 +131,9 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 
 				var rawOutput = await _processManager.RunPrintModeAsync(
 					claudePath, prompt, model,
-					Constants.ClaudeAssist.TimeoutMs,
-					cancellationToken);
+					profileConfigDir: SelectedProfileConfigDir,
+					timeoutMs: Constants.ClaudeAssist.TimeoutMs,
+					cancellationToken: cancellationToken);
 
 				if (rawOutput == null)
 				{

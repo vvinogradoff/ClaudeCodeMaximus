@@ -149,20 +149,22 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		string claudePath,
 		string prompt,
 		string? model = null,
+		string? profileConfigDir = null,
 		int timeoutMs = 60000,
 		CancellationToken cancellationToken = default)
 	{
 		var args = BuildPrintModeArguments(model);
-		_log.Debug("RunPrintModeAsync: spawning claude. Path={ClaudePath} Args={Args}", claudePath, args);
+		_log.Debug("RunPrintModeAsync: spawning claude. Path={ClaudePath} Args={Args} ProfileConfigDir={ProfileConfigDir}",
+			claudePath, args, profileConfigDir);
 
-		Process? process = TryStartProcess(claudePath, args, Directory.GetCurrentDirectory());
+		Process? process = TryStartProcess(claudePath, args, Directory.GetCurrentDirectory(), profileConfigDir);
 
 		// Windows .cmd retry
 		if (process == null && OperatingSystem.IsWindows())
 		{
 			var cmdArgs = $"/c \"{claudePath}\" {args}";
 			_log.Debug("RunPrintModeAsync: retrying via cmd.exe /c. Args={CmdArgs}", cmdArgs);
-			process = TryStartProcess("cmd.exe", cmdArgs, Directory.GetCurrentDirectory());
+			process = TryStartProcess("cmd.exe", cmdArgs, Directory.GetCurrentDirectory(), profileConfigDir);
 		}
 
 		if (process == null)

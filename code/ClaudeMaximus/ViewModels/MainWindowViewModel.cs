@@ -184,7 +184,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 		}
 
 		// Pre-warm model list once (no-op after first call)
-		_ = _modelService.EnsureModelsLoadedAsync(_appSettings.Settings.ClaudePath);
+		var profileConfigDir = _profileService.GetConfigDirForProfile(
+			_appSettings.Settings.SelectedProfileIndex, _appSettings.Settings.Profiles);
+		_ = _modelService.EnsureModelsLoadedAsync(_appSettings.Settings.ClaudePath, profileConfigDir);
 
 		if (!_sessionCache.TryGetValue(node.FileName, out var vm))
 		{
