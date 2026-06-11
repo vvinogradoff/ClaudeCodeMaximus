@@ -151,6 +151,14 @@ Example: [{"id":"claude-opus-4-7","alias":"opus","displayName":"Opus 4.7"},{"id"
                 root.TryGetProperty("result", out var resultEl) &&
                 resultEl.ValueKind == JsonValueKind.String)
             {
+                // Don't try to parse error responses as model lists
+                if (root.TryGetProperty("is_error", out var isErrEl) && isErrEl.GetBoolean())
+                {
+                    var errMsg = resultEl.GetString() ?? "";
+                    _log.Debug("ExtractJsonArray: CLI returned is_error=true: {Msg}",
+                        errMsg.Length > 200 ? errMsg[..200] : errMsg);
+                    return null;
+                }
                 return ExtractArrayFromText(resultEl.GetString());
             }
 

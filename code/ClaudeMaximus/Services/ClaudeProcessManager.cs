@@ -86,6 +86,16 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 				await process.StandardInput.WriteLineAsync(userMessage);
 				process.StandardInput.Close();
 
+				// On Windows, StreamReader.ReadLineAsync(CancellationToken) may not unblock when the
+				// token is cancelled while a blocking pipe-read is in progress. Register a callback
+				// that kills the process immediately so the pipe closes and the read returns.
+				using var killOnCancel = cancellationToken.Register(() =>
+				{
+					_log.Information("Cancellation requested - killing claude process PID={Pid}", process.Id);
+					try { process.Kill(entireProcessTree: true); }
+					catch (Exception ex) { _log.Warning(ex, "Failed to kill process on cancellation PID={Pid}", process.Id); }
+				});
+
 				string? line;
 				while ((line = await process.StandardOutput.ReadLineAsync(cancellationToken)) != null)
 				{
@@ -98,6 +108,9 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 					if (evt != null)
 						onEvent(evt);
 				}
+
+				// If the loop exited because the process was killed on cancellation, propagate.
+				cancellationToken.ThrowIfCancellationRequested();
 
 				await process.WaitForExitAsync(cancellationToken);
 				_log.Debug("Claude process exited. Code={ExitCode}", process.ExitCode);
@@ -120,9 +133,9 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			}
 			catch (OperationCanceledException)
 			{
-				_log.Information("Cancellation requested — killing claude process PID={Pid}", process.Id);
+				// Process may already be dead (killed by killOnCancel above), kill is best-effort.
 				try { process.Kill(entireProcessTree: true); }
-				catch (Exception ex) { _log.Warning(ex, "Failed to kill cancelled process PID={Pid}", process.Id); }
+				catch { /* already dead */ }
 				throw;
 			}
 			finally
@@ -181,8 +194,9 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 
 				if (process.ExitCode != 0)
 				{
-					_log.Warning("RunPrintModeAsync: exit code {ExitCode}. stderr={Stderr}",
-						process.ExitCode, stderr.Trim());
+					var stdoutSnippet = stdout.Length > 500 ? stdout[..500] + "…" : stdout;
+					_log.Warning("RunPrintModeAsync: exit code {ExitCode}. stderr={Stderr}. stdout={Stdout}",
+						process.ExitCode, stderr.Trim(), stdoutSnippet.Trim());
 					return null;
 				}
 
