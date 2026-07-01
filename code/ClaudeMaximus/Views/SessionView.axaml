@@ -9,7 +9,7 @@
              x:Name="Root"
              x:DataType="vm:SessionViewModel">
 
-    <Grid RowDefinitions="Auto,*,Auto,5,150">
+    <Grid RowDefinitions="Auto,*,5,120">
 
         <Border Grid.Row="0" Padding="12,6"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
@@ -35,13 +35,19 @@
                          Width="180" Margin="0,0,8,0"
                          Padding="6,3" FontSize="12"
                          VerticalAlignment="Center"/>
-                <TextBlock Text="{Binding Name}"
-                           FontSize="16" FontWeight="SemiBold"
-                           VerticalAlignment="Center"/>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding LocationDisplay}"
+                               FontSize="11" Opacity="0.5"
+                               IsVisible="{Binding LocationDisplay, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding Name}"
+                               FontSize="16" FontWeight="SemiBold"/>
+                </StackPanel>
             </DockPanel>
         </Border>
 
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" RowDefinitions="*,Auto">
+            <Grid Grid.Row="0">
             <ScrollViewer x:Name="MessageScroller"
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto">
@@ -167,45 +173,46 @@
             </Border>
         </Grid>
 
-        <!-- Row 2: Thinking indicator (local or external) -->
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    IsVisible="{Binding IsBusy}"
-                    Margin="8,3,8,3"
-                    Spacing="6">
-            <TextBlock Text="Claude is thinking…"
-                       FontStyle="Italic"
-                       Opacity="0.5"
-                       FontSize="13"/>
-            <TextBlock Text="{Binding ThinkingDuration}"
-                       FontStyle="Italic"
-                       Opacity="0.5"
-                       FontSize="13"
-                       Foreground="#888888"/>
-        </StackPanel>
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    IsVisible="{Binding IsExternallyActive}"
-                    Margin="8,3,8,3"
-                    Spacing="6"
-                    x:CompileBindings="False">
-            <Ellipse Width="8" Height="8" Fill="Orange" VerticalAlignment="Center"/>
-            <TextBlock Text="Active in external terminal…"
-                       FontStyle="Italic"
-                       Opacity="0.5"
-                       FontSize="13"/>
-        </StackPanel>
+            <!-- Thinking indicator (inside Row 1, below messages) -->
+            <StackPanel Grid.Row="1"
+                        Orientation="Horizontal"
+                        IsVisible="{Binding IsBusy}"
+                        Margin="8,3,8,3"
+                        Spacing="6">
+                <TextBlock Text="Claude is thinking…"
+                           FontStyle="Italic"
+                           Opacity="0.5"
+                           FontSize="13"/>
+                <TextBlock Text="{Binding ThinkingDuration}"
+                           FontStyle="Italic"
+                           Opacity="0.5"
+                           FontSize="13"
+                           Foreground="#888888"/>
+            </StackPanel>
+            <StackPanel Grid.Row="1"
+                        Orientation="Horizontal"
+                        IsVisible="{Binding IsExternallyActive}"
+                        Margin="8,3,8,3"
+                        Spacing="6"
+                        x:CompileBindings="False">
+                <Ellipse Width="8" Height="8" Fill="Orange" VerticalAlignment="Center"/>
+                <TextBlock Text="Active in external terminal…"
+                           FontStyle="Italic"
+                           Opacity="0.5"
+                           FontSize="13"/>
+            </StackPanel>
+        </Grid>
 
-        <GridSplitter Grid.Row="3" ResizeDirection="Rows"
+        <GridSplitter Grid.Row="2" ResizeDirection="Rows"
                       Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
 
-        <Border Grid.Row="4" Padding="8"
+        <Border Grid.Row="3" Padding="8" MinHeight="120"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,1,0,0">
-            <Grid RowDefinitions="*,Auto">
-                <!-- Row 0: Input area + Send/Settings buttons -->
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-                    <Panel Grid.Column="0">
+            <Grid ColumnDefinitions="*,Auto">
+                <!-- Left column: Input area + Command bar -->
+                <Grid Grid.Column="0" RowDefinitions="*,Auto">
+                    <Panel Grid.Row="0">
                         <TextBox x:Name="InputBox"
                                  Text="{Binding InputText}"
                                  AcceptsReturn="True"
@@ -224,74 +231,75 @@
                             <views:AutocompletePopup DataContext="{Binding AutocompleteVm}"/>
                         </Popup>
                     </Panel>
-                    <Grid Grid.Column="1" RowDefinitions="*,Auto,*" Margin="8,0,0,0">
-                        <Button Grid.Row="0"
-                                Content="Send"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                VerticalAlignment="Stretch"
-                                VerticalContentAlignment="Center"
-                                Command="{Binding SendCommand}"/>
-                        <Button Grid.Row="1"
-                                Content="&#x25A0;"
-                                FontSize="12"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                VerticalAlignment="Stretch"
-                                VerticalContentAlignment="Center"
-                                IsVisible="{Binding IsBusy}"
-                                Command="{Binding StopCommand}"
-                                ToolTip.Tip="Stop: interrupt Claude"/>
-                        <ToggleButton Grid.Row="2"
-                                      Content="&#x2699;"
-                                      FontSize="16"
-                                      HorizontalAlignment="Stretch"
-                                      HorizontalContentAlignment="Center"
-                                      VerticalAlignment="Stretch"
-                                      VerticalContentAlignment="Center"
-                                      IsChecked="{Binding IsCommandBarVisible}"
-                                      ToolTip.Tip="Toggle command bar"/>
-                    </Grid>
+                    <!-- Command bar (model selection) — below input, left of buttons -->
+                    <Border Grid.Row="1"
+                            IsVisible="{Binding IsCommandBarVisible}"
+                            Padding="6,4"
+                            Margin="0,4,0,0"
+                            CornerRadius="4"
+                            Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Model:"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" Opacity="0.7"/>
+                            <ComboBox ItemsSource="{Binding AvailableModels}"
+                                      SelectedIndex="{Binding SelectedModelIndex}"
+                                      VerticalAlignment="Center"
+                                      FontSize="12"
+                                      MinWidth="100"
+                                      Padding="6,3"/>
+                            <TextBlock Text="Profile:"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" Opacity="0.7"
+                                       Margin="12,0,0,0"/>
+                            <ComboBox ItemsSource="{Binding AvailableProfiles}"
+                                      SelectedIndex="{Binding SelectedProfileIndex}"
+                                      VerticalAlignment="Center"
+                                      FontSize="12"
+                                      MinWidth="120"
+                                      Padding="6,3"/>
+                            <TextBlock Text="Effort:"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" Opacity="0.7"
+                                       Margin="12,0,0,0"/>
+                            <ComboBox ItemsSource="{Binding AvailableEfforts}"
+                                      SelectedIndex="{Binding SelectedEffortIndex}"
+                                      VerticalAlignment="Center"
+                                      FontSize="12"
+                                      MinWidth="90"
+                                      Padding="6,3"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
-                <!-- Row 1: Command bar (model selection) -->
-                <Border Grid.Row="1"
-                        IsVisible="{Binding IsCommandBarVisible}"
-                        Padding="6,4"
-                        Margin="0,4,0,0"
-                        CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="Model:"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" Opacity="0.7"/>
-                        <ComboBox ItemsSource="{Binding AvailableModels}"
-                                  SelectedIndex="{Binding SelectedModelIndex}"
-                                  VerticalAlignment="Center"
-                                  FontSize="12"
-                                  MinWidth="100"
-                                  Padding="6,3"/>
-                        <TextBlock Text="Profile:"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" Opacity="0.7"
-                                   Margin="12,0,0,0"/>
-                        <ComboBox ItemsSource="{Binding AvailableProfiles}"
-                                  SelectedIndex="{Binding SelectedProfileIndex}"
-                                  VerticalAlignment="Center"
-                                  FontSize="12"
-                                  MinWidth="120"
-                                  Padding="6,3"/>
-                        <TextBlock Text="Effort:"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" Opacity="0.7"
-                                   Margin="12,0,0,0"/>
-                        <ComboBox ItemsSource="{Binding AvailableEfforts}"
-                                  SelectedIndex="{Binding SelectedEffortIndex}"
-                                  VerticalAlignment="Center"
-                                  FontSize="12"
-                                  MinWidth="90"
-                                  Padding="6,3"/>
-                    </StackPanel>
-                </Border>
+                <!-- Right column: Send/Stop/Gear buttons (unchanged size) -->
+                <Grid Grid.Column="1" RowDefinitions="*,Auto,*" Margin="8,0,0,0">
+                    <Button Grid.Row="0"
+                            Content="Send"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            VerticalAlignment="Stretch"
+                            VerticalContentAlignment="Center"
+                            Command="{Binding SendCommand}"/>
+                    <Button Grid.Row="1"
+                            Content="&#x25A0;"
+                            FontSize="12"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            VerticalAlignment="Stretch"
+                            VerticalContentAlignment="Center"
+                            IsVisible="{Binding IsBusy}"
+                            Command="{Binding StopCommand}"
+                            ToolTip.Tip="Stop: interrupt Claude"/>
+                    <ToggleButton Grid.Row="2"
+                                  Content="&#x2699;"
+                                  FontSize="16"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Center"
+                                  VerticalAlignment="Stretch"
+                                  VerticalContentAlignment="Center"
+                                  IsChecked="{Binding IsCommandBarVisible}"
+                                  ToolTip.Tip="Toggle command bar"/>
+                </Grid>
             </Grid>
         </Border>
 

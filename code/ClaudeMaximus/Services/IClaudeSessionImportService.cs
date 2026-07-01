@@ -20,6 +20,12 @@ public interface IClaudeSessionImportService
 	IReadOnlyList<SessionEntryModel> ParseJsonlSession(string jsonlPath);
 
 	/// <summary>
+	/// Parses a Claude Code JSONL session file in raw mode — preserves instruction blocks
+	/// and system-injected content that would normally be stripped.
+	/// </summary>
+	IReadOnlyList<SessionEntryModel> ParseJsonlSessionRaw(string jsonlPath);
+
+	/// <summary>
 	/// Caches a generated title for a session ID. Survives across dialog open/close cycles.
 	/// </summary>
 	void CacheTitle(string sessionId, string title);

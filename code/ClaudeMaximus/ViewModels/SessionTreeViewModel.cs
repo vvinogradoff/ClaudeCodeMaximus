@@ -881,6 +881,45 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		}
 	}
 
+	/// <summary>
+	/// Returns the directory label and the group path (e.g. "GroupA / SubGroup") for a session node.
+	/// </summary>
+	public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeViewModel session)
+	{
+		foreach (var dir in Directories)
+		{
+			var path = new List<string>();
+			if (FindPathToSession(dir.Children, session, path))
+			{
+				var dirLabel = _labelService.GetLabel(dir.Path);
+				var treePath = path.Count > 0 ? string.Join(" / ", path) : string.Empty;
+				return (dirLabel, treePath);
+			}
+		}
+		return (string.Empty, string.Empty);
+	}
+
+	private static bool FindPathToSession(
+		ObservableCollection<ViewModelBase> children,
+		SessionNodeViewModel target,
+		List<string> path)
+	{
+		foreach (var child in children)
+		{
+			if (child == target)
+				return true;
+
+			if (child is GroupNodeViewModel group)
+			{
+				path.Add(group.Name);
+				if (FindPathToSession(group.Children, target, path))
+					return true;
+				path.RemoveAt(path.Count - 1);
+			}
+		}
+		return false;
+	}
+
 	private void LoadLastPromptTime(SessionNodeViewModel session)
 	{
 		try

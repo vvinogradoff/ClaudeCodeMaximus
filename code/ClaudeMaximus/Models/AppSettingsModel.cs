@@ -55,4 +55,20 @@ public sealed class AppSettingsModel
 	/// on first load if missing.
 	/// </summary>
 	public KeyBindingsModel KeyBindings { get; set; } = KeyBindingsModel.CreateDefaults();
+
+	/// <summary>
+	/// HTTPS proxy URL for Claude CLI requests (e.g. http://127.0.0.1:8080).
+	/// When set, HTTPS_PROXY and NODE_TLS_REJECT_UNAUTHORIZED=0 environment
+	/// variables are injected into the spawned claude process.
+	/// </summary>
+	public string HttpsProxy { get; set; } = string.Empty;
+
+	/// <summary>Directory containing images for the screensaver slideshow. Empty = black screen.</summary>
+	public string ScreensaverDirectory { get; set; } = string.Empty;
+
+	/// <summary>Inactivity timeout in seconds before the screensaver activates. 0 = disabled.</summary>
+	public int ScreensaverTimeout { get; set; } = 120;
+
+	/// <summary>Seconds between image transitions in the screensaver slideshow.</summary>
+	public int ScreensaverSlideshowInterval { get; set; } = 10;
 }

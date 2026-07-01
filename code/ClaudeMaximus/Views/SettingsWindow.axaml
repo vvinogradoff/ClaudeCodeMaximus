@@ -50,6 +50,16 @@
                             <TextBox Text="{Binding SourceCodesLocation}"
                                      Watermark="Auto-detected from running directory"/>
                         </StackPanel>
+
+                        <Separator Margin="0,4"/>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="HTTPS Proxy" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding HttpsProxy}"
+                                     Watermark="e.g. http://127.0.0.1:8080 (for Fiddler, mitmproxy, HTTP Toolkit)"/>
+                            <TextBlock Text="When set, routes Claude CLI traffic through this proxy and disables TLS verification on the spawned process."
+                                       FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -174,6 +184,49 @@
                                 </Grid>
                             </StackPanel>
                         </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Screensaver tab -->
+            <TabItem Header="Screensaver">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12" Spacing="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Inactivity Timeout" FontWeight="SemiBold"/>
+                            <Grid ColumnDefinitions="120,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding ScreensaverTimeout}"
+                                         Watermark="seconds"/>
+                                <TextBlock Grid.Column="1" Text="seconds" VerticalAlignment="Center"
+                                           Margin="8,0,0,0" Opacity="0.6"/>
+                            </Grid>
+                            <TextBlock Text="Set to 0 to disable the screensaver."
+                                       FontSize="11" Opacity="0.5"/>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Images Directory" FontWeight="SemiBold"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding ScreensaverDirectory}"
+                                         IsReadOnly="True" Watermark="No images — black screen"/>
+                                <Button Grid.Column="1" Content="Browse..." Margin="4,0,0,0"
+                                        Click="OnBrowseScreensaverDirectoryClicked"/>
+                            </Grid>
+                            <TextBlock Text="Supported formats: PNG, JPG, JPEG, BMP, GIF, WEBP."
+                                       FontSize="11" Opacity="0.5"/>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Slideshow Interval" FontWeight="SemiBold"/>
+                            <Grid ColumnDefinitions="120,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding ScreensaverSlideshowInterval}"
+                                         Watermark="10"/>
+                                <TextBlock Grid.Column="1" Text="seconds" VerticalAlignment="Center"
+                                           Margin="8,0,0,0" Opacity="0.6"/>
+                            </Grid>
+                            <TextBlock Text="Time between image transitions. Minimum 1 second."
+                                       FontSize="11" Opacity="0.5"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

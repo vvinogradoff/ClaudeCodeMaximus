@@ -8,6 +8,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
@@ -30,6 +32,15 @@ public partial class MainWindow : Window
 
 	// Saved tree panel column width so it can be restored when the panel is re-shown
 	private double _savedTreeColumnWidth = 280;
+
+	// Screensaver state
+	private DispatcherTimer? _screensaverTimer;
+	private bool _screensaverActive;
+	private DateTime _lastActivity = DateTime.UtcNow;
+	private DateTime _lastImageChange = DateTime.UtcNow;
+	private List<string> _screensaverImages = [];
+	private int _screensaverImageIndex;
+	private Bitmap? _screensaverCurrentBitmap;
 
 	public MainWindow()
 	{
@@ -67,6 +78,10 @@ public partial class MainWindow : Window
 		PositionChanged += OnPositionChanged;
 		Opened += OnWindowOpened;
 		DataContextChanged += OnDataContextSet;
+
+		// Track pointer movement for screensaver inactivity detection
+		PointerMoved += (_, _) => { if (!_screensaverActive) _lastActivity = DateTime.UtcNow; };
+		PointerPressed += (_, _) => { if (!_screensaverActive) _lastActivity = DateTime.UtcNow; };
 	}
 
 	private void OnDataContextSet(object? sender, EventArgs e)
@@ -153,6 +168,11 @@ public partial class MainWindow : Window
 		// Restore active session selection now that the tree UI is ready
 		if (DataContext is MainWindowViewModel vm)
 			vm.RestoreActiveSession();
+
+		// Start screensaver inactivity/slideshow timer (always running; reads settings each tick)
+		_screensaverTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+		_screensaverTimer.Tick += OnScreensaverTimerTick;
+		_screensaverTimer.Start();
 	}
 
 	/// <summary>
@@ -265,6 +285,16 @@ public partial class MainWindow : Window
 
 	private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
 	{
+		// Any keystroke dismisses the screensaver immediately
+		if (_screensaverActive)
+		{
+			DismissScreensaver();
+			e.Handled = true;
+			return;
+		}
+
+		_lastActivity = DateTime.UtcNow;
+
 		var keyService = App.Services.GetRequiredService<IKeyBindingService>();
 
 		if (keyService.Matches(Constants.KeyBindings.ImportSessions, e))
@@ -489,6 +519,102 @@ public partial class MainWindow : Window
 
 		if (confirmed)
 			vm.DetachActiveSession();
+	}
+
+	// ── Screensaver ──────────────────────────────────────────────────────────
+
+	private void OnScreensaverTimerTick(object? sender, EventArgs e)
+	{
+		var settings = App.Services.GetRequiredService<IAppSettingsService>().Settings;
+
+		if (settings.ScreensaverTimeout <= 0)
+			return;
+
+		if (!_screensaverActive)
+		{
+			var elapsed = (DateTime.UtcNow - _lastActivity).TotalSeconds;
+			if (elapsed >= settings.ScreensaverTimeout)
+				ActivateScreensaver(settings.ScreensaverDirectory);
+		}
+		else
+		{
+			if (_screensaverImages.Count > 1)
+			{
+				var elapsed = (DateTime.UtcNow - _lastImageChange).TotalSeconds;
+				if (elapsed >= settings.ScreensaverSlideshowInterval)
+				{
+					_screensaverImageIndex = (_screensaverImageIndex + 1) % _screensaverImages.Count;
+					ShowScreensaverImage();
+					_lastImageChange = DateTime.UtcNow;
+				}
+			}
+		}
+	}
+
+	private void ActivateScreensaver(string directory)
+	{
+		_screensaverImages = LoadScreensaverImages(directory);
+		_screensaverImageIndex = 0;
+		_lastImageChange = DateTime.UtcNow;
+		ShowScreensaverImage();
+		_screensaverActive = true;
+		ScreensaverPanel.IsVisible = true;
+	}
+
+	private void DismissScreensaver()
+	{
+		_screensaverActive = false;
+		_lastActivity = DateTime.UtcNow;
+		ScreensaverPanel.IsVisible = false;
+		ScreensaverImage.Source = null;
+		_screensaverCurrentBitmap?.Dispose();
+		_screensaverCurrentBitmap = null;
+	}
+
+	private void ShowScreensaverImage()
+	{
+		_screensaverCurrentBitmap?.Dispose();
+		_screensaverCurrentBitmap = null;
+
+		if (_screensaverImages.Count == 0)
+		{
+			ScreensaverImage.Source = null;
+			return;
+		}
+
+		try
+		{
+			var path = _screensaverImages[_screensaverImageIndex % _screensaverImages.Count];
+			_screensaverCurrentBitmap = new Bitmap(path);
+			ScreensaverImage.Source = _screensaverCurrentBitmap;
+		}
+		catch (Exception ex)
+		{
+			Log.Warning("Screensaver: failed to load image {Path}: {Error}",
+				_screensaverImages[_screensaverImageIndex], ex.Message);
+			ScreensaverImage.Source = null;
+		}
+	}
+
+	private static List<string> LoadScreensaverImages(string directory)
+	{
+		if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+			return [];
+
+		var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+			{ ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp" };
+
+		return Directory.GetFiles(directory)
+			.Where(f => extensions.Contains(Path.GetExtension(f)))
+			.OrderBy(f => f)
+			.ToList();
+	}
+
+	private void OnScreensaverPointerPressed(object? sender, PointerPressedEventArgs e)
+	{
+		if (!_screensaverActive) return;
+		DismissScreensaver();
+		e.Handled = true;
 	}
 
 	private static string GetBuildNumber()

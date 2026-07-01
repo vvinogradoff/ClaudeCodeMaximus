@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ClaudeMaximus.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="ClaudeMaximus.Views.RecentSessionsView"
+             x:DataType="vm:RecentSessionsViewModel">
+
+    <DockPanel>
+
+        <!-- Flat list grouped by directory -->
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Groups}">
+                <ItemsControl.DataTemplates>
+
+                    <!-- Directory group -->
+                    <DataTemplate DataType="vm:RecentSessionGroupViewModel"
+                                  x:CompileBindings="False">
+                        <StackPanel Margin="0,0,0,4">
+                            <!-- Directory header -->
+                            <Border Padding="4,4,4,2">
+                                <Grid RowDefinitions="2,Auto">
+                                    <Rectangle Grid.Row="0" Height="2" Fill="Black" Margin="0"
+                                               HorizontalAlignment="Stretch"/>
+                                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="2,1">
+                                        <TextBlock Text="&#128194;" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <!-- Sessions in this directory -->
+                            <ItemsControl ItemsSource="{Binding Sessions}">
+                                <ItemsControl.DataTemplates>
+                                    <DataTemplate DataType="vm:SessionNodeViewModel"
+                                                  x:CompileBindings="False">
+                                        <Border HorizontalAlignment="Stretch"
+                                                Background="{Binding RecencyBrush}"
+                                                CornerRadius="3" Padding="0" Margin="4,1"
+                                                PointerPressed="OnSessionPointerPressed">
+                                            <Grid>
+                                                <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                                                    <StackPanel Grid.Row="0" Grid.ColumnSpan="2"
+                                                                Orientation="Horizontal" Spacing="6" Margin="2,1,2,0">
+                                                        <!-- Status indicator -->
+                                                        <Grid Width="8" Height="16" VerticalAlignment="Center" RowDefinitions="8,8">
+                                                            <Panel Grid.Row="0">
+                                                                <Rectangle Width="8" Height="8" Fill="DarkRed"
+                                                                           IsVisible="{Binding IsRunning}"/>
+                                                                <Rectangle Width="8" Height="8" Fill="Orange" Opacity="0.8"
+                                                                           IsVisible="{Binding IsExternallyActive}"
+                                                                           ToolTip.Tip="Active in external terminal"/>
+                                                            </Panel>
+                                                            <Rectangle Grid.Row="1" Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
+                                                                       IsVisible="{Binding IsResumable}"/>
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="&#x270F;" FontSize="10" VerticalAlignment="Center"
+                                                                   Opacity="0.5"
+                                                                   IsVisible="{Binding HasDraftText}"
+                                                                   ToolTip.Tip="Has unsent text"/>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Row="1" Grid.Column="1"
+                                                               Text="{Binding LastPromptTime}"
+                                                               IsVisible="{Binding LastPromptTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                               FontSize="10" Foreground="Gray" Opacity="0.6"
+                                                               HorizontalAlignment="Right"
+                                                               Margin="0,0,4,1"/>
+                                                </Grid>
+                                                <!-- Dotted green border for recently active -->
+                                                <Rectangle IsVisible="{Binding IsRecentlyActive}"
+                                                           Stroke="DarkGreen"
+                                                           StrokeThickness="1"
+                                                           StrokeDashArray="3,2"
+                                                           RadiusX="3" RadiusY="3"
+                                                           Fill="Transparent"
+                                                           IsHitTestVisible="False"
+                                                           HorizontalAlignment="Stretch"
+                                                           VerticalAlignment="Stretch"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.DataTemplates>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+
+                </ItemsControl.DataTemplates>
+            </ItemsControl>
+        </ScrollViewer>
+
+    </DockPanel>
+
+</UserControl>

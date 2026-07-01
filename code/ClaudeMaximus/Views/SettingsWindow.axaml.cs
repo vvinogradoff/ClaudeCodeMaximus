@@ -43,6 +43,22 @@ public partial class SettingsWindow : Window
 			vm.SessionFilesRoot = folders[0].Path.LocalPath;
 	}
 
+	private async void OnBrowseScreensaverDirectoryClicked(object? sender, RoutedEventArgs e)
+	{
+		if (DataContext is not SettingsViewModel vm)
+			return;
+
+		var folders = await StorageProvider.OpenFolderPickerAsync(
+			new Avalonia.Platform.Storage.FolderPickerOpenOptions
+			{
+				Title = "Select Screensaver Images Directory",
+				AllowMultiple = false,
+			});
+
+		if (folders.Count > 0)
+			vm.ScreensaverDirectory = folders[0].Path.LocalPath;
+	}
+
 	private void OnSaveClicked(object? sender, RoutedEventArgs e)
 		=> Close();
 }

@@ -165,12 +165,27 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Left panel -->
+                <!-- Left panel: Tree / Recent tabs -->
                 <Border Grid.Column="0"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                         BorderThickness="0,0,1,0"
                         IsVisible="{Binding IsTreePanelVisible}">
-                    <views:SessionTreeView DataContext="{Binding SessionTree}"/>
+                    <TabControl x:Name="LeftPanelTabs" Padding="0"
+                                SelectedIndex="{Binding SelectedLeftTabIndex}">
+                        <TabControl.Styles>
+                            <Style Selector="TabItem">
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="Padding" Value="10,4"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </TabControl.Styles>
+                        <TabItem Header="Tree">
+                            <views:SessionTreeView DataContext="{Binding SessionTree}"/>
+                        </TabItem>
+                        <TabItem Header="Recent">
+                            <views:RecentSessionsView DataContext="{Binding RecentSessions}"/>
+                        </TabItem>
+                    </TabControl>
                 </Border>
 
                 <GridSplitter Grid.Column="1"
@@ -236,6 +251,16 @@
                 </StackPanel>
             </Border>
 
+        </Panel>
+
+        <!-- Screensaver overlay: last child = highest z-order, covers entire window.
+             Dismissed instantly on any mouse click or keystroke. -->
+        <Panel x:Name="ScreensaverPanel" IsVisible="False" Background="Black"
+               PointerPressed="OnScreensaverPointerPressed">
+            <Image x:Name="ScreensaverImage"
+                   Stretch="UniformToFill"
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Stretch"/>
         </Panel>
 
     </Panel>

@@ -14,7 +14,11 @@ public sealed class SettingsViewModel : ViewModelBase
 	private string _sessionFilesRoot;
 	private string _claudePath;
 	private string _sourceCodesLocation;
+	private string _httpsProxy;
 	private bool _isDarkTheme;
+	private string _screensaverDirectory;
+	private string _screensaverTimeout;
+	private string _screensaverSlideshowInterval;
 
 	// Color fields for the currently selected theme
 	private string _inputBoxBackground;
@@ -46,6 +50,30 @@ public sealed class SettingsViewModel : ViewModelBase
 	{
 		get => _sourceCodesLocation;
 		set => this.RaiseAndSetIfChanged(ref _sourceCodesLocation, value);
+	}
+
+	public string HttpsProxy
+	{
+		get => _httpsProxy;
+		set => this.RaiseAndSetIfChanged(ref _httpsProxy, value);
+	}
+
+	public string ScreensaverDirectory
+	{
+		get => _screensaverDirectory;
+		set => this.RaiseAndSetIfChanged(ref _screensaverDirectory, value);
+	}
+
+	public string ScreensaverTimeout
+	{
+		get => _screensaverTimeout;
+		set => this.RaiseAndSetIfChanged(ref _screensaverTimeout, value);
+	}
+
+	public string ScreensaverSlideshowInterval
+	{
+		get => _screensaverSlideshowInterval;
+		set => this.RaiseAndSetIfChanged(ref _screensaverSlideshowInterval, value);
 	}
 
 	public bool IsDarkTheme
@@ -144,6 +172,10 @@ public sealed class SettingsViewModel : ViewModelBase
 		_sessionFilesRoot = appSettings.Settings.SessionFilesRoot;
 		_claudePath = appSettings.Settings.ClaudePath;
 		_sourceCodesLocation = appSettings.Settings.SourceCodesLocation;
+		_httpsProxy = appSettings.Settings.HttpsProxy;
+		_screensaverDirectory = appSettings.Settings.ScreensaverDirectory;
+		_screensaverTimeout = appSettings.Settings.ScreensaverTimeout.ToString();
+		_screensaverSlideshowInterval = appSettings.Settings.ScreensaverSlideshowInterval.ToString();
 		_isDarkTheme = appSettings.Settings.Theme == "Dark";
 
 		var colors = _isDarkTheme ? appSettings.Settings.DarkColors : appSettings.Settings.LightColors;
@@ -194,6 +226,10 @@ public sealed class SettingsViewModel : ViewModelBase
 		_appSettings.Settings.SessionFilesRoot = _sessionFilesRoot;
 		_appSettings.Settings.ClaudePath = _claudePath;
 		_appSettings.Settings.SourceCodesLocation = _sourceCodesLocation;
+		_appSettings.Settings.HttpsProxy = _httpsProxy;
+		_appSettings.Settings.ScreensaverDirectory = _screensaverDirectory;
+		_appSettings.Settings.ScreensaverTimeout = int.TryParse(_screensaverTimeout, out var st) ? Math.Max(0, st) : 120;
+		_appSettings.Settings.ScreensaverSlideshowInterval = int.TryParse(_screensaverSlideshowInterval, out var si) ? Math.Max(1, si) : 10;
 		_appSettings.Settings.Theme = _isDarkTheme ? "Dark" : "Light";
 
 		// Save colors to the appropriate theme

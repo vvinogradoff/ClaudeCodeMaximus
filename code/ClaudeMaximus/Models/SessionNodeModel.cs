@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace ClaudeMaximus.Models;
 
 /// <summary>
@@ -14,6 +16,11 @@ public sealed class SessionNodeModel
 	public required string FileName { get; init; }
 	public string WorkingDirectory { get; set; } = string.Empty;
 	public string? ClaudeSessionId { get; set; }
+
+	/// <summary>Session IDs from previous Claude sessions that were cleared (FR.11.7).
+	/// Preserved so the JSONL view can show the full history across session resets.</summary>
+	public List<string> PriorClaudeSessionIds { get; set; } = [];
+
 	/// <summary>Persisted vertical scroll offset for the session output area.</summary>
 	public double ScrollOffset { get; set; }
 

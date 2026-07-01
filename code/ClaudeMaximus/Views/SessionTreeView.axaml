@@ -130,7 +130,7 @@
                                     <!-- Status indicator: upper half = active, lower half = resumable -->
                                     <Grid Width="8" Height="16" VerticalAlignment="Center" RowDefinitions="8,8">
                                         <Panel Grid.Row="0">
-                                            <Rectangle Width="8" Height="8" Fill="LimeGreen"
+                                            <Rectangle Width="8" Height="8" Fill="DarkRed"
                                                        IsVisible="{Binding IsRunning}"/>
                                             <Rectangle Width="8" Height="8" Fill="Orange" Opacity="0.8"
                                                        IsVisible="{Binding IsExternallyActive}"

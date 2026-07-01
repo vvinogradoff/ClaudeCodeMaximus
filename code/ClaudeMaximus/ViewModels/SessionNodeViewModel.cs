@@ -61,7 +61,11 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	public bool HasDraftText
 	{
 		get => _hasDraftText;
-		set => this.RaiseAndSetIfChanged(ref _hasDraftText, value);
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _hasDraftText, value);
+			RefreshRecencyBrush();
+		}
 	}
 
 	/// <summary>Controls visibility during search filtering.</summary>
@@ -124,38 +128,34 @@ public sealed class SessionNodeViewModel : ViewModelBase
 		private set => this.RaiseAndSetIfChanged(ref _recencyBrush, value);
 	}
 
-	/// <summary>Recalculates the recency brush and 24-hour active flag based on how long ago the last prompt was.</summary>
+	private static readonly SolidColorBrush GreenBrush     = new(Color.Parse("Green"));
+	private static readonly SolidColorBrush LightGreenBrush = new(Color.Parse("LightGreen"));
+	private static readonly SolidColorBrush HoneyDewBrush  = new(Color.Parse("HoneyDew"));
+	private static readonly SolidColorBrush MintCreamBrush = new(Color.Parse("MintCream"));
+
+	/// <summary>Recalculates the recency brush and 24-hour active flag based on how long ago the last prompt was and whether the session has a draft.</summary>
 	public void RefreshRecencyBrush()
 	{
-		if (_lastPromptTimestamp is null)
+		var elapsed = _lastPromptTimestamp.HasValue
+			? DateTimeOffset.UtcNow - _lastPromptTimestamp.Value
+			: TimeSpan.MaxValue;
+
+		IsRecentlyActive = _lastPromptTimestamp.HasValue && elapsed.TotalHours <= 24;
+
+		if (!_lastPromptTimestamp.HasValue)
 		{
-			RecencyBrush = null;
-			IsRecentlyActive = false;
+			RecencyBrush = _hasDraftText ? MintCreamBrush : null;
 			return;
 		}
 
-		var elapsed = DateTimeOffset.UtcNow - _lastPromptTimestamp.Value;
-
-		IsRecentlyActive = elapsed.TotalHours <= 24;
-
-		string? key = elapsed.TotalMinutes switch
+		RecencyBrush = elapsed.TotalMinutes switch
 		{
-			<= 15 => ThemeApplicator.KeyRecency15Min,
-			<= 30 => ThemeApplicator.KeyRecency30Min,
-			<= 60 => ThemeApplicator.KeyRecency60Min,
-			_     => null,
+			<= 15  => GreenBrush,
+			<= 60  => LightGreenBrush,
+			<= 240 => HoneyDewBrush,
+			<= 720 => MintCreamBrush,
+			_      => _hasDraftText ? MintCreamBrush : null,
 		};
-
-		if (key is null)
-		{
-			RecencyBrush = null;
-			return;
-		}
-
-		if (Application.Current!.Resources.TryGetResource(key, null, out var resource) && resource is IBrush brush)
-			RecencyBrush = brush;
-		else
-			RecencyBrush = null;
 	}
 
 	public SessionNodeViewModel(SessionNodeModel model)
