@@ -25,15 +25,22 @@ public sealed class ClaudeModelService : IClaudeModelService
     ];
 
     private readonly IClaudeProcessManager _processManager;
+    private readonly IOllamaModelService _ollamaService;
+    private readonly IAppSettingsService _appSettings;
     private readonly string _cacheFilePath;
     private IReadOnlyList<ClaudeModelInfo> _cachedModels;
     private Task? _fetchTask;
 
     public event EventHandler? ModelsUpdated;
 
-    public ClaudeModelService(IClaudeProcessManager processManager)
+    public ClaudeModelService(
+        IClaudeProcessManager processManager,
+        IOllamaModelService ollamaService,
+        IAppSettingsService appSettings)
     {
         _processManager = processManager;
+        _ollamaService  = ollamaService;
+        _appSettings    = appSettings;
         _cacheFilePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             Constants.AppDataFolderName,
@@ -55,25 +62,45 @@ public sealed class ClaudeModelService : IClaudeModelService
 
     private async Task FetchAndCacheAsync(string claudePath, string? profileConfigDir)
     {
+        var ollamaBaseUrl = _appSettings.Settings.OllamaBaseUrl;
+
+        // Start both fetches concurrently
+        var anthropicTask = FetchFromCliAsync(claudePath, profileConfigDir);
+        var ollamaTask    = _ollamaService.GetModelsAsync(ollamaBaseUrl);
+
+        IReadOnlyList<ClaudeModelInfo>? anthropicModels = null;
         try
         {
-            var models = await FetchFromCliAsync(claudePath, profileConfigDir);
-            if (models != null && models.Count > 0)
-            {
-                _cachedModels = models;
-                SaveToFileCache(models);
-                _log.Information("Loaded {Count} models from Claude CLI", models.Count);
-                Dispatcher.UIThread.Post(() => ModelsUpdated?.Invoke(this, EventArgs.Empty));
-            }
-            else
-            {
-                _log.Information("Model fetch returned no results; retaining current list");
-            }
+            anthropicModels = await anthropicTask;
         }
         catch (Exception ex)
         {
-            _log.Warning(ex, "Failed to fetch models from Claude CLI; using current cached list");
+            _log.Warning(ex, "Anthropic model fetch failed; using cached/fallback list");
         }
+
+        var ollamaModels = await ollamaTask; // never throws — OllamaModelService catches internally
+
+        // Determine effective Anthropic list
+        IReadOnlyList<ClaudeModelInfo> effectiveAnthropic;
+        if (anthropicModels != null && anthropicModels.Count > 0)
+        {
+            SaveToFileCache(anthropicModels);
+            _log.Information("Loaded {Count} Anthropic models from CLI", anthropicModels.Count);
+            effectiveAnthropic = anthropicModels;
+        }
+        else
+        {
+            // Keep Anthropic portion of whatever's currently cached (was loaded from file at startup)
+            var cached = _cachedModels.Where(m => m.Provider == ModelProvider.Anthropic).ToList();
+            effectiveAnthropic = cached.Count > 0 ? cached : FallbackModels;
+            _log.Information("No new Anthropic models; using {Count} cached/fallback", effectiveAnthropic.Count);
+        }
+
+        if (ollamaModels.Count > 0)
+            _log.Information("Loaded {Count} Ollama models", ollamaModels.Count);
+
+        _cachedModels = effectiveAnthropic.Concat(ollamaModels).ToList();
+        Dispatcher.UIThread.Post(() => ModelsUpdated?.Invoke(this, EventArgs.Empty));
     }
 
     private async Task<IReadOnlyList<ClaudeModelInfo>?> FetchFromCliAsync(string claudePath, string? profileConfigDir)

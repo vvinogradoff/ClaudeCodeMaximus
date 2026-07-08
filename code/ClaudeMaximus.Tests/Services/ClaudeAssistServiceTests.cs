@@ -1,3 +1,4 @@
+using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
 using Xunit;
 
@@ -136,12 +137,20 @@ public sealed class ClaudeAssistServiceTests
 		Assert.Equal("def-456", result[1]);
 	}
 
-	// --- Model fallback order ---
+	// --- Model fallback order (FR.13.14) ---
+
+	private static readonly IReadOnlyList<ClaudeModelInfo> SampleModels =
+	[
+		new("claude-opus-4-7",           "opus",   "Opus 4.7"),
+		new("claude-sonnet-4-6",         "sonnet", "Sonnet 4.6"),
+		new("claude-haiku-4-5-20251001", "haiku",  "Haiku 4.5"),
+		new("gemma4:26b",                "",       "gemma4:26b", ModelProvider.Ollama),
+	];
 
 	[Fact]
-	public void GetModelFallbackOrder_Default_ReturnsHaikuThenNull()
+	public void GetModelFallbackOrder_DefaultEmpty_ReturnsHaikuThenNull()
 	{
-		var models = ClaudeAssistService.GetModelFallbackOrderFromIndex(0);
+		var models = ClaudeAssistService.GetModelFallbackOrderFromId(string.Empty, SampleModels);
 
 		Assert.Equal(2, models.Count);
 		Assert.Equal("haiku", models[0]);
@@ -151,22 +160,45 @@ public sealed class ClaudeAssistServiceTests
 	[Fact]
 	public void GetModelFallbackOrder_UserSelectedOpus_ReturnsHaikuOpusNull()
 	{
-		var models = ClaudeAssistService.GetModelFallbackOrderFromIndex(1);
+		var models = ClaudeAssistService.GetModelFallbackOrderFromId("claude-opus-4-7", SampleModels);
 
 		Assert.Equal(3, models.Count);
 		Assert.Equal("haiku", models[0]);
-		Assert.Equal("opus", models[1]);
+		Assert.Equal("opus", models[1]); // alias used for Anthropic models
 		Assert.Null(models[2]);
 	}
 
 	[Fact]
 	public void GetModelFallbackOrder_UserSelectedHaiku_NoDuplicate()
 	{
-		var models = ClaudeAssistService.GetModelFallbackOrderFromIndex(3);
+		var models = ClaudeAssistService.GetModelFallbackOrderFromId("claude-haiku-4-5-20251001", SampleModels);
 
 		// haiku + null (no duplicate haiku)
 		Assert.Equal(2, models.Count);
 		Assert.Equal("haiku", models[0]);
 		Assert.Null(models[1]);
+	}
+
+	[Fact]
+	public void GetModelFallbackOrder_OllamaModel_Excluded()
+	{
+		// Ollama models must be skipped — assist calls use Anthropic only (FR.12.14)
+		var models = ClaudeAssistService.GetModelFallbackOrderFromId("gemma4:26b", SampleModels);
+
+		Assert.Equal(2, models.Count);
+		Assert.Equal("haiku", models[0]);
+		Assert.Null(models[1]);
+	}
+
+	[Fact]
+	public void GetModelFallbackOrder_UnknownId_IncludedAsLiteral()
+	{
+		// Unknown ID (not in model list) — treated as Anthropic, passed through as literal
+		var models = ClaudeAssistService.GetModelFallbackOrderFromId("claude-future-model", SampleModels);
+
+		Assert.Equal(3, models.Count);
+		Assert.Equal("haiku", models[0]);
+		Assert.Equal("claude-future-model", models[1]);
+		Assert.Null(models[2]);
 	}
 }

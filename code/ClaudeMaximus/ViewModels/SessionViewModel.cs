@@ -29,6 +29,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly IClaudeProfileService _profileService;
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeModelService _modelService;
+	private readonly ISessionTurnService _turnService;
 	private readonly DirectoryNodeModel? _directoryModel;
 	private string _name;
 	private string _inputText = string.Empty;
@@ -288,7 +289,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>Display names for the model selector (populated dynamically from IClaudeModelService).</summary>
 	public ObservableCollection<string> AvailableModels { get; } = [];
 
-	/// <summary>Selected model index (0=Default, 1..N=model entries). Persisted per directory (FR.12.4).</summary>
+	/// <summary>Selected model index (0=Default, 1..N=model entries). Persisted per directory as model ID string (FR.12.4).</summary>
 	public int SelectedModelIndex
 	{
 		get => _selectedModelIndex;
@@ -296,22 +297,40 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		{
 			if (_isUpdatingModels) return;
 			this.RaiseAndSetIfChanged(ref _selectedModelIndex, value);
+			var modelId = (value > 0 && value <= _modelInfos.Count)
+				? _modelInfos[value - 1].Id
+				: string.Empty;
 			if (_directoryModel != null)
-				_directoryModel.SelectedModelIndex = value;
-			_appSettings.Settings.SelectedModelIndex = value;
+				_directoryModel.SelectedModelId = modelId;
+			_appSettings.Settings.SelectedModelId = modelId;
 			_appSettings.Save();
 		}
 	}
 
-	/// <summary>Returns the CLI alias (or full ID) for --model, or null if Default is selected.</summary>
+	/// <summary>Returns the true model ID for --model, or null if Default is selected.</summary>
 	public string? SelectedModelId
 	{
 		get
 		{
 			if (_selectedModelIndex <= 0 || _selectedModelIndex > _modelInfos.Count)
 				return null;
-			var info = _modelInfos[_selectedModelIndex - 1];
-			return !string.IsNullOrEmpty(info.Alias) ? info.Alias : info.Id;
+			return _modelInfos[_selectedModelIndex - 1].Id;
+		}
+	}
+
+	/// <summary>
+	/// Returns the Ollama base URL when the selected model is a local Ollama model, or null for Anthropic models.
+	/// Used to set ANTHROPIC_BASE_URL env var on claude CLI spawns (FR.12.14).
+	/// </summary>
+	public string? SelectedLocalBaseUrl
+	{
+		get
+		{
+			if (_selectedModelIndex <= 0 || _selectedModelIndex > _modelInfos.Count)
+				return null;
+			return _modelInfos[_selectedModelIndex - 1].Provider == ModelProvider.Ollama
+				? _appSettings.Settings.OllamaBaseUrl
+				: null;
 		}
 	}
 
@@ -395,7 +414,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
 		IClaudeSessionImportService importService,
-		IClaudeModelService modelService)
+		IClaudeModelService modelService,
+		ISessionTurnService turnService)
 	{
 		_node             = node;
 		_fileService      = fileService;
@@ -406,6 +426,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_profileService   = profileService;
 		_importService    = importService;
 		_modelService     = modelService;
+		_turnService      = turnService;
 		_name             = node.Name;
 
 		// Find the parent DirectoryNodeModel for per-directory settings (FR.12.4, FR.12.8, FR.12.11)
@@ -415,9 +436,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// Populate model list from cache (instant; may update later via ModelsUpdated event)
 		_modelInfos = new List<ClaudeModelInfo>(modelService.GetCachedModels());
 		RebuildModelList();
-		_selectedModelIndex = Math.Clamp(
-			_directoryModel?.SelectedModelIndex ?? appSettings.Settings.SelectedModelIndex,
-			0, _modelInfos.Count);
+		var savedModelId = _directoryModel?.SelectedModelId ?? appSettings.Settings.SelectedModelId;
+		_selectedModelIndex = string.IsNullOrEmpty(savedModelId)
+			? 0
+			: _modelInfos.FindIndex(m => m.Id == savedModelId) is var idx && idx >= 0 ? idx + 1 : 0;
 
 		modelService.ModelsUpdated += OnModelsUpdated;
 		_selectedEffortIndex = Math.Clamp(
@@ -790,6 +812,24 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		if (string.IsNullOrEmpty(message))
 			return;
 
+		// Acquire per-node turn lock so scheduled/orchestrated turns cannot interleave.
+		var nodeId   = _node.Model.NodeId;
+		var turnLock = string.IsNullOrEmpty(nodeId) ? null : _turnService.GetTurnLock(nodeId);
+		if (turnLock != null)
+			await turnLock.WaitAsync();
+
+		try
+		{
+		await SendAsyncCore(message);
+		}
+		finally
+		{
+			turnLock?.Release();
+		}
+	}
+
+	private async System.Threading.Tasks.Task SendAsyncCore(string message)
+	{
 		InputText = string.Empty;
 		_draftService.DeleteDraft(_node.FileName);
 
@@ -876,6 +916,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				model:            SelectedModelId,
 				profileConfigDir: SelectedProfileConfigDir,
 				effort:           SelectedEffort,
+				ollamaBaseUrl:    SelectedLocalBaseUrl,
 				cancellationToken: ct);
 
 			if (_needsContextRetry)
@@ -907,6 +948,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					model:            SelectedModelId,
 					profileConfigDir: SelectedProfileConfigDir,
 					effort:           SelectedEffort,
+					ollamaBaseUrl:    SelectedLocalBaseUrl,
 					cancellationToken: ct);
 			}
 
@@ -1201,6 +1243,7 @@ PROJECT GLOSSARY:
 			model:            SelectedModelId,
 			profileConfigDir: SelectedProfileConfigDir,
 			effort:           SelectedEffort,
+			ollamaBaseUrl:    SelectedLocalBaseUrl,
 			onEvent:          evt =>
 			{
 				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
@@ -1278,6 +1321,7 @@ PROJECT GLOSSARY:
 			model:            SelectedModelId,
 			profileConfigDir: SelectedProfileConfigDir,
 			effort:           SelectedEffort,
+			ollamaBaseUrl:    SelectedLocalBaseUrl,
 			onEvent:          evt =>
 			{
 				// Capture session ID updates but don't write to file or UI
@@ -1309,13 +1353,13 @@ PROJECT GLOSSARY:
 		return sb.ToString();
 	}
 
-	/// <summary>Rebuilds the AvailableModels collection from _modelInfos. Index 0 is always "Default".</summary>
+	/// <summary>Rebuilds the AvailableModels collection from _modelInfos. Index 0 is "Default"; entries show true model IDs (FR.12.3).</summary>
 	private void RebuildModelList()
 	{
 		AvailableModels.Clear();
 		AvailableModels.Add("Default");
 		foreach (var m in _modelInfos)
-			AvailableModels.Add(m.DisplayName);
+			AvailableModels.Add(m.Id);
 	}
 
 	/// <summary>Called when the model service refreshes its list from the CLI.</summary>
@@ -1323,19 +1367,19 @@ PROJECT GLOSSARY:
 	{
 		var newModels = _modelService.GetCachedModels();
 
-		// Save alias of currently selected model so we can re-select it after the list rebuilds
-		var currentAlias = _selectedModelIndex > 0 && _selectedModelIndex <= _modelInfos.Count
-			? _modelInfos[_selectedModelIndex - 1].Alias
+		// Save ID of currently selected model so we can re-select it after the list rebuilds
+		var currentId = _selectedModelIndex > 0 && _selectedModelIndex <= _modelInfos.Count
+			? _modelInfos[_selectedModelIndex - 1].Id
 			: null;
 
 		_isUpdatingModels = true;
 		_modelInfos = new List<ClaudeModelInfo>(newModels);
 		RebuildModelList();
 
-		// Restore selection by alias; fall back to Default if the alias is no longer present
-		if (currentAlias != null)
+		// Restore selection by ID; fall back to Default if the ID is no longer present
+		if (currentId != null)
 		{
-			var idx = _modelInfos.FindIndex(m => m.Alias == currentAlias);
+			var idx = _modelInfos.FindIndex(m => m.Id == currentId);
 			_selectedModelIndex = idx >= 0 ? idx + 1 : 0;
 		}
 		else

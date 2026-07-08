@@ -388,17 +388,13 @@ The input area includes a collapsible command bar for runtime configuration of t
 
 **FR.12.2 — Command bar layout:** The command bar appears directly beneath the text input area (within the same input border). When visible, it reduces the available height for the text input. The command bar has a subtle background matching the chrome medium brush for visual separation.
 
-**FR.12.3 — Model selection:** The command bar contains a model selector (ComboBox) with the following options:
-| Index | Label | CLI Flag |
-|---|---|---|
-| 0 | Default | (no `--model` flag — uses Claude Code's own default) |
-| 1 | Opus | `--model opus` |
-| 2 | Sonnet | `--model sonnet` |
-| 3 | Haiku | `--model haiku` |
+**FR.12.3 — Model selection:** The command bar contains a model selector (ComboBox). The first entry is always "Default" (no `--model` flag — uses Claude Code's own default). Remaining entries are loaded dynamically at startup from two sources:
+1. **Anthropic models** — fetched from the Claude CLI using a print-mode query; cached to disk for 24 hours. A built-in fallback list (Opus, Sonnet, Haiku) is used if the fetch fails.
+2. **Ollama models** — fetched from the locally running Ollama instance (`GET {OllamaBaseUrl}/api/tags`) on each startup. If Ollama is unreachable the discovery fails silently and no Ollama models appear.
 
-The CLI accepts short aliases (`opus`, `sonnet`, `haiku`) which automatically resolve to the latest model version in each family.
+Anthropic models appear first, Ollama models after. Each entry displays the true model ID (e.g. `claude-opus-4-7`, `gemma4:26b`).
 
-**FR.12.4 — Model persistence:** The selected model index is persisted per working directory in `appsettings.json` (stored as `SelectedModelIndex` on each `DirectoryNodeModel`). When the user switches sessions under a different directory, the model selector reflects that directory's saved choice. New directories default to index 0 (Default).
+**FR.12.4 — Model persistence:** The selected model is persisted as a **model ID string** (`SelectedModelId` on `DirectoryNodeModel` and `AppSettingsModel`). When the user switches sessions under a different directory, the model selector reflects that directory's saved choice. If the saved ID is not present in the current model list the selection reverts to "Default". New directories default to "Default" (empty `SelectedModelId`).
 
 **FR.12.5 — Model flag injection:** When a non-default model is selected, the `--model <id>` flag is appended to the `claude` CLI arguments for all process spawns (user messages, context retries, compaction, and mid-run corrections).
 
@@ -431,6 +427,15 @@ The dropdown selection reverts to the previous value while auth is in progress, 
 The selected effort index is persisted per working directory (`SelectedEffortIndex` on `DirectoryNodeModel`). When a non-default effort is selected, the `--effort` flag is appended to the `claude` CLI arguments for all process spawns.
 
 **FR.12.11 — Command bar visibility persistence:** The show/hide state of the command bar (toggled via the settings gear button) is persisted per working directory in `appsettings.json` (stored as `IsCommandBarVisible` on each `DirectoryNodeModel`). When the user switches to a session under a different directory, the command bar visibility reflects that directory's saved state. New directories default to hidden.
+
+**FR.12.13 — Local model discovery (Ollama):** On each startup the application queries the local Ollama instance at `GET {OllamaBaseUrl}/api/tags` for installed models. The base URL is configurable as `OllamaBaseUrl` in `appsettings.json` (default: `http://localhost:11434`). Discovered Ollama models are appended to the model selector after Anthropic models, using their true Ollama IDs (e.g. `gemma4:26b`). If Ollama is unreachable or returns an error the discovery fails silently — no Ollama models appear and no error is shown to the user.
+
+**FR.12.14 — Local model routing:** When a session uses an Ollama model (identified by `ModelProvider.Ollama`), the claude CLI subprocess is launched with:
+- `ANTHROPIC_BASE_URL = {OllamaBaseUrl}/v1` — routes the Claude SDK to the local Ollama endpoint
+- `ANTHROPIC_AUTH_TOKEN = ollama` — dummy token accepted by Ollama
+- `ANTHROPIC_API_KEY = ""` — clears any real key
+
+Profile authentication (`CLAUDE_CONFIG_DIR`) and HTTPS proxy settings are **not** injected for Ollama-routed sessions. Ollama models are also excluded from the Claude Assist fallback chain (FR.13.14) — assist calls (title generation, semantic search) always use Anthropic models only.
 
 ---
 
@@ -501,6 +506,68 @@ The model is selected using a fallback order: Haiku (preferred for speed/cost), 
 - No JSONL files found for the slug → picker shows empty state with explanatory message
 
 **FR.13.14 — CLI process management for import:** All Claude CLI calls for title generation and search use timeouts, stderr capture, and structured error propagation. The process management reuses the existing `ClaudeProcessManager` infrastructure (shared `TryStartProcess` pattern). The `--tools ""` flag prevents the CLI from executing any tools. The `--no-session-persistence` flag prevents the CLI from creating session files for these utility calls. The model for assist calls follows a fallback order: Haiku (preferred), then the user's FR.12 model selection, then no `--model` flag (CLI default). This ensures the feature works regardless of the user's plan entitlements.
+
+---
+
+### FR.14 — Scheduled Turns
+
+The application allows any session to schedule a future turn against itself or another session, enabling "get back to me in 30 minutes" and "check this job every hour" workflows.
+
+**FR.14.1 — In-process MCP server:** The application hosts an HTTP MCP server bound to `127.0.0.1` (loopback only). The port is persisted in `appsettings.json` (`AgentMcpPort`); 0 means a free port is chosen at startup. The server implements the MCP JSON-RPC 2.0 protocol and is started when the application launches (if `AgentToolsEnabled` is true in `appsettings.json`).
+
+**FR.14.2 — Per-node identity:** Each Session node has a stable `NodeId` (GUID, never changes even after session detach/compact) and a `AgentToken` (random secret, regenerated only on explicit user action). Both are persisted in `appsettings.json` and backfilled for existing sessions on first load. `NodeId` is the durable handle used by all scheduling and orchestration tools.
+
+**FR.14.3 — Agent tool injection:** When `AgentToolsEnabled` is true, every `claude` process spawn (user turns, scheduled turns, orchestrated turns) passes `--mcp-config <per-node-path>`. The config file points to the in-process MCP server with the node's `AgentToken` in the `X-CMX-Token` request header. The MCP server maps the token to the calling node, enabling self-referential scheduling.
+
+**FR.14.4 — Scheduling tools:**
+| Tool | Required args | Optional args | Effect |
+|---|---|---|---|
+| `schedule_wake` | `when` (object: `inSeconds`, `at`, or `cron`) | `prompt`, `note`, `target` (nodeId) | Create a schedule. When `target` is omitted, targets the caller's own node (self-wake). |
+| `list_schedules` | — | `all` (bool) | Returns the caller's schedules (or all app schedules when `all=true`). |
+| `cancel_schedule` | `scheduleId` | — | Removes a schedule. |
+
+**FR.14.5 — Self-wake identity guarantee:** When `schedule_wake` is called without a `target`, the scheduled turn is always fired against the **same** session (same `NodeId`, resumed via its current `ClaudeSessionId`). A new session node is never created.
+
+**FR.14.6 — Schedule kinds:**
+- **Delay**: fire once after N seconds from now (`when.inSeconds`)
+- **At**: fire once at a specific UTC datetime (`when.at`)
+- **Cron**: fire repeatedly on a cron expression (`when.cron`)
+
+**FR.14.7 — Missed fire policy:** If the application is closed when a schedule is due, on next launch the application fires the schedule once (default policy: `FireOnce`). The per-schedule policy is configurable.
+
+**FR.14.8 — Schedule persistence:** Schedules are stored as a `List<ScheduleModel>` in `appsettings.json`. The scheduler re-arms timers from persisted schedules on startup.
+
+**FR.14.9 — Per-node turn serialization:** At most one turn may run concurrently per `NodeId`. If a live user-initiated turn and a scheduled turn would overlap, the scheduled turn waits for the lock to be released.
+
+**FR.14.10 — Scheduled turn visibility:** A scheduled turn's prompt is appended to the session file as a `USER` entry, and the response as an `ASSISTANT` entry. A `SYSTEM` entry `[Scheduled: <note>]` is prepended to the prompt so the trigger is visible in the session view. The session file watcher (`FR.3.1`, `SessionViewModel`) picks up the new entries and updates the output panel for any session that is currently open.
+
+---
+
+### FR.15 — Agent Orchestration (Persistent Worker Sessions)
+
+A supervisor session can spawn and control worker sessions. All workers are **persistent, resumable** session nodes in the tree — never ephemeral subagents.
+
+**FR.15.1 — Orchestration tools:**
+| Tool | Required args | Optional args | Effect |
+|---|---|---|---|
+| `list_sessions` | — | — | Returns summary of all sessions in the tree: nodeId, name, dirLabel, isRunning, isResumable, lastPrompt. |
+| `spawn_session` | `name`, `workingDir` OR `parentNodeId`, `prompt` | `profile`, `model`, `group` | Creates a **new** session node in the tree under the specified parent, runs the first turn, returns `{nodeId, resultText}`. |
+| `send_to_session` | `nodeId`, `prompt` | `mode` (wait/async) | **Resumes** an existing session node, runs a turn. In `wait` mode returns the result synchronously. In `async` mode returns immediately and posts the result back to the supervisor when done. |
+| `read_session` | `nodeId` | `lastN` | Returns the last N session file entries for the given node. |
+| `stop_session` | `nodeId` | — | Cancels any running turn for the given node. |
+
+**FR.15.2 — New-vs-resume choice:** The supervisor explicitly chooses between `spawn_session` (creates a new tree node) and `send_to_session` (resumes an existing node). `list_sessions` provides the data needed to make that choice.
+
+**FR.15.3 — Async mailbox:** When `send_to_session` is called with `mode=async`, on worker turn completion a follow-up turn is automatically triggered on the supervisor node with the message `[worker <name> finished] <resultText>`. This is implemented as a delay-0 schedule targeting the supervisor, reusing the scheduler engine from FR.14.
+
+**FR.15.4 — UI thread marshaling:** All tree mutations triggered by orchestration tools (node creation, model changes) are executed on the Avalonia UI thread via `Dispatcher.UIThread.InvokeAsync`.
+
+**FR.15.5 — Guardrails:** To prevent runaway loops:
+- `Constants.Agent.MaxOrchestrationDepth` (default: 5) — maximum supervisor-worker nesting depth
+- `Constants.Agent.MaxConcurrentWorkers` (default: 10) — maximum simultaneous worker turns
+- `Constants.Agent.MaxTurnsPerLoop` (default: 100) — maximum turns per cron schedule before auto-cancellation
+
+A global kill-switch (`TerminateAllSessions`) cancels all active turn locks and calls `ClaudeProcessManager.TerminateAll()`.
 
 ---
 

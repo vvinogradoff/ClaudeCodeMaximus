@@ -326,6 +326,69 @@
 
 ---
 
+---
+
+## Phase 12 — Scheduled Turns & Agent Orchestration (FR.14, FR.15)
+
+### P12.1 Turn execution core (FR.14.9)
+- [ ] Add `NodeId` (GUID) and `AgentToken` (secret) to `SessionNodeModel` — backfill on load
+- [ ] `Models/TurnSource.cs` — enum: User, Scheduled, Orchestrated
+- [ ] `Models/TurnResultModel.cs` — record: AssistantText, SessionId
+- [ ] `Models/InstructionOptionsModel.cs` — record: IsAutoCommit, IsNewBranch, IsAutoDocument
+- [ ] `Services/InstructionBlockBuilder.cs` — shared static builder extracted from SessionViewModel
+- [ ] `Services/ISessionTurnService.cs` + `SessionTurnService.cs` — headless turn runner with per-node SemaphoreSlim
+- [ ] Wire turn lock into `SessionViewModel.SendAsync` to prevent concurrent turns per node
+
+### P12.2 In-process MCP server (FR.14.1–3)
+- [ ] Add `AgentMcpPort` (int) and `AgentToolsEnabled` (bool) to `AppSettingsModel`
+- [ ] `Services/IAgentMcpServer.cs` + `AgentMcpServer.cs` — HttpListener on loopback, JSON-RPC 2.0
+- [ ] Thread `mcpConfigPath` through `IClaudeProcessManager.SendMessageAsync` and `BuildArguments`
+- [ ] `AgentMcpServer.EnsureConfigFileAsync(nodeId, token)` — writes per-node `--mcp-config` JSON file
+- [ ] `SessionTreeViewModel`: backfill NodeId/AgentToken on load; add `FindNodeByNodeId` + `FindModelByNodeId`
+- [ ] Register `IAgentMcpServer` singleton; start on app startup in `App.axaml.cs`
+- [ ] `Constants.Agent` nested class — MaxOrchestrationDepth, MaxConcurrentWorkers, MaxTurnsPerLoop
+
+### P12.3 Scheduling tools (FR.14.4–8)
+- [ ] `Models/ScheduleModel.cs`, `Models/ScheduleKind.cs`, `Models/MissedFirePolicy.cs`
+- [ ] `Models/Agent/ScheduleWakeArgs.cs`, `ListSchedulesArgs.cs`, `CancelScheduleArgs.cs`
+- [ ] Add `List<ScheduleModel> Schedules` to `AppSettingsModel`
+- [ ] `Services/ISchedulerService.cs` + `SchedulerService.cs` — timer-based scheduler, cron support, missed-fire handling
+- [ ] Register `ISchedulerService` singleton; start on app startup; arm timers on load
+- [ ] Register `schedule_wake`, `list_schedules`, `cancel_schedule` tools on `AgentMcpServer`
+
+### P12.4 Orchestration tools (FR.15.1–4)
+- [ ] `Models/Agent/SessionSummaryModel.cs`, `SpawnResultModel.cs`, `SendToSessionArgs.cs`, `SpawnSessionArgs.cs`, `ReadSessionArgs.cs`, `StopSessionArgs.cs`
+- [ ] Register `list_sessions`, `spawn_session`, `send_to_session`, `read_session`, `stop_session` tools on `AgentMcpServer`
+- [ ] Async mailbox: on worker turn complete → delay-0 schedule back to supervisor
+
+---
+
+## Phase 13 — Local Model Support via Ollama (FR.12.13, FR.12.14)
+
+### P13.1 Model infrastructure
+- [DONE] `Models/ModelProvider.cs` — `enum ModelProvider { Anthropic, Ollama }`
+- [DONE] `Models/ClaudeModelInfo.cs` — add `Provider` parameter (default `Anthropic`)
+- [DONE] `Models/AppSettingsModel.cs` — add `OllamaBaseUrl` (default `http://localhost:11434`); replace `SelectedModelIndex: int` with `SelectedModelId: string`
+- [DONE] `Models/DirectoryNodeModel.cs` — replace `SelectedModelIndex: int` with `SelectedModelId: string`
+- [DONE] `Constants.cs` — add `Ollama` nested class with `AuthToken`, `TagsPath`, `DiscoveryTimeoutMs`
+
+### P13.2 Ollama discovery service (FR.12.13)
+- [DONE] `Services/IOllamaModelService.cs` — interface
+- [DONE] `Services/OllamaModelService.cs` — `GET {baseUrl}/api/tags`, 2.5s timeout, silent fail on any error
+- [DONE] `Services/ClaudeModelService.cs` — inject `IOllamaModelService` + `IAppSettingsService`; fetch Anthropic + Ollama in parallel on startup; merge (Anthropic first)
+- [DONE] `App.axaml.cs` — register `IOllamaModelService → OllamaModelService`
+
+### P13.3 Local model routing (FR.12.14)
+- [DONE] `Services/IClaudeProcessManager.cs` — add `ollamaBaseUrl` param to `SendMessageAsync` and `RunPrintModeAsync`
+- [DONE] `Services/ClaudeProcessManager.cs` — when `ollamaBaseUrl != null`: set `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`; skip profile/proxy
+
+### P13.4 ViewModel & assist updates
+- [DONE] `Services/ClaudeAssistService.cs` — skip Ollama models in fallback; update to use `SelectedModelId` string
+- [DONE] `ViewModels/SessionViewModel.cs` — string ID persistence; `RebuildModelList` shows model IDs; `SelectedLocalBaseUrl`; pass `ollamaBaseUrl` at all 4 `SendMessageAsync` sites; re-select by ID in `OnModelsUpdated`
+- [DONE] Tests updated for new `GetModelFallbackOrderFromId` method signature
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion

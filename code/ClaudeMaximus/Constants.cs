@@ -111,6 +111,46 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		public const string Send = "Send";
 	}
 
+	/// <summary>Constants for the agent MCP server and orchestration guardrails (FR.14, FR.15).</summary>
+	public static class Agent
+	{
+		public const string McpServerName        = "cmx";
+		public const string McpConfigFolderName  = "mcp";
+		public const string McpConfigFileName    = "mcp-config.json";
+		public const string TokenHeader          = "X-CMX-Token";
+		public const string McpEndpointPath      = "/mcp";
+
+		/// <summary>Maximum supervisor-worker nesting depth (FR.15.5).</summary>
+		public const int MaxOrchestrationDepth = 5;
+
+		/// <summary>Maximum simultaneous worker turns across all supervisor sessions (FR.15.5).</summary>
+		public const int MaxConcurrentWorkers = 10;
+
+		/// <summary>Maximum cron fires per schedule before auto-cancellation (FR.15.5). 0 = unlimited.</summary>
+		public const int MaxTurnsPerLoop = 100;
+
+		/// <summary>MCP JSON-RPC protocol version string.</summary>
+		public const string ProtocolVersion = "2024-11-05";
+
+		/// <summary>Prefix prepended to scheduled turn prompts as a SYSTEM message.</summary>
+		public const string ScheduledTurnSystemPrefix = "[Scheduled]";
+
+		/// <summary>Prefix used in async mailbox messages posted to the supervisor.</summary>
+		public const string WorkerFinishedPrefix = "[Worker finished]";
+
+		/// <summary>Timeout in ms for a scheduled turn; after this the turn is cancelled.</summary>
+		public const int ScheduledTurnTimeoutMs = 3_600_000; // 1 hour
+	}
+
+	/// <summary>Constants for local Ollama model discovery and routing (FR.12.13, FR.12.14).</summary>
+	public static class Ollama
+	{
+		public const string DefaultBaseUrl    = "http://localhost:11434";
+		public const string TagsPath          = "/api/tags";
+		public const string AuthToken         = "ollama";
+		public const int    DiscoveryTimeoutMs = 2500;
+	}
+
 	public static class ClaudeSessions
 	{
 		public const string ClaudeHomeFolderName = ".claude";

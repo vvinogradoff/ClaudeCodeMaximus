@@ -18,8 +18,8 @@ public sealed class DirectoryNodeModel
 	/// <summary>Whether the command bar is visible for sessions under this directory (FR.12.11).</summary>
 	public bool IsCommandBarVisible { get; set; }
 
-	/// <summary>Selected model index for sessions under this directory (FR.12.4). 0=Default.</summary>
-	public int SelectedModelIndex { get; set; }
+	/// <summary>Selected model ID for sessions under this directory (FR.12.4). Empty = Default.</summary>
+	public string SelectedModelId { get; set; } = string.Empty;
 
 	/// <summary>Selected profile index for sessions under this directory (FR.12.8). 0=Default.</summary>
 	public int SelectedProfileIndex { get; set; }

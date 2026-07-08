@@ -45,13 +45,15 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		string? model = null,
 		string? profileConfigDir = null,
 		string? effort = null,
+		string? mcpConfigPath = null,
+		string? ollamaBaseUrl = null,
 		CancellationToken cancellationToken = default)
 	{
-		var args = BuildArguments(sessionId, model, effort);
-		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir} ConfigDir={ConfigDir}",
-			claudePath, args, workingDirectory, profileConfigDir);
+		var args = BuildArguments(sessionId, model, effort, mcpConfigPath);
+		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir} ConfigDir={ConfigDir} OllamaBaseUrl={OllamaBaseUrl}",
+			claudePath, args, workingDirectory, profileConfigDir, ollamaBaseUrl);
 
-		Process? process = TryStartProcess(claudePath, args, workingDirectory, profileConfigDir);
+		Process? process = TryStartProcess(claudePath, args, workingDirectory, profileConfigDir, ollamaBaseUrl);
 
 		// On Windows, 'claude' is often a .cmd file which requires cmd.exe to launch
 		// when UseShellExecute=false. Retry via cmd.exe /c if direct spawn failed.
@@ -59,7 +61,7 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		{
 			var cmdArgs = $"/c \"{claudePath}\" {args}";
 			_log.Debug("Direct spawn failed — retrying via cmd.exe /c. Args={CmdArgs}", cmdArgs);
-			process = TryStartProcess("cmd.exe", cmdArgs, workingDirectory, profileConfigDir);
+			process = TryStartProcess("cmd.exe", cmdArgs, workingDirectory, profileConfigDir, ollamaBaseUrl);
 		}
 
 		if (process == null)
@@ -228,7 +230,11 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		return args;
 	}
 
-	private static string BuildArguments(string? sessionId, string? model = null, string? effort = null)
+	private static string BuildArguments(
+		string? sessionId,
+		string? model = null,
+		string? effort = null,
+		string? mcpConfigPath = null)
 	{
 		// -p (--print) forces non-interactive single-prompt mode.
 		// --verbose is required by claude when combining --print with stream-json output.
@@ -240,10 +246,17 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			args += $" --model {model}";
 		if (!string.IsNullOrEmpty(effort))
 			args += $" --effort {effort}";
+		if (!string.IsNullOrEmpty(mcpConfigPath))
+			args += $" --mcp-config \"{mcpConfigPath}\"";
 		return args;
 	}
 
-	private Process? TryStartProcess(string fileName, string arguments, string workingDirectory, string? profileConfigDir = null)
+	private Process? TryStartProcess(
+		string fileName,
+		string arguments,
+		string workingDirectory,
+		string? profileConfigDir = null,
+		string? ollamaBaseUrl = null)
 	{
 		var psi = new ProcessStartInfo(fileName, arguments)
 		{
@@ -261,18 +274,28 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		// Remove CLAUDECODE so claude doesn't refuse to run inside another claude session.
 		psi.Environment.Remove("CLAUDECODE");
 
-		// Set CLAUDE_CONFIG_DIR to isolate auth context for non-default profiles.
-		if (!string.IsNullOrEmpty(profileConfigDir))
-			psi.Environment["CLAUDE_CONFIG_DIR"] = profileConfigDir;
-
-		// Inject HTTPS proxy for traffic inspection (Fiddler, mitmproxy, HTTP Toolkit, etc.)
-		var httpsProxy = _appSettings.Settings.HttpsProxy;
-		if (!string.IsNullOrWhiteSpace(httpsProxy))
+		if (!string.IsNullOrEmpty(ollamaBaseUrl))
 		{
-			psi.Environment["HTTPS_PROXY"] = httpsProxy;
-			psi.Environment["HTTP_PROXY"] = httpsProxy;
-			psi.Environment["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
-			_log.Information("HTTPS proxy configured: {Proxy}", httpsProxy);
+			// Local model routing (FR.12.14): redirect Claude SDK to the Ollama endpoint.
+			// Profile auth and proxy are not used — billing is local hardware.
+			psi.Environment["ANTHROPIC_BASE_URL"]   = ollamaBaseUrl.TrimEnd('/') + "/v1";
+			psi.Environment["ANTHROPIC_AUTH_TOKEN"] = Constants.Ollama.AuthToken;
+			psi.Environment["ANTHROPIC_API_KEY"]    = string.Empty;
+		}
+		else
+		{
+			// Anthropic routing: set profile isolation and optional proxy.
+			if (!string.IsNullOrEmpty(profileConfigDir))
+				psi.Environment["CLAUDE_CONFIG_DIR"] = profileConfigDir;
+
+			var httpsProxy = _appSettings.Settings.HttpsProxy;
+			if (!string.IsNullOrWhiteSpace(httpsProxy))
+			{
+				psi.Environment["HTTPS_PROXY"] = httpsProxy;
+				psi.Environment["HTTP_PROXY"]  = httpsProxy;
+				psi.Environment["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
+				_log.Information("HTTPS proxy configured: {Proxy}", httpsProxy);
+			}
 		}
 
 		try
@@ -391,8 +414,68 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			if (!block.TryGetProperty("type", out var blockType))
 				continue;
 
-			if (blockType.GetString() == "text" && block.TryGetProperty("text", out var text))
+			var blockTypeStr = blockType.GetString();
+			if (blockTypeStr == "text" && block.TryGetProperty("text", out var text))
+			{
 				sb.Append(text.GetString());
+			}
+			else if (blockTypeStr == "tool_use")
+			{
+				var toolName = block.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+				if (toolName == "AskUserQuestion")
+				{
+					var questionMd = FormatAskUserQuestion(block);
+					if (!string.IsNullOrEmpty(questionMd))
+					{
+						if (sb.Length > 0) sb.AppendLine();
+						sb.Append(questionMd);
+					}
+				}
+			}
+		}
+
+		return sb.Length > 0 ? sb.ToString().TrimEnd() : null;
+	}
+
+	private static string? FormatAskUserQuestion(JsonElement block)
+	{
+		if (!block.TryGetProperty("input", out var input))
+			return null;
+		if (!input.TryGetProperty("questions", out var questions) ||
+		    questions.ValueKind != JsonValueKind.Array)
+			return null;
+
+		var sb = new StringBuilder();
+		foreach (var q in questions.EnumerateArray())
+		{
+			if (!q.TryGetProperty("question", out var questionEl))
+				continue;
+			var questionText = questionEl.GetString();
+			if (string.IsNullOrEmpty(questionText))
+				continue;
+
+			if (sb.Length > 0)
+				sb.AppendLine();
+
+			sb.AppendLine($"**{questionText}**");
+
+			if (q.TryGetProperty("options", out var options) &&
+			    options.ValueKind == JsonValueKind.Array)
+			{
+				foreach (var opt in options.EnumerateArray())
+				{
+					var label = opt.TryGetProperty("label", out var lEl) ? lEl.GetString() : null;
+					var desc  = opt.TryGetProperty("description", out var dEl) ? dEl.GetString() : null;
+
+					if (string.IsNullOrEmpty(label))
+						continue;
+
+					sb.Append($"- **{label}**");
+					if (!string.IsNullOrEmpty(desc))
+						sb.Append($" — {desc}");
+					sb.AppendLine();
+				}
+			}
 		}
 
 		return sb.Length > 0 ? sb.ToString().TrimEnd() : null;

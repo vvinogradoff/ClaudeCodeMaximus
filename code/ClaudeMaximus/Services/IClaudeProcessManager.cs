@@ -18,6 +18,7 @@ public interface IClaudeProcessManager
 	/// <summary>
 	/// Spawns a claude process for one user turn. Writes userMessage to stdin, reads
 	/// stdout as stream-json events, calls onEvent for each parsed event, then exits.
+	/// When ollamaBaseUrl is set the process is routed to local Ollama (no profile/proxy).
 	/// </summary>
 	Task SendMessageAsync(
 		string workingDirectory,
@@ -28,6 +29,8 @@ public interface IClaudeProcessManager
 		string? model = null,
 		string? profileConfigDir = null,
 		string? effort = null,
+		string? mcpConfigPath = null,
+		string? ollamaBaseUrl = null,
 		CancellationToken cancellationToken = default);
 
 	/// <summary>

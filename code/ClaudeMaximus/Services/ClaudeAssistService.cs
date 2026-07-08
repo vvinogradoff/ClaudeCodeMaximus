@@ -158,21 +158,21 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 
 	/// <summary>
 	/// Returns the ordered list of models to try for assist calls.
-	/// Per FR.13.14: haiku first, then user's FR.12 selection, then CLI default (null).
+	/// Per FR.13.14: haiku first, then user's FR.12 selection (if Anthropic), then CLI default (null).
 	/// </summary>
 	private List<string?> GetModelFallbackOrder()
 	{
-		return GetModelFallbackOrderFromIndex(
-			_appSettings.Settings.SelectedModelIndex,
+		return GetModelFallbackOrderFromId(
+			_appSettings.Settings.SelectedModelId,
 			_modelService.GetCachedModels());
 	}
 
 	/// <summary>
-	/// Returns ordered model candidates. When <paramref name="availableModels"/> is provided
-	/// the alias is resolved dynamically; otherwise falls back to the legacy hardcoded mapping.
+	/// Returns ordered model candidates for assist calls.
+	/// Ollama models are excluded — assist calls always use Anthropic (FR.12.14).
 	/// </summary>
-	public static List<string?> GetModelFallbackOrderFromIndex(
-		int selectedModelIndex,
+	public static List<string?> GetModelFallbackOrderFromId(
+		string? selectedModelId,
 		IReadOnlyList<ClaudeMaximus.Models.ClaudeModelInfo>? availableModels = null)
 	{
 		var models = new List<string?>();
@@ -180,27 +180,21 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 		// 1. Always try haiku first (preferred for speed/cost)
 		models.Add(Constants.ClaudeAssist.PreferredModel);
 
-		// 2. User's selected model (if different from haiku and non-default)
-		string? userModel;
-		if (availableModels != null && selectedModelIndex > 0 && selectedModelIndex <= availableModels.Count)
+		// 2. User's selected model, if non-empty and not an Ollama model
+		if (!string.IsNullOrEmpty(selectedModelId))
 		{
-			var info = availableModels[selectedModelIndex - 1];
-			userModel = !string.IsNullOrEmpty(info.Alias) ? info.Alias : info.Id;
-		}
-		else
-		{
-			// Legacy fallback for callers without the model list (e.g., unit tests)
-			userModel = selectedModelIndex switch
+			var info = availableModels?.FirstOrDefault(m => m.Id == selectedModelId);
+			// Skip Ollama models — assist calls route through Anthropic only
+			if (info == null || info.Provider != ClaudeMaximus.Models.ModelProvider.Ollama)
 			{
-				1 => "opus",
-				2 => "sonnet",
-				3 => "haiku",
-				_ => null,
-			};
+				// Use alias for Anthropic models when available (resolves to latest)
+				var userModel = (info != null && !string.IsNullOrEmpty(info.Alias))
+					? info.Alias
+					: selectedModelId;
+				if (userModel != Constants.ClaudeAssist.PreferredModel)
+					models.Add(userModel);
+			}
 		}
-
-		if (userModel != null && userModel != Constants.ClaudeAssist.PreferredModel)
-			models.Add(userModel);
 
 		// 3. No model flag (CLI decides)
 		models.Add(null);

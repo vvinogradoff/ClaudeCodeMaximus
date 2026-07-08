@@ -45,10 +45,17 @@ public sealed class AppSettingsModel
 	public string SourceCodesLocation { get; set; } = string.Empty;
 
 	/// <summary>
-	/// Selected Claude model index (0=Default, 1=Opus, 2=Sonnet, 3=Haiku).
-	/// When 0 (Default), no --model flag is passed to the CLI.
+	/// Selected model ID (true model ID string, e.g. "claude-opus-4-7" or "gemma4:26b").
+	/// Empty string = Default (no --model flag passed to CLI). Persisted globally as last-used;
+	/// per-directory selection is on DirectoryNodeModel.SelectedModelId.
 	/// </summary>
-	public int SelectedModelIndex { get; set; }
+	public string SelectedModelId { get; set; } = string.Empty;
+
+	/// <summary>
+	/// Base URL for the local Ollama instance (FR.12.13).
+	/// Used to discover available local models and to route claude CLI spawns for Ollama models.
+	/// </summary>
+	public string OllamaBaseUrl { get; set; } = Constants.Ollama.DefaultBaseUrl;
 
 	/// <summary>
 	/// Configurable keyboard shortcuts. Populated with platform-appropriate defaults
@@ -71,4 +78,19 @@ public sealed class AppSettingsModel
 
 	/// <summary>Seconds between image transitions in the screensaver slideshow.</summary>
 	public int ScreensaverSlideshowInterval { get; set; } = 10;
+
+	/// <summary>
+	/// Whether the in-process agent MCP server is enabled (FR.14.1).
+	/// When true, all claude spawns receive --mcp-config giving access to scheduling and orchestration tools.
+	/// </summary>
+	public bool AgentToolsEnabled { get; set; } = true;
+
+	/// <summary>
+	/// Port for the loopback MCP HTTP server (FR.14.1). 0 = pick a free port at startup.
+	/// Updated with the actual port after the server starts.
+	/// </summary>
+	public int AgentMcpPort { get; set; }
+
+	/// <summary>Persisted schedules (FR.14.8). Scheduler re-arms timers from this list on startup.</summary>
+	public List<ScheduleModel> Schedules { get; set; } = [];
 }

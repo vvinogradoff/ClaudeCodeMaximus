@@ -39,6 +39,13 @@ public partial class App : Application
 		var selfUpdate = Services.GetRequiredService<ISelfUpdateService>();
 		selfUpdate.Initialize();
 
+		// Start agent MCP server and scheduler (FR.14, FR.15).
+		if (appSettings.Settings.AgentToolsEnabled)
+		{
+			Services.GetRequiredService<IAgentMcpServer>().Start();
+			Services.GetRequiredService<ISchedulerService>().Start();
+		}
+
 		if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
 		{
 			desktop.MainWindow = new MainWindow
@@ -46,7 +53,15 @@ public partial class App : Application
 				DataContext = Services.GetRequiredService<MainWindowViewModel>(),
 			};
 
-			desktop.Exit += (_, _) => selfUpdate.CheckAndTriggerUpdate();
+			desktop.Exit += (_, _) =>
+			{
+				selfUpdate.CheckAndTriggerUpdate();
+				if (appSettings.Settings.AgentToolsEnabled)
+				{
+					Services.GetRequiredService<IAgentMcpServer>().Stop();
+					Services.GetRequiredService<ISchedulerService>().Stop();
+				}
+			};
 		}
 
 		base.OnFrameworkInitializationCompleted();
@@ -89,8 +104,19 @@ public partial class App : Application
 		services.AddSingleton<IClaudeAssistService, ClaudeAssistService>();
 		services.AddSingleton<IKeyBindingService, KeyBindingService>();
 		services.AddSingleton<IClaudeProfileService, ClaudeProfileService>();
+		services.AddSingleton<IOllamaModelService, OllamaModelService>();
 		services.AddSingleton<IClaudeModelService, ClaudeModelService>();
 		services.AddSingleton<SessionTreeViewModel>();
+
+		// Agent orchestration singletons (FR.14, FR.15).
+		// Lazy<T> registrations break the circular dependency between ISessionTurnService ↔ IAgentMcpServer.
+		services.AddSingleton<ISessionTurnService, SessionTurnService>();
+		services.AddSingleton<IAgentMcpServer, AgentMcpServer>();
+		services.AddSingleton<ISchedulerService, SchedulerService>();
+		services.AddSingleton(sp => new Lazy<ISessionTurnService>(sp.GetRequiredService<ISessionTurnService>));
+		services.AddSingleton(sp => new Lazy<IAgentMcpServer>(sp.GetRequiredService<IAgentMcpServer>));
+		services.AddSingleton(sp => new Lazy<ISchedulerService>(sp.GetRequiredService<ISchedulerService>));
+
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();
 	}
