@@ -278,9 +278,13 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		{
 			// Local model routing (FR.12.14): redirect Claude SDK to the Ollama endpoint.
 			// Profile auth and proxy are not used — billing is local hardware.
-			psi.Environment["ANTHROPIC_BASE_URL"]   = ollamaBaseUrl.TrimEnd('/') + "/v1";
+			// ANTHROPIC_BASE_URL must be the bare host without /v1 — the Anthropic SDK
+			// appends /v1/messages internally, so including /v1 creates a double path.
+			// ANTHROPIC_API_KEY must be non-empty; the SDK rejects an empty string before
+			// sending the request, so we use the "ollama" placeholder for both.
+			psi.Environment["ANTHROPIC_BASE_URL"]   = ollamaBaseUrl.TrimEnd('/');
 			psi.Environment["ANTHROPIC_AUTH_TOKEN"] = Constants.Ollama.AuthToken;
-			psi.Environment["ANTHROPIC_API_KEY"]    = string.Empty;
+			psi.Environment["ANTHROPIC_API_KEY"]    = Constants.Ollama.AuthToken;
 		}
 		else
 		{
