@@ -31,6 +31,7 @@ public interface IClaudeProcessManager
 		string? effort = null,
 		string? mcpConfigPath = null,
 		string? ollamaBaseUrl = null,
+		bool disableTools = false,
 		CancellationToken cancellationToken = default);
 
 	/// <summary>

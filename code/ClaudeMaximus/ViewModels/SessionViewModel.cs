@@ -344,6 +344,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
+	/// <summary>
+	/// True when the selected local model does not support tool/function calling.
+	/// Causes --tools "" to be appended so the CLI doesn't send tool definitions to the model.
+	/// </summary>
+	private bool SelectedModelDisablesTools =>
+		_selectedModelIndex > 0 && _selectedModelIndex <= _modelInfos.Count
+		&& !_modelInfos[_selectedModelIndex - 1].SupportsTools;
+
 	/// <summary>Display names for the effort selector.</summary>
 	public static string[] AvailableEfforts { get; } = ["Default", "Max", "High", "Medium", "Low"];
 
@@ -1365,6 +1373,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				effort:           SelectedEffort,
 				mcpConfigPath:    mcpConfigPath,
 				ollamaBaseUrl:    SelectedLocalBaseUrl,
+				disableTools:     SelectedModelDisablesTools,
 				cancellationToken: ct);
 
 			if (_needsContextRetry)
@@ -1397,6 +1406,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					profileConfigDir: SelectedProfileConfigDir,
 					effort:           SelectedEffort,
 					ollamaBaseUrl:    SelectedLocalBaseUrl,
+					disableTools:     SelectedModelDisablesTools,
 					cancellationToken: ct);
 			}
 
@@ -1720,6 +1730,7 @@ PROJECT GLOSSARY:
 			profileConfigDir: SelectedProfileConfigDir,
 			effort:           SelectedEffort,
 			ollamaBaseUrl:    SelectedLocalBaseUrl,
+			disableTools:     SelectedModelDisablesTools,
 			onEvent:          evt =>
 			{
 				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
@@ -1798,6 +1809,7 @@ PROJECT GLOSSARY:
 			profileConfigDir: SelectedProfileConfigDir,
 			effort:           SelectedEffort,
 			ollamaBaseUrl:    SelectedLocalBaseUrl,
+			disableTools:     SelectedModelDisablesTools,
 			onEvent:          evt =>
 			{
 				// Capture session ID updates but don't write to file or UI

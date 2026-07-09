@@ -202,8 +202,10 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 	{
 		public const string DefaultBaseUrl    = "http://localhost:11434";
 		public const string TagsPath          = "/api/tags";
+		public const string ShowPath          = "/api/show";
 		public const string AuthToken         = "ollama";
 		public const int    DiscoveryTimeoutMs = 2500;
+		public const int    ShowTimeoutMs      = 3000;
 	}
 
 	public static class Tessyn

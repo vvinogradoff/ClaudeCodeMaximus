@@ -9,4 +9,6 @@ public sealed record ClaudeModelInfo(
     /// <summary>Human-readable display name, e.g. "Opus 4.7". Not shown in dropdown (FR.12.3 uses true IDs).</summary>
     string DisplayName,
     /// <summary>Whether this model is served by Anthropic or a local Ollama instance (FR.12.14).</summary>
-    ModelProvider Provider = ModelProvider.Anthropic);
+    ModelProvider Provider = ModelProvider.Anthropic,
+    /// <summary>Whether this model supports tool/function calling. Anthropic models always do; Ollama models are probed via /api/show.</summary>
+    bool SupportsTools = true);

@@ -47,9 +47,10 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		string? effort = null,
 		string? mcpConfigPath = null,
 		string? ollamaBaseUrl = null,
+		bool disableTools = false,
 		CancellationToken cancellationToken = default)
 	{
-		var args = BuildArguments(sessionId, model, effort, mcpConfigPath);
+		var args = BuildArguments(sessionId, model, effort, mcpConfigPath, disableTools);
 		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir} ConfigDir={ConfigDir} OllamaBaseUrl={OllamaBaseUrl}",
 			claudePath, args, workingDirectory, profileConfigDir, ollamaBaseUrl);
 
@@ -234,7 +235,8 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		string? sessionId,
 		string? model = null,
 		string? effort = null,
-		string? mcpConfigPath = null)
+		string? mcpConfigPath = null,
+		bool disableTools = false)
 	{
 		// -p (--print) forces non-interactive single-prompt mode.
 		// --verbose is required by claude when combining --print with stream-json output.
@@ -248,6 +250,8 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			args += $" --effort {effort}";
 		if (!string.IsNullOrEmpty(mcpConfigPath))
 			args += $" --mcp-config \"{mcpConfigPath}\"";
+		if (disableTools)
+			args += " --tools \"\"";
 		return args;
 	}
 
