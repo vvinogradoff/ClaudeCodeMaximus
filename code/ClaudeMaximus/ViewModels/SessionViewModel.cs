@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,6 +33,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly ISessionTurnService _turnService;
 	private readonly IAgentMcpServer _mcpServer;
 	private readonly DirectoryNodeModel? _directoryModel;
+	private readonly ITessynRunService? _runService;
+	private readonly ITessynDaemonService? _daemonService;
+	private IDisposable? _runEventSubscription;
+	private string? _activeRunId;
+	private bool _daemonPendingClear;
+	private bool _daemonPendingAutoCompact;
+	private CancellationTokenSource? _draftSaveCts;
+	private bool _pendingClear;
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -417,7 +426,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IClaudeSessionImportService importService,
 		IClaudeModelService modelService,
 		ISessionTurnService turnService,
-		IAgentMcpServer mcpServer)
+		IAgentMcpServer mcpServer,
+		ITessynRunService? runService = null,
+		ITessynDaemonService? daemonService = null)
 	{
 		_node             = node;
 		_fileService      = fileService;
@@ -430,6 +441,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_modelService     = modelService;
 		_turnService      = turnService;
 		_mcpServer        = mcpServer;
+		_runService       = runService;
+		_daemonService    = daemonService;
 		_name             = node.Name;
 
 		// Find the parent DirectoryNodeModel for per-directory settings (FR.12.4, FR.12.8, FR.12.11)
@@ -472,6 +485,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// Start background indexing for this session's working directory
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
 			_ = codeIndexService.GetOrCreateIndexAsync(WorkingDirectory);
+
+		_log.Debug("SessionViewModel created: UseDaemon={UseDaemon}, ExternalId={ExternalId}",
+			UseDaemon, _node.ExternalId);
 	}
 
 	public void LoadFromFile()
@@ -500,10 +516,431 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		StartFileWatcher();
 	}
 
+	/// <summary>
+	/// Loads session content from the Tessyn daemon instead of local .txt files.
+	/// Used when UseTessynDaemon is enabled.
+	/// </summary>
+	public async System.Threading.Tasks.Task LoadFromDaemonAsync()
+	{
+		if (_daemonService == null || _node.ExternalId == null) return;
+
+		try
+		{
+			var result = await _daemonService.SessionsGetAsync(_node.ExternalId);
+			foreach (var msg in result.Messages)
+			{
+				Messages.Add(new MessageEntryViewModel
+				{
+					Role      = msg.Role.ToUpperInvariant(),
+					Content   = msg.Content,
+					Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(msg.Timestamp),
+				});
+			}
+
+			// Load draft from daemon
+			var draft = await _daemonService.DraftGetAsync(_node.ExternalId);
+			if (draft is not null)
+			{
+				_inputText = draft;
+				_node.HasDraftText = !string.IsNullOrWhiteSpace(draft);
+			}
+		}
+		catch (TessynRpcException ex) when (ex.Code == Constants.Tessyn.ErrorSessionNotFound)
+		{
+			_log.Warning("Session {ExternalId} not found in daemon", _node.ExternalId);
+		}
+		catch (Exception ex)
+		{
+			_log.Error(ex, "Failed to load session from daemon");
+		}
+	}
+
+	/// <summary>
+	/// Sends a message via the Tessyn daemon instead of spawning a local claude process.
+	/// Used when UseTessynDaemon is enabled.
+	/// </summary>
+	private async System.Threading.Tasks.Task SendViaDaemonAsync()
+	{
+		if (_runService == null) return;
+
+		var message = InputText.Trim();
+		if (string.IsNullOrEmpty(message)) return;
+
+		// For cross-project imported sessions, use the original project path for resume to work
+		var projectPath = _node.Model.OriginalProjectPath ?? _node.Model.WorkingDirectory;
+
+		_log.Debug("SendViaDaemonAsync: ProjectPath={Dir}, ExternalId={Id}", projectPath, _node.ExternalId);
+
+		InputText = string.Empty;
+
+		// Build augmented message with hidden instructions (same as legacy path)
+		var instructionBlock = BuildInstructionBlock();
+		var augmentedMessage = message + instructionBlock;
+
+		// Capture and reset one-shot toggles
+		_daemonPendingClear = _pendingClear;
+		_daemonPendingAutoCompact = _isAutoCompact;
+		if (_isNewBranch) IsNewBranch = false;
+		_pendingClear = false;
+
+		_busyCount++;
+		IsBusy = true;
+		_node.IsRunning = true;
+
+		if (_thinkingTimer == null)
+		{
+			_thinkingStartedAt = DateTimeOffset.UtcNow;
+			ThinkingDuration = "0:00";
+			_thinkingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+			_thinkingTimer.Tick += OnThinkingTimerTick;
+			_thinkingTimer.Start();
+		}
+
+		var now = DateTimeOffset.UtcNow;
+		Messages.Add(new MessageEntryViewModel
+		{
+			Role      = Constants.SessionFile.RoleUser,
+			Content   = message,
+			Timestamp = now,
+		});
+		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+		_node.LastPromptTimestamp = now;
+
+		Messages.Add(new MessageEntryViewModel
+		{
+			Role       = Constants.SessionFile.RoleSystem,
+			Content    = "Claude is thinking...",
+			Timestamp  = DateTimeOffset.UtcNow,
+			IsProgress = true,
+		});
+
+		try
+		{
+			// Subscribe to ALL run events before sending, then filter by runId once known.
+			// This prevents missing early events (run.system, initial deltas) that arrive
+			// before run.send returns the runId.
+			var pendingEvents = new List<TessynRunEvent>();
+			_runEventSubscription?.Dispose();
+			_runEventSubscription = _runService.RunEvents
+				.Subscribe(evt =>
+				{
+					if (_activeRunId != null && evt.RunId == _activeRunId)
+						HandleRunEvent(evt);
+					else if (_activeRunId == null)
+						pendingEvents.Add(evt); // Buffer until runId is known
+				});
+
+			var runId = await _runService.SendAsync(
+				projectPath,
+				augmentedMessage,
+				_node.ExternalId,
+				SelectedModelId,
+				_appSettings.Settings.DaemonPermissionMode);
+
+			_activeRunId = runId;
+
+			// Replay any buffered events for this run
+			foreach (var buffered in pendingEvents)
+			{
+				if (buffered.RunId == runId)
+					HandleRunEvent(buffered);
+			}
+			pendingEvents.Clear();
+
+			// Narrow subscription to only this run now that we have the runId
+			_runEventSubscription?.Dispose();
+			_runEventSubscription = _runService.RunEvents
+				.Where(e => e.RunId == runId)
+				.Subscribe(HandleRunEvent);
+		}
+		catch (Exception ex)
+		{
+			_log.Error(ex, "Failed to send message via daemon");
+			Dispatcher.UIThread.Post(() =>
+			{
+				for (var i = Messages.Count - 1; i >= 0; i--)
+					if (Messages[i].IsProgress) Messages.RemoveAt(i);
+
+				Messages.Add(new MessageEntryViewModel
+				{
+					Role      = Constants.SessionFile.RoleSystem,
+					Content   = $"Error: {ex.Message}",
+					Timestamp = DateTimeOffset.UtcNow,
+				});
+			});
+
+			_busyCount = Math.Max(0, _busyCount - 1);
+			if (_busyCount == 0)
+			{
+				var t = _thinkingTimer;
+				_thinkingTimer = null;
+				t?.Stop();
+				ThinkingDuration = string.Empty;
+				IsBusy = false;
+				_node.IsRunning = false;
+			}
+		}
+	}
+
+	/// <summary>
+	/// Handles a single run event from the Tessyn daemon. Called on the background thread;
+	/// posts UI updates to the dispatcher.
+	/// </summary>
+	private void HandleRunEvent(TessynRunEvent evt)
+	{
+		switch (evt.Type)
+		{
+			case "started":
+				// Run is spawning — no UI action needed beyond what we already show
+				break;
+
+			case "system":
+				// Capture ExternalId for new sessions
+				if (evt.ExternalId != null && _node.Model.ExternalId == null)
+				{
+					Dispatcher.UIThread.Post(() =>
+					{
+						_node.Model.ExternalId = evt.ExternalId;
+						_node.Model.ClaudeSessionId = evt.ExternalId;
+						_appSettings.Save();
+					});
+				}
+				break;
+
+			case "delta" when evt.Delta != null:
+				Dispatcher.UIThread.Post(() =>
+				{
+					// Remove "thinking" progress message and start accumulating assistant text
+					var last = Messages.Count > 0 ? Messages[^1] : null;
+					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
+						Messages.RemoveAt(Messages.Count - 1);
+
+					// Append to existing assistant message or create new one
+					last = Messages.Count > 0 ? Messages[^1] : null;
+					if (last?.Role == Constants.SessionFile.RoleAssistant)
+						last.Content += evt.Delta;
+					else
+						Messages.Add(new MessageEntryViewModel
+						{
+							Role      = Constants.SessionFile.RoleAssistant,
+							Content   = evt.Delta,
+							Timestamp = DateTimeOffset.UtcNow,
+						});
+				});
+				break;
+
+			case "block_start" when evt.BlockType == "tool_use":
+				Dispatcher.UIThread.Post(() =>
+				{
+					Messages.Add(new MessageEntryViewModel
+					{
+						Role       = Constants.SessionFile.RoleSystem,
+						Content    = $"Using tool: {evt.ToolName ?? "unknown"}",
+						Timestamp  = DateTimeOffset.UtcNow,
+						IsProgress = true,
+					});
+				});
+				break;
+
+			case "block_start":
+				// Non-tool content blocks (text, thinking) — start new assistant message
+				if (evt.BlockType == "text")
+				{
+					Dispatcher.UIThread.Post(() =>
+					{
+						// Remove progress messages
+						var last = Messages.Count > 0 ? Messages[^1] : null;
+						if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
+							Messages.RemoveAt(Messages.Count - 1);
+
+						Messages.Add(new MessageEntryViewModel
+						{
+							Role      = Constants.SessionFile.RoleAssistant,
+							Content   = string.Empty,
+							Timestamp = DateTimeOffset.UtcNow,
+						});
+					});
+				}
+				break;
+
+			case "block_stop":
+				// Content block ended — remove tool progress for tool_use blocks
+				Dispatcher.UIThread.Post(() =>
+				{
+					for (var i = Messages.Count - 1; i >= 0; i--)
+					{
+						if (Messages[i].IsProgress && Messages[i].Content.StartsWith("Using tool:"))
+						{
+							Messages.RemoveAt(i);
+							break;
+						}
+					}
+				});
+				break;
+
+			case "message":
+				// Full message received — used for reconnect catch-up, no action needed
+				// during normal streaming since we accumulate via deltas
+				break;
+
+			case "completed":
+				Dispatcher.UIThread.Post(() =>
+				{
+					// Remove any remaining progress messages
+					for (var i = Messages.Count - 1; i >= 0; i--)
+						if (Messages[i].IsProgress) Messages.RemoveAt(i);
+
+					if (evt.Usage != null)
+					{
+						Messages.Add(new MessageEntryViewModel
+						{
+							Role      = Constants.SessionFile.RoleSystem,
+							Content   = $"[{evt.Usage.InputTokens} in / {evt.Usage.OutputTokens} out, {evt.Usage.DurationMs / 1000.0:F1}s, ${evt.Usage.CostUsd:F4}]",
+							Timestamp = DateTimeOffset.UtcNow,
+						});
+					}
+				});
+				FinishDaemonRun(success: true);
+				break;
+
+			case "failed":
+				Dispatcher.UIThread.Post(() =>
+				{
+					for (var i = Messages.Count - 1; i >= 0; i--)
+						if (Messages[i].IsProgress) Messages.RemoveAt(i);
+
+					Messages.Add(new MessageEntryViewModel
+					{
+						Role      = Constants.SessionFile.RoleSystem,
+						Content   = $"Error: {evt.Error ?? "Unknown error"}",
+						Timestamp = DateTimeOffset.UtcNow,
+					});
+				});
+				FinishDaemonRun(success: false);
+				break;
+
+			case "cancelled":
+				Dispatcher.UIThread.Post(() =>
+				{
+					for (var i = Messages.Count - 1; i >= 0; i--)
+						if (Messages[i].IsProgress) Messages.RemoveAt(i);
+
+					Messages.Add(new MessageEntryViewModel
+					{
+						Role      = Constants.SessionFile.RoleSystem,
+						Content   = "[Run cancelled]",
+						Timestamp = DateTimeOffset.UtcNow,
+					});
+				});
+				FinishDaemonRun(success: false);
+				break;
+
+			case "rate_limit":
+				Dispatcher.UIThread.Post(() =>
+				{
+					var retryMs = evt.RetryAfterMs ?? 0;
+					var last = Messages.Count > 0 ? Messages[^1] : null;
+					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
+						last.Content = $"Rate limited — retrying in {retryMs / 1000.0:F0}s...";
+					else
+						Messages.Add(new MessageEntryViewModel
+						{
+							Role       = Constants.SessionFile.RoleSystem,
+							Content    = $"Rate limited — retrying in {retryMs / 1000.0:F0}s...",
+							Timestamp  = DateTimeOffset.UtcNow,
+							IsProgress = true,
+						});
+				});
+				break;
+		}
+	}
+
+	private void FinishDaemonRun(bool success)
+	{
+		_activeRunId = null;
+		_runEventSubscription?.Dispose();
+		_runEventSubscription = null;
+
+		// Trigger daemon reindex so new messages are persisted in the index.
+		// Workaround: daemon's incremental reindex after run completion isn't reliable yet.
+		if (_daemonService != null)
+		{
+			_ = Task.Run(async () =>
+			{
+				try { await _daemonService.ReindexAsync(); }
+				catch (Exception ex) { _log.Debug(ex, "Post-run reindex failed"); }
+			});
+		}
+
+		// Post-run behavior: clear session and auto-compact (mirrors legacy path)
+		if (success)
+		{
+			if (_daemonPendingClear)
+			{
+				_daemonPendingClear = false;
+				Dispatcher.UIThread.Post(() =>
+				{
+					_node.Model.ClaudeSessionId = null;
+					_node.Model.ExternalId = null;
+					_appSettings.Save();
+					this.RaisePropertyChanged(nameof(CanClear));
+				});
+			}
+
+			if (_daemonPendingAutoCompact)
+			{
+				_daemonPendingAutoCompact = false;
+				// Auto-compact via daemon: send compaction prompt as a follow-up
+				if (_runService != null && _node.ExternalId != null)
+				{
+					_ = Task.Run(async () =>
+					{
+						try
+						{
+							await _runService.SendAsync(
+								_node.Model.WorkingDirectory,
+								Constants.Instructions.CompactionPrompt,
+								_node.ExternalId,
+								permissionMode: _appSettings.Settings.DaemonPermissionMode);
+						}
+						catch (Exception ex)
+						{
+							_log.Warning(ex, "Auto-compact via daemon failed");
+						}
+					});
+				}
+				Dispatcher.UIThread.Post(() => IsAutoCompact = false);
+			}
+		}
+		else
+		{
+			_daemonPendingClear = false;
+			_daemonPendingAutoCompact = false;
+		}
+
+		Dispatcher.UIThread.Post(() =>
+		{
+			_busyCount = Math.Max(0, _busyCount - 1);
+			if (_busyCount == 0)
+			{
+				var t = _thinkingTimer;
+				_thinkingTimer = null;
+				t?.Stop();
+				ThinkingDuration = string.Empty;
+				IsBusy = false;
+				_node.IsRunning = false;
+			}
+		});
+	}
+
+	/// <summary>Whether this SessionViewModel should use Tessyn daemon for operations.</summary>
+	private bool UseDaemon => _appSettings.Settings.UseTessynDaemon && _runService != null && _daemonService != null;
+
 	public void Dispose()
 	{
 		_modelService.ModelsUpdated -= OnModelsUpdated;
 		_sendCts?.Dispose();
+		_runEventSubscription?.Dispose();
 		_fileWatcher?.Dispose();
 		_jsonlWatcher?.Dispose();
 		_fileChangeDebounceTimer?.Dispose();
@@ -811,6 +1248,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private async System.Threading.Tasks.Task SendAsync()
 	{
+		if (UseDaemon)
+		{
+			await SendViaDaemonAsync();
+			return;
+		}
 		var message = InputText.Trim();
 		if (string.IsNullOrEmpty(message))
 			return;
@@ -1125,10 +1567,36 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		{
 			_draftDebounceTimer?.Stop();
 			_draftDebounceTimer = null;
-			if (string.IsNullOrEmpty(text))
-				_draftService.DeleteDraft(_node.FileName);
+
+			if (UseDaemon && _node.ExternalId != null)
+			{
+				// Cancel any previous in-flight save to ensure last-write-wins ordering
+				_draftSaveCts?.Cancel();
+				var cts = new CancellationTokenSource();
+				_draftSaveCts = cts;
+				var externalId = _node.ExternalId;
+				var content = string.IsNullOrEmpty(text) ? string.Empty : text;
+
+				_ = Task.Run(async () =>
+				{
+					try
+					{
+						await _daemonService!.DraftSaveAsync(externalId, content, cts.Token);
+					}
+					catch (OperationCanceledException) { /* superseded by newer save */ }
+					catch (Exception ex)
+					{
+						_log.Debug(ex, "Failed to save draft to daemon");
+					}
+				}, cts.Token);
+			}
 			else
-				_draftService.SaveDraft(_node.FileName, text);
+			{
+				if (string.IsNullOrEmpty(text))
+					_draftService.DeleteDraft(_node.FileName);
+				else
+					_draftService.SaveDraft(_node.FileName, text);
+			}
 		};
 		_draftDebounceTimer.Start();
 	}

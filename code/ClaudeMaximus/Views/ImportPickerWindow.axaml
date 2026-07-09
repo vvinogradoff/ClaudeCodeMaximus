@@ -1,25 +1,31 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ClaudeMaximus.ViewModels"
+        xmlns:views="using:ClaudeMaximus.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         x:Class="ClaudeMaximus.Views.ImportPickerWindow"
         x:DataType="vm:ImportPickerViewModel"
-        Title="Import Claude Sessions"
+        Title="Import Sessions"
         Width="700" Height="650"
         MinWidth="500" MinHeight="500"
         WindowStartupLocation="CenterOwner">
 
     <DockPanel Margin="12">
 
-        <!-- Source directory selector (only shown when multiple directories exist) -->
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4"
-                   IsVisible="{Binding HasMultipleSources}" x:CompileBindings="False">
+        <!-- Source directory selector with Global toggle -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" x:CompileBindings="False">
             <TextBlock DockPanel.Dock="Left" Text="Scan from:" VerticalAlignment="Center"
                        Margin="0,0,8,0" Width="75"/>
+            <CheckBox DockPanel.Dock="Right" Content="Global" Margin="8,0,0,0"
+                      IsChecked="{Binding IsGlobalSearch}"
+                      IsVisible="{Binding CanUseGlobalSearch}"
+                      VerticalAlignment="Center" FontSize="12"
+                      ToolTip.Tip="Search across all projects (via Tessyn daemon)"/>
             <ComboBox ItemsSource="{Binding SourceDirectories}"
                       SelectedItem="{Binding SelectedSource}"
+                      IsEnabled="{Binding !IsGlobalSearch}"
                       HorizontalAlignment="Stretch"/>
         </DockPanel>
 
@@ -32,15 +38,44 @@
                       HorizontalAlignment="Stretch"/>
         </DockPanel>
 
-        <!-- Top: Search bar -->
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-            <TextBlock DockPanel.Dock="Left" Text="Search:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <ProgressBar DockPanel.Dock="Right" Width="24" Height="24" IsIndeterminate="True"
-                         IsVisible="{Binding IsSearching}" Margin="8,0,0,0"/>
-            <TextBox x:Name="SearchBox" Text="{Binding SearchText}"
-                     Watermark="Enter search query and press Enter..."
-                     KeyDown="OnSearchKeyDown"/>
-        </DockPanel>
+        <!-- Cross-project warning banner -->
+        <Border DockPanel.Dock="Top" Margin="0,0,0,6" Padding="8,5"
+                CornerRadius="4" Background="#30FF9800"
+                BorderBrush="#60FF9800" BorderThickness="1"
+                IsVisible="{Binding HasCrossProjectWarning}"
+                x:CompileBindings="False">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Use original directory"
+                        FontSize="11" Padding="8,2" Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Click="OnSwitchToOriginalClicked"/>
+                <TextBlock Text="{Binding CrossProjectWarning}"
+                           FontSize="11" TextWrapping="Wrap"
+                           VerticalAlignment="Center" Opacity="0.9"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Search bar with inline icon -->
+        <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,8">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Text="Search:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <Grid>
+                    <views:NativeTextBox x:Name="SearchBox" Text="{Binding SearchText}"
+                             Watermark="Search sessions..."
+                             Padding="6,5,30,5"
+                             KeyDown="OnSearchKeyDown"/>
+                    <Button Content="&#x1F50D;" FontSize="11"
+                            Width="26" Height="22" Padding="0"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Margin="0,0,3,0"
+                            Background="Transparent" BorderThickness="0"
+                            Opacity="0.5"
+                            ToolTip.Tip="Search" Click="OnSearchButtonClicked"/>
+                </Grid>
+            </DockPanel>
+            <ProgressBar Height="2" IsIndeterminate="True"
+                         IsVisible="{Binding IsSearching}"/>
+        </StackPanel>
 
         <!-- Status bar -->
         <TextBlock DockPanel.Dock="Top" Text="{Binding StatusMessage}" Opacity="0.7" FontSize="12"
@@ -89,18 +124,20 @@
                                 <CheckBox Grid.Row="0" Grid.RowSpan="2" Grid.Column="0"
                                           IsChecked="{Binding IsSelected}"
                                           IsEnabled="{Binding IsSelectable}"
-                                          VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                          VerticalAlignment="Center" Margin="0,0,8,0"
+                                          Click="OnItemCheckboxClicked"/>
 
                                 <!-- Title / preview -->
-                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <DockPanel Grid.Row="0" Grid.Column="1">
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Text="generating..."
+                                               IsVisible="{Binding IsTitlePending}"
+                                               FontSize="11" FontStyle="Italic" Opacity="0.4"
+                                               VerticalAlignment="Center" Margin="6,0,0,0"/>
                                     <TextBlock Text="{Binding DisplayTitle}"
                                                TextTrimming="CharacterEllipsis"
                                                FontWeight="SemiBold"/>
-                                    <TextBlock Text="generating..."
-                                               IsVisible="{Binding IsTitlePending}"
-                                               FontSize="11" FontStyle="Italic" Opacity="0.4"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
+                                </DockPanel>
 
                                 <!-- Status badge (already imported / empty) -->
                                 <TextBlock Grid.Row="0" Grid.Column="2"
@@ -114,6 +151,10 @@
                                             Orientation="Horizontal" Spacing="12" Margin="0,2,0,0">
                                     <TextBlock Text="{Binding DateRange}" FontSize="11" Opacity="0.6"/>
                                     <TextBlock Text="{Binding MessageCountText}" FontSize="11" Opacity="0.6"/>
+                                    <TextBlock Text="{Binding ProjectLabel}"
+                                               IsVisible="{Binding IsCrossProject}"
+                                               FontSize="11" Opacity="0.5" FontStyle="Italic"
+                                               Foreground="#5599DD"/>
                                 </StackPanel>
                             </Grid>
                         </Border>

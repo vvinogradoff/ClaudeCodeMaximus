@@ -361,12 +361,13 @@ public partial class MainWindow : Window
 
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
+		var daemonService = App.Services.GetRequiredService<ITessynDaemonService>();
 
 		var sourceDirectories = vm.SessionTree.BuildSourceDirectories();
 		var importTargets = vm.SessionTree.BuildImportTargets();
 		var (initialPath, initialTargetKey) = vm.SessionTree.GetSelectedImportContext();
 
-		var pickerVm = new ImportPickerViewModel(importService, assistService);
+		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonService);
 		var alreadyImportedIds = vm.SessionTree.CollectAllClaudeSessionIds();
 		pickerVm.Initialize(sourceDirectories, importTargets, initialPath, initialTargetKey, alreadyImportedIds);
 
@@ -381,6 +382,11 @@ public partial class MainWindow : Window
 			return;
 
 		var (dirNode, grpNode) = vm.SessionTree.FindTargetByKey(target.Key);
+
+		// If target is a new directory not yet in the tree, create it
+		if (dirNode == null && grpNode == null && target.IsDirectory && !string.IsNullOrEmpty(target.WorkingDirectory))
+			dirNode = vm.SessionTree.AddDirectory(target.WorkingDirectory);
+
 		var fileService = App.Services.GetRequiredService<ISessionFileService>();
 
 		foreach (var item in picker.Result)

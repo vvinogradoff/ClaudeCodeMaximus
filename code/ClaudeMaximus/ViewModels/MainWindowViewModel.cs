@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reactive;
 using System.Reactive.Linq;
+using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
 using ReactiveUI;
 using Serilog;
@@ -22,12 +23,16 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ISelfUpdateService _selfUpdate;
 	private readonly ISessionTurnService _turnService;
 	private readonly IAgentMcpServer _mcpServer;
+	private readonly ITessynRunService? _runService;
+	private readonly ITessynDaemonService? _daemonService;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
 	private bool _isTreePanelVisible;
 	private bool _isDarkTheme;
 	private int _selectedLeftTabIndex;
+	private string _daemonStatusText = string.Empty;
+	private string _daemonStatusColor = "Gray";
 
 	public SessionTreeViewModel SessionTree { get; }
 	public RecentSessionsViewModel RecentSessions { get; }
@@ -84,6 +89,49 @@ public sealed class MainWindowViewModel : ViewModelBase
 		}
 	}
 
+	private bool _isDaemonMissing;
+	private string _daemonMissingMessage = string.Empty;
+
+	/// <summary>True when tessyn binary was not found on PATH.</summary>
+	public bool IsDaemonMissing
+	{
+		get => _isDaemonMissing;
+		private set => this.RaiseAndSetIfChanged(ref _isDaemonMissing, value);
+	}
+
+	/// <summary>User-facing message about missing daemon.</summary>
+	public string DaemonMissingMessage
+	{
+		get => _daemonMissingMessage;
+		private set => this.RaiseAndSetIfChanged(ref _daemonMissingMessage, value);
+	}
+
+	/// <summary>Called when tessyn binary is not found during startup.</summary>
+	public void SetDaemonMissing(string message)
+	{
+		IsDaemonMissing = true;
+		DaemonMissingMessage = message;
+		DaemonStatusText = "Not installed";
+		DaemonStatusColor = "Red";
+	}
+
+	/// <summary>Status text for the Tessyn daemon indicator in the title bar.</summary>
+	public string DaemonStatusText
+	{
+		get => _daemonStatusText;
+		private set => this.RaiseAndSetIfChanged(ref _daemonStatusText, value);
+	}
+
+	/// <summary>Color name for the daemon status dot (Green, Orange, Red, Gray).</summary>
+	public string DaemonStatusColor
+	{
+		get => _daemonStatusColor;
+		private set => this.RaiseAndSetIfChanged(ref _daemonStatusColor, value);
+	}
+
+	/// <summary>Whether daemon status indicator should be visible.</summary>
+	public bool IsDaemonStatusVisible => _daemonService != null && _appSettings.Settings.UseTessynDaemon;
+
 	// --- FR.11 instruction toolbar forwarding properties ---
 
 	/// <summary>Whether any session is selected (used to enable/disable toolbar buttons).</summary>
@@ -136,7 +184,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IDirectoryLabelService labelService,
 		SessionTreeViewModel sessionTree,
 		ISessionTurnService turnService,
-		IAgentMcpServer mcpServer)
+		IAgentMcpServer mcpServer,
+		ITessynRunService? runService = null,
+		ITessynDaemonService? daemonService = null)
 	{
 		_appSettings      = appSettings;
 		_fileService      = fileService;
@@ -149,6 +199,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_selfUpdate       = selfUpdate;
 		_turnService      = turnService;
 		_mcpServer        = mcpServer;
+		_runService       = runService;
+		_daemonService    = daemonService;
 		SessionTree       = sessionTree;
 		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
@@ -177,6 +229,38 @@ public sealed class MainWindowViewModel : ViewModelBase
 					SessionTree.SelectedSession = node;
 			});
 
+		// Subscribe to daemon state changes for status indicator
+		if (_daemonService != null)
+		{
+			_daemonService.ConnectionStateChanged += (_, state) =>
+			{
+				Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateDaemonStatus(state, _daemonService.Readiness));
+			};
+			_daemonService.ReadinessChanged += (_, readiness) =>
+			{
+				Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateDaemonStatus(_daemonService.ConnectionState, readiness));
+			};
+			UpdateDaemonStatus(_daemonService.ConnectionState, _daemonService.Readiness);
+		}
+	}
+
+	private void UpdateDaemonStatus(TessynConnectionState connection, TessynDaemonReadiness readiness)
+	{
+		(DaemonStatusText, DaemonStatusColor) = connection switch
+		{
+			TessynConnectionState.Disconnected => ("Disconnected", "Red"),
+			TessynConnectionState.Connecting => ("Connecting...", "Orange"),
+			TessynConnectionState.Reconnecting => ("Reconnecting...", "Orange"),
+			TessynConnectionState.Connected => readiness switch
+			{
+				TessynDaemonReadiness.Ready => ($"Tessyn: {_daemonService?.LastStatus?.SessionsIndexed ?? 0} sessions", "Green"),
+				TessynDaemonReadiness.Scanning => ("Indexing...", "Orange"),
+				TessynDaemonReadiness.Cold => ("Starting...", "Orange"),
+				TessynDaemonReadiness.Degraded => ("Degraded", "Orange"),
+				_ => ("Connected", "Green"),
+			},
+			_ => ("Unknown", "Gray"),
+		};
 	}
 
 	private void OnSelectedSessionChanged(SessionNodeViewModel? node)
@@ -185,6 +269,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		{
 			ActiveSession = null;
 			_appSettings.Settings.ActiveSessionFileName = null;
+			_appSettings.Settings.ActiveSessionExternalId = null;
 			RaiseInstructionToolbarChanged();
 			return;
 		}
@@ -194,12 +279,25 @@ public sealed class MainWindowViewModel : ViewModelBase
 			_appSettings.Settings.SelectedProfileIndex, _appSettings.Settings.Profiles);
 		_ = _modelService.EnsureModelsLoadedAsync(_appSettings.Settings.ClaudePath, profileConfigDir);
 
-		if (!_sessionCache.TryGetValue(node.FileName, out var vm))
+		var cacheKey = node.SessionKey;
+		if (!_sessionCache.TryGetValue(cacheKey, out var vm))
 		{
-			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _turnService, _mcpServer);
-			vm.LoadFromFile();
-			vm.ResolveDefaultProfileEmail();
-			_sessionCache[node.FileName] = vm;
+			// Check if the VM is cached under the old FileName key (ExternalId was set after caching)
+			if (node.ExternalId != null && _sessionCache.TryGetValue(node.FileName, out vm))
+			{
+				_sessionCache.Remove(node.FileName);
+				_sessionCache[cacheKey] = vm;
+			}
+			else
+			{
+				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _turnService, _mcpServer, _runService, _daemonService);
+				if (_appSettings.Settings.UseTessynDaemon && _daemonService != null && node.ExternalId != null)
+					_ = vm.LoadFromDaemonAsync();
+				else
+					vm.LoadFromFile();
+				vm.ResolveDefaultProfileEmail();
+				_sessionCache[cacheKey] = vm;
+			}
 		}
 
 		// Compute and set location info for the session header
@@ -209,6 +307,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 		ActiveSession = vm;
 		_appSettings.Settings.ActiveSessionFileName = node.FileName;
+		_appSettings.Settings.ActiveSessionExternalId = node.ExternalId;
 		RaiseInstructionToolbarChanged();
 	}
 
@@ -251,25 +350,33 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 	public void RestoreActiveSession()
 	{
+		// Try ExternalId first (new identity), fall back to FileName (legacy)
+		var savedExternalId = _appSettings.Settings.ActiveSessionExternalId;
 		var savedFileName = _appSettings.Settings.ActiveSessionFileName;
-		if (string.IsNullOrEmpty(savedFileName))
+
+		SessionNodeViewModel? node = null;
+
+		if (!string.IsNullOrEmpty(savedExternalId))
 		{
-			Log.Debug("RestoreActiveSession: no saved ActiveSessionFileName");
-			return;
+			Log.Debug("RestoreActiveSession: looking for ExternalId {ExternalId}", savedExternalId);
+			node = FindSessionByPredicate(s => s.ExternalId == savedExternalId);
 		}
 
-		Log.Debug("RestoreActiveSession: looking for {FileName} in {DirCount} directories",
-			savedFileName, SessionTree.Directories.Count);
+		if (node == null && !string.IsNullOrEmpty(savedFileName))
+		{
+			Log.Debug("RestoreActiveSession: falling back to FileName {FileName}", savedFileName);
+			node = FindSessionByPredicate(s => s.FileName == savedFileName);
+		}
 
-		var node = FindSessionNode(savedFileName);
 		if (node != null)
 		{
 			Log.Debug("RestoreActiveSession: found node '{Name}', setting selection", node.Name);
 			SessionTree.SelectedSession = node;
 		}
-		else
+		else if (!string.IsNullOrEmpty(savedExternalId) || !string.IsNullOrEmpty(savedFileName))
 		{
-			Log.Warning("RestoreActiveSession: session node not found for {FileName}", savedFileName);
+			Log.Warning("RestoreActiveSession: session node not found for ExternalId={ExternalId}, FileName={FileName}",
+				savedExternalId, savedFileName);
 		}
 	}
 
@@ -284,11 +391,11 @@ public sealed class MainWindowViewModel : ViewModelBase
 			SessionTree.SelectedSession = node;
 	}
 
-	private SessionNodeViewModel? FindSessionNode(string fileName)
+	private SessionNodeViewModel? FindSessionByPredicate(Func<SessionNodeViewModel, bool> predicate)
 	{
 		foreach (var dir in SessionTree.Directories)
 		{
-			var found = FindSessionInChildren(dir.Children, fileName);
+			var found = FindSessionInChildren(dir.Children, predicate);
 			if (found != null)
 				return found;
 		}
@@ -296,15 +403,16 @@ public sealed class MainWindowViewModel : ViewModelBase
 	}
 
 	private static SessionNodeViewModel? FindSessionInChildren(
-		System.Collections.ObjectModel.ObservableCollection<ViewModelBase> children, string fileName)
+		System.Collections.ObjectModel.ObservableCollection<ViewModelBase> children,
+		Func<SessionNodeViewModel, bool> predicate)
 	{
 		foreach (var child in children)
 		{
-			if (child is SessionNodeViewModel session && session.FileName == fileName)
+			if (child is SessionNodeViewModel session && predicate(session))
 				return session;
 			if (child is GroupNodeViewModel group)
 			{
-				var found = FindSessionInChildren(group.Children, fileName);
+				var found = FindSessionInChildren(group.Children, predicate);
 				if (found != null)
 					return found;
 			}

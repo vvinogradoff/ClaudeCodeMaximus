@@ -29,7 +29,7 @@
                               ToolTip.Tip="Toggle markdown rendering"
                               Padding="8,3" FontSize="11"
                               VerticalAlignment="Center"/>
-                <TextBox DockPanel.Dock="Right"
+                <views:NativeTextBox DockPanel.Dock="Right"
                          x:Name="OutputSearchBox"
                          Watermark="Search output..."
                          Width="180" Margin="0,0,8,0"
@@ -213,7 +213,7 @@
                 <!-- Left column: Input area + Command bar -->
                 <Grid Grid.Column="0" RowDefinitions="*,Auto">
                     <Panel Grid.Row="0">
-                        <TextBox x:Name="InputBox"
+                        <views:NativeTextBox x:Name="InputBox"
                                  Text="{Binding InputText}"
                                  AcceptsReturn="True"
                                  Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file"
