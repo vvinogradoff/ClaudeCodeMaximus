@@ -19,6 +19,7 @@ public sealed class SettingsViewModel : ViewModelBase
 	private string _screensaverDirectory;
 	private string _screensaverTimeout;
 	private string _screensaverSlideshowInterval;
+	private bool _notificationsEnabled;
 
 	// Color fields for the currently selected theme
 	private string _inputBoxBackground;
@@ -84,6 +85,13 @@ public sealed class SettingsViewModel : ViewModelBase
 			this.RaiseAndSetIfChanged(ref _isDarkTheme, value);
 			LoadColorsFromTheme();
 		}
+	}
+
+	/// <summary>Whether desktop toast notifications are enabled for completed scheduled turns (FR.16.5).</summary>
+	public bool NotificationsEnabled
+	{
+		get => _notificationsEnabled;
+		set => this.RaiseAndSetIfChanged(ref _notificationsEnabled, value);
 	}
 
 	public string InputBoxBackground
@@ -177,6 +185,7 @@ public sealed class SettingsViewModel : ViewModelBase
 		_screensaverTimeout = appSettings.Settings.ScreensaverTimeout.ToString();
 		_screensaverSlideshowInterval = appSettings.Settings.ScreensaverSlideshowInterval.ToString();
 		_isDarkTheme = appSettings.Settings.Theme == "Dark";
+		_notificationsEnabled = appSettings.Settings.NotificationsEnabled;
 
 		var colors = _isDarkTheme ? appSettings.Settings.DarkColors : appSettings.Settings.LightColors;
 		_inputBoxBackground    = colors.InputBoxBackground;
@@ -230,6 +239,7 @@ public sealed class SettingsViewModel : ViewModelBase
 		_appSettings.Settings.ScreensaverDirectory = _screensaverDirectory;
 		_appSettings.Settings.ScreensaverTimeout = int.TryParse(_screensaverTimeout, out var st) ? Math.Max(0, st) : 120;
 		_appSettings.Settings.ScreensaverSlideshowInterval = int.TryParse(_screensaverSlideshowInterval, out var si) ? Math.Max(1, si) : 10;
+		_appSettings.Settings.NotificationsEnabled = _notificationsEnabled;
 		_appSettings.Settings.Theme = _isDarkTheme ? "Dark" : "Light";
 
 		// Save colors to the appropriate theme

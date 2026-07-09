@@ -316,6 +316,7 @@ The application header bar provides per-session instruction toggles that modify 
 - **Not shown** in the user message bubble in the output window
 - **Not stored** in the session file (the session file records only the clean user prompt)
 - Appended as a clearly delimited block after the user's message text when written to `claude` stdin
+- When `AgentToolsEnabled` is true, the block additionally includes the native-scheduling redirect defined in **FR.14.11** (unconditional, not tied to any toolbar toggle).
 
 **FR.11.3 — Auto-Commit toggle:**
 - **Type:** Sticky toggle (persists across prompts until user toggles it off)
@@ -540,6 +541,8 @@ The application allows any session to schedule a future turn against itself or a
 **FR.14.9 — Per-node turn serialization:** At most one turn may run concurrently per `NodeId`. If a live user-initiated turn and a scheduled turn would overlap, the scheduled turn waits for the lock to be released.
 
 **FR.14.10 — Scheduled turn visibility:** A scheduled turn's prompt is appended to the session file as a `USER` entry, and the response as an `ASSISTANT` entry. A `SYSTEM` entry `[Scheduled: <note>]` is prepended to the prompt so the trigger is visible in the session view. The session file watcher (`FR.3.1`, `SessionViewModel`) picks up the new entries and updates the output panel for any session that is currently open.
+
+**FR.14.11 — Native scheduling redirect:** When `AgentToolsEnabled` is true, the hidden instruction block (FR.11.2, FR.11.10) unconditionally includes a directive redirecting Claude away from the CLI's built-in scheduling tools (`ScheduleWakeup`, `CronCreate`, `CronList`, `CronDelete`) toward the ClaudeMaximus MCP scheduling tools (`mcp__cmx__schedule_wake`, `mcp__cmx__list_schedules`, `mcp__cmx__cancel_schedule`). **Rationale:** the `claude` process is terminated after each turn, so schedules registered via the CLI's built-in tools live only within that process's lifetime and are silently lost. The MCP-served scheduling tools delegate to the host-side `SchedulerService`, which persists schedules to `appsettings.json` and re-arms them on app startup (FR.14.7, FR.14.8). When `AgentToolsEnabled` is false, the redirect line is omitted (the MCP tools are unavailable, so no substitute exists).
 
 ---
 

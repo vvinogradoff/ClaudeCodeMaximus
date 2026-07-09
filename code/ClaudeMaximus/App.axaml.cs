@@ -46,11 +46,17 @@ public partial class App : Application
 			Services.GetRequiredService<ISchedulerService>().Start();
 		}
 
+		// Wire toast click-to-activate before the window opens so early clicks are not missed (FR.16).
+		var mainVm = Services.GetRequiredService<MainWindowViewModel>();
+		var notifications = Services.GetRequiredService<INotificationService>();
+		notifications.RegisterActivationHandler(nodeId =>
+			Avalonia.Threading.Dispatcher.UIThread.Post(() => mainVm.SelectSessionByNodeId(nodeId)));
+
 		if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
 		{
 			desktop.MainWindow = new MainWindow
 			{
-				DataContext = Services.GetRequiredService<MainWindowViewModel>(),
+				DataContext = mainVm,
 			};
 
 			desktop.Exit += (_, _) =>
@@ -113,6 +119,7 @@ public partial class App : Application
 		services.AddSingleton<ISessionTurnService, SessionTurnService>();
 		services.AddSingleton<IAgentMcpServer, AgentMcpServer>();
 		services.AddSingleton<ISchedulerService, SchedulerService>();
+		services.AddSingleton<INotificationService, WindowsNotificationService>();
 		services.AddSingleton(sp => new Lazy<ISessionTurnService>(sp.GetRequiredService<ISessionTurnService>));
 		services.AddSingleton(sp => new Lazy<IAgentMcpServer>(sp.GetRequiredService<IAgentMcpServer>));
 		services.AddSingleton(sp => new Lazy<ISchedulerService>(sp.GetRequiredService<ISchedulerService>));

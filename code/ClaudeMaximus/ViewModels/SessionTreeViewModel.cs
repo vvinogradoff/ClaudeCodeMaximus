@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using ClaudeMaximus.Models;
+using ClaudeMaximus.Models.Agent;
 using ClaudeMaximus.Services;
 using ReactiveUI;
 
@@ -732,7 +733,30 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private void LoadFromSettings()
 	{
 		foreach (var dirModel in _appSettings.Settings.Tree)
+		{
+			BackfillAgentIdentity(dirModel.Sessions);
+			foreach (var grp in dirModel.Groups)
+				BackfillAgentIdentityInGroups(grp);
 			Directories.Add(new DirectoryNodeViewModel(dirModel, _labelService));
+		}
+	}
+
+	private static void BackfillAgentIdentity(IEnumerable<SessionNodeModel> sessions)
+	{
+		var dirty = false;
+		foreach (var s in sessions)
+		{
+			if (string.IsNullOrEmpty(s.NodeId))     { s.NodeId     = Guid.NewGuid().ToString("N"); dirty = true; }
+			if (string.IsNullOrEmpty(s.AgentToken)) { s.AgentToken = Guid.NewGuid().ToString("N"); dirty = true; }
+		}
+		_ = dirty; // caller saves after all dirs are processed
+	}
+
+	private static void BackfillAgentIdentityInGroups(GroupNodeModel group)
+	{
+		BackfillAgentIdentity(group.Sessions);
+		foreach (var child in group.Groups)
+			BackfillAgentIdentityInGroups(child);
 	}
 
 	private void PromptAddDirectory()
@@ -852,6 +876,174 @@ public sealed class SessionTreeViewModel : ViewModelBase
 				case GroupNodeViewModel group:
 					group.IsVisible = true;
 					ShowAllChildren(group.Children);
+					break;
+			}
+		}
+	}
+
+	// --- Agent orchestration helpers (FR.14, FR.15) ---
+
+	/// <summary>
+	/// Finds the <see cref="SessionNodeViewModel"/> whose model has <c>NodeId == nodeId</c>.
+	/// Must be called on the UI thread (reads ObservableCollections).
+	/// </summary>
+	public SessionNodeViewModel? FindNodeVmByNodeId(string nodeId)
+	{
+		foreach (var dir in Directories)
+		{
+			var found = FindNodeVmInChildren(dir.Children, nodeId);
+			if (found != null) return found;
+		}
+		return null;
+	}
+
+	private static SessionNodeViewModel? FindNodeVmInChildren(ObservableCollection<ViewModelBase> children, string nodeId)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel s when s.Model.NodeId == nodeId: return s;
+				case GroupNodeViewModel g:
+					var r = FindNodeVmInChildren(g.Children, nodeId);
+					if (r != null) return r;
+					break;
+			}
+		}
+		return null;
+	}
+
+	/// <summary>
+	/// Finds the raw <see cref="SessionNodeModel"/> whose <c>NodeId == nodeId</c>.
+	/// Must be called on the UI thread.
+	/// </summary>
+	public SessionNodeModel? FindModelByNodeId(string nodeId)
+	{
+		foreach (var dir in Directories)
+		{
+			var found = FindModelInChildren(dir.Children, nodeId, byNodeId: true);
+			if (found != null) return found;
+		}
+		return null;
+	}
+
+	/// <summary>
+	/// Finds the raw <see cref="SessionNodeModel"/> whose <c>AgentToken == token</c>.
+	/// Must be called on the UI thread.
+	/// </summary>
+	public SessionNodeModel? FindModelByAgentToken(string token)
+	{
+		foreach (var dir in Directories)
+		{
+			var found = FindModelInChildren(dir.Children, token, byNodeId: false);
+			if (found != null) return found;
+		}
+		return null;
+	}
+
+	private static SessionNodeModel? FindModelInChildren(
+		ObservableCollection<ViewModelBase> children, string key, bool byNodeId)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel s:
+					var match = byNodeId
+						? s.Model.NodeId == key
+						: s.Model.AgentToken == key;
+					if (match) return s.Model;
+					break;
+				case GroupNodeViewModel g:
+					var r = FindModelInChildren(g.Children, key, byNodeId);
+					if (r != null) return r;
+					break;
+			}
+		}
+		return null;
+	}
+
+	/// <summary>
+	/// Creates a new session node for the agent orchestration tool (spawn_session).
+	/// Attempts to place the session under a directory matching <paramref name="workingDir"/>.
+	/// Optionally places it under a group named <paramref name="group"/>.
+	/// Must be called on the UI thread.
+	/// Returns the new <see cref="SessionNodeModel"/>, or null if no matching directory was found.
+	/// </summary>
+	public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group)
+	{
+		var dir = Directories.FirstOrDefault(d =>
+			string.Equals(d.Path, workingDir, StringComparison.OrdinalIgnoreCase));
+
+		if (dir == null)
+		{
+			// Try a prefix match (working dir may be a subdirectory).
+			dir = Directories.FirstOrDefault(d =>
+				workingDir.StartsWith(d.Path, StringComparison.OrdinalIgnoreCase));
+		}
+
+		if (dir == null)
+			return null;
+
+		SessionNodeViewModel sessionVm;
+		if (!string.IsNullOrEmpty(group))
+		{
+			// Find or create the group under the directory.
+			var grpVm = dir.Children.OfType<GroupNodeViewModel>()
+				.FirstOrDefault(g => string.Equals(g.Name, group, StringComparison.OrdinalIgnoreCase));
+
+			grpVm ??= AddGroup(dir, group);
+			sessionVm = AddSessionToGroup(grpVm, name);
+		}
+		else
+			sessionVm = AddSession(dir, name);
+
+		// Backfill NodeId + AgentToken immediately.
+		if (string.IsNullOrEmpty(sessionVm.Model.NodeId))
+			sessionVm.Model.NodeId = Guid.NewGuid().ToString("N");
+		if (string.IsNullOrEmpty(sessionVm.Model.AgentToken))
+			sessionVm.Model.AgentToken = Guid.NewGuid().ToString("N");
+
+		_appSettings.Save();
+		return sessionVm.Model;
+	}
+
+	/// <summary>
+	/// Builds a flat list of all sessions for the <c>list_sessions</c> MCP tool.
+	/// Must be called on the UI thread.
+	/// </summary>
+	public List<SessionSummaryModel> BuildAgentSessionSummaries()
+	{
+		var result = new List<SessionSummaryModel>();
+		foreach (var dir in Directories)
+		{
+			var label = _labelService.GetLabel(dir.Path);
+			CollectSessionSummaries(dir.Children, label, result);
+		}
+		return result;
+	}
+
+	private static void CollectSessionSummaries(
+		ObservableCollection<ViewModelBase> children,
+		string directoryLabel,
+		List<SessionSummaryModel> result)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel s:
+					result.Add(new SessionSummaryModel(
+						NodeId:         s.Model.NodeId,
+						Name:           s.Name,
+						DirectoryLabel: directoryLabel,
+						WorkingDirectory: s.Model.WorkingDirectory,
+						IsRunning:      s.IsRunning,
+						IsResumable:    s.IsResumable,
+						LastPrompt:     s.LastPromptTime));
+					break;
+				case GroupNodeViewModel g:
+					CollectSessionSummaries(g.Children, directoryLabel, result);
 					break;
 			}
 		}

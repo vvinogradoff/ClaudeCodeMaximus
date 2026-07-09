@@ -46,6 +46,14 @@ public static class Constants
 		public const string AutoDocument = "After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made. If any new domain terms were introduced or existing terms changed, also update /docs/glossary.md.";
 		public const string Clear = "After completing this request, please summarize the key outcomes and decisions from this session in a brief closing statement.";
 
+		/// <summary>
+		/// FR.14.11 — Redirects Claude away from the CLI's built-in scheduling tools toward the
+		/// host MCP-served equivalents, because the claude process is terminated between turns
+		/// and any native-tool schedules would be silently lost.
+		/// </summary>
+		public const string NativeSchedulingRedirect =
+			"This CLI is terminated between turns. Do NOT use `ScheduleWakeup`, `CronCreate`, `CronList`, or `CronDelete` — schedules set via those tools will not survive. Use the ClaudeMaximus MCP tools instead: `mcp__" + Agent.McpServerName + "__schedule_wake` (accepts `inSeconds`, `at` ISO time, or `cron`), `mcp__" + Agent.McpServerName + "__list_schedules`, `mcp__" + Agent.McpServerName + "__cancel_schedule`. These are persisted by the host application and re-arm across CLI restarts.";
+
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
 		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
 		public const string MidRunAutoCommitOff = "Correction: Ignore previous instructions about committing to git. Do not commit any changes.";
@@ -129,8 +137,8 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		/// <summary>Maximum cron fires per schedule before auto-cancellation (FR.15.5). 0 = unlimited.</summary>
 		public const int MaxTurnsPerLoop = 100;
 
-		/// <summary>MCP JSON-RPC protocol version string.</summary>
-		public const string ProtocolVersion = "2024-11-05";
+		/// <summary>MCP JSON-RPC protocol version string. Must match what the claude CLI sends in its initialize request.</summary>
+		public const string ProtocolVersion = "2025-11-25";
 
 		/// <summary>Prefix prepended to scheduled turn prompts as a SYSTEM message.</summary>
 		public const string ScheduledTurnSystemPrefix = "[Scheduled]";
@@ -140,6 +148,19 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 
 		/// <summary>Timeout in ms for a scheduled turn; after this the turn is cancelled.</summary>
 		public const int ScheduledTurnTimeoutMs = 3_600_000; // 1 hour
+	}
+
+	/// <summary>Constants for Windows toast notifications (FR.16).</summary>
+	public static class Notifications
+	{
+		/// <summary>Maximum characters of assistant response shown in the toast body.</summary>
+		public const int MaxBodyChars = 200;
+
+		/// <summary>Toast argument key for the NodeId used for click-to-activate routing.</summary>
+		public const string ArgNodeId = "nodeId";
+
+		/// <summary>Application User Model ID used to identify the app to the Windows toast system.</summary>
+		public const string Aumid = "Duxre.ClaudeMaximus";
 	}
 
 	/// <summary>Constants for local Ollama model discovery and routing (FR.12.13, FR.12.14).</summary>

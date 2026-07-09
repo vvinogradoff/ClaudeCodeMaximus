@@ -30,6 +30,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeModelService _modelService;
 	private readonly ISessionTurnService _turnService;
+	private readonly IAgentMcpServer _mcpServer;
 	private readonly DirectoryNodeModel? _directoryModel;
 	private string _name;
 	private string _inputText = string.Empty;
@@ -415,7 +416,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IClaudeProfileService profileService,
 		IClaudeSessionImportService importService,
 		IClaudeModelService modelService,
-		ISessionTurnService turnService)
+		ISessionTurnService turnService,
+		IAgentMcpServer mcpServer)
 	{
 		_node             = node;
 		_fileService      = fileService;
@@ -427,6 +429,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_importService    = importService;
 		_modelService     = modelService;
 		_turnService      = turnService;
+		_mcpServer        = mcpServer;
 		_name             = node.Name;
 
 		// Find the parent DirectoryNodeModel for per-directory settings (FR.12.4, FR.12.8, FR.12.11)
@@ -812,20 +815,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		if (string.IsNullOrEmpty(message))
 			return;
 
-		// Acquire per-node turn lock so scheduled/orchestrated turns cannot interleave.
-		var nodeId   = _node.Model.NodeId;
-		var turnLock = string.IsNullOrEmpty(nodeId) ? null : _turnService.GetTurnLock(nodeId);
-		if (turnLock != null)
-			await turnLock.WaitAsync();
-
-		try
-		{
 		await SendAsyncCore(message);
-		}
-		finally
-		{
-			turnLock?.Release();
-		}
 	}
 
 	private async System.Threading.Tasks.Task SendAsyncCore(string message)
@@ -905,6 +895,21 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_sendCts = new CancellationTokenSource();
 		var ct = _sendCts.Token;
 
+		// FR.14.3 / FR.14.11 — ensure the per-node MCP config file exists so the claude process
+		// receives --mcp-config and can reach the host scheduling/orchestration tools.
+		string? mcpConfigPath = null;
+		if (_appSettings.Settings.AgentToolsEnabled)
+			mcpConfigPath = await _mcpServer.EnsureConfigFileAsync(_node.Model.NodeId, _node.Model.AgentToken);
+
+		// Serialize only the CLI dispatch, not the UI updates above. This preserves the
+		// ability to queue a follow-up prompt while a previous turn is still in flight —
+		// the input clears and the message appears in the pane immediately, and this
+		// send's CLI spawn waits behind the in-flight one to avoid concurrent --resume.
+		var nodeId   = _node.Model.NodeId;
+		var turnLock = string.IsNullOrEmpty(nodeId) ? null : _turnService.GetTurnLock(nodeId);
+		if (turnLock != null)
+			await turnLock.WaitAsync();
+
 		try
 		{
 			await _processManager.SendMessageAsync(
@@ -916,6 +921,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				model:            SelectedModelId,
 				profileConfigDir: SelectedProfileConfigDir,
 				effort:           SelectedEffort,
+				mcpConfigPath:    mcpConfigPath,
 				ollamaBaseUrl:    SelectedLocalBaseUrl,
 				cancellationToken: ct);
 
@@ -973,6 +979,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 		finally
 		{
+			turnLock?.Release();
+
 			_busyCount = Math.Max(0, _busyCount - 1);
 			if (_busyCount == 0)
 			{
@@ -1349,6 +1357,10 @@ PROJECT GLOSSARY:
 
 		if (IsAutoDocument)
 			sb.AppendLine($"- {Constants.Instructions.AutoDocument}");
+
+		// FR.14.11 — Redirect Claude from CLI-native scheduling tools to the host MCP tools.
+		if (_appSettings.Settings.AgentToolsEnabled)
+			sb.AppendLine($"- {Constants.Instructions.NativeSchedulingRedirect}");
 
 		return sb.ToString();
 	}

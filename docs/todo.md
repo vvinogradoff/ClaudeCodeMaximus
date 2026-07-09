@@ -361,6 +361,12 @@
 - [ ] Register `list_sessions`, `spawn_session`, `send_to_session`, `read_session`, `stop_session` tools on `AgentMcpServer`
 - [ ] Async mailbox: on worker turn complete → delay-0 schedule back to supervisor
 
+### P12.5 Native scheduling redirect (FR.14.11)
+- [DONE] Add `Constants.Instructions.NativeSchedulingRedirect` referencing `Agent.McpServerName`
+- [DONE] Add `IsAgentToolsEnabled` to `InstructionOptionsModel`
+- [DONE] Emit the redirect line from `InstructionBlockBuilder.Build` and `SessionViewModel.BuildInstructionBlock` when `AgentToolsEnabled`
+- [DONE] Pass `AppSettings.AgentToolsEnabled` from `SessionTurnService` to the options record
+
 ---
 
 ## Phase 13 — Local Model Support via Ollama (FR.12.13, FR.12.14)

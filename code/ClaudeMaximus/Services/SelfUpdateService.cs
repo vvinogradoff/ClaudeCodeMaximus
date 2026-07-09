@@ -122,8 +122,9 @@ public class SelfUpdateService : ISelfUpdateService
 	}
 
 	/// <summary>
-	/// Finds the bin/Debug/net9.0 directory for the main ClaudeMaximus project
-	/// under the given solution root.
+	/// Finds the bin/Debug/net* directory for the main ClaudeMaximus project
+	/// under the given solution root. Handles platform-specific TFMs like
+	/// net9.0-windows10.0.17763.0 by scanning for any net* subdirectory.
 	/// </summary>
 	private static string? FindBuildOutputDir(string solutionRoot)
 	{
@@ -139,12 +140,28 @@ public class SelfUpdateService : ISelfUpdateService
 				if (projectDir.Contains("Tests", StringComparison.OrdinalIgnoreCase))
 					continue;
 
-				var binDebugDir = Path.Combine(projectDir, "bin", "Debug", "net9.0");
-				if (Directory.Exists(binDebugDir))
-					return binDebugDir;
+				var binDebugDir = Path.Combine(projectDir, "bin", "Debug");
+				if (!Directory.Exists(binDebugDir))
+					return null;
 
-				// If the directory doesn't exist yet, still return the expected path
-				return binDebugDir;
+				// Prefer the directory whose ClaudeMaximus.dll is newest (handles
+				// both net9.0 and platform-specific TFMs like net9.0-windows10.0.17763.0).
+				var tfmDirs = Directory.GetDirectories(binDebugDir, "net*");
+				if (tfmDirs.Length == 0)
+					return null;
+
+				string? best       = null;
+				DateTime bestTime  = DateTime.MinValue;
+				foreach (var dir in tfmDirs)
+				{
+					var dll = Path.Combine(dir, AssemblyFileName);
+					if (!File.Exists(dll))
+						continue;
+					var t = File.GetLastWriteTimeUtc(dll);
+					if (t > bestTime) { bestTime = t; best = dir; }
+				}
+
+				return best ?? tfmDirs[0];
 			}
 		}
 		catch (Exception ex)

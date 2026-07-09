@@ -20,6 +20,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeModelService _modelService;
 	private readonly ISelfUpdateService _selfUpdate;
+	private readonly ISessionTurnService _turnService;
+	private readonly IAgentMcpServer _mcpServer;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
@@ -132,7 +134,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IClaudeModelService modelService,
 		ISelfUpdateService selfUpdate,
 		IDirectoryLabelService labelService,
-		SessionTreeViewModel sessionTree)
+		SessionTreeViewModel sessionTree,
+		ISessionTurnService turnService,
+		IAgentMcpServer mcpServer)
 	{
 		_appSettings      = appSettings;
 		_fileService      = fileService;
@@ -143,6 +147,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_importService    = importService;
 		_modelService     = modelService;
 		_selfUpdate       = selfUpdate;
+		_turnService      = turnService;
+		_mcpServer        = mcpServer;
 		SessionTree       = sessionTree;
 		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
@@ -190,7 +196,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 		if (!_sessionCache.TryGetValue(node.FileName, out var vm))
 		{
-			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService);
+			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _turnService, _mcpServer);
 			vm.LoadFromFile();
 			vm.ResolveDefaultProfileEmail();
 			_sessionCache[node.FileName] = vm;
@@ -265,6 +271,17 @@ public sealed class MainWindowViewModel : ViewModelBase
 		{
 			Log.Warning("RestoreActiveSession: session node not found for {FileName}", savedFileName);
 		}
+	}
+
+	/// <summary>
+	/// Navigates to the session identified by <paramref name="nodeId"/> (FR.16 — toast click routing).
+	/// Must be called on the UI thread.
+	/// </summary>
+	public void SelectSessionByNodeId(string nodeId)
+	{
+		var node = SessionTree.FindNodeVmByNodeId(nodeId);
+		if (node != null)
+			SessionTree.SelectedSession = node;
 	}
 
 	private SessionNodeViewModel? FindSessionNode(string fileName)

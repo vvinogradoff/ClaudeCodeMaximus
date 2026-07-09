@@ -93,4 +93,10 @@ public sealed class AppSettingsModel
 
 	/// <summary>Persisted schedules (FR.14.8). Scheduler re-arms timers from this list on startup.</summary>
 	public List<ScheduleModel> Schedules { get; set; } = [];
+
+	/// <summary>
+	/// Whether desktop toast notifications are shown for completed scheduled and orchestrated turns (FR.16.5).
+	/// Default true — disable to suppress all result toasts.
+	/// </summary>
+	public bool NotificationsEnabled { get; set; } = true;
 }
