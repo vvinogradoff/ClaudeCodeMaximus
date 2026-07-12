@@ -17,12 +17,14 @@ public sealed class SessionTurnService : ISessionTurnService
 {
 	private static readonly ILogger _log = Log.ForContext<SessionTurnService>();
 
-	private readonly IClaudeProcessManager     _processManager;
-	private readonly ISessionFileService       _fileService;
-	private readonly IAppSettingsService       _appSettings;
-	private readonly IClaudeProfileService     _profileService;
-	private readonly Lazy<IAgentMcpServer>     _mcpServer;
-	private readonly SessionTreeViewModel      _sessionTree;
+	private readonly IClaudeProcessManager        _processManager;
+	private readonly ISessionFileService          _fileService;
+	private readonly IAppSettingsService          _appSettings;
+	private readonly IClaudeProfileService        _profileService;
+	private readonly Lazy<IAgentMcpServer>        _mcpServer;
+	private readonly SessionTreeViewModel         _sessionTree;
+	private readonly IClaudeSessionStatusService  _sessionStatus;
+	private readonly IClaudeModelService          _modelService;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
 	private readonly ConcurrentDictionary<string, SemaphoreSlim> _turnLocks = new();
@@ -36,7 +38,9 @@ public sealed class SessionTurnService : ISessionTurnService
 		IAppSettingsService appSettings,
 		IClaudeProfileService profileService,
 		Lazy<IAgentMcpServer> mcpServer,
-		SessionTreeViewModel sessionTree)
+		SessionTreeViewModel sessionTree,
+		IClaudeSessionStatusService sessionStatus,
+		IClaudeModelService modelService)
 	{
 		_processManager = processManager;
 		_fileService    = fileService;
@@ -44,6 +48,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		_profileService = profileService;
 		_mcpServer      = mcpServer;
 		_sessionTree    = sessionTree;
+		_sessionStatus  = sessionStatus;
+		_modelService   = modelService;
 	}
 
 	public SemaphoreSlim GetTurnLock(string nodeId) =>
@@ -97,6 +103,17 @@ public sealed class SessionTurnService : ISessionTurnService
 			// Write clean prompt (without instruction block) to the session file.
 			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt);
 
+			// Validate that the claude session file still exists before attempting --resume.
+			// If the session was wiped (compaction, cleanup, context window reset), fall through
+			// to the context-preamble path which rebuilds context from the ClaudeMaximus JSONL file.
+			if (node.ClaudeSessionId != null
+			    && !_sessionStatus.IsSessionResumable(node.WorkingDirectory, node.ClaudeSessionId))
+			{
+				_log.Information("Session {SessionId} is no longer resumable — clearing to use context preamble", node.ClaudeSessionId);
+				node.ClaudeSessionId = null;
+				_appSettings.Save();
+			}
+
 			// Proactive context reload: if no ClaudeSessionId but the file has history, prepend preamble.
 			var sessionId      = node.ClaudeSessionId;
 			var messageToSend  = augmentedPrompt;
@@ -110,20 +127,39 @@ public sealed class SessionTurnService : ISessionTurnService
 					messageToSend = InstructionBlockBuilder.BuildContextPreamble(entries, augmentedPrompt);
 			}
 
-			var resultText = new StringBuilder();
-			var isError    = false;
+			// Resolve effective model for this session (FR.16.5 bug fix):
+			// node.ModelId → per-directory setting → app-level setting.
+			var effectiveModelId = ResolveEffectiveModel(node);
+			var modelInfo        = string.IsNullOrEmpty(effectiveModelId)
+				? null
+				: _modelService.GetCachedModels().FirstOrDefault(m => m.Id == effectiveModelId);
+			var ollamaBaseUrl    = modelInfo?.Provider == ModelProvider.Ollama
+				? _appSettings.Settings.OllamaBaseUrl
+				: null;
+			var disableTools     = modelInfo is { Provider: ModelProvider.Ollama, SupportsTools: false };
+
+			var resultText   = new StringBuilder();
+			var isError      = false;
 			string? errorMessage = null;
+			int inputTokens  = 0, outputTokens = 0;
+			double costUsd   = 0;
 
 			await _processManager.SendMessageAsync(
 				workingDirectory: node.WorkingDirectory,
 				claudePath:       _appSettings.Settings.ClaudePath,
 				sessionId:        sessionId,
 				userMessage:      messageToSend,
-				onEvent:          evt => HandleEvent(evt, node, resultText, ref isError, ref errorMessage),
+				onEvent:          evt => HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
+				                                     ref inputTokens, ref outputTokens, ref costUsd),
+				model:            effectiveModelId,
+				profileConfigDir: profileConfigDir,
 				mcpConfigPath:    mcpConfigPath,
+				ollamaBaseUrl:    ollamaBaseUrl,
+				disableTools:     disableTools,
 				cancellationToken: ct);
 
-			return new TurnResultModel(resultText.ToString(), node.ClaudeSessionId, isError, errorMessage);
+			return new TurnResultModel(resultText.ToString(), node.ClaudeSessionId, isError, errorMessage,
+			                           inputTokens, outputTokens, costUsd);
 		}
 		catch (OperationCanceledException)
 		{
@@ -150,7 +186,10 @@ public sealed class SessionTurnService : ISessionTurnService
 		SessionNodeModel node,
 		StringBuilder resultText,
 		ref bool isError,
-		ref string? errorMessage)
+		ref string? errorMessage,
+		ref int inputTokens,
+		ref int outputTokens,
+		ref double costUsd)
 	{
 		switch (evt.Type)
 		{
@@ -173,6 +212,9 @@ public sealed class SessionTurnService : ISessionTurnService
 
 			case "result" when !evt.IsError && evt.SessionId is not null:
 				node.ClaudeSessionId = evt.SessionId;
+				inputTokens  = evt.InputTokens;
+				outputTokens = evt.OutputTokens;
+				costUsd      = evt.CostUsd;
 				_appSettings.Save();
 				break;
 
@@ -182,6 +224,26 @@ public sealed class SessionTurnService : ISessionTurnService
 				_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
 				break;
 		}
+	}
+
+	/// <summary>
+	/// Resolves the effective model ID for a session: node.ModelId → directory SelectedModelId
+	/// → app-level SelectedModelId. Returns null/empty if nothing is configured.
+	/// </summary>
+	private string? ResolveEffectiveModel(SessionNodeModel node)
+	{
+		if (!string.IsNullOrEmpty(node.ModelId))
+			return node.ModelId;
+
+		var dirModel = _appSettings.Settings.Tree.FirstOrDefault(d =>
+			string.Equals(d.Path, node.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
+
+		if (!string.IsNullOrEmpty(dirModel?.SelectedModelId))
+			return dirModel.SelectedModelId;
+
+		return string.IsNullOrEmpty(_appSettings.Settings.SelectedModelId)
+			? null
+			: _appSettings.Settings.SelectedModelId;
 	}
 
 	private string? ResolveProfileConfigDir(SessionNodeModel node)

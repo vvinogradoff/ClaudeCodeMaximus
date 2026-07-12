@@ -54,6 +54,28 @@ public static class Constants
 		public const string NativeSchedulingRedirect =
 			"This CLI is terminated between turns. Do NOT use `ScheduleWakeup`, `CronCreate`, `CronList`, or `CronDelete` — schedules set via those tools will not survive. Use the ClaudeMaximus MCP tools instead: `mcp__" + Agent.McpServerName + "__schedule_wake` (accepts `inSeconds`, `at` ISO time, or `cron`), `mcp__" + Agent.McpServerName + "__list_schedules`, `mcp__" + Agent.McpServerName + "__cancel_schedule`. These are persisted by the host application and re-arm across CLI restarts.";
 
+		/// <summary>
+		/// Redirects Claude away from the Claude Code <c>Workflow</c> tool and the <c>Agent</c>
+		/// tool's multi-agent orchestration toward ClaudeMaximus session orchestration MCP tools.
+		/// The Workflow tool spins off background processes that are invisible to ClaudeMaximus and
+		/// whose results are not tracked in the session tree. ClaudeMaximus MCP tools produce
+		/// persistent, visible session nodes instead.
+		/// </summary>
+		public const string NoWorkflowTool =
+			"Do NOT use the Claude Code `Workflow` tool. Do NOT use the `Agent` tool for multi-agent orchestration. These spawn processes that are invisible to ClaudeMaximus and untracked in the session tree. " +
+			"Instead, use the ClaudeMaximus MCP tools for all multi-agent and orchestration work: " +
+			"`mcp__" + Agent.McpServerName + "__spawn_session` to create child sessions (supports `model`, `schema` args), " +
+			"`mcp__" + Agent.McpServerName + "__send_to_session` to send prompts (use `wait` mode for sequential work, `async` for parallel fan-out; supports `schema` arg for typed output), " +
+			"`mcp__" + Agent.McpServerName + "__read_session` to retrieve results, " +
+			"`mcp__" + Agent.McpServerName + "__stop_session` to cancel a running turn, " +
+			"`mcp__" + Agent.McpServerName + "__list_sessions` to inspect the session tree, " +
+			"`mcp__" + Agent.McpServerName + "__orchestrate_parallel` for concurrent fan-out over a task array (returns all results together), " +
+			"`mcp__" + Agent.McpServerName + "__orchestrate_pipeline` for pipelined fan-out where items flow through stages independently (no barrier), " +
+			"`mcp__" + Agent.McpServerName + "__workflow_phase` to mark a named phase for progress tracking in the UI, " +
+			"`mcp__" + Agent.McpServerName + "__workflow_log` to emit a progress message visible in the session tree, " +
+			"`mcp__" + Agent.McpServerName + "__get_budget` to check remaining token budget for the current orchestration, and " +
+			"`mcp__" + Agent.McpServerName + "__set_session_model` to switch the model of a child session mid-orchestration.";
+
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
 		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
 		public const string MidRunAutoCommitOff = "Correction: Ignore previous instructions about committing to git. Do not commit any changes.";
@@ -170,6 +192,18 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 
 		/// <summary>Maximum cron fires per schedule before auto-cancellation (FR.15.5). 0 = unlimited.</summary>
 		public const int MaxTurnsPerLoop = 100;
+
+		/// <summary>
+		/// Tier assigned to sessions whose effective model is not configured (FR.16.4).
+		/// Defaults to 2 (Sonnet) so unconfigured sessions can still spawn Haiku/Local workers.
+		/// </summary>
+		public const int DefaultModelTier = 2;
+
+		/// <summary>
+		/// Maximum number of times the host will re-prompt a worker to produce valid
+		/// JSON matching the requested schema before giving up (FR.15.7).
+		/// </summary>
+		public const int MaxSchemaRetries = 3;
 
 		/// <summary>MCP JSON-RPC protocol version string. Must match what the claude CLI sends in its initialize request.</summary>
 		public const string ProtocolVersion = "2025-11-25";

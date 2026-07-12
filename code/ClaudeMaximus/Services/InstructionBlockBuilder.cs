@@ -33,10 +33,14 @@ public static class InstructionBlockBuilder
 			sb.AppendLine($"- {Constants.Instructions.AutoDocument}");
 
 		// FR.14.11 — Redirect from CLI-native scheduling to host MCP scheduling tools.
-		// Emitted only when AgentToolsEnabled, because otherwise the MCP tools are not registered
-		// and the redirect would point at nothing.
+		// Also redirect away from the Workflow/Agent multi-agent tools toward CMX session orchestration.
+		// Both emitted only when AgentToolsEnabled, because otherwise the MCP tools are not registered
+		// and the redirects would point at nothing.
 		if (options.IsAgentToolsEnabled)
+		{
 			sb.AppendLine($"- {Constants.Instructions.NativeSchedulingRedirect}");
+			sb.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
+		}
 
 		return sb.ToString();
 	}

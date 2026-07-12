@@ -401,13 +401,29 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 				errorMsg = errMsgEl.GetString();
 		}
 
+		// Extract token usage and cost from the result event (FR.17.1).
+		int inputTokens = 0, outputTokens = 0;
+		double costUsd = 0;
+		if (root.TryGetProperty("usage", out var usageEl))
+		{
+			if (usageEl.TryGetProperty("input_tokens", out var inEl))
+				inputTokens = inEl.GetInt32();
+			if (usageEl.TryGetProperty("output_tokens", out var outEl))
+				outputTokens = outEl.GetInt32();
+		}
+		if (root.TryGetProperty("total_cost_usd", out var costEl))
+			costUsd = costEl.GetDouble();
+
 		return new ClaudeStreamEvent
 		{
-			Type      = type,
-			Subtype   = subtype,
-			SessionId = sessionId,
-			IsError   = isError,
-			Content   = errorMsg,
+			Type         = type,
+			Subtype      = subtype,
+			SessionId    = sessionId,
+			IsError      = isError,
+			Content      = errorMsg,
+			InputTokens  = inputTokens,
+			OutputTokens = outputTokens,
+			CostUsd      = costUsd,
 		};
 	}
 

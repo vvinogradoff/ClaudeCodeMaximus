@@ -38,6 +38,11 @@
                                FontSize="13" Foreground="Orange" Margin="0,0,4,0"
                                IsVisible="{Binding IsRunningFromBuildOutput}"
                                ToolTip.Tip="Running from project build output — will not be updated on restart"/>
+                    <!-- Daemon missing inline indicator -->
+                    <TextBlock Text="{Binding DaemonMissingMessage}" VerticalAlignment="Center"
+                               FontSize="10" Foreground="DarkRed" Margin="0,0,8,0"
+                               IsVisible="{Binding IsDaemonMissing}" x:CompileBindings="False"
+                               ToolTip.Tip="{Binding DaemonMissingMessage, x:CompileBindings=False}"/>
                     <TextBlock x:Name="BuildNumberText" VerticalAlignment="Center"
                                FontSize="10" Opacity="0.4" Margin="0,0,8,0"/>
                     <Button x:Name="MinimizeBtn" Content="&#x2013;" Width="46" Height="30"
@@ -166,14 +171,6 @@
                 <!-- Empty space for drag -->
                 <Border Background="Transparent"/>
             </DockPanel>
-
-            <!-- Daemon missing warning banner -->
-            <Border DockPanel.Dock="Top" Padding="12,8" Background="#40F44336"
-                    IsVisible="{Binding IsDaemonMissing}" x:CompileBindings="False">
-                <TextBlock Text="{Binding DaemonMissingMessage}"
-                           FontSize="13" TextWrapping="Wrap" Foreground="#FFE0E0"
-                           HorizontalAlignment="Center"/>
-            </Border>
 
             <!-- Two-panel layout -->
             <Grid x:Name="MainContentGrid">

@@ -554,10 +554,16 @@ A supervisor session can spawn and control worker sessions. All workers are **pe
 | Tool | Required args | Optional args | Effect |
 |---|---|---|---|
 | `list_sessions` | — | — | Returns summary of all sessions in the tree: nodeId, name, dirLabel, isRunning, isResumable, lastPrompt. |
-| `spawn_session` | `name`, `workingDir` OR `parentNodeId`, `prompt` | `profile`, `model`, `group` | Creates a **new** session node in the tree under the specified parent, runs the first turn, returns `{nodeId, resultText}`. |
-| `send_to_session` | `nodeId`, `prompt` | `mode` (wait/async) | **Resumes** an existing session node, runs a turn. In `wait` mode returns the result synchronously. In `async` mode returns immediately and posts the result back to the supervisor when done. |
+| `spawn_session` | `name` | `workingDir`, `parentNodeId`, `prompt`, `model`, `group`, `schema` | Creates a **new** session node, runs the first turn, returns `{nodeId, resultText}`. `model` is tier-enforced (FR.16). |
+| `send_to_session` | `nodeId`, `prompt` | `mode` (wait/async), `schema` | **Resumes** an existing session node, runs a turn. In `wait` mode returns the result synchronously. In `async` mode posts the result back to the supervisor when done. `schema` enforces structured output (FR.15.7). |
 | `read_session` | `nodeId` | `lastN` | Returns the last N session file entries for the given node. |
 | `stop_session` | `nodeId` | — | Cancels any running turn for the given node. |
+| `set_session_model` | `nodeId`, `model` | — | Changes the model for an existing session (tier-enforced, FR.16.2). Effective from next turn. |
+| `orchestrate_parallel` | `tasks` | `model`, `group`, `schema`, `budgetTokens` | Barrier fan-out: spawns one session per task, waits for all (FR.15.8). |
+| `orchestrate_pipeline` | `items`, `stages` | `model`, `group`, `schema`, `budgetTokens` | Non-blocking item pipeline: one session per item through sequential stages (FR.15.8). |
+| `workflow_phase` | `title` | — | Writes `[Phase: {title}]` to the supervisor session file (FR.15.9). |
+| `workflow_log` | `message` | — | Writes `[Log: {message}]` to the supervisor session file (FR.15.9). |
+| `get_budget` | — | — | Returns token usage and remaining budget for the caller's active orchestrations (FR.15.6). |
 
 **FR.15.2 — New-vs-resume choice:** The supervisor explicitly chooses between `spawn_session` (creates a new tree node) and `send_to_session` (resumes an existing node). `list_sessions` provides the data needed to make that choice.
 
@@ -565,12 +571,90 @@ A supervisor session can spawn and control worker sessions. All workers are **pe
 
 **FR.15.4 — UI thread marshaling:** All tree mutations triggered by orchestration tools (node creation, model changes) are executed on the Avalonia UI thread via `Dispatcher.UIThread.InvokeAsync`.
 
-**FR.15.5 — Guardrails:** To prevent runaway loops:
-- `Constants.Agent.MaxOrchestrationDepth` (default: 5) — maximum supervisor-worker nesting depth
-- `Constants.Agent.MaxConcurrentWorkers` (default: 10) — maximum simultaneous worker turns
-- `Constants.Agent.MaxTurnsPerLoop` (default: 100) — maximum turns per cron schedule before auto-cancellation
+**FR.15.5 — Guardrails (enforced):** To prevent runaway loops, the following limits are checked at runtime — they are not advisory:
+- `Constants.Agent.MaxOrchestrationDepth` (default: 5) — maximum supervisor-worker nesting depth. Checked on `spawn_session`, `orchestrate_parallel`, and `orchestrate_pipeline`; a `McpToolException` is thrown when exceeded.
+- `Constants.Agent.MaxConcurrentWorkers` (default: 10) — maximum simultaneous worker turns across the entire app. `orchestrate_parallel` and `orchestrate_pipeline` acquire slots from a global `SemaphoreSlim`; if all slots are taken the spawn waits until one frees.
+- `Constants.Agent.MaxTurnsPerLoop` (default: 100) — maximum turns per cron schedule before auto-cancellation.
+
+Each `SessionNodeModel` persists `OrchestrationDepth` (int, 0 = top-level user session) and `SupervisorNodeId` (string?, null for user sessions). These are set when a session is created by an orchestration tool and used to enforce the depth limit on further spawning from that session.
 
 A global kill-switch (`TerminateAllSessions`) cancels all active turn locks and calls `ClaudeProcessManager.TerminateAll()`.
+
+**FR.15.6 — Orchestration Budget:** Fan-out tools (`orchestrate_parallel`, `orchestrate_pipeline`) accept an optional `budgetTokens` (int) argument. When set, an `OrchestrationBudget` is registered in memory for the duration of the orchestration, keyed by `(supervisorNodeId, orchestrationId)`. Each worker turn accrues `input_tokens + output_tokens` against the budget. Spawning a new worker when the budget is already exhausted returns a `McpToolException`. The `get_budget` tool returns current usage and remaining tokens for the caller's active orchestrations.
+
+**FR.15.7 — Schema-Enforced Output:** `spawn_session`, `send_to_session`, `orchestrate_parallel`, and `orchestrate_pipeline` accept an optional `schema` argument (a JSON Schema object). When present, the host:
+1. Appends a schema-instruction to the worker's prompt telling it to return only valid JSON matching the schema.
+2. After the turn completes, validates the response using `JsonSchema.Net`.
+3. On failure, sends a correction prompt up to `Constants.Agent.MaxSchemaRetries` (default: 3) times.
+4. After `MaxSchemaRetries` exhausted, returns the last raw text prefixed with `[schema-invalid]`.
+5. On success, returns the validated JSON string so the supervisor can parse it without ambiguity.
+
+**FR.15.8 — Fan-Out Primitives:**
+
+`orchestrate_parallel` — barrier fan-out:
+| Arg | Required | Description |
+|---|---|---|
+| `tasks` | yes | JSON array of `{name, prompt}` objects |
+| `model` | no | Override model for all workers (tier-enforced, FR.16) |
+| `group` | no | Group name for worker sessions in the tree |
+| `schema` | no | JSON Schema for structured output (FR.15.7) |
+| `budgetTokens` | no | Token ceiling for this orchestration (FR.15.6) |
+
+Creates one worker session per task. All sessions run concurrently, bounded by `MaxConcurrentWorkers`. Returns a JSON array of `{name, result, inputTokens, outputTokens}` objects when ALL workers complete. Depth enforcement applies (FR.15.5).
+
+`orchestrate_pipeline` — non-blocking item fan-out through sequential stages:
+| Arg | Required | Description |
+|---|---|---|
+| `items` | yes | JSON array of string items |
+| `stages` | yes | JSON array of `{prompt}` objects. Stages run sequentially within one session per item. Use `{{item}}` in the first stage prompt to reference the item. |
+| `model` | no | Override model for all worker sessions (tier-enforced, FR.16) |
+| `group` | no | Group name for worker sessions |
+| `schema` | no | Applied to the LAST stage output only |
+| `budgetTokens` | no | Token ceiling |
+
+Creates one session per item. Within each session the stages are sent as sequential turns (the session accumulates full context). All item-sessions run concurrently. Returns a JSON array of `{item, result, inputTokens, outputTokens}` when all are complete.
+
+**FR.15.9 — Progress Tracking:**
+- `workflow_phase(title)` — writes a `SYSTEM` entry `[Phase: {title}]` to the calling supervisor's session file. Visible in the session view. Returns immediately.
+- `workflow_log(message)` — writes a `SYSTEM` entry `[Log: {message}]` to the calling supervisor's session file. Returns immediately.
+
+**FR.15.10 — Per-Session Model Control:**
+- `set_session_model(nodeId, model)` — changes the persisted `ModelId` on an existing session node (tier-enforced per FR.16.2; the caller's tier must be ≥ the requested model's tier). Takes effect on the next turn for that session. The supervisor can use this to switch models on running worker sessions mid-orchestration.
+
+---
+
+### FR.16 — Model Tier Governance
+
+A session may only create or configure worker sessions using models at or below its own capability tier.
+
+**FR.16.1 — Tier table:**
+| Tier | Matches (substring in model ID) |
+|---|---|
+| 4 — Fable | `fable` |
+| 3 — Opus | `opus` |
+| 2 — Sonnet | `sonnet` |
+| 1 — Haiku | `haiku` |
+| 0 — Local | anything else (Ollama / unknown) |
+
+Matching is case-insensitive substring search on the model ID string. If multiple substrings match, the highest-tier match wins.
+
+**FR.16.2 — Enforcement:** The `ModelTierService.GetTier(string? modelId)` method computes the tier. Enforcement is applied in `AgentMcpServer` before processing `spawn_session`, `set_session_model`, `orchestrate_parallel`, and `orchestrate_pipeline`. A clear error is returned if `callerTier < requestedTier`. `send_to_session` does not take a model arg and therefore requires no tier check; the target session's tier is already fixed at spawn time.
+
+**FR.16.3 — Per-session model persistence:** `SessionNodeModel` persists a `ModelId` (string, nullable). This is the model used for all turns (user-initiated, scheduled, and orchestrated) on that session. When `ModelId` is null or empty, the session inherits the effective model from the per-directory `SelectedModelId`, then the global app `SelectedModelId`.
+
+**FR.16.4 — Caller tier resolution:** The caller node's tier is derived from its effective model: `callerNode.ModelId` → directory `SelectedModelId` → app `SelectedModelId`. An unconfigured session (all null/empty) falls back to `Constants.Agent.DefaultModelTier` (default: 2, Sonnet). This prevents unset sessions from being unable to spawn any workers.
+
+**FR.16.5 — Turn model resolution (bug fix):** `SessionTurnService.RunTurnAsync` previously always passed `model: null` to `SendMessageAsync`, causing all headless turns (scheduled and orchestrated) to run on the CLI's default model regardless of the session's configured model. After this fix, `RunTurnAsync` resolves the effective model from `SessionNodeModel.ModelId` (falling back to directory/app selection), determines `ollamaBaseUrl` and `disableTools` from model provider, and passes these to `SendMessageAsync`.
+
+---
+
+### FR.17 — Token Capture in Non-Daemon Path
+
+**FR.17.1 — Stream-JSON usage extraction:** The `result` event in the claude `stream-json` format contains a `usage` object with `input_tokens` (int), `output_tokens` (int), and optionally `total_cost_usd` (double). `ClaudeProcessManager.ParseResultEvent` extracts these into new fields on `ClaudeStreamEvent`: `InputTokens`, `OutputTokens`, `CostUsd`.
+
+**FR.17.2 — TurnResultModel extension:** `TurnResultModel` gains `InputTokens` (int), `OutputTokens` (int), and `CostUsd` (double) fields, populated by `SessionTurnService.HandleEvent` from the result event.
+
+**FR.17.3 — Orchestration budget accrual:** When a worker turn completes inside `orchestrate_parallel` or `orchestrate_pipeline`, its `InputTokens + OutputTokens` are accrued against the active `OrchestrationBudget` (if one was registered with `budgetTokens`).
 
 ---
 

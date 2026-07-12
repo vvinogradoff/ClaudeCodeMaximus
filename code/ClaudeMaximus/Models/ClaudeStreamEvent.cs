@@ -22,5 +22,14 @@ public sealed class ClaudeStreamEvent
 
 	public bool IsError { get; init; }
 
+	/// <summary>Input token count from the result event usage object (FR.17.1). 0 if not present.</summary>
+	public int InputTokens { get; init; }
+
+	/// <summary>Output token count from the result event usage object (FR.17.1). 0 if not present.</summary>
+	public int OutputTokens { get; init; }
+
+	/// <summary>Total cost in USD from the result event (FR.17.1). 0 if not present.</summary>
+	public double CostUsd { get; init; }
+
 	public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }

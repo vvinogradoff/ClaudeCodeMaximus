@@ -395,6 +395,50 @@
 
 ---
 
+## Phase 16 — Orchestration Enhancements (FR.15.5–FR.15.10, FR.16, FR.17) ✓ DONE
+
+### [DONE] P16.1 Per-session model plumbing & bug fix (FR.16.3, FR.16.5)
+- [DONE] Add `ModelId` (string?), `OrchestrationDepth` (int), `SupervisorNodeId` (string?) to `SessionNodeModel`
+- [DONE] `SessionTurnService`: inject `IClaudeModelService`; resolve effective model + ollamaBaseUrl + disableTools from `node.ModelId` → dir setting → app setting; pass to `SendMessageAsync` (bug fix: scheduled turns were running on CLI default model instead of session model)
+- [DONE] `SessionTreeViewModel.CreateSessionForAgent`: accept `depth` and `supervisorNodeId` params; set them on the new node
+
+### [DONE] P16.2 Model Tier Governance (FR.16)
+- [DONE] `Services/ModelTierService.cs` — static `GetTier(string? modelId)` (case-insensitive substring: fable=4, opus=3, sonnet=2, haiku=1, else=0)
+- [DONE] `Constants.Agent.DefaultModelTier = 2` (Sonnet) and `MaxSchemaRetries = 3`
+- [DONE] `AgentMcpServer`: enforce tier in `spawn_session`, `set_session_model`, `orchestrate_parallel`, `orchestrate_pipeline`
+- [DONE] `AgentMcpServer`: add `set_session_model` tool
+- [DONE] `AgentMcpServer`: enforce depth in `spawn_session`, `orchestrate_parallel`, `orchestrate_pipeline`
+- [DONE] `AgentMcpServer`: enforce `MaxConcurrentWorkers` via global `SemaphoreSlim`
+
+### [DONE] P16.3 Token capture (FR.17)
+- [DONE] `Models/ClaudeStreamEvent.cs` — add `InputTokens`, `OutputTokens`, `CostUsd`
+- [DONE] `Models/TurnResultModel.cs` — add `InputTokens`, `OutputTokens`, `CostUsd`
+- [DONE] `ClaudeProcessManager.ParseResultEvent` — extract `usage.input_tokens`, `usage.output_tokens`, `total_cost_usd`
+- [DONE] `SessionTurnService.HandleEvent` — capture usage from result event into `TurnResultModel`
+
+### [DONE] P16.4 Orchestration Budget (FR.15.6)
+- [DONE] In-memory `ConcurrentDictionary<string, BudgetEntry>` in `AgentMcpServer` for active budgets
+- [DONE] `get_budget` MCP tool
+- [DONE] Accrue tokens per worker turn in `orchestrate_parallel` / `orchestrate_pipeline`
+- [DONE] Block new worker spawns when budget exhausted
+
+### [DONE] P16.5 Schema-enforced output (FR.15.7)
+- [DONE] Add `JsonSchema.Net` NuGet to `ClaudeMaximus.csproj`
+- [DONE] Schema validation helper in `AgentMcpServer`: validate response, build re-prompt instruction, retry up to `MaxSchemaRetries`
+- [DONE] Wire into `spawn_session`, `send_to_session`, fan-out tools
+
+### [DONE] P16.6 Fan-out primitives (FR.15.8)
+- [DONE] `orchestrate_parallel` MCP tool + schema + tool registration
+- [DONE] `orchestrate_pipeline` MCP tool + schema + tool registration
+
+### [DONE] P16.7 Progress tracking + misc (FR.15.9, FR.15.10)
+- [DONE] `workflow_phase` MCP tool
+- [DONE] `workflow_log` MCP tool
+- [DONE] Wire all new tools into `HandleToolsList` and `HandleToolCallAsync`
+- [DONE] `Constants.Instructions.NoWorkflowTool` — updated to mention all new CMX fan-out tools
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion

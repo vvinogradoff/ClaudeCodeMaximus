@@ -53,6 +53,11 @@ public class SelfUpdateService : ISelfUpdateService
 				IsRunningFromBuildOutput = true;
 				Log.Warning("SelfUpdate: running from build output ({Dir}), self-update disabled", runningDir);
 			}
+			else if (buildOutputDir != null && !IsRunningFromBuildOutput)
+			{
+				// Apply any pending build immediately on startup so the next restart is always current.
+				TryApplyBuildNow(buildOutputDir, runningDir);
+			}
 		}
 
 		Log.Information("SelfUpdate: initialized. RunningDir={RunningDir}, SourceLocation={Source}, RunningFromBuild={Flag}",
@@ -118,6 +123,65 @@ public class SelfUpdateService : ISelfUpdateService
 		catch (Exception ex)
 		{
 			Log.Error(ex, "SelfUpdate: unexpected error during update check.");
+		}
+	}
+
+	/// <summary>
+	/// Copies all files from buildOutputDir to runningDir synchronously on startup.
+	/// Skips individual files that are locked (e.g. the running .exe), logs each result.
+	/// Any locked files are picked up by the exit-time copy as a fallback.
+	/// </summary>
+	private static void TryApplyBuildNow(string buildOutputDir, string runningDir)
+	{
+		try
+		{
+			var sourceDll = Path.Combine(buildOutputDir, AssemblyFileName);
+			var runningDll = Path.Combine(runningDir, AssemblyFileName);
+
+			if (!File.Exists(sourceDll))
+				return;
+
+			// Skip copy if running copy is already at least as new.
+			if (File.Exists(runningDll))
+			{
+				var srcTime = File.GetLastWriteTimeUtc(sourceDll);
+				var runTime = File.GetLastWriteTimeUtc(runningDll);
+				if (srcTime <= runTime)
+				{
+					Log.Information("SelfUpdate: startup check — running copy is current, no copy needed.");
+					return;
+				}
+				Log.Information("SelfUpdate: newer build detected on startup (src={SrcTime}, run={RunTime}), copying now...", srcTime, runTime);
+			}
+			else
+			{
+				Log.Information("SelfUpdate: running dll missing, copying build output on startup...");
+			}
+
+			var files = Directory.GetFiles(buildOutputDir);
+			var copied = 0;
+			var skipped = 0;
+			foreach (var src in files)
+			{
+				var dest = Path.Combine(runningDir, Path.GetFileName(src));
+				try
+				{
+					File.Copy(src, dest, overwrite: true);
+					copied++;
+				}
+				catch (Exception ex)
+				{
+					// File locked by the running process — the exit-time script handles it.
+					Log.Warning("SelfUpdate: skipped locked file {File}: {Msg}", Path.GetFileName(src), ex.Message);
+					skipped++;
+				}
+			}
+
+			Log.Information("SelfUpdate: startup copy done — {Copied} copied, {Skipped} skipped (locked).", copied, skipped);
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "SelfUpdate: error during startup copy.");
 		}
 	}
 
@@ -197,9 +261,9 @@ public class SelfUpdateService : ISelfUpdateService
 		var psi = new ProcessStartInfo
 		{
 			FileName        = "powershell.exe",
-			Arguments       = $"-ExecutionPolicy Bypass -File \"{scriptPath}\"",
+			Arguments       = $"-ExecutionPolicy Bypass -WindowStyle Hidden -File \"{scriptPath}\"",
 			UseShellExecute = true,
-			CreateNoWindow  = false,
+			CreateNoWindow  = true,
 		};
 
 		Process.Start(psi);

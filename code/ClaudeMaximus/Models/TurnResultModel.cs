@@ -13,4 +13,13 @@ public sealed record TurnResultModel(
 	bool IsError = false,
 
 	/// <summary>Error description when <see cref="IsError"/> is true.</summary>
-	string? ErrorMessage = null);
+	string? ErrorMessage = null,
+
+	/// <summary>Input token count from the result event (FR.17.2). 0 if not captured.</summary>
+	int InputTokens = 0,
+
+	/// <summary>Output token count from the result event (FR.17.2). 0 if not captured.</summary>
+	int OutputTokens = 0,
+
+	/// <summary>Total cost in USD from the result event (FR.17.2). 0 if not captured.</summary>
+	double CostUsd = 0);

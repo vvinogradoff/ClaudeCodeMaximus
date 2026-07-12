@@ -55,6 +55,25 @@ public sealed class SessionNodeModel
 	public bool IsAutoDocument { get; set; }
 
 	/// <summary>
+	/// Model ID used for all turns (user, scheduled, orchestrated) on this session (FR.16.3).
+	/// Null or empty means "inherit from directory/app setting".
+	/// Set interactively via the UI or by the <c>set_session_model</c> MCP tool (FR.15.10).
+	/// </summary>
+	public string? ModelId { get; set; }
+
+	/// <summary>
+	/// Nesting depth in the supervisor→worker chain (FR.15.5, FR.16).
+	/// 0 = top-level user session. Set by orchestration tools at spawn time.
+	/// </summary>
+	public int OrchestrationDepth { get; set; }
+
+	/// <summary>
+	/// NodeId of the session that spawned this one. Null for user-created sessions.
+	/// Used for depth-limit enforcement (FR.15.5).
+	/// </summary>
+	public string? SupervisorNodeId { get; set; }
+
+	/// <summary>
 	/// Returns the best available session identity key: ExternalId if available, otherwise FileName.
 	/// Used for cache keying and session restore during the migration period.
 	/// </summary>

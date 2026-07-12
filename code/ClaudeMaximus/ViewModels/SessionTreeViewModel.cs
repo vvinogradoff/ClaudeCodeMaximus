@@ -1102,7 +1102,8 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// Must be called on the UI thread.
 	/// Returns the new <see cref="SessionNodeModel"/>, or null if no matching directory was found.
 	/// </summary>
-	public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group)
+	public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group,
+		int orchestrationDepth = 0, string? supervisorNodeId = null)
 	{
 		var dir = Directories.FirstOrDefault(d =>
 			string.Equals(d.Path, workingDir, StringComparison.OrdinalIgnoreCase));
@@ -1135,6 +1136,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			sessionVm.Model.NodeId = Guid.NewGuid().ToString("N");
 		if (string.IsNullOrEmpty(sessionVm.Model.AgentToken))
 			sessionVm.Model.AgentToken = Guid.NewGuid().ToString("N");
+
+		sessionVm.Model.OrchestrationDepth = orchestrationDepth;
+		sessionVm.Model.SupervisorNodeId   = supervisorNodeId;
 
 		_appSettings.Save();
 		return sessionVm.Model;
