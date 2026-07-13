@@ -24,6 +24,15 @@ public sealed class MessageEntryViewModel : ViewModelBase
 	/// <summary>True for live task_progress / task_started entries that are updated in-place.</summary>
 	public bool IsProgress { get; init; }
 
+	/// <summary>Profile display name shown next to "You" in user bubbles. Null/empty = not shown.</summary>
+	public string? ProfileName { get; init; }
+
+	/// <summary>Model+effort label shown at the top of the first assistant message after each user prompt.</summary>
+	public string? ModelLabel { get; set; }
+
+	public bool HasProfileName => !string.IsNullOrEmpty(ProfileName);
+	public bool HasModelLabel => !string.IsNullOrEmpty(ModelLabel);
+
 	public string FormattedDate => Timestamp.LocalDateTime.ToString("yyyy-MM-dd");
 	public string FormattedTime => Timestamp.LocalDateTime.ToString("HH:mm");
 

@@ -79,9 +79,18 @@
                                     <Border Grid.Column="1" Padding="10,7" CornerRadius="8"
                                             Background="{DynamicResource CmxUserBubbleBg}">
                                         <StackPanel>
-                                            <TextBlock Text="You" FontSize="11"
-                                                       Foreground="{DynamicResource CmxUserBubbleFg}"
-                                                       Opacity="0.6" Margin="0,0,0,3"/>
+                                            <DockPanel Margin="0,0,0,3">
+                                                <TextBlock DockPanel.Dock="Left" Text="You" FontSize="11"
+                                                           Foreground="{DynamicResource CmxUserBubbleFg}"
+                                                           Opacity="0.6"/>
+                                                <TextBlock DockPanel.Dock="Right"
+                                                           Text="{Binding ProfileName}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource CmxUserBubbleFg}"
+                                                           Opacity="0.5"
+                                                           HorizontalAlignment="Right"
+                                                           IsVisible="{Binding HasProfileName}"/>
+                                            </DockPanel>
                                             <views:HighlightTextBlock Text="{Binding Content}"
                                                                  HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
                                                                  IsCurrentMatch="{Binding IsCurrentSearchMatch}"
@@ -99,22 +108,29 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="52"/>
                                     </Grid.ColumnDefinitions>
-                                    <Panel Grid.Column="0" Margin="0,0,8,0">
-                                        <views:MarkdownView
-                                            IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
-                                            Markdown="{Binding Content}"
-                                            HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
-                                            IsCurrentMatch="{Binding IsCurrentSearchMatch}"
-                                            FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
-                                        <views:HighlightTextBlock
-                                            IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
-                                            Text="{Binding Content}"
-                                            HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
-                                            IsCurrentMatch="{Binding IsCurrentSearchMatch}"
-                                            TextWrapping="Wrap"
-                                            FontFamily="Cascadia Code,Consolas,monospace"
-                                            FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
-                                    </Panel>
+                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                        <TextBlock Text="{Binding ModelLabel}"
+                                                   IsVisible="{Binding HasModelLabel}"
+                                                   FontSize="11" Opacity="0.45"
+                                                   FontStyle="Italic"
+                                                   Margin="0,0,0,4"/>
+                                        <Panel>
+                                            <views:MarkdownView
+                                                IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
+                                                Markdown="{Binding Content}"
+                                                HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                                IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                                FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
+                                            <views:HighlightTextBlock
+                                                IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
+                                                Text="{Binding Content}"
+                                                HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                                IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                                TextWrapping="Wrap"
+                                                FontFamily="Cascadia Code,Consolas,monospace"
+                                                FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
+                                        </Panel>
+                                    </StackPanel>
                                     <StackPanel Grid.Column="1"
                                                 VerticalAlignment="Bottom"
                                                 HorizontalAlignment="Left"

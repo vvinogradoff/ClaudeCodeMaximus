@@ -41,6 +41,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private bool _daemonPendingAutoCompact;
 	private CancellationTokenSource? _draftSaveCts;
 	private bool _pendingClear;
+	private string? _pendingModelLabel;
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -605,12 +606,17 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 
 		var now = DateTimeOffset.UtcNow;
+		var daemonProfileName = _selectedProfileIndex >= 0 && _selectedProfileIndex < AvailableProfiles.Count
+			? AvailableProfiles[_selectedProfileIndex]
+			: null;
 		Messages.Add(new MessageEntryViewModel
 		{
-			Role      = Constants.SessionFile.RoleUser,
-			Content   = message,
-			Timestamp = now,
+			Role        = Constants.SessionFile.RoleUser,
+			Content     = message,
+			Timestamp   = now,
+			ProfileName = daemonProfileName,
 		});
+		_pendingModelLabel = BuildModelLabel();
 		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 		_node.LastPromptTimestamp = now;
 
@@ -728,12 +734,17 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					if (last?.Role == Constants.SessionFile.RoleAssistant)
 						last.Content += evt.Delta;
 					else
+					{
+						var label = _pendingModelLabel;
+						_pendingModelLabel = null;
 						Messages.Add(new MessageEntryViewModel
 						{
-							Role      = Constants.SessionFile.RoleAssistant,
-							Content   = evt.Delta,
-							Timestamp = DateTimeOffset.UtcNow,
+							Role       = Constants.SessionFile.RoleAssistant,
+							Content    = evt.Delta,
+							Timestamp  = DateTimeOffset.UtcNow,
+							ModelLabel = label,
 						});
+					}
 				});
 				break;
 
@@ -1306,12 +1317,17 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// Store only the clean user message in file and UI (FR.11.2)
 		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message);
 		var now = DateTimeOffset.UtcNow;
+		var profileName = _selectedProfileIndex >= 0 && _selectedProfileIndex < AvailableProfiles.Count
+			? AvailableProfiles[_selectedProfileIndex]
+			: null;
 		Messages.Add(new MessageEntryViewModel
 		{
-			Role      = Constants.SessionFile.RoleUser,
-			Content   = message,
-			Timestamp = now,
+			Role        = Constants.SessionFile.RoleUser,
+			Content     = message,
+			Timestamp   = now,
+			ProfileName = profileName,
 		});
+		_pendingModelLabel = BuildModelLabel();
 		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 		_node.LastPromptTimestamp = now;
 
@@ -1500,11 +1516,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			switch (evt.Type)
 			{
 				case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
+					var pendingLabel = _pendingModelLabel;
+					_pendingModelLabel = null;
 					Messages.Add(new MessageEntryViewModel
 					{
-						Role      = Constants.SessionFile.RoleAssistant,
-						Content   = evt.Content,
-						Timestamp = evt.Timestamp,
+						Role       = Constants.SessionFile.RoleAssistant,
+						Content    = evt.Content,
+						Timestamp  = evt.Timestamp,
+						ModelLabel = pendingLabel,
 					});
 					break;
 
@@ -1615,6 +1634,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	{
 		var elapsed = DateTimeOffset.UtcNow - _thinkingStartedAt;
 		ThinkingDuration = $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:D2}";
+	}
+
+	/// <summary>Builds the [model, effort] label for the current command bar selection.</summary>
+	private string BuildModelLabel()
+	{
+		var model  = SelectedModelId ?? "default";
+		var effort = SelectedEffort  ?? "default";
+		return $"[{model}, {effort}]";
 	}
 
 	private string BuildContextPreamble(string currentMessage)
