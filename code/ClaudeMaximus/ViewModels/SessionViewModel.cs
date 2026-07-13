@@ -1929,6 +1929,86 @@ PROJECT GLOSSARY:
 		AvailableProfiles.Add("New...");
 	}
 
+	/// <summary>
+	/// Reads the session file and restores the last-used profile, model, and effort to the UI dropdowns.
+	/// Sets backing fields directly (no directory-model write or settings save) so that switching
+	/// sessions shows each session's own history rather than the shared per-directory values.
+	/// </summary>
+	public void RestoreLastUsedSettings()
+	{
+		try
+		{
+			var entries = _fileService.ReadEntries(_node.FileName).ToList();
+
+			// --- Profile: last user entry that recorded a profile name ---
+			var lastUserWithProfile = entries.LastOrDefault(
+				e => e.Role == Constants.SessionFile.RoleUser && e.ProfileName != null);
+
+			if (lastUserWithProfile != null)
+			{
+				var name = lastUserWithProfile.ProfileName!;
+				var found = false;
+				// Skip index 0 (Default) and the last entry ("New...") when searching
+				for (var i = 1; i < AvailableProfiles.Count - 1; i++)
+				{
+					if (string.Equals(AvailableProfiles[i], name, StringComparison.OrdinalIgnoreCase))
+					{
+						_selectedProfileIndex = i;
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+					_selectedProfileIndex = 0; // profile was deleted or renamed → fall back to Default
+			}
+			else
+			{
+				_selectedProfileIndex = 0;
+			}
+			this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+
+			// --- Model + Effort: last assistant entry that recorded a model ID ---
+			var lastAssistantWithModel = entries.LastOrDefault(
+				e => e.Role == Constants.SessionFile.RoleAssistant && e.ModelId != null);
+
+			if (lastAssistantWithModel != null)
+			{
+				var modelId = lastAssistantWithModel.ModelId;
+				if (!string.IsNullOrEmpty(modelId) && modelId != "default")
+				{
+					var idx = _modelInfos.FindIndex(m => m.Id == modelId);
+					_selectedModelIndex = idx >= 0 ? idx + 1 : 0;
+				}
+				else
+				{
+					_selectedModelIndex = 0;
+				}
+
+				var effort = lastAssistantWithModel.Effort;
+				if (!string.IsNullOrEmpty(effort) && effort != "default")
+				{
+					var effortIdx = Array.IndexOf(EffortValues, effort);
+					_selectedEffortIndex = effortIdx >= 0 ? effortIdx : 0;
+				}
+				else
+				{
+					_selectedEffortIndex = 0;
+				}
+			}
+			else
+			{
+				_selectedModelIndex  = 0;
+				_selectedEffortIndex = 0;
+			}
+			this.RaisePropertyChanged(nameof(SelectedModelIndex));
+			this.RaisePropertyChanged(nameof(SelectedEffortIndex));
+		}
+		catch (Exception ex)
+		{
+			_log.Debug("RestoreLastUsedSettings: {Error}", ex.Message);
+		}
+	}
+
 	private string? _defaultProfileDisplayName;
 
 	/// <summary>Resolves the default profile email on first load (fire-and-forget).</summary>

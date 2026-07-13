@@ -437,6 +437,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 			_suppressRecentNav = false;
 		}
 
+		// Restore last-used profile/model/effort for this session before updating the status bar,
+		// so UpdateStatusBarModel and SetActiveProfile pick up the restored (per-session) values.
+		vm.RestoreLastUsedSettings();
+
 		// FR.18 — update status bar for the newly active session; show zero bars immediately
 		UpdateStatusBarModel();
 		_hasActiveProfile = true;
