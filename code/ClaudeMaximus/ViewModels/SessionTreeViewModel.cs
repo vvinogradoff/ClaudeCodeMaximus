@@ -31,6 +31,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private ViewModelBase? _selectedTreeItem;
 	private CancellationTokenSource? _searchCts;
 
+	// ── Sub-session expand/collapse state ───────────────────────────────────
+	private SessionNodeViewModel? _expandedSupervisor;
+
 	// ── Move mode state ──────────────────────────────────────────────────────
 	private bool _isMoveModeActive;
 	private SessionNodeViewModel? _movingSession;
@@ -114,6 +117,10 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			.Throttle(TimeSpan.FromMilliseconds(300))
 			.ObserveOn(RxApp.MainThreadScheduler)
 			.Subscribe(_ => ApplySearchFilter());
+
+		this.WhenAnyValue(x => x.SelectedSession)
+			.ObserveOn(RxApp.MainThreadScheduler)
+			.Subscribe(UpdateSubSessionExpansion);
 
 		var timer = new DispatcherTimer
 		{
@@ -755,6 +762,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 				BackfillAgentIdentityInGroups(grp);
 			Directories.Add(new DirectoryNodeViewModel(dirModel, _labelService));
 		}
+		ReorganizeSubSessions();
 	}
 
 	private static void BackfillAgentIdentity(IEnumerable<SessionNodeModel> sessions)
@@ -773,6 +781,87 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		BackfillAgentIdentity(group.Sessions);
 		foreach (var child in group.Groups)
 			BackfillAgentIdentityInGroups(child);
+	}
+
+	/// <summary>
+	/// Post-load pass: moves sub-sessions (those with SupervisorNodeId set) from the flat
+	/// directory/group Children collection into their supervisor's SubSessions collection.
+	/// The underlying model (and JSON persistence) is unchanged; this is purely a ViewModel reorganization.
+	/// </summary>
+	private void ReorganizeSubSessions()
+	{
+		// Collect all (sessionVm, container) pairs across the entire tree
+		var all = new List<(SessionNodeViewModel Vm, ObservableCollection<ViewModelBase> Container)>();
+		foreach (var dir in Directories)
+			CollectAllSessions(dir.Children, all);
+
+		// Build a NodeId → ViewModel lookup
+		var byNodeId = new Dictionary<string, SessionNodeViewModel>(all.Count);
+		foreach (var (vm, _) in all)
+			if (!string.IsNullOrEmpty(vm.Model.NodeId))
+				byNodeId[vm.Model.NodeId] = vm;
+
+		// Move sub-sessions: remove from flat container, add to supervisor's SubSessions
+		foreach (var (vm, container) in all)
+		{
+			if (string.IsNullOrEmpty(vm.Model.SupervisorNodeId)) continue;
+			if (!byNodeId.TryGetValue(vm.Model.SupervisorNodeId, out var supervisor)) continue;
+
+			container.Remove(vm);
+			supervisor.SubSessions.Add(vm);
+		}
+	}
+
+	private static void CollectAllSessions(
+		ObservableCollection<ViewModelBase> children,
+		List<(SessionNodeViewModel, ObservableCollection<ViewModelBase>)> result)
+	{
+		foreach (var child in children)
+		{
+			if (child is SessionNodeViewModel session)
+				result.Add((session, children));
+			else if (child is GroupNodeViewModel group)
+				CollectAllSessions(group.Children, result);
+		}
+	}
+
+	/// <summary>
+	/// Expands the newly selected session's sub-sessions and collapses any previously expanded supervisor.
+	/// </summary>
+	private void UpdateSubSessionExpansion(SessionNodeViewModel? newSession)
+	{
+		if (newSession == null)
+		{
+			if (_expandedSupervisor != null)
+			{
+				_expandedSupervisor.IsExpanded = false;
+				_expandedSupervisor = null;
+			}
+			return;
+		}
+
+		// New selection is already the expanded supervisor → leave as-is
+		if (newSession == _expandedSupervisor) return;
+
+		// New selection is a sub-session of the current expanded supervisor → keep it expanded
+		if (_expandedSupervisor != null
+			&& newSession.IsSubSession
+			&& newSession.Model.SupervisorNodeId == _expandedSupervisor.Model.NodeId)
+			return;
+
+		// Different selection: collapse the previous supervisor
+		if (_expandedSupervisor != null)
+		{
+			_expandedSupervisor.IsExpanded = false;
+			_expandedSupervisor = null;
+		}
+
+		// Expand the new session if it has sub-sessions
+		if (newSession.SubSessions.Count > 0)
+		{
+			newSession.IsExpanded = true;
+			_expandedSupervisor = newSession;
+		}
 	}
 
 	private void PromptAddDirectory()
@@ -798,11 +887,24 @@ public sealed class SessionTreeViewModel : ViewModelBase
 						&& _claudeSessionStatus.IsSessionResumable(
 							session.Model.WorkingDirectory,
 							session.Model.ClaudeSessionId);
+					RefreshSubSessions(session.SubSessions);
 					break;
 				case GroupNodeViewModel group:
 					RefreshChildren(group.Children);
 					break;
 			}
+		}
+	}
+
+	private void RefreshSubSessions(IEnumerable<SessionNodeViewModel> sessions)
+	{
+		foreach (var session in sessions)
+		{
+			session.IsResumable = session.Model.ClaudeSessionId is not null
+				&& _claudeSessionStatus.IsSessionResumable(
+					session.Model.WorkingDirectory,
+					session.Model.ClaudeSessionId);
+			RefreshSubSessions(session.SubSessions);
 		}
 	}
 
@@ -978,6 +1080,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			{
 				case SessionNodeViewModel session:
 					session.IsVisible = false;
+					foreach (var sub in session.SubSessions) sub.IsVisible = false;
 					break;
 				case GroupNodeViewModel group:
 					HideAllChildren(group.Children);
@@ -1004,6 +1107,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			{
 				case SessionNodeViewModel session:
 					session.IsVisible = true;
+					foreach (var sub in session.SubSessions) sub.IsVisible = true;
 					break;
 				case GroupNodeViewModel group:
 					group.IsVisible = true;
@@ -1035,12 +1139,28 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		{
 			switch (child)
 			{
-				case SessionNodeViewModel s when s.Model.NodeId == nodeId: return s;
+				case SessionNodeViewModel s:
+					if (s.Model.NodeId == nodeId) return s;
+					var subR = FindNodeVmInSubSessions(s.SubSessions, nodeId);
+					if (subR != null) return subR;
+					break;
 				case GroupNodeViewModel g:
 					var r = FindNodeVmInChildren(g.Children, nodeId);
 					if (r != null) return r;
 					break;
 			}
+		}
+		return null;
+	}
+
+	private static SessionNodeViewModel? FindNodeVmInSubSessions(
+		IEnumerable<SessionNodeViewModel> sessions, string nodeId)
+	{
+		foreach (var s in sessions)
+		{
+			if (s.Model.NodeId == nodeId) return s;
+			var r = FindNodeVmInSubSessions(s.SubSessions, nodeId);
+			if (r != null) return r;
 		}
 		return null;
 	}
@@ -1081,16 +1201,29 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			switch (child)
 			{
 				case SessionNodeViewModel s:
-					var match = byNodeId
-						? s.Model.NodeId == key
-						: s.Model.AgentToken == key;
+					var match = byNodeId ? s.Model.NodeId == key : s.Model.AgentToken == key;
 					if (match) return s.Model;
+					var subR = FindModelInSubSessions(s.SubSessions, key, byNodeId);
+					if (subR != null) return subR;
 					break;
 				case GroupNodeViewModel g:
 					var r = FindModelInChildren(g.Children, key, byNodeId);
 					if (r != null) return r;
 					break;
 			}
+		}
+		return null;
+	}
+
+	private static SessionNodeModel? FindModelInSubSessions(
+		IEnumerable<SessionNodeViewModel> sessions, string key, bool byNodeId)
+	{
+		foreach (var s in sessions)
+		{
+			var match = byNodeId ? s.Model.NodeId == key : s.Model.AgentToken == key;
+			if (match) return s.Model;
+			var r = FindModelInSubSessions(s.SubSessions, key, byNodeId);
+			if (r != null) return r;
 		}
 		return null;
 	}
@@ -1140,6 +1273,32 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		sessionVm.Model.OrchestrationDepth = orchestrationDepth;
 		sessionVm.Model.SupervisorNodeId   = supervisorNodeId;
 
+		// If this session has a supervisor, move it from the flat directory children
+		// into the supervisor's SubSessions (ViewModel-only; model stays in dir.Sessions for persistence).
+		if (!string.IsNullOrEmpty(supervisorNodeId))
+		{
+			var supervisorVm = FindNodeVmByNodeId(supervisorNodeId);
+			if (supervisorVm != null)
+			{
+				// Remove from whichever flat container AddSession just placed it in
+				foreach (var d in Directories)
+				{
+					if (d.Children.Remove(sessionVm)) break;
+					var removed = false;
+					foreach (var child in d.Children)
+					{
+						if (child is GroupNodeViewModel g && g.Children.Remove(sessionVm))
+						{ removed = true; break; }
+					}
+					if (removed) break;
+				}
+				supervisorVm.SubSessions.Add(sessionVm);
+
+				// If the supervisor is currently expanded, keep it expanded (new sub-session appears live).
+				// If not, auto-expand only when supervisor is selected (handled by UpdateSubSessionExpansion).
+			}
+		}
+
 		_appSettings.Save();
 		return sessionVm.Model;
 	}
@@ -1177,6 +1336,15 @@ public sealed class SessionTreeViewModel : ViewModelBase
 						IsRunning:      s.IsRunning,
 						IsResumable:    s.IsResumable,
 						LastPrompt:     s.LastPromptTime));
+					foreach (var sub in s.SubSessions)
+						result.Add(new SessionSummaryModel(
+							NodeId:         sub.Model.NodeId,
+							Name:           sub.Name,
+							DirectoryLabel: directoryLabel,
+							WorkingDirectory: sub.Model.WorkingDirectory,
+							IsRunning:      sub.IsRunning,
+							IsResumable:    sub.IsResumable,
+							LastPrompt:     sub.LastPromptTime));
 					break;
 				case GroupNodeViewModel g:
 					CollectSessionSummaries(g.Children, directoryLabel, result);
@@ -1201,6 +1369,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			{
 				case SessionNodeViewModel session:
 					LoadLastPromptTime(session);
+					foreach (var sub in session.SubSessions) LoadLastPromptTime(sub);
 					break;
 				case GroupNodeViewModel group:
 					RefreshLastPromptTimesInChildren(group.Children);

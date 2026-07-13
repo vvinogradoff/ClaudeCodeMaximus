@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Media;
 using ClaudeMaximus.Models;
@@ -17,6 +18,7 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private bool _isVisible = true;
 	private bool _isBeingMoved;
 	private bool _hasDraftText;
+	private bool _isExpanded;
 	private string? _lastPromptTime;
 	private DateTimeOffset? _lastPromptTimestamp;
 	private IBrush? _recencyBrush;
@@ -162,6 +164,19 @@ public sealed class SessionNodeViewModel : ViewModelBase
 			<= 720 => MintCreamBrush,
 			_      => _hasDraftText ? MintCreamBrush : null,
 		};
+	}
+
+	/// <summary>Worker sessions spawned by this session via orchestration tools.</summary>
+	public ObservableCollection<SessionNodeViewModel> SubSessions { get; } = [];
+
+	/// <summary>True when this session was created by an orchestration tool (has a supervisor).</summary>
+	public bool IsSubSession => !string.IsNullOrEmpty(Model.SupervisorNodeId);
+
+	/// <summary>Controls TreeView expand/collapse for showing sub-sessions.</summary>
+	public bool IsExpanded
+	{
+		get => _isExpanded;
+		set => this.RaiseAndSetIfChanged(ref _isExpanded, value);
 	}
 
 	public SessionNodeViewModel(SessionNodeModel model)

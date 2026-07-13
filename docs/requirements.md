@@ -77,6 +77,16 @@ This is equivalent to writing a custom terminal emulator or IDE plugin that runs
 
 **FR.2.3.1 — Message timestamps:** Each message bubble displays a timestamp. User messages show both date (`yyyy-MM-dd`) and time (`HH:mm`). Assistant messages show time only (`HH:mm`) — the date is omitted to reduce visual clutter.
 
+**FR.2.3.4 — User bubble profile label:** The user message bubble header displays "You" on the left and the active profile display name (e.g. the account email, or "Default") on the right of the same row. The profile name is persisted in the session file and is restored when the session is loaded.
+
+**FR.2.3.5 — Assistant model/effort label:** The first assistant message rendered after each user prompt displays a small italic label above the response content in the format `[<modelId>, <effort>]` (e.g. `[claude-sonnet-4-6, max]` or `[default, default]`). The label is persisted in the session file and restored on load. Subsequent assistant messages within the same turn (e.g. after a tool call) do not repeat the label. For scheduled/orchestrated turns (FR.14, FR.15), the model is recorded from the session's effective model and effort is written as `"default"` since effort is a user-facing command-bar option only.
+
+**FR.3.3 — Session file format (extended):** The standard header line optionally carries space-delimited `key="value"` metadata after the role keyword:
+- USER entries: `profile="<displayName>"`
+- ASSISTANT entries: `model="<modelId>" effort="<effortLevel>"`
+
+Old session files without metadata are parsed correctly (backward-compatible). The role keyword is always the first word after the timestamp; metadata keys never conflict with role names.
+
 **FR.2.3.2 — Text selectability:** All rendered text in the output panel must be selectable (copy-able) by the user, including user prompts, assistant responses (both plain text and markdown mode), headings, list items, code blocks, and system messages. Text blocks display an I-beam cursor on hover and show a visible blue selection highlight when text is selected. Cross-block selection is supported: when a pointer drag crosses from one text block into another, the selection extends across all intervening blocks. The first and last blocks receive partial selection; intermediate blocks are fully selected. Ctrl+C copies the combined cross-block text. Auto-scrolling is triggered when the pointer nears the viewport edges during a drag. This works uniformly in both plain-text mode (across messages) and markdown mode (across paragraphs, headings, code blocks within and across messages). Implementation: `CrossBlockSelectionHandler` attaches tunnel-level pointer handlers to the `MessageScroller` ScrollViewer and manages `SelectionStart`/`SelectionEnd` on each `SelectableTextBlock` in range.
 
 **FR.2.3.3 — Markdown table rendering:** Tables in markdown responses shall render with:

@@ -74,6 +74,13 @@ public partial class SessionTreeView : UserControl
 			ExpandParentsOf(session, vm);
 
 		Tree.SelectedItem = session;
+
+		// Scroll the node into view after layout has settled
+		Dispatcher.UIThread.Post(() =>
+		{
+			var tvi = FindTreeViewItemForDataContext(session);
+			tvi?.BringIntoView();
+		}, DispatcherPriority.Loaded);
 	}
 
 	private static void ExpandParentsOf(SessionNodeViewModel target, SessionTreeViewModel tree)
@@ -99,6 +106,24 @@ public partial class SessionTreeView : UserControl
 				group.IsExpanded = true;
 				return true;
 			}
+			// Check sub-sessions: target may be nested under a session
+			if (child is SessionNodeViewModel session && ExpandIfContainsInSubSessions(session, target))
+				return true;
+		}
+		return false;
+	}
+
+	private static bool ExpandIfContainsInSubSessions(SessionNodeViewModel parent, SessionNodeViewModel target)
+	{
+		foreach (var sub in parent.SubSessions)
+		{
+			if (sub == target)
+			{
+				parent.IsExpanded = true;
+				return true;
+			}
+			if (ExpandIfContainsInSubSessions(sub, target))
+				return true;
 		}
 		return false;
 	}
@@ -117,7 +142,11 @@ public partial class SessionTreeView : UserControl
 		foreach (var child in children)
 		{
 			if (child is SessionNodeViewModel session)
+			{
 				session.RefreshRecencyBrush();
+				foreach (var sub in session.SubSessions)
+					sub.RefreshRecencyBrush();
+			}
 			else if (child is GroupNodeViewModel group)
 				RefreshRecencyInChildren(group.Children);
 		}

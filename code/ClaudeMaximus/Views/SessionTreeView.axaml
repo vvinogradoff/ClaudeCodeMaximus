@@ -107,9 +107,10 @@
                     </Border>
                 </TreeDataTemplate>
 
-                <!-- Session node -->
-                <DataTemplate DataType="vm:SessionNodeViewModel"
-                              x:CompileBindings="False">
+                <!-- Session node (TreeDataTemplate so sub-sessions appear as children) -->
+                <TreeDataTemplate DataType="vm:SessionNodeViewModel"
+                                  x:CompileBindings="False"
+                                  ItemsSource="{Binding SubSessions}">
                     <Border HorizontalAlignment="Stretch"
                             Background="{Binding RecencyBrush}"
                             Opacity="{Binding MoveOpacity}"
@@ -140,6 +141,12 @@
                                         <Rectangle Grid.Row="1" Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
                                                    IsVisible="{Binding IsResumable}"/>
                                     </Grid>
+                                    <!-- Vertical grey bar: visually marks orchestration sub-sessions -->
+                                    <Rectangle Width="2" Height="14"
+                                               Fill="Gray" Opacity="0.55"
+                                               VerticalAlignment="Center"
+                                               Margin="-2,0"
+                                               IsVisible="{Binding IsSubSession}"/>
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
                                                Foreground="{Binding MoveForeground}"/>
                                     <TextBlock Text="&#x270F;" FontSize="10" VerticalAlignment="Center"
@@ -166,7 +173,7 @@
                                        VerticalAlignment="Stretch"/>
                         </Grid>
                     </Border>
-                </DataTemplate>
+                </TreeDataTemplate>
 
             </TreeView.DataTemplates>
         </TreeView>

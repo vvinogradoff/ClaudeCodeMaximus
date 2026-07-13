@@ -496,10 +496,15 @@ public partial class MainWindow : Window
 		var visual = source as Visual;
 		while (visual != null)
 		{
-			if (visual is Button or MenuItem) return true;
+			if (visual is Button or MenuItem or ComboBox or ComboBoxItem) return true;
 			visual = visual.GetVisualParent();
 		}
 		return false;
+	}
+
+	private void OnRecentDropDownOpened(object? sender, EventArgs e)
+	{
+		(DataContext as MainWindowViewModel)?.RefreshRecentDropdown();
 	}
 
 	// ── Window control buttons ────────────────────────────────────────────────
