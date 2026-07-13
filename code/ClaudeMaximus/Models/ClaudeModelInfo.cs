@@ -1,6 +1,6 @@
 namespace ClaudeMaximus.Models;
 
-/// <summary>Represents an AI model available for selection in the command bar (FR.12.3).</summary>
+/// <summary>Represents an AI model available for selection in the command bar (FR.12.3, FR.18.7).</summary>
 public sealed record ClaudeModelInfo(
     /// <summary>Full model ID passed to --model, e.g. "claude-opus-4-7" or "gemma4:26b".</summary>
     string Id,
@@ -11,4 +11,8 @@ public sealed record ClaudeModelInfo(
     /// <summary>Whether this model is served by Anthropic or a local Ollama instance (FR.12.14).</summary>
     ModelProvider Provider = ModelProvider.Anthropic,
     /// <summary>Whether this model supports tool/function calling. Anthropic models always do; Ollama models are probed via /api/show.</summary>
-    bool SupportsTools = true);
+    bool SupportsTools = true,
+    /// <summary>Published input price in USD per 1 million tokens (FR.18.7). 0 for Ollama/unknown models.</summary>
+    decimal InputPricePerMillion = 0m,
+    /// <summary>Published output price in USD per 1 million tokens (FR.18.7). 0 for Ollama/unknown models.</summary>
+    decimal OutputPricePerMillion = 0m);

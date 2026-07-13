@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
+using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
 using ReactiveUI;
@@ -20,6 +23,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IClaudeProfileService _profileService;
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeModelService _modelService;
+	private readonly IClaudeUsageService _usageService;
 	private readonly ISelfUpdateService _selfUpdate;
 	private readonly ISessionTurnService _turnService;
 	private readonly IAgentMcpServer _mcpServer;
@@ -33,6 +37,14 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private int _selectedLeftTabIndex;
 	private string _daemonStatusText = string.Empty;
 	private string _daemonStatusColor = "Gray";
+
+	// --- FR.18 Status Bar ---
+	private string _statusBarModelText = string.Empty;
+	private double _fiveHourUtilization;
+	private double _sevenDayUtilization;
+	private string _fiveHourLabel = string.Empty;
+	private string _sevenDayLabel = string.Empty;
+	private bool _hasUsageData;
 
 	public SessionTreeViewModel SessionTree { get; }
 	public RecentSessionsViewModel RecentSessions { get; }
@@ -163,6 +175,50 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 	public bool CanClear => ActiveSession?.CanClear ?? false;
 
+	// --- FR.18 Status Bar properties ---
+
+	/// <summary>Model ID + pricing shown in the left portion of the status bar.</summary>
+	public string StatusBarModelText
+	{
+		get => _statusBarModelText;
+		private set => this.RaiseAndSetIfChanged(ref _statusBarModelText, value);
+	}
+
+	/// <summary>5-hour window utilisation percentage (0–100). Drives the top progress bar.</summary>
+	public double FiveHourUtilization
+	{
+		get => _fiveHourUtilization;
+		private set => this.RaiseAndSetIfChanged(ref _fiveHourUtilization, value);
+	}
+
+	/// <summary>7-day window utilisation percentage (0–100). Drives the bottom progress bar.</summary>
+	public double SevenDayUtilization
+	{
+		get => _sevenDayUtilization;
+		private set => this.RaiseAndSetIfChanged(ref _sevenDayUtilization, value);
+	}
+
+	/// <summary>Text overlaid on the 5-hour progress bar (e.g. "5h: 42%  resets 10:49").</summary>
+	public string FiveHourLabel
+	{
+		get => _fiveHourLabel;
+		private set => this.RaiseAndSetIfChanged(ref _fiveHourLabel, value);
+	}
+
+	/// <summary>Text overlaid on the 7-day progress bar (e.g. "7d: 4%  resets Thu").</summary>
+	public string SevenDayLabel
+	{
+		get => _sevenDayLabel;
+		private set => this.RaiseAndSetIfChanged(ref _sevenDayLabel, value);
+	}
+
+	/// <summary>Whether usage bars should be visible (false when no data has been fetched yet).</summary>
+	public bool HasUsageData
+	{
+		get => _hasUsageData;
+		private set => this.RaiseAndSetIfChanged(ref _hasUsageData, value);
+	}
+
 	public ReactiveCommand<Unit, Unit> OpenSettingsCommand { get; }
 	public ReactiveCommand<Unit, Unit> ExitCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleTreePanelCommand { get; }
@@ -180,6 +236,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IClaudeProfileService profileService,
 		IClaudeSessionImportService importService,
 		IClaudeModelService modelService,
+		IClaudeUsageService usageService,
 		ISelfUpdateService selfUpdate,
 		IDirectoryLabelService labelService,
 		SessionTreeViewModel sessionTree,
@@ -196,6 +253,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_profileService   = profileService;
 		_importService    = importService;
 		_modelService     = modelService;
+		_usageService     = usageService;
 		_selfUpdate       = selfUpdate;
 		_turnService      = turnService;
 		_mcpServer        = mcpServer;
@@ -211,6 +269,14 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ExitCommand            = ReactiveCommand.Create(Exit);
 		ToggleTreePanelCommand = ReactiveCommand.Create(() => { IsTreePanelVisible = !IsTreePanelVisible; });
 		ToggleThemeCommand     = ReactiveCommand.Create(() => { IsDarkTheme = !IsDarkTheme; });
+
+		// FR.18 — update model text in status bar whenever the model list refreshes
+		_modelService.ModelsUpdated += (_, _) =>
+			Dispatcher.UIThread.Post(UpdateStatusBarModel);
+
+		// FR.18 — update usage bars whenever a fresh fetch arrives
+		_usageService.UsageUpdated += (_, _) =>
+			Dispatcher.UIThread.Post(() => UpdateStatusBarUsage(_usageService.CachedUsage));
 
 		// Repair session files corrupted by the auto-compaction bug (one-time on startup)
 		var repaired = fileService.RepairCorruptedCompactions();
@@ -268,16 +334,16 @@ public sealed class MainWindowViewModel : ViewModelBase
 		if (node == null)
 		{
 			ActiveSession = null;
+			_usageService.SetActiveProfile(null);
+			StatusBarModelText = string.Empty;
 			_appSettings.Settings.ActiveSessionFileName = null;
 			_appSettings.Settings.ActiveSessionExternalId = null;
 			RaiseInstructionToolbarChanged();
 			return;
 		}
 
-		// Pre-warm model list once (no-op after first call)
-		var profileConfigDir = _profileService.GetConfigDirForProfile(
-			_appSettings.Settings.SelectedProfileIndex, _appSettings.Settings.Profiles);
-		_ = _modelService.EnsureModelsLoadedAsync(_appSettings.Settings.ClaudePath, profileConfigDir);
+		// Pre-warm Ollama discovery once (no-op after first call)
+		_ = _modelService.EnsureModelsLoadedAsync();
 
 		var cacheKey = node.SessionKey;
 		if (!_sessionCache.TryGetValue(cacheKey, out var vm))
@@ -306,9 +372,66 @@ public sealed class MainWindowViewModel : ViewModelBase
 		vm.TreePath = treePath;
 
 		ActiveSession = vm;
+
+		// FR.18 — update status bar for the newly active session
+		UpdateStatusBarModel();
+		_usageService.SetActiveProfile(ResolveCredentialsPath(vm.SelectedProfileConfigDir));
+
 		_appSettings.Settings.ActiveSessionFileName = node.FileName;
 		_appSettings.Settings.ActiveSessionExternalId = node.ExternalId;
 		RaiseInstructionToolbarChanged();
+	}
+
+	/// <summary>Builds the status-bar model text from the active session's selected model (FR.18.2).</summary>
+	private void UpdateStatusBarModel()
+	{
+		var session = ActiveSession;
+		if (session == null) { StatusBarModelText = string.Empty; return; }
+
+		var modelId = session.SelectedModelId;
+		if (string.IsNullOrEmpty(modelId)) { StatusBarModelText = string.Empty; return; }
+
+		var info = _modelService.GetCachedModels().FirstOrDefault(m => m.Id == modelId);
+
+		if (info?.Provider == ModelProvider.Ollama)
+		{
+			StatusBarModelText = $"{modelId}  ·  local";
+			return;
+		}
+
+		if (info != null && (info.InputPricePerMillion > 0 || info.OutputPricePerMillion > 0))
+			StatusBarModelText = $"{modelId}  ·  in ${info.InputPricePerMillion:0.00} / out ${info.OutputPricePerMillion:0.00} per 1M";
+		else
+			StatusBarModelText = modelId;
+	}
+
+	/// <summary>Updates the status-bar usage bars from a freshly-fetched snapshot (FR.18.3).</summary>
+	private void UpdateStatusBarUsage(ClaudeUsageData? usage)
+	{
+		if (usage == null) { HasUsageData = false; return; }
+
+		HasUsageData        = true;
+		FiveHourUtilization = usage.FiveHourUtilization;
+		SevenDayUtilization = usage.SevenDayUtilization;
+
+		var fiveReset  = usage.FiveHourResetsAt.ToLocalTime();
+		var sevenReset = usage.SevenDayResetsAt.ToLocalTime();
+
+		FiveHourLabel = $"5h: {usage.FiveHourUtilization:0}%  resets {fiveReset:HH:mm}";
+		SevenDayLabel = $"7d: {usage.SevenDayUtilization:0}%  resets {sevenReset:ddd}";
+	}
+
+	/// <summary>
+	/// Returns the path to the .credentials.json file for the given profile config directory.
+	/// Falls back to ~/.claude/.credentials.json for the system-wide default profile.
+	/// </summary>
+	private static string ResolveCredentialsPath(string? profileConfigDir)
+	{
+		if (!string.IsNullOrEmpty(profileConfigDir))
+			return Path.Combine(profileConfigDir, Constants.Usage.CredentialsFileName);
+
+		var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		return Path.Combine(home, Constants.Usage.DefaultClaudeRelativePath, Constants.Usage.CredentialsFileName);
 	}
 
 	private void RaiseInstructionToolbarChanged()

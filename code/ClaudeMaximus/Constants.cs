@@ -231,6 +231,17 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		public const string Aumid = "Duxre.ClaudeMaximus";
 	}
 
+	/// <summary>Constants for plan-usage polling via the Anthropic OAuth usage endpoint (FR.18).</summary>
+	public static class Usage
+	{
+		public const string Endpoint            = "https://api.anthropic.com/api/oauth/usage";
+		public const string BetaHeaderValue     = "oauth-2025-04-20";
+		public const string CredentialsFileName = ".credentials.json";
+		/// <summary>Default Claude credentials path for the system-wide (non-profiled) account.</summary>
+		public const string DefaultClaudeRelativePath = ".claude";
+		public const double PollingIntervalMinutes = 5.0;
+	}
+
 	/// <summary>Constants for local Ollama model discovery and routing (FR.12.13, FR.12.14).</summary>
 	public static class Ollama
 	{

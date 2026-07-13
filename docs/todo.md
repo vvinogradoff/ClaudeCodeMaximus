@@ -439,6 +439,26 @@
 
 ---
 
+## Phase 18 — Status Bar: Usage & Model Pricing (FR.18)
+
+### P18.1 Model catalog — curated static list (FR.18.7)
+- [DONE] `Models/ClaudeModelInfo.cs` — add `InputPricePerMillion` and `OutputPricePerMillion` decimal fields
+- [DONE] `Services/IClaudeModelService.cs` — simplify `EnsureModelsLoadedAsync` (no CLI params needed)
+- [DONE] `Services/ClaudeModelService.cs` — replace dynamic CLI fetch with curated static catalog; keep live Ollama discovery
+- [DONE] `Constants.cs` — add `Usage` nested class
+
+### P18.2 Usage service (FR.18.4–18.6)
+- [DONE] `Models/ClaudeUsageData.cs` — record: FiveHourUtilization, FiveHourResetsAt, FiveHourSeverity, SevenDay…
+- [DONE] `Services/IClaudeUsageService.cs` — interface with CachedUsage, UsageUpdated event, SetActiveProfile
+- [DONE] `Services/ClaudeUsageService.cs` — HTTP GET /api/oauth/usage; reads token from .credentials.json; 5-min polling
+- [DONE] `App.axaml.cs` — register IOllamaUsageService (sic IClaudeUsageService) singleton
+
+### P18.3 Status bar UI (FR.18.1–18.3)
+- [DONE] `ViewModels/MainWindowViewModel.cs` — StatusBarModelText, FiveHourUtilization, SevenDayUtilization, labels, HasUsageData; subscribe to ModelsUpdated + UsageUpdated; call SetActiveProfile on session switch
+- [DONE] `Views/MainWindow.axaml` — DockPanel.Dock="Bottom" status bar with model label + 2 stacked ProgressBars
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion

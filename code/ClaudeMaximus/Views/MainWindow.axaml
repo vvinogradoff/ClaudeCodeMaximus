@@ -172,6 +172,62 @@
                 <Border Background="Transparent"/>
             </DockPanel>
 
+            <!-- FR.18 — Status bar: model pricing (left) + usage progress bars (right) -->
+            <Border DockPanel.Dock="Bottom"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: model ID + pricing -->
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding StatusBarModelText}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="8,0"
+                               TextTrimming="CharacterEllipsis"
+                               Opacity="0.8"/>
+
+                    <!-- Right: two stacked thin progress bars (5h on top, 7d below) -->
+                    <StackPanel Grid.Column="1"
+                                Orientation="Vertical"
+                                Spacing="0"
+                                Width="220"
+                                IsVisible="{Binding HasUsageData}"
+                                VerticalAlignment="Stretch">
+                        <!-- 5-hour window bar -->
+                        <Grid Height="13">
+                            <ProgressBar Value="{Binding FiveHourUtilization}"
+                                         Maximum="100" Minimum="0"
+                                         Foreground="#888888"
+                                         Background="Transparent"
+                                         VerticalAlignment="Stretch"
+                                         HorizontalAlignment="Stretch"/>
+                            <TextBlock Text="{Binding FiveHourLabel}"
+                                       FontSize="9"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                        <!-- 7-day window bar (pixel-adjacent, no gap) -->
+                        <Grid Height="13">
+                            <ProgressBar Value="{Binding SevenDayUtilization}"
+                                         Maximum="100" Minimum="0"
+                                         Foreground="#888888"
+                                         Background="Transparent"
+                                         VerticalAlignment="Stretch"
+                                         HorizontalAlignment="Stretch"/>
+                            <TextBlock Text="{Binding SevenDayLabel}"
+                                       FontSize="9"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
             <!-- Two-panel layout -->
             <Grid x:Name="MainContentGrid">
                 <Grid.ColumnDefinitions>

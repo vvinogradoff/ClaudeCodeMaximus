@@ -242,6 +242,7 @@ public partial class App : Application
 		services.AddSingleton<IClaudeProfileService, ClaudeProfileService>();
 		services.AddSingleton<IOllamaModelService, OllamaModelService>();
 		services.AddSingleton<IClaudeModelService, ClaudeModelService>();
+		services.AddSingleton<IClaudeUsageService, ClaudeUsageService>();
 		services.AddSingleton<ITessynDaemonService, TessynDaemonService>();
 		services.AddSingleton<ITessynRunService, TessynRunService>();
 		services.AddSingleton<SessionTreeViewModel>();

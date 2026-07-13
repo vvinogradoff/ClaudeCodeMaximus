@@ -6,8 +6,9 @@ using ClaudeMaximus.Models;
 namespace ClaudeMaximus.Services;
 
 /// <summary>
-/// Provides the list of available Claude models, fetching it dynamically from the CLI
-/// and caching the result for 24 hours.
+/// Provides the list of available models. Anthropic models come from a built-in curated
+/// catalog (FR.18.7); Ollama models are discovered live from the local Ollama instance
+/// on first call. Raises <see cref="ModelsUpdated"/> on the UI thread when the list changes.
 /// </summary>
 public interface IClaudeModelService
 {
@@ -15,16 +16,12 @@ public interface IClaudeModelService
     IReadOnlyList<ClaudeModelInfo> GetCachedModels();
 
     /// <summary>
-    /// Ensures models are loaded from the Claude CLI. Only performs a live fetch once per 24 hours.
+    /// Ensures the Ollama models have been discovered and merged with the curated Anthropic list.
+    /// Only performs the Ollama discovery once per app launch (subsequent calls are no-ops).
     /// Raises <see cref="ModelsUpdated"/> on the UI thread when the list changes.
-    /// Safe to call multiple times — subsequent calls are no-ops while a fetch is in progress.
     /// </summary>
-    /// <param name="claudePath">Path to the claude executable.</param>
-    /// <param name="profileConfigDir">
-    /// CLAUDE_CONFIG_DIR for the profile to authenticate as, or null for the default profile.
-    /// </param>
-    Task EnsureModelsLoadedAsync(string claudePath, string? profileConfigDir = null);
+    Task EnsureModelsLoadedAsync();
 
-    /// <summary>Raised on the UI thread after the model list has been refreshed from the CLI.</summary>
+    /// <summary>Raised on the UI thread after the model list has been refreshed.</summary>
     event EventHandler? ModelsUpdated;
 }
