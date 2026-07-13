@@ -41,7 +41,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private bool _daemonPendingAutoCompact;
 	private CancellationTokenSource? _draftSaveCts;
 	private bool _pendingClear;
-	private string? _pendingModelLabel;
+	private string? _pendingModelLabel;       // UI thread only (first assistant VM)
+	private string? _pendingFileModelId;      // cross-thread; use Interlocked
+	private string? _pendingFileEffort;       // cross-thread; use Interlocked
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -617,6 +619,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			ProfileName = daemonProfileName,
 		});
 		_pendingModelLabel = BuildModelLabel();
+		Interlocked.Exchange(ref _pendingFileModelId, SelectedModelId ?? "default");
+		Interlocked.Exchange(ref _pendingFileEffort,  SelectedEffort  ?? "default");
 		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 		_node.LastPromptTimestamp = now;
 
@@ -1315,11 +1319,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 
 		// Store only the clean user message in file and UI (FR.11.2)
-		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message);
-		var now = DateTimeOffset.UtcNow;
 		var profileName = _selectedProfileIndex >= 0 && _selectedProfileIndex < AvailableProfiles.Count
 			? AvailableProfiles[_selectedProfileIndex]
 			: null;
+		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message, profileName: profileName);
+		var now = DateTimeOffset.UtcNow;
 		Messages.Add(new MessageEntryViewModel
 		{
 			Role        = Constants.SessionFile.RoleUser,
@@ -1328,6 +1332,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			ProfileName = profileName,
 		});
 		_pendingModelLabel = BuildModelLabel();
+		Interlocked.Exchange(ref _pendingFileModelId, SelectedModelId ?? "default");
+		Interlocked.Exchange(ref _pendingFileEffort,  SelectedEffort  ?? "default");
 		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 		_node.LastPromptTimestamp = now;
 
@@ -1471,7 +1477,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		switch (evt.Type)
 		{
 			case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
-				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleAssistant, evt.Content);
+				var fileModelId = Interlocked.Exchange(ref _pendingFileModelId, null);
+				var fileEffort  = Interlocked.Exchange(ref _pendingFileEffort, null);
+				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleAssistant, evt.Content,
+					modelId: fileModelId, effort: fileEffort);
 				break;
 			case "system" when evt.Subtype is "compact":
 				_fileService.AppendCompactionSeparator(_node.FileName);
@@ -2131,10 +2140,18 @@ PROJECT GLOSSARY:
 	}
 
 	private static MessageEntryViewModel EntryToViewModel(SessionEntryModel entry)
-		=> new()
+	{
+		string? modelLabel = null;
+		if (entry.ModelId != null || entry.Effort != null)
+			modelLabel = $"[{entry.ModelId ?? "default"}, {entry.Effort ?? "default"}]";
+
+		return new MessageEntryViewModel
 		{
-			Role      = entry.Role,
-			Content   = entry.Content,
-			Timestamp = entry.Timestamp,
+			Role        = entry.Role,
+			Content     = entry.Content,
+			Timestamp   = entry.Timestamp,
+			ProfileName = entry.ProfileName,
+			ModelLabel  = modelLabel,
 		};
+	}
 }

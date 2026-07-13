@@ -26,9 +26,9 @@ public sealed class SessionFileService : ISessionFileService
 		return fileName;
 	}
 
-	public void AppendMessage(string fileName, string role, string content)
+	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null)
 	{
-		var entry = BuildEntryText(DateTimeOffset.UtcNow, role, content);
+		var entry = BuildEntryText(DateTimeOffset.UtcNow, role, content, profileName, modelId, effort);
 		AppendToFile(fileName, entry);
 	}
 
@@ -77,7 +77,7 @@ public sealed class SessionFileService : ISessionFileService
 			}
 			else
 			{
-				sb.AppendLine(FormatHeader(entry.Timestamp, entry.Role));
+				sb.AppendLine(FormatHeader(entry.Timestamp, entry.Role, entry.ProfileName, entry.ModelId, entry.Effort));
 				sb.AppendLine(entry.Content);
 				sb.AppendLine();
 			}
@@ -146,17 +146,28 @@ public sealed class SessionFileService : ISessionFileService
 		stream.Flush(flushToDisk: true);
 	}
 
-	private static string BuildEntryText(DateTimeOffset timestamp, string role, string content)
+	private static string BuildEntryText(DateTimeOffset timestamp, string role, string content, string? profileName = null, string? modelId = null, string? effort = null)
 	{
 		var sb = new StringBuilder();
-		sb.AppendLine(FormatHeader(timestamp, role));
+		sb.AppendLine(FormatHeader(timestamp, role, profileName, modelId, effort));
 		sb.AppendLine(content);
 		sb.AppendLine();
 		return sb.ToString();
 	}
 
-	private static string FormatHeader(DateTimeOffset timestamp, string role)
-		=> $"[{timestamp.ToString(Constants.SessionFile.TimestampFormat)}] {role}";
+	private static string FormatHeader(DateTimeOffset timestamp, string role, string? profileName = null, string? modelId = null, string? effort = null)
+	{
+		var sb = new StringBuilder($"[{timestamp.ToString(Constants.SessionFile.TimestampFormat)}] {role}");
+		if (profileName != null)
+			sb.Append($" profile=\"{EscapeMetaValue(profileName)}\"");
+		if (modelId != null)
+			sb.Append($" model=\"{EscapeMetaValue(modelId)}\"");
+		if (effort != null)
+			sb.Append($" effort=\"{EscapeMetaValue(effort)}\"");
+		return sb.ToString();
+	}
+
+	private static string EscapeMetaValue(string value) => value.Replace("\"", "'");
 
 	private static IReadOnlyList<SessionEntryModel> ParseEntries(string[] lines)
 	{
@@ -165,7 +176,7 @@ public sealed class SessionFileService : ISessionFileService
 
 		while (i < lines.Length)
 		{
-			if (!TryParseHeader(lines[i], out var timestamp, out var role))
+			if (!TryParseHeader(lines[i], out var timestamp, out var role, out var rawMeta))
 			{
 				i++;
 				continue;
@@ -184,6 +195,11 @@ public sealed class SessionFileService : ISessionFileService
 				continue;
 			}
 
+			var meta = ParseMetadata(rawMeta);
+			meta.TryGetValue("profile", out var profileName);
+			meta.TryGetValue("model", out var modelId);
+			meta.TryGetValue("effort", out var effort);
+
 			var contentLines = new List<string>();
 			while (i < lines.Length && !IsHeaderLine(lines[i]))
 			{
@@ -197,19 +213,23 @@ public sealed class SessionFileService : ISessionFileService
 
 			entries.Add(new SessionEntryModel
 			{
-				Timestamp = timestamp,
-				Role = role,
-				Content = string.Join(Environment.NewLine, contentLines),
+				Timestamp   = timestamp,
+				Role        = role,
+				Content     = string.Join(Environment.NewLine, contentLines),
+				ProfileName = profileName,
+				ModelId     = modelId,
+				Effort      = effort,
 			});
 		}
 
 		return entries;
 	}
 
-	private static bool TryParseHeader(string line, out DateTimeOffset timestamp, out string role)
+	private static bool TryParseHeader(string line, out DateTimeOffset timestamp, out string role, out string rawMeta)
 	{
 		timestamp = default;
 		role = string.Empty;
+		rawMeta = string.Empty;
 
 		if (!line.StartsWith('['))
 			return false;
@@ -227,8 +247,47 @@ public sealed class SessionFileService : ISessionFileService
 				out timestamp))
 			return false;
 
-		role = line[(closeBracket + 2)..].Trim();
+		// Everything after "] ": first word is the role, the rest is key="value" metadata
+		var afterBracket = line[(closeBracket + 2)..];
+		var spaceIdx = afterBracket.IndexOf(' ');
+		if (spaceIdx < 0)
+		{
+			role = afterBracket.Trim();
+		}
+		else
+		{
+			role = afterBracket[..spaceIdx];
+			rawMeta = afterBracket[(spaceIdx + 1)..];
+		}
+
 		return !string.IsNullOrEmpty(role);
+	}
+
+	/// <summary>Parses space-delimited key="value" pairs from a header metadata string.</summary>
+	private static Dictionary<string, string> ParseMetadata(string rawMeta)
+	{
+		var result = new Dictionary<string, string>(StringComparer.Ordinal);
+		if (string.IsNullOrWhiteSpace(rawMeta))
+			return result;
+
+		var i = 0;
+		while (i < rawMeta.Length)
+		{
+			while (i < rawMeta.Length && char.IsWhiteSpace(rawMeta[i])) i++;
+			var eqIndex = rawMeta.IndexOf('=', i);
+			if (eqIndex < 0) break;
+			var key = rawMeta[i..eqIndex].Trim();
+			i = eqIndex + 1;
+			if (i >= rawMeta.Length || rawMeta[i] != '"') break;
+			i++;
+			var closeQuote = rawMeta.IndexOf('"', i);
+			if (closeQuote < 0) break;
+			var value = rawMeta[i..closeQuote];
+			i = closeQuote + 1;
+			if (!string.IsNullOrEmpty(key))
+				result[key] = value;
+		}
+		return result;
 	}
 
 	private static bool IsHeaderLine(string line)

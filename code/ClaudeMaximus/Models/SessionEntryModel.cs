@@ -16,5 +16,14 @@ public sealed class SessionEntryModel
 	/// </summary>
 	public required string Content { get; init; }
 
+	/// <summary>Profile display name stored in the header for USER entries.</summary>
+	public string? ProfileName { get; init; }
+
+	/// <summary>Model ID stored in the header for ASSISTANT entries.</summary>
+	public string? ModelId { get; init; }
+
+	/// <summary>Effort level stored in the header for ASSISTANT entries.</summary>
+	public string? Effort { get; init; }
+
 	public bool IsCompaction => Role == Constants.SessionFile.RoleCompaction;
 }

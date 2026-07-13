@@ -138,11 +138,13 @@ public sealed class SessionTurnService : ISessionTurnService
 				: null;
 			var disableTools     = modelInfo is { Provider: ModelProvider.Ollama, SupportsTools: false };
 
-			var resultText   = new StringBuilder();
-			var isError      = false;
-			string? errorMessage = null;
-			int inputTokens  = 0, outputTokens = 0;
-			double costUsd   = 0;
+			var resultText        = new StringBuilder();
+			var isError           = false;
+			string? errorMessage  = null;
+			int inputTokens       = 0, outputTokens = 0;
+			double costUsd        = 0;
+			var firstAssistant    = true;
+			var pendingModelId    = effectiveModelId ?? "default";
 
 			await _processManager.SendMessageAsync(
 				workingDirectory: node.WorkingDirectory,
@@ -150,7 +152,8 @@ public sealed class SessionTurnService : ISessionTurnService
 				sessionId:        sessionId,
 				userMessage:      messageToSend,
 				onEvent:          evt => HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
-				                                     ref inputTokens, ref outputTokens, ref costUsd),
+				                                     ref inputTokens, ref outputTokens, ref costUsd,
+				                                     ref firstAssistant, pendingModelId),
 				model:            effectiveModelId,
 				profileConfigDir: profileConfigDir,
 				mcpConfigPath:    mcpConfigPath,
@@ -189,12 +192,22 @@ public sealed class SessionTurnService : ISessionTurnService
 		ref string? errorMessage,
 		ref int inputTokens,
 		ref int outputTokens,
-		ref double costUsd)
+		ref double costUsd,
+		ref bool firstAssistant,
+		string pendingModelId)
 	{
 		switch (evt.Type)
 		{
 			case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
-				_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleAssistant, evt.Content);
+				string? fileModelId = null, fileEffort = null;
+				if (firstAssistant)
+				{
+					firstAssistant = false;
+					fileModelId    = pendingModelId;
+					fileEffort     = "default";
+				}
+				_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleAssistant, evt.Content,
+					modelId: fileModelId, effort: fileEffort);
 				resultText.Append(evt.Content);
 				break;
 

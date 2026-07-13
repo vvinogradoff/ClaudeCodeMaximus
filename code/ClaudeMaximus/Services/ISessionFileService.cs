@@ -13,7 +13,11 @@ public interface ISessionFileService
 	/// <summary>Creates a new session file and returns its bare file name.</summary>
 	string CreateSessionFile();
 
-	void AppendMessage(string fileName, string role, string content);
+	/// <summary>
+	/// Appends a message entry to the session file. Optional metadata is embedded in the header line:
+	/// <paramref name="profileName"/> for USER entries, <paramref name="modelId"/> and <paramref name="effort"/> for ASSISTANT entries.
+	/// </summary>
+	void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null);
 	void AppendCompactionSeparator(string fileName);
 
 	IReadOnlyList<SessionEntryModel> ReadEntries(string fileName);
