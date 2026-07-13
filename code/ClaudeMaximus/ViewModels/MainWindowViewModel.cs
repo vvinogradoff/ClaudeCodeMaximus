@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
@@ -37,6 +38,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private int _selectedLeftTabIndex;
 	private string _daemonStatusText = string.Empty;
 	private string _daemonStatusColor = "Gray";
+	private SessionNodeViewModel? _selectedRecentSession;
+	private bool _suppressRecentNav;
 
 	// --- FR.18 Status Bar ---
 	private string _statusBarModelText = string.Empty;
@@ -45,9 +48,29 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private string _fiveHourLabel = string.Empty;
 	private string _sevenDayLabel = string.Empty;
 	private bool _hasUsageData;
+	private bool _hasActiveProfile;
 
 	public SessionTreeViewModel SessionTree { get; }
 	public RecentSessionsViewModel RecentSessions { get; }
+
+	/// <summary>Flat list of recently-active sessions (last 24 h), newest first, for the top-bar dropdown.</summary>
+	public ObservableCollection<SessionNodeViewModel> RecentDropdownSessions { get; } = [];
+
+	/// <summary>Currently selected session in the top-bar recent-sessions dropdown.</summary>
+	public SessionNodeViewModel? SelectedRecentSession
+	{
+		get => _selectedRecentSession;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _selectedRecentSession, value);
+			if (_suppressRecentNav || value == null || value == SessionTree.SelectedSession)
+				return;
+			// Reveal tree and navigate
+			IsTreePanelVisible = true;
+			SelectedLeftTabIndex = 0;
+			SessionTree.SelectedSession = value;
+		}
+	}
 
 	public SessionViewModel? ActiveSession
 	{
@@ -308,6 +331,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 			};
 			UpdateDaemonStatus(_daemonService.ConnectionState, _daemonService.Readiness);
 		}
+
+		// Populate the top-bar recent-sessions dropdown on startup
+		RefreshRecentDropdown();
 	}
 
 	private void UpdateDaemonStatus(TessynConnectionState connection, TessynDaemonReadiness readiness)
@@ -334,6 +360,11 @@ public sealed class MainWindowViewModel : ViewModelBase
 		if (node == null)
 		{
 			ActiveSession = null;
+			_suppressRecentNav = true;
+			try { _selectedRecentSession = null; this.RaisePropertyChanged(nameof(SelectedRecentSession)); }
+			finally { _suppressRecentNav = false; }
+			_hasActiveProfile = false;
+			HasUsageData = false;
 			_usageService.SetActiveProfile(null);
 			StatusBarModelText = string.Empty;
 			_appSettings.Settings.ActiveSessionFileName = null;
@@ -373,8 +404,26 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 		ActiveSession = vm;
 
-		// FR.18 — update status bar for the newly active session
+		// Sync the top-bar dropdown to follow whatever session is now active
+		_suppressRecentNav = true;
+		try
+		{
+			_selectedRecentSession = RecentDropdownSessions.Contains(node) ? node : null;
+			this.RaisePropertyChanged(nameof(SelectedRecentSession));
+		}
+		finally
+		{
+			_suppressRecentNav = false;
+		}
+
+		// FR.18 — update status bar for the newly active session; show zero bars immediately
 		UpdateStatusBarModel();
+		_hasActiveProfile = true;
+		FiveHourUtilization = 0;
+		SevenDayUtilization = 0;
+		FiveHourLabel = "5h: 0%";
+		SevenDayLabel = "7d: 0%";
+		HasUsageData = true;
 		_usageService.SetActiveProfile(ResolveCredentialsPath(vm.SelectedProfileConfigDir));
 
 		_appSettings.Settings.ActiveSessionFileName = node.FileName;
@@ -408,11 +457,18 @@ public sealed class MainWindowViewModel : ViewModelBase
 	/// <summary>Updates the status-bar usage bars from a freshly-fetched snapshot (FR.18.3).</summary>
 	private void UpdateStatusBarUsage(ClaudeUsageData? usage)
 	{
-		if (usage == null) { HasUsageData = false; return; }
+		if (!_hasActiveProfile) { HasUsageData = false; return; }
 
 		HasUsageData        = true;
-		FiveHourUtilization = usage.FiveHourUtilization;
-		SevenDayUtilization = usage.SevenDayUtilization;
+		FiveHourUtilization = usage?.FiveHourUtilization ?? 0;
+		SevenDayUtilization = usage?.SevenDayUtilization ?? 0;
+
+		if (usage == null)
+		{
+			FiveHourLabel = "5h: 0%";
+			SevenDayLabel = "7d: 0%";
+			return;
+		}
 
 		var fiveReset  = usage.FiveHourResetsAt.ToLocalTime();
 		var sevenReset = usage.SevenDayResetsAt.ToLocalTime();
@@ -512,6 +568,46 @@ public sealed class MainWindowViewModel : ViewModelBase
 		var node = SessionTree.FindNodeVmByNodeId(nodeId);
 		if (node != null)
 			SessionTree.SelectedSession = node;
+	}
+
+	/// <summary>Rebuilds the top-bar recent-sessions dropdown from sessions active in the last 24 h.</summary>
+	public void RefreshRecentDropdown()
+	{
+		var all = new List<SessionNodeViewModel>();
+		foreach (var dir in SessionTree.Directories)
+			CollectRecentSessions(dir.Children, all);
+
+		all = all
+			.Where(s => s.IsRecentlyActive)
+			.OrderByDescending(s => s.LastPromptTimestamp)
+			.ToList();
+
+		_suppressRecentNav = true;
+		try
+		{
+			RecentDropdownSessions.Clear();
+			foreach (var s in all)
+				RecentDropdownSessions.Add(s);
+
+			var current = SessionTree.SelectedSession;
+			_selectedRecentSession = current != null && RecentDropdownSessions.Contains(current) ? current : null;
+			this.RaisePropertyChanged(nameof(SelectedRecentSession));
+		}
+		finally
+		{
+			_suppressRecentNav = false;
+		}
+	}
+
+	private static void CollectRecentSessions(ObservableCollection<ViewModelBase> children, List<SessionNodeViewModel> result)
+	{
+		foreach (var child in children)
+		{
+			if (child is SessionNodeViewModel session)
+				result.Add(session);
+			else if (child is GroupNodeViewModel group)
+				CollectRecentSessions(group.Children, result);
+		}
 	}
 
 	private SessionNodeViewModel? FindSessionByPredicate(Func<SessionNodeViewModel, bool> predicate)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -20,6 +21,7 @@ public sealed class ClaudeUsageService : IClaudeUsageService
     private const string BetaValue     = "oauth-2025-04-20";
 
     private readonly HttpClient _httpClient;
+    private readonly Dictionary<string, ClaudeUsageData> _profileCache = new();
     private CancellationTokenSource _cts = new();
     private string? _activeCredentialsPath;
 
@@ -41,6 +43,14 @@ public sealed class ClaudeUsageService : IClaudeUsageService
         _cts.Cancel();
         _cts.Dispose();
         _cts = new CancellationTokenSource();
+
+        // Restore per-profile cached data immediately (null = no previous data = show zeros)
+        CachedUsage = credentialsFilePath != null && _profileCache.TryGetValue(credentialsFilePath, out var cached)
+            ? cached
+            : null;
+
+        // Notify UI of the profile switch immediately so bars reflect new state
+        Dispatcher.UIThread.Post(() => UsageUpdated?.Invoke(this, EventArgs.Empty));
 
         if (credentialsFilePath != null)
             _ = RunPollingLoopAsync(credentialsFilePath, _cts.Token);
@@ -96,6 +106,7 @@ public sealed class ClaudeUsageService : IClaudeUsageService
             if (usage != null)
             {
                 CachedUsage = usage;
+                _profileCache[credentialsPath] = usage;
                 Dispatcher.UIThread.Post(() => UsageUpdated?.Invoke(this, EventArgs.Empty));
                 _log.Debug("ClaudeUsageService: refreshed — 5h={FiveH:0}%  7d={SevenD:0}%",
                     usage.FiveHourUtilization, usage.SevenDayUtilization);

@@ -168,6 +168,83 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Button>
                 </StackPanel>
+                <!-- Recent sessions navigator dropdown -->
+                <ComboBox x:Name="RecentSessionsCombo"
+                          DockPanel.Dock="Left"
+                          ItemsSource="{Binding RecentDropdownSessions}"
+                          SelectedItem="{Binding SelectedRecentSession}"
+                          PlaceholderText="Recent sessions…"
+                          DropDownOpened="OnRecentDropDownOpened"
+                          VerticalAlignment="Center"
+                          Width="220"
+                          MaxDropDownHeight="400"
+                          Margin="4,0,0,0"
+                          FontSize="13"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          HorizontalContentAlignment="Stretch">
+                    <ComboBox.Styles>
+                        <Style Selector="ComboBox#RecentSessionsCombo">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo /template/ Border#Background">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo:pointerover /template/ Border#Background">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo:pressed /template/ Border#Background">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo:focus /template/ Border#Background">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo /template/ TextBlock#PlaceholderTextBlock">
+                            <Setter Property="FontSize" Value="13"/>
+                            <Setter Property="Opacity" Value="0.75"/>
+                        </Style>
+                    </ComboBox.Styles>
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:CompileBindings="False">
+                            <Border HorizontalAlignment="Stretch"
+                                    Background="{Binding RecencyBrush}"
+                                    CornerRadius="2" Padding="0">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1,2,1">
+                                        <!-- Status indicator: upper half = active/external, lower half = resumable -->
+                                        <Grid Width="8" Height="16" VerticalAlignment="Center" RowDefinitions="8,8">
+                                            <Panel Grid.Row="0">
+                                                <Rectangle Width="8" Height="8" Fill="DarkRed"
+                                                           IsVisible="{Binding IsRunning}"/>
+                                                <Rectangle Width="8" Height="8" Fill="Orange" Opacity="0.8"
+                                                           IsVisible="{Binding IsExternallyActive}"/>
+                                            </Panel>
+                                            <Rectangle Grid.Row="1" Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
+                                                       IsVisible="{Binding IsResumable}"/>
+                                        </Grid>
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <!-- Dotted dark green border overlay for recently-active sessions -->
+                                    <Rectangle IsVisible="{Binding IsRecentlyActive}"
+                                               Stroke="DarkGreen"
+                                               StrokeThickness="1"
+                                               StrokeDashArray="3,2"
+                                               RadiusX="2" RadiusY="2"
+                                               Fill="Transparent"
+                                               IsHitTestVisible="False"
+                                               HorizontalAlignment="Stretch"
+                                               VerticalAlignment="Stretch"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
                 <!-- Empty space for drag -->
                 <Border Background="Transparent"/>
             </DockPanel>
@@ -178,8 +255,8 @@
                     BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="0.3*"/>
+                        <ColumnDefinition Width="0.7*"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Left: model ID + pricing -->
@@ -191,11 +268,10 @@
                                TextTrimming="CharacterEllipsis"
                                Opacity="0.8"/>
 
-                    <!-- Right: two stacked thin progress bars (5h on top, 7d below) -->
+                    <!-- Right: two stacked thin progress bars (5h on top, 7d below) — 70% of status bar -->
                     <StackPanel Grid.Column="1"
                                 Orientation="Vertical"
                                 Spacing="0"
-                                Width="220"
                                 IsVisible="{Binding HasUsageData}"
                                 VerticalAlignment="Stretch">
                         <!-- 5-hour window bar -->
