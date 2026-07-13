@@ -21,7 +21,7 @@ public sealed class ClaudeModelService : IClaudeModelService
         new("claude-opus-4-8",           "opus",    "Opus 4.8",   InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
         new("claude-opus-4-7",           "",        "Opus 4.7",   InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
         new("claude-opus-4-6",           "",        "Opus 4.6",   InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
-        new("claude-sonnet-5",           "sonnet",  "Sonnet 5",   InputPricePerMillion:  3m, OutputPricePerMillion: 15m),
+        new("claude-sonnet-5",           "sonnet",  "Sonnet 5",   InputPricePerMillion:  2m, OutputPricePerMillion: 10m), // introductory price through 2026-08-31
         new("claude-sonnet-4-6",         "",        "Sonnet 4.6", InputPricePerMillion:  3m, OutputPricePerMillion: 15m),
         new("claude-haiku-4-5-20251001", "haiku",   "Haiku 4.5",  InputPricePerMillion:  1m, OutputPricePerMillion:  5m),
     ];
