@@ -310,7 +310,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		this.WhenAnyValue(x => x.SessionTree.SelectedSession)
 			.Subscribe(OnSelectedSessionChanged);
 
-		// FR.18 — when the profile dropdown changes inside the active session, update usage bars.
+		// FR.18 — when the profile or model dropdown changes inside the active session, update status bar.
 		// Skip(1) avoids a duplicate call with OnSelectedSessionChanged which handles the initial load.
 		this.WhenAnyValue(x => x.ActiveSession)
 			.Select(session => session == null
@@ -323,6 +323,13 @@ public sealed class MainWindowViewModel : ViewModelBase
 				if (s != null)
 					_usageService.SetActiveProfile(ResolveCredentialsPath(s.SelectedProfileConfigDir));
 			});
+
+		this.WhenAnyValue(x => x.ActiveSession)
+			.Select(session => session == null
+				? Observable.Empty<int>()
+				: session.WhenAnyValue(s => s.SelectedModelIndex).Skip(1))
+			.Switch()
+			.Subscribe(_ => UpdateStatusBarModel());
 
 		// When a session is selected from the Recent tab, sync it to the tree
 		this.WhenAnyValue(x => x.RecentSessions.SelectedSession)
