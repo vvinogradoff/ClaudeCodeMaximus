@@ -26,11 +26,12 @@ public interface IClaudeProfileService
 	Task<string?> GetAccountEmailAsync(string claudePath, string? configDir);
 
 	/// <summary>
-	/// Launches <c>claude auth login</c> in a visible console window
-	/// with CLAUDE_CONFIG_DIR set to the given directory.
+	/// Launches <c>claude auth login</c> in a visible console window,
+	/// with CLAUDE_CONFIG_DIR set to <paramref name="configDir"/> when non-null.
+	/// Pass null to (re)authenticate the Default profile (no env var override).
 	/// Waits for the process to exit.
 	/// </summary>
-	Task LaunchAuthLoginAsync(string claudePath, string configDir);
+	Task LaunchAuthLoginAsync(string claudePath, string? configDir);
 
 	/// <summary>
 	/// Resolves the CLAUDE_CONFIG_DIR for a profile selector index: 0 (or out of range)
@@ -38,4 +39,12 @@ public interface IClaudeProfileService
 	/// <paramref name="profiles"/>[index-1].
 	/// </summary>
 	string? GetConfigDirForProfile(int profileIndex, IReadOnlyList<ClaudeProfileModel> profiles);
+
+	/// <summary>
+	/// Marks a profile's config directory as removed by renaming it with a "_rem" suffix
+	/// (e.g. "profile_4" -&gt; "profile_4_rem"), appending a numeric suffix on collision.
+	/// The directory and its contents (Claude sessions/projects) are preserved, not deleted.
+	/// Best-effort — failures are logged and swallowed.
+	/// </summary>
+	void MarkProfileDirectoryRemoved(string profileId);
 }

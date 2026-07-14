@@ -448,6 +448,19 @@ The selected effort index is persisted per working directory (`SelectedEffortInd
 
 Profile authentication (`CLAUDE_CONFIG_DIR`) and HTTPS proxy settings are **not** injected for Ollama-routed sessions. Ollama models are also excluded from the Claude Assist fallback chain (FR.13.14) — assist calls (title generation, semantic search) always use Anthropic models only.
 
+**FR.12.15 — Mid-flight model change (not supported — design decision):** Changing the model or effort dropdown while a Claude response is in progress does **not** affect the currently-running invocation. The model and effort are captured at send time and passed to the CLI process; there is no mechanism in the Claude CLI protocol to hot-swap the model mid-stream. The new selection takes effect on the next user message automatically. Real mid-flight switching would require killing the running process and re-sending the same prompt, discarding the partial response — this is not implemented. Users who need to abort and restart with a different model should use the **Stop** button, then change the model and resend.
+
+**FR.12.16 — Auth failure detection:** When a `result` or `system` error event's content contains the substring `"Invalid authentication credentials"` (the Claude CLI's 401 error text), the session sets `HasAuthError = true` in addition to normal error handling (FR.12.16 does not change how the error text itself is displayed — it only raises a flag). The flag is cleared when: a subsequent request succeeds, the user switches the profile selection, or a Re-authenticate/Remove action (FR.12.17/FR.12.18) completes.
+
+**FR.12.17 — Re-authenticate button:** When `HasAuthError` is true, a **"Re-authenticate"** button appears docked at the far right of the command bar (to the right of the Model/Profile/Effort selectors). Clicking it re-runs the same interactive auth login flow used for profile creation (FR.12.7), targeting the **currently selected profile's** config directory (or no `CLAUDE_CONFIG_DIR` override, if Default is selected). On success (`claude auth status` returns an email), `HasAuthError` is cleared and a confirmation message is appended to the session. On failure/cancellation, `HasAuthError` remains set and a failure message is appended.
+
+**FR.12.18 — Remove profile button:** When `HasAuthError` is true **and** a non-Default profile is selected, a **Remove** button (✕ icon, no text) appears in the command bar next to Re-authenticate. Clicking it:
+1. Removes the profile's entry from `AppSettingsModel.Profiles` (the app no longer lists or selects it).
+2. Renames the profile's config directory on disk from `<ProfilesRoot>\<ProfileId>\` to `<ProfilesRoot>\<ProfileId>_rem\` (e.g. `profile_4` → `profile_4_rem`). The directory itself, its Claude sessions, and its projects are **not deleted** — only marked removed and taken out of the active profile list, since they may hold sessions/projects still worth recovering later. If a directory with the `_rem` suffix already exists (e.g. from a previous removal that was never cleaned up manually), a numeric suffix is appended (`_rem2`, `_rem3`, ...) to avoid collisions.
+3. Resets the profile selector to "Default" (index 0) and clears `HasAuthError`.
+
+The Default profile cannot be removed (the Remove button never appears while Default is selected, even if `HasAuthError` is true).
+
 ---
 
 ### FR.13 — Session Import

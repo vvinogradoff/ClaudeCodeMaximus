@@ -32,6 +32,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly IClaudeModelService _modelService;
 	private readonly ISessionTurnService _turnService;
 	private readonly IAgentMcpServer _mcpServer;
+	private readonly ISchedulerService _schedulerService;
 	private readonly DirectoryNodeModel? _directoryModel;
 	private readonly ITessynRunService? _runService;
 	private readonly ITessynDaemonService? _daemonService;
@@ -72,8 +73,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private int _selectedProfileIndex;
 	private int _selectedEffortIndex;
 	private bool _isProfileAuthInProgress;
+	private bool _hasAuthError;
 	private string _projectDirectory = string.Empty;
 	private string _treePath = string.Empty;
+	private bool _isNodeRunning;
+	private bool _hasActiveSchedule;
+	private string _scheduleTooltip = string.Empty;
 
 	public string Name
 	{
@@ -128,7 +133,39 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public bool IsBusy
 	{
 		get => _isBusy;
-		private set => this.RaiseAndSetIfChanged(ref _isBusy, value);
+		private set
+		{
+			this.RaiseAndSetIfChanged(ref _isBusy, value);
+			this.RaisePropertyChanged(nameof(CanStop));
+		}
+	}
+
+	/// <summary>True while the session's node has an orchestrated turn running (set by SessionTurnService).</summary>
+	public bool IsNodeRunning
+	{
+		get => _isNodeRunning;
+		private set
+		{
+			this.RaiseAndSetIfChanged(ref _isNodeRunning, value);
+			this.RaisePropertyChanged(nameof(CanStop));
+		}
+	}
+
+	/// <summary>True when the Stop button should be shown: a local send is in flight, or the node has an active orchestrated turn.</summary>
+	public bool CanStop => IsBusy || IsNodeRunning;
+
+	/// <summary>True when this session has at least one active schedule targeting its NodeId.</summary>
+	public bool HasActiveSchedule
+	{
+		get => _hasActiveSchedule;
+		private set => this.RaiseAndSetIfChanged(ref _hasActiveSchedule, value);
+	}
+
+	/// <summary>Tooltip text describing the active schedule(s) for this session.</summary>
+	public string ScheduleTooltip
+	{
+		get => _scheduleTooltip;
+		private set => this.RaiseAndSetIfChanged(ref _scheduleTooltip, value);
 	}
 
 	/// <summary>True when this session is being actively used in an external terminal.</summary>
@@ -403,12 +440,27 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				_directoryModel.SelectedProfileIndex = value;
 			_appSettings.Settings.SelectedProfileIndex = value;
 			_appSettings.Save();
+			HasAuthError = false;
 		}
 	}
 
 	/// <summary>Returns the CLAUDE_CONFIG_DIR path for the selected profile, or null if Default is selected.</summary>
 	public string? SelectedProfileConfigDir =>
 		_profileService.GetConfigDirForProfile(_selectedProfileIndex, _appSettings.Settings.Profiles);
+
+	/// <summary>True when the last request failed with an "Invalid authentication credentials" error (FR.12.16). Drives Re-authenticate/Remove button visibility.</summary>
+	public bool HasAuthError
+	{
+		get => _hasAuthError;
+		private set
+		{
+			this.RaiseAndSetIfChanged(ref _hasAuthError, value);
+			this.RaisePropertyChanged(nameof(CanRemoveProfile));
+		}
+	}
+
+	/// <summary>True when the Remove button should be shown: an auth error is active and a non-Default profile is selected (FR.12.18).</summary>
+	public bool CanRemoveProfile => HasAuthError && _selectedProfileIndex > 0;
 
 	/// <summary>Persisted vertical scroll offset for the message area.</summary>
 	public double ScrollOffset
@@ -422,9 +474,15 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public ReactiveCommand<Unit, Unit> SendCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleMarkdownCommand { get; }
 	public ReactiveCommand<Unit, Unit> StopCommand { get; }
+	public ReactiveCommand<Unit, Unit> CancelScheduleCommand { get; }
+	public ReactiveCommand<Unit, Unit> ReauthenticateCommand { get; }
+	public ReactiveCommand<Unit, Unit> RemoveProfileCommand { get; }
 	public AutocompleteViewModel AutocompleteVm { get; }
 	public OutputSearchViewModel OutputSearchVm { get; }
 	public string WorkingDirectory => _node.Model.WorkingDirectory;
+
+	/// <summary>Raised when the user clicks the schedule button, requesting a cancel confirmation dialog from the View.</summary>
+	public event Action? CancelScheduleRequested;
 
 	public SessionViewModel(
 		SessionNodeViewModel node,
@@ -438,6 +496,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IClaudeModelService modelService,
 		ISessionTurnService turnService,
 		IAgentMcpServer mcpServer,
+		ISchedulerService schedulerService,
 		ITessynRunService? runService = null,
 		ITessynDaemonService? daemonService = null)
 	{
@@ -452,6 +511,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_modelService     = modelService;
 		_turnService      = turnService;
 		_mcpServer        = mcpServer;
+		_schedulerService = schedulerService;
 		_runService       = runService;
 		_daemonService    = daemonService;
 		_name             = node.Name;
@@ -483,15 +543,31 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
+		node.WhenAnyValue(x => x.IsRunning).Subscribe(running => IsNodeRunning = running);
 
 		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
 
 		StopCommand           = ReactiveCommand.Create(() =>
 		{
-			_sendCts?.Cancel();
-			_log.Information("Stop requested for session {FileName}", _node.FileName);
+			if (IsBusy)
+			{
+				_sendCts?.Cancel();
+				_log.Information("Stop requested for session {FileName}", _node.FileName);
+			}
+			else if (IsNodeRunning)
+			{
+				_turnService.CancelTurn(_node.Model.NodeId);
+				_log.Information("Stop requested for orchestrated turn on node {NodeId}", _node.Model.NodeId);
+			}
 		});
+
+		CancelScheduleCommand = ReactiveCommand.Create(() => CancelScheduleRequested?.Invoke());
+		ReauthenticateCommand = ReactiveCommand.Create(() => { _ = HandleReauthenticateAsync(); });
+		RemoveProfileCommand  = ReactiveCommand.Create(HandleRemoveProfile);
+
+		_schedulerService.ScheduleChanged += OnScheduleChanged;
+		RefreshScheduleState();
 
 		// Start background indexing for this session's working directory
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
@@ -499,6 +575,56 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 		_log.Debug("SessionViewModel created: UseDaemon={UseDaemon}, ExternalId={ExternalId}",
 			UseDaemon, _node.ExternalId);
+	}
+
+	private void OnScheduleChanged(object? sender, EventArgs e) =>
+		Dispatcher.UIThread.Post(RefreshScheduleState);
+
+	/// <summary>Refreshes HasActiveSchedule and ScheduleTooltip from the scheduler's current state for this node.</summary>
+	private void RefreshScheduleState()
+	{
+		var schedules = _schedulerService.GetSchedules(_node.Model.NodeId);
+		HasActiveSchedule = schedules.Count > 0;
+		ScheduleTooltip = HasActiveSchedule
+			? string.Join("\n\n", schedules.Select(FormatScheduleTooltip))
+			: string.Empty;
+	}
+
+	private static string FormatScheduleTooltip(ScheduleModel s)
+	{
+		var timing = s.Kind switch
+		{
+			ScheduleKind.Cron => $"Repeating (cron: {s.CronExpression})",
+			_ => s.FireAtUtc.HasValue
+				? $"One-time at {s.FireAtUtc.Value.LocalDateTime:yyyy-MM-dd HH:mm}"
+				: "One-time",
+		};
+
+		var lines = new List<string> { timing };
+		if (!string.IsNullOrEmpty(s.Note))
+			lines.Add($"Note: \"{s.Note}\"");
+		if (s.FireAtUtc.HasValue)
+		{
+			var remaining = s.FireAtUtc.Value - DateTimeOffset.UtcNow;
+			lines.Add(remaining > TimeSpan.Zero
+				? $"Next fire: in {FormatTimeSpan(remaining)}"
+				: "Next fire: due now");
+		}
+		return string.Join("\n", lines);
+	}
+
+	private static string FormatTimeSpan(TimeSpan ts)
+	{
+		if (ts.TotalDays >= 1) return $"{ts.TotalDays:F1} days";
+		if (ts.TotalHours >= 1) return $"{ts.TotalHours:F1} hours";
+		return $"{Math.Max(1, (int)ts.TotalMinutes)} minutes";
+	}
+
+	/// <summary>Cancels all schedules currently targeting this session's node.</summary>
+	public void CancelAllSchedules()
+	{
+		foreach (var schedule in _schedulerService.GetSchedules(_node.Model.NodeId))
+			_schedulerService.RemoveSchedule(schedule.ScheduleId);
 	}
 
 	public void LoadFromFile()
@@ -962,6 +1088,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public void Dispose()
 	{
 		_modelService.ModelsUpdated -= OnModelsUpdated;
+		_schedulerService.ScheduleChanged -= OnScheduleChanged;
 		_sendCts?.Dispose();
 		_runEventSubscription?.Dispose();
 		_fileWatcher?.Dispose();
@@ -1499,6 +1626,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					return;
 				}
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
+				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
+					Dispatcher.UIThread.Post(() => HasAuthError = true);
 				break;
 			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
 				&& evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase):
@@ -1512,8 +1641,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
 				_log.Warning("Claude result error: {Error}", evt.Content);
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
+				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
+					Dispatcher.UIThread.Post(() => HasAuthError = true);
 				break;
 			case "result" when !evt.IsError && evt.SessionId is not null:
+				Dispatcher.UIThread.Post(() => HasAuthError = false);
 				_node.Model.ClaudeSessionId = evt.SessionId;
 				_appSettings.Save();
 				Dispatcher.UIThread.Post(() => this.RaisePropertyChanged(nameof(HasClaudeSession)));
@@ -2108,6 +2240,102 @@ PROJECT GLOSSARY:
 		{
 			_isProfileAuthInProgress = false;
 		}
+	}
+
+	/// <summary>Re-runs interactive auth login against the currently selected profile (FR.12.17).</summary>
+	private async Task HandleReauthenticateAsync()
+	{
+		if (_isProfileAuthInProgress)
+			return;
+
+		_isProfileAuthInProgress = true;
+		try
+		{
+			var configDir = SelectedProfileConfigDir;
+
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = "Launching re-authentication... Complete authentication in the opened window.",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+
+			await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, configDir);
+
+			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, configDir);
+			if (string.IsNullOrEmpty(email))
+			{
+				Messages.Add(new MessageEntryViewModel
+				{
+					Role      = Constants.SessionFile.RoleSystem,
+					Content   = "Re-authentication was cancelled or failed.",
+					Timestamp = DateTimeOffset.UtcNow,
+				});
+				return;
+			}
+
+			// Update the display name if it changed (e.g. different account authenticated)
+			if (_selectedProfileIndex > 0 && _selectedProfileIndex - 1 < _appSettings.Settings.Profiles.Count)
+			{
+				_appSettings.Settings.Profiles[_selectedProfileIndex - 1].DisplayName = email;
+				_appSettings.Save();
+				Dispatcher.UIThread.Post(RebuildProfileList);
+			}
+			else if (_selectedProfileIndex == 0)
+			{
+				_defaultProfileDisplayName = email;
+				Dispatcher.UIThread.Post(() =>
+				{
+					if (AvailableProfiles.Count > 0)
+						AvailableProfiles[0] = email;
+				});
+			}
+
+			Dispatcher.UIThread.Post(() => HasAuthError = false);
+
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = $"Re-authenticated as '{email}'.",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+		}
+		finally
+		{
+			_isProfileAuthInProgress = false;
+		}
+	}
+
+	/// <summary>Removes the selected profile from the app's list and renames its config directory with a "_rem" suffix (FR.12.18).</summary>
+	private void HandleRemoveProfile()
+	{
+		if (_selectedProfileIndex <= 0 || _selectedProfileIndex - 1 >= _appSettings.Settings.Profiles.Count)
+			return;
+
+		var profile = _appSettings.Settings.Profiles[_selectedProfileIndex - 1];
+		_appSettings.Settings.Profiles.RemoveAt(_selectedProfileIndex - 1);
+
+		_profileService.MarkProfileDirectoryRemoved(profile.ProfileId);
+
+		_appSettings.Settings.SelectedProfileIndex = 0;
+		if (_directoryModel != null)
+			_directoryModel.SelectedProfileIndex = 0;
+		_appSettings.Save();
+
+		Dispatcher.UIThread.Post(() =>
+		{
+			RebuildProfileList();
+			_selectedProfileIndex = 0;
+			this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+			HasAuthError = false;
+		});
+
+		Messages.Add(new MessageEntryViewModel
+		{
+			Role      = Constants.SessionFile.RoleSystem,
+			Content   = $"Profile '{profile.DisplayName}' removed. Its config directory was preserved as '{profile.ProfileId}{Constants.Auth.RemovedDirectorySuffix}'.",
+			Timestamp = DateTimeOffset.UtcNow,
+		});
 	}
 
 	/// <summary>Switches the Messages collection between ClaudeMaximus .txt and Claude CLI JSONL sources.</summary>

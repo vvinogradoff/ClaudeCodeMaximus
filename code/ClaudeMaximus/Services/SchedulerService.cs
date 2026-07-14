@@ -29,6 +29,8 @@ public sealed class SchedulerService : ISchedulerService
 	private Timer? _timer;
 	private readonly object _lock = new();
 
+	public event EventHandler? ScheduleChanged;
+
 	public SchedulerService(
 		IAppSettingsService appSettings,
 		ISessionTurnService turnService,
@@ -66,6 +68,7 @@ public sealed class SchedulerService : ISchedulerService
 
 		_log.Information("Schedule added: {Id} kind={Kind} target={Target} fireAt={At}",
 			schedule.ScheduleId, schedule.Kind, schedule.TargetNodeId, schedule.FireAtUtc);
+		ScheduleChanged?.Invoke(this, EventArgs.Empty);
 	}
 
 	public bool RemoveSchedule(string scheduleId)
@@ -80,6 +83,7 @@ public sealed class SchedulerService : ISchedulerService
 		}
 		_appSettings.Save();
 		_log.Information("Schedule cancelled: {Id}", scheduleId);
+		ScheduleChanged?.Invoke(this, EventArgs.Empty);
 		return true;
 	}
 
@@ -183,6 +187,7 @@ public sealed class SchedulerService : ISchedulerService
 			}
 		}
 		_appSettings.Save();
+		ScheduleChanged?.Invoke(this, EventArgs.Empty);
 
 		// Build the prompt — prefix with note if available.
 		var prompt = string.IsNullOrEmpty(schedule.Note)

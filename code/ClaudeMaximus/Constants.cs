@@ -29,6 +29,15 @@ public static class Constants
 		public const string NoConversationFoundMarker = "No conversation found";
 	}
 
+	public static class Auth
+	{
+		/// <summary>Substring of the Claude CLI's 401 error text (FR.12.16).</summary>
+		public const string InvalidCredentialsMarker = "Invalid authentication credentials";
+
+		/// <summary>Suffix appended to a removed profile's config directory name (FR.12.18).</summary>
+		public const string RemovedDirectorySuffix = "_rem";
+	}
+
 	public static class CodeIndex
 	{
 		public const int DebounceMilliseconds = 300;

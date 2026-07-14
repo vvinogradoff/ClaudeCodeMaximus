@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using ClaudeMaximus.Models;
 
@@ -10,6 +11,9 @@ namespace ClaudeMaximus.Services;
 /// <remarks>Created by Claude</remarks>
 public interface ISchedulerService
 {
+	/// <summary>Raised whenever a schedule is added, removed, or fires. Used to refresh session UI.</summary>
+	event EventHandler? ScheduleChanged;
+
 	/// <summary>Starts the polling timer. Checks missed fires on startup.</summary>
 	void Start();
 

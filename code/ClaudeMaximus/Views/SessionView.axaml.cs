@@ -67,6 +67,7 @@ public partial class SessionView : UserControl
 		{
 			_subscribedVm.ScrollOffset = MessageScroller.Offset.Y;
 			_subscribedVm.Messages.CollectionChanged -= OnMessagesChanged;
+			_subscribedVm.CancelScheduleRequested -= OnCancelScheduleRequested;
 			UnsubscribeProgressMessage();
 		}
 
@@ -75,6 +76,7 @@ public partial class SessionView : UserControl
 		if (_subscribedVm != null)
 		{
 			_subscribedVm.Messages.CollectionChanged += OnMessagesChanged;
+			_subscribedVm.CancelScheduleRequested += OnCancelScheduleRequested;
 			// Restore persisted scroll position (or bottom for new sessions)
 			var savedOffset = _subscribedVm.ScrollOffset;
 			Dispatcher.UIThread.Post(() =>
@@ -85,6 +87,21 @@ public partial class SessionView : UserControl
 					MessageScroller.ScrollToEnd();
 			}, DispatcherPriority.Background);
 		}
+	}
+
+	private async void OnCancelScheduleRequested()
+	{
+		if (DataContext is not SessionViewModel vm) return;
+
+		var ownerWindow = TopLevel.GetTopLevel(this) as MainWindow;
+		if (ownerWindow == null) return;
+
+		var confirmed = await ownerWindow.ShowConfirmOverlayAsync(
+			$"Cancel the scheduled turn(s) for this session?\n\n{vm.ScheduleTooltip}",
+			"Cancel Schedule");
+
+		if (confirmed)
+			vm.CancelAllSchedules();
 	}
 
 	private void OnInputKeyDown(object? sender, KeyEventArgs e)

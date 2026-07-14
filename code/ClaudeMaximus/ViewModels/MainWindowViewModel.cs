@@ -28,6 +28,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ISelfUpdateService _selfUpdate;
 	private readonly ISessionTurnService _turnService;
 	private readonly IAgentMcpServer _mcpServer;
+	private readonly ISchedulerService _schedulerService;
 	private readonly ITessynRunService? _runService;
 	private readonly ITessynDaemonService? _daemonService;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
@@ -265,6 +266,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		SessionTreeViewModel sessionTree,
 		ISessionTurnService turnService,
 		IAgentMcpServer mcpServer,
+		ISchedulerService schedulerService,
 		ITessynRunService? runService = null,
 		ITessynDaemonService? daemonService = null)
 	{
@@ -280,6 +282,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_selfUpdate       = selfUpdate;
 		_turnService      = turnService;
 		_mcpServer        = mcpServer;
+		_schedulerService = schedulerService;
 		_runService       = runService;
 		_daemonService    = daemonService;
 		SessionTree       = sessionTree;
@@ -408,7 +411,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _turnService, _mcpServer, _runService, _daemonService);
+				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _turnService, _mcpServer, _schedulerService, _runService, _daemonService);
 				if (_appSettings.Settings.UseTessynDaemon && _daemonService != null && node.ExternalId != null)
 					_ = vm.LoadFromDaemonAsync();
 				else

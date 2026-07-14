@@ -47,14 +47,20 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 		return null;
 	}
 
-	public async Task LaunchAuthLoginAsync(string claudePath, string configDir)
+	public async Task LaunchAuthLoginAsync(string claudePath, string? configDir)
 	{
 		// Defensive trim — trailing whitespace in paths can create ghost NTFS entries
-		configDir = configDir.Trim();
-		_log.Information("Launching interactive auth login with configDir {ConfigDir}", configDir);
+		configDir = configDir?.Trim();
+		_log.Information("Launching interactive auth login with configDir {ConfigDir}", configDir ?? "(default)");
 
-		// Ensure the config directory exists
-		Directory.CreateDirectory(configDir);
+		// The Default profile has no config directory of its own; the temp .bat file
+		// is written under the profiles root instead so there's always a writable location.
+		var batDir = configDir;
+		if (batDir == null)
+		{
+			batDir = Path.Combine(ProfilesRootDirectory, "_default_auth");
+		}
+		Directory.CreateDirectory(batDir);
 
 		Process? process;
 
@@ -65,10 +71,11 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 			// before the OAuth browser callback arrives. Writing a temporary .bat file
 			// avoids all quoting issues and ensures cmd.exe properly waits for the
 			// entire auth flow to complete.
-			var batPath = Path.Combine(configDir, "_auth_login.bat");
+			var batPath = Path.Combine(batDir, "_auth_login.bat");
+			var setLine = configDir != null ? $"""set "CLAUDE_CONFIG_DIR={configDir}" """ : "rem Default profile — no CLAUDE_CONFIG_DIR override";
 			var batContent = $"""
 				@echo off
-				set "CLAUDE_CONFIG_DIR={configDir}"
+				{setLine}
 				call "{claudePath}" auth login
 				echo.
 				echo Authentication complete. Press any key to close.
@@ -85,20 +92,20 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 
 		if (process == null)
 		{
-			_log.Error("Failed to start claude auth login for configDir {ConfigDir}", configDir);
+			_log.Error("Failed to start claude auth login for configDir {ConfigDir}", configDir ?? "(default)");
 			return;
 		}
 
 		using (process)
 		{
 			await process.WaitForExitAsync();
-			_log.Information("Auth login for configDir {ConfigDir} exited with code {ExitCode}", configDir, process.ExitCode);
+			_log.Information("Auth login for configDir {ConfigDir} exited with code {ExitCode}", configDir ?? "(default)", process.ExitCode);
 		}
 
 		// Clean up temp bat file
 		if (OperatingSystem.IsWindows())
 		{
-			var batPath = Path.Combine(configDir, "_auth_login.bat");
+			var batPath = Path.Combine(batDir, "_auth_login.bat");
 			try { File.Delete(batPath); }
 			catch { /* best-effort cleanup */ }
 		}
@@ -180,5 +187,33 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 			return null;
 
 		return Path.Combine(ProfilesRootDirectory, profiles[profileListIndex].ProfileId);
+	}
+
+	public void MarkProfileDirectoryRemoved(string profileId)
+	{
+		var sourceDir = Path.Combine(ProfilesRootDirectory, profileId);
+		if (!Directory.Exists(sourceDir))
+		{
+			_log.Warning("MarkProfileDirectoryRemoved: source directory does not exist for profile {ProfileId}", profileId);
+			return;
+		}
+
+		var targetDir = Path.Combine(ProfilesRootDirectory, profileId + Constants.Auth.RemovedDirectorySuffix);
+		var attempt = 2;
+		while (Directory.Exists(targetDir))
+		{
+			targetDir = Path.Combine(ProfilesRootDirectory, profileId + Constants.Auth.RemovedDirectorySuffix + attempt);
+			attempt++;
+		}
+
+		try
+		{
+			Directory.Move(sourceDir, targetDir);
+			_log.Information("Renamed removed profile directory {Source} -> {Target}", sourceDir, targetDir);
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Failed to rename removed profile directory {Source} -> {Target}", sourceDir, targetDir);
+		}
 	}
 }

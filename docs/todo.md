@@ -282,6 +282,14 @@
 - [DONE] Command bar visibility, model, and profile selections restored from directory model on session switch
 - [DONE] Changes persisted to directory model on user interaction
 
+### P10.5 Profile Re-authenticate & Remove (FR.12.16–12.18)
+- [DONE] Detect `"Invalid authentication credentials"` in result/system error events, set `HasAuthError` (FR.12.16)
+- [DONE] `HasAuthError` cleared on request success, profile selection change, or completed reauth/remove
+- [DONE] `IClaudeProfileService.LaunchAuthLoginAsync` accepts nullable configDir (Default profile reauth) (FR.12.17)
+- [DONE] "Re-authenticate" button in command bar, right-docked, visible when `HasAuthError` (FR.12.17)
+- [DONE] "Remove" (✕) button in command bar, right-docked, visible when `HasAuthError` and non-Default profile selected (FR.12.18)
+- [DONE] Remove: strips profile from settings list, renames config dir to `<ProfileId>_rem` (collision-safe), resets selection to Default (FR.12.18)
+
 ---
 
 ## Phase 11 — Session Import (FR.13)
@@ -456,6 +464,22 @@
 ### P18.3 Status bar UI (FR.18.1–18.3)
 - [DONE] `ViewModels/MainWindowViewModel.cs` — StatusBarModelText, FiveHourUtilization, SevenDayUtilization, labels, HasUsageData; subscribe to ModelsUpdated + UsageUpdated; call SetActiveProfile on session switch
 - [DONE] `Views/MainWindow.axaml` — DockPanel.Dock="Bottom" status bar with model label + 2 stacked ProgressBars
+
+---
+
+## Phase 19 — Session View Toolbar: Sub-Session Stop + Schedule Indicator (FR.14, FR.15)
+
+### P19.1 Stop button for sub-sessions (FR.15) ✓ DONE
+- [DONE] `ViewModels/SessionViewModel.cs` — `IsNodeRunning` mirrors `SessionNodeViewModel.IsRunning`; `CanStop` combines `IsBusy || IsNodeRunning`
+- [DONE] `StopCommand` — cancels `_sendCts` for user sends, or calls `ISessionTurnService.CancelTurn(nodeId)` for orchestrated turns
+- [DONE] `Views/SessionView.axaml` — Stop button `IsVisible` bound to `CanStop` instead of `IsBusy`
+
+### P19.2 Schedule indicator button (FR.14) ✓ DONE
+- [DONE] `Services/ISchedulerService.cs` / `SchedulerService.cs` — add `ScheduleChanged` event, raised on add/remove/fire
+- [DONE] `ViewModels/SessionViewModel.cs` — inject `ISchedulerService`; `HasActiveSchedule`, `ScheduleTooltip`, `CancelScheduleCommand`, `RefreshScheduleState()`, `CancelAllSchedules()`
+- [DONE] `ViewModels/MainWindowViewModel.cs` — thread `ISchedulerService` through to `SessionViewModel`
+- [DONE] `Views/SessionView.axaml` — clock button (row between Stop and Settings), visible only when `HasActiveSchedule`, tooltip shows schedule details
+- [DONE] `Views/SessionView.axaml.cs` — `OnCancelScheduleRequested` shows `ShowConfirmOverlayAsync` confirmation, then cancels all schedules for the node
 
 ---
 
