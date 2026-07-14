@@ -259,11 +259,29 @@ public sealed class SessionTurnService : ISessionTurnService
 			: _appSettings.Settings.SelectedModelId;
 	}
 
+	/// <summary>
+	/// Resolves the profile to use for this turn from the session's own history — the last
+	/// user entry that recorded a profile name — mirroring SessionViewModel.RestoreLastUsedSettings
+	/// so scheduled/orchestrated turns use the same profile as interactive turns on the same session
+	/// (see docs/issues/ISSUE-001-scheduled-turn-profile-mismatch.md).
+	/// </summary>
 	private string? ResolveProfileConfigDir(SessionNodeModel node)
 	{
-		var directoryModel = _appSettings.Settings.Tree.FirstOrDefault(d =>
-			string.Equals(d.Path, node.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
-		var profileIndex = directoryModel?.SelectedProfileIndex ?? 0;
-		return _profileService.GetConfigDirForProfile(profileIndex, _appSettings.Settings.Profiles);
+		var entries = _fileService.ReadEntries(node.FileName);
+		var lastUserWithProfile = entries.LastOrDefault(
+			e => e.Role == Constants.SessionFile.RoleUser && e.ProfileName != null);
+
+		if (lastUserWithProfile == null)
+			return null; // No profile recorded yet → Default
+
+		var name     = lastUserWithProfile.ProfileName!;
+		var profiles = _appSettings.Settings.Profiles;
+		for (var i = 0; i < profiles.Count; i++)
+		{
+			if (string.Equals(profiles[i].DisplayName, name, StringComparison.OrdinalIgnoreCase))
+				return _profileService.GetConfigDirForProfile(i + 1, profiles);
+		}
+
+		return null; // Profile was deleted or renamed → fall back to Default
 	}
 }
