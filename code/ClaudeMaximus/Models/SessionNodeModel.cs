@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace ClaudeMaximus.Models;
@@ -48,8 +49,12 @@ public sealed class SessionNodeModel
 	/// <summary>Persisted vertical scroll offset for the session output area.</summary>
 	public double ScrollOffset { get; set; }
 
-	/// <summary>Per-session auto-commit toggle (FR.11.3). Persisted across app restarts.</summary>
-	public bool IsAutoCommit { get; set; }
+	/// <summary>
+	/// Per-session auto-commit tri-state toggle (FR.11.3): <c>true</c> = Commit, <c>false</c> =
+	/// Do-not-commit, <c>null</c> = No preference (no commit-related instruction is emitted).
+	/// Persisted across app restarts. New sessions default to Do-not-commit.
+	/// </summary>
+	public bool? IsAutoCommit { get; set; } = false;
 
 	/// <summary>Per-session auto-document toggle (FR.11.5). Persisted across app restarts.</summary>
 	public bool IsAutoDocument { get; set; }
@@ -74,8 +79,25 @@ public sealed class SessionNodeModel
 	public string? SupervisorNodeId { get; set; }
 
 	/// <summary>
+	/// Profile display name pinned for headless (scheduled/orchestrated) turns on this session.
+	/// Orchestrated children inherit their supervisor's resolved profile here at spawn so they
+	/// authenticate with the same account as the supervisor rather than falling back to Default —
+	/// whose OAuth token may be revoked, causing every child turn to 401
+	/// (see docs/issues/ISSUE-002-orchestrated-child-profile-inheritance.md).
+	/// Null = resolve from this session's own file history, then Default.
+	/// </summary>
+	public string? ProfileName { get; set; }
+
+	/// <summary>
 	/// Returns the best available session identity key: ExternalId if available, otherwise FileName.
 	/// Used for cache keying and session restore during the migration period.
 	/// </summary>
 	public string SessionKey => ExternalId ?? FileName;
+
+	/// <summary>
+	/// When the user hid this session from the top-bar recent-sessions dropdown. The session stays
+	/// hidden as long as this is at or after the session's last activity (prompt/response/draft edit);
+	/// any newer activity makes it reappear without needing to clear this field.
+	/// </summary>
+	public DateTimeOffset? RecentIgnoredAt { get; set; }
 }

@@ -184,6 +184,14 @@
 - [DONE] `BuildInstructionBlock()` — reads toggle states, returns `---` delimited instruction text
 - [DONE] Always includes auto-commit instruction (ON or OFF)
 
+### P8.6 Auto-Commit tri-state rework (FR.11.2, FR.11.3, FR.11.9, FR.11.10, FR.11.12)
+- [ ] `SessionNodeModel.IsAutoCommit`: `bool` → `bool?` (`true`=Commit, `false`=Do-not-commit, `null`=No preference; new sessions default `false`)
+- [ ] `InstructionOptionsModel.IsAutoCommit` → `bool?`; `InstructionBlockBuilder.Build` emits Commit/Do-not-commit/nothing accordingly, returns `""` when the block would otherwise be empty
+- [ ] Reword `Constants.Instructions.Delimiter` to an honest preamble (no "do not acknowledge"); keep matching the old delimiter for stripping back-compat on existing JSONL sessions
+- [ ] `SessionViewModel`/`MainWindowViewModel` `IsAutoCommit` proxies → `bool?`; mid-run correction covers the silent transition
+- [ ] `MainWindow.axaml` Auto-Commit `ToggleButton` → `IsThreeState="True"` with three distinct visuals/tooltips
+- [ ] Verify txt/MD render still strips the block while raw JSONL view keeps it
+
 ### P8.3 SessionViewModel — SendAsync Modifications ✓
 - [DONE] Separate clean message (stored in file + shown in UI) from augmented message (sent to claude stdin)
 - [DONE] After send: auto-reset `IsNewBranch` to false
@@ -289,6 +297,12 @@
 - [DONE] "Re-authenticate" button in command bar, right-docked, visible when `HasAuthError` (FR.12.17)
 - [DONE] "Remove" (✕) button in command bar, right-docked, visible when `HasAuthError` and non-Default profile selected (FR.12.18)
 - [DONE] Remove: strips profile from settings list, renames config dir to `<ProfileId>_rem` (collision-safe), resets selection to Default (FR.12.18)
+
+### P10.6 Profile dropdown context menu (FR.12.19)
+- [DONE] `ProfileListItemModel` (DisplayName + ProfileId) backs `AvailableProfiles` so rename/delete target a specific profile, not by display-name matching
+- [DONE] ComboBox ItemTemplate context menu: "Rename..." and "Delete", no-op for Default/"New..." entries
+- [DONE] `SessionViewModel.RenameProfile` — updates stored `DisplayName` via input dialog
+- [DONE] `SessionViewModel.DeleteProfile` — same removal as FR.12.18 Remove button, usable without an active auth error; `HandleRemoveProfile` (✕ button) now delegates to it
 
 ---
 
@@ -482,6 +496,21 @@
 - [DONE] `Views/SessionView.axaml.cs` — `OnCancelScheduleRequested` shows `ShowConfirmOverlayAsync` confirmation, then cancels all schedules for the node
 
 ---
+
+## Phase 20 — Instruction-Block Injection Timing + /deep-research Ban (FR.14, FR.15)
+
+### P20.1 Fix scheduled-turn profile mismatch (ISSUE-001) — DONE
+- [DONE] `Services/SessionTurnService.cs` — `ResolveProfileConfigDir` now scans the session's own history for the last recorded `ProfileName` (same as `SessionViewModel.RestoreLastUsedSettings`), instead of reading the shared per-directory `SelectedProfileIndex` — fixes scheduled/orchestrated turns authenticating as the wrong account and getting 401s
+
+### P20.2 Ban /deep-research skill alongside Workflow/Agent — DONE
+- [DONE] `Constants.cs` — `NoWorkflowTool` text extended to also ban the `/deep-research` skill, redirecting to ClaudeMaximus MCP orchestration tools
+
+### P20.3 Inject tool-usage bans once per fresh session instead of every turn — DONE
+- [DONE] `Models/InstructionOptionsModel.cs` — add `IsNewSession` flag
+- [DONE] `Services/InstructionBlockBuilder.cs` — gate `NativeSchedulingRedirect`/`NoWorkflowTool` on `IsAgentToolsEnabled && IsNewSession` (auto-commit/branch/document toggles remain per-turn, unaffected)
+- [DONE] `Services/SessionTurnService.cs` — compute `IsNewSession = node.ClaudeSessionId == null`, evaluated after the resumability check so a context reset re-injects the bans
+- [DONE] `ViewModels/SessionViewModel.cs` — `BuildInstructionBlock` now delegates to the shared `InstructionBlockBuilder` (previously a separate, drifted copy missing `NoWorkflowTool` entirely) with `IsNewSession` from `ClaudeSessionId`/`ExternalId == null`
+- Confirmed no change needed for txt-view/JSONL-view separation — already correct: `.txt` session files only ever store the clean prompt (never the instruction block), and `ClaudeSessionImportService.ExtractUserContent` already strips the instruction block unless `raw: true` (used by the JSONL toggle), which is the existing mechanism for "cut it out in txt view, show everything in JSONL view"
 
 ## Backlog / Future
 

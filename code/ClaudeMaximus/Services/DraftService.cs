@@ -43,6 +43,12 @@ public sealed class DraftService : IDraftService
 			File.Delete(path);
 	}
 
+	public DateTimeOffset? GetDraftTimestamp(string sessionFileName)
+	{
+		var path = GetDraftPath(sessionFileName);
+		return File.Exists(path) ? new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero) : null;
+	}
+
 	private string GetDraftPath(string sessionFileName)
 		=> Path.Combine(_draftsDirectory, sessionFileName + Constants.DraftFileExtension);
 

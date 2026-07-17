@@ -24,6 +24,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly IClaudeSessionStatusService _claudeSessionStatus;
 	private readonly ISessionSearchService _searchService;
 	private readonly IGitOriginService _gitOriginService;
+	private readonly IDraftService _draftService;
 	private readonly ITessynDaemonService? _daemonService;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
@@ -96,6 +97,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		IClaudeSessionStatusService claudeSessionStatus,
 		ISessionSearchService searchService,
 		IGitOriginService gitOriginService,
+		IDraftService draftService,
 		ITessynDaemonService? daemonService = null)
 	{
 		_appSettings = appSettings;
@@ -104,6 +106,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		_claudeSessionStatus = claudeSessionStatus;
 		_searchService = searchService;
 		_gitOriginService = gitOriginService;
+		_draftService = draftService;
 		_daemonService = daemonService;
 
 		AddDirectoryCommand = ReactiveCommand.Create(PromptAddDirectory);
@@ -172,7 +175,11 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		var fileName = UseDaemon
 			? $"daemon-{Guid.NewGuid():N}.pending"
 			: _sessionFileService.CreateSessionFile();
-		var model = new SessionNodeModel { Name = name, FileName = fileName, WorkingDirectory = parent.Path };
+		var model = new SessionNodeModel
+		{
+			Name = name, FileName = fileName, WorkingDirectory = parent.Path,
+			NodeId = Guid.NewGuid().ToString("N"), AgentToken = Guid.NewGuid().ToString("N"),
+		};
 		var vm = new SessionNodeViewModel(model);
 		parent.AddSession(vm);
 		_appSettings.Save();
@@ -184,7 +191,11 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		var fileName = UseDaemon
 			? $"daemon-{Guid.NewGuid():N}.pending"
 			: _sessionFileService.CreateSessionFile();
-		var model = new SessionNodeModel { Name = name, FileName = fileName, WorkingDirectory = parent.WorkingDirectory };
+		var model = new SessionNodeModel
+		{
+			Name = name, FileName = fileName, WorkingDirectory = parent.WorkingDirectory,
+			NodeId = Guid.NewGuid().ToString("N"), AgentToken = Guid.NewGuid().ToString("N"),
+		};
 		var vm = new SessionNodeViewModel(model);
 		parent.AddSession(vm);
 		_appSettings.Save();
@@ -755,17 +766,20 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	private void LoadFromSettings()
 	{
+		var dirty = false;
 		foreach (var dirModel in _appSettings.Settings.Tree)
 		{
-			BackfillAgentIdentity(dirModel.Sessions);
+			dirty |= BackfillAgentIdentity(dirModel.Sessions);
 			foreach (var grp in dirModel.Groups)
-				BackfillAgentIdentityInGroups(grp);
+				dirty |= BackfillAgentIdentityInGroups(grp);
 			Directories.Add(new DirectoryNodeViewModel(dirModel, _labelService));
 		}
+		if (dirty)
+			_appSettings.Save();
 		ReorganizeSubSessions();
 	}
 
-	private static void BackfillAgentIdentity(IEnumerable<SessionNodeModel> sessions)
+	private static bool BackfillAgentIdentity(IEnumerable<SessionNodeModel> sessions)
 	{
 		var dirty = false;
 		foreach (var s in sessions)
@@ -773,14 +787,15 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			if (string.IsNullOrEmpty(s.NodeId))     { s.NodeId     = Guid.NewGuid().ToString("N"); dirty = true; }
 			if (string.IsNullOrEmpty(s.AgentToken)) { s.AgentToken = Guid.NewGuid().ToString("N"); dirty = true; }
 		}
-		_ = dirty; // caller saves after all dirs are processed
+		return dirty;
 	}
 
-	private static void BackfillAgentIdentityInGroups(GroupNodeModel group)
+	private static bool BackfillAgentIdentityInGroups(GroupNodeModel group)
 	{
-		BackfillAgentIdentity(group.Sessions);
+		var dirty = BackfillAgentIdentity(group.Sessions);
 		foreach (var child in group.Groups)
-			BackfillAgentIdentityInGroups(child);
+			dirty |= BackfillAgentIdentityInGroups(child);
+		return dirty;
 	}
 
 	/// <summary>
@@ -1419,27 +1434,36 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	private void LoadLastPromptTime(SessionNodeViewModel session)
 	{
+		SessionEntryModel? lastUserEntry = null;
+		DateTimeOffset? lastAssistant = null;
+
 		try
 		{
 			var entries = _sessionFileService.ReadEntries(session.FileName);
-			for (var i = entries.Count - 1; i >= 0; i--)
+			for (var i = entries.Count - 1; i >= 0 && (lastUserEntry == null || lastAssistant == null); i--)
 			{
-				if (entries[i].Role == Constants.SessionFile.RoleUser)
-				{
-					session.LastPromptTimestamp = entries[i].Timestamp;
-					var local = entries[i].Timestamp.LocalDateTime;
-					session.LastPromptTime = local.ToString("yyyy-MM-dd HH:mm");
-					return;
-				}
+				if (lastUserEntry == null && entries[i].Role == Constants.SessionFile.RoleUser)
+					lastUserEntry = entries[i];
+				else if (lastAssistant == null && entries[i].Role == Constants.SessionFile.RoleAssistant)
+					lastAssistant = entries[i].Timestamp;
 			}
 		}
 		catch
 		{
-			// Session file may not exist or be corrupted; leave LastPromptTime null.
+			// Session file may not exist or be corrupted; leave timestamps null.
 		}
 
-		session.LastPromptTime = null;
-		session.LastPromptTimestamp = null;
+		session.LastPromptTimestamp = lastUserEntry?.Timestamp;
+		session.LastPromptTime = lastUserEntry?.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+		session.LastResponseTimestamp = lastAssistant;
+		session.ProfileName = lastUserEntry?.ProfileName;
+
+		// A draft file can persist with whitespace-only content (e.g. all text deleted without
+		// clearing the draft); that isn't a real pending draft, so its timestamp must not count.
+		var draftText = _draftService.LoadDraft(session.FileName);
+		session.LastDraftEditTimestamp = !string.IsNullOrWhiteSpace(draftText)
+			? _draftService.GetDraftTimestamp(session.FileName)
+			: null;
 	}
 
 }

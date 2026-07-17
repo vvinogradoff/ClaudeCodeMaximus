@@ -374,10 +374,13 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 		if (content == null)
 			return null;
 
-		// Strip Maximus-injected instruction blocks — unless raw mode is requested
+		// Strip Maximus-injected instruction blocks — unless raw mode is requested. Matches both the
+		// current delimiter wording and the legacy one, so older JSONL sessions still strip correctly.
 		if (!raw)
 		{
 			var delimIdx = content.IndexOf(Constants.Instructions.Delimiter, StringComparison.Ordinal);
+			if (delimIdx < 0)
+				delimIdx = content.IndexOf(Constants.Instructions.LegacyDelimiter, StringComparison.Ordinal);
 			if (delimIdx >= 0)
 				content = content[..delimIdx].TrimEnd();
 		}

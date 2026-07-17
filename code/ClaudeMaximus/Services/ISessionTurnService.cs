@@ -35,4 +35,13 @@ public interface ISessionTurnService
 	/// Returns true if a running turn was found and cancelled.
 	/// </summary>
 	bool CancelTurn(string nodeId);
+
+	/// <summary>
+	/// Resolves the profile display name for a session: the pinned/inherited
+	/// <see cref="SessionNodeModel.ProfileName"/> if set, otherwise the last profile recorded in
+	/// the session's own file history. Returns null when nothing is recorded (→ Default profile).
+	/// Used at spawn time so orchestrated children can inherit their supervisor's profile
+	/// (see docs/issues/ISSUE-002-orchestrated-child-profile-inheritance.md).
+	/// </summary>
+	string? ResolveProfileName(SessionNodeModel node);
 }

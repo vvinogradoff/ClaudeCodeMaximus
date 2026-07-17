@@ -67,4 +67,7 @@ consults the old shared per-directory field.
 
 ## Status
 
-Open — root cause identified, no fix implemented yet.
+Fixed via **Option 1** — `SessionTurnService.ResolveProfileConfigDir` now resolves the
+profile from the session's own history, matching the interactive path. See ISSUE-002 for
+a follow-on case this exposed: freshly-spawned child sessions have no history to scan and
+so fell back to the Default profile until profile inheritance was added.

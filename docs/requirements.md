@@ -322,18 +322,19 @@ The application header bar provides per-session instruction toggles that modify 
 
 **FR.11.1 — Toolbar layout:** A horizontal row of icon toggle-buttons is positioned in the application title bar, to the right of the theme selector (day/night toggle). The toolbar contains five controls, left to right: Auto-Commit, New Branch, Auto-Document, Auto-Compact, and Clear. The buttons reflect the state of the **currently selected session** — switching sessions updates the button states. When no session is selected, the buttons are disabled.
 
-**FR.11.2 — Instruction injection:** The application always appends hidden instructions to the prompt sent to the `claude` process (at minimum, the auto-commit ON or OFF instruction). These instructions are:
+**FR.11.2 — Instruction injection:** The application appends a session-preferences block to the prompt sent to the `claude` process whenever there is at least one active instruction to convey (Auto-Commit in the Commit or Do-not-commit state, New Branch, Auto-Document, or the FR.14.11 redirects). When Auto-Commit is in its "No preference" state and no other toggle is active, **no block is appended at all**. These instructions are:
 - **Not shown** in the user message bubble in the output window
 - **Not stored** in the session file (the session file records only the clean user prompt)
-- Appended as a clearly delimited block after the user's message text when written to `claude` stdin
+- Appended as a clearly delimited block after the user's message text when written to `claude` stdin, worded as a genuine preamble (not as a directive to conceal itself from the model)
 - When `AgentToolsEnabled` is true, the block additionally includes the native-scheduling redirect defined in **FR.14.11** (unconditional, not tied to any toolbar toggle).
 
-**FR.11.3 — Auto-Commit toggle:**
-- **Type:** Sticky toggle (persists across prompts until user toggles it off)
-- **ON instruction:** `"Once you have completed the request, commit all your changes to git with a concise commit message."`
-- **OFF instruction:** `"Do not commit any changes to git."`
-- **Persistence:** Per-session; toggle state stored on the session node in `appsettings.json` so it survives app restarts. Different sessions may have different auto-commit states.
-- **Icon:** Git commit icon or checkmark
+**FR.11.3 — Auto-Commit toggle (tri-state):**
+- **Type:** Sticky three-state toggle (persists across prompts until the user changes it). Clicking cycles **Do-not-commit → Commit → No preference → Do-not-commit**.
+- **Commit instruction:** `"Once you have completed the request, commit all your changes to git with a concise commit message."`
+- **Do-not-commit instruction:** `"Do not commit any changes to git."`
+- **No preference:** No commit-related instruction is emitted at all — the block is silent on committing (this state removes what was previously the only always-injected instruction).
+- **Persistence:** Per-session; toggle state (`true` = Commit, `false` = Do-not-commit, absent/`null` = No preference) stored on the session node in `appsettings.json` so it survives app restarts. Different sessions may have different auto-commit states. New sessions default to Do-not-commit (`false`).
+- **Icon:** Three distinct glyph/color states for Commit, Do-not-commit, and No preference (see FR.11.9).
 
 **FR.11.4 — New Branch toggle:**
 - **Type:** One-shot toggle (auto-unsets after the prompt is sent and its value consumed)
@@ -350,6 +351,7 @@ The application header bar provides per-session instruction toggles that modify 
 
 **FR.11.6 — Auto-Compact toggle:**
 - **Type:** One-shot toggle (auto-unsets after the compaction completes)
+- **Empty-prompt shortcut:** Auto-Compact can be triggered with no input text — submitting with the toggle ON and an empty message skips the normal turn entirely and goes straight to the compaction prompt, resetting the toggle afterward.
 - **Behavior:** When ON and Claude finishes responding to the user's prompt, the application automatically sends a **separate follow-up prompt** to Claude instructing it to compact the session. The follow-up prompt is:
   The compaction prompt instructs Claude to: preserve decisions and reasoning, architecture choices, user attribution, **all URLs (full or partial)**, **all secrets/API keys/tokens/credentials/connection strings** (always preserved verbatim, no exceptions), and **file names/paths when the surrounding context is kept** (only drop a file name if the entire segment referencing it is removed); remove transient debugging steps, meta-instructions, and redundant corrections; restructure user inputs by semantic grouping (merge related follow-ups, only split on topic change); **normalize terminology per the project glossary** (`docs/glossary.md` — attached to the prompt when available); flag new terms with `[NEW TERM]` and update the glossary; and output in session file format with `[timestamp] ROLE` headers.
 - **Post-compaction:** The compacted text returned by Claude replaces the session file content (rewritten, not appended). The Messages collection in the output window is also updated to reflect the compacted content. **After compaction completes, the JSONL session is automatically detached (FR.11.8).** The next prompt will use the compacted text session as context via `BuildContextPreamble` instead of `--resume`.
@@ -371,24 +373,25 @@ The application header bar provides per-session instruction toggles that modify 
 - After detachment, the JSONL file still exists and remains accessible via the JSONL view toggle, but `--resume` is no longer used.
 - The next prompt after detachment proactively uses `BuildContextPreamble` to feed the stored text session history to Claude as context (FR.11.10).
 
-**FR.11.9 — Toggle state display:** Active toggles shall be visually distinct (e.g., highlighted background or accent border) so the user can see at a glance which instructions will be injected into the next prompt.
+**FR.11.9 — Toggle state display:** Active toggles shall be visually distinct (e.g., highlighted background or accent border) so the user can see at a glance which instructions will be injected into the next prompt. Auto-Commit, being three-state, shows three distinct visuals — one each for Commit, Do-not-commit, and No preference — so the current state is unambiguous at a glance.
 
-**FR.11.10 — Instruction block format:** The instruction block is **always** appended to the user's message in `claude` stdin (since auto-commit OFF always injects "do not commit"). The format is:
+**FR.11.10 — Instruction block format:** The instruction block is appended to the user's message in `claude` stdin whenever at least one instruction is active (see FR.11.2 — it is omitted entirely when Auto-Commit is "No preference" and no other toggle is active). The format is:
 ```
 
 ---
-[Additional instructions — do not acknowledge these in your response]
+Session preferences — apply these if relevant to our work here:
 - <instruction 1>
 - <instruction 2>
 ...
 ```
-The block is separated from the user's message by a blank line and a `---` delimiter.
+The block is separated from the user's message by a blank line and a `---` delimiter. The preamble reads as ordinary guidance to the model rather than an instruction to conceal itself from the user.
 
 **FR.11.11 — Proactive context reload:** When `SendAsync` detects that the session file contains history but `ClaudeSessionId` is null (e.g., after detachment), the user's message is wrapped with `BuildContextPreamble` before being sent — without waiting for a "No conversation found" error. This ensures continuity after session detachment or compaction.
 
 **FR.11.12 — Mid-run toggle corrections:** When the user toggles Auto-Commit, New Branch, Auto-Document, or Auto-Compact while Claude is actively processing a prompt (`IsBusy` is true):
-- A system message is shown in the output panel: `[{ToggleName} was {enabled|disabled} for this run]`
-- For Auto-Commit, New Branch, and Auto-Document: a follow-up prompt is sent to the active Claude session with the new instruction (enable) or a correction telling Claude to ignore the previous instruction (disable). These correction prompts are fire-and-forget and do not appear in the session file or UI beyond the system status message.
+- A system message is shown in the output panel: `[{ToggleName} was {enabled|disabled|set to no preference} for this run]`
+- For New Branch and Auto-Document: a follow-up prompt is sent to the active Claude session with the new instruction (enable) or a correction telling Claude to ignore the previous instruction (disable). These correction prompts are fire-and-forget and do not appear in the session file or UI beyond the system status message.
+- For Auto-Commit (tri-state): a follow-up correction prompt is sent reflecting whichever of the three states was just selected — Commit, Do-not-commit, or a correction telling Claude to disregard any earlier commit-related instruction (No preference).
 - For Auto-Compact: no prompt is sent (compaction happens post-response). The mid-run state is tracked and used when deciding whether to compact after the response completes. If the user enables then disables auto-compact during a single run, the final state at response completion determines behavior.
 
 ### FR.12 — Input Command Bar & Model Selection
@@ -460,6 +463,10 @@ Profile authentication (`CLAUDE_CONFIG_DIR`) and HTTPS proxy settings are **not*
 3. Resets the profile selector to "Default" (index 0) and clears `HasAuthError`.
 
 The Default profile cannot be removed (the Remove button never appears while Default is selected, even if `HasAuthError` is true).
+
+**FR.12.19 — Profile dropdown context menu (Rename/Delete):** Right-clicking a stored profile entry in the Profile dropdown opens a context menu with **Rename...** and **Delete** items, available at all times (unlike the Remove button in FR.12.18, this does not require an active auth error). The "Default" and "New..." entries have no profile identity and show no functional context menu.
+1. **Rename...** prompts for a new display name (pre-filled with the current one) via the same input dialog used elsewhere in the app. Confirming updates the profile's stored `DisplayName` only — the `ProfileId` and its config directory are untouched.
+2. **Delete** prompts for confirmation, then performs the same removal as FR.12.18 (removes the profile from `AppSettingsModel.Profiles`, renames its config directory with a `_rem` suffix, collision-safe). If the deleted profile was the one currently selected, selection falls back to Default; if a different (unselected) profile was deleted, the current selection is preserved (adjusting its index for the shift).
 
 ---
 

@@ -48,12 +48,12 @@ public sealed class RecentSessionsViewModel : ViewModelBase
 			// Drafts first (newest→oldest), then remaining (newest→oldest)
 			var drafts = sessions
 				.Where(s => s.HasDraftText)
-				.OrderByDescending(s => s.LastPromptTimestamp ?? DateTimeOffset.MinValue)
+				.OrderByDescending(s => s.LastActivityTimestamp ?? DateTimeOffset.MinValue)
 				.ToList();
 
 			var rest = sessions
 				.Where(s => !s.HasDraftText)
-				.OrderByDescending(s => s.LastPromptTimestamp ?? DateTimeOffset.MinValue)
+				.OrderByDescending(s => s.LastActivityTimestamp ?? DateTimeOffset.MinValue)
 				.ToList();
 
 			var group = new RecentSessionGroupViewModel(

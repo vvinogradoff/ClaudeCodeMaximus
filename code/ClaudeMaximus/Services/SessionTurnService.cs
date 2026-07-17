@@ -93,13 +93,6 @@ public sealed class SessionTurnService : ISessionTurnService
 				? await _mcpServer.Value.EnsureConfigFileAsync(node.NodeId, node.AgentToken)
 				: null;
 
-			// Build instruction block using persisted per-session toggle states.
-			var options          = new InstructionOptionsModel(
-				node.IsAutoCommit, false, node.IsAutoDocument,
-				_appSettings.Settings.AgentToolsEnabled);
-			var instructionBlock = InstructionBlockBuilder.Build(options);
-			var augmentedPrompt  = prompt + instructionBlock;
-
 			// Write clean prompt (without instruction block) to the session file.
 			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt);
 
@@ -113,6 +106,16 @@ public sealed class SessionTurnService : ISessionTurnService
 				node.ClaudeSessionId = null;
 				_appSettings.Save();
 			}
+
+			// Build instruction block using persisted per-session toggle states. IsNewSession is
+			// evaluated here (after the resumability check above) so the tool-usage bans re-inject
+			// whenever a fresh claude process is actually about to start — including a context reset —
+			// not just on the session's very first-ever turn.
+			var options          = new InstructionOptionsModel(
+				node.IsAutoCommit, false, node.IsAutoDocument,
+				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null);
+			var instructionBlock = InstructionBlockBuilder.Build(options);
+			var augmentedPrompt  = prompt + instructionBlock;
 
 			// Proactive context reload: if no ClaudeSessionId but the file has history, prepend preamble.
 			var sessionId      = node.ClaudeSessionId;
@@ -260,21 +263,36 @@ public sealed class SessionTurnService : ISessionTurnService
 	}
 
 	/// <summary>
-	/// Resolves the profile to use for this turn from the session's own history — the last
-	/// user entry that recorded a profile name — mirroring SessionViewModel.RestoreLastUsedSettings
-	/// so scheduled/orchestrated turns use the same profile as interactive turns on the same session
-	/// (see docs/issues/ISSUE-001-scheduled-turn-profile-mismatch.md).
+	/// Resolves the profile display name for a session: the pinned/inherited
+	/// <see cref="SessionNodeModel.ProfileName"/> takes precedence (orchestrated children inherit
+	/// their supervisor's profile at spawn — ISSUE-002); otherwise the last user entry in the
+	/// session's own file history that recorded a profile name, mirroring
+	/// SessionViewModel.RestoreLastUsedSettings (ISSUE-001). Null when nothing is recorded → Default.
 	/// </summary>
-	private string? ResolveProfileConfigDir(SessionNodeModel node)
+	public string? ResolveProfileName(SessionNodeModel node)
 	{
+		if (!string.IsNullOrEmpty(node.ProfileName))
+			return node.ProfileName;
+
 		var entries = _fileService.ReadEntries(node.FileName);
 		var lastUserWithProfile = entries.LastOrDefault(
 			e => e.Role == Constants.SessionFile.RoleUser && e.ProfileName != null);
 
-		if (lastUserWithProfile == null)
-			return null; // No profile recorded yet → Default
+		return lastUserWithProfile?.ProfileName;
+	}
 
-		var name     = lastUserWithProfile.ProfileName!;
+	/// <summary>
+	/// Resolves the profile config dir to use for this turn, mapping the resolved profile name
+	/// (see <see cref="ResolveProfileName"/>) to its credential store. Scheduled/orchestrated turns
+	/// thereby use the same account as interactive turns on the same session, and spawned children
+	/// use their supervisor's account rather than a possibly-revoked Default.
+	/// </summary>
+	private string? ResolveProfileConfigDir(SessionNodeModel node)
+	{
+		var name = ResolveProfileName(node);
+		if (string.IsNullOrEmpty(name))
+			return null; // No profile recorded → Default
+
 		var profiles = _appSettings.Settings.Profiles;
 		for (var i = 0; i < profiles.Count; i++)
 		{

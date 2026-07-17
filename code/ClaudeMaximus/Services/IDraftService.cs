@@ -1,3 +1,5 @@
+using System;
+
 namespace ClaudeMaximus.Services;
 
 /// <summary>
@@ -15,4 +17,7 @@ public interface IDraftService
 
 	/// <summary>Deletes the draft for a session (e.g. after the message is sent).</summary>
 	void DeleteDraft(string sessionFileName);
+
+	/// <summary>Returns when the draft for a session was last written, or null if none exists.</summary>
+	DateTimeOffset? GetDraftTimestamp(string sessionFileName);
 }

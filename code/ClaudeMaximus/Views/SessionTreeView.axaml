@@ -154,6 +154,12 @@
                                                IsVisible="{Binding HasDraftText}"
                                                ToolTip.Tip="Has unsent text"/>
                                 </StackPanel>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                           Text="{Binding ProfileName}"
+                                           IsVisible="{Binding ProfileName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           FontSize="10" Foreground="Gray" Opacity="0.6"
+                                           HorizontalAlignment="Left"
+                                           Margin="4,0,0,1"/>
                                 <TextBlock Grid.Row="1" Grid.Column="1"
                                            Text="{Binding LastPromptTime}"
                                            IsVisible="{Binding LastPromptTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"

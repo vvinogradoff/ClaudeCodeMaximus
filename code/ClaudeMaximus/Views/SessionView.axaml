@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ClaudeMaximus.ViewModels"
              xmlns:views="using:ClaudeMaximus.Views"
+             xmlns:models="using:ClaudeMaximus.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -293,7 +294,24 @@
                                           VerticalAlignment="Center"
                                           FontSize="12"
                                           MinWidth="120"
-                                          Padding="6,3"/>
+                                          Padding="6,3">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ProfileListItemModel">
+                                            <TextBlock Text="{Binding DisplayName}">
+                                                <TextBlock.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="Rename..."
+                                                                  Tag="RenameProfile"
+                                                                  Click="OnProfileContextMenuClicked"/>
+                                                        <MenuItem Header="Delete"
+                                                                  Tag="DeleteProfile"
+                                                                  Click="OnProfileContextMenuClicked"/>
+                                                    </ContextMenu>
+                                                </TextBlock.ContextMenu>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                                 <TextBlock Text="Effort:"
                                            VerticalAlignment="Center"
                                            FontSize="12" Opacity="0.7"

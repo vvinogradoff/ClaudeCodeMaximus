@@ -507,6 +507,14 @@ public partial class MainWindow : Window
 		(DataContext as MainWindowViewModel)?.RefreshRecentDropdown();
 	}
 
+	private void OnHideRecentSessionClick(object? sender, RoutedEventArgs e)
+	{
+		e.Handled = true;
+		if (sender is Button { DataContext: SessionNodeViewModel session }
+		    && DataContext is MainWindowViewModel vm)
+			vm.HideSessionFromRecent(session);
+	}
+
 	// ── Window control buttons ────────────────────────────────────────────────
 
 	private void OnMinimizeClick(object? sender, RoutedEventArgs e) =>

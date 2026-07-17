@@ -1,3 +1,5 @@
+using System;
+
 namespace ClaudeMaximus;
 
 /// <remarks>Created by Claude</remarks>
@@ -48,7 +50,14 @@ public static class Constants
 
 	public static class Instructions
 	{
-		public const string Delimiter = "\n\n---\n[Additional instructions — do not acknowledge these in your response]";
+		public const string Delimiter = "\n\n---\nSession preferences — apply these if relevant to our work here:";
+
+		/// <summary>
+		/// The previous delimiter wording, kept only so stripping (<see cref="ClaudeSessionImportService"/>)
+		/// still recognizes instruction blocks appended to older JSONL sessions before the wording changed.
+		/// </summary>
+		public const string LegacyDelimiter = "\n\n---\n[Additional instructions — do not acknowledge these in your response]";
+
 		public const string AutoCommitOn = "Once you have completed the request, commit all your changes to git with a concise commit message.";
 		public const string AutoCommitOff = "Do not commit any changes to git.";
 		public const string NewBranch = "Create a new git branch before committing your changes.";
@@ -64,15 +73,15 @@ public static class Constants
 			"This CLI is terminated between turns. Do NOT use `ScheduleWakeup`, `CronCreate`, `CronList`, or `CronDelete` — schedules set via those tools will not survive. Use the ClaudeMaximus MCP tools instead: `mcp__" + Agent.McpServerName + "__schedule_wake` (accepts `inSeconds`, `at` ISO time, or `cron`), `mcp__" + Agent.McpServerName + "__list_schedules`, `mcp__" + Agent.McpServerName + "__cancel_schedule`. These are persisted by the host application and re-arm across CLI restarts.";
 
 		/// <summary>
-		/// Redirects Claude away from the Claude Code <c>Workflow</c> tool and the <c>Agent</c>
-		/// tool's multi-agent orchestration toward ClaudeMaximus session orchestration MCP tools.
-		/// The Workflow tool spins off background processes that are invisible to ClaudeMaximus and
-		/// whose results are not tracked in the session tree. ClaudeMaximus MCP tools produce
-		/// persistent, visible session nodes instead.
+		/// Redirects Claude away from the Claude Code <c>Workflow</c> tool, the <c>Agent</c> tool's
+		/// multi-agent orchestration, and the <c>/deep-research</c> skill toward ClaudeMaximus session
+		/// orchestration MCP tools. All three spin off background processes/subagents that are
+		/// invisible to ClaudeMaximus and whose results are not tracked in the session tree.
+		/// ClaudeMaximus MCP tools produce persistent, visible session nodes instead.
 		/// </summary>
 		public const string NoWorkflowTool =
-			"Do NOT use the Claude Code `Workflow` tool. Do NOT use the `Agent` tool for multi-agent orchestration. These spawn processes that are invisible to ClaudeMaximus and untracked in the session tree. " +
-			"Instead, use the ClaudeMaximus MCP tools for all multi-agent and orchestration work: " +
+			"Do NOT use the Claude Code `Workflow` tool. Do NOT use the `Agent` tool for multi-agent orchestration. Do NOT use the `/deep-research` skill. These spawn processes/subagents that are invisible to ClaudeMaximus and untracked in the session tree. " +
+			"Instead, use the ClaudeMaximus MCP tools for all multi-agent, orchestration, and research fan-out work: " +
 			"`mcp__" + Agent.McpServerName + "__spawn_session` to create child sessions (supports `model`, `schema` args), " +
 			"`mcp__" + Agent.McpServerName + "__send_to_session` to send prompts (use `wait` mode for sequential work, `async` for parallel fan-out; supports `schema` arg for typed output), " +
 			"`mcp__" + Agent.McpServerName + "__read_session` to retrieve results, " +
@@ -88,6 +97,7 @@ public static class Constants
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
 		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
 		public const string MidRunAutoCommitOff = "Correction: Ignore previous instructions about committing to git. Do not commit any changes.";
+		public const string MidRunAutoCommitSilent = "Correction: Disregard any earlier commit-related instruction. There is no preference on whether you commit or not.";
 		public const string MidRunNewBranchOn = "Additional instruction: Create a new git branch before committing your changes.";
 		public const string MidRunNewBranchOff = "Correction: Ignore previous instructions about creating a new git branch. Do not create a new branch.";
 		public const string MidRunAutoDocumentOn = "Additional instruction: After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made. If any new domain terms were introduced or existing terms changed, also update /docs/glossary.md.";
@@ -95,6 +105,7 @@ public static class Constants
 		public const string MidRunAutoCompactOn = "[Auto-compact has been enabled — the session will be compacted after this response completes.]";
 		public const string MidRunAutoCompactOff = "[Auto-compact has been disabled — the session will not be compacted after this response.]";
 
+		[Obsolete("Looks like the functionality was superceded by the CompactionPromptTemplate, which includes glossary injection. Use that instead.", true)]
 		/// <summary>Simple compaction prompt for the Tessyn daemon path (no glossary injection).</summary>
 		public const string CompactionPrompt = """
 Please compact the conversation in this session.

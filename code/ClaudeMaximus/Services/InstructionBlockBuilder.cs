@@ -18,30 +18,41 @@ public static class InstructionBlockBuilder
 	/// </summary>
 	public static string Build(InstructionOptionsModel options)
 	{
-		var sb = new StringBuilder();
-		sb.AppendLine(Constants.Instructions.Delimiter);
+		var lines = new StringBuilder();
 
-		// Auto-commit: always inject (ON or OFF) per FR.11.3
-		sb.AppendLine(options.IsAutoCommit
-			? $"- {Constants.Instructions.AutoCommitOn}"
-			: $"- {Constants.Instructions.AutoCommitOff}");
+		// Auto-commit is tri-state (FR.11.3): true=Commit, false=Do-not-commit, null=No preference
+		// (silent — no commit-related line at all).
+		if (options.IsAutoCommit == true)
+			lines.AppendLine($"- {Constants.Instructions.AutoCommitOn}");
+		else if (options.IsAutoCommit == false)
+			lines.AppendLine($"- {Constants.Instructions.AutoCommitOff}");
 
 		if (options.IsNewBranch)
-			sb.AppendLine($"- {Constants.Instructions.NewBranch}");
+			lines.AppendLine($"- {Constants.Instructions.NewBranch}");
 
 		if (options.IsAutoDocument)
-			sb.AppendLine($"- {Constants.Instructions.AutoDocument}");
+			lines.AppendLine($"- {Constants.Instructions.AutoDocument}");
 
 		// FR.14.11 — Redirect from CLI-native scheduling to host MCP scheduling tools.
-		// Also redirect away from the Workflow/Agent multi-agent tools toward CMX session orchestration.
-		// Both emitted only when AgentToolsEnabled, because otherwise the MCP tools are not registered
-		// and the redirects would point at nothing.
-		if (options.IsAgentToolsEnabled)
+		// Also redirect away from the Workflow/Agent/deep-research tools toward CMX session orchestration.
+		// Emitted only when AgentToolsEnabled (otherwise the MCP tools aren't registered and the
+		// redirects would point at nothing) AND only at the start of a fresh claude process
+		// (IsNewSession) — these are session-level policy, not per-turn state, and repeating them
+		// on every turn reads as a prompt injection to the model and is sometimes ignored outright.
+		if (options.IsAgentToolsEnabled && options.IsNewSession)
 		{
-			sb.AppendLine($"- {Constants.Instructions.NativeSchedulingRedirect}");
-			sb.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
+			lines.AppendLine($"- {Constants.Instructions.NativeSchedulingRedirect}");
+			lines.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
 		}
 
+		// FR.11.2 — omit the block entirely when there is nothing to say (Auto-Commit silent and
+		// no other toggle active), instead of appending a dangling preamble with no instructions.
+		if (lines.Length == 0)
+			return string.Empty;
+
+		var sb = new StringBuilder();
+		sb.AppendLine(Constants.Instructions.Delimiter);
+		sb.Append(lines);
 		return sb.ToString();
 	}
 

@@ -125,7 +125,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		set
 		{
 			this.RaiseAndSetIfChanged(ref _inputText, value);
-			_node.HasDraftText = !string.IsNullOrWhiteSpace(value);
+			var hasDraft = !string.IsNullOrWhiteSpace(value);
+			_node.HasDraftText = hasDraft;
+			_node.LastDraftEditTimestamp = hasDraft ? DateTimeOffset.UtcNow : null;
 			SaveDraft(value);
 		}
 	}
@@ -199,8 +201,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public bool HasClaudeSession => !string.IsNullOrEmpty(_node.Model.ClaudeSessionId)
 	                                || _node.Model.PriorClaudeSessionIds.Count > 0;
 
-	/// <summary>Per-session sticky toggle (FR.11.3). Persisted in appsettings.json.</summary>
-	public bool IsAutoCommit
+	/// <summary>
+	/// Per-session sticky tri-state toggle (FR.11.3): <c>true</c> = Commit, <c>false</c> =
+	/// Do-not-commit, <c>null</c> = No preference. Persisted in appsettings.json.
+	/// </summary>
+	public bool? IsAutoCommit
 	{
 		get => _node.Model.IsAutoCommit;
 		set
@@ -210,9 +215,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			this.RaisePropertyChanged();
 			_appSettings.Save();
 			if (IsBusy && value != oldValue)
-				SendMidRunToggleCorrection("AutoCommit", value,
-					Constants.Instructions.MidRunAutoCommitOn,
-					Constants.Instructions.MidRunAutoCommitOff);
+				SendMidRunAutoCommitCorrection(value);
 		}
 	}
 
@@ -417,8 +420,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			? EffortValues[_selectedEffortIndex]
 			: null;
 
-	/// <summary>Display names for the profile selector. Rebuilt when profiles change.</summary>
-	public ObservableCollection<string> AvailableProfiles { get; } = [];
+	/// <summary>Entries for the profile selector (Default, stored profiles, "New..."). Rebuilt when profiles change.</summary>
+	public ObservableCollection<ProfileListItemModel> AvailableProfiles { get; } = [];
 
 	/// <summary>Selected profile index. 0=Default, 1..N=stored profiles, last="New...". Persisted per directory (FR.12.8).</summary>
 	public int SelectedProfileIndex
@@ -644,6 +647,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		{
 			_inputText = draft;
 			_node.HasDraftText = !string.IsNullOrWhiteSpace(draft);
+			if (_node.HasDraftText)
+				_node.LastDraftEditTimestamp = _draftService.GetDraftTimestamp(_node.FileName);
 		}
 
 		// Initialize JSONL entry count for the watcher. Must reflect the JSONL's current
@@ -674,7 +679,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				});
 			}
 
-			// Load draft from daemon
+			// Load draft from daemon. The daemon doesn't report when the draft was last edited,
+			// so merely loading a pre-existing draft must not fabricate a "just edited" timestamp —
+			// only an actual edit (via the InputText setter) should bump recency.
 			var draft = await _daemonService.DraftGetAsync(_node.ExternalId);
 			if (draft is not null)
 			{
@@ -711,7 +718,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		InputText = string.Empty;
 
 		// Build augmented message with hidden instructions (same as legacy path)
-		var instructionBlock = BuildInstructionBlock();
+		var instructionBlock = BuildInstructionBlock(_isNewBranch, _node.ExternalId == null);
 		var augmentedMessage = message + instructionBlock;
 
 		// Capture and reset one-shot toggles
@@ -735,7 +742,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 		var now = DateTimeOffset.UtcNow;
 		var daemonProfileName = _selectedProfileIndex >= 0 && _selectedProfileIndex < AvailableProfiles.Count
-			? AvailableProfiles[_selectedProfileIndex]
+			? AvailableProfiles[_selectedProfileIndex].DisplayName
 			: null;
 		Messages.Add(new MessageEntryViewModel
 		{
@@ -749,6 +756,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		Interlocked.Exchange(ref _pendingFileEffort,  SelectedEffort  ?? "default");
 		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 		_node.LastPromptTimestamp = now;
+		_node.ProfileName = daemonProfileName;
 
 		Messages.Add(new MessageEntryViewModel
 		{
@@ -939,6 +947,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					for (var i = Messages.Count - 1; i >= 0; i--)
 						if (Messages[i].IsProgress) Messages.RemoveAt(i);
 
+					_node.LastResponseTimestamp = DateTimeOffset.UtcNow;
+
 					if (evt.Usage != null)
 					{
 						Messages.Add(new MessageEntryViewModel
@@ -1048,7 +1058,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 						{
 							await _runService.SendAsync(
 								_node.Model.WorkingDirectory,
-								Constants.Instructions.CompactionPrompt,
+								BuildCompactionPrompt(),
 								_node.ExternalId,
 								permissionMode: _appSettings.Settings.DaemonPermissionMode);
 						}
@@ -1339,7 +1349,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				{
 					_node.LastPromptTimestamp = lastUser.Timestamp;
 					_node.LastPromptTime = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+					_node.ProfileName = lastUser.ProfileName;
 				}
+
+				var lastAssistant = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleAssistant);
+				if (lastAssistant != null)
+					_node.LastResponseTimestamp = lastAssistant.Timestamp;
 			});
 		}
 		catch (Exception ex)
@@ -1387,7 +1402,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				{
 					_node.LastPromptTimestamp = lastUser.Timestamp;
 					_node.LastPromptTime = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+					_node.ProfileName = lastUser.ProfileName;
 				}
+
+				var lastAssistant = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleAssistant);
+				if (lastAssistant != null)
+					_node.LastResponseTimestamp = lastAssistant.Timestamp;
 			});
 		}
 		catch (Exception ex)
@@ -1404,7 +1424,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			return;
 		}
 		var message = InputText.Trim();
-		if (string.IsNullOrEmpty(message))
+		if (string.IsNullOrEmpty(message) && !_isAutoCompact)
 			return;
 
 		await SendAsyncCore(message);
@@ -1415,6 +1435,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		InputText = string.Empty;
 		_draftService.DeleteDraft(_node.FileName);
 
+		// Auto-Compact can be triggered with an empty prompt: skip straight to compaction (no turn sent).
+		if (string.IsNullOrEmpty(message) && _isAutoCompact)
+		{
+			await SendCompactionPromptAsync();
+			IsAutoCompact = false;
+			return;
+		}
+
 		// Switch back to Maximus view if currently showing Claude's JSONL
 		if (_isClaudeSessionView)
 			IsClaudeSessionView = false;
@@ -1423,10 +1451,6 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		var wasNewBranch = _isNewBranch;
 		var wasAutoCompact = _isAutoCompact;
 		_midRunAutoCompactState = _isAutoCompact;
-
-		// Build augmented message with hidden instructions (FR.11.2, FR.11.9)
-		var instructionBlock = BuildInstructionBlock();
-		var augmentedMessage = message + instructionBlock;
 
 		// Reset one-shot toggles immediately
 		if (wasNewBranch) IsNewBranch = false;
@@ -1447,7 +1471,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 		// Store only the clean user message in file and UI (FR.11.2)
 		var profileName = _selectedProfileIndex >= 0 && _selectedProfileIndex < AvailableProfiles.Count
-			? AvailableProfiles[_selectedProfileIndex]
+			? AvailableProfiles[_selectedProfileIndex].DisplayName
 			: null;
 		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message, profileName: profileName);
 		var now = DateTimeOffset.UtcNow;
@@ -1463,6 +1487,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		Interlocked.Exchange(ref _pendingFileEffort,  SelectedEffort  ?? "default");
 		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 		_node.LastPromptTimestamp = now;
+		_node.ProfileName = profileName;
 
 		Messages.Add(new MessageEntryViewModel
 		{
@@ -1472,8 +1497,13 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			IsProgress = true,
 		});
 
-		// Proactive context reload (FR.11.10): if file has history but no session ID, wrap with context
+		// Build augmented message with hidden instructions (FR.11.2, FR.11.9). IsNewSession reflects
+		// whether this turn is about to start a fresh claude process (no ClaudeSessionId yet).
 		var sessionId = _node.Model.ClaudeSessionId;
+		var instructionBlock = BuildInstructionBlock(wasNewBranch, sessionId == null);
+		var augmentedMessage = message + instructionBlock;
+
+		// Proactive context reload (FR.11.10): if file has history but no session ID, wrap with context
 		var messageToSend = augmentedMessage;
 		if (sessionId == null)
 		{
@@ -1666,6 +1696,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 						Timestamp  = evt.Timestamp,
 						ModelLabel = pendingLabel,
 					});
+					_node.LastResponseTimestamp = evt.Timestamp;
 					break;
 
 				case "system" when evt.Subtype is "compact":
@@ -1762,7 +1793,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			}
 			else
 			{
-				if (string.IsNullOrEmpty(text))
+				if (string.IsNullOrWhiteSpace(text))
 					_draftService.DeleteDraft(_node.FileName);
 				else
 					_draftService.SaveDraft(_node.FileName, text);
@@ -1958,7 +1989,23 @@ PROJECT GLOSSARY:
 	{
 		var label = newValue ? "enabled" : "disabled";
 		var prompt = newValue ? onPrompt : offPrompt;
+		SendMidRunToggleCorrection(toggleName, label, prompt);
+	}
 
+	/// <summary>Sends a mid-run correction prompt for the tri-state Auto-Commit toggle (FR.11.12).</summary>
+	private void SendMidRunAutoCommitCorrection(bool? newValue)
+	{
+		var (label, prompt) = newValue switch
+		{
+			true  => ("enabled", Constants.Instructions.MidRunAutoCommitOn),
+			false => ("disabled", Constants.Instructions.MidRunAutoCommitOff),
+			null  => ("set to no preference", Constants.Instructions.MidRunAutoCommitSilent),
+		};
+		SendMidRunToggleCorrection("AutoCommit", label, prompt);
+	}
+
+	private void SendMidRunToggleCorrection(string toggleName, string label, string prompt)
+	{
 		Messages.Add(new MessageEntryViewModel
 		{
 			Role      = Constants.SessionFile.RoleSystem,
@@ -1989,28 +2036,20 @@ PROJECT GLOSSARY:
 			});
 	}
 
-	/// <summary>Builds the hidden instruction block appended to the user's message for claude stdin (FR.11.9).</summary>
-	private string BuildInstructionBlock()
+	/// <summary>
+	/// Builds the hidden instruction block appended to the user's message for claude stdin
+	/// (FR.11.9), via the shared <see cref="InstructionBlockBuilder"/> so interactive and headless
+	/// (<c>SessionTurnService</c>) turns emit identical instructions. <paramref name="isNewSession"/>
+	/// should be true only when this turn is about to start a fresh claude process (no
+	/// ClaudeSessionId/ExternalId yet) — the tool-usage bans are gated on it so they are sent once
+	/// per fresh process instead of on every turn.
+	/// </summary>
+	private string BuildInstructionBlock(bool isNewBranch, bool isNewSession)
 	{
-		var sb = new StringBuilder();
-		sb.AppendLine(Constants.Instructions.Delimiter);
-
-		// Auto-commit: always inject (ON or OFF)
-		sb.AppendLine(IsAutoCommit
-			? $"- {Constants.Instructions.AutoCommitOn}"
-			: $"- {Constants.Instructions.AutoCommitOff}");
-
-		if (_isNewBranch)
-			sb.AppendLine($"- {Constants.Instructions.NewBranch}");
-
-		if (IsAutoDocument)
-			sb.AppendLine($"- {Constants.Instructions.AutoDocument}");
-
-		// FR.14.11 — Redirect Claude from CLI-native scheduling tools to the host MCP tools.
-		if (_appSettings.Settings.AgentToolsEnabled)
-			sb.AppendLine($"- {Constants.Instructions.NativeSchedulingRedirect}");
-
-		return sb.ToString();
+		var options = new InstructionOptionsModel(
+			IsAutoCommit, isNewBranch, IsAutoDocument,
+			_appSettings.Settings.AgentToolsEnabled, isNewSession);
+		return InstructionBlockBuilder.Build(options);
 	}
 
 	/// <summary>Rebuilds the AvailableModels collection from _modelInfos. Index 0 is "Default"; entries show true model IDs (FR.12.3).</summary>
@@ -2055,10 +2094,10 @@ PROJECT GLOSSARY:
 	private void RebuildProfileList()
 	{
 		AvailableProfiles.Clear();
-		AvailableProfiles.Add(_defaultProfileDisplayName ?? "Default");
+		AvailableProfiles.Add(new ProfileListItemModel(_defaultProfileDisplayName ?? "Default", null));
 		foreach (var p in _appSettings.Settings.Profiles)
-			AvailableProfiles.Add(p.DisplayName);
-		AvailableProfiles.Add("New...");
+			AvailableProfiles.Add(new ProfileListItemModel(p.DisplayName, p.ProfileId));
+		AvailableProfiles.Add(new ProfileListItemModel("New...", null));
 	}
 
 	/// <summary>
@@ -2083,7 +2122,7 @@ PROJECT GLOSSARY:
 				// Skip index 0 (Default) and the last entry ("New...") when searching
 				for (var i = 1; i < AvailableProfiles.Count - 1; i++)
 				{
-					if (string.Equals(AvailableProfiles[i], name, StringComparison.OrdinalIgnoreCase))
+					if (string.Equals(AvailableProfiles[i].DisplayName, name, StringComparison.OrdinalIgnoreCase))
 					{
 						_selectedProfileIndex = i;
 						found = true;
@@ -2158,7 +2197,7 @@ PROJECT GLOSSARY:
 			Dispatcher.UIThread.Post(() =>
 			{
 				if (AvailableProfiles.Count > 0)
-					AvailableProfiles[0] = email;
+					AvailableProfiles[0] = new ProfileListItemModel(email, null);
 			});
 		}
 	}
@@ -2287,7 +2326,7 @@ PROJECT GLOSSARY:
 				Dispatcher.UIThread.Post(() =>
 				{
 					if (AvailableProfiles.Count > 0)
-						AvailableProfiles[0] = email;
+						AvailableProfiles[0] = new ProfileListItemModel(email, null);
 				});
 			}
 
@@ -2306,28 +2345,69 @@ PROJECT GLOSSARY:
 		}
 	}
 
-	/// <summary>Removes the selected profile from the app's list and renames its config directory with a "_rem" suffix (FR.12.18).</summary>
+	/// <summary>Removes the currently selected profile from the app's list (FR.12.18). Delegates to <see cref="DeleteProfile"/>.</summary>
 	private void HandleRemoveProfile()
 	{
-		if (_selectedProfileIndex <= 0 || _selectedProfileIndex - 1 >= _appSettings.Settings.Profiles.Count)
+		if (_selectedProfileIndex <= 0 || _selectedProfileIndex >= AvailableProfiles.Count - 1)
 			return;
 
-		var profile = _appSettings.Settings.Profiles[_selectedProfileIndex - 1];
-		_appSettings.Settings.Profiles.RemoveAt(_selectedProfileIndex - 1);
+		DeleteProfile(AvailableProfiles[_selectedProfileIndex]);
+	}
+
+	/// <summary>Renames a stored profile's display name. Context-menu action on the Profile dropdown; no-op for the "Default"/"New..." entries.</summary>
+	public void RenameProfile(ProfileListItemModel item, string newName)
+	{
+		if (item.ProfileId is null)
+			return;
+
+		var profile = _appSettings.Settings.Profiles.FirstOrDefault(p => p.ProfileId == item.ProfileId);
+		if (profile is null)
+			return;
+
+		profile.DisplayName = newName;
+		_appSettings.Save();
+		RebuildProfileList();
+	}
+
+	/// <summary>
+	/// Removes a stored profile from the app's list and renames its config directory with a "_rem" suffix (FR.12.18).
+	/// Context-menu action on the Profile dropdown; no-op for the "Default"/"New..." entries.
+	/// </summary>
+	public void DeleteProfile(ProfileListItemModel item)
+	{
+		if (item.ProfileId is null)
+			return;
+
+		var index = _appSettings.Settings.Profiles.FindIndex(p => p.ProfileId == item.ProfileId);
+		if (index < 0)
+			return;
+
+		var profile = _appSettings.Settings.Profiles[index];
+		_appSettings.Settings.Profiles.RemoveAt(index);
 
 		_profileService.MarkProfileDirectoryRemoved(profile.ProfileId);
 
-		_appSettings.Settings.SelectedProfileIndex = 0;
+		// The removed entry sits at AvailableProfiles index (index + 1) (0 is Default).
+		var removedListIndex = index + 1;
+		if (_selectedProfileIndex == removedListIndex)
+		{
+			_selectedProfileIndex = 0;
+			HasAuthError = false;
+		}
+		else if (_selectedProfileIndex > removedListIndex)
+		{
+			_selectedProfileIndex--;
+		}
+
+		_appSettings.Settings.SelectedProfileIndex = _selectedProfileIndex;
 		if (_directoryModel != null)
-			_directoryModel.SelectedProfileIndex = 0;
+			_directoryModel.SelectedProfileIndex = _selectedProfileIndex;
 		_appSettings.Save();
 
 		Dispatcher.UIThread.Post(() =>
 		{
 			RebuildProfileList();
-			_selectedProfileIndex = 0;
 			this.RaisePropertyChanged(nameof(SelectedProfileIndex));
-			HasAuthError = false;
 		});
 
 		Messages.Add(new MessageEntryViewModel

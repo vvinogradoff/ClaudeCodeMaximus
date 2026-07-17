@@ -20,7 +20,13 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private bool _hasDraftText;
 	private bool _isExpanded;
 	private string? _lastPromptTime;
+	private string? _profileName;
 	private DateTimeOffset? _lastPromptTimestamp;
+	private DateTimeOffset? _lastResponseTimestamp;
+	private DateTimeOffset? _lastDraftEditTimestamp;
+	private DateTimeOffset? _recentIgnoredAt;
+	private bool _hasSchedules;
+	private string _directoryLabel = string.Empty;
 	private IBrush? _recencyBrush;
 	private bool _isRecentlyActive;
 
@@ -111,6 +117,13 @@ public sealed class SessionNodeViewModel : ViewModelBase
 		set => this.RaiseAndSetIfChanged(ref _lastPromptTime, value);
 	}
 
+	/// <summary>Display name of the profile used for the last user prompt, or null if unknown/default.</summary>
+	public string? ProfileName
+	{
+		get => _profileName;
+		set => this.RaiseAndSetIfChanged(ref _profileName, value);
+	}
+
 	/// <summary>Actual timestamp of the last user prompt, used for recency calculations.</summary>
 	public DateTimeOffset? LastPromptTimestamp
 	{
@@ -118,11 +131,92 @@ public sealed class SessionNodeViewModel : ViewModelBase
 		set
 		{
 			this.RaiseAndSetIfChanged(ref _lastPromptTimestamp, value);
+			NotifyActivityChanged();
 			RefreshRecencyBrush();
 		}
 	}
 
-	/// <summary>True when the last prompt was within the last 24 hours (drives dotted green border).</summary>
+	/// <summary>Actual timestamp of the last assistant output received, used for recency calculations.</summary>
+	public DateTimeOffset? LastResponseTimestamp
+	{
+		get => _lastResponseTimestamp;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _lastResponseTimestamp, value);
+			NotifyActivityChanged();
+			RefreshRecencyBrush();
+		}
+	}
+
+	/// <summary>Timestamp of the last unsent draft edit, or null while there is no pending draft.</summary>
+	public DateTimeOffset? LastDraftEditTimestamp
+	{
+		get => _lastDraftEditTimestamp;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _lastDraftEditTimestamp, value);
+			NotifyActivityChanged();
+			RefreshRecencyBrush();
+		}
+	}
+
+	/// <summary>Most recent of the last prompt sent, last response received, and last unsent draft edit.</summary>
+	public DateTimeOffset? LastActivityTimestamp
+	{
+		get
+		{
+			DateTimeOffset? result = _lastPromptTimestamp;
+			if (_lastResponseTimestamp.HasValue && (!result.HasValue || _lastResponseTimestamp > result))
+				result = _lastResponseTimestamp;
+			if (_lastDraftEditTimestamp.HasValue && (!result.HasValue || _lastDraftEditTimestamp > result))
+				result = _lastDraftEditTimestamp;
+			return result;
+		}
+	}
+
+	private void NotifyActivityChanged()
+	{
+		this.RaisePropertyChanged(nameof(LastActivityTimestamp));
+		this.RaisePropertyChanged(nameof(IsHiddenFromRecent));
+	}
+
+	/// <summary>
+	/// Timestamp when the user hid this session from the recent-sessions dropdown, or null if never hidden
+	/// (or if hidden but activity has since occurred, in which case it's cleared back to null — see setter).
+	/// </summary>
+	public DateTimeOffset? RecentIgnoredAt
+	{
+		get => _recentIgnoredAt;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _recentIgnoredAt, value);
+			Model.RecentIgnoredAt = value;
+			this.RaisePropertyChanged(nameof(IsHiddenFromRecent));
+		}
+	}
+
+	/// <summary>
+	/// True when the session was hidden from the recent dropdown and no activity (prompt, response, or
+	/// draft edit) has occurred since. Any newer activity makes this false again automatically.
+	/// </summary>
+	public bool IsHiddenFromRecent =>
+		_recentIgnoredAt.HasValue && (!LastActivityTimestamp.HasValue || _recentIgnoredAt.Value >= LastActivityTimestamp.Value);
+
+	/// <summary>True when this session has one or more active schedules (FR.14). Refreshed by the recent-dropdown rebuild.</summary>
+	public bool HasSchedules
+	{
+		get => _hasSchedules;
+		set => this.RaiseAndSetIfChanged(ref _hasSchedules, value);
+	}
+
+	/// <summary>Directory label for this session, shown in the recent-dropdown row. Refreshed by the recent-dropdown rebuild.</summary>
+	public string DirectoryLabel
+	{
+		get => _directoryLabel;
+		set => this.RaiseAndSetIfChanged(ref _directoryLabel, value);
+	}
+
+	/// <summary>True when the last activity was within the last 24 hours (drives dotted green border).</summary>
 	public bool IsRecentlyActive
 	{
 		get => _isRecentlyActive;
@@ -141,16 +235,17 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private static readonly SolidColorBrush HoneyDewBrush  = new(Color.Parse("HoneyDew"));
 	private static readonly SolidColorBrush MintCreamBrush = new(Color.Parse("MintCream"));
 
-	/// <summary>Recalculates the recency brush and 24-hour active flag based on how long ago the last prompt was and whether the session has a draft.</summary>
+	/// <summary>Recalculates the recency brush and 24-hour active flag based on how long ago the last activity (prompt sent, response received, or draft edit) was.</summary>
 	public void RefreshRecencyBrush()
 	{
-		var elapsed = _lastPromptTimestamp.HasValue
-			? DateTimeOffset.UtcNow - _lastPromptTimestamp.Value
+		var lastActivity = LastActivityTimestamp;
+		var elapsed = lastActivity.HasValue
+			? DateTimeOffset.UtcNow - lastActivity.Value
 			: TimeSpan.MaxValue;
 
-		IsRecentlyActive = _lastPromptTimestamp.HasValue && elapsed.TotalHours <= 24;
+		IsRecentlyActive = lastActivity.HasValue && elapsed.TotalHours <= 24;
 
-		if (!_lastPromptTimestamp.HasValue)
+		if (!lastActivity.HasValue)
 		{
 			RecencyBrush = _hasDraftText ? MintCreamBrush : null;
 			return;
@@ -183,5 +278,6 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	{
 		Model = model;
 		_name = model.Name;
+		_recentIgnoredAt = model.RecentIgnoredAt;
 	}
 }

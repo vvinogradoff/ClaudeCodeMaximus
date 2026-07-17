@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -404,5 +405,38 @@ public partial class SessionView : UserControl
 			visual = visual.GetVisualParent();
 		}
 		return null;
+	}
+
+	// ── Profile dropdown context menu (Rename/Delete) ────────────────────────
+
+	private async void OnProfileContextMenuClicked(object? sender, RoutedEventArgs e)
+	{
+		if (sender is not MenuItem { Parent: ContextMenu cm } mi || DataContext is not SessionViewModel vm)
+			return;
+
+		var item = (cm.PlacementTarget?.DataContext ?? cm.DataContext) as ProfileListItemModel;
+		if (item?.ProfileId is null)
+			return; // "Default" and "New..." entries have no profile identity to rename/delete
+
+		var ownerWindow = TopLevel.GetTopLevel(this) as MainWindow;
+		if (ownerWindow is null)
+			return;
+
+		switch (mi.Tag as string)
+		{
+			case "RenameProfile":
+				var newName = await ownerWindow.ShowInputOverlayAsync("Rename Profile", "New name:", item.DisplayName);
+				if (!string.IsNullOrEmpty(newName))
+					vm.RenameProfile(item, newName);
+				break;
+
+			case "DeleteProfile":
+				var confirmed = await ownerWindow.ShowConfirmOverlayAsync(
+					$"Remove profile '{item.DisplayName}' from the list?\n\nIts config directory will be preserved (renamed with a \"_rem\" suffix), not deleted.",
+					"Yes, remove");
+				if (confirmed)
+					vm.DeleteProfile(item);
+				break;
+		}
 	}
 }

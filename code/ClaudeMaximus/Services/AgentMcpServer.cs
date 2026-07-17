@@ -114,7 +114,12 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 	public Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken)
 	{
-		if (!_appSettings.Settings.AgentToolsEnabled || _port == 0)
+		// A blank nodeId/agentToken (session created before identity backfill, or a latent gap
+		// in a creation path) would still produce a non-null config path whose token header is
+		// empty — HandleRequestAsync rejects that on the very first handshake, which the CLI
+		// then reports as mcp_servers:[{"status":"failed"}] with zero cmx tools, no error surfaced.
+		if (!_appSettings.Settings.AgentToolsEnabled || _port == 0
+		    || string.IsNullOrEmpty(nodeId) || string.IsNullOrEmpty(agentToken))
 			return Task.FromResult<string?>(null);
 
 		var dir  = Path.Combine(
@@ -134,6 +139,22 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	}
 
 	// ── Private helpers ───────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Pins the supervisor's resolved profile onto a freshly-spawned child so its headless turns
+	/// authenticate with the same account. Without this the child has no file history to resolve a
+	/// profile from, falls back to the Default profile, and every turn 401s if Default's OAuth token
+	/// is revoked (see docs/issues/ISSUE-002-orchestrated-child-profile-inheritance.md).
+	/// </summary>
+	private void InheritSupervisorProfile(SessionNodeModel child, SessionNodeModel supervisor)
+	{
+		if (!string.IsNullOrEmpty(child.ProfileName))
+			return; // already pinned
+
+		var profileName = _turnService.Value.ResolveProfileName(supervisor);
+		if (!string.IsNullOrEmpty(profileName))
+			child.ProfileName = profileName;
+	}
 
 	private string BuildMcpConfigJson(string agentToken)
 	{
@@ -505,12 +526,14 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		if (newModel == null)
 			throw new McpToolException($"Could not create session under working dir: {workingDir}");
 
+		// Inherit the supervisor's profile so the child authenticates with the same account (ISSUE-002).
+		InheritSupervisorProfile(newModel, callerNode);
+
 		// Persist model on the new session (FR.16.3).
 		if (!string.IsNullOrEmpty(modelArg))
-		{
 			newModel.ModelId = modelArg;
-			_appSettings.Save();
-		}
+
+		_appSettings.Save();
 
 		// Run first turn if a prompt was supplied.
 		TurnResultModel? result = null;
@@ -760,6 +783,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			if (session == null)
 				return new WorkerResult(name, "[error: could not create session]", 0, 0);
 
+			// Inherit the supervisor's profile so the worker authenticates with the same account (ISSUE-002).
+			InheritSupervisorProfile(session, callerNode);
 			if (!string.IsNullOrEmpty(model))
 				session.ModelId = model;
 
@@ -797,6 +822,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			if (session == null)
 				return new PipelineResult(item, "[error: could not create session]", 0, 0);
 
+			// Inherit the supervisor's profile so the item session authenticates with the same account (ISSUE-002).
+			InheritSupervisorProfile(session, callerNode);
 			if (!string.IsNullOrEmpty(model))
 				session.ModelId = model;
 

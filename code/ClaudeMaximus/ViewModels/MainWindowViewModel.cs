@@ -173,9 +173,14 @@ public sealed class MainWindowViewModel : ViewModelBase
 	/// <summary>Whether any session is selected (used to enable/disable toolbar buttons).</summary>
 	public bool HasActiveSession => ActiveSession is not null;
 
-	public bool IsAutoCommit
+	/// <summary>
+	/// Tri-state Auto-Commit (FR.11.3): true=Commit, false=Do-not-commit, null=No preference.
+	/// The getter must NOT coalesce null away, otherwise the "No preference" state can never be
+	/// represented (it would read back as Do-not-commit).
+	/// </summary>
+	public bool? IsAutoCommit
 	{
-		get => ActiveSession?.IsAutoCommit ?? false;
+		get => ActiveSession?.IsAutoCommit;
 		set { if (ActiveSession is not null) ActiveSession.IsAutoCommit = value; }
 	}
 
@@ -606,9 +611,15 @@ public sealed class MainWindowViewModel : ViewModelBase
 			CollectRecentSessions(dir.Children, all);
 
 		all = all
-			.Where(s => s.IsRecentlyActive)
-			.OrderByDescending(s => s.LastPromptTimestamp)
+			.Where(s => s.IsRecentlyActive && !s.IsHiddenFromRecent)
+			.OrderByDescending(s => s.LastActivityTimestamp)
 			.ToList();
+
+		foreach (var s in all)
+		{
+			s.HasSchedules = _schedulerService.GetSchedules(s.Model.NodeId).Count > 0;
+			s.DirectoryLabel = SessionTree.GetSessionLocation(s).directoryLabel;
+		}
 
 		_suppressRecentNav = true;
 		try
@@ -625,6 +636,14 @@ public sealed class MainWindowViewModel : ViewModelBase
 		{
 			_suppressRecentNav = false;
 		}
+	}
+
+	/// <summary>Hides a session from the top-bar recent dropdown until its next real activity (FR — recent dropdown hide).</summary>
+	public void HideSessionFromRecent(SessionNodeViewModel session)
+	{
+		session.RecentIgnoredAt = DateTimeOffset.UtcNow;
+		_appSettings.Save();
+		RefreshRecentDropdown();
 	}
 
 	private static void CollectRecentSessions(ObservableCollection<ViewModelBase> children, List<SessionNodeViewModel> result)
