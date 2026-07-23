@@ -18,7 +18,7 @@ namespace ClaudeMaximus.ViewModels;
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionTreeViewModel : ViewModelBase
 {
-	private readonly ISessionRegistry _registry;
+	private readonly IDaemonClient _daemon;
 	private readonly IAppSettingsService _appSettings;
 	private readonly IDirectoryLabelService _labelService;
 	private readonly ISessionFileService _sessionFileService;
@@ -92,7 +92,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	public ReactiveCommand<Unit, Unit> AddDirectoryCommand { get; }
 
 	public SessionTreeViewModel(
-		ISessionRegistry registry,
+		IDaemonClient daemon,
 		IAppSettingsService appSettings,
 		IDirectoryLabelService labelService,
 		ISessionFileService sessionFileService,
@@ -102,7 +102,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		IDraftService draftService,
 		ITessynDaemonService? daemonService = null)
 	{
-		_registry = registry;
+		_daemon = daemon;
 		_appSettings = appSettings;
 		_labelService = labelService;
 		_sessionFileService = sessionFileService;
@@ -115,7 +115,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		AddDirectoryCommand = ReactiveCommand.Create(PromptAddDirectory);
 
 		// Registry backfills NodeId/AgentToken, then we project models → VMs.
-		_registry.LoadFromSettings();
+		_daemon.LoadFromSettings();
 		LoadFromSettings();
 		RefreshGitOrigins();
 		RefreshSessionResumability();
@@ -123,7 +123,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 		// Subscribe to registry changes so service-initiated mutations (orchestration spawn,
 		// IsRunning changes) are reflected in the VM tree without the VM touching the model directly.
-		_registry.TreeChanged += OnRegistryTreeChanged;
+		_daemon.TreeChanged += OnRegistryTreeChanged;
 
 		this.WhenAnyValue(x => x.SearchText)
 			.Throttle(TimeSpan.FromMilliseconds(300))
@@ -134,7 +134,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			.ObserveOn(RxApp.MainThreadScheduler)
 			.Subscribe(session =>
 			{
-				_registry.SelectedNodeId = session?.Model.NodeId;
+				_daemon.SelectedNodeId = session?.Model.NodeId;
 				UpdateSubSessionExpansion(session);
 			});
 
@@ -232,7 +232,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	{
 		var vm = FindNodeVmByNodeId(model.NodeId);
 		if (vm != null)
-			vm.IsRunning = _registry.IsSessionRunning(model.NodeId);
+			vm.IsRunning = _daemon.IsSessionRunning(model.NodeId);
 	}
 
 	// --- Add operations ---
@@ -246,7 +246,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		if (existing != null)
 			return existing;
 
-		var model = _registry.AddDirectory(normalised); // creates model + saves
+		var model = _daemon.AddDirectory(normalised); // creates model + saves
 		var vm = new DirectoryNodeViewModel(model, _labelService);
 		Directories.Add(vm);
 		return vm;
@@ -254,7 +254,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public GroupNodeViewModel AddGroup(DirectoryNodeViewModel parent, string name)
 	{
-		var model = _registry.AddGroup(parent.Model, name); // creates model + saves
+		var model = _daemon.AddGroup(parent.Model, name); // creates model + saves
 		var vm = new GroupNodeViewModel(model);
 		parent.Children.Add(vm); // VM-only; model was added to parent.Model.Groups by registry
 		return vm;
@@ -262,7 +262,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public GroupNodeViewModel AddGroupToGroup(GroupNodeViewModel parent, string name)
 	{
-		var model = _registry.AddGroupToGroup(parent.Model, name); // creates model + saves
+		var model = _daemon.AddGroupToGroup(parent.Model, name); // creates model + saves
 		var vm = new GroupNodeViewModel(model);
 		parent.Children.Add(vm); // VM-only
 		return vm;
@@ -270,7 +270,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public SessionNodeViewModel AddSession(DirectoryNodeViewModel parent, string name)
 	{
-		var model = _registry.AddSession(parent.Model, name); // creates file + model + saves
+		var model = _daemon.AddSession(parent.Model, name); // creates file + model + saves
 		var vm = new SessionNodeViewModel(model);
 		parent.Children.Add(vm); // VM-only; model was added to parent.Model.Sessions by registry
 		return vm;
@@ -278,7 +278,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public SessionNodeViewModel AddSessionToGroup(GroupNodeViewModel parent, string name)
 	{
-		var model = _registry.AddSessionToGroup(parent.Model, name); // creates file + model + saves
+		var model = _daemon.AddSessionToGroup(parent.Model, name); // creates file + model + saves
 		var vm = new SessionNodeViewModel(model);
 		parent.Children.Add(vm); // VM-only
 		return vm;
@@ -295,7 +295,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	public SessionNodeViewModel ImportSession(
 		DirectoryNodeViewModel parent, string name, string fileName, string claudeSessionId)
 	{
-		var model = _registry.ImportSession(parent.Model, name, fileName, claudeSessionId);
+		var model = _daemon.ImportSession(parent.Model, name, fileName, claudeSessionId);
 		var vm = new SessionNodeViewModel(model);
 		parent.Children.Add(vm);
 		return vm;
@@ -307,7 +307,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	public SessionNodeViewModel ImportSessionToGroup(
 		GroupNodeViewModel parent, string name, string fileName, string claudeSessionId)
 	{
-		var model = _registry.ImportSessionToGroup(parent.Model, name, fileName, claudeSessionId);
+		var model = _daemon.ImportSessionToGroup(parent.Model, name, fileName, claudeSessionId);
 		var vm = new SessionNodeViewModel(model);
 		parent.Children.Add(vm);
 		return vm;
@@ -317,7 +317,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// Collects all session identifiers from the entire tree for duplicate detection.
 	/// Includes both ExternalId and ClaudeSessionId for backward compatibility.
 	/// </summary>
-	public IReadOnlySet<string> CollectAllClaudeSessionIds() => _registry.CollectAllClaudeSessionIds();
+	public IReadOnlySet<string> CollectAllClaudeSessionIds() => _daemon.CollectAllClaudeSessionIds();
 
 	/// <summary>
 	/// Builds a flat list of all import targets (directories + groups) with hierarchy depth.
@@ -414,13 +414,13 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public void RenameGroup(GroupNodeViewModel group, string newName)
 	{
-		_registry.RenameGroup(group.Model, newName); // updates Model.Name + saves
+		_daemon.RenameGroup(group.Model, newName); // updates Model.Name + saves
 		group.Name = newName; // refreshes VM binding (also sets Model.Name again, idempotent)
 	}
 
 	public void RenameSession(SessionNodeViewModel session, string newName)
 	{
-		_registry.RenameSession(session.Model, newName); // updates Model.Name + saves
+		_daemon.RenameSession(session.Model, newName); // updates Model.Name + saves
 		session.Name = newName; // refreshes VM binding
 	}
 
@@ -431,7 +431,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		if (!directory.CanDelete)
 			return false;
 
-		if (!_registry.TryDeleteDirectory(directory.Model)) // removes from model tree + saves
+		if (!_daemon.TryDeleteDirectory(directory.Model)) // removes from model tree + saves
 			return false;
 
 		Directories.Remove(directory);
@@ -443,7 +443,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		if (!group.CanDelete)
 			return false;
 
-		if (!_registry.TryDeleteGroup(parent.Model, group.Model)) // removes from model + saves
+		if (!_daemon.TryDeleteGroup(parent.Model, group.Model)) // removes from model + saves
 			return false;
 
 		parent.Children.Remove(group);
@@ -455,7 +455,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		if (!group.CanDelete)
 			return false;
 
-		if (!_registry.TryDeleteGroupFromGroup(parent.Model, group.Model)) // removes from model + saves
+		if (!_daemon.TryDeleteGroupFromGroup(parent.Model, group.Model)) // removes from model + saves
 			return false;
 
 		parent.Children.Remove(group);
@@ -464,7 +464,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public bool TryDeleteSession(DirectoryNodeViewModel parent, SessionNodeViewModel session, bool forceDelete = false)
 	{
-		if (!_registry.TryDeleteSession(parent.Model, session.Model, forceDelete)) // deletes file + removes model + saves
+		if (!_daemon.TryDeleteSession(parent.Model, session.Model, forceDelete)) // deletes file + removes model + saves
 			return false;
 
 		parent.Children.Remove(session);
@@ -473,7 +473,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public bool TryDeleteSessionFromGroup(GroupNodeViewModel parent, SessionNodeViewModel session, bool forceDelete = false)
 	{
-		if (!_registry.TryDeleteSessionFromGroup(parent.Model, session.Model, forceDelete)) // deletes file + removes model + saves
+		if (!_daemon.TryDeleteSessionFromGroup(parent.Model, session.Model, forceDelete)) // deletes file + removes model + saves
 			return false;
 
 		parent.Children.Remove(session);
@@ -544,7 +544,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	public (ViewModelBase? parent, int index) RemoveSessionFromTree(SessionNodeViewModel session)
 	{
 		// Remove from model tree via registry.
-		_registry.RemoveSessionFromModel(session.Model);
+		_daemon.RemoveSessionFromModel(session.Model);
 
 		// Remove from VM collections and return the parent VM + index.
 		foreach (var dir in Directories)
@@ -595,12 +595,12 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			case DirectoryNodeViewModel dir:
 				index = Math.Clamp(index, 0, dir.Children.Count);
 				dir.Children.Insert(index, session);
-				_registry.InsertSessionIntoDirectory(dir.Model, session.Model, index);
+				_daemon.InsertSessionIntoDirectory(dir.Model, session.Model, index);
 				break;
 			case GroupNodeViewModel grp:
 				index = Math.Clamp(index, 0, grp.Children.Count);
 				grp.Children.Insert(index, session);
-				_registry.InsertSessionIntoGroup(grp.Model, session.Model, index);
+				_daemon.InsertSessionIntoGroup(grp.Model, session.Model, index);
 				break;
 		}
 	}
@@ -1191,17 +1191,17 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// <summary>
 	/// Finds the raw <see cref="SessionNodeModel"/> whose <c>NodeId == nodeId</c>. Delegates to the registry.
 	/// </summary>
-	public SessionNodeModel? FindModelByNodeId(string nodeId) => _registry.FindModelByNodeId(nodeId);
+	public SessionNodeModel? FindModelByNodeId(string nodeId) => _daemon.FindSessionByNodeId(nodeId);
 
 	/// <summary>
 	/// Finds the raw <see cref="SessionNodeModel"/> whose <c>AgentToken == token</c>. Delegates to the registry.
 	/// </summary>
-	public SessionNodeModel? FindModelByAgentToken(string token) => _registry.FindModelByAgentToken(token);
+	public SessionNodeModel? FindModelByAgentToken(string token) => _daemon.FindSessionByAgentToken(token);
 
 	/// <summary>
 	/// Builds a flat list of all sessions for the <c>list_sessions</c> MCP tool. Delegates to the registry.
 	/// </summary>
-	public List<SessionSummaryModel> BuildAgentSessionSummaries() => _registry.BuildAgentSessionSummaries();
+	public List<SessionSummaryModel> BuildAgentSessionSummaries() => _daemon.BuildAgentSessionSummaries();
 
 	// --- Last prompt time ---
 
@@ -1232,7 +1232,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// Returns the directory label and the group path for a session node. Delegates to the registry.
 	/// </summary>
 	public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeViewModel session)
-		=> _registry.GetSessionLocation(session.Model);
+		=> _daemon.GetSessionLocation(session.Model);
 
 	private void LoadLastPromptTime(SessionNodeViewModel session)
 	{

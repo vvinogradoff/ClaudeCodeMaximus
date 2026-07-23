@@ -30,9 +30,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly IClaudeProfileService _profileService;
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeModelService _modelService;
-	private readonly ISessionTurnService _turnService;
 	private readonly IAgentMcpServer _mcpServer;
-	private readonly ISchedulerService _schedulerService;
+	private readonly IDaemonClient _daemonClient;
 	private readonly DirectoryNodeModel? _directoryModel;
 	private readonly ITessynRunService? _runService;
 	private readonly ITessynDaemonService? _daemonService;
@@ -498,9 +497,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IClaudeProfileService profileService,
 		IClaudeSessionImportService importService,
 		IClaudeModelService modelService,
-		ISessionTurnService turnService,
 		IAgentMcpServer mcpServer,
-		ISchedulerService schedulerService,
+		IDaemonClient daemonClient,
 		ITessynRunService? runService = null,
 		ITessynDaemonService? daemonService = null)
 	{
@@ -513,9 +511,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_profileService   = profileService;
 		_importService    = importService;
 		_modelService     = modelService;
-		_turnService      = turnService;
 		_mcpServer        = mcpServer;
-		_schedulerService = schedulerService;
+		_daemonClient     = daemonClient;
 		_runService       = runService;
 		_daemonService    = daemonService;
 		_name             = node.Name;
@@ -563,7 +560,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			}
 			else if (IsNodeRunning)
 			{
-				_turnService.CancelTurn(_node.Model.NodeId);
+				_daemonClient.CancelTurn(_node.Model.NodeId);
 				_log.Information("Stop requested for orchestrated turn on node {NodeId}", _node.Model.NodeId);
 			}
 		});
@@ -572,7 +569,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		ReauthenticateCommand = ReactiveCommand.Create(() => { _ = HandleReauthenticateAsync(); });
 		RemoveProfileCommand  = ReactiveCommand.Create(HandleRemoveProfile);
 
-		_schedulerService.ScheduleChanged += OnScheduleChanged;
+		_daemonClient.ScheduleChanged += OnScheduleChanged;
 		RefreshScheduleState();
 
 		// Start background indexing for this session's working directory
@@ -589,7 +586,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>Refreshes HasActiveSchedule and ScheduleTooltip from the scheduler's current state for this node.</summary>
 	private void RefreshScheduleState()
 	{
-		var schedules = _schedulerService.GetSchedules(_node.Model.NodeId);
+		var schedules = _daemonClient.GetSchedules(_node.Model.NodeId);
 		HasActiveSchedule = schedules.Count > 0;
 		ScheduleTooltip = HasActiveSchedule
 			? string.Join("\n\n", schedules.Select(FormatScheduleTooltip))
@@ -629,8 +626,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>Cancels all schedules currently targeting this session's node.</summary>
 	public void CancelAllSchedules()
 	{
-		foreach (var schedule in _schedulerService.GetSchedules(_node.Model.NodeId))
-			_schedulerService.RemoveSchedule(schedule.ScheduleId);
+		foreach (var schedule in _daemonClient.GetSchedules(_node.Model.NodeId))
+			_daemonClient.RemoveSchedule(schedule.ScheduleId);
 	}
 
 	public void LoadFromFile()
@@ -1101,7 +1098,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public void Dispose()
 	{
 		_modelService.ModelsUpdated -= OnModelsUpdated;
-		_schedulerService.ScheduleChanged -= OnScheduleChanged;
+		_daemonClient.ScheduleChanged -= OnScheduleChanged;
 		lock (_ctsLock) { foreach (var c in _activeCts) c.Dispose(); _activeCts.Clear(); }
 		_runEventSubscription?.Dispose();
 		_fileWatcher?.Dispose();
@@ -1538,7 +1535,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// the input clears and the message appears in the pane immediately, and this
 		// send's CLI spawn waits behind the in-flight one to avoid concurrent --resume.
 		var nodeId   = _node.Model.NodeId;
-		var turnLock = string.IsNullOrEmpty(nodeId) ? null : _turnService.GetTurnLock(nodeId);
+		var turnLock = string.IsNullOrEmpty(nodeId) ? null : _daemonClient.GetTurnLock(nodeId);
 		bool lockAcquired = false;
 
 		try

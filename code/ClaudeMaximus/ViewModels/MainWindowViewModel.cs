@@ -26,9 +26,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IClaudeModelService _modelService;
 	private readonly IClaudeUsageService _usageService;
 	private readonly ISelfUpdateService _selfUpdate;
-	private readonly ISessionTurnService _turnService;
 	private readonly IAgentMcpServer _mcpServer;
-	private readonly ISchedulerService _schedulerService;
+	private readonly IDaemonClient _daemonClient;
 	private readonly ITessynRunService? _runService;
 	private readonly ITessynDaemonService? _daemonService;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
@@ -269,9 +268,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ISelfUpdateService selfUpdate,
 		IDirectoryLabelService labelService,
 		SessionTreeViewModel sessionTree,
-		ISessionTurnService turnService,
 		IAgentMcpServer mcpServer,
-		ISchedulerService schedulerService,
+		IDaemonClient daemonClient,
 		ITessynRunService? runService = null,
 		ITessynDaemonService? daemonService = null)
 	{
@@ -285,9 +283,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_modelService     = modelService;
 		_usageService     = usageService;
 		_selfUpdate       = selfUpdate;
-		_turnService      = turnService;
 		_mcpServer        = mcpServer;
-		_schedulerService = schedulerService;
+		_daemonClient     = daemonClient;
 		_runService       = runService;
 		_daemonService    = daemonService;
 		SessionTree       = sessionTree;
@@ -416,7 +413,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _turnService, _mcpServer, _schedulerService, _runService, _daemonService);
+				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _runService, _daemonService);
 				if (_appSettings.Settings.UseTessynDaemon && _daemonService != null && node.ExternalId != null)
 					_ = vm.LoadFromDaemonAsync();
 				else
@@ -617,7 +614,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 		foreach (var s in all)
 		{
-			s.HasSchedules = _schedulerService.GetSchedules(s.Model.NodeId).Count > 0;
+			s.HasSchedules = _daemonClient.GetSchedules(s.Model.NodeId).Count > 0;
 			s.DirectoryLabel = SessionTree.GetSessionLocation(s).directoryLabel;
 		}
 
