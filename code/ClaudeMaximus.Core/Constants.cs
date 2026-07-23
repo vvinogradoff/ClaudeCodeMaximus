@@ -82,17 +82,18 @@ public static class Constants
 		public const string NoWorkflowTool =
 			"Do NOT use the Claude Code `Workflow` tool. Do NOT use the `Agent` tool for multi-agent orchestration. Do NOT use the `/deep-research` skill. These spawn processes/subagents that are invisible to ClaudeMaximus and untracked in the session tree. " +
 			"Instead, use the ClaudeMaximus MCP tools for all multi-agent, orchestration, and research fan-out work: " +
-			"`mcp__" + Agent.McpServerName + "__spawn_session` to create child sessions (supports `model`, `schema` args), " +
-			"`mcp__" + Agent.McpServerName + "__send_to_session` to send prompts (use `wait` mode for sequential work, `async` for parallel fan-out; supports `schema` arg for typed output), " +
+			"`mcp__" + Agent.McpServerName + "__spawn_session` to create child sessions (supports `model`, `outputFormat` args), " +
+			"`mcp__" + Agent.McpServerName + "__send_to_session` to send prompts (use `wait` mode for sequential work, `async` for parallel fan-out; supports `outputFormat` arg for a markdown shape hint), " +
 			"`mcp__" + Agent.McpServerName + "__read_session` to retrieve results, " +
 			"`mcp__" + Agent.McpServerName + "__stop_session` to cancel a running turn, " +
 			"`mcp__" + Agent.McpServerName + "__list_sessions` to inspect the session tree, " +
-			"`mcp__" + Agent.McpServerName + "__orchestrate_parallel` for concurrent fan-out over a task array (returns all results together), " +
-			"`mcp__" + Agent.McpServerName + "__orchestrate_pipeline` for pipelined fan-out where items flow through stages independently (no barrier), " +
+			"`mcp__" + Agent.McpServerName + "__orchestrate_parallel` for concurrent fan-out over a task array (returns all results together as one markdown document), " +
+			"`mcp__" + Agent.McpServerName + "__orchestrate_pipeline` for pipelined fan-out where items flow through stages independently (no barrier; returns one markdown document), " +
 			"`mcp__" + Agent.McpServerName + "__workflow_phase` to mark a named phase for progress tracking in the UI, " +
 			"`mcp__" + Agent.McpServerName + "__workflow_log` to emit a progress message visible in the session tree, " +
 			"`mcp__" + Agent.McpServerName + "__get_budget` to check remaining token budget for the current orchestration, and " +
-			"`mcp__" + Agent.McpServerName + "__set_session_model` to switch the model of a child session mid-orchestration.";
+			"`mcp__" + Agent.McpServerName + "__set_session_model` to switch the model of a child session mid-orchestration. " +
+			"For detailed guidance on orchestrating multi-session workflows, or on how to respond if you were spawned as a worker by another session, use the `" + Agent.OrchestrationSkillName + "` skill.";
 
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
 		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
@@ -203,6 +204,13 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		public const string McpConfigFileName    = "mcp-config.json";
 		public const string TokenHeader          = "X-CMX-Token";
 		public const string McpEndpointPath      = "/mcp";
+		public const string TdcpEndpointPath     = "/tdcp";
+
+		/// <summary>Skill name and on-disk layout for the orchestration skill (FR.15.11).
+		/// Provisioned under each profile's config dir as skills/{OrchestrationSkillName}/SKILL.md.</summary>
+		public const string OrchestrationSkillName       = "cmx-orchestration";
+		public const string SkillsFolderName             = "skills";
+		public const string SkillFileName                = "SKILL.md";
 
 		/// <summary>Maximum supervisor-worker nesting depth (FR.15.5).</summary>
 		public const int MaxOrchestrationDepth = 5;
@@ -219,12 +227,6 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		/// </summary>
 		public const int DefaultModelTier = 2;
 
-		/// <summary>
-		/// Maximum number of times the host will re-prompt a worker to produce valid
-		/// JSON matching the requested schema before giving up (FR.15.7).
-		/// </summary>
-		public const int MaxSchemaRetries = 3;
-
 		/// <summary>MCP JSON-RPC protocol version string. Must match what the claude CLI sends in its initialize request.</summary>
 		public const string ProtocolVersion = "2025-11-25";
 
@@ -236,6 +238,70 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 
 		/// <summary>Timeout in ms for a scheduled turn; after this the turn is cancelled.</summary>
 		public const int ScheduledTurnTimeoutMs = 3_600_000; // 1 hour
+
+		/// <summary>
+		/// Body of the <see cref="OrchestrationSkillName"/> skill, provisioned by
+		/// SkillProvisioningService into every profile's skills folder (FR.15.11). Loads on demand —
+		/// only the frontmatter `description` below is always visible to a session; the body is
+		/// pulled in only when the session decides it needs orchestration guidance.
+		/// </summary>
+		public const string OrchestrationSkillMarkdown = """
+			---
+			name: cmx-orchestration
+			description: How to orchestrate multi-session workflows in ClaudeMaximus (fan-out, pipelines, budgets, progress markers) and how to behave when you were spawned as a worker by another session. Use when spinning off sub-sessions / complex workflows, or when you were spawned by another session and need to know how to respond.
+			---
+
+			# ClaudeMaximus session orchestration
+
+			ClaudeMaximus hosts every Claude Code session as a tree node with its own persistent
+			transcript. The `mcp__cmx__*` tools let one session (a supervisor) spin off other sessions
+			(workers) and collect their results. Do NOT use the Claude Code `Workflow` tool, the `Agent`
+			tool, or `/deep-research` for this — they spawn processes invisible to ClaudeMaximus and
+			untracked in the session tree. Use the tools below instead.
+
+			## As a supervisor
+
+			Choose the right primitive:
+			- `spawn_session` — create one new child session and optionally run its first turn.
+			- `send_to_session` — resume an existing session node. Use `mode=wait` for sequential work
+			  you need the result of before continuing; `mode=async` to fire-and-continue — the result
+			  posts back to you automatically when the worker finishes.
+			- `orchestrate_parallel` — barrier fan-out: give it a `tasks` array of `{name, prompt}`, it
+			  spawns one session per task, runs them all concurrently, and returns everything as a
+			  single markdown document (one `## name` section per task) once ALL tasks finish.
+			- `orchestrate_pipeline` — non-blocking item fan-out: give it an `items` array and a
+			  `stages` array of `{prompt}` (use `{{item}}` in stage prompts), each item runs through all
+			  stages sequentially in its own session, all items run concurrently. Returns one markdown
+			  document (one `## item` section) when all items finish.
+
+			Shaping worker output: pass `outputFormat` (a markdown/free-text description of the shape
+			you want, e.g. a section outline) — it's advisory guidance appended to the worker's prompt,
+			not a validated schema. Don't ask for JSON back-and-forth between sessions — markdown is
+			what an LLM reads and writes best. If a worker produces something genuinely large or
+			structured (data files, generated code, a big table), tell it to write a file in the working
+			directory and return the path instead of inlining the content.
+
+			Other tools: `list_sessions` to inspect the tree before deciding new-vs-resume;
+			`read_session` to pull a worker's transcript directly; `stop_session` to cancel a running
+			turn; `set_session_model` to change a child's model mid-orchestration (tier-enforced);
+			`workflow_phase`/`workflow_log` to mark progress visible in the session tree UI;
+			`budgetTokens` on the fan-out tools plus `get_budget` to track token spend. Depth
+			(`MaxOrchestrationDepth`) and concurrency (`MaxConcurrentWorkers`) limits are enforced —
+			expect an error if you nest or fan out too aggressively.
+
+			## As a worker
+
+			If you were spawned by another session (check `list_sessions` or just notice your prompt
+			came with a specific, scoped task), you're a worker in someone else's orchestration:
+			- Return concise markdown as your final response. Honor any `outputFormat` guidance in the
+			  prompt. If your result is large or structured, write it to a file in your working
+			  directory and return the path rather than inlining it.
+			- Don't spawn further sub-sessions unless the task genuinely requires it — orchestration
+			  depth is limited and nesting adds latency for no benefit on simple tasks.
+			- You are headless and the CLI process is terminated between turns. Never use the CLI's
+			  native `ScheduleWakeup`/`CronCreate`/`CronList`/`CronDelete` — those schedules won't
+			  survive. Use `mcp__cmx__schedule_wake` if you need to poll or resume later.
+			""";
 	}
 
 	/// <summary>Constants for Windows toast notifications (FR.16).</summary>

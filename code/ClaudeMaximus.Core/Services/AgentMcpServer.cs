@@ -9,11 +9,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
-using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Models.Agent;
-using ClaudeMaximus.ViewModels;
-using Json.Schema;
 using Serilog;
 
 namespace ClaudeMaximus.Services;
@@ -33,9 +30,10 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly IAppSettingsService       _appSettings;
 	private readonly Lazy<ISessionTurnService> _turnService;
 	private readonly Lazy<ISchedulerService>   _scheduler;
-	private readonly SessionTreeViewModel      _sessionTree;
+	private readonly ISessionRegistry          _registry;
 	private readonly ISessionFileService       _fileService;
 	private readonly IClaudeModelService       _modelService;
+	private readonly TdcpServer                _tdcpServer;
 
 	// Enforced concurrent worker cap (FR.15.5).
 	private readonly SemaphoreSlim _workerSemaphore =
@@ -54,16 +52,18 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		IAppSettingsService appSettings,
 		Lazy<ISessionTurnService> turnService,
 		Lazy<ISchedulerService> scheduler,
-		SessionTreeViewModel sessionTree,
+		ISessionRegistry registry,
 		ISessionFileService fileService,
-		IClaudeModelService modelService)
+		IClaudeModelService modelService,
+		TdcpServer tdcpServer)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
 		_scheduler    = scheduler;
-		_sessionTree  = sessionTree;
+		_registry     = registry;
 		_fileService  = fileService;
 		_modelService = modelService;
+		_tdcpServer   = tdcpServer;
 	}
 
 	public void Start()
@@ -106,6 +106,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 	public void Stop()
 	{
+		_tdcpServer.Stop();
 		_cts?.Cancel();
 		try { _listener?.Stop(); } catch { /* best effort */ }
 		_listener = null;
@@ -202,6 +203,13 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	{
 		try
 		{
+			// Route TDCP requests to TdcpServer (/tdcp); leave /mcp flow byte-for-byte unchanged.
+			if (ctx.Request.Url?.AbsolutePath == Constants.Agent.TdcpEndpointPath)
+			{
+				await _tdcpServer.HandleAsync(ctx);
+				return;
+			}
+
 			if (ctx.Request.HttpMethod != "POST"
 			    || !ctx.Request.RawUrl?.StartsWith(Constants.Agent.McpEndpointPath) == true)
 			{
@@ -217,10 +225,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				return;
 			}
 
-			// Resolve caller node from token on the UI thread.
-			SessionNodeModel? callerNode = null;
-			await Dispatcher.UIThread.InvokeAsync(() =>
-				callerNode = _sessionTree.FindModelByAgentToken(token));
+			// Resolve caller node from the registry (thread-safe, no UI dispatch needed).
+			var callerNode = _registry.FindModelByAgentToken(token);
 
 			if (callerNode == null)
 			{
@@ -304,7 +310,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"Create a new persistent session node and optionally run the first turn. Model is tier-enforced (FR.16).",
 				SpawnSessionSchema()),
 			BuildToolDef("send_to_session",
-				"Resume an existing session and run a turn. Use mode=async to not block. Supports schema-enforced output.",
+				"Resume an existing session and run a turn. Use mode=async to not block. Supports an optional markdown outputFormat hint.",
 				SendToSessionSchema()),
 			BuildToolDef("read_session",
 				"Read the last N entries from a session's file.",
@@ -316,10 +322,10 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"Change the model for an existing session. Tier-enforced (FR.16.2). Takes effect on next turn.",
 				SetSessionModelSchema()),
 			BuildToolDef("orchestrate_parallel",
-				"Barrier fan-out: spawns one session per task, runs all concurrently, returns all results when done (FR.15.8).",
+				"Barrier fan-out: spawns one session per task, runs all concurrently, returns all results as one markdown document when done (FR.15.8).",
 				OrchestrateParallelSchema()),
 			BuildToolDef("orchestrate_pipeline",
-				"Item pipeline: one session per item through sequential stages, all items run concurrently (FR.15.8).",
+				"Item pipeline: one session per item through sequential stages, all items run concurrently, returns all results as one markdown document (FR.15.8).",
 				OrchestratePipelineSchema()),
 			BuildToolDef("workflow_phase",
 				"Write a [Phase: title] progress marker to the supervisor session file (FR.15.9).",
@@ -373,9 +379,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		var targetNodeId = target ?? callerNode.NodeId;
 
 		// Validate target exists.
-		SessionNodeModel? targetNode = null;
-		await Dispatcher.UIThread.InvokeAsync(() =>
-			targetNode = _sessionTree.FindModelByNodeId(targetNodeId));
+		var targetNode = _registry.FindModelByNodeId(targetNodeId);
 
 		if (targetNode == null)
 			throw new McpToolException($"Target session not found: {targetNodeId}");
@@ -462,30 +466,28 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 	// ── Orchestration tools ───────────────────────────────────────────────────
 
-	private async Task<JsonNode> ListSessionsAsync()
+	private Task<JsonNode> ListSessionsAsync()
 	{
-		List<SessionSummaryModel> summaries = [];
-		await Dispatcher.UIThread.InvokeAsync(() =>
-			summaries = _sessionTree.BuildAgentSessionSummaries());
+		var summaries = _registry.BuildAgentSessionSummaries();
 
 		var lines = summaries.Select(s =>
 			$"[{s.NodeId}] {s.Name} | {s.DirectoryLabel} | running={s.IsRunning} resumable={s.IsResumable}" +
 			(s.LastPrompt != null ? $" | last: {s.LastPrompt[..Math.Min(60, s.LastPrompt.Length)]}" : ""));
 
-		return BuildTextContent(
+		return Task.FromResult(BuildTextContent(
 			summaries.Count == 0
 				? "No sessions in tree."
-				: string.Join("\n", lines));
+				: string.Join("\n", lines)));
 	}
 
 	private async Task<JsonNode> SpawnSessionAsync(JsonNode? args, SessionNodeModel callerNode)
 	{
-		var name       = args?["name"]?.GetValue<string>()
-		                 ?? throw new McpToolException("'name' is required");
-		var prompt     = args?["prompt"]?.GetValue<string>() ?? string.Empty;
-		var group      = args?["group"]?.GetValue<string>();
-		var modelArg   = args?["model"]?.GetValue<string>();
-		var schemaNode = args?["schema"];
+		var name         = args?["name"]?.GetValue<string>()
+		                   ?? throw new McpToolException("'name' is required");
+		var prompt       = args?["prompt"]?.GetValue<string>() ?? string.Empty;
+		var group        = args?["group"]?.GetValue<string>();
+		var modelArg     = args?["model"]?.GetValue<string>();
+		var outputFormat = args?["outputFormat"]?.GetValue<string>();
 
 		// Tier enforcement (FR.16.2).
 		if (!string.IsNullOrEmpty(modelArg))
@@ -507,9 +509,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			workingDir = explicitDir;
 		else if (!string.IsNullOrEmpty(parentNodeIdArg))
 		{
-			SessionNodeModel? parentModel = null;
-			await Dispatcher.UIThread.InvokeAsync(() =>
-				parentModel = _sessionTree.FindModelByNodeId(parentNodeIdArg));
+			var parentModel = _registry.FindModelByNodeId(parentNodeIdArg);
 			if (parentModel == null)
 				throw new McpToolException($"Parent node not found: {parentNodeIdArg}");
 			workingDir = parentModel.WorkingDirectory;
@@ -517,11 +517,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		else
 			workingDir = callerNode.WorkingDirectory;
 
-		// Create the node on the UI thread (NodeId/AgentToken backfilled inside CreateSessionForAgent).
-		SessionNodeModel? newModel = null;
-		await Dispatcher.UIThread.InvokeAsync(() =>
-			newModel = _sessionTree.CreateSessionForAgent(workingDir, name, group,
-			                                              childDepth, callerNode.NodeId));
+		// Create the node via the registry (thread-safe, raises TreeChanged so VM re-projects).
+		var newModel = _registry.CreateSessionForAgent(workingDir, name, group, childDepth, callerNode.NodeId);
 
 		if (newModel == null)
 			throw new McpToolException($"Could not create session under working dir: {workingDir}");
@@ -538,11 +535,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		// Run first turn if a prompt was supplied.
 		TurnResultModel? result = null;
 		if (!string.IsNullOrEmpty(prompt))
-		{
-			result = await _turnService.Value.RunTurnAsync(newModel, prompt, TurnSource.Orchestrated);
-			if (schemaNode != null && result != null)
-				result = await ValidateAndRetryAsync(newModel, result, schemaNode.ToJsonString());
-		}
+			result = await _turnService.Value.RunTurnAsync(
+				newModel, ApplyOutputFormat(prompt, outputFormat), TurnSource.Orchestrated);
 
 		return BuildTextContent(result == null
 			? $"Session '{name}' created (nodeId={newModel.NodeId}). No prompt run."
@@ -556,28 +550,25 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		var prompt       = args?["prompt"]?.GetValue<string>()
 		                   ?? throw new McpToolException("'prompt' is required");
 		var mode         = args?["mode"]?.GetValue<string>() ?? "wait";
-		var schemaNode   = args?["schema"];
+		var outputFormat = args?["outputFormat"]?.GetValue<string>();
 
-		SessionNodeModel? targetModel = null;
-		await Dispatcher.UIThread.InvokeAsync(() =>
-			targetModel = _sessionTree.FindModelByNodeId(targetNodeId));
+		var targetModel = _registry.FindModelByNodeId(targetNodeId);
 
 		if (targetModel == null)
 			throw new McpToolException($"Session not found: {targetNodeId}");
+
+		var augmentedPrompt = ApplyOutputFormat(prompt, outputFormat);
 
 		if (mode == "async")
 		{
 			var callerSnapshot = callerNode;
 			var targetSnapshot = targetModel;
-			var schemaStr      = schemaNode?.ToJsonString();
 			_ = Task.Run(async () =>
 			{
 				try
 				{
 					var result = await _turnService.Value.RunTurnAsync(
-						targetSnapshot, prompt, TurnSource.Orchestrated);
-					if (schemaStr != null)
-						result = await ValidateAndRetryAsync(targetSnapshot, result, schemaStr);
+						targetSnapshot, augmentedPrompt, TurnSource.Orchestrated);
 					var workerName = targetSnapshot.Name;
 					var mailboxMsg = $"{Constants.Agent.WorkerFinishedPrefix} {workerName}\n{result.AssistantText}";
 					var mailbox    = new ScheduleModel
@@ -600,24 +591,20 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		}
 		else
 		{
-			var result = await _turnService.Value.RunTurnAsync(targetModel, prompt, TurnSource.Orchestrated);
-			if (schemaNode != null)
-				result = await ValidateAndRetryAsync(targetModel, result, schemaNode.ToJsonString());
+			var result = await _turnService.Value.RunTurnAsync(targetModel, augmentedPrompt, TurnSource.Orchestrated);
 			return BuildTextContent(result.IsError
 				? $"Error: {result.ErrorMessage}"
 				: result.AssistantText);
 		}
 	}
 
-	private async Task<JsonNode> ReadSessionAsync(JsonNode? args)
+	private Task<JsonNode> ReadSessionAsync(JsonNode? args)
 	{
 		var nodeId = args?["nodeId"]?.GetValue<string>()
 		             ?? throw new McpToolException("'nodeId' is required");
 		var lastN  = args?["lastN"]?.GetValue<int>() ?? 20;
 
-		SessionNodeModel? model = null;
-		await Dispatcher.UIThread.InvokeAsync(() =>
-			model = _sessionTree.FindModelByNodeId(nodeId));
+		var model = _registry.FindModelByNodeId(nodeId);
 
 		if (model == null)
 			throw new McpToolException($"Session not found: {nodeId}");
@@ -629,7 +616,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			.ToList();
 
 		if (relevant.Count == 0)
-			return BuildTextContent("Session has no conversation entries.");
+			return Task.FromResult(BuildTextContent("Session has no conversation entries."));
 
 		var sb = new StringBuilder();
 		foreach (var e in relevant)
@@ -638,7 +625,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			sb.AppendLine(e.Content);
 			sb.AppendLine();
 		}
-		return BuildTextContent(sb.ToString().TrimEnd());
+		return Task.FromResult(BuildTextContent(sb.ToString().TrimEnd()));
 	}
 
 	private JsonNode StopSession(JsonNode? args)
@@ -651,7 +638,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 	// ── New orchestration tools (FR.15.6–FR.15.10, FR.16) ───────────────────
 
-	private async Task<JsonNode> SetSessionModelAsync(JsonNode? args, SessionNodeModel callerNode)
+	private Task<JsonNode> SetSessionModelAsync(JsonNode? args, SessionNodeModel callerNode)
 	{
 		var targetNodeId = args?["nodeId"]?.GetValue<string>()
 		                   ?? throw new McpToolException("'nodeId' is required");
@@ -660,16 +647,14 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 		EnforceModelTier(callerNode, model);
 
-		SessionNodeModel? target = null;
-		await Dispatcher.UIThread.InvokeAsync(() =>
-			target = _sessionTree.FindModelByNodeId(targetNodeId));
+		var target = _registry.FindModelByNodeId(targetNodeId);
 
 		if (target == null)
 			throw new McpToolException($"Session not found: {targetNodeId}");
 
 		target.ModelId = model;
 		_appSettings.Save();
-		return BuildTextContent($"Session '{target.Name}' ({targetNodeId}) model set to '{model}'. Effective from next turn.");
+		return Task.FromResult(BuildTextContent($"Session '{target.Name}' ({targetNodeId}) model set to '{model}'. Effective from next turn."));
 	}
 
 	private async Task<JsonNode> OrchestrateParallelAsync(JsonNode? args, SessionNodeModel callerNode)
@@ -678,7 +663,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		                   ?? throw new McpToolException("'tasks' is required");
 		var modelArg     = args?["model"]?.GetValue<string>();
 		var group        = args?["group"]?.GetValue<string>() ?? "Orchestration";
-		var schemaStr    = args?["schema"]?.ToJsonString();
+		var outputFormat = args?["outputFormat"]?.GetValue<string>();
 		var budgetTokens = args?["budgetTokens"]?.GetValue<int>() ?? 0;
 
 		if (!string.IsNullOrEmpty(modelArg))
@@ -707,15 +692,14 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		// Spawn and run all tasks concurrently, bounded by MaxConcurrentWorkers.
 		var taskRuns = tasks.Select((task, idx) => RunWorkerAsync(
 			task.name, task.prompt, idx, callerNode, modelArg, group, childDepth,
-			schemaStr, budgetTokens > 0 ? $"{callerNode.NodeId}/{orchestrationId}" : null)).ToArray();
+			outputFormat, budgetTokens > 0 ? $"{callerNode.NodeId}/{orchestrationId}" : null)).ToArray();
 
 		var results = await Task.WhenAll(taskRuns);
 
 		// Clean up budget entry.
 		_budgets.TryRemove($"{callerNode.NodeId}/{orchestrationId}", out _);
 
-		return BuildTextContent(JsonSerializer.Serialize(results,
-			new JsonSerializerOptions { WriteIndented = true }));
+		return BuildTextContent(BuildWorkerResultsMarkdown(results));
 	}
 
 	private async Task<JsonNode> OrchestratePipelineAsync(JsonNode? args, SessionNodeModel callerNode)
@@ -726,7 +710,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		                   ?? throw new McpToolException("'stages' is required");
 		var modelArg     = args?["model"]?.GetValue<string>();
 		var group        = args?["group"]?.GetValue<string>() ?? "Pipeline";
-		var schemaStr    = args?["schema"]?.ToJsonString();
+		var outputFormat = args?["outputFormat"]?.GetValue<string>();
 		var budgetTokens = args?["budgetTokens"]?.GetValue<int>() ?? 0;
 
 		if (!string.IsNullOrEmpty(modelArg))
@@ -754,20 +738,19 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		{
 			var item = itemNode?.GetValue<string>() ?? $"item-{idx + 1}";
 			return RunPipelineItemAsync(item, idx, stages, callerNode, modelArg, group, childDepth,
-				schemaStr, budgetTokens > 0 ? $"{callerNode.NodeId}/{orchestrationId}" : null);
+				outputFormat, budgetTokens > 0 ? $"{callerNode.NodeId}/{orchestrationId}" : null);
 		}).ToArray();
 
 		var results = await Task.WhenAll(itemRuns);
 		_budgets.TryRemove($"{callerNode.NodeId}/{orchestrationId}", out _);
 
-		return BuildTextContent(JsonSerializer.Serialize(results,
-			new JsonSerializerOptions { WriteIndented = true }));
+		return BuildTextContent(BuildPipelineResultsMarkdown(results));
 	}
 
-	/// <summary>Runs a single parallel worker task: acquire slot → spawn session → run turn → validate → release.</summary>
+	/// <summary>Runs a single parallel worker task: acquire slot → spawn session → run turn → release.</summary>
 	private async Task<WorkerResult> RunWorkerAsync(
 		string name, string prompt, int index, SessionNodeModel callerNode,
-		string? model, string group, int depth, string? schemaStr, string? budgetKey)
+		string? model, string group, int depth, string? outputFormat, string? budgetKey)
 	{
 		await _workerSemaphore.WaitAsync();
 		try
@@ -775,10 +758,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			if (budgetKey != null && _budgets.TryGetValue(budgetKey, out var budget) && budget.IsExhausted)
 				return new WorkerResult(name, "[budget-exhausted]", 0, 0);
 
-			SessionNodeModel? session = null;
-			await Dispatcher.UIThread.InvokeAsync(() =>
-				session = _sessionTree.CreateSessionForAgent(
-					callerNode.WorkingDirectory, name, group, depth, callerNode.NodeId));
+			var session = _registry.CreateSessionForAgent(
+				callerNode.WorkingDirectory, name, group, depth, callerNode.NodeId);
 
 			if (session == null)
 				return new WorkerResult(name, "[error: could not create session]", 0, 0);
@@ -788,9 +769,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			if (!string.IsNullOrEmpty(model))
 				session.ModelId = model;
 
-			var result = await _turnService.Value.RunTurnAsync(session, prompt, TurnSource.Orchestrated);
-			if (schemaStr != null)
-				result = await ValidateAndRetryAsync(session, result, schemaStr);
+			var result = await _turnService.Value.RunTurnAsync(
+				session, ApplyOutputFormat(prompt, outputFormat), TurnSource.Orchestrated);
 
 			if (budgetKey != null)
 				_budgets[budgetKey].Accrue(result.InputTokens + result.OutputTokens);
@@ -806,7 +786,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	/// <summary>Runs a single pipeline item through all stages sequentially in its own session.</summary>
 	private async Task<PipelineResult> RunPipelineItemAsync(
 		string item, int index, List<string> stages, SessionNodeModel callerNode,
-		string? model, string group, int depth, string? schemaStr, string? budgetKey)
+		string? model, string group, int depth, string? outputFormat, string? budgetKey)
 	{
 		await _workerSemaphore.WaitAsync();
 		try
@@ -814,10 +794,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			if (budgetKey != null && _budgets.TryGetValue(budgetKey, out var budget) && budget.IsExhausted)
 				return new PipelineResult(item, "[budget-exhausted]", 0, 0);
 
-			SessionNodeModel? session = null;
-			await Dispatcher.UIThread.InvokeAsync(() =>
-				session = _sessionTree.CreateSessionForAgent(
-					callerNode.WorkingDirectory, $"pipeline-{index + 1}", group, depth, callerNode.NodeId));
+			var session = _registry.CreateSessionForAgent(
+				callerNode.WorkingDirectory, $"pipeline-{index + 1}", group, depth, callerNode.NodeId);
 
 			if (session == null)
 				return new PipelineResult(item, "[error: could not create session]", 0, 0);
@@ -832,7 +810,11 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 			for (var s = 0; s < stages.Count; s++)
 			{
+				// outputFormat guidance only applies to the last stage — earlier stages feed the
+				// next stage's prompt, not the supervisor, so shaping them would be wasted guidance.
+				var isLastStage = s == stages.Count - 1;
 				var stagePrompt = stages[s].Replace("{{item}}", item);
+				stagePrompt = isLastStage ? ApplyOutputFormat(stagePrompt, outputFormat) : stagePrompt;
 				lastResult = await _turnService.Value.RunTurnAsync(session, stagePrompt, TurnSource.Orchestrated);
 				totalIn  += lastResult.InputTokens;
 				totalOut += lastResult.OutputTokens;
@@ -842,10 +824,6 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 				if (lastResult.IsError) break;
 			}
-
-			// Schema validation on last stage output only.
-			if (schemaStr != null && lastResult != null)
-				lastResult = await ValidateAndRetryAsync(session, lastResult, schemaStr);
 
 			return new PipelineResult(item, lastResult?.AssistantText ?? string.Empty, totalIn, totalOut);
 		}
@@ -887,7 +865,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			: string.Join("\n", entries));
 	}
 
-	// ── Helpers: tier enforcement + schema validation ─────────────────────────
+	// ── Helpers: tier enforcement + output shaping ────────────────────────────
 
 	/// <summary>Resolves the caller's effective model for tier comparison (FR.16.4).</summary>
 	private string? GetCallerEffectiveModel(SessionNodeModel callerNode)
@@ -920,51 +898,51 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	}
 
 	/// <summary>
-	/// Validates <paramref name="result"/> against the JSON Schema string.
-	/// On failure re-prompts up to <see cref="Constants.Agent.MaxSchemaRetries"/> times (FR.15.7).
+	/// Appends optional markdown output-shaping guidance to a worker prompt. Advisory only — not
+	/// validated or retried, since the consumer of a worker's result is another session, which
+	/// reads markdown far better than JSON. A worker that needs to hand back a large or structured
+	/// artifact is told to persist it to a file and return the path instead.
 	/// </summary>
-	private async Task<TurnResultModel> ValidateAndRetryAsync(
-		SessionNodeModel session, TurnResultModel result, string schemaStr)
+	private static string ApplyOutputFormat(string prompt, string? outputFormat)
 	{
-		JsonSchema? schema = null;
-		try { schema = JsonSchema.FromText(schemaStr); }
-		catch (Exception ex)
+		if (string.IsNullOrWhiteSpace(outputFormat))
+			return prompt;
+
+		return prompt + "\n\n---\nFormat your final response as follows:\n" + outputFormat +
+		       "\n\nIf the result is a large or structured artifact, write it to a file in your " +
+		       "working directory and return its path instead of inlining it.";
+	}
+
+	/// <summary>Assembles orchestrate_parallel worker results into one markdown document.</summary>
+	private static string BuildWorkerResultsMarkdown(WorkerResult[] results)
+	{
+		var sb = new StringBuilder();
+		foreach (var r in results)
 		{
-			_log.Warning(ex, "Schema parse error — skipping validation");
-			return result;
+			sb.AppendLine($"## {r.Name}");
+			sb.AppendLine();
+			sb.AppendLine(r.Result);
+			sb.AppendLine();
+			sb.AppendLine($"_tokens: in={r.InputTokens} out={r.OutputTokens}_");
+			sb.AppendLine();
 		}
+		return sb.ToString().TrimEnd();
+	}
 
-		for (var attempt = 0; attempt < Constants.Agent.MaxSchemaRetries; attempt++)
+	/// <summary>Assembles orchestrate_pipeline item results into one markdown document.</summary>
+	private static string BuildPipelineResultsMarkdown(PipelineResult[] results)
+	{
+		var sb = new StringBuilder();
+		foreach (var r in results)
 		{
-			if (string.IsNullOrWhiteSpace(result.AssistantText))
-				break;
-
-			bool isValid = false;
-			try
-			{
-				using var doc = JsonDocument.Parse(result.AssistantText.Trim());
-				var evalResult = schema.Evaluate(doc.RootElement);
-				isValid = evalResult.IsValid;
-			}
-			catch { /* not JSON — fall through to re-prompt */ }
-
-			if (isValid)
-				return result;
-
-			if (attempt == Constants.Agent.MaxSchemaRetries - 1)
-				break;
-
-			// Re-prompt with the schema constraint.
-			var retryPrompt = $"Your previous response did not match the required JSON schema. " +
-			                  $"Please respond with ONLY valid JSON matching this schema:\n{schemaStr}\n\n" +
-			                  $"Do not include any text outside the JSON object.";
-			result = await _turnService.Value.RunTurnAsync(session, retryPrompt, TurnSource.Orchestrated);
+			sb.AppendLine($"## {r.Item}");
+			sb.AppendLine();
+			sb.AppendLine(r.Result);
+			sb.AppendLine();
+			sb.AppendLine($"_tokens: in={r.InputTokens} out={r.OutputTokens}_");
+			sb.AppendLine();
 		}
-
-		// Return with prefix so the supervisor knows validation failed.
-		if (!result.AssistantText.StartsWith("[schema-invalid]"))
-			return result with { AssistantText = "[schema-invalid] " + result.AssistantText };
-		return result;
+		return sb.ToString().TrimEnd();
 	}
 
 	// ── JSON-RPC wire helpers ─────────────────────────────────────────────────
@@ -1081,7 +1059,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"prompt":       { "type": "string", "description": "Optional first prompt to run on the new session." },
 				"group":        { "type": "string", "description": "Optional group name to place the session under." },
 				"model":        { "type": "string", "description": "Model ID for the new session (tier-enforced, FR.16)." },
-				"schema":       { "type": "object", "description": "JSON Schema for structured output from the first prompt (FR.15.7)." }
+				"outputFormat": { "type": "string", "description": "Optional markdown/free-text description of the desired response shape for the first prompt (e.g. a section outline). Advisory guidance appended to the prompt — not validated. For a large or structured artifact, tell the worker to write a file and return its path instead of inlining it (FR.15.7)." }
 			},
 			"required": ["name"]
 		}
@@ -1091,10 +1069,10 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		{
 			"type": "object",
 			"properties": {
-				"nodeId":  { "type": "string", "description": "NodeId of the session to resume." },
-				"prompt":  { "type": "string" },
-				"mode":    { "type": "string", "enum": ["wait", "async"], "description": "wait=block for result, async=return immediately and post result via mailbox." },
-				"schema":  { "type": "object", "description": "JSON Schema for structured output (FR.15.7)." }
+				"nodeId":       { "type": "string", "description": "NodeId of the session to resume." },
+				"prompt":       { "type": "string" },
+				"mode":         { "type": "string", "enum": ["wait", "async"], "description": "wait=block for result, async=return immediately and post result via mailbox." },
+				"outputFormat": { "type": "string", "description": "Optional markdown/free-text description of the desired response shape. Advisory guidance appended to the prompt — not validated (FR.15.7)." }
 			},
 			"required": ["nodeId", "prompt"]
 		}
@@ -1150,7 +1128,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				},
 				"model":        { "type": "string", "description": "Model override for all workers (tier-enforced)." },
 				"group":        { "type": "string", "description": "Group name for worker sessions in the tree." },
-				"schema":       { "type": "object", "description": "JSON Schema for structured worker output (FR.15.7)." },
+				"outputFormat": { "type": "string", "description": "Optional markdown/free-text description of the desired response shape, applied to every worker. Advisory guidance appended to each worker's prompt — not validated. Results come back as one markdown document, one section per worker (FR.15.7)." },
 				"budgetTokens": { "type": "integer", "description": "Max total input+output tokens for this orchestration." }
 			},
 			"required": ["tasks"]
@@ -1179,7 +1157,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				},
 				"model":        { "type": "string", "description": "Model override for all item sessions (tier-enforced)." },
 				"group":        { "type": "string", "description": "Group name for item sessions in the tree." },
-				"schema":       { "type": "object", "description": "JSON Schema applied to the LAST stage output." },
+				"outputFormat": { "type": "string", "description": "Optional markdown/free-text description of the desired response shape, applied to the LAST stage prompt only. Advisory guidance — not validated. Results come back as one markdown document, one section per item (FR.15.7)." },
 				"budgetTokens": { "type": "integer", "description": "Max total tokens for this pipeline run." }
 			},
 			"required": ["items", "stages"]

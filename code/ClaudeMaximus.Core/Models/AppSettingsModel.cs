@@ -94,6 +94,12 @@ public sealed class AppSettingsModel
 	/// </summary>
 	public int AgentMcpPort { get; set; }
 
+	/// <summary>
+	/// Bearer token for the TDCP control surface (co-hosted with the MCP server on <see cref="AgentMcpPort"/>).
+	/// Generated once at first startup and persisted; sent as X-CMX-Token by TDCP clients (e.g. the UI, WireDaemonClient).
+	/// </summary>
+	public string TdcpToken { get; set; } = "";
+
 	/// <summary>Persisted schedules (FR.14.8). Scheduler re-arms timers from this list on startup.</summary>
 	public List<ScheduleModel> Schedules { get; set; } = [];
 

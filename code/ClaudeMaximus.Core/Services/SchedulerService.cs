@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Avalonia.Threading;
 using ClaudeMaximus.Models;
-using ClaudeMaximus.ViewModels;
 using Serilog;
 
 namespace ClaudeMaximus.Services;
@@ -23,7 +21,7 @@ public sealed class SchedulerService : ISchedulerService
 
 	private readonly IAppSettingsService    _appSettings;
 	private readonly ISessionTurnService    _turnService;
-	private readonly SessionTreeViewModel   _sessionTree;
+	private readonly ISessionRegistry       _registry;
 	private readonly INotificationService   _notifications;
 
 	private Timer? _timer;
@@ -34,12 +32,12 @@ public sealed class SchedulerService : ISchedulerService
 	public SchedulerService(
 		IAppSettingsService appSettings,
 		ISessionTurnService turnService,
-		SessionTreeViewModel sessionTree,
+		ISessionRegistry registry,
 		INotificationService notifications)
 	{
 		_appSettings   = appSettings;
 		_turnService   = turnService;
-		_sessionTree   = sessionTree;
+		_registry      = registry;
 		_notifications = notifications;
 	}
 
@@ -155,10 +153,8 @@ public sealed class SchedulerService : ISchedulerService
 	{
 		_log.Information("Firing schedule {Id} → node {Target}", schedule.ScheduleId, schedule.TargetNodeId);
 
-		// Resolve target node on UI thread.
-		SessionNodeModel? targetNode = null;
-		await Dispatcher.UIThread.InvokeAsync(() =>
-			targetNode = _sessionTree.FindModelByNodeId(schedule.TargetNodeId));
+		// Resolve target node via the registry (thread-safe, no UI dispatch needed).
+		var targetNode = _registry.FindModelByNodeId(schedule.TargetNodeId);
 
 		if (targetNode == null)
 		{
@@ -207,10 +203,8 @@ public sealed class SchedulerService : ISchedulerService
 
 		if (result != null && !result.IsError && !string.IsNullOrWhiteSpace(result.AssistantText))
 		{
-			bool isSelected = false;
-			await Dispatcher.UIThread.InvokeAsync(() =>
-				isSelected = _sessionTree.SelectedSession?.Model.NodeId == targetNode.NodeId);
-
+			// Suppress the toast when the session is currently visible (selected) in the UI.
+			var isSelected = _registry.SelectedNodeId == targetNode.NodeId;
 			if (!isSelected)
 				_notifications.ShowResult(targetNode.NodeId, targetNode.Name, result.AssistantText, schedule.Note);
 		}

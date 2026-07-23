@@ -660,7 +660,7 @@ public sealed class TessynDaemonService : ITessynDaemonService
             ".local", "share", "tessyn", "ws-auth-token");
     }
 
-    internal static int GetPort()
+    public static int GetPort()
     {
         var envPort = Environment.GetEnvironmentVariable("TESSYN_WS_PORT");
         return int.TryParse(envPort, out var port) ? port : Constants.Tessyn.DefaultPort;

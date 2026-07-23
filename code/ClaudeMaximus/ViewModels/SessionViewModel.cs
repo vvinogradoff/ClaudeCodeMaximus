@@ -56,7 +56,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
 	private bool _needsContextRetry;
-	private CancellationTokenSource? _sendCts;
+	private readonly object _ctsLock = new();
+	private readonly List<CancellationTokenSource> _activeCts = new();
 	private bool _isNewBranch;
 	private bool _isAutoCompact;
 	private bool _midRunAutoCompactState;
@@ -555,7 +556,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		{
 			if (IsBusy)
 			{
-				_sendCts?.Cancel();
+				List<CancellationTokenSource> snapshot;
+				lock (_ctsLock) snapshot = [.._activeCts];
+				foreach (var c in snapshot) c.Cancel();
 				_log.Information("Stop requested for session {FileName}", _node.FileName);
 			}
 			else if (IsNodeRunning)
@@ -1099,7 +1102,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	{
 		_modelService.ModelsUpdated -= OnModelsUpdated;
 		_schedulerService.ScheduleChanged -= OnScheduleChanged;
-		_sendCts?.Dispose();
+		lock (_ctsLock) { foreach (var c in _activeCts) c.Dispose(); _activeCts.Clear(); }
 		_runEventSubscription?.Dispose();
 		_fileWatcher?.Dispose();
 		_jsonlWatcher?.Dispose();
@@ -1520,9 +1523,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			}
 		}
 
-		_sendCts?.Dispose();
-		_sendCts = new CancellationTokenSource();
-		var ct = _sendCts.Token;
+		var cts = new CancellationTokenSource();
+		lock (_ctsLock) _activeCts.Add(cts);
+		var ct = cts.Token;
 
 		// FR.14.3 / FR.14.11 — ensure the per-node MCP config file exists so the claude process
 		// receives --mcp-config and can reach the host scheduling/orchestration tools.
@@ -1536,11 +1539,15 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// send's CLI spawn waits behind the in-flight one to avoid concurrent --resume.
 		var nodeId   = _node.Model.NodeId;
 		var turnLock = string.IsNullOrEmpty(nodeId) ? null : _turnService.GetTurnLock(nodeId);
-		if (turnLock != null)
-			await turnLock.WaitAsync();
+		bool lockAcquired = false;
 
 		try
 		{
+			if (turnLock != null)
+			{
+				await turnLock.WaitAsync(ct);
+				lockAcquired = true;
+			}
 			await _processManager.SendMessageAsync(
 				workingDirectory: _node.Model.WorkingDirectory,
 				claudePath:       _appSettings.Settings.ClaudePath,
@@ -1610,7 +1617,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 		finally
 		{
-			turnLock?.Release();
+			if (lockAcquired) turnLock?.Release();
+			lock (_ctsLock) _activeCts.Remove(cts);
+			cts.Dispose();
 
 			_busyCount = Math.Max(0, _busyCount - 1);
 			if (_busyCount == 0)

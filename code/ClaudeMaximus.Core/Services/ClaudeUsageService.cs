@@ -6,7 +6,6 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using Serilog;
 
@@ -21,6 +20,7 @@ public sealed class ClaudeUsageService : IClaudeUsageService
     private const string BetaValue     = "oauth-2025-04-20";
 
     private readonly HttpClient _httpClient;
+    private readonly IUiDispatcher _uiDispatcher;
     private readonly Dictionary<string, ClaudeUsageData> _profileCache = new();
     private CancellationTokenSource _cts = new();
     private string? _activeCredentialsPath;
@@ -29,8 +29,9 @@ public sealed class ClaudeUsageService : IClaudeUsageService
 
     public event EventHandler? UsageUpdated;
 
-    public ClaudeUsageService()
+    public ClaudeUsageService(IUiDispatcher uiDispatcher)
     {
+        _uiDispatcher = uiDispatcher;
         _httpClient = new HttpClient();
         _httpClient.DefaultRequestHeaders.Add(BetaHeader, BetaValue);
     }
@@ -50,7 +51,7 @@ public sealed class ClaudeUsageService : IClaudeUsageService
             : null;
 
         // Notify UI of the profile switch immediately so bars reflect new state
-        Dispatcher.UIThread.Post(() => UsageUpdated?.Invoke(this, EventArgs.Empty));
+        _uiDispatcher.Post(() => UsageUpdated?.Invoke(this, EventArgs.Empty));
 
         if (credentialsFilePath != null)
             _ = RunPollingLoopAsync(credentialsFilePath, _cts.Token);
@@ -107,7 +108,7 @@ public sealed class ClaudeUsageService : IClaudeUsageService
             {
                 CachedUsage = usage;
                 _profileCache[credentialsPath] = usage;
-                Dispatcher.UIThread.Post(() => UsageUpdated?.Invoke(this, EventArgs.Empty));
+                _uiDispatcher.Post(() => UsageUpdated?.Invoke(this, EventArgs.Empty));
                 _log.Debug("ClaudeUsageService: refreshed — 5h={FiveH:0}%  7d={SevenD:0}%",
                     usage.FiveHourUtilization, usage.SevenDayUtilization);
             }

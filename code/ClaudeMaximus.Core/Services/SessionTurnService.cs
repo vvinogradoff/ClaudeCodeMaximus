@@ -5,9 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Avalonia.Threading;
 using ClaudeMaximus.Models;
-using ClaudeMaximus.ViewModels;
 using Serilog;
 
 namespace ClaudeMaximus.Services;
@@ -22,7 +20,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly IAppSettingsService          _appSettings;
 	private readonly IClaudeProfileService        _profileService;
 	private readonly Lazy<IAgentMcpServer>        _mcpServer;
-	private readonly SessionTreeViewModel         _sessionTree;
+	private readonly ISessionRegistry             _registry;
 	private readonly IClaudeSessionStatusService  _sessionStatus;
 	private readonly IClaudeModelService          _modelService;
 
@@ -38,7 +36,7 @@ public sealed class SessionTurnService : ISessionTurnService
 		IAppSettingsService appSettings,
 		IClaudeProfileService profileService,
 		Lazy<IAgentMcpServer> mcpServer,
-		SessionTreeViewModel sessionTree,
+		ISessionRegistry registry,
 		IClaudeSessionStatusService sessionStatus,
 		IClaudeModelService modelService)
 	{
@@ -47,7 +45,7 @@ public sealed class SessionTurnService : ISessionTurnService
 		_appSettings    = appSettings;
 		_profileService = profileService;
 		_mcpServer      = mcpServer;
-		_sessionTree    = sessionTree;
+		_registry       = registry;
 		_sessionStatus  = sessionStatus;
 		_modelService   = modelService;
 	}
@@ -77,14 +75,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		_activeCts[node.NodeId] = linkedCts;
 		var ct = linkedCts.Token;
 
-		// Signal the tree node spinner on the UI thread.
-		SessionNodeViewModel? nodeVm = null;
-		await Dispatcher.UIThread.InvokeAsync(() =>
-		{
-			nodeVm = _sessionTree.FindNodeVmByNodeId(node.NodeId);
-			if (nodeVm != null)
-				nodeVm.IsRunning = true;
-		});
+		// Signal running state via the registry (SessionTreeViewModel observes TreeChanged).
+		_registry.SetSessionRunning(node.NodeId, true);
 
 		try
 		{
@@ -179,11 +171,7 @@ public sealed class SessionTurnService : ISessionTurnService
 			linkedCts.Dispose();
 			turnLock.Release();
 
-			await Dispatcher.UIThread.InvokeAsync(() =>
-			{
-				if (nodeVm != null)
-					nodeVm.IsRunning = false;
-			});
+			_registry.SetSessionRunning(node.NodeId, false);
 		}
 	}
 

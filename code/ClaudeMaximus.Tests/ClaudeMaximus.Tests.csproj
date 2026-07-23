@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ClaudeMaximus\ClaudeMaximus.csproj" />
+    <ProjectReference Include="..\ClaudeMaximus.Core\ClaudeMaximus.Core.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using Serilog;
 
@@ -28,15 +27,17 @@ public sealed class ClaudeModelService : IClaudeModelService
 
     private readonly IOllamaModelService _ollamaService;
     private readonly IAppSettingsService _appSettings;
+    private readonly IUiDispatcher _uiDispatcher;
     private IReadOnlyList<ClaudeModelInfo> _cachedModels;
     private Task? _fetchTask;
 
     public event EventHandler? ModelsUpdated;
 
-    public ClaudeModelService(IOllamaModelService ollamaService, IAppSettingsService appSettings)
+    public ClaudeModelService(IOllamaModelService ollamaService, IAppSettingsService appSettings, IUiDispatcher uiDispatcher)
     {
         _ollamaService = ollamaService;
         _appSettings   = appSettings;
+        _uiDispatcher  = uiDispatcher;
 
         // Anthropic models are immediately available from the curated catalog.
         // Ollama models are appended once EnsureModelsLoadedAsync() is called.
@@ -63,6 +64,6 @@ public sealed class ClaudeModelService : IClaudeModelService
             _log.Information("Discovered {Count} Ollama models", ollamaModels.Count);
 
         _cachedModels = CuratedAnthropicModels.Concat(ollamaModels).ToList();
-        Dispatcher.UIThread.Post(() => ModelsUpdated?.Invoke(this, EventArgs.Empty));
+        _uiDispatcher.Post(() => ModelsUpdated?.Invoke(this, EventArgs.Empty));
     }
 }

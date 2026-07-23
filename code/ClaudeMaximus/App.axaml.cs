@@ -51,6 +51,7 @@ public partial class App : Application
 		{
 			Services.GetRequiredService<IAgentMcpServer>().Start();
 			Services.GetRequiredService<ISchedulerService>().Start();
+			Services.GetRequiredService<ISkillProvisioningService>().ProvisionAll();
 		}
 
 		// Wire toast click-to-activate before the window opens so early clicks are not missed (FR.16).
@@ -226,6 +227,7 @@ public partial class App : Application
 
 	private static void ConfigureServices(IServiceCollection services)
 	{
+		services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
 		services.AddSingleton<IAppSettingsService, AppSettingsService>();
 		services.AddSingleton<IDirectoryLabelService, DirectoryLabelService>();
 		services.AddSingleton<ISessionFileService, SessionFileService>();
@@ -245,6 +247,7 @@ public partial class App : Application
 		services.AddSingleton<IClaudeUsageService, ClaudeUsageService>();
 		services.AddSingleton<ITessynDaemonService, TessynDaemonService>();
 		services.AddSingleton<ITessynRunService, TessynRunService>();
+		services.AddSingleton<ISessionRegistry, SessionRegistry>();
 		services.AddSingleton<SessionTreeViewModel>();
 
 		// Agent orchestration singletons (FR.14, FR.15).
@@ -252,10 +255,29 @@ public partial class App : Application
 		services.AddSingleton<ISessionTurnService, SessionTurnService>();
 		services.AddSingleton<IAgentMcpServer, AgentMcpServer>();
 		services.AddSingleton<ISchedulerService, SchedulerService>();
+		services.AddSingleton<ISkillProvisioningService, SkillProvisioningService>();
 		services.AddSingleton<INotificationService, WindowsNotificationService>();
 		services.AddSingleton(sp => new Lazy<ISessionTurnService>(sp.GetRequiredService<ISessionTurnService>));
 		services.AddSingleton(sp => new Lazy<IAgentMcpServer>(sp.GetRequiredService<IAgentMcpServer>));
 		services.AddSingleton(sp => new Lazy<ISchedulerService>(sp.GetRequiredService<ISchedulerService>));
+
+		// UI/daemon boundary (Stage 4): the UI talks to the daemon-owned domain through IDaemonClient.
+		// In-process today; swapped for a TDCP wire adapter in Stage 5 with no ViewModel changes.
+		services.AddSingleton<IDaemonClient, InProcDaemonClient>();
+
+		// TDCP control surface (Stage 5a): co-hosted with AgentMcpServer on the /tdcp path.
+		// Token is generated once on first run and persisted so restarts keep the same value.
+		services.AddSingleton(sp =>
+		{
+			var appSettings = sp.GetRequiredService<IAppSettingsService>();
+			if (string.IsNullOrEmpty(appSettings.Settings.TdcpToken))
+			{
+				appSettings.Settings.TdcpToken = Guid.NewGuid().ToString("N");
+				appSettings.Save();
+			}
+
+			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), appSettings.Settings.TdcpToken);
+		});
 
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();
