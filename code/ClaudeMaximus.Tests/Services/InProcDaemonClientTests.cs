@@ -25,6 +25,59 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
     public string? SetRunningNodeId { get; private set; }
     public bool? SetRunningValue { get; private set; }
 
+    public bool LoadFromSettingsCalled { get; private set; }
+
+    public DirectoryNodeModel AddDirectoryResult { get; set; } = new() { Path = "/added" };
+    public string? LastAddDirectoryPath { get; private set; }
+
+    public bool TryDeleteDirectoryResult { get; set; }
+    public DirectoryNodeModel? LastTryDeleteDirectoryArg { get; private set; }
+
+    public GroupNodeModel AddGroupResult { get; set; } = new() { Name = "added-group" };
+    public DirectoryNodeModel? LastAddGroupParent { get; private set; }
+    public string? LastAddGroupName { get; private set; }
+
+    public GroupNodeModel AddGroupToGroupResult { get; set; } = new() { Name = "added-subgroup" };
+    public GroupNodeModel? LastAddGroupToGroupParent { get; private set; }
+    public string? LastAddGroupToGroupName { get; private set; }
+
+    public bool TryDeleteGroupResult { get; set; }
+    public (DirectoryNodeModel parent, GroupNodeModel group)? LastTryDeleteGroupArgs { get; private set; }
+
+    public bool TryDeleteGroupFromGroupResult { get; set; }
+    public (GroupNodeModel parent, GroupNodeModel group)? LastTryDeleteGroupFromGroupArgs { get; private set; }
+
+    public (GroupNodeModel group, string newName)? LastRenameGroupArgs { get; private set; }
+
+    public SessionNodeModel AddSessionResult { get; set; } = new() { NodeId = "added-session", Name = "Added", FileName = "added.txt" };
+    public (DirectoryNodeModel parent, string name)? LastAddSessionArgs { get; private set; }
+
+    public SessionNodeModel AddSessionToGroupResult { get; set; } = new() { NodeId = "added-session-group", Name = "AddedGroup", FileName = "added-group.txt" };
+    public (GroupNodeModel parent, string name)? LastAddSessionToGroupArgs { get; private set; }
+
+    public SessionNodeModel ImportSessionResult { get; set; } = new() { NodeId = "imported", Name = "Imported", FileName = "imported.txt" };
+    public (DirectoryNodeModel parent, string name, string fileName, string claudeSessionId)? LastImportSessionArgs { get; private set; }
+
+    public SessionNodeModel ImportSessionToGroupResult { get; set; } = new() { NodeId = "imported-group", Name = "ImportedGroup", FileName = "imported-group.txt" };
+    public (GroupNodeModel parent, string name, string fileName, string claudeSessionId)? LastImportSessionToGroupArgs { get; private set; }
+
+    public bool TryDeleteSessionResult { get; set; }
+    public (DirectoryNodeModel parent, SessionNodeModel session, bool forceDelete)? LastTryDeleteSessionArgs { get; private set; }
+
+    public bool TryDeleteSessionFromGroupResult { get; set; }
+    public (GroupNodeModel parent, SessionNodeModel session, bool forceDelete)? LastTryDeleteSessionFromGroupArgs { get; private set; }
+
+    public (SessionNodeModel session, string newName)? LastRenameSessionArgs { get; private set; }
+
+    public DirectoryNodeModel? RemoveSessionFromModelResult { get; set; }
+    public SessionNodeModel? LastRemoveSessionFromModelArg { get; private set; }
+
+    public (DirectoryNodeModel parent, SessionNodeModel session, int index)? LastInsertSessionIntoDirectoryArgs { get; private set; }
+    public (GroupNodeModel parent, SessionNodeModel session, int index)? LastInsertSessionIntoGroupArgs { get; private set; }
+
+    public List<SessionSummaryModel> BuildAgentSessionSummariesResult { get; set; } = new();
+    public IReadOnlySet<string> CollectAllClaudeSessionIdsResult { get; set; } = new HashSet<string>();
+
     public void RaiseTreeChanged(TreeChangedEventArgs e) => TreeChanged.Invoke(this, e);
 
     public SessionNodeModel? FindModelByNodeId(string nodeId) => FindByNodeIdResult;
@@ -32,27 +85,93 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
     public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session) => LocationResult;
     public bool IsSessionRunning(string nodeId) => IsRunningResult;
     public void SetSessionRunning(string nodeId, bool isRunning) { SetRunningNodeId = nodeId; SetRunningValue = isRunning; }
-    public void LoadFromSettings() { }
-    public DirectoryNodeModel AddDirectory(string path) => throw new NotImplementedException();
-    public bool TryDeleteDirectory(DirectoryNodeModel directory) => false;
-    public GroupNodeModel AddGroup(DirectoryNodeModel parent, string name) => throw new NotImplementedException();
-    public GroupNodeModel AddGroupToGroup(GroupNodeModel parent, string name) => throw new NotImplementedException();
-    public bool TryDeleteGroup(DirectoryNodeModel parent, GroupNodeModel group) => false;
-    public bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group) => false;
-    public void RenameGroup(GroupNodeModel group, string newName) { }
-    public SessionNodeModel AddSession(DirectoryNodeModel parent, string name) => throw new NotImplementedException();
-    public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name) => throw new NotImplementedException();
-    public SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId) => throw new NotImplementedException();
-    public SessionNodeModel ImportSessionToGroup(GroupNodeModel parent, string name, string fileName, string claudeSessionId) => throw new NotImplementedException();
-    public bool TryDeleteSession(DirectoryNodeModel parent, SessionNodeModel session, bool forceDelete = false) => false;
-    public bool TryDeleteSessionFromGroup(GroupNodeModel parent, SessionNodeModel session, bool forceDelete = false) => false;
-    public void RenameSession(SessionNodeModel session, string newName) { }
-    public DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session) => null;
-    public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index) { }
-    public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) { }
+
+    public void LoadFromSettings() => LoadFromSettingsCalled = true;
+
+    public DirectoryNodeModel AddDirectory(string path) { LastAddDirectoryPath = path; return AddDirectoryResult; }
+    public bool TryDeleteDirectory(DirectoryNodeModel directory) { LastTryDeleteDirectoryArg = directory; return TryDeleteDirectoryResult; }
+
+    public GroupNodeModel AddGroup(DirectoryNodeModel parent, string name)
+    {
+        LastAddGroupParent = parent;
+        LastAddGroupName = name;
+        return AddGroupResult;
+    }
+
+    public GroupNodeModel AddGroupToGroup(GroupNodeModel parent, string name)
+    {
+        LastAddGroupToGroupParent = parent;
+        LastAddGroupToGroupName = name;
+        return AddGroupToGroupResult;
+    }
+
+    public bool TryDeleteGroup(DirectoryNodeModel parent, GroupNodeModel group)
+    {
+        LastTryDeleteGroupArgs = (parent, group);
+        return TryDeleteGroupResult;
+    }
+
+    public bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group)
+    {
+        LastTryDeleteGroupFromGroupArgs = (parent, group);
+        return TryDeleteGroupFromGroupResult;
+    }
+
+    public void RenameGroup(GroupNodeModel group, string newName) => LastRenameGroupArgs = (group, newName);
+
+    public SessionNodeModel AddSession(DirectoryNodeModel parent, string name)
+    {
+        LastAddSessionArgs = (parent, name);
+        return AddSessionResult;
+    }
+
+    public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name)
+    {
+        LastAddSessionToGroupArgs = (parent, name);
+        return AddSessionToGroupResult;
+    }
+
+    public SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId)
+    {
+        LastImportSessionArgs = (parent, name, fileName, claudeSessionId);
+        return ImportSessionResult;
+    }
+
+    public SessionNodeModel ImportSessionToGroup(GroupNodeModel parent, string name, string fileName, string claudeSessionId)
+    {
+        LastImportSessionToGroupArgs = (parent, name, fileName, claudeSessionId);
+        return ImportSessionToGroupResult;
+    }
+
+    public bool TryDeleteSession(DirectoryNodeModel parent, SessionNodeModel session, bool forceDelete = false)
+    {
+        LastTryDeleteSessionArgs = (parent, session, forceDelete);
+        return TryDeleteSessionResult;
+    }
+
+    public bool TryDeleteSessionFromGroup(GroupNodeModel parent, SessionNodeModel session, bool forceDelete = false)
+    {
+        LastTryDeleteSessionFromGroupArgs = (parent, session, forceDelete);
+        return TryDeleteSessionFromGroupResult;
+    }
+
+    public void RenameSession(SessionNodeModel session, string newName) => LastRenameSessionArgs = (session, newName);
+
+    public DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session)
+    {
+        LastRemoveSessionFromModelArg = session;
+        return RemoveSessionFromModelResult;
+    }
+
+    public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index)
+        => LastInsertSessionIntoDirectoryArgs = (parent, session, index);
+
+    public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index)
+        => LastInsertSessionIntoGroupArgs = (parent, session, index);
+
     public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group, int orchestrationDepth = 0, string? supervisorNodeId = null) => null;
-    public List<SessionSummaryModel> BuildAgentSessionSummaries() => new();
-    public IReadOnlySet<string> CollectAllClaudeSessionIds() => new HashSet<string>();
+    public List<SessionSummaryModel> BuildAgentSessionSummaries() => BuildAgentSessionSummariesResult;
+    public IReadOnlySet<string> CollectAllClaudeSessionIds() => CollectAllClaudeSessionIdsResult;
 }
 
 internal sealed class InProcFakeTurnService : ISessionTurnService
@@ -456,5 +575,285 @@ public sealed class InProcDaemonClientTests
         _client.ScheduleChanged += (_, _) => count++;
 
         Assert.Equal(0, count);
+    }
+
+    // ── Initialization ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void LoadFromSettings_DelegatesToRegistry()
+    {
+        _client.LoadFromSettings();
+
+        Assert.True(_registry.LoadFromSettingsCalled);
+    }
+
+    // ── CRUD – Directory ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void AddDirectory_DelegatesToRegistry()
+    {
+        var expected = new DirectoryNodeModel { Path = "/new-dir" };
+        _registry.AddDirectoryResult = expected;
+
+        var result = _client.AddDirectory("/new-dir");
+
+        Assert.Equal("/new-dir", _registry.LastAddDirectoryPath);
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public void TryDeleteDirectory_DelegatesToRegistry()
+    {
+        var dir = new DirectoryNodeModel { Path = "/dir" };
+        _registry.TryDeleteDirectoryResult = true;
+
+        var result = _client.TryDeleteDirectory(dir);
+
+        Assert.True(result);
+        Assert.Same(dir, _registry.LastTryDeleteDirectoryArg);
+    }
+
+    // ── CRUD – Group ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void AddGroup_DelegatesToRegistry()
+    {
+        var parent = new DirectoryNodeModel { Path = "/dir" };
+        var expected = new GroupNodeModel { Name = "MyGroup" };
+        _registry.AddGroupResult = expected;
+
+        var result = _client.AddGroup(parent, "MyGroup");
+
+        Assert.Same(parent, _registry.LastAddGroupParent);
+        Assert.Equal("MyGroup", _registry.LastAddGroupName);
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public void AddGroupToGroup_DelegatesToRegistry()
+    {
+        var parent = new GroupNodeModel { Name = "Parent" };
+        var expected = new GroupNodeModel { Name = "Child" };
+        _registry.AddGroupToGroupResult = expected;
+
+        var result = _client.AddGroupToGroup(parent, "Child");
+
+        Assert.Same(parent, _registry.LastAddGroupToGroupParent);
+        Assert.Equal("Child", _registry.LastAddGroupToGroupName);
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public void TryDeleteGroup_DelegatesToRegistry()
+    {
+        var parent = new DirectoryNodeModel { Path = "/dir" };
+        var group = new GroupNodeModel { Name = "Group" };
+        _registry.TryDeleteGroupResult = true;
+
+        var result = _client.TryDeleteGroup(parent, group);
+
+        Assert.True(result);
+        Assert.Equal((parent, group), _registry.LastTryDeleteGroupArgs);
+    }
+
+    [Fact]
+    public void TryDeleteGroupFromGroup_DelegatesToRegistry()
+    {
+        var parent = new GroupNodeModel { Name = "Parent" };
+        var group = new GroupNodeModel { Name = "Child" };
+        _registry.TryDeleteGroupFromGroupResult = true;
+
+        var result = _client.TryDeleteGroupFromGroup(parent, group);
+
+        Assert.True(result);
+        Assert.Equal((parent, group), _registry.LastTryDeleteGroupFromGroupArgs);
+    }
+
+    [Fact]
+    public void RenameGroup_DelegatesToRegistry()
+    {
+        var group = new GroupNodeModel { Name = "Old" };
+
+        _client.RenameGroup(group, "New");
+
+        Assert.Equal((group, "New"), _registry.LastRenameGroupArgs);
+    }
+
+    // ── CRUD – Session ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void AddSession_DelegatesToRegistry()
+    {
+        var parent = new DirectoryNodeModel { Path = "/dir" };
+        var expected = MakeNode("added");
+        _registry.AddSessionResult = expected;
+
+        var result = _client.AddSession(parent, "Added");
+
+        Assert.Equal((parent, "Added"), _registry.LastAddSessionArgs);
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public void AddSessionToGroup_DelegatesToRegistry()
+    {
+        var parent = new GroupNodeModel { Name = "Group" };
+        var expected = MakeNode("added-group");
+        _registry.AddSessionToGroupResult = expected;
+
+        var result = _client.AddSessionToGroup(parent, "AddedGroup");
+
+        Assert.Equal((parent, "AddedGroup"), _registry.LastAddSessionToGroupArgs);
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public void ImportSession_DelegatesToRegistry()
+    {
+        var parent = new DirectoryNodeModel { Path = "/dir" };
+        var expected = MakeNode("imported");
+        _registry.ImportSessionResult = expected;
+
+        var result = _client.ImportSession(parent, "Imported", "imported.txt", "claude-sess-1");
+
+        Assert.Equal((parent, "Imported", "imported.txt", "claude-sess-1"), _registry.LastImportSessionArgs);
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public void ImportSessionToGroup_DelegatesToRegistry()
+    {
+        var parent = new GroupNodeModel { Name = "Group" };
+        var expected = MakeNode("imported-group");
+        _registry.ImportSessionToGroupResult = expected;
+
+        var result = _client.ImportSessionToGroup(parent, "ImportedGroup", "imported-group.txt", "claude-sess-2");
+
+        Assert.Equal((parent, "ImportedGroup", "imported-group.txt", "claude-sess-2"), _registry.LastImportSessionToGroupArgs);
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public void TryDeleteSession_DelegatesToRegistry_WithDefaultForceDelete()
+    {
+        var parent = new DirectoryNodeModel { Path = "/dir" };
+        var session = MakeNode();
+        _registry.TryDeleteSessionResult = true;
+
+        var result = _client.TryDeleteSession(parent, session);
+
+        Assert.True(result);
+        Assert.Equal((parent, session, false), _registry.LastTryDeleteSessionArgs);
+    }
+
+    [Fact]
+    public void TryDeleteSession_DelegatesToRegistry_WithForceDeleteTrue()
+    {
+        var parent = new DirectoryNodeModel { Path = "/dir" };
+        var session = MakeNode();
+        _registry.TryDeleteSessionResult = false;
+
+        var result = _client.TryDeleteSession(parent, session, forceDelete: true);
+
+        Assert.False(result);
+        Assert.Equal((parent, session, true), _registry.LastTryDeleteSessionArgs);
+    }
+
+    [Fact]
+    public void TryDeleteSessionFromGroup_DelegatesToRegistry()
+    {
+        var parent = new GroupNodeModel { Name = "Group" };
+        var session = MakeNode();
+        _registry.TryDeleteSessionFromGroupResult = true;
+
+        var result = _client.TryDeleteSessionFromGroup(parent, session, forceDelete: true);
+
+        Assert.True(result);
+        Assert.Equal((parent, session, true), _registry.LastTryDeleteSessionFromGroupArgs);
+    }
+
+    [Fact]
+    public void RenameSession_DelegatesToRegistry()
+    {
+        var session = MakeNode();
+
+        _client.RenameSession(session, "Renamed");
+
+        Assert.Equal((session, "Renamed"), _registry.LastRenameSessionArgs);
+    }
+
+    // ── Model-level move ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void RemoveSessionFromModel_DelegatesToRegistry()
+    {
+        var session = MakeNode();
+        var expectedParent = new DirectoryNodeModel { Path = "/dir" };
+        _registry.RemoveSessionFromModelResult = expectedParent;
+
+        var result = _client.RemoveSessionFromModel(session);
+
+        Assert.Same(session, _registry.LastRemoveSessionFromModelArg);
+        Assert.Same(expectedParent, result);
+    }
+
+    [Fact]
+    public void RemoveSessionFromModel_ReturnsNull_WhenNotFound()
+    {
+        var session = MakeNode();
+        _registry.RemoveSessionFromModelResult = null;
+
+        var result = _client.RemoveSessionFromModel(session);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void InsertSessionIntoDirectory_DelegatesToRegistry()
+    {
+        var parent = new DirectoryNodeModel { Path = "/dir" };
+        var session = MakeNode();
+
+        _client.InsertSessionIntoDirectory(parent, session, 2);
+
+        Assert.Equal((parent, session, 2), _registry.LastInsertSessionIntoDirectoryArgs);
+    }
+
+    [Fact]
+    public void InsertSessionIntoGroup_DelegatesToRegistry()
+    {
+        var parent = new GroupNodeModel { Name = "Group" };
+        var session = MakeNode();
+
+        _client.InsertSessionIntoGroup(parent, session, 3);
+
+        Assert.Equal((parent, session, 3), _registry.LastInsertSessionIntoGroupArgs);
+    }
+
+    // ── Orchestration helpers ────────────────────────────────────────────────────
+
+    [Fact]
+    public void BuildAgentSessionSummaries_DelegatesToRegistry()
+    {
+        var expected = new List<SessionSummaryModel>
+        {
+            new("node-1", "Test", "Dir", "/work", true, true, "hello"),
+        };
+        _registry.BuildAgentSessionSummariesResult = expected;
+
+        var result = _client.BuildAgentSessionSummaries();
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public void CollectAllClaudeSessionIds_DelegatesToRegistry()
+    {
+        var expected = new HashSet<string> { "claude-sess-1", "claude-sess-2" };
+        _registry.CollectAllClaudeSessionIdsResult = expected;
+
+        var result = _client.CollectAllClaudeSessionIds();
+
+        Assert.Same(expected, result);
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClaudeMaximus.Models;
+using ClaudeMaximus.Models.Agent;
 
 namespace ClaudeMaximus.Services;
 
@@ -95,4 +96,62 @@ public sealed class InProcDaemonClient : IDaemonClient
 	public bool SessionFileExists(string fileName) => _fileService.SessionFileExists(fileName);
 
 	public string GetSessionFilePath(string fileName) => _fileService.GetFullPath(fileName);
+
+	// ── Initialization ───────────────────────────────────────────────────────────
+
+	public void LoadFromSettings() => _registry.LoadFromSettings();
+
+	// ── CRUD – Directory ─────────────────────────────────────────────────────────
+
+	public DirectoryNodeModel AddDirectory(string path) => _registry.AddDirectory(path);
+
+	public bool TryDeleteDirectory(DirectoryNodeModel directory) => _registry.TryDeleteDirectory(directory);
+
+	// ── CRUD – Group ─────────────────────────────────────────────────────────────
+
+	public GroupNodeModel AddGroup(DirectoryNodeModel parent, string name) => _registry.AddGroup(parent, name);
+
+	public GroupNodeModel AddGroupToGroup(GroupNodeModel parent, string name) => _registry.AddGroupToGroup(parent, name);
+
+	public bool TryDeleteGroup(DirectoryNodeModel parent, GroupNodeModel group) => _registry.TryDeleteGroup(parent, group);
+
+	public bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group) => _registry.TryDeleteGroupFromGroup(parent, group);
+
+	public void RenameGroup(GroupNodeModel group, string newName) => _registry.RenameGroup(group, newName);
+
+	// ── CRUD – Session ───────────────────────────────────────────────────────────
+
+	public SessionNodeModel AddSession(DirectoryNodeModel parent, string name) => _registry.AddSession(parent, name);
+
+	public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name) => _registry.AddSessionToGroup(parent, name);
+
+	public SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId)
+		=> _registry.ImportSession(parent, name, fileName, claudeSessionId);
+
+	public SessionNodeModel ImportSessionToGroup(GroupNodeModel parent, string name, string fileName, string claudeSessionId)
+		=> _registry.ImportSessionToGroup(parent, name, fileName, claudeSessionId);
+
+	public bool TryDeleteSession(DirectoryNodeModel parent, SessionNodeModel session, bool forceDelete = false)
+		=> _registry.TryDeleteSession(parent, session, forceDelete);
+
+	public bool TryDeleteSessionFromGroup(GroupNodeModel parent, SessionNodeModel session, bool forceDelete = false)
+		=> _registry.TryDeleteSessionFromGroup(parent, session, forceDelete);
+
+	public void RenameSession(SessionNodeModel session, string newName) => _registry.RenameSession(session, newName);
+
+	// ── Model-level move ─────────────────────────────────────────────────────────
+
+	public DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session) => _registry.RemoveSessionFromModel(session);
+
+	public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index)
+		=> _registry.InsertSessionIntoDirectory(parent, session, index);
+
+	public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index)
+		=> _registry.InsertSessionIntoGroup(parent, session, index);
+
+	// ── Orchestration helpers ────────────────────────────────────────────────────
+
+	public List<SessionSummaryModel> BuildAgentSessionSummaries() => _registry.BuildAgentSessionSummaries();
+
+	public IReadOnlySet<string> CollectAllClaudeSessionIds() => _registry.CollectAllClaudeSessionIds();
 }

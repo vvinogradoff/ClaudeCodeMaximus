@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClaudeMaximus.Models;
+using ClaudeMaximus.Models.Agent;
 
 namespace ClaudeMaximus.Services;
 
@@ -14,9 +15,11 @@ namespace ClaudeMaximus.Services;
 /// interface so that switching transport later touches no ViewModel.
 /// </summary>
 /// <remarks>
-/// First cut covers the daemon-owned operations the UI's core turn / tree / schedule / content
-/// flows require. Tree CRUD, model/effort/profile selection and usage fold in as their consumers
-/// migrate (Stages 6–7). See docs/refactoring/tdcp-spec.md for the wire-method mapping.
+/// Covers the daemon-owned operations the UI's core turn / tree-CRUD / schedule / content flows
+/// require. Tree CRUD was folded in during Stage 5b (it was a hard prerequisite for
+/// <c>SessionTreeViewModel</c> to depend on this interface at all). Model/effort/profile selection
+/// and usage still fold in as their consumers migrate (Stages 6–7). See
+/// docs/refactoring/tdcp-spec.md for the wire-method mapping.
 /// Created by Claude.
 /// </remarks>
 public interface IDaemonClient
@@ -90,4 +93,44 @@ public interface IDaemonClient
 
 	/// <summary>Returns the full filesystem path for a session file name.</summary>
 	string GetSessionFilePath(string fileName);
+
+	// ── Initialization (Stage 5b) ──────────────────────────────────────────────────
+
+	/// <summary>Backfills NodeId/AgentToken on any sessions missing them, then saves if dirty. Raises <see cref="TreeChanged"/> with <see cref="TreeChangeKind.Reloaded"/>.</summary>
+	void LoadFromSettings();
+
+	// ── CRUD – Directory (Stage 5b) ─────────────────────────────────────────────────
+
+	DirectoryNodeModel AddDirectory(string path);
+	bool TryDeleteDirectory(DirectoryNodeModel directory);
+
+	// ── CRUD – Group (Stage 5b) ──────────────────────────────────────────────────────
+
+	GroupNodeModel AddGroup(DirectoryNodeModel parent, string name);
+	GroupNodeModel AddGroupToGroup(GroupNodeModel parent, string name);
+	bool TryDeleteGroup(DirectoryNodeModel parent, GroupNodeModel group);
+	bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group);
+	void RenameGroup(GroupNodeModel group, string newName);
+
+	// ── CRUD – Session (Stage 5b) ────────────────────────────────────────────────────
+
+	SessionNodeModel AddSession(DirectoryNodeModel parent, string name);
+	SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name);
+	SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId);
+	SessionNodeModel ImportSessionToGroup(GroupNodeModel parent, string name, string fileName, string claudeSessionId);
+	bool TryDeleteSession(DirectoryNodeModel parent, SessionNodeModel session, bool forceDelete = false);
+	bool TryDeleteSessionFromGroup(GroupNodeModel parent, SessionNodeModel session, bool forceDelete = false);
+	void RenameSession(SessionNodeModel session, string newName);
+
+	// ── Model-level move (Stage 5b) ──────────────────────────────────────────────────
+
+	/// <summary>Removes the session from its current model container. Returns the parent directory (or null if not found).</summary>
+	DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session);
+	void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index);
+	void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index);
+
+	// ── Orchestration helpers (Stage 5b) ─────────────────────────────────────────────
+
+	List<SessionSummaryModel> BuildAgentSessionSummaries();
+	IReadOnlySet<string> CollectAllClaudeSessionIds();
 }

@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using ClaudeMaximus.Models;
+using ClaudeMaximus.Models.Agent;
 using ClaudeMaximus.Services;
 using Xunit;
 
@@ -164,6 +165,31 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
         LastGetPathFile = fileName;
         return GetFullPathResult;
     }
+
+    // ── Tree CRUD (Stage 5b) ───────────────────────────────────────────────────────
+    // Not exercised over the wire yet (WireDaemonClient throws before reaching the server);
+    // these only need to exist so the fake satisfies IDaemonClient.
+
+    public void LoadFromSettings() => throw new NotSupportedException("Fake does not implement LoadFromSettings.");
+    public DirectoryNodeModel AddDirectory(string path) => throw new NotSupportedException("Fake does not implement AddDirectory.");
+    public bool TryDeleteDirectory(DirectoryNodeModel directory) => throw new NotSupportedException("Fake does not implement TryDeleteDirectory.");
+    public GroupNodeModel AddGroup(DirectoryNodeModel parent, string name) => throw new NotSupportedException("Fake does not implement AddGroup.");
+    public GroupNodeModel AddGroupToGroup(GroupNodeModel parent, string name) => throw new NotSupportedException("Fake does not implement AddGroupToGroup.");
+    public bool TryDeleteGroup(DirectoryNodeModel parent, GroupNodeModel group) => throw new NotSupportedException("Fake does not implement TryDeleteGroup.");
+    public bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group) => throw new NotSupportedException("Fake does not implement TryDeleteGroupFromGroup.");
+    public void RenameGroup(GroupNodeModel group, string newName) => throw new NotSupportedException("Fake does not implement RenameGroup.");
+    public SessionNodeModel AddSession(DirectoryNodeModel parent, string name) => throw new NotSupportedException("Fake does not implement AddSession.");
+    public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name) => throw new NotSupportedException("Fake does not implement AddSessionToGroup.");
+    public SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId) => throw new NotSupportedException("Fake does not implement ImportSession.");
+    public SessionNodeModel ImportSessionToGroup(GroupNodeModel parent, string name, string fileName, string claudeSessionId) => throw new NotSupportedException("Fake does not implement ImportSessionToGroup.");
+    public bool TryDeleteSession(DirectoryNodeModel parent, SessionNodeModel session, bool forceDelete = false) => throw new NotSupportedException("Fake does not implement TryDeleteSession.");
+    public bool TryDeleteSessionFromGroup(GroupNodeModel parent, SessionNodeModel session, bool forceDelete = false) => throw new NotSupportedException("Fake does not implement TryDeleteSessionFromGroup.");
+    public void RenameSession(SessionNodeModel session, string newName) => throw new NotSupportedException("Fake does not implement RenameSession.");
+    public DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session) => throw new NotSupportedException("Fake does not implement RemoveSessionFromModel.");
+    public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index) => throw new NotSupportedException("Fake does not implement InsertSessionIntoDirectory.");
+    public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotSupportedException("Fake does not implement InsertSessionIntoGroup.");
+    public List<SessionSummaryModel> BuildAgentSessionSummaries() => throw new NotSupportedException("Fake does not implement BuildAgentSessionSummaries.");
+    public IReadOnlySet<string> CollectAllClaudeSessionIds() => throw new NotSupportedException("Fake does not implement CollectAllClaudeSessionIds.");
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────────
@@ -613,5 +639,149 @@ public sealed class WireDaemonClientTests : IDisposable
     {
         using var badClient = new WireDaemonClient(_serverBaseUrl, "wrong-token");
         Assert.Throws<TdcpCallException>(() => badClient.FindSessionByNodeId("any"));
+    }
+
+    // ── Tree CRUD (Stage 5b) — not wired over TDCP yet ────────────────────────────
+
+    [Fact]
+    public void LoadFromSettings_ThrowsNotSupportedException()
+    {
+        Assert.Throws<NotSupportedException>(() => _client.LoadFromSettings());
+    }
+
+    [Fact]
+    public void AddDirectory_ThrowsNotSupportedException()
+    {
+        Assert.Throws<NotSupportedException>(() => _client.AddDirectory("/any"));
+    }
+
+    [Fact]
+    public void TryDeleteDirectory_ThrowsNotSupportedException()
+    {
+        var dir = new DirectoryNodeModel { Path = "/any" };
+        Assert.Throws<NotSupportedException>(() => _client.TryDeleteDirectory(dir));
+    }
+
+    [Fact]
+    public void AddGroup_ThrowsNotSupportedException()
+    {
+        var parent = new DirectoryNodeModel { Path = "/any" };
+        Assert.Throws<NotSupportedException>(() => _client.AddGroup(parent, "name"));
+    }
+
+    [Fact]
+    public void AddGroupToGroup_ThrowsNotSupportedException()
+    {
+        var parent = new GroupNodeModel { Name = "parent" };
+        Assert.Throws<NotSupportedException>(() => _client.AddGroupToGroup(parent, "name"));
+    }
+
+    [Fact]
+    public void TryDeleteGroup_ThrowsNotSupportedException()
+    {
+        var parent = new DirectoryNodeModel { Path = "/any" };
+        var group  = new GroupNodeModel { Name = "group" };
+        Assert.Throws<NotSupportedException>(() => _client.TryDeleteGroup(parent, group));
+    }
+
+    [Fact]
+    public void TryDeleteGroupFromGroup_ThrowsNotSupportedException()
+    {
+        var parent = new GroupNodeModel { Name = "parent" };
+        var group  = new GroupNodeModel { Name = "group" };
+        Assert.Throws<NotSupportedException>(() => _client.TryDeleteGroupFromGroup(parent, group));
+    }
+
+    [Fact]
+    public void RenameGroup_ThrowsNotSupportedException()
+    {
+        var group = new GroupNodeModel { Name = "group" };
+        Assert.Throws<NotSupportedException>(() => _client.RenameGroup(group, "newName"));
+    }
+
+    [Fact]
+    public void AddSession_ThrowsNotSupportedException()
+    {
+        var parent = new DirectoryNodeModel { Path = "/any" };
+        Assert.Throws<NotSupportedException>(() => _client.AddSession(parent, "name"));
+    }
+
+    [Fact]
+    public void AddSessionToGroup_ThrowsNotSupportedException()
+    {
+        var parent = new GroupNodeModel { Name = "parent" };
+        Assert.Throws<NotSupportedException>(() => _client.AddSessionToGroup(parent, "name"));
+    }
+
+    [Fact]
+    public void ImportSession_ThrowsNotSupportedException()
+    {
+        var parent = new DirectoryNodeModel { Path = "/any" };
+        Assert.Throws<NotSupportedException>(() => _client.ImportSession(parent, "name", "file.txt", "claude-id"));
+    }
+
+    [Fact]
+    public void ImportSessionToGroup_ThrowsNotSupportedException()
+    {
+        var parent = new GroupNodeModel { Name = "parent" };
+        Assert.Throws<NotSupportedException>(() => _client.ImportSessionToGroup(parent, "name", "file.txt", "claude-id"));
+    }
+
+    [Fact]
+    public void TryDeleteSession_ThrowsNotSupportedException()
+    {
+        var parent  = new DirectoryNodeModel { Path = "/any" };
+        var session = MakeNode();
+        Assert.Throws<NotSupportedException>(() => _client.TryDeleteSession(parent, session));
+    }
+
+    [Fact]
+    public void TryDeleteSessionFromGroup_ThrowsNotSupportedException()
+    {
+        var parent  = new GroupNodeModel { Name = "parent" };
+        var session = MakeNode();
+        Assert.Throws<NotSupportedException>(() => _client.TryDeleteSessionFromGroup(parent, session));
+    }
+
+    [Fact]
+    public void RenameSession_ThrowsNotSupportedException()
+    {
+        var session = MakeNode();
+        Assert.Throws<NotSupportedException>(() => _client.RenameSession(session, "newName"));
+    }
+
+    [Fact]
+    public void RemoveSessionFromModel_ThrowsNotSupportedException()
+    {
+        var session = MakeNode();
+        Assert.Throws<NotSupportedException>(() => _client.RemoveSessionFromModel(session));
+    }
+
+    [Fact]
+    public void InsertSessionIntoDirectory_ThrowsNotSupportedException()
+    {
+        var parent  = new DirectoryNodeModel { Path = "/any" };
+        var session = MakeNode();
+        Assert.Throws<NotSupportedException>(() => _client.InsertSessionIntoDirectory(parent, session, 0));
+    }
+
+    [Fact]
+    public void InsertSessionIntoGroup_ThrowsNotSupportedException()
+    {
+        var parent  = new GroupNodeModel { Name = "parent" };
+        var session = MakeNode();
+        Assert.Throws<NotSupportedException>(() => _client.InsertSessionIntoGroup(parent, session, 0));
+    }
+
+    [Fact]
+    public void BuildAgentSessionSummaries_ThrowsNotSupportedException()
+    {
+        Assert.Throws<NotSupportedException>(() => _client.BuildAgentSessionSummaries());
+    }
+
+    [Fact]
+    public void CollectAllClaudeSessionIds_ThrowsNotSupportedException()
+    {
+        Assert.Throws<NotSupportedException>(() => _client.CollectAllClaudeSessionIds());
     }
 }

@@ -9,6 +9,7 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using ClaudeMaximus.Models;
+using ClaudeMaximus.Models.Agent;
 using Serilog;
 
 namespace ClaudeMaximus.Services;
@@ -24,6 +25,9 @@ namespace ClaudeMaximus.Services;
 /// daemon-side; the UI acquires it indirectly by calling <c>turn.run</c>.
 /// <b>Directories</b> are fetched on first access and cached until a <c>tree.changed</c>
 /// SSE notification invalidates the cache (see property documentation).
+/// <b>LoadFromSettings and the Stage 5b tree-CRUD members</b> also throw
+/// <see cref="NotSupportedException"/> — not yet wired over TDCP (see tdcp-spec.md §5); only
+/// <see cref="InProcDaemonClient"/> implements them for real today.
 /// Created by Claude.
 /// </remarks>
 public sealed class WireDaemonClient : IDaemonClient, IDisposable
@@ -239,6 +243,122 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 		var result = CallAsync<FilePathResult>("content.path", p).GetAwaiter().GetResult();
 		return result?.Path ?? string.Empty;
 	}
+
+	// ── Initialization ─────────────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Not supported over the wire — startup-only, called once in App.axaml.cs after
+	/// appSettings.Load(); wouldn't make sense for a remote client to call regardless.
+	/// </summary>
+	public void LoadFromSettings() =>
+		throw new NotSupportedException(
+			"LoadFromSettings is not available over the TDCP wire. " +
+			"It is a daemon-side startup operation only.");
+
+	// ── CRUD – Directory ─────────────────────────────────────────────────────────────
+
+	public DirectoryNodeModel AddDirectory(string path) =>
+		throw new NotSupportedException(
+			"AddDirectory is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public bool TryDeleteDirectory(DirectoryNodeModel directory) =>
+		throw new NotSupportedException(
+			"TryDeleteDirectory is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	// ── CRUD – Group ─────────────────────────────────────────────────────────────────
+
+	public GroupNodeModel AddGroup(DirectoryNodeModel parent, string name) =>
+		throw new NotSupportedException(
+			"AddGroup is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public GroupNodeModel AddGroupToGroup(GroupNodeModel parent, string name) =>
+		throw new NotSupportedException(
+			"AddGroupToGroup is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public bool TryDeleteGroup(DirectoryNodeModel parent, GroupNodeModel group) =>
+		throw new NotSupportedException(
+			"TryDeleteGroup is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group) =>
+		throw new NotSupportedException(
+			"TryDeleteGroupFromGroup is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public void RenameGroup(GroupNodeModel group, string newName) =>
+		throw new NotSupportedException(
+			"RenameGroup is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	// ── CRUD – Session ───────────────────────────────────────────────────────────────
+
+	public SessionNodeModel AddSession(DirectoryNodeModel parent, string name) =>
+		throw new NotSupportedException(
+			"AddSession is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name) =>
+		throw new NotSupportedException(
+			"AddSessionToGroup is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId) =>
+		throw new NotSupportedException(
+			"ImportSession is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public SessionNodeModel ImportSessionToGroup(GroupNodeModel parent, string name, string fileName, string claudeSessionId) =>
+		throw new NotSupportedException(
+			"ImportSessionToGroup is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public bool TryDeleteSession(DirectoryNodeModel parent, SessionNodeModel session, bool forceDelete = false) =>
+		throw new NotSupportedException(
+			"TryDeleteSession is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public bool TryDeleteSessionFromGroup(GroupNodeModel parent, SessionNodeModel session, bool forceDelete = false) =>
+		throw new NotSupportedException(
+			"TryDeleteSessionFromGroup is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public void RenameSession(SessionNodeModel session, string newName) =>
+		throw new NotSupportedException(
+			"RenameSession is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	// ── Model-level move ─────────────────────────────────────────────────────────────
+
+	public DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session) =>
+		throw new NotSupportedException(
+			"RemoveSessionFromModel is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index) =>
+		throw new NotSupportedException(
+			"InsertSessionIntoDirectory is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) =>
+		throw new NotSupportedException(
+			"InsertSessionIntoGroup is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	// ── Orchestration helpers ────────────────────────────────────────────────────────
+
+	public List<SessionSummaryModel> BuildAgentSessionSummaries() =>
+		throw new NotSupportedException(
+			"BuildAgentSessionSummaries is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	public IReadOnlySet<string> CollectAllClaudeSessionIds() =>
+		throw new NotSupportedException(
+			"CollectAllClaudeSessionIds is not available over the TDCP wire yet. " +
+			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
 
 	// ── SSE background loop ───────────────────────────────────────────────────────
 
