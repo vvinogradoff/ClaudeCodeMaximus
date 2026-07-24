@@ -1,12 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using ClaudeMaximus.Models;
@@ -16,6 +13,18 @@ using Serilog;
 
 namespace ClaudeMaximus.ViewModels;
 
+/// <summary>
+/// Coordinates a single session's UI surface, composing the focused collaborators that own each
+/// domain: <see cref="SessionContentViewModel"/> (message log, file/JSONL watching),
+/// <see cref="ModelSelectionController"/> (model/effort selection),
+/// <see cref="ProfileController"/> (profile selection and lifecycle),
+/// <see cref="TurnController"/> (sending, streaming, mid-run corrections, compaction), and
+/// <see cref="SessionPromptComposer"/> (instruction/context/compaction prompt text).
+/// Every property below that used to be implemented directly on this class is now a thin
+/// passthrough to one of these collaborators, forwarding their PropertyChanged notifications —
+/// this keeps every existing AXAML binding and external call site (MainWindowViewModel,
+/// SessionView.axaml.cs) working unchanged (Stage 7 decomposition of the former 2551-LOC class).
+/// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionViewModel : ViewModelBase, IDisposable
 {
@@ -23,60 +32,22 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private readonly SessionNodeViewModel _node;
 	private readonly ISessionFileService _fileService;
-	private readonly IClaudeProcessManager _processManager;
-	private readonly IAppSettingsService _appSettings;
 	private readonly IDraftService _draftService;
-	private readonly ICodeIndexService _codeIndexService;
-	private readonly IClaudeProfileService _profileService;
-	private readonly IClaudeSessionImportService _importService;
-	private readonly IClaudeModelService _modelService;
-	private readonly IAgentMcpServer _mcpServer;
+	private readonly IAppSettingsService _appSettings;
 	private readonly IDaemonClient _daemonClient;
 	private readonly DirectoryNodeModel? _directoryModel;
-	private readonly ITessynRunService? _runService;
-	private readonly ITessynDaemonService? _daemonService;
-	private IDisposable? _runEventSubscription;
-	private string? _activeRunId;
-	private bool _daemonPendingClear;
-	private bool _daemonPendingAutoCompact;
-	private CancellationTokenSource? _draftSaveCts;
-	private bool _pendingClear;
-	private string? _pendingModelLabel;       // UI thread only (first assistant VM)
-	private string? _pendingFileModelId;      // cross-thread; use Interlocked
-	private string? _pendingFileEffort;       // cross-thread; use Interlocked
+
+	private readonly SessionContentViewModel _content;
+	private readonly ModelSelectionController _models;
+	private readonly ProfileController _profiles;
+	private readonly TurnController _turn;
+
 	private string _name;
 	private string _inputText = string.Empty;
-	private bool _isBusy;
-	private bool _isMarkdownMode = true;
-	private bool _isClaudeSessionView;
-	private List<MessageEntryViewModel>? _maximusMessagesSnapshot;
-	private string _thinkingDuration = string.Empty;
-	private DispatcherTimer? _thinkingTimer;
-	private DateTimeOffset _thinkingStartedAt;
-	private int _busyCount;
-	private bool _needsContextRetry;
-	private readonly object _ctsLock = new();
-	private readonly List<CancellationTokenSource> _activeCts = new();
-	private bool _isNewBranch;
-	private bool _isAutoCompact;
-	private bool _midRunAutoCompactState;
 	private DispatcherTimer? _draftDebounceTimer;
 	private bool _isCommandBarVisible;
-	private int _selectedModelIndex;
-	private bool _isUpdatingModels;
-	private List<ClaudeModelInfo> _modelInfos = [];
-	private FileSystemWatcher? _fileWatcher;
-	private FileSystemWatcher? _jsonlWatcher;
-	private Timer? _fileChangeDebounceTimer;
-	private Timer? _jsonlChangeDebounceTimer;
-	private int _lastKnownEntryCount;
-	private int _selectedProfileIndex;
-	private int _selectedEffortIndex;
-	private bool _isProfileAuthInProgress;
-	private bool _hasAuthError;
 	private string _projectDirectory = string.Empty;
 	private string _treePath = string.Empty;
-	private bool _isNodeRunning;
 	private bool _hasActiveSchedule;
 	private string _scheduleTooltip = string.Empty;
 
@@ -132,29 +103,13 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
-	public bool IsBusy
-	{
-		get => _isBusy;
-		private set
-		{
-			this.RaiseAndSetIfChanged(ref _isBusy, value);
-			this.RaisePropertyChanged(nameof(CanStop));
-		}
-	}
+	public bool IsBusy => _turn.IsBusy;
 
 	/// <summary>True while the session's node has an orchestrated turn running (set by SessionTurnService).</summary>
-	public bool IsNodeRunning
-	{
-		get => _isNodeRunning;
-		private set
-		{
-			this.RaiseAndSetIfChanged(ref _isNodeRunning, value);
-			this.RaisePropertyChanged(nameof(CanStop));
-		}
-	}
+	public bool IsNodeRunning => _turn.IsNodeRunning;
 
 	/// <summary>True when the Stop button should be shown: a local send is in flight, or the node has an active orchestrated turn.</summary>
-	public bool CanStop => IsBusy || IsNodeRunning;
+	public bool CanStop => _turn.CanStop;
 
 	/// <summary>True when this session has at least one active schedule targeting its NodeId.</summary>
 	public bool HasActiveSchedule
@@ -173,33 +128,23 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>True when this session is being actively used in an external terminal.</summary>
 	public bool IsExternallyActive => _node.IsExternallyActive;
 
-	public string ThinkingDuration
-	{
-		get => _thinkingDuration;
-		private set => this.RaiseAndSetIfChanged(ref _thinkingDuration, value);
-	}
+	public string ThinkingDuration => _turn.ThinkingDuration;
 
 	public bool IsMarkdownMode
 	{
-		get => _isMarkdownMode;
-		set => this.RaiseAndSetIfChanged(ref _isMarkdownMode, value);
+		get => _content.IsMarkdownMode;
+		set => _content.IsMarkdownMode = value;
 	}
 
 	/// <summary>When true, displays messages from Claude CLI's JSONL session instead of the ClaudeMaximus .txt file.</summary>
 	public bool IsClaudeSessionView
 	{
-		get => _isClaudeSessionView;
-		set
-		{
-			if (_isClaudeSessionView == value) return;
-			this.RaiseAndSetIfChanged(ref _isClaudeSessionView, value);
-			SwapMessageSource(value);
-		}
+		get => _content.IsClaudeSessionView;
+		set => _content.IsClaudeSessionView = value;
 	}
 
 	/// <summary>True when the session has any linked Claude JSONL file(s) that can be viewed.</summary>
-	public bool HasClaudeSession => !string.IsNullOrEmpty(_node.Model.ClaudeSessionId)
-	                                || _node.Model.PriorClaudeSessionIds.Count > 0;
+	public bool HasClaudeSession => _content.HasClaudeSession;
 
 	/// <summary>
 	/// Per-session sticky tri-state toggle (FR.11.3): <c>true</c> = Commit, <c>false</c> =
@@ -207,78 +152,33 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// </summary>
 	public bool? IsAutoCommit
 	{
-		get => _node.Model.IsAutoCommit;
-		set
-		{
-			var oldValue = _node.Model.IsAutoCommit;
-			_node.Model.IsAutoCommit = value;
-			this.RaisePropertyChanged();
-			_appSettings.Save();
-			if (IsBusy && value != oldValue)
-				SendMidRunAutoCommitCorrection(value);
-		}
+		get => _turn.IsAutoCommit;
+		set => _turn.IsAutoCommit = value;
 	}
 
 	/// <summary>One-shot toggle (FR.11.4). Auto-resets after prompt sent.</summary>
 	public bool IsNewBranch
 	{
-		get => _isNewBranch;
-		set
-		{
-			var oldValue = _isNewBranch;
-			this.RaiseAndSetIfChanged(ref _isNewBranch, value);
-			if (IsBusy && value != oldValue)
-				SendMidRunToggleCorrection("NewBranch", value,
-					Constants.Instructions.MidRunNewBranchOn,
-					Constants.Instructions.MidRunNewBranchOff);
-		}
+		get => _turn.IsNewBranch;
+		set => _turn.IsNewBranch = value;
 	}
 
 	/// <summary>Per-session sticky toggle (FR.11.5). Persisted in appsettings.json.</summary>
 	public bool IsAutoDocument
 	{
-		get => _node.Model.IsAutoDocument;
-		set
-		{
-			var oldValue = _node.Model.IsAutoDocument;
-			_node.Model.IsAutoDocument = value;
-			this.RaisePropertyChanged();
-			_appSettings.Save();
-			if (IsBusy && value != oldValue)
-				SendMidRunToggleCorrection("AutoDocument", value,
-					Constants.Instructions.MidRunAutoDocumentOn,
-					Constants.Instructions.MidRunAutoDocumentOff);
-		}
+		get => _turn.IsAutoDocument;
+		set => _turn.IsAutoDocument = value;
 	}
 
 	/// <summary>One-shot toggle (FR.11.6). Auto-resets after compaction completes.</summary>
 	public bool IsAutoCompact
 	{
-		get => _isAutoCompact;
-		set
-		{
-			var oldValue = _isAutoCompact;
-			this.RaiseAndSetIfChanged(ref _isAutoCompact, value);
-			if (IsBusy && value != oldValue)
-			{
-				_midRunAutoCompactState = value;
-				var label = value ? "enabled" : "disabled";
-				var statusMsg = value
-					? Constants.Instructions.MidRunAutoCompactOn
-					: Constants.Instructions.MidRunAutoCompactOff;
-				Messages.Add(new MessageEntryViewModel
-				{
-					Role      = Constants.SessionFile.RoleSystem,
-					Content   = $"[AutoCompact was {label} for this run]",
-					Timestamp = DateTimeOffset.UtcNow,
-				});
-				_log.Information("Mid-run AutoCompact toggle: {State}", label);
-			}
-		}
+		get => _turn.IsAutoCompact;
+		set => _turn.IsAutoCompact = value;
 	}
 
 	/// <summary>True when the session has a live ClaudeSessionId that can be cleared.</summary>
-	public bool CanClear => _node.Model.ClaudeSessionId is not null;
+	public bool CanClear => _turn.CanClear;
 
 	public double AssistantFontSize
 	{
@@ -340,130 +240,55 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	}
 
 	/// <summary>Display names for the model selector (populated dynamically from IClaudeModelService).</summary>
-	public ObservableCollection<string> AvailableModels { get; } = [];
+	public ObservableCollection<string> AvailableModels => _models.AvailableModels;
 
 	/// <summary>Selected model index (0=Default, 1..N=model entries). Persisted per directory as model ID string (FR.12.4).</summary>
 	public int SelectedModelIndex
 	{
-		get => _selectedModelIndex;
-		set
-		{
-			if (_isUpdatingModels) return;
-			this.RaiseAndSetIfChanged(ref _selectedModelIndex, value);
-			var modelId = (value > 0 && value <= _modelInfos.Count)
-				? _modelInfos[value - 1].Id
-				: string.Empty;
-			if (_directoryModel != null)
-				_directoryModel.SelectedModelId = modelId;
-			_appSettings.Settings.SelectedModelId = modelId;
-			_appSettings.Save();
-		}
+		get => _models.SelectedModelIndex;
+		set => _models.SelectedModelIndex = value;
 	}
 
 	/// <summary>Returns the true model ID for --model, or null if Default is selected.</summary>
-	public string? SelectedModelId
-	{
-		get
-		{
-			if (_selectedModelIndex <= 0 || _selectedModelIndex > _modelInfos.Count)
-				return null;
-			return _modelInfos[_selectedModelIndex - 1].Id;
-		}
-	}
+	public string? SelectedModelId => _models.SelectedModelId;
 
 	/// <summary>
 	/// Returns the Ollama base URL when the selected model is a local Ollama model, or null for Anthropic models.
 	/// Used to set ANTHROPIC_BASE_URL env var on claude CLI spawns (FR.12.14).
 	/// </summary>
-	public string? SelectedLocalBaseUrl
-	{
-		get
-		{
-			if (_selectedModelIndex <= 0 || _selectedModelIndex > _modelInfos.Count)
-				return null;
-			return _modelInfos[_selectedModelIndex - 1].Provider == ModelProvider.Ollama
-				? _appSettings.Settings.OllamaBaseUrl
-				: null;
-		}
-	}
-
-	/// <summary>
-	/// True when the selected local model does not support tool/function calling.
-	/// Causes --tools "" to be appended so the CLI doesn't send tool definitions to the model.
-	/// </summary>
-	private bool SelectedModelDisablesTools =>
-		_selectedModelIndex > 0 && _selectedModelIndex <= _modelInfos.Count
-		&& !_modelInfos[_selectedModelIndex - 1].SupportsTools;
+	public string? SelectedLocalBaseUrl => _models.SelectedLocalBaseUrl;
 
 	/// <summary>Display names for the effort selector.</summary>
-	public static string[] AvailableEfforts { get; } = ["Default", "Max", "High", "Medium", "Low"];
-
-	/// <summary>Effort values passed to --effort flag. Empty string means no flag.</summary>
-	private static readonly string[] EffortValues = ["", "max", "high", "medium", "low"];
+	public static string[] AvailableEfforts => ModelSelectionController.AvailableEfforts;
 
 	/// <summary>Selected effort index. 0=Default. Persisted per directory.</summary>
 	public int SelectedEffortIndex
 	{
-		get => _selectedEffortIndex;
-		set
-		{
-			this.RaiseAndSetIfChanged(ref _selectedEffortIndex, value);
-			if (_directoryModel != null)
-				_directoryModel.SelectedEffortIndex = value;
-			_appSettings.Save();
-		}
+		get => _models.SelectedEffortIndex;
+		set => _models.SelectedEffortIndex = value;
 	}
 
 	/// <summary>Returns the effort value for --effort flag, or null if Default is selected.</summary>
-	public string? SelectedEffort =>
-		_selectedEffortIndex > 0 && _selectedEffortIndex < EffortValues.Length
-			? EffortValues[_selectedEffortIndex]
-			: null;
+	public string? SelectedEffort => _models.SelectedEffort;
 
 	/// <summary>Entries for the profile selector (Default, stored profiles, "New..."). Rebuilt when profiles change.</summary>
-	public ObservableCollection<ProfileListItemModel> AvailableProfiles { get; } = [];
+	public ObservableCollection<ProfileListItemModel> AvailableProfiles => _profiles.AvailableProfiles;
 
 	/// <summary>Selected profile index. 0=Default, 1..N=stored profiles, last="New...". Persisted per directory (FR.12.8).</summary>
 	public int SelectedProfileIndex
 	{
-		get => _selectedProfileIndex;
-		set
-		{
-			// "New..." is always the last item
-			if (value == AvailableProfiles.Count - 1)
-			{
-				_ = HandleNewProfileAsync();
-				// Revert selection to previous value (don't persist "New...")
-				this.RaisePropertyChanged();
-				return;
-			}
-
-			this.RaiseAndSetIfChanged(ref _selectedProfileIndex, value);
-			if (_directoryModel != null)
-				_directoryModel.SelectedProfileIndex = value;
-			_appSettings.Settings.SelectedProfileIndex = value;
-			_appSettings.Save();
-			HasAuthError = false;
-		}
+		get => _profiles.SelectedProfileIndex;
+		set => _profiles.SelectedProfileIndex = value;
 	}
 
 	/// <summary>Returns the CLAUDE_CONFIG_DIR path for the selected profile, or null if Default is selected.</summary>
-	public string? SelectedProfileConfigDir =>
-		_profileService.GetConfigDirForProfile(_selectedProfileIndex, _appSettings.Settings.Profiles);
+	public string? SelectedProfileConfigDir => _profiles.SelectedProfileConfigDir;
 
 	/// <summary>True when the last request failed with an "Invalid authentication credentials" error (FR.12.16). Drives Re-authenticate/Remove button visibility.</summary>
-	public bool HasAuthError
-	{
-		get => _hasAuthError;
-		private set
-		{
-			this.RaiseAndSetIfChanged(ref _hasAuthError, value);
-			this.RaisePropertyChanged(nameof(CanRemoveProfile));
-		}
-	}
+	public bool HasAuthError => _profiles.HasAuthError;
 
 	/// <summary>True when the Remove button should be shown: an auth error is active and a non-Default profile is selected (FR.12.18).</summary>
-	public bool CanRemoveProfile => HasAuthError && _selectedProfileIndex > 0;
+	public bool CanRemoveProfile => _profiles.CanRemoveProfile;
 
 	/// <summary>Persisted vertical scroll offset for the message area.</summary>
 	public double ScrollOffset
@@ -472,7 +297,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		set => _node.Model.ScrollOffset = value;
 	}
 
-	public ObservableCollection<MessageEntryViewModel> Messages { get; } = [];
+	public ObservableCollection<MessageEntryViewModel> Messages => _content.Messages;
 
 	public ReactiveCommand<Unit, Unit> SendCommand { get; }
 	public ReactiveCommand<Unit, Unit> ToggleMarkdownCommand { get; }
@@ -498,76 +323,50 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IClaudeSessionImportService importService,
 		IClaudeModelService modelService,
 		IAgentMcpServer mcpServer,
-		IDaemonClient daemonClient,
-		ITessynRunService? runService = null,
-		ITessynDaemonService? daemonService = null)
+		IDaemonClient daemonClient)
 	{
-		_node             = node;
-		_fileService      = fileService;
-		_processManager   = processManager;
-		_appSettings      = appSettings;
-		_draftService     = draftService;
-		_codeIndexService = codeIndexService;
-		_profileService   = profileService;
-		_importService    = importService;
-		_modelService     = modelService;
-		_mcpServer        = mcpServer;
-		_daemonClient     = daemonClient;
-		_runService       = runService;
-		_daemonService    = daemonService;
-		_name             = node.Name;
+		_node         = node;
+		_fileService  = fileService;
+		_draftService = draftService;
+		_appSettings  = appSettings;
+		_daemonClient = daemonClient;
+		_name         = node.Name;
 
 		// Find the parent DirectoryNodeModel for per-directory settings (FR.12.4, FR.12.8, FR.12.11)
 		_directoryModel = appSettings.Settings.Tree
 			.FirstOrDefault(d => string.Equals(d.Path, node.Model.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
 
-		// Populate model list from cache (instant; may update later via ModelsUpdated event)
-		_modelInfos = new List<ClaudeModelInfo>(modelService.GetCachedModels());
-		RebuildModelList();
-		var savedModelId = _directoryModel?.SelectedModelId ?? appSettings.Settings.SelectedModelId;
-		_selectedModelIndex = string.IsNullOrEmpty(savedModelId)
-			? 0
-			: _modelInfos.FindIndex(m => m.Id == savedModelId) is var idx && idx >= 0 ? idx + 1 : 0;
+		// TurnController isn't constructed until after SessionContentViewModel (it needs the
+		// content log to append to), but the content log needs to ask "is a turn in flight" to
+		// gate its file watchers. The lambda closes over this local, assigned once _turn exists.
+		TurnController? turn = null;
+		_content = new SessionContentViewModel(fileService, importService, node, () => turn?.IsBusy ?? false);
+		_models = new ModelSelectionController(modelService, appSettings, _directoryModel);
+		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
+		var composer = new SessionPromptComposer(fileService, appSettings, node);
+		_turn = new TurnController(node, fileService, draftService, processManager, appSettings, mcpServer, daemonClient,
+			_content, _models, _profiles, composer);
+		turn = _turn;
 
-		modelService.ModelsUpdated += OnModelsUpdated;
-		_selectedEffortIndex = Math.Clamp(
-			_directoryModel?.SelectedEffortIndex ?? 0,
-			0, EffortValues.Length - 1);
+		_content.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+		_models.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+		_profiles.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+		_turn.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+		_turn.InputCleared += () => InputText = string.Empty;
+
 		_isCommandBarVisible = _directoryModel?.IsCommandBarVisible ?? false;
-		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
-		OutputSearchVm    = new OutputSearchViewModel(Messages);
-
-		RebuildProfileList();
-		_selectedProfileIndex = Math.Clamp(
-			_directoryModel?.SelectedProfileIndex ?? appSettings.Settings.SelectedProfileIndex,
-			0, Math.Max(0, AvailableProfiles.Count - 2));
+		AutocompleteVm = new AutocompleteViewModel(codeIndexService);
+		OutputSearchVm = new OutputSearchViewModel(_content.Messages);
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
-		node.WhenAnyValue(x => x.IsRunning).Subscribe(running => IsNodeRunning = running);
 
-		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
+		SendCommand           = ReactiveCommand.Create(() => { _ = _turn.SendAsync(InputText); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
-
-		StopCommand           = ReactiveCommand.Create(() =>
-		{
-			if (IsBusy)
-			{
-				List<CancellationTokenSource> snapshot;
-				lock (_ctsLock) snapshot = [.._activeCts];
-				foreach (var c in snapshot) c.Cancel();
-				_log.Information("Stop requested for session {FileName}", _node.FileName);
-			}
-			else if (IsNodeRunning)
-			{
-				_daemonClient.CancelTurn(_node.Model.NodeId);
-				_log.Information("Stop requested for orchestrated turn on node {NodeId}", _node.Model.NodeId);
-			}
-		});
-
+		StopCommand           = ReactiveCommand.Create(_turn.Stop);
 		CancelScheduleCommand = ReactiveCommand.Create(() => CancelScheduleRequested?.Invoke());
-		ReauthenticateCommand = ReactiveCommand.Create(() => { _ = HandleReauthenticateAsync(); });
-		RemoveProfileCommand  = ReactiveCommand.Create(HandleRemoveProfile);
+		ReauthenticateCommand = ReactiveCommand.Create(() => { _ = _profiles.HandleReauthenticateAsync(); });
+		RemoveProfileCommand  = ReactiveCommand.Create(_profiles.HandleRemoveProfile);
 
 		_daemonClient.ScheduleChanged += OnScheduleChanged;
 		RefreshScheduleState();
@@ -576,8 +375,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
 			_ = codeIndexService.GetOrCreateIndexAsync(WorkingDirectory);
 
-		_log.Debug("SessionViewModel created: UseDaemon={UseDaemon}, ExternalId={ExternalId}",
-			UseDaemon, _node.ExternalId);
+		_log.Debug("SessionViewModel created: ExternalId={ExternalId}", _node.ExternalId);
 	}
 
 	private void OnScheduleChanged(object? sender, EventArgs e) =>
@@ -632,15 +430,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	public void LoadFromFile()
 	{
-		var entries = _fileService.ReadEntries(_node.FileName);
-		foreach (var entry in entries)
-		{
-			if (entry.Role != Constants.SessionFile.RoleCompaction
-			    && string.IsNullOrWhiteSpace(entry.Content))
-				continue;
-
-			Messages.Add(EntryToViewModel(entry));
-		}
+		_content.LoadMessagesFromFile();
 
 		var draft = _draftService.LoadDraft(_node.FileName);
 		if (draft is not null)
@@ -650,1117 +440,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			if (_node.HasDraftText)
 				_node.LastDraftEditTimestamp = _draftService.GetDraftTimestamp(_node.FileName);
 		}
-
-		// Initialize JSONL entry count for the watcher. Must reflect the JSONL's current
-		// state, not the .txt file's, because the JSONL typically has more entries (tool_use, etc.)
-		// and RefreshFromJsonl compares against this to find only truly new entries.
-		_lastKnownEntryCount = InitializeJsonlEntryCount();
-		StartFileWatcher();
 	}
-
-	/// <summary>
-	/// Loads session content from the Tessyn daemon instead of local .txt files.
-	/// Used when UseTessynDaemon is enabled.
-	/// </summary>
-	public async System.Threading.Tasks.Task LoadFromDaemonAsync()
-	{
-		if (_daemonService == null || _node.ExternalId == null) return;
-
-		try
-		{
-			var result = await _daemonService.SessionsGetAsync(_node.ExternalId);
-			foreach (var msg in result.Messages)
-			{
-				Messages.Add(new MessageEntryViewModel
-				{
-					Role      = msg.Role.ToUpperInvariant(),
-					Content   = msg.Content,
-					Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(msg.Timestamp),
-				});
-			}
-
-			// Load draft from daemon. The daemon doesn't report when the draft was last edited,
-			// so merely loading a pre-existing draft must not fabricate a "just edited" timestamp —
-			// only an actual edit (via the InputText setter) should bump recency.
-			var draft = await _daemonService.DraftGetAsync(_node.ExternalId);
-			if (draft is not null)
-			{
-				_inputText = draft;
-				_node.HasDraftText = !string.IsNullOrWhiteSpace(draft);
-			}
-		}
-		catch (TessynRpcException ex) when (ex.Code == Constants.Tessyn.ErrorSessionNotFound)
-		{
-			_log.Warning("Session {ExternalId} not found in daemon", _node.ExternalId);
-		}
-		catch (Exception ex)
-		{
-			_log.Error(ex, "Failed to load session from daemon");
-		}
-	}
-
-	/// <summary>
-	/// Sends a message via the Tessyn daemon instead of spawning a local claude process.
-	/// Used when UseTessynDaemon is enabled.
-	/// </summary>
-	private async System.Threading.Tasks.Task SendViaDaemonAsync()
-	{
-		if (_runService == null) return;
-
-		var message = InputText.Trim();
-		if (string.IsNullOrEmpty(message)) return;
-
-		// For cross-project imported sessions, use the original project path for resume to work
-		var projectPath = _node.Model.OriginalProjectPath ?? _node.Model.WorkingDirectory;
-
-		_log.Debug("SendViaDaemonAsync: ProjectPath={Dir}, ExternalId={Id}", projectPath, _node.ExternalId);
-
-		InputText = string.Empty;
-
-		// Build augmented message with hidden instructions (same as legacy path)
-		var instructionBlock = BuildInstructionBlock(_isNewBranch, _node.ExternalId == null);
-		var augmentedMessage = message + instructionBlock;
-
-		// Capture and reset one-shot toggles
-		_daemonPendingClear = _pendingClear;
-		_daemonPendingAutoCompact = _isAutoCompact;
-		if (_isNewBranch) IsNewBranch = false;
-		_pendingClear = false;
-
-		_busyCount++;
-		IsBusy = true;
-		_node.IsRunning = true;
-
-		if (_thinkingTimer == null)
-		{
-			_thinkingStartedAt = DateTimeOffset.UtcNow;
-			ThinkingDuration = "0:00";
-			_thinkingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-			_thinkingTimer.Tick += OnThinkingTimerTick;
-			_thinkingTimer.Start();
-		}
-
-		var now = DateTimeOffset.UtcNow;
-		var daemonProfileName = _selectedProfileIndex >= 0 && _selectedProfileIndex < AvailableProfiles.Count
-			? AvailableProfiles[_selectedProfileIndex].DisplayName
-			: null;
-		Messages.Add(new MessageEntryViewModel
-		{
-			Role        = Constants.SessionFile.RoleUser,
-			Content     = message,
-			Timestamp   = now,
-			ProfileName = daemonProfileName,
-		});
-		_pendingModelLabel = BuildModelLabel();
-		Interlocked.Exchange(ref _pendingFileModelId, SelectedModelId ?? "default");
-		Interlocked.Exchange(ref _pendingFileEffort,  SelectedEffort  ?? "default");
-		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-		_node.LastPromptTimestamp = now;
-		_node.ProfileName = daemonProfileName;
-
-		Messages.Add(new MessageEntryViewModel
-		{
-			Role       = Constants.SessionFile.RoleSystem,
-			Content    = "Claude is thinking...",
-			Timestamp  = DateTimeOffset.UtcNow,
-			IsProgress = true,
-		});
-
-		try
-		{
-			// Subscribe to ALL run events before sending, then filter by runId once known.
-			// This prevents missing early events (run.system, initial deltas) that arrive
-			// before run.send returns the runId.
-			var pendingEvents = new List<TessynRunEvent>();
-			_runEventSubscription?.Dispose();
-			_runEventSubscription = _runService.RunEvents
-				.Subscribe(evt =>
-				{
-					if (_activeRunId != null && evt.RunId == _activeRunId)
-						HandleRunEvent(evt);
-					else if (_activeRunId == null)
-						pendingEvents.Add(evt); // Buffer until runId is known
-				});
-
-			var runId = await _runService.SendAsync(
-				projectPath,
-				augmentedMessage,
-				_node.ExternalId,
-				SelectedModelId,
-				_appSettings.Settings.DaemonPermissionMode);
-
-			_activeRunId = runId;
-
-			// Replay any buffered events for this run
-			foreach (var buffered in pendingEvents)
-			{
-				if (buffered.RunId == runId)
-					HandleRunEvent(buffered);
-			}
-			pendingEvents.Clear();
-
-			// Narrow subscription to only this run now that we have the runId
-			_runEventSubscription?.Dispose();
-			_runEventSubscription = _runService.RunEvents
-				.Where(e => e.RunId == runId)
-				.Subscribe(HandleRunEvent);
-		}
-		catch (Exception ex)
-		{
-			_log.Error(ex, "Failed to send message via daemon");
-			Dispatcher.UIThread.Post(() =>
-			{
-				for (var i = Messages.Count - 1; i >= 0; i--)
-					if (Messages[i].IsProgress) Messages.RemoveAt(i);
-
-				Messages.Add(new MessageEntryViewModel
-				{
-					Role      = Constants.SessionFile.RoleSystem,
-					Content   = $"Error: {ex.Message}",
-					Timestamp = DateTimeOffset.UtcNow,
-				});
-			});
-
-			_busyCount = Math.Max(0, _busyCount - 1);
-			if (_busyCount == 0)
-			{
-				var t = _thinkingTimer;
-				_thinkingTimer = null;
-				t?.Stop();
-				ThinkingDuration = string.Empty;
-				IsBusy = false;
-				_node.IsRunning = false;
-			}
-		}
-	}
-
-	/// <summary>
-	/// Handles a single run event from the Tessyn daemon. Called on the background thread;
-	/// posts UI updates to the dispatcher.
-	/// </summary>
-	private void HandleRunEvent(TessynRunEvent evt)
-	{
-		switch (evt.Type)
-		{
-			case "started":
-				// Run is spawning — no UI action needed beyond what we already show
-				break;
-
-			case "system":
-				// Capture ExternalId for new sessions
-				if (evt.ExternalId != null && _node.Model.ExternalId == null)
-				{
-					Dispatcher.UIThread.Post(() =>
-					{
-						_node.Model.ExternalId = evt.ExternalId;
-						_node.Model.ClaudeSessionId = evt.ExternalId;
-						_appSettings.Save();
-					});
-				}
-				break;
-
-			case "delta" when evt.Delta != null:
-				Dispatcher.UIThread.Post(() =>
-				{
-					// Remove "thinking" progress message and start accumulating assistant text
-					var last = Messages.Count > 0 ? Messages[^1] : null;
-					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-						Messages.RemoveAt(Messages.Count - 1);
-
-					// Append to existing assistant message or create new one
-					last = Messages.Count > 0 ? Messages[^1] : null;
-					if (last?.Role == Constants.SessionFile.RoleAssistant)
-						last.Content += evt.Delta;
-					else
-					{
-						var label = _pendingModelLabel;
-						_pendingModelLabel = null;
-						Messages.Add(new MessageEntryViewModel
-						{
-							Role       = Constants.SessionFile.RoleAssistant,
-							Content    = evt.Delta,
-							Timestamp  = DateTimeOffset.UtcNow,
-							ModelLabel = label,
-						});
-					}
-				});
-				break;
-
-			case "block_start" when evt.BlockType == "tool_use":
-				Dispatcher.UIThread.Post(() =>
-				{
-					Messages.Add(new MessageEntryViewModel
-					{
-						Role       = Constants.SessionFile.RoleSystem,
-						Content    = $"Using tool: {evt.ToolName ?? "unknown"}",
-						Timestamp  = DateTimeOffset.UtcNow,
-						IsProgress = true,
-					});
-				});
-				break;
-
-			case "block_start":
-				// Non-tool content blocks (text, thinking) — start new assistant message
-				if (evt.BlockType == "text")
-				{
-					Dispatcher.UIThread.Post(() =>
-					{
-						// Remove progress messages
-						var last = Messages.Count > 0 ? Messages[^1] : null;
-						if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-							Messages.RemoveAt(Messages.Count - 1);
-
-						Messages.Add(new MessageEntryViewModel
-						{
-							Role      = Constants.SessionFile.RoleAssistant,
-							Content   = string.Empty,
-							Timestamp = DateTimeOffset.UtcNow,
-						});
-					});
-				}
-				break;
-
-			case "block_stop":
-				// Content block ended — remove tool progress for tool_use blocks
-				Dispatcher.UIThread.Post(() =>
-				{
-					for (var i = Messages.Count - 1; i >= 0; i--)
-					{
-						if (Messages[i].IsProgress && Messages[i].Content.StartsWith("Using tool:"))
-						{
-							Messages.RemoveAt(i);
-							break;
-						}
-					}
-				});
-				break;
-
-			case "message":
-				// Full message received — used for reconnect catch-up, no action needed
-				// during normal streaming since we accumulate via deltas
-				break;
-
-			case "completed":
-				Dispatcher.UIThread.Post(() =>
-				{
-					// Remove any remaining progress messages
-					for (var i = Messages.Count - 1; i >= 0; i--)
-						if (Messages[i].IsProgress) Messages.RemoveAt(i);
-
-					_node.LastResponseTimestamp = DateTimeOffset.UtcNow;
-
-					if (evt.Usage != null)
-					{
-						Messages.Add(new MessageEntryViewModel
-						{
-							Role      = Constants.SessionFile.RoleSystem,
-							Content   = $"[{evt.Usage.InputTokens} in / {evt.Usage.OutputTokens} out, {evt.Usage.DurationMs / 1000.0:F1}s, ${evt.Usage.CostUsd:F4}]",
-							Timestamp = DateTimeOffset.UtcNow,
-						});
-					}
-				});
-				FinishDaemonRun(success: true);
-				break;
-
-			case "failed":
-				Dispatcher.UIThread.Post(() =>
-				{
-					for (var i = Messages.Count - 1; i >= 0; i--)
-						if (Messages[i].IsProgress) Messages.RemoveAt(i);
-
-					Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleSystem,
-						Content   = $"Error: {evt.Error ?? "Unknown error"}",
-						Timestamp = DateTimeOffset.UtcNow,
-					});
-				});
-				FinishDaemonRun(success: false);
-				break;
-
-			case "cancelled":
-				Dispatcher.UIThread.Post(() =>
-				{
-					for (var i = Messages.Count - 1; i >= 0; i--)
-						if (Messages[i].IsProgress) Messages.RemoveAt(i);
-
-					Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleSystem,
-						Content   = "[Run cancelled]",
-						Timestamp = DateTimeOffset.UtcNow,
-					});
-				});
-				FinishDaemonRun(success: false);
-				break;
-
-			case "rate_limit":
-				Dispatcher.UIThread.Post(() =>
-				{
-					var retryMs = evt.RetryAfterMs ?? 0;
-					var last = Messages.Count > 0 ? Messages[^1] : null;
-					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-						last.Content = $"Rate limited — retrying in {retryMs / 1000.0:F0}s...";
-					else
-						Messages.Add(new MessageEntryViewModel
-						{
-							Role       = Constants.SessionFile.RoleSystem,
-							Content    = $"Rate limited — retrying in {retryMs / 1000.0:F0}s...",
-							Timestamp  = DateTimeOffset.UtcNow,
-							IsProgress = true,
-						});
-				});
-				break;
-		}
-	}
-
-	private void FinishDaemonRun(bool success)
-	{
-		_activeRunId = null;
-		_runEventSubscription?.Dispose();
-		_runEventSubscription = null;
-
-		// Trigger daemon reindex so new messages are persisted in the index.
-		// Workaround: daemon's incremental reindex after run completion isn't reliable yet.
-		if (_daemonService != null)
-		{
-			_ = Task.Run(async () =>
-			{
-				try { await _daemonService.ReindexAsync(); }
-				catch (Exception ex) { _log.Debug(ex, "Post-run reindex failed"); }
-			});
-		}
-
-		// Post-run behavior: clear session and auto-compact (mirrors legacy path)
-		if (success)
-		{
-			if (_daemonPendingClear)
-			{
-				_daemonPendingClear = false;
-				Dispatcher.UIThread.Post(() =>
-				{
-					_node.Model.ClaudeSessionId = null;
-					_node.Model.ExternalId = null;
-					_appSettings.Save();
-					this.RaisePropertyChanged(nameof(CanClear));
-				});
-			}
-
-			if (_daemonPendingAutoCompact)
-			{
-				_daemonPendingAutoCompact = false;
-				// Auto-compact via daemon: send compaction prompt as a follow-up
-				if (_runService != null && _node.ExternalId != null)
-				{
-					_ = Task.Run(async () =>
-					{
-						try
-						{
-							await _runService.SendAsync(
-								_node.Model.WorkingDirectory,
-								BuildCompactionPrompt(),
-								_node.ExternalId,
-								permissionMode: _appSettings.Settings.DaemonPermissionMode);
-						}
-						catch (Exception ex)
-						{
-							_log.Warning(ex, "Auto-compact via daemon failed");
-						}
-					});
-				}
-				Dispatcher.UIThread.Post(() => IsAutoCompact = false);
-			}
-		}
-		else
-		{
-			_daemonPendingClear = false;
-			_daemonPendingAutoCompact = false;
-		}
-
-		Dispatcher.UIThread.Post(() =>
-		{
-			_busyCount = Math.Max(0, _busyCount - 1);
-			if (_busyCount == 0)
-			{
-				var t = _thinkingTimer;
-				_thinkingTimer = null;
-				t?.Stop();
-				ThinkingDuration = string.Empty;
-				IsBusy = false;
-				_node.IsRunning = false;
-			}
-		});
-	}
-
-	/// <summary>Whether this SessionViewModel should use Tessyn daemon for operations.</summary>
-	private bool UseDaemon => _appSettings.Settings.UseTessynDaemon && _runService != null && _daemonService != null;
 
 	public void Dispose()
 	{
-		_modelService.ModelsUpdated -= OnModelsUpdated;
 		_daemonClient.ScheduleChanged -= OnScheduleChanged;
-		lock (_ctsLock) { foreach (var c in _activeCts) c.Dispose(); _activeCts.Clear(); }
-		_runEventSubscription?.Dispose();
-		_fileWatcher?.Dispose();
-		_jsonlWatcher?.Dispose();
-		_fileChangeDebounceTimer?.Dispose();
-		_jsonlChangeDebounceTimer?.Dispose();
-	}
-
-	/// <summary>
-	/// Counts the current displayable entries in the JSONL file so the watcher
-	/// can detect only truly new entries. Falls back to Messages.Count if no JSONL exists.
-	/// </summary>
-	private int InitializeJsonlEntryCount()
-	{
-		var sessionId = _node.Model.ClaudeSessionId;
-		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(WorkingDirectory))
-			return Messages.Count;
-
-		try
-		{
-			var slug = Constants.ClaudeSessions.BuildProjectSlug(WorkingDirectory);
-			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-			var jsonlPath = Path.Combine(
-				userProfile,
-				Constants.ClaudeSessions.ClaudeHomeFolderName,
-				Constants.ClaudeSessions.ProjectsFolderName,
-				slug,
-				sessionId + Constants.ClaudeSessions.SessionFileExtension);
-
-			if (!File.Exists(jsonlPath))
-				return Messages.Count;
-
-			var entries = _importService.ParseJsonlSession(jsonlPath);
-			var count = 0;
-			foreach (var entry in entries)
-			{
-				if (entry.Role != Constants.SessionFile.RoleCompaction
-				    && !string.IsNullOrWhiteSpace(entry.Content))
-					count++;
-			}
-
-			_log.Debug("InitializeJsonlEntryCount: {Count} displayable entries in JSONL for session {SessionId}",
-				count, sessionId);
-			return count;
-		}
-		catch (Exception ex)
-		{
-			_log.Debug("InitializeJsonlEntryCount: error reading JSONL: {Error}", ex.Message);
-			return Messages.Count;
-		}
-	}
-
-	private void StartFileWatcher()
-	{
-		// Watch the Maximus .txt session file
-		try
-		{
-			var fullPath = _fileService.GetFullPath(_node.FileName);
-			var directory = Path.GetDirectoryName(fullPath);
-			var fileName = Path.GetFileName(fullPath);
-
-			if (directory != null && Directory.Exists(directory))
-			{
-				_fileWatcher = new FileSystemWatcher(directory, fileName)
-				{
-					NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-					EnableRaisingEvents = true,
-				};
-				_fileWatcher.Changed += OnSessionFileChanged;
-			}
-		}
-		catch (Exception ex)
-		{
-			_log.Warning(ex, "Failed to start .txt file watcher for session {FileName}", _node.FileName);
-		}
-
-		// Watch the Claude Code JSONL file (for sessions running externally)
-		StartJsonlWatcher();
-	}
-
-	private void StartJsonlWatcher()
-	{
-		var sessionId = _node.Model.ClaudeSessionId;
-		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(WorkingDirectory))
-			return;
-
-		try
-		{
-			var slug = Constants.ClaudeSessions.BuildProjectSlug(WorkingDirectory);
-			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-			var jsonlDir = Path.Combine(
-				userProfile,
-				Constants.ClaudeSessions.ClaudeHomeFolderName,
-				Constants.ClaudeSessions.ProjectsFolderName,
-				slug);
-
-			var jsonlFileName = sessionId + Constants.ClaudeSessions.SessionFileExtension;
-			var jsonlPath = Path.Combine(jsonlDir, jsonlFileName);
-
-			if (!Directory.Exists(jsonlDir))
-				return;
-
-			_log.Debug("Starting JSONL watcher for {Path}", jsonlPath);
-
-			_jsonlWatcher = new FileSystemWatcher(jsonlDir, jsonlFileName)
-			{
-				NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-				EnableRaisingEvents = true,
-			};
-			_jsonlWatcher.Changed += OnJsonlFileChanged;
-		}
-		catch (Exception ex)
-		{
-			_log.Warning(ex, "Failed to start JSONL watcher for session {SessionId}", sessionId);
-		}
-	}
-
-	private void OnSessionFileChanged(object sender, FileSystemEventArgs e)
-	{
-		// Ignore changes caused by our own writes (IsBusy covers all write paths)
-		if (IsBusy)
-			return;
-
-		_fileChangeDebounceTimer?.Dispose();
-		_fileChangeDebounceTimer = new Timer(
-			_ => RefreshFromFile(),
-			null,
-			500,
-			Timeout.Infinite);
-	}
-
-	private void OnJsonlFileChanged(object sender, FileSystemEventArgs e)
-	{
-		// Ignore changes when we're actively sending (our own process writes to the JSONL too)
-		if (IsBusy)
-			return;
-
-		// Quick check: read the last line to detect if Claude is actively working
-		DetectExternalActivity(e.FullPath);
-
-		_jsonlChangeDebounceTimer?.Dispose();
-		_jsonlChangeDebounceTimer = new Timer(
-			_ => RefreshFromJsonl(e.FullPath),
-			null,
-			1000,
-			Timeout.Infinite);
-	}
-
-	private void DetectExternalActivity(string jsonlPath)
-	{
-		try
-		{
-			var lastLine = ReadLastLine(jsonlPath);
-			if (lastLine == null)
-				return;
-
-			using var doc = System.Text.Json.JsonDocument.Parse(lastLine);
-			var type = doc.RootElement.TryGetProperty("type", out var typeEl)
-				? typeEl.GetString() : null;
-
-			// progress, assistant (mid-stream), system with task_progress → active
-			// result → done
-			var isActive = type is "progress" or "assistant";
-
-			Dispatcher.UIThread.Post(() => _node.IsExternallyActive = isActive);
-		}
-		catch
-		{
-			// Best effort — don't crash on parse errors
-		}
-	}
-
-	/// <summary>Reads the last non-empty line from a file without loading it all into memory.</summary>
-	private static string? ReadLastLine(string path)
-	{
-		try
-		{
-			using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-			if (stream.Length == 0)
-				return null;
-
-			// Seek backwards from end to find the last newline
-			var pos = stream.Length - 1;
-			// Skip trailing newlines
-			while (pos > 0)
-			{
-				stream.Position = pos;
-				var b = stream.ReadByte();
-				if (b != '\n' && b != '\r')
-					break;
-				pos--;
-			}
-
-			// Find the start of the last line
-			while (pos > 0)
-			{
-				stream.Position = pos - 1;
-				var b = stream.ReadByte();
-				if (b == '\n')
-					break;
-				pos--;
-			}
-
-			stream.Position = pos;
-			using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
-			return reader.ReadLine();
-		}
-		catch
-		{
-			return null;
-		}
-	}
-
-	private void RefreshFromFile()
-	{
-		try
-		{
-			var entries = _fileService.ReadEntries(_node.FileName);
-			var currentCount = 0;
-
-			// Count non-empty entries to compare with current Messages
-			var newEntries = new List<SessionEntryModel>();
-			foreach (var entry in entries)
-			{
-				if (entry.Role != Constants.SessionFile.RoleCompaction
-				    && string.IsNullOrWhiteSpace(entry.Content))
-					continue;
-
-				currentCount++;
-				if (currentCount > Messages.Count)
-					newEntries.Add(entry);
-			}
-
-			if (newEntries.Count == 0)
-				return;
-
-			_log.Information("FileWatcher: {Count} new entries detected in {FileName}",
-				newEntries.Count, _node.FileName);
-
-			Dispatcher.UIThread.Post(() =>
-			{
-				foreach (var entry in newEntries)
-					Messages.Add(EntryToViewModel(entry));
-
-				// Update last prompt time if new entries include a user message
-				var lastUser = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
-				if (lastUser != null)
-				{
-					_node.LastPromptTimestamp = lastUser.Timestamp;
-					_node.LastPromptTime = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-					_node.ProfileName = lastUser.ProfileName;
-				}
-
-				var lastAssistant = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleAssistant);
-				if (lastAssistant != null)
-					_node.LastResponseTimestamp = lastAssistant.Timestamp;
-			});
-		}
-		catch (Exception ex)
-		{
-			_log.Debug("FileWatcher: error reading {FileName}: {Error}", _node.FileName, ex.Message);
-		}
-	}
-
-	private void RefreshFromJsonl(string jsonlPath)
-	{
-		try
-		{
-			// Parse the full JSONL and find entries beyond what we already have
-			var allEntries = _importService.ParseJsonlSession(jsonlPath);
-
-			// Filter to displayable entries (same logic as LoadFromFile)
-			var displayable = new List<SessionEntryModel>();
-			foreach (var entry in allEntries)
-			{
-				if (entry.Role != Constants.SessionFile.RoleCompaction
-				    && string.IsNullOrWhiteSpace(entry.Content))
-					continue;
-				displayable.Add(entry);
-			}
-
-			if (displayable.Count <= _lastKnownEntryCount)
-				return;
-
-			var newEntries = displayable.Skip(_lastKnownEntryCount).ToList();
-			_log.Information("JSONL watcher: {Count} new entries detected from JSONL", newEntries.Count);
-
-			// Append new entries to the Maximus .txt file for persistence
-			foreach (var entry in newEntries)
-				_fileService.AppendMessage(_node.FileName, entry.Role, entry.Content);
-
-			_lastKnownEntryCount = displayable.Count;
-
-			Dispatcher.UIThread.Post(() =>
-			{
-				foreach (var entry in newEntries)
-					Messages.Add(EntryToViewModel(entry));
-
-				var lastUser = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
-				if (lastUser != null)
-				{
-					_node.LastPromptTimestamp = lastUser.Timestamp;
-					_node.LastPromptTime = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-					_node.ProfileName = lastUser.ProfileName;
-				}
-
-				var lastAssistant = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleAssistant);
-				if (lastAssistant != null)
-					_node.LastResponseTimestamp = lastAssistant.Timestamp;
-			});
-		}
-		catch (Exception ex)
-		{
-			_log.Debug("JSONL watcher: error reading {Path}: {Error}", jsonlPath, ex.Message);
-		}
-	}
-
-	private async System.Threading.Tasks.Task SendAsync()
-	{
-		if (UseDaemon)
-		{
-			await SendViaDaemonAsync();
-			return;
-		}
-		var message = InputText.Trim();
-		if (string.IsNullOrEmpty(message) && !_isAutoCompact)
-			return;
-
-		await SendAsyncCore(message);
-	}
-
-	private async System.Threading.Tasks.Task SendAsyncCore(string message)
-	{
-		InputText = string.Empty;
-		_draftService.DeleteDraft(_node.FileName);
-
-		// Auto-Compact can be triggered with an empty prompt: skip straight to compaction (no turn sent).
-		if (string.IsNullOrEmpty(message) && _isAutoCompact)
-		{
-			await SendCompactionPromptAsync();
-			IsAutoCompact = false;
-			return;
-		}
-
-		// Switch back to Maximus view if currently showing Claude's JSONL
-		if (_isClaudeSessionView)
-			IsClaudeSessionView = false;
-
-		// Capture one-shot toggle states before resetting them
-		var wasNewBranch = _isNewBranch;
-		var wasAutoCompact = _isAutoCompact;
-		_midRunAutoCompactState = _isAutoCompact;
-
-		// Reset one-shot toggles immediately
-		if (wasNewBranch) IsNewBranch = false;
-
-		_busyCount++;
-		IsBusy = true;
-		_node.IsRunning = true;
-
-		// Start timer only for the first concurrent send; subsequent sends keep the running clock
-		if (_thinkingTimer == null)
-		{
-			_thinkingStartedAt = DateTimeOffset.UtcNow;
-			ThinkingDuration = "0:00";
-			_thinkingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-			_thinkingTimer.Tick += OnThinkingTimerTick;
-			_thinkingTimer.Start();
-		}
-
-		// Store only the clean user message in file and UI (FR.11.2)
-		var profileName = _selectedProfileIndex >= 0 && _selectedProfileIndex < AvailableProfiles.Count
-			? AvailableProfiles[_selectedProfileIndex].DisplayName
-			: null;
-		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message, profileName: profileName);
-		var now = DateTimeOffset.UtcNow;
-		Messages.Add(new MessageEntryViewModel
-		{
-			Role        = Constants.SessionFile.RoleUser,
-			Content     = message,
-			Timestamp   = now,
-			ProfileName = profileName,
-		});
-		_pendingModelLabel = BuildModelLabel();
-		Interlocked.Exchange(ref _pendingFileModelId, SelectedModelId ?? "default");
-		Interlocked.Exchange(ref _pendingFileEffort,  SelectedEffort  ?? "default");
-		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-		_node.LastPromptTimestamp = now;
-		_node.ProfileName = profileName;
-
-		Messages.Add(new MessageEntryViewModel
-		{
-			Role       = Constants.SessionFile.RoleSystem,
-			Content    = "Claude is thinking...",
-			Timestamp  = DateTimeOffset.UtcNow,
-			IsProgress = true,
-		});
-
-		// Build augmented message with hidden instructions (FR.11.2, FR.11.9). IsNewSession reflects
-		// whether this turn is about to start a fresh claude process (no ClaudeSessionId yet).
-		var sessionId = _node.Model.ClaudeSessionId;
-		var instructionBlock = BuildInstructionBlock(wasNewBranch, sessionId == null);
-		var augmentedMessage = message + instructionBlock;
-
-		// Proactive context reload (FR.11.10): if file has history but no session ID, wrap with context
-		var messageToSend = augmentedMessage;
-		if (sessionId == null)
-		{
-			var entries = _fileService.ReadEntries(_node.FileName);
-			var hasHistory = entries.Any(e => e.Role is Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant);
-			// Exclude the message we just appended (last USER entry is the current prompt)
-			var priorEntries = entries
-				.Where(e => e.Role is Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant)
-				.ToList();
-			if (priorEntries.Count > 1) // More than just the current prompt
-			{
-				messageToSend = BuildContextPreamble(augmentedMessage);
-				_log.Information("Proactive context reload for session {FileName}", _node.FileName);
-			}
-		}
-
-		var cts = new CancellationTokenSource();
-		lock (_ctsLock) _activeCts.Add(cts);
-		var ct = cts.Token;
-
-		// FR.14.3 / FR.14.11 — ensure the per-node MCP config file exists so the claude process
-		// receives --mcp-config and can reach the host scheduling/orchestration tools.
-		string? mcpConfigPath = null;
-		if (_appSettings.Settings.AgentToolsEnabled)
-			mcpConfigPath = await _mcpServer.EnsureConfigFileAsync(_node.Model.NodeId, _node.Model.AgentToken);
-
-		// Serialize only the CLI dispatch, not the UI updates above. This preserves the
-		// ability to queue a follow-up prompt while a previous turn is still in flight —
-		// the input clears and the message appears in the pane immediately, and this
-		// send's CLI spawn waits behind the in-flight one to avoid concurrent --resume.
-		var nodeId   = _node.Model.NodeId;
-		var turnLock = string.IsNullOrEmpty(nodeId) ? null : _daemonClient.GetTurnLock(nodeId);
-		bool lockAcquired = false;
-
-		try
-		{
-			if (turnLock != null)
-			{
-				await turnLock.WaitAsync(ct);
-				lockAcquired = true;
-			}
-			await _processManager.SendMessageAsync(
-				workingDirectory: _node.Model.WorkingDirectory,
-				claudePath:       _appSettings.Settings.ClaudePath,
-				sessionId:        sessionId,
-				userMessage:      messageToSend,
-				onEvent:          HandleStreamEvent,
-				model:            SelectedModelId,
-				profileConfigDir: SelectedProfileConfigDir,
-				effort:           SelectedEffort,
-				mcpConfigPath:    mcpConfigPath,
-				ollamaBaseUrl:    SelectedLocalBaseUrl,
-				disableTools:     SelectedModelDisablesTools,
-				cancellationToken: ct);
-
-			if (_needsContextRetry)
-			{
-				_needsContextRetry = false;
-				var enrichedMessage = BuildContextPreamble(augmentedMessage);
-
-				Dispatcher.UIThread.Post(() =>
-				{
-					var last = Messages.Count > 0 ? Messages[^1] : null;
-					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-						last.Content = "Resuming session with conversation history...";
-					else
-						Messages.Add(new MessageEntryViewModel
-						{
-							Role       = Constants.SessionFile.RoleSystem,
-							Content    = "Resuming session with conversation history...",
-							Timestamp  = DateTimeOffset.UtcNow,
-							IsProgress = true,
-						});
-				});
-
-				await _processManager.SendMessageAsync(
-					workingDirectory: _node.Model.WorkingDirectory,
-					claudePath:       _appSettings.Settings.ClaudePath,
-					sessionId:        null,
-					userMessage:      enrichedMessage,
-					onEvent:          HandleStreamEvent,
-					model:            SelectedModelId,
-					profileConfigDir: SelectedProfileConfigDir,
-					effort:           SelectedEffort,
-					ollamaBaseUrl:    SelectedLocalBaseUrl,
-					disableTools:     SelectedModelDisablesTools,
-					cancellationToken: ct);
-			}
-
-			// Post-response: handle Auto-Compact (FR.11.6)
-			// Use _midRunAutoCompactState which reflects any mid-run toggle changes
-			if (_midRunAutoCompactState)
-			{
-				await SendCompactionPromptAsync();
-				IsAutoCompact = false;
-			}
-		}
-		catch (OperationCanceledException)
-		{
-			_log.Information("Send interrupted by user for session {FileName}", _node.FileName);
-			_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, "[Interrupted by user]");
-			Messages.Add(new MessageEntryViewModel
-			{
-				Role      = Constants.SessionFile.RoleSystem,
-				Content   = "[Interrupted by user]",
-				Timestamp = DateTimeOffset.UtcNow,
-			});
-		}
-		finally
-		{
-			if (lockAcquired) turnLock?.Release();
-			lock (_ctsLock) _activeCts.Remove(cts);
-			cts.Dispose();
-
-			_busyCount = Math.Max(0, _busyCount - 1);
-			if (_busyCount == 0)
-			{
-				// Update JSONL entry count before IsBusy goes false, so the watcher
-				// doesn't re-detect entries we already processed during this send cycle.
-				_lastKnownEntryCount = InitializeJsonlEntryCount();
-
-				var t = _thinkingTimer;
-				_thinkingTimer = null;
-				t?.Stop();
-				ThinkingDuration = string.Empty;
-				IsBusy = false;
-				_node.IsRunning = false;
-			}
-		}
-	}
-
-	private void HandleStreamEvent(ClaudeStreamEvent evt)
-	{
-		switch (evt.Type)
-		{
-			case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
-				var fileModelId = Interlocked.Exchange(ref _pendingFileModelId, null);
-				var fileEffort  = Interlocked.Exchange(ref _pendingFileEffort, null);
-				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleAssistant, evt.Content,
-					modelId: fileModelId, effort: fileEffort);
-				break;
-			case "system" when evt.Subtype is "compact":
-				_fileService.AppendCompactionSeparator(_node.FileName);
-				break;
-			case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-				// When context retry is pending, suppress stderr-based errors (they echo the
-				// same "No conversation found" that the result event already handled).
-				if (_needsContextRetry)
-					return;
-				if (evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase))
-				{
-					_log.Information("No conversation found (system error) for session {FileName} — will retry with context", _node.FileName);
-					_node.Model.ClaudeSessionId = null;
-					_appSettings.Save();
-					_needsContextRetry = true;
-					return;
-				}
-				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
-				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
-					Dispatcher.UIThread.Post(() => HasAuthError = true);
-				break;
-			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
-				&& evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase):
-				// "No conversation found" — transient infrastructure error.
-				// Set flag for auto-retry with context preamble; skip file write and UI post.
-				_log.Information("No conversation found for session {FileName} — will retry with context", _node.FileName);
-				_node.Model.ClaudeSessionId = null;
-				_appSettings.Save();
-				_needsContextRetry = true;
-				return;
-			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-				_log.Warning("Claude result error: {Error}", evt.Content);
-				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
-				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
-					Dispatcher.UIThread.Post(() => HasAuthError = true);
-				break;
-			case "result" when !evt.IsError && evt.SessionId is not null:
-				Dispatcher.UIThread.Post(() => HasAuthError = false);
-				_node.Model.ClaudeSessionId = evt.SessionId;
-				_appSettings.Save();
-				Dispatcher.UIThread.Post(() => this.RaisePropertyChanged(nameof(HasClaudeSession)));
-				break;
-		}
-
-		Dispatcher.UIThread.Post(() =>
-		{
-			switch (evt.Type)
-			{
-				case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
-					var pendingLabel = _pendingModelLabel;
-					_pendingModelLabel = null;
-					Messages.Add(new MessageEntryViewModel
-					{
-						Role       = Constants.SessionFile.RoleAssistant,
-						Content    = evt.Content,
-						Timestamp  = evt.Timestamp,
-						ModelLabel = pendingLabel,
-					});
-					_node.LastResponseTimestamp = evt.Timestamp;
-					break;
-
-				case "system" when evt.Subtype is "compact":
-					Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleCompaction,
-						Content   = string.Empty,
-						Timestamp = evt.Timestamp,
-					});
-					break;
-
-				case "system" when evt.Subtype is "task_progress" or "task_started"
-				                   && !string.IsNullOrWhiteSpace(evt.Content):
-					var last = Messages.Count > 0 ? Messages[^1] : null;
-					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-						last.Content = evt.Content;
-					else
-						Messages.Add(new MessageEntryViewModel
-						{
-							Role       = Constants.SessionFile.RoleSystem,
-							Content    = evt.Content,
-							Timestamp  = evt.Timestamp,
-							IsProgress = true,
-						});
-					break;
-
-				case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-					Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleSystem,
-						Content   = evt.Content,
-						Timestamp = evt.Timestamp,
-					});
-					break;
-
-				case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-					for (var i = Messages.Count - 1; i >= 0; i--)
-					{
-						if (Messages[i].IsProgress)
-							Messages.RemoveAt(i);
-					}
-					Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleSystem,
-						Content   = evt.Content,
-						Timestamp = evt.Timestamp,
-					});
-					break;
-
-				case "result":
-					for (var i = Messages.Count - 1; i >= 0; i--)
-					{
-						if (Messages[i].IsProgress)
-							Messages.RemoveAt(i);
-					}
-					break;
-			}
-		});
+		_models.Dispose();
+		_content.Dispose();
+		_turn.Dispose();
 	}
 
 	private void SaveDraft(string text)
@@ -1775,335 +462,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			_draftDebounceTimer?.Stop();
 			_draftDebounceTimer = null;
 
-			if (UseDaemon && _node.ExternalId != null)
-			{
-				// Cancel any previous in-flight save to ensure last-write-wins ordering
-				_draftSaveCts?.Cancel();
-				var cts = new CancellationTokenSource();
-				_draftSaveCts = cts;
-				var externalId = _node.ExternalId;
-				var content = string.IsNullOrEmpty(text) ? string.Empty : text;
-
-				_ = Task.Run(async () =>
-				{
-					try
-					{
-						await _daemonService!.DraftSaveAsync(externalId, content, cts.Token);
-					}
-					catch (OperationCanceledException) { /* superseded by newer save */ }
-					catch (Exception ex)
-					{
-						_log.Debug(ex, "Failed to save draft to daemon");
-					}
-				}, cts.Token);
-			}
+			if (string.IsNullOrWhiteSpace(text))
+				_draftService.DeleteDraft(_node.FileName);
 			else
-			{
-				if (string.IsNullOrWhiteSpace(text))
-					_draftService.DeleteDraft(_node.FileName);
-				else
-					_draftService.SaveDraft(_node.FileName, text);
-			}
+				_draftService.SaveDraft(_node.FileName, text);
 		};
 		_draftDebounceTimer.Start();
-	}
-
-	private void OnThinkingTimerTick(object? sender, EventArgs e)
-	{
-		var elapsed = DateTimeOffset.UtcNow - _thinkingStartedAt;
-		ThinkingDuration = $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:D2}";
-	}
-
-	/// <summary>Builds the [model, effort] label for the current command bar selection.</summary>
-	private string BuildModelLabel()
-	{
-		var model  = SelectedModelId ?? "default";
-		var effort = SelectedEffort  ?? "default";
-		return $"[{model}, {effort}]";
-	}
-
-	private string BuildContextPreamble(string currentMessage)
-	{
-		var entries = _fileService.ReadEntries(_node.FileName);
-		var conversationEntries = entries
-			.Where(e => e.Role is Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant)
-			.ToList();
-
-		if (conversationEntries.Count == 0)
-			return currentMessage;
-
-		var sb = new StringBuilder();
-		sb.AppendLine("The following is the conversation history from a previous session that is no longer available. Use it as context for continuity:");
-		sb.AppendLine("---");
-
-		foreach (var entry in conversationEntries)
-		{
-			var roleLabel = entry.Role == Constants.SessionFile.RoleUser ? "Human" : "Assistant";
-			sb.AppendLine($"[{roleLabel}]: {entry.Content}");
-			sb.AppendLine();
-		}
-
-		sb.AppendLine("---");
-		sb.AppendLine("Now, continuing the conversation:");
-		sb.AppendLine(currentMessage);
-
-		return sb.ToString();
-	}
-
-	/// <summary>Builds the full compaction prompt, injecting glossary content if available.</summary>
-	private string BuildCompactionPrompt()
-	{
-		var glossarySection = string.Empty;
-		try
-		{
-			var glossaryPath = Path.Combine(WorkingDirectory, "docs", "glossary.md");
-			if (File.Exists(glossaryPath))
-			{
-				var glossaryContent = File.ReadAllText(glossaryPath);
-				glossarySection = $"""
-
-PROJECT GLOSSARY:
-```
-{glossaryContent}
-```
-
-""";
-			}
-		}
-		catch (Exception ex)
-		{
-			_log.Debug("Could not read glossary for compaction: {Error}", ex.Message);
-		}
-
-		return string.Format(Constants.Instructions.CompactionPromptTemplate, glossarySection);
-	}
-
-	/// <summary>
-	/// Immediately detaches the live Claude JSONL session (FR.11.7, FR.11.8).
-	/// Moves ClaudeSessionId to PriorClaudeSessionIds so the JSONL is still viewable,
-	/// but the next prompt will feed the text session as context instead of --resume.
-	/// Thread-safe; posts UI updates to the dispatcher.
-	/// </summary>
-	public void DetachSession(string displayMessage = "[Session detached — next prompt will use text session as context]")
-	{
-		var currentId = _node.Model.ClaudeSessionId;
-		if (string.IsNullOrEmpty(currentId))
-			return;
-
-		_node.Model.PriorClaudeSessionIds.Add(currentId);
-		_node.Model.ClaudeSessionId = null;
-		_appSettings.Save();
-		_log.Information("Detached Claude session {SessionId} for {FileName}", currentId, _node.FileName);
-
-		Dispatcher.UIThread.Post(() =>
-		{
-			Messages.Add(new MessageEntryViewModel
-			{
-				Role      = Constants.SessionFile.RoleSystem,
-				Content   = displayMessage,
-				Timestamp = DateTimeOffset.UtcNow,
-			});
-			this.RaisePropertyChanged(nameof(CanClear));
-			this.RaisePropertyChanged(nameof(HasClaudeSession));
-		});
-	}
-
-	/// <summary>Sends a follow-up compaction prompt and rewrites the session file (FR.11.6).</summary>
-	private async System.Threading.Tasks.Task SendCompactionPromptAsync()
-	{
-		_log.Information("Starting auto-compaction for session {FileName}", _node.FileName);
-
-		Dispatcher.UIThread.Post(() =>
-		{
-			Messages.Add(new MessageEntryViewModel
-			{
-				Role       = Constants.SessionFile.RoleSystem,
-				Content    = "Compacting session...",
-				Timestamp  = DateTimeOffset.UtcNow,
-				IsProgress = true,
-			});
-		});
-
-		var compactedContent = new StringBuilder();
-
-		await _processManager.SendMessageAsync(
-			workingDirectory: _node.Model.WorkingDirectory,
-			claudePath:       _appSettings.Settings.ClaudePath,
-			sessionId:        _node.Model.ClaudeSessionId,
-			userMessage:      BuildCompactionPrompt(),
-			model:            SelectedModelId,
-			profileConfigDir: SelectedProfileConfigDir,
-			effort:           SelectedEffort,
-			ollamaBaseUrl:    SelectedLocalBaseUrl,
-			disableTools:     SelectedModelDisablesTools,
-			onEvent:          evt =>
-			{
-				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
-					compactedContent.AppendLine(evt.Content);
-				// Session ID from the compaction response is intentionally NOT stored:
-				// after compaction the JSONL is detached (FR.11.8).
-			});
-
-		var compacted = compactedContent.ToString().Trim();
-		if (!string.IsNullOrEmpty(compacted))
-		{
-			// Write COMPACTION separator followed by the compacted conversation
-			// (Claude outputs entries in session file format: [timestamp] ROLE\ncontent\n)
-			var now = DateTimeOffset.UtcNow;
-			var fileContent = new StringBuilder();
-			fileContent.AppendLine($"[{now.ToString(Constants.SessionFile.TimestampFormat)}] {Constants.SessionFile.RoleCompaction}");
-			fileContent.AppendLine(compacted);
-			if (!compacted.EndsWith(Environment.NewLine))
-				fileContent.AppendLine();
-
-			_fileService.RewriteSessionFile(_node.FileName, fileContent.ToString());
-
-			Dispatcher.UIThread.Post(() =>
-			{
-				Messages.Clear();
-				var entries = _fileService.ReadEntries(_node.FileName);
-				foreach (var entry in entries)
-				{
-					if (entry.Role != Constants.SessionFile.RoleCompaction
-					    && string.IsNullOrWhiteSpace(entry.Content))
-						continue;
-					Messages.Add(EntryToViewModel(entry));
-				}
-			});
-
-			// Detach the JSONL session after compaction (FR.11.8):
-		// next prompt will use the compacted text session as context via BuildContextPreamble.
-		DetachSession("[Session compacted and JSONL detached — next prompt will use the compacted text session as context]");
-
-		_log.Information("Session {FileName} compacted and JSONL detached", _node.FileName);
-		}
-		else
-		{
-			_log.Warning("Compaction returned empty content for session {FileName}; keeping original", _node.FileName);
-			Dispatcher.UIThread.Post(() =>
-			{
-				for (var i = Messages.Count - 1; i >= 0; i--)
-				{
-					if (Messages[i].IsProgress) Messages.RemoveAt(i);
-				}
-			});
-		}
-	}
-
-	/// <summary>Sends a mid-run correction prompt when user toggles a flag while Claude is thinking.</summary>
-	private void SendMidRunToggleCorrection(string toggleName, bool newValue, string onPrompt, string offPrompt)
-	{
-		var label = newValue ? "enabled" : "disabled";
-		var prompt = newValue ? onPrompt : offPrompt;
-		SendMidRunToggleCorrection(toggleName, label, prompt);
-	}
-
-	/// <summary>Sends a mid-run correction prompt for the tri-state Auto-Commit toggle (FR.11.12).</summary>
-	private void SendMidRunAutoCommitCorrection(bool? newValue)
-	{
-		var (label, prompt) = newValue switch
-		{
-			true  => ("enabled", Constants.Instructions.MidRunAutoCommitOn),
-			false => ("disabled", Constants.Instructions.MidRunAutoCommitOff),
-			null  => ("set to no preference", Constants.Instructions.MidRunAutoCommitSilent),
-		};
-		SendMidRunToggleCorrection("AutoCommit", label, prompt);
-	}
-
-	private void SendMidRunToggleCorrection(string toggleName, string label, string prompt)
-	{
-		Messages.Add(new MessageEntryViewModel
-		{
-			Role      = Constants.SessionFile.RoleSystem,
-			Content   = $"[{toggleName} was {label} for this run]",
-			Timestamp = DateTimeOffset.UtcNow,
-		});
-
-		_log.Information("Mid-run {Toggle} toggle: {State}, sending correction prompt", toggleName, label);
-
-		_ = _processManager.SendMessageAsync(
-			workingDirectory: _node.Model.WorkingDirectory,
-			claudePath:       _appSettings.Settings.ClaudePath,
-			sessionId:        _node.Model.ClaudeSessionId,
-			userMessage:      prompt,
-			model:            SelectedModelId,
-			profileConfigDir: SelectedProfileConfigDir,
-			effort:           SelectedEffort,
-			ollamaBaseUrl:    SelectedLocalBaseUrl,
-			disableTools:     SelectedModelDisablesTools,
-			onEvent:          evt =>
-			{
-				// Capture session ID updates but don't write to file or UI
-				if (evt.Type == "result" && !evt.IsError && evt.SessionId is not null)
-				{
-					_node.Model.ClaudeSessionId = evt.SessionId;
-					_appSettings.Save();
-				}
-			});
-	}
-
-	/// <summary>
-	/// Builds the hidden instruction block appended to the user's message for claude stdin
-	/// (FR.11.9), via the shared <see cref="InstructionBlockBuilder"/> so interactive and headless
-	/// (<c>SessionTurnService</c>) turns emit identical instructions. <paramref name="isNewSession"/>
-	/// should be true only when this turn is about to start a fresh claude process (no
-	/// ClaudeSessionId/ExternalId yet) — the tool-usage bans are gated on it so they are sent once
-	/// per fresh process instead of on every turn.
-	/// </summary>
-	private string BuildInstructionBlock(bool isNewBranch, bool isNewSession)
-	{
-		var options = new InstructionOptionsModel(
-			IsAutoCommit, isNewBranch, IsAutoDocument,
-			_appSettings.Settings.AgentToolsEnabled, isNewSession);
-		return InstructionBlockBuilder.Build(options);
-	}
-
-	/// <summary>Rebuilds the AvailableModels collection from _modelInfos. Index 0 is "Default"; entries show true model IDs (FR.12.3).</summary>
-	private void RebuildModelList()
-	{
-		AvailableModels.Clear();
-		AvailableModels.Add("Default");
-		foreach (var m in _modelInfos)
-			AvailableModels.Add(m.Id);
-	}
-
-	/// <summary>Called when the model service refreshes its list from the CLI.</summary>
-	private void OnModelsUpdated(object? sender, EventArgs e)
-	{
-		var newModels = _modelService.GetCachedModels();
-
-		// Save ID of currently selected model so we can re-select it after the list rebuilds
-		var currentId = _selectedModelIndex > 0 && _selectedModelIndex <= _modelInfos.Count
-			? _modelInfos[_selectedModelIndex - 1].Id
-			: null;
-
-		_isUpdatingModels = true;
-		_modelInfos = new List<ClaudeModelInfo>(newModels);
-		RebuildModelList();
-
-		// Restore selection by ID; fall back to Default if the ID is no longer present
-		if (currentId != null)
-		{
-			var idx = _modelInfos.FindIndex(m => m.Id == currentId);
-			_selectedModelIndex = idx >= 0 ? idx + 1 : 0;
-		}
-		else
-		{
-			_selectedModelIndex = Math.Clamp(_selectedModelIndex, 0, _modelInfos.Count);
-		}
-
-		_isUpdatingModels = false;
-		this.RaisePropertyChanged(nameof(SelectedModelIndex));
-	}
-
-	/// <summary>Rebuilds the AvailableProfiles list from appsettings. Always ends with "New...".</summary>
-	private void RebuildProfileList()
-	{
-		AvailableProfiles.Clear();
-		AvailableProfiles.Add(new ProfileListItemModel(_defaultProfileDisplayName ?? "Default", null));
-		foreach (var p in _appSettings.Settings.Profiles)
-			AvailableProfiles.Add(new ProfileListItemModel(p.DisplayName, p.ProfileId));
-		AvailableProfiles.Add(new ProfileListItemModel("New...", null));
 	}
 
 	/// <summary>
@@ -2120,65 +484,12 @@ PROJECT GLOSSARY:
 			// --- Profile: last user entry that recorded a profile name ---
 			var lastUserWithProfile = entries.LastOrDefault(
 				e => e.Role == Constants.SessionFile.RoleUser && e.ProfileName != null);
-
-			if (lastUserWithProfile != null)
-			{
-				var name = lastUserWithProfile.ProfileName!;
-				var found = false;
-				// Skip index 0 (Default) and the last entry ("New...") when searching
-				for (var i = 1; i < AvailableProfiles.Count - 1; i++)
-				{
-					if (string.Equals(AvailableProfiles[i].DisplayName, name, StringComparison.OrdinalIgnoreCase))
-					{
-						_selectedProfileIndex = i;
-						found = true;
-						break;
-					}
-				}
-				if (!found)
-					_selectedProfileIndex = 0; // profile was deleted or renamed → fall back to Default
-			}
-			else
-			{
-				_selectedProfileIndex = 0;
-			}
-			this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+			_profiles.RestoreFromEntry(lastUserWithProfile?.ProfileName);
 
 			// --- Model + Effort: last assistant entry that recorded a model ID ---
 			var lastAssistantWithModel = entries.LastOrDefault(
 				e => e.Role == Constants.SessionFile.RoleAssistant && e.ModelId != null);
-
-			if (lastAssistantWithModel != null)
-			{
-				var modelId = lastAssistantWithModel.ModelId;
-				if (!string.IsNullOrEmpty(modelId) && modelId != "default")
-				{
-					var idx = _modelInfos.FindIndex(m => m.Id == modelId);
-					_selectedModelIndex = idx >= 0 ? idx + 1 : 0;
-				}
-				else
-				{
-					_selectedModelIndex = 0;
-				}
-
-				var effort = lastAssistantWithModel.Effort;
-				if (!string.IsNullOrEmpty(effort) && effort != "default")
-				{
-					var effortIdx = Array.IndexOf(EffortValues, effort);
-					_selectedEffortIndex = effortIdx >= 0 ? effortIdx : 0;
-				}
-				else
-				{
-					_selectedEffortIndex = 0;
-				}
-			}
-			else
-			{
-				_selectedModelIndex  = 0;
-				_selectedEffortIndex = 0;
-			}
-			this.RaisePropertyChanged(nameof(SelectedModelIndex));
-			this.RaisePropertyChanged(nameof(SelectedEffortIndex));
+			_models.RestoreFromEntry(lastAssistantWithModel?.ModelId, lastAssistantWithModel?.Effort);
 		}
 		catch (Exception ex)
 		{
@@ -2186,366 +497,24 @@ PROJECT GLOSSARY:
 		}
 	}
 
-	private string? _defaultProfileDisplayName;
-
 	/// <summary>Resolves the default profile email on first load (fire-and-forget).</summary>
-	internal void ResolveDefaultProfileEmail()
-	{
-		_ = ResolveDefaultProfileEmailAsync();
-	}
-
-	private async Task ResolveDefaultProfileEmailAsync()
-	{
-		var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, null);
-		if (!string.IsNullOrEmpty(email))
-		{
-			_defaultProfileDisplayName = email;
-			Dispatcher.UIThread.Post(() =>
-			{
-				if (AvailableProfiles.Count > 0)
-					AvailableProfiles[0] = new ProfileListItemModel(email, null);
-			});
-		}
-	}
-
-	private async Task HandleNewProfileAsync()
-	{
-		if (_isProfileAuthInProgress)
-			return;
-
-		_isProfileAuthInProgress = true;
-		try
-		{
-			// Generate a unique profile ID — check both settings and filesystem to avoid collisions
-			var existingIds = _appSettings.Settings.Profiles.Select(p => p.ProfileId).ToHashSet();
-			var profileId = "profile_1";
-			for (var i = 2;
-			     existingIds.Contains(profileId)
-			     || Directory.Exists(System.IO.Path.Combine(_profileService.ProfilesRootDirectory, profileId));
-			     i++)
-				profileId = $"profile_{i}";
-
-			// Build the config directory path for this profile
-			var configDir = System.IO.Path.Combine(_profileService.ProfilesRootDirectory, profileId);
-
-			// Launch interactive auth in a visible terminal
-			Messages.Add(new MessageEntryViewModel
-			{
-				Role      = Constants.SessionFile.RoleSystem,
-				Content   = $"Launching auth login for new profile... Complete authentication in the opened window.",
-				Timestamp = DateTimeOffset.UtcNow,
-			});
-
-			await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, configDir);
-
-			// Verify auth succeeded by querying the profile status
-			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, configDir);
-			if (string.IsNullOrEmpty(email))
-			{
-				Messages.Add(new MessageEntryViewModel
-				{
-					Role      = Constants.SessionFile.RoleSystem,
-					Content   = "Profile authentication was cancelled or failed.",
-					Timestamp = DateTimeOffset.UtcNow,
-				});
-				return;
-			}
-
-			var displayName = email;
-
-			// Add profile to settings
-			_appSettings.Settings.Profiles.Add(new ClaudeProfileModel
-			{
-				ProfileId   = profileId,
-				DisplayName = displayName,
-			});
-
-			// Select the newly added profile
-			var newIndex = _appSettings.Settings.Profiles.Count; // 1-based (0 is Default)
-			_appSettings.Settings.SelectedProfileIndex = newIndex;
-			if (_directoryModel != null)
-				_directoryModel.SelectedProfileIndex = newIndex;
-			_appSettings.Save();
-
-			Dispatcher.UIThread.Post(() =>
-			{
-				RebuildProfileList();
-				_selectedProfileIndex = newIndex;
-				this.RaisePropertyChanged(nameof(SelectedProfileIndex));
-			});
-
-			Messages.Add(new MessageEntryViewModel
-			{
-				Role      = Constants.SessionFile.RoleSystem,
-				Content   = $"Profile '{displayName}' added and selected.",
-				Timestamp = DateTimeOffset.UtcNow,
-			});
-		}
-		finally
-		{
-			_isProfileAuthInProgress = false;
-		}
-	}
-
-	/// <summary>Re-runs interactive auth login against the currently selected profile (FR.12.17).</summary>
-	private async Task HandleReauthenticateAsync()
-	{
-		if (_isProfileAuthInProgress)
-			return;
-
-		_isProfileAuthInProgress = true;
-		try
-		{
-			var configDir = SelectedProfileConfigDir;
-
-			Messages.Add(new MessageEntryViewModel
-			{
-				Role      = Constants.SessionFile.RoleSystem,
-				Content   = "Launching re-authentication... Complete authentication in the opened window.",
-				Timestamp = DateTimeOffset.UtcNow,
-			});
-
-			await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, configDir);
-
-			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, configDir);
-			if (string.IsNullOrEmpty(email))
-			{
-				Messages.Add(new MessageEntryViewModel
-				{
-					Role      = Constants.SessionFile.RoleSystem,
-					Content   = "Re-authentication was cancelled or failed.",
-					Timestamp = DateTimeOffset.UtcNow,
-				});
-				return;
-			}
-
-			// Update the display name if it changed (e.g. different account authenticated)
-			if (_selectedProfileIndex > 0 && _selectedProfileIndex - 1 < _appSettings.Settings.Profiles.Count)
-			{
-				_appSettings.Settings.Profiles[_selectedProfileIndex - 1].DisplayName = email;
-				_appSettings.Save();
-				Dispatcher.UIThread.Post(RebuildProfileList);
-			}
-			else if (_selectedProfileIndex == 0)
-			{
-				_defaultProfileDisplayName = email;
-				Dispatcher.UIThread.Post(() =>
-				{
-					if (AvailableProfiles.Count > 0)
-						AvailableProfiles[0] = new ProfileListItemModel(email, null);
-				});
-			}
-
-			Dispatcher.UIThread.Post(() => HasAuthError = false);
-
-			Messages.Add(new MessageEntryViewModel
-			{
-				Role      = Constants.SessionFile.RoleSystem,
-				Content   = $"Re-authenticated as '{email}'.",
-				Timestamp = DateTimeOffset.UtcNow,
-			});
-		}
-		finally
-		{
-			_isProfileAuthInProgress = false;
-		}
-	}
-
-	/// <summary>Removes the currently selected profile from the app's list (FR.12.18). Delegates to <see cref="DeleteProfile"/>.</summary>
-	private void HandleRemoveProfile()
-	{
-		if (_selectedProfileIndex <= 0 || _selectedProfileIndex >= AvailableProfiles.Count - 1)
-			return;
-
-		DeleteProfile(AvailableProfiles[_selectedProfileIndex]);
-	}
+	internal void ResolveDefaultProfileEmail() => _profiles.ResolveDefaultProfileEmail();
 
 	/// <summary>Renames a stored profile's display name. Context-menu action on the Profile dropdown; no-op for the "Default"/"New..." entries.</summary>
-	public void RenameProfile(ProfileListItemModel item, string newName)
-	{
-		if (item.ProfileId is null)
-			return;
-
-		var profile = _appSettings.Settings.Profiles.FirstOrDefault(p => p.ProfileId == item.ProfileId);
-		if (profile is null)
-			return;
-
-		profile.DisplayName = newName;
-		_appSettings.Save();
-		RebuildProfileList();
-	}
+	public void RenameProfile(ProfileListItemModel item, string newName) => _profiles.RenameProfile(item, newName);
 
 	/// <summary>
 	/// Removes a stored profile from the app's list and renames its config directory with a "_rem" suffix (FR.12.18).
 	/// Context-menu action on the Profile dropdown; no-op for the "Default"/"New..." entries.
 	/// </summary>
-	public void DeleteProfile(ProfileListItemModel item)
-	{
-		if (item.ProfileId is null)
-			return;
+	public void DeleteProfile(ProfileListItemModel item) => _profiles.DeleteProfile(item);
 
-		var index = _appSettings.Settings.Profiles.FindIndex(p => p.ProfileId == item.ProfileId);
-		if (index < 0)
-			return;
-
-		var profile = _appSettings.Settings.Profiles[index];
-		_appSettings.Settings.Profiles.RemoveAt(index);
-
-		_profileService.MarkProfileDirectoryRemoved(profile.ProfileId);
-
-		// The removed entry sits at AvailableProfiles index (index + 1) (0 is Default).
-		var removedListIndex = index + 1;
-		if (_selectedProfileIndex == removedListIndex)
-		{
-			_selectedProfileIndex = 0;
-			HasAuthError = false;
-		}
-		else if (_selectedProfileIndex > removedListIndex)
-		{
-			_selectedProfileIndex--;
-		}
-
-		_appSettings.Settings.SelectedProfileIndex = _selectedProfileIndex;
-		if (_directoryModel != null)
-			_directoryModel.SelectedProfileIndex = _selectedProfileIndex;
-		_appSettings.Save();
-
-		Dispatcher.UIThread.Post(() =>
-		{
-			RebuildProfileList();
-			this.RaisePropertyChanged(nameof(SelectedProfileIndex));
-		});
-
-		Messages.Add(new MessageEntryViewModel
-		{
-			Role      = Constants.SessionFile.RoleSystem,
-			Content   = $"Profile '{profile.DisplayName}' removed. Its config directory was preserved as '{profile.ProfileId}{Constants.Auth.RemovedDirectorySuffix}'.",
-			Timestamp = DateTimeOffset.UtcNow,
-		});
-	}
-
-	/// <summary>Switches the Messages collection between ClaudeMaximus .txt and Claude CLI JSONL sources.</summary>
-	private void SwapMessageSource(bool showClaude)
-	{
-		if (showClaude)
-		{
-			// Snapshot current Maximus messages so we can restore them
-			_maximusMessagesSnapshot = new List<MessageEntryViewModel>(Messages);
-
-			var allPaths = GetAllJsonlPaths();
-			if (allPaths.Count == 0)
-			{
-				_log.Warning("Cannot show Claude session: no JSONL files found");
-				_isClaudeSessionView = false;
-				this.RaisePropertyChanged(nameof(IsClaudeSessionView));
-				return;
-			}
-
-			Messages.Clear();
-			for (var i = 0; i < allPaths.Count; i++)
-			{
-				var (sessionId, path) = allPaths[i];
-
-				// Add a visual separator header for each JSONL file
-				var fileName = System.IO.Path.GetFileName(path);
-				var fileInfo = new System.IO.FileInfo(path);
-				var startedAt = fileInfo.CreationTime.ToString("yyyy-MM-dd HH:mm");
-				var status = i < allPaths.Count - 1 ? "detached" : "current";
-				var separator = "═══════════════════════════════════════════════════════════════";
-				Messages.Add(new MessageEntryViewModel
-				{
-					Role      = Constants.SessionFile.RoleSystem,
-					Content   = $"{separator}\n{fileName}  ({status}, started {startedAt})\n{separator}",
-					Timestamp = fileInfo.CreationTimeUtc,
-				});
-
-				var entries = _importService.ParseJsonlSessionRaw(path);
-				foreach (var entry in entries)
-				{
-					if (entry.Role != Constants.SessionFile.RoleCompaction
-					    && string.IsNullOrWhiteSpace(entry.Content))
-						continue;
-					Messages.Add(EntryToViewModel(entry));
-				}
-			}
-		}
-		else
-		{
-			// Restore the Maximus messages
-			Messages.Clear();
-			if (_maximusMessagesSnapshot != null)
-			{
-				foreach (var msg in _maximusMessagesSnapshot)
-					Messages.Add(msg);
-				_maximusMessagesSnapshot = null;
-			}
-		}
-	}
-
-	/// <summary>Builds the full path to the Claude CLI JSONL session file, or null if unavailable.</summary>
-	private string? GetJsonlPath()
-	{
-		var sessionId = _node.Model.ClaudeSessionId;
-		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(WorkingDirectory))
-			return null;
-
-		return BuildJsonlPathForSessionId(sessionId);
-	}
-
-	/// <summary>Returns all JSONL paths (prior + current) in chronological order, filtered to existing files.</summary>
-	private List<(string SessionId, string Path)> GetAllJsonlPaths()
-	{
-		if (string.IsNullOrEmpty(WorkingDirectory))
-			return [];
-
-		var result = new List<(string, string)>();
-
-		foreach (var priorId in _node.Model.PriorClaudeSessionIds)
-		{
-			var path = BuildJsonlPathForSessionId(priorId);
-			if (path != null && File.Exists(path))
-				result.Add((priorId, path));
-		}
-
-		var currentId = _node.Model.ClaudeSessionId;
-		if (!string.IsNullOrEmpty(currentId))
-		{
-			var path = BuildJsonlPathForSessionId(currentId);
-			if (path != null && File.Exists(path))
-				result.Add((currentId, path));
-		}
-
-		return result;
-	}
-
-	private string? BuildJsonlPathForSessionId(string sessionId)
-	{
-		if (string.IsNullOrEmpty(WorkingDirectory))
-			return null;
-
-		var slug = Constants.ClaudeSessions.BuildProjectSlug(WorkingDirectory);
-		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		return Path.Combine(
-			userProfile,
-			Constants.ClaudeSessions.ClaudeHomeFolderName,
-			Constants.ClaudeSessions.ProjectsFolderName,
-			slug,
-			sessionId + Constants.ClaudeSessions.SessionFileExtension);
-	}
-
-	private static MessageEntryViewModel EntryToViewModel(SessionEntryModel entry)
-	{
-		string? modelLabel = null;
-		if (entry.ModelId != null || entry.Effort != null)
-			modelLabel = $"[{entry.ModelId ?? "default"}, {entry.Effort ?? "default"}]";
-
-		return new MessageEntryViewModel
-		{
-			Role        = entry.Role,
-			Content     = entry.Content,
-			Timestamp   = entry.Timestamp,
-			ProfileName = entry.ProfileName,
-			ModelLabel  = modelLabel,
-		};
-	}
+	/// <summary>
+	/// Immediately detaches the live Claude JSONL session (FR.11.7, FR.11.8).
+	/// Moves ClaudeSessionId to PriorClaudeSessionIds so the JSONL is still viewable,
+	/// but the next prompt will feed the text session as context instead of --resume.
+	/// Thread-safe; posts UI updates to the dispatcher.
+	/// </summary>
+	public void DetachSession(string displayMessage = "[Session detached — next prompt will use text session as context]") =>
+		_turn.DetachSession(displayMessage);
 }

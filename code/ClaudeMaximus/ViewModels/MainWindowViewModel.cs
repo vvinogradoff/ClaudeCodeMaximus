@@ -28,7 +28,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ISelfUpdateService _selfUpdate;
 	private readonly IAgentMcpServer _mcpServer;
 	private readonly IDaemonClient _daemonClient;
-	private readonly ITessynRunService? _runService;
 	private readonly ITessynDaemonService? _daemonService;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
@@ -270,7 +269,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 		SessionTreeViewModel sessionTree,
 		IAgentMcpServer mcpServer,
 		IDaemonClient daemonClient,
-		ITessynRunService? runService = null,
 		ITessynDaemonService? daemonService = null)
 	{
 		_appSettings      = appSettings;
@@ -285,7 +283,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_selfUpdate       = selfUpdate;
 		_mcpServer        = mcpServer;
 		_daemonClient     = daemonClient;
-		_runService       = runService;
 		_daemonService    = daemonService;
 		SessionTree       = sessionTree;
 		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
@@ -413,11 +410,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _runService, _daemonService);
-				if (_appSettings.Settings.UseTessynDaemon && _daemonService != null && node.ExternalId != null)
-					_ = vm.LoadFromDaemonAsync();
-				else
-					vm.LoadFromFile();
+				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient);
+				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache[cacheKey] = vm;
 			}
