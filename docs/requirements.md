@@ -584,13 +584,13 @@ A supervisor session can spawn and control worker sessions. All workers are **pe
 | Tool | Required args | Optional args | Effect |
 |---|---|---|---|
 | `list_sessions` | — | — | Returns summary of all sessions in the tree: nodeId, name, dirLabel, isRunning, isResumable, lastPrompt. |
-| `spawn_session` | `name` | `workingDir`, `parentNodeId`, `prompt`, `model`, `group`, `schema` | Creates a **new** session node, runs the first turn, returns `{nodeId, resultText}`. `model` is tier-enforced (FR.16). |
-| `send_to_session` | `nodeId`, `prompt` | `mode` (wait/async), `schema` | **Resumes** an existing session node, runs a turn. In `wait` mode returns the result synchronously. In `async` mode posts the result back to the supervisor when done. `schema` enforces structured output (FR.15.7). |
+| `spawn_session` | `name` | `workingDir`, `parentNodeId`, `prompt`, `model`, `group`, `outputFormat` | Creates a **new** session node, runs the first turn, returns `{nodeId, resultText}`. `model` is tier-enforced (FR.16). |
+| `send_to_session` | `nodeId`, `prompt` | `mode` (wait/async), `outputFormat` | **Resumes** an existing session node, runs a turn. In `wait` mode returns the result synchronously. In `async` mode posts the result back to the supervisor when done. `outputFormat` is advisory markdown shaping guidance (FR.15.7). |
 | `read_session` | `nodeId` | `lastN` | Returns the last N session file entries for the given node. |
 | `stop_session` | `nodeId` | — | Cancels any running turn for the given node. |
 | `set_session_model` | `nodeId`, `model` | — | Changes the model for an existing session (tier-enforced, FR.16.2). Effective from next turn. |
-| `orchestrate_parallel` | `tasks` | `model`, `group`, `schema`, `budgetTokens` | Barrier fan-out: spawns one session per task, waits for all (FR.15.8). |
-| `orchestrate_pipeline` | `items`, `stages` | `model`, `group`, `schema`, `budgetTokens` | Non-blocking item pipeline: one session per item through sequential stages (FR.15.8). |
+| `orchestrate_parallel` | `tasks` | `model`, `group`, `outputFormat`, `budgetTokens` | Barrier fan-out: spawns one session per task, waits for all, returns one markdown document (FR.15.8). |
+| `orchestrate_pipeline` | `items`, `stages` | `model`, `group`, `outputFormat`, `budgetTokens` | Non-blocking item pipeline: one session per item through sequential stages, returns one markdown document (FR.15.8). |
 | `workflow_phase` | `title` | — | Writes `[Phase: {title}]` to the supervisor session file (FR.15.9). |
 | `workflow_log` | `message` | — | Writes `[Log: {message}]` to the supervisor session file (FR.15.9). |
 | `get_budget` | — | — | Returns token usage and remaining budget for the caller's active orchestrations (FR.15.6). |
@@ -612,12 +612,7 @@ A global kill-switch (`TerminateAllSessions`) cancels all active turn locks and 
 
 **FR.15.6 — Orchestration Budget:** Fan-out tools (`orchestrate_parallel`, `orchestrate_pipeline`) accept an optional `budgetTokens` (int) argument. When set, an `OrchestrationBudget` is registered in memory for the duration of the orchestration, keyed by `(supervisorNodeId, orchestrationId)`. Each worker turn accrues `input_tokens + output_tokens` against the budget. Spawning a new worker when the budget is already exhausted returns a `McpToolException`. The `get_budget` tool returns current usage and remaining tokens for the caller's active orchestrations.
 
-**FR.15.7 — Schema-Enforced Output:** `spawn_session`, `send_to_session`, `orchestrate_parallel`, and `orchestrate_pipeline` accept an optional `schema` argument (a JSON Schema object). When present, the host:
-1. Appends a schema-instruction to the worker's prompt telling it to return only valid JSON matching the schema.
-2. After the turn completes, validates the response using `JsonSchema.Net`.
-3. On failure, sends a correction prompt up to `Constants.Agent.MaxSchemaRetries` (default: 3) times.
-4. After `MaxSchemaRetries` exhausted, returns the last raw text prefixed with `[schema-invalid]`.
-5. On success, returns the validated JSON string so the supervisor can parse it without ambiguity.
+**FR.15.7 — Output Format Guidance (markdown-centric, not schema-validated):** `spawn_session`, `send_to_session`, `orchestrate_parallel`, and `orchestrate_pipeline` accept an optional `outputFormat` argument — a free-text/markdown description of the desired response shape (e.g. a section outline). The host appends it to the relevant prompt (the first prompt for `spawn_session`; the prompt for `send_to_session`; every worker's prompt for `orchestrate_parallel`; the **last stage's** prompt only for `orchestrate_pipeline`) as advisory guidance. It is never validated or retried — a worker's result is consumed by another session, which reads markdown far better than JSON, so there is no host-side parsing step to enforce. Convention: when a worker's output is genuinely large or structured (data files, generated code, a big table), it should write the artifact to a file in its working directory and return the path instead of inlining the content (see glossary "Worker Artifact File").
 
 **FR.15.8 — Fan-Out Primitives:**
 
@@ -627,10 +622,10 @@ A global kill-switch (`TerminateAllSessions`) cancels all active turn locks and 
 | `tasks` | yes | JSON array of `{name, prompt}` objects |
 | `model` | no | Override model for all workers (tier-enforced, FR.16) |
 | `group` | no | Group name for worker sessions in the tree |
-| `schema` | no | JSON Schema for structured output (FR.15.7) |
+| `outputFormat` | no | Advisory markdown shape guidance, applied to every worker's prompt (FR.15.7) |
 | `budgetTokens` | no | Token ceiling for this orchestration (FR.15.6) |
 
-Creates one worker session per task. All sessions run concurrently, bounded by `MaxConcurrentWorkers`. Returns a JSON array of `{name, result, inputTokens, outputTokens}` objects when ALL workers complete. Depth enforcement applies (FR.15.5).
+Creates one worker session per task. All sessions run concurrently, bounded by `MaxConcurrentWorkers`. Returns **one markdown document** — a `## {name}` section per worker with its result and a trailing `_tokens: in=… out=…_` line — when ALL workers complete. Depth enforcement applies (FR.15.5).
 
 `orchestrate_pipeline` — non-blocking item fan-out through sequential stages:
 | Arg | Required | Description |
@@ -639,10 +634,10 @@ Creates one worker session per task. All sessions run concurrently, bounded by `
 | `stages` | yes | JSON array of `{prompt}` objects. Stages run sequentially within one session per item. Use `{{item}}` in the first stage prompt to reference the item. |
 | `model` | no | Override model for all worker sessions (tier-enforced, FR.16) |
 | `group` | no | Group name for worker sessions |
-| `schema` | no | Applied to the LAST stage output only |
+| `outputFormat` | no | Advisory markdown shape guidance, applied to the LAST stage's prompt only |
 | `budgetTokens` | no | Token ceiling |
 
-Creates one session per item. Within each session the stages are sent as sequential turns (the session accumulates full context). All item-sessions run concurrently. Returns a JSON array of `{item, result, inputTokens, outputTokens}` when all are complete.
+Creates one session per item. Within each session the stages are sent as sequential turns (the session accumulates full context). All item-sessions run concurrently. Returns **one markdown document** — a `## {item}` section per item with its result and a trailing `_tokens: in=… out=…_` line — when all are complete.
 
 **FR.15.9 — Progress Tracking:**
 - `workflow_phase(title)` — writes a `SYSTEM` entry `[Phase: {title}]` to the calling supervisor's session file. Visible in the session view. Returns immediately.
@@ -650,6 +645,8 @@ Creates one session per item. Within each session the stages are sent as sequent
 
 **FR.15.10 — Per-Session Model Control:**
 - `set_session_model(nodeId, model)` — changes the persisted `ModelId` on an existing session node (tier-enforced per FR.16.2; the caller's tier must be ≥ the requested model's tier). Takes effect on the next turn for that session. The supervisor can use this to switch models on running worker sessions mid-orchestration.
+
+**FR.15.11 — CMX Orchestration Skill:** A skill named `cmx-orchestration` documents how to act as a supervisor (choosing between the orchestration tools, `outputFormat` shaping, the file-artifact convention) and how to behave when spawned as a worker (return markdown, honor `outputFormat`, don't over-nest, never use CLI-native scheduling). `SkillProvisioningService.ProvisionAll()` writes its `SKILL.md` (content: `Constants.Agent.OrchestrationSkillMarkdown`) into every registered profile's `skills/cmx-orchestration/` folder at startup — idempotent, rewriting only when content changes, mirroring `AgentMcpServer.EnsureConfigFileAsync`'s write pattern. Gated on `AgentToolsEnabled`; the Default profile (no dedicated config dir) is skipped. Only the skill's one-line frontmatter `description` is always visible to a session; the body loads on demand. A one-line pointer to the skill is folded into `Constants.Instructions.NoWorkflowTool`, so it is surfaced at session start under the same `IsAgentToolsEnabled && IsNewSession` gate as the rest of that instruction (FR.14.11) — not repeated on every turn.
 
 ---
 

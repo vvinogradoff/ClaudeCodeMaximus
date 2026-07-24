@@ -512,6 +512,36 @@
 - [DONE] `ViewModels/SessionViewModel.cs` — `BuildInstructionBlock` now delegates to the shared `InstructionBlockBuilder` (previously a separate, drifted copy missing `NoWorkflowTool` entirely) with `IsNewSession` from `ClaudeSessionId`/`ExternalId == null`
 - Confirmed no change needed for txt-view/JSONL-view separation — already correct: `.txt` session files only ever store the clean prompt (never the instruction block), and `ClaudeSessionImportService.ExtractUserContent` already strips the instruction block unless `raw: true` (used by the JSONL toggle), which is the existing mechanism for "cut it out in txt view, show everything in JSONL view"
 
+---
+
+## Phase 21 — Orchestrated Child Profile Inheritance (ISSUE-002) — DONE
+
+### P21.1 Fix spawned children falling back to Default profile — DONE
+- [DONE] `Models/SessionNodeModel.cs` — add persisted `ProfileName` (pinned profile for a session's headless turns; null = resolve from history, then Default)
+- [DONE] `Services/ISessionTurnService.cs` / `SessionTurnService.cs` — add `ResolveProfileName(node)` (returns pinned `ProfileName` if set, else last profile from history); `ResolveProfileConfigDir` now builds on it
+- [DONE] `Services/AgentMcpServer.cs` — `InheritSupervisorProfile(child, supervisor)`, called in `spawn_session`, `orchestrate_parallel`, and `orchestrate_pipeline` right after child creation, pinning the supervisor's resolved profile onto the child so it authenticates with the same account instead of falling back to a possibly-revoked Default
+- Documented as `docs/issues/ISSUE-002-orchestrated-child-profile-inheritance.md`; `ISSUE-001` marked fixed with a pointer to this follow-on
+
+---
+
+## Phase 22 — Markdown-Centric Orchestration I/O + CMX Orchestration Skill (FR.15.7, FR.15.8, FR.15.11)
+
+### P22.1 Replace JSON-Schema output validation with advisory markdown guidance (FR.15.7) — DONE
+- [DONE] `Services/AgentMcpServer.cs` — `spawn_session`, `send_to_session`, `orchestrate_parallel`, `orchestrate_pipeline` now accept `outputFormat` (free-text/markdown shape hint) instead of `schema` (JSON Schema)
+- [DONE] `ApplyOutputFormat` helper appends the hint as advisory prompt guidance (plus the file-artifact convention for large/structured results); applied to every worker's prompt for `orchestrate_parallel`, and to the **last stage's** prompt only for `orchestrate_pipeline`
+- [DONE] Removed `ValidateAndRetryAsync`, the `JsonSchema.Net` (`Json.Schema`) usage, and `Constants.Agent.MaxSchemaRetries` — no retry loop, no `[schema-invalid]` prefix
+- [DONE] All four tool input schemas + `HandleToolsList` descriptions updated; `Constants.Instructions.NoWorkflowTool` reworded (`schema` args → `outputFormat`)
+
+### P22.2 Markdown aggregation for fan-out tools (FR.15.8) — DONE
+- [DONE] `orchestrate_parallel` / `orchestrate_pipeline` no longer return a JSON array — `BuildWorkerResultsMarkdown` / `BuildPipelineResultsMarkdown` assemble one markdown document, one `## name`/`## item` section per result with a trailing `_tokens: in=… out=…_` line
+
+### P22.3 CMX Orchestration Skill, provisioned into every profile (FR.15.11) — DONE
+- [DONE] `Constants.cs` — `Agent.OrchestrationSkillName` (`cmx-orchestration`), `SkillsFolderName`, `SkillFileName`, and the `OrchestrationSkillMarkdown` body (supervisor guidance + worker guidance sections)
+- [DONE] `Services/ISkillProvisioningService.cs` / `SkillProvisioningService.cs` — new service; `ProvisionAll()` writes `SKILL.md` into every registered profile's `skills/cmx-orchestration/` folder, write-if-changed (mirrors `AgentMcpServer.EnsureConfigFileAsync`), gated on `AgentToolsEnabled`, skips the Default profile (no dedicated config dir)
+- [DONE] `App.axaml.cs` — registered the service; `ProvisionAll()` called at startup alongside `AgentMcpServer.Start()`
+- [DONE] Skill pointer folded into `Constants.Instructions.NoWorkflowTool` — surfaced once per fresh session under the existing `IsAgentToolsEnabled && IsNewSession` gate, not repeated every turn
+- [DONE] Provisioned immediately into all 7 currently-registered profiles by hand (the running app instance hosting this session can't be restarted to pick up the new build without severing it) — verified byte-identical across all 7 against the un-indented `Constants.cs` source
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion
