@@ -22,7 +22,7 @@
                       IsChecked="{Binding IsGlobalSearch}"
                       IsVisible="{Binding CanUseGlobalSearch}"
                       VerticalAlignment="Center" FontSize="12"
-                      ToolTip.Tip="Search across all projects (via Tessyn daemon)"/>
+                      ToolTip.Tip="Search across all Claude CLI sessions on this machine"/>
             <ComboBox ItemsSource="{Binding SourceDirectories}"
                       SelectedItem="{Binding SelectedSource}"
                       IsEnabled="{Binding !IsGlobalSearch}"

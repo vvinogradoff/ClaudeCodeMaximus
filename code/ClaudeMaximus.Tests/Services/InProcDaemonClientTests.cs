@@ -250,6 +250,52 @@ internal sealed class InProcFakeFileService : ISessionFileService
     public int RepairCorruptedCompactions() => 0;
 }
 
+internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
+{
+    public int ReindexResult { get; set; }
+    public IReadOnlyList<SessionSearchResultModel> SearchResult { get; set; } = Array.Empty<SessionSearchResultModel>();
+    public IReadOnlyDictionary<string, string> EnsureTitlesResult { get; set; } = new Dictionary<string, string>();
+    public IReadOnlyList<ClaudeSessionSummaryModel> SummariesResult { get; set; } = Array.Empty<ClaudeSessionSummaryModel>();
+
+    public string? LastSearchQuery { get; private set; }
+    public string? LastSearchProjectSlug { get; private set; }
+    public string? LastSearchRole { get; private set; }
+    public int? LastSearchLimit { get; private set; }
+    public int? LastSearchOffset { get; private set; }
+    public IReadOnlyList<ClaudeSessionSummaryModel>? LastEnsureTitlesSummaries { get; private set; }
+    public IReadOnlyList<string>? LastGetSummariesExternalIds { get; private set; }
+
+    public Task<int> ReindexAsync(CancellationToken cancellationToken = default) => Task.FromResult(ReindexResult);
+
+    public Task<IReadOnlyList<SessionSearchResultModel>> SearchAsync(
+        string query, string? projectSlug = null, string? role = null,
+        int? limit = null, int? offset = null, CancellationToken cancellationToken = default)
+    {
+        LastSearchQuery = query;
+        LastSearchProjectSlug = projectSlug;
+        LastSearchRole = role;
+        LastSearchLimit = limit;
+        LastSearchOffset = offset;
+        return Task.FromResult(SearchResult);
+    }
+
+    public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
+        IReadOnlyList<ClaudeSessionSummaryModel> summaries,
+        Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null,
+        CancellationToken cancellationToken = default)
+    {
+        LastEnsureTitlesSummaries = summaries;
+        return Task.FromResult(EnsureTitlesResult);
+    }
+
+    public Task<IReadOnlyList<ClaudeSessionSummaryModel>> GetSessionSummariesAsync(
+        IReadOnlyList<string> externalIds, CancellationToken cancellationToken = default)
+    {
+        LastGetSummariesExternalIds = externalIds;
+        return Task.FromResult(SummariesResult);
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────────────────────
 
 /// <remarks>Created by Claude</remarks>
@@ -259,11 +305,12 @@ public sealed class InProcDaemonClientTests
     private readonly InProcFakeTurnService _turnService = new();
     private readonly InProcFakeScheduler _scheduler = new();
     private readonly InProcFakeFileService _fileService = new();
+    private readonly InProcFakeIndexService _indexService = new();
     private readonly InProcDaemonClient _client;
 
     public InProcDaemonClientTests()
     {
-        _client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService);
+        _client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService);
     }
 
     private static SessionNodeModel MakeNode(string nodeId = "node-1") =>

@@ -190,6 +190,10 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotSupportedException("Fake does not implement InsertSessionIntoGroup.");
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => throw new NotSupportedException("Fake does not implement BuildAgentSessionSummaries.");
     public IReadOnlySet<string> CollectAllClaudeSessionIds() => throw new NotSupportedException("Fake does not implement CollectAllClaudeSessionIds.");
+    public Task<int> ReindexSessionsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement ReindexSessionsAsync.");
+    public Task<IReadOnlyList<SessionSearchResultModel>> SearchSessionsAsync(string query, string? projectSlug = null, string? role = null, int? limit = null, int? offset = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement SearchSessionsAsync.");
+    public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(IReadOnlyList<ClaudeSessionSummaryModel> summaries, Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement EnsureTitlesAsync.");
+    public Task<IReadOnlyList<ClaudeSessionSummaryModel>> GetSessionSummariesAsync(IReadOnlyList<string> externalIds, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement GetSessionSummariesAsync.");
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────────
@@ -777,6 +781,30 @@ public sealed class WireDaemonClientTests : IDisposable
     public void BuildAgentSessionSummaries_ThrowsNotSupportedException()
     {
         Assert.Throws<NotSupportedException>(() => _client.BuildAgentSessionSummaries());
+    }
+
+    [Fact]
+    public async Task ReindexSessionsAsync_ThrowsNotSupportedException()
+    {
+        await Assert.ThrowsAsync<NotSupportedException>(() => _client.ReindexSessionsAsync());
+    }
+
+    [Fact]
+    public async Task SearchSessionsAsync_ThrowsNotSupportedException()
+    {
+        await Assert.ThrowsAsync<NotSupportedException>(() => _client.SearchSessionsAsync("query"));
+    }
+
+    [Fact]
+    public async Task EnsureTitlesAsync_ThrowsNotSupportedException()
+    {
+        await Assert.ThrowsAsync<NotSupportedException>(() => _client.EnsureTitlesAsync(Array.Empty<ClaudeSessionSummaryModel>()));
+    }
+
+    [Fact]
+    public async Task GetSessionSummariesAsync_ThrowsNotSupportedException()
+    {
+        await Assert.ThrowsAsync<NotSupportedException>(() => _client.GetSessionSummariesAsync(Array.Empty<string>()));
     }
 
     [Fact]

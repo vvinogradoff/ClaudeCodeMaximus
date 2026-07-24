@@ -11,7 +11,8 @@ namespace ClaudeMaximus.Models;
 /// ClaudeSessionId is captured from the first result event and used for --resume on subsequent launches.
 /// NodeId is a stable GUID that never changes (unlike ClaudeSessionId) and is used by agent tools (FR.14.2).
 /// AgentToken is a random secret injected into the per-node --mcp-config to identify the calling node (FR.14.3).
-/// ExternalId is the stable daemon-side identifier (UUID from JSONL). Used for all Tessyn daemon references.
+/// ExternalId is the stable Claude CLI session identifier (UUID from the JSONL file name), used to key
+/// the cross-project search index (IClaudeSessionIndexService) and daemon-owned session lookups.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionNodeModel
@@ -32,9 +33,8 @@ public sealed class SessionNodeModel
 	public List<string> PriorClaudeSessionIds { get; set; } = [];
 
 	/// <summary>
-	/// Stable session identifier for the Tessyn daemon (UUID from JSONL filename or session_id).
-	/// Populated from ClaudeSessionId during migration, or from run.system event for new sessions.
-	/// Null for sessions not yet mapped to the daemon.
+	/// Stable Claude CLI session identifier (UUID from the JSONL file name). Populated from
+	/// ClaudeSessionId by <see cref="Services.SessionIdentityMigration"/>. Null until migrated.
 	/// </summary>
 	public string? ExternalId { get; set; }
 

@@ -133,4 +133,24 @@ public interface IDaemonClient
 
 	List<SessionSummaryModel> BuildAgentSessionSummaries();
 	IReadOnlySet<string> CollectAllClaudeSessionIds();
+
+	// ── Cross-project search & titles (Stage 6) ──────────────────────────────────────
+
+	/// <summary>Re-scans ~/.claude/projects/*/*.jsonl and updates the search index (incremental). Returns the count (re)indexed.</summary>
+	Task<int> ReindexSessionsAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>Full-text searches indexed session content across all projects, ranked by relevance.</summary>
+	Task<IReadOnlyList<SessionSearchResultModel>> SearchSessionsAsync(
+		string query, string? projectSlug = null, string? role = null,
+		int? limit = null, int? offset = null, CancellationToken cancellationToken = default);
+
+	/// <summary>Returns a title per summary — cached if already generated, otherwise generates and persists it.</summary>
+	Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
+		IReadOnlyList<ClaudeSessionSummaryModel> summaries,
+		Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null,
+		CancellationToken cancellationToken = default);
+
+	/// <summary>Looks up indexed session summary metadata for a set of external IDs (e.g. cross-project search hits).</summary>
+	Task<IReadOnlyList<ClaudeSessionSummaryModel>> GetSessionSummariesAsync(
+		IReadOnlyList<string> externalIds, CancellationToken cancellationToken = default);
 }

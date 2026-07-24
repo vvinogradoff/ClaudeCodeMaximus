@@ -361,13 +361,13 @@ public partial class MainWindow : Window
 
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
-		var daemonService = App.Services.GetRequiredService<ITessynDaemonService>();
+		var daemonClient = App.Services.GetRequiredService<IDaemonClient>();
 
 		var sourceDirectories = vm.SessionTree.BuildSourceDirectories();
 		var importTargets = vm.SessionTree.BuildImportTargets();
 		var (initialPath, initialTargetKey) = vm.SessionTree.GetSelectedImportContext();
 
-		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonService);
+		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonClient);
 		var alreadyImportedIds = vm.SessionTree.CollectAllClaudeSessionIds();
 		pickerVm.Initialize(sourceDirectories, importTargets, initialPath, initialTargetKey, alreadyImportedIds);
 

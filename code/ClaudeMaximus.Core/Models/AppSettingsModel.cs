@@ -108,24 +108,4 @@ public sealed class AppSettingsModel
 	/// Default true — disable to suppress all result toasts.
 	/// </summary>
 	public bool NotificationsEnabled { get; set; } = true;
-
-	/// <summary>Path to the tessyn daemon executable. Default: "tessyn" (assumes on PATH).</summary>
-	public string TessynPath { get; set; } = "tessyn";
-
-	/// <summary>Whether to auto-start the Tessyn daemon if not already running.</summary>
-	public bool AutoStartDaemon { get; set; } = true;
-
-	/// <summary>
-	/// When true, use the Tessyn daemon for session operations (send, load, search).
-	/// When false, use the legacy local process and file-based code paths.
-	/// Default false during migration; set to true once daemon integration is verified.
-	/// </summary>
-	public bool UseTessynDaemon { get; set; }
-
-	/// <summary>
-	/// Permission mode for daemon-spawned Claude sessions.
-	/// "default" = Claude asks for tool approval (may block in headless mode).
-	/// "auto-approve" = all tools auto-approved (--dangerously-skip-permissions).
-	/// </summary>
-	public string DaemonPermissionMode { get; set; } = "auto-approve";
 }

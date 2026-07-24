@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         x:Class="ClaudeMaximus.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="Tessyn Desktop"
+        Title="ClaudeMaximus"
         Icon="avares://ClaudeMaximus/Assets/avalonia-logo.ico"
         SystemDecorations="BorderOnly"
         Width="1400" Height="900"
@@ -25,25 +25,10 @@
                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
                 <!-- Window control buttons — docked right -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="0">
-                    <!-- Tessyn daemon status indicator -->
-                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,10,0"
-                                VerticalAlignment="Center"
-                                IsVisible="{Binding IsDaemonStatusVisible}"
-                                ToolTip.Tip="{Binding DaemonStatusText}">
-                        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
-                                 Fill="{Binding DaemonStatusColor, Converter={x:Static views:StringToBrushConverter.Instance}}"/>
-                        <TextBlock Text="{Binding DaemonStatusText}" FontSize="10"
-                                   Opacity="0.6" VerticalAlignment="Center"/>
-                    </StackPanel>
                     <TextBlock Text="&#x26A0;" VerticalAlignment="Center"
                                FontSize="13" Foreground="Orange" Margin="0,0,4,0"
                                IsVisible="{Binding IsRunningFromBuildOutput}"
                                ToolTip.Tip="Running from project build output — will not be updated on restart"/>
-                    <!-- Daemon missing inline indicator -->
-                    <TextBlock Text="{Binding DaemonMissingMessage}" VerticalAlignment="Center"
-                               FontSize="10" Foreground="DarkRed" Margin="0,0,8,0"
-                               IsVisible="{Binding IsDaemonMissing}" x:CompileBindings="False"
-                               ToolTip.Tip="{Binding DaemonMissingMessage, x:CompileBindings=False}"/>
                     <TextBlock x:Name="BuildNumberText" VerticalAlignment="Center"
                                FontSize="10" Opacity="0.4" Margin="0,0,8,0"/>
                     <Button x:Name="MinimizeBtn" Content="&#x2013;" Width="46" Height="30"

@@ -6,8 +6,8 @@ namespace ClaudeMaximus.Services;
 
 /// <summary>
 /// One-time migration that populates ExternalId from ClaudeSessionId for existing sessions.
-/// ClaudeSessionId is the same UUID used by the Tessyn daemon as external_id, so this
-/// is a simple copy rather than a lookup.
+/// Both are the same underlying Claude CLI session UUID, so this is a simple copy rather
+/// than a lookup.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionIdentityMigration

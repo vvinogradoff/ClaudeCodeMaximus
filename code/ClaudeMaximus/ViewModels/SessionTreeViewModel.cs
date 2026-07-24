@@ -26,10 +26,8 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly ISessionSearchService _searchService;
 	private readonly IGitOriginService _gitOriginService;
 	private readonly IDraftService _draftService;
-	private readonly ITessynDaemonService? _daemonService;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
-	private Dictionary<int, string>? _daemonIdToExternalIdCache;
 	private ViewModelBase? _selectedTreeItem;
 	private CancellationTokenSource? _searchCts;
 
@@ -99,8 +97,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		IClaudeSessionStatusService claudeSessionStatus,
 		ISessionSearchService searchService,
 		IGitOriginService gitOriginService,
-		IDraftService draftService,
-		ITessynDaemonService? daemonService = null)
+		IDraftService draftService)
 	{
 		_daemon = daemon;
 		_appSettings = appSettings;
@@ -110,7 +107,6 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		_searchService = searchService;
 		_gitOriginService = gitOriginService;
 		_draftService = draftService;
-		_daemonService = daemonService;
 
 		AddDirectoryCommand = ReactiveCommand.Create(PromptAddDirectory);
 
@@ -283,8 +279,6 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		parent.Children.Add(vm); // VM-only
 		return vm;
 	}
-
-	private bool UseDaemon => _appSettings.Settings.UseTessynDaemon && _daemonService != null;
 
 	// --- Import operations ---
 
@@ -948,103 +942,44 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		var cts = new CancellationTokenSource();
 		_searchCts = cts;
 
-		if (UseDaemon)
+		_ = Task.Run(async () =>
 		{
-			_ = Task.Run(async () =>
+			try
 			{
-				try
-				{
-					var response = await _daemonService!.SearchAsync(query, cancellationToken: cts.Token);
-					if (cts.Token.IsCancellationRequested) return;
+				var results = await _daemon.SearchSessionsAsync(query, cancellationToken: cts.Token);
+				if (cts.Token.IsCancellationRequested) return;
 
-					// Search returns numeric sessionIds — resolve to externalIds via sessions.list
-					var numericIds = response.Results.Select(r => r.SessionId).ToHashSet();
-					if (numericIds.Count == 0)
-					{
-						Dispatcher.UIThread.Post(() =>
-						{
-							foreach (var dir in Directories)
-							{
-								HideAllChildren(dir.Children);
-								dir.IsVisible = false;
-							}
-						});
-						return;
-					}
-
-					// Resolve numeric IDs to externalIds using cached map
-					if (_daemonIdToExternalIdCache == null)
-					{
-						var allSessions = await _daemonService.SessionsListAsync(limit: 10000, cancellationToken: cts.Token);
-						_daemonIdToExternalIdCache = new Dictionary<int, string>();
-						foreach (var s in allSessions)
-							_daemonIdToExternalIdCache[s.Id] = s.ExternalId;
-					}
-
-					var matchingExternalIds = new HashSet<string>();
-					foreach (var nid in numericIds)
-					{
-						if (_daemonIdToExternalIdCache.TryGetValue(nid, out var eid))
-							matchingExternalIds.Add(eid);
-					}
-
-					if (cts.Token.IsCancellationRequested) return;
-
-					Dispatcher.UIThread.Post(() =>
-					{
-						if (cts.Token.IsCancellationRequested) return;
-
-						foreach (var dir in Directories)
-						{
-							var dirHasMatch = ApplyFilterToChildrenByExternalId(dir.Children, matchingExternalIds);
-							dir.IsVisible = dirHasMatch;
-						}
-					});
-				}
-				catch (OperationCanceledException) { /* expected */ }
-				catch (Exception ex)
-				{
-					if (cts.Token.IsCancellationRequested) return;
-					Serilog.Log.Warning(ex, "Daemon search failed, falling back to local");
-					var matches = _searchService.FindMatchingSessionFiles(query);
-					if (cts.Token.IsCancellationRequested) return;
-					Dispatcher.UIThread.Post(() =>
-					{
-						if (cts.Token.IsCancellationRequested) return;
-						foreach (var dir in Directories)
-						{
-							var dirHasMatch = ApplyFilterToChildren(dir.Children, matches);
-							dir.IsVisible = dirHasMatch;
-						}
-					});
-				}
-			}, cts.Token);
-		}
-		else
-		{
-			Task.Run(() =>
-			{
-				if (cts.Token.IsCancellationRequested)
-					return;
-
-				var matches = _searchService.FindMatchingSessionFiles(query);
-
-				if (cts.Token.IsCancellationRequested)
-					return;
+				var matchingExternalIds = results.Select(r => r.ExternalId).ToHashSet();
 
 				Dispatcher.UIThread.Post(() =>
 				{
-					if (cts.Token.IsCancellationRequested)
-						return;
+					if (cts.Token.IsCancellationRequested) return;
 
+					foreach (var dir in Directories)
+					{
+						var dirHasMatch = ApplyFilterToChildrenByExternalId(dir.Children, matchingExternalIds);
+						dir.IsVisible = dirHasMatch;
+					}
+				});
+			}
+			catch (OperationCanceledException) { /* expected */ }
+			catch (Exception ex)
+			{
+				if (cts.Token.IsCancellationRequested) return;
+				Serilog.Log.Warning(ex, "Session search failed, falling back to local substring match");
+				var matches = _searchService.FindMatchingSessionFiles(query);
+				if (cts.Token.IsCancellationRequested) return;
+				Dispatcher.UIThread.Post(() =>
+				{
+					if (cts.Token.IsCancellationRequested) return;
 					foreach (var dir in Directories)
 					{
 						var dirHasMatch = ApplyFilterToChildren(dir.Children, matches);
 						dir.IsVisible = dirHasMatch;
 					}
 				});
-			}, cts.Token);
-		}
+			}
+		}, cts.Token);
 	}
 
 	private static bool ApplyFilterToChildren(ObservableCollection<ViewModelBase> children, IReadOnlySet<string> matches)
@@ -1093,24 +1028,6 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		}
 
 		return anyVisible;
-	}
-
-	private static void HideAllChildren(ObservableCollection<ViewModelBase> children)
-	{
-		foreach (var child in children)
-		{
-			switch (child)
-			{
-				case SessionNodeViewModel session:
-					session.IsVisible = false;
-					foreach (var sub in session.SubSessions) sub.IsVisible = false;
-					break;
-				case GroupNodeViewModel group:
-					HideAllChildren(group.Children);
-					group.IsVisible = false;
-					break;
-			}
-		}
 	}
 
 	private void ShowAllNodes()

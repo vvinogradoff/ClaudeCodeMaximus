@@ -844,13 +844,13 @@ public partial class SessionTreeView : UserControl
 	{
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
-		var daemonService = App.Services.GetRequiredService<ITessynDaemonService>();
+		var daemonClient = App.Services.GetRequiredService<IDaemonClient>();
 
 		var sourceDirectories = vm.BuildSourceDirectories();
 		var importTargets = vm.BuildImportTargets();
 		var alreadyImportedIds = vm.CollectAllClaudeSessionIds();
 
-		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonService);
+		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonClient);
 		pickerVm.Initialize(sourceDirectories, importTargets, workingDirectory, initialTargetKey, alreadyImportedIds);
 
 		var picker = new ImportPickerWindow { DataContext = pickerVm };
@@ -894,13 +894,7 @@ public partial class SessionTreeView : UserControl
 			}
 			else
 			{
-				// Daemon-sourced session (no local JSONL) — create placeholder file.
-				// Content will be loaded from daemon via sessions.get when opened.
-				var appSettings = App.Services.GetRequiredService<IAppSettingsService>();
-				if (appSettings.Settings.UseTessynDaemon)
-					fileName = $"daemon-{System.Guid.NewGuid():N}.pending";
-				else
-					return; // Cannot import without JSONL and without daemon
+				return; // Cannot import without a resolvable JSONL path
 			}
 
 			// Determine original project path for cross-project sessions

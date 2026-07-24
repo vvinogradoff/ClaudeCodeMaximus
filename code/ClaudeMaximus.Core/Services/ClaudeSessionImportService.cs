@@ -127,7 +127,7 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 		return entries;
 	}
 
-	private static ClaudeSessionSummaryModel? ExtractSummary(string sessionId, string jsonlPath)
+	public ClaudeSessionSummaryModel? ExtractSummary(string sessionId, string jsonlPath)
 	{
 		DateTimeOffset? firstTimestamp = null;
 		DateTimeOffset? lastTimestamp = null;

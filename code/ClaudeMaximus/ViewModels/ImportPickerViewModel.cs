@@ -22,7 +22,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeAssistService _assistService;
-	private readonly ITessynDaemonService? _daemonService;
+	private readonly IDaemonClient _daemon;
 	private string _searchText = string.Empty;
 	private bool _isSearching;
 	private bool _isGlobalSearch;
@@ -36,7 +36,6 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	private ImportTargetModel? _selectedSource;
 	private ImportTargetModel? _selectedImportTarget;
 	private IReadOnlySet<string> _alreadyImportedIds = new HashSet<string>();
-	private Dictionary<int, TessynSessionModel>? _daemonSessionCache;
 
 	/// <summary>All discovered session items (master list).</summary>
 	private List<ImportSessionItemViewModel> _allItems = [];
@@ -75,8 +74,8 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		set => this.RaiseAndSetIfChanged(ref _isGlobalSearch, value);
 	}
 
-	/// <summary>Whether daemon-based global search is available.</summary>
-	public bool CanUseGlobalSearch => _daemonService != null;
+	/// <summary>Whether cross-project global search is available (always true — backed by the in-process session index, no external dependency).</summary>
+	public bool CanUseGlobalSearch => true;
 
 	public bool IsGeneratingTitles
 	{
@@ -284,11 +283,11 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	public ImportPickerViewModel(
 		IClaudeSessionImportService importService,
 		IClaudeAssistService assistService,
-		ITessynDaemonService? daemonService = null)
+		IDaemonClient daemon)
 	{
 		_importService = importService;
 		_assistService = assistService;
-		_daemonService = daemonService;
+		_daemon = daemon;
 	}
 
 	/// <summary>
@@ -377,64 +376,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		else
 			StatusMessage = $"Found {_allItems.Count} sessions.";
 
-		// Enrich with daemon titles THEN generate remaining — sequenced, not raced
-		_ = EnrichThenGenerateTitlesAsync(summaries);
-	}
-
-	private async Task EnrichThenGenerateTitlesAsync(IReadOnlyList<ClaudeSessionSummaryModel> summaries)
-	{
-		// Step 1: Try to get persisted titles from daemon
-		if (_daemonService != null)
-			await EnrichWithDaemonTitlesAsync(summaries);
-
-		// Step 2: Generate titles for any still-untitled sessions
-		await GenerateTitlesAsync();
-	}
-
-	private async Task EnrichWithDaemonTitlesAsync(IReadOnlyList<ClaudeSessionSummaryModel> summaries)
-	{
-		try
-		{
-			// Build session cache if needed
-			if (_daemonSessionCache == null)
-			{
-				var allSessions = await _daemonService!.SessionsListAsync(limit: 10000);
-				_daemonSessionCache = allSessions.ToDictionary(s => s.Id);
-			}
-
-			var byExternalId = _daemonSessionCache.Values
-				.Where(s => s.Title != null)
-				.ToDictionary(s => s.ExternalId, s => s.Title!);
-
-			var enriched = 0;
-			foreach (var summary in summaries)
-			{
-				if (summary.GeneratedTitle == null && byExternalId.TryGetValue(summary.SessionId, out var title))
-				{
-					summary.GeneratedTitle = title;
-					_importService.CacheTitle(summary.SessionId, title);
-					enriched++;
-				}
-			}
-
-			if (enriched > 0)
-			{
-				_log.Information("Enriched {Count} sessions with daemon-persisted titles", enriched);
-				// Update display titles on existing items
-				Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-				{
-					foreach (var item in _allItems)
-					{
-						if (item.IsTitlePending && item.Summary.GeneratedTitle != null)
-							item.UpdateTitle(item.Summary.GeneratedTitle);
-					}
-				});
-			}
-		}
-		catch (Exception ex)
-		{
-			_log.Debug(ex, "Failed to enrich sessions with daemon titles");
-		}
+		_ = GenerateTitlesAsync();
 	}
 
 	/// <summary>
@@ -462,7 +404,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		try
 		{
-			if (_isGlobalSearch && _daemonService != null)
+			if (_isGlobalSearch)
 			{
 				await SearchViaDaemonAsync(query);
 			}
@@ -498,74 +440,43 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 	private async Task SearchViaDaemonAsync(string query)
 	{
-		var response = await _daemonService!.SearchAsync(query, limit: 50);
-		if (response.Results.Count == 0)
+		var hits = await _daemon.SearchSessionsAsync(query, limit: 50);
+		if (hits.Count == 0)
 		{
 			StatusMessage = "No results found across all projects.";
 			Items.Clear();
 			return;
 		}
 
-		// Collect unique session IDs from search results
-		var hitSessionIds = response.Results.Select(r => r.SessionId).Distinct().ToList();
-
-		// Resolve to full session models (cached to avoid per-keystroke fetches)
-		if (_daemonSessionCache == null)
-		{
-			var allSessions = await _daemonService.SessionsListAsync(limit: 10000);
-			_daemonSessionCache = allSessions.ToDictionary(s => s.Id);
-		}
-		var sessionMap = _daemonSessionCache;
+		// Preserve relevance-rank order while collecting each session's first (best) hit
+		var hitExternalIds = hits.Select(r => r.ExternalId).Distinct().ToList();
+		var summaries = await _daemon.GetSessionSummariesAsync(hitExternalIds);
+		var summaryByExternalId = summaries.ToDictionary(s => s.SessionId);
 
 		Items.Clear();
 		var count = 0;
 
-		foreach (var sid in hitSessionIds)
+		foreach (var externalId in hitExternalIds)
 		{
-			if (!sessionMap.TryGetValue(sid, out var session)) continue;
-
 			// Check if already in _allItems (local discovery)
-			var existing = _allItems.FirstOrDefault(i => i.Summary.SessionId == session.ExternalId);
+			var existing = _allItems.FirstOrDefault(i => i.Summary.SessionId == externalId);
 			if (existing != null)
 			{
 				Items.Add(existing);
 			}
-			else
+			else if (summaryByExternalId.TryGetValue(externalId, out var summary))
 			{
-				// Resolve JSONL path and original project path
-				var jsonlPath = string.Empty;
-				string? originalProjectPath = null;
+				// Reverse slug to path for cross-project sessions (best-effort; slugs are lossy)
+				if (summary.OriginalProjectPath == null && summary.ProjectSlug is { } slug && slug.StartsWith('-'))
+					summary.OriginalProjectPath = slug.Replace('-', '/');
 
-				if (!string.IsNullOrEmpty(session.ProjectSlug))
-				{
-					var claudeHome = System.IO.Path.Combine(
-						Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-						".claude", "projects", session.ProjectSlug);
-					var candidatePath = System.IO.Path.Combine(claudeHome, session.ExternalId + ".jsonl");
-					if (System.IO.File.Exists(candidatePath))
-						jsonlPath = candidatePath;
-
-					// Reverse slug to path for cross-project sessions
-					if (session.ProjectSlug.StartsWith('-'))
-						originalProjectPath = session.ProjectSlug.Replace('-', '/');
-				}
-
-				var summary = new ClaudeSessionSummaryModel
-				{
-					SessionId           = session.ExternalId,
-					JsonlPath           = jsonlPath,
-					Created             = DateTimeOffset.FromUnixTimeMilliseconds(session.CreatedAt),
-					LastUsed            = DateTimeOffset.FromUnixTimeMilliseconds(session.UpdatedAt),
-					MessageCount        = session.MessageCount,
-					FirstUserPrompt     = session.FirstPrompt,
-					GeneratedTitle      = session.Title,
-					OriginalProjectPath = originalProjectPath,
-					ProjectSlug         = session.ProjectSlug,
-				};
-				var isImported = _alreadyImportedIds.Contains(session.ExternalId);
+				var isImported = _alreadyImportedIds.Contains(externalId);
 				var item = new ImportSessionItemViewModel(summary, isImported);
 				Items.Add(item);
-
+			}
+			else
+			{
+				continue;
 			}
 			count++;
 		}
@@ -602,44 +513,15 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		try
 		{
-			if (_daemonService != null)
+			var summaries = pendingItems.Select(i => i.Summary).ToList();
+			await _daemon.EnsureTitlesAsync(summaries, OnBatchComplete, ct);
+
+			if (ct.IsCancellationRequested) return;
+
+			foreach (var item in pendingItems)
 			{
-				// Use daemon RPC — generates and persists titles server-side
-				var generated = await _daemonService.TitlesGenerateAsync(pendingItems.Count, ct);
-				_log.Information("Daemon generated {Count} titles", generated);
-
-				// Refresh titles from daemon
-				var allSessions = await _daemonService.SessionsListAsync(limit: 10000, cancellationToken: ct);
-				var titleMap = allSessions
-					.Where(s => s.Title != null)
-					.ToDictionary(s => s.ExternalId, s => s.Title!);
-
-				Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-				{
-					foreach (var item in pendingItems)
-					{
-						if (titleMap.TryGetValue(item.SessionId, out var title))
-							item.UpdateTitle(title);
-						else if (item.IsTitlePending)
-							item.IsTitlePending = false;
-					}
-					TitleProgressValue = pendingItems.Count;
-					TitleProgressText = string.Empty;
-				});
-			}
-			else
-			{
-				// Legacy: local CLI title generation
-				var summaries = pendingItems.Select(i => i.Summary).ToList();
-				await _assistService.GenerateTitlesAsync(summaries, OnBatchComplete, ct);
-
-				if (ct.IsCancellationRequested) return;
-
-				foreach (var item in pendingItems)
-				{
-					if (item.IsTitlePending)
-						item.IsTitlePending = false;
-				}
+				if (item.IsTitlePending)
+					item.IsTitlePending = false;
 			}
 		}
 		catch (OperationCanceledException)
@@ -657,7 +539,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		}
 	}
 
-	private void OnBatchComplete(Dictionary<string, string> allTitlesSoFar)
+	private void OnBatchComplete(IReadOnlyDictionary<string, string> allTitlesSoFar)
 	{
 		// Cache all titles for future dialog opens
 		foreach (var (sessionId, title) in allTitlesSoFar)
@@ -758,14 +640,9 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		try
 		{
-			// For daemon-sourced virtual items (cross-project search), load preview from daemon
 			if (string.IsNullOrEmpty(item.Summary.JsonlPath))
 			{
-				if (_daemonService != null)
-					_ = LoadPreviewFromDaemonAsync(item.Summary.SessionId);
-				else
-					PreviewEntries.Add(new PreviewEntryViewModel("SYSTEM",
-						"Preview not available without daemon connection."));
+				PreviewEntries.Add(new PreviewEntryViewModel("SYSTEM", "Preview not available."));
 				this.RaisePropertyChanged(nameof(HasPreview));
 				return;
 			}
@@ -794,38 +671,6 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		catch (Exception ex)
 		{
 			_log.Warning(ex, "LoadPreview: failed to parse {Path}", item.Summary.JsonlPath);
-		}
-
-		this.RaisePropertyChanged(nameof(HasPreview));
-	}
-
-	private async Task LoadPreviewFromDaemonAsync(string externalId)
-	{
-		try
-		{
-			var result = await _daemonService!.SessionsGetAsync(externalId, limit: PreviewEntryLimit * 2);
-			var conversationEntries = result.Messages
-				.Where(m => m.Role is "user" or "assistant")
-				.Select(m => (Role: m.Role.ToUpperInvariant(), m.Content))
-				.ToList();
-
-			var startIndex = Math.Max(0, conversationEntries.Count - PreviewEntryLimit);
-			for (var i = startIndex; i < conversationEntries.Count; i++)
-			{
-				var content = conversationEntries[i].Content;
-				if (content.Length > 300)
-					content = content[..297] + "...";
-
-				PreviewEntries.Add(new PreviewEntryViewModel(conversationEntries[i].Role, content));
-			}
-
-			if (PreviewEntries.Count == 0)
-				PreviewEntries.Add(new PreviewEntryViewModel("SYSTEM", "(no conversation content)"));
-		}
-		catch (Exception ex)
-		{
-			_log.Warning(ex, "Failed to load daemon preview for {ExternalId}", externalId);
-			PreviewEntries.Add(new PreviewEntryViewModel("SYSTEM", "Could not load preview."));
 		}
 
 		this.RaisePropertyChanged(nameof(HasPreview));

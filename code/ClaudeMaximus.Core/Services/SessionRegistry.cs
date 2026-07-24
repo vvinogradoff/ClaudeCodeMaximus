@@ -484,10 +484,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     private SessionNodeModel CreateSessionModel(string name, string workingDir)
     {
-        var useDaemon = _appSettings.Settings.UseTessynDaemon;
-        var fileName = useDaemon
-            ? $"daemon-{Guid.NewGuid():N}.pending"
-            : _fileService.CreateSessionFile();
+        var fileName = _fileService.CreateSessionFile();
         return new SessionNodeModel
         {
             Name             = name,

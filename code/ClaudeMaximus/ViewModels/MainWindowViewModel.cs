@@ -28,15 +28,12 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ISelfUpdateService _selfUpdate;
 	private readonly IAgentMcpServer _mcpServer;
 	private readonly IDaemonClient _daemonClient;
-	private readonly ITessynDaemonService? _daemonService;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
 	private bool _isTreePanelVisible;
 	private bool _isDarkTheme;
 	private int _selectedLeftTabIndex;
-	private string _daemonStatusText = string.Empty;
-	private string _daemonStatusColor = "Gray";
 	private SessionNodeViewModel? _selectedRecentSession;
 	private bool _suppressRecentNav;
 
@@ -122,49 +119,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 			_appSettings.Save();
 		}
 	}
-
-	private bool _isDaemonMissing;
-	private string _daemonMissingMessage = string.Empty;
-
-	/// <summary>True when tessyn binary was not found on PATH.</summary>
-	public bool IsDaemonMissing
-	{
-		get => _isDaemonMissing;
-		private set => this.RaiseAndSetIfChanged(ref _isDaemonMissing, value);
-	}
-
-	/// <summary>User-facing message about missing daemon.</summary>
-	public string DaemonMissingMessage
-	{
-		get => _daemonMissingMessage;
-		private set => this.RaiseAndSetIfChanged(ref _daemonMissingMessage, value);
-	}
-
-	/// <summary>Called when tessyn binary is not found during startup.</summary>
-	public void SetDaemonMissing(string message)
-	{
-		IsDaemonMissing = true;
-		DaemonMissingMessage = message;
-		DaemonStatusText = "Not installed";
-		DaemonStatusColor = "Red";
-	}
-
-	/// <summary>Status text for the Tessyn daemon indicator in the title bar.</summary>
-	public string DaemonStatusText
-	{
-		get => _daemonStatusText;
-		private set => this.RaiseAndSetIfChanged(ref _daemonStatusText, value);
-	}
-
-	/// <summary>Color name for the daemon status dot (Green, Orange, Red, Gray).</summary>
-	public string DaemonStatusColor
-	{
-		get => _daemonStatusColor;
-		private set => this.RaiseAndSetIfChanged(ref _daemonStatusColor, value);
-	}
-
-	/// <summary>Whether daemon status indicator should be visible.</summary>
-	public bool IsDaemonStatusVisible => _daemonService != null && _appSettings.Settings.UseTessynDaemon;
 
 	// --- FR.11 instruction toolbar forwarding properties ---
 
@@ -268,8 +222,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IDirectoryLabelService labelService,
 		SessionTreeViewModel sessionTree,
 		IAgentMcpServer mcpServer,
-		IDaemonClient daemonClient,
-		ITessynDaemonService? daemonService = null)
+		IDaemonClient daemonClient)
 	{
 		_appSettings      = appSettings;
 		_fileService      = fileService;
@@ -283,7 +236,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_selfUpdate       = selfUpdate;
 		_mcpServer        = mcpServer;
 		_daemonClient     = daemonClient;
-		_daemonService    = daemonService;
 		SessionTree       = sessionTree;
 		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
@@ -341,41 +293,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 					SessionTree.SelectedSession = node;
 			});
 
-		// Subscribe to daemon state changes for status indicator
-		if (_daemonService != null)
-		{
-			_daemonService.ConnectionStateChanged += (_, state) =>
-			{
-				Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateDaemonStatus(state, _daemonService.Readiness));
-			};
-			_daemonService.ReadinessChanged += (_, readiness) =>
-			{
-				Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateDaemonStatus(_daemonService.ConnectionState, readiness));
-			};
-			UpdateDaemonStatus(_daemonService.ConnectionState, _daemonService.Readiness);
-		}
-
 		// Populate the top-bar recent-sessions dropdown on startup
 		RefreshRecentDropdown();
-	}
-
-	private void UpdateDaemonStatus(TessynConnectionState connection, TessynDaemonReadiness readiness)
-	{
-		(DaemonStatusText, DaemonStatusColor) = connection switch
-		{
-			TessynConnectionState.Disconnected => ("Disconnected", "Red"),
-			TessynConnectionState.Connecting => ("Connecting...", "Orange"),
-			TessynConnectionState.Reconnecting => ("Reconnecting...", "Orange"),
-			TessynConnectionState.Connected => readiness switch
-			{
-				TessynDaemonReadiness.Ready => ($"Tessyn: {_daemonService?.LastStatus?.SessionsIndexed ?? 0} sessions", "Green"),
-				TessynDaemonReadiness.Scanning => ("Indexing...", "Orange"),
-				TessynDaemonReadiness.Cold => ("Starting...", "Orange"),
-				TessynDaemonReadiness.Degraded => ("Degraded", "Orange"),
-				_ => ("Connected", "Green"),
-			},
-			_ => ("Unknown", "Gray"),
-		};
 	}
 
 	private void OnSelectedSessionChanged(SessionNodeViewModel? node)

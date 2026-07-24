@@ -20,17 +20,20 @@ public sealed class InProcDaemonClient : IDaemonClient
 	private readonly ISessionTurnService _turnService;
 	private readonly ISchedulerService _scheduler;
 	private readonly ISessionFileService _fileService;
+	private readonly IClaudeSessionIndexService _indexService;
 
 	public InProcDaemonClient(
 		ISessionRegistry registry,
 		ISessionTurnService turnService,
 		ISchedulerService scheduler,
-		ISessionFileService fileService)
+		ISessionFileService fileService,
+		IClaudeSessionIndexService indexService)
 	{
 		_registry = registry;
 		_turnService = turnService;
 		_scheduler = scheduler;
 		_fileService = fileService;
+		_indexService = indexService;
 
 		// Forward the underlying domain events through the boundary. Over TDCP these become
 		// push notifications on the change channel; in-process they are a direct relay.
@@ -154,4 +157,24 @@ public sealed class InProcDaemonClient : IDaemonClient
 	public List<SessionSummaryModel> BuildAgentSessionSummaries() => _registry.BuildAgentSessionSummaries();
 
 	public IReadOnlySet<string> CollectAllClaudeSessionIds() => _registry.CollectAllClaudeSessionIds();
+
+	// ── Cross-project search & titles ────────────────────────────────────────────────
+
+	public Task<int> ReindexSessionsAsync(CancellationToken cancellationToken = default)
+		=> _indexService.ReindexAsync(cancellationToken);
+
+	public Task<IReadOnlyList<SessionSearchResultModel>> SearchSessionsAsync(
+		string query, string? projectSlug = null, string? role = null,
+		int? limit = null, int? offset = null, CancellationToken cancellationToken = default)
+		=> _indexService.SearchAsync(query, projectSlug, role, limit, offset, cancellationToken);
+
+	public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
+		IReadOnlyList<ClaudeSessionSummaryModel> summaries,
+		Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null,
+		CancellationToken cancellationToken = default)
+		=> _indexService.EnsureTitlesAsync(summaries, onBatchComplete, cancellationToken);
+
+	public Task<IReadOnlyList<ClaudeSessionSummaryModel>> GetSessionSummariesAsync(
+		IReadOnlyList<string> externalIds, CancellationToken cancellationToken = default)
+		=> _indexService.GetSessionSummariesAsync(externalIds, cancellationToken);
 }

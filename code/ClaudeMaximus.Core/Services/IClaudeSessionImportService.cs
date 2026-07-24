@@ -34,4 +34,11 @@ public interface IClaudeSessionImportService
 	/// Returns a cached title for a session ID, or null if not cached.
 	/// </summary>
 	string? GetCachedTitle(string sessionId);
+
+	/// <summary>
+	/// Extracts summary metadata (first prompt, prompt samples, message count, timestamps) from
+	/// a single JSONL session file, for search indexing or title generation. Returns null if the
+	/// file is unreadable.
+	/// </summary>
+	ClaudeSessionSummaryModel? ExtractSummary(string sessionId, string jsonlPath);
 }

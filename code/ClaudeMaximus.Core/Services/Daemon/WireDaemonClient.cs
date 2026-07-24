@@ -360,6 +360,30 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 			"CollectAllClaudeSessionIds is not available over the TDCP wire yet. " +
 			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
 
+	// ── Cross-project search & titles ────────────────────────────────────────────────
+
+	public Task<int> ReindexSessionsAsync(CancellationToken cancellationToken = default) =>
+		throw new NotSupportedException(
+			"ReindexSessionsAsync is not available over the TDCP wire yet; see tdcp-spec.md §5.");
+
+	public Task<IReadOnlyList<SessionSearchResultModel>> SearchSessionsAsync(
+		string query, string? projectSlug = null, string? role = null,
+		int? limit = null, int? offset = null, CancellationToken cancellationToken = default) =>
+		throw new NotSupportedException(
+			"SearchSessionsAsync is not available over the TDCP wire yet; see tdcp-spec.md §5.");
+
+	public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
+		IReadOnlyList<ClaudeSessionSummaryModel> summaries,
+		Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null,
+		CancellationToken cancellationToken = default) =>
+		throw new NotSupportedException(
+			"EnsureTitlesAsync is not available over the TDCP wire yet; see tdcp-spec.md §5.");
+
+	public Task<IReadOnlyList<ClaudeSessionSummaryModel>> GetSessionSummariesAsync(
+		IReadOnlyList<string> externalIds, CancellationToken cancellationToken = default) =>
+		throw new NotSupportedException(
+			"GetSessionSummariesAsync is not available over the TDCP wire yet; see tdcp-spec.md §5.");
+
 	// ── SSE background loop ───────────────────────────────────────────────────────
 
 	private async Task RunSseLoopAsync(CancellationToken ct)
