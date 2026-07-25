@@ -1,0 +1,50 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using TessynDesktop.Models;
+
+namespace TessynDesktop.Services;
+
+/// <summary>
+/// Queries Claude CLI profile authentication status and launches interactive auth.
+/// Profiles are isolated via the CLAUDE_CONFIG_DIR environment variable.
+/// </summary>
+/// <remarks>Created by Claude</remarks>
+public interface IClaudeProfileService
+{
+	/// <summary>
+	/// Returns the absolute path to the profiles root directory
+	/// (e.g. %APPDATA%\TessynDesktop\profiles\).
+	/// </summary>
+	string ProfilesRootDirectory { get; }
+
+	/// <summary>
+	/// Runs <c>claude auth status</c> with the given config directory
+	/// (via CLAUDE_CONFIG_DIR env var) and returns the account email,
+	/// or null if not authenticated or the command fails.
+	/// Pass null for the default profile (no env var override).
+	/// </summary>
+	Task<string?> GetAccountEmailAsync(string claudePath, string? configDir);
+
+	/// <summary>
+	/// Launches <c>claude auth login</c> in a visible console window,
+	/// with CLAUDE_CONFIG_DIR set to <paramref name="configDir"/> when non-null.
+	/// Pass null to (re)authenticate the Default profile (no env var override).
+	/// Waits for the process to exit.
+	/// </summary>
+	Task LaunchAuthLoginAsync(string claudePath, string? configDir);
+
+	/// <summary>
+	/// Resolves the CLAUDE_CONFIG_DIR for a profile selector index: 0 (or out of range)
+	/// means the Default profile (returns null, no env var override); 1..N maps to
+	/// <paramref name="profiles"/>[index-1].
+	/// </summary>
+	string? GetConfigDirForProfile(int profileIndex, IReadOnlyList<ClaudeProfileModel> profiles);
+
+	/// <summary>
+	/// Marks a profile's config directory as removed by renaming it with a "_rem" suffix
+	/// (e.g. "profile_4" -&gt; "profile_4_rem"), appending a numeric suffix on collision.
+	/// The directory and its contents (Claude sessions/projects) are preserved, not deleted.
+	/// Best-effort — failures are logged and swallowed.
+	/// </summary>
+	void MarkProfileDirectoryRemoved(string profileId);
+}

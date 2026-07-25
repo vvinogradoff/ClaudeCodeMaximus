@@ -1,5 +1,56 @@
 # Session Resume Notes
 
+> ## ⏵ ACTIVE WORK — TessynNetDaemon UI/daemon split refactoring (2026-07-18)
+>
+> A large strangler-fig refactoring is in progress. **Working docs (untracked, NOT committed):**
+> `docs/refactoring/refactoring-plan.md` (9-stage sequence) and `docs/refactoring/structure-notes.md`
+> (dependency graph, responsibility matrix, SessionViewModel decomposition seams). Read those first.
+>
+> **Naming (Architect, 2026-07-18):** .NET daemon = **TessynNetDaemon** (host `tessynnetd`); wire
+> contract = **TDCP** (extends the loopback MCP/JSON-RPC); external NodeJS = **tessyn** (optional
+> alt backend); Avalonia-free class lib = **ClaudeMaximus.Core**; UI = **ClaudeMaximus** (App).
+>
+> **Done & verified (Stages 1–4) — suite at 128 tests, build green:**
+> 1. `ISessionRegistry` extracted from `SessionTreeViewModel` — headless services (Turn, McpServer,
+>    Scheduler) no longer depend on a ViewModel (NFR.4 layering violation fixed).
+> 2. Engine tests added (ModelTier, SessionRegistry, Scheduler).
+> 3. `ClaudeMaximus.Core` class library carved out — all Models + ~47 Services moved; UI keeps only
+>    Avalonia-bound services (`ThemeApplicator`, `KeyBindingService`, `WindowsNotificationService`);
+>    `IUiDispatcher`/`AvaloniaUiDispatcher` abstracts `Dispatcher.UIThread`. **Tests ref Core only —
+>    Avalonia-free gate.**
+> 4. `IDaemonClient` + `InProcDaemonClient` (in Core, `Services/Daemon/`) + DI + TDCP spec
+>    (`docs/refactoring/tdcp-spec.md`) + `InProcDaemonClientTests` (delegation/event-relay).
+>
+> **Decisions (CONFIRMED):** **D3** (2026-07-18) — WPF (not WinForms), built later as a separate
+> thin client; Avalonia stays the sole thin client through the split. NFR.1 → Windows-only
+> (Architect owns the requirements edit). **D4** (2026-07-19) — TDCP as its *own* protocol,
+> **JSON-RPC 2.0 over Streamable HTTP** (MCP-style: POST→JSON-or-SSE, GET→SSE push), co-hosted with
+> (not folded into) the MCP server. Chosen to unify with MCP's own transport and fit every stack.
+> 3-surface topology it serves: S1 claude→daemon (MCP); S2 UI→daemon (TDCP loopback); S3 daemon
+> dials *out* to a web server which commands it over an SSE downstream (future stage — same schema).
+> Full analysis: refactoring-plan.md §0.2, tdcp-spec.md §3.
+>
+> **Next — Stage 5 UNBLOCKED and IN PROGRESS (supervised Sonnet workers, Opus verifies each build):**
+> - **Stage 5** (extract TessynNetDaemon host: new exe, output types, Program.cs, lifecycle from
+>   App.axaml.cs; TDCP server over Streamable HTTP + `WireDaemonClient`; UI swaps InProc→Wire).
+>   Approach: 5a build TDCP transport in-process + `WireDaemonClient`, verify it satisfies the
+>   `InProcDaemonClient` contract (reuse the 27 boundary tests); 5b extract the separate process.
+> - **Stage 7** (decompose the 2545-LOC `SessionViewModel` god object) — highest value, but no
+>   ViewModel-level test safety net exists yet (ViewModels are Avalonia-bound; Tests are Core-only),
+>   so this needs supervision. Its extracted controllers should be born depending on `IDaemonClient`.
+> - **Stage 6** (remove in-app Tessyn path) must stay AFTER Stage 5 — the path still powers WORKING
+>   cross-project search + title generation (see refactoring-plan.md "Stage 6 sequencing" note).
+>
+> **Execution model:** dogfood the app's own `cmx` MCP orchestration; Opus supervises, Sonnet workers
+> do coding. Serial for coupled stages (supervisor runs `dotnet build code/ClaudeMaximus.sln` at each
+> checkpoint); parallel fan-out only for file-disjoint work. **Do not commit to git** (session pref).
+>
+> ---
+>
+> _Everything below predates the refactoring (Phase 1–5 baseline). The architecture reference is
+> still broadly accurate but file locations have moved into ClaudeMaximus.Core — trust the plan docs
+> over this section for current layout._
+
 ## Project Status
 
 ClaudeMaximus is a working Avalonia desktop app that wraps the Claude Code CLI.

@@ -7,10 +7,10 @@
 
 Build normally without the `-o` flag:
 ```
-dotnet build code/ClaudeMaximus.sln
+dotnet build code/TessynDesktop.sln
 ```
 
-The app runs from a separate directory (typically `code/ClaudeMaximus/publish/`), not from `bin\Debug\net9.0\`. Therefore `bin\Debug\net9.0\` should not be locked during builds.
+The app runs from `C:\Projects\Personal\Tessyn\[Publish]`, not from the build output. Therefore the build output directory (`bin\Debug\net9.0-windows10.0.17763.0\`) should not be locked during builds.
 
 If the app is accidentally launched directly from `bin\Debug\net9.0\`, a warning icon (⚠) appears in the title bar and self-update is disabled for that session.
 

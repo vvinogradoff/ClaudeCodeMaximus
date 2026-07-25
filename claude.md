@@ -1,5 +1,15 @@
 # Claude Code General Guidelines
 
+## Project naming — ClaudeMaximus is now TessynDesktop
+
+**"ClaudeMaximus" is the former name of this project; it is now "TessynDesktop".** Any lingering reference to `ClaudeMaximus` — in docs, helper scripts, code comments, or older session notes — means **TessynDesktop**. C# namespaces, project/assembly names, and the `%AppData%` data root are already migrated to `TessynDesktop`; only some documentation and root scripts still carry the old name.
+
+Naming map (the product family is **Tessyn**):
+- **TessynDesktop** — the desktop app (was `ClaudeMaximus`).
+- **TessynDesktop.Core** — the cross-platform class library that encapsulates the daemon.
+- **Data root** — `%AppData%\TessynDesktop` (was `%AppData%\ClaudeMaximus`).
+- **Legacy MCP prefix** — the in-process agent MCP server is still named `cmx` (tools `mcp__cmx__*`, header `X-CMX-Token`, skill `cmx-orchestration`), an artifact of the old name; a Tessyn-branded rename is planned.
+
 ## Roles in this project
 
 1. Application Archtect: myself, the human person guiding and suervising the development of the project.
@@ -192,3 +202,18 @@ Read and follow standards described in /docs/code_standards.md
 ## Forbidden Patterns
 
 - **Never use `Dictionary<string, object>` as a method return type.** It signals lack of planning, breaks type safety, and creates long-term maintenance burden. Always define a named DTO or record class for the return value instead.
+
+## Building the project
+
+Build normally without the `-o` flag:
+```
+dotnet build code/TessynDesktop.sln
+```
+
+The build output goes to `code/TessynDesktop/bin/Debug/net9.0-windows10.0.17763.0/` (platform-specific TFM).
+
+The app runs from `C:\Projects\Personal\Tessyn\[Publish]`, NOT from the build output. Therefore the build output directory should NOT be locked during builds. If you encounter a file-lock error on the build output, investigate — it likely means the app was accidentally launched from the build output.
+
+Do NOT use `-o` to redirect build output. On each startup the self-update mechanism (`SelfUpdateService`) scans `bin/Debug/net*/` (under `SourceCodesLocation` from appsettings) for the newest build and copies it into the directory the app runs from — i.e. `C:\Projects\Personal\Tessyn\[Publish]`. Because the copy target is the run directory, `SourceCodesLocation` must point at the tree containing `TessynDesktop.csproj` (e.g. `C:\Projects\Personal\Tessyn`); it is not auto-discovered from `[Publish]`, which is a sibling of `code/`, not an ancestor of the `.sln`.
+
+Do NOT use the `Tempcmx-build` folder — it is deprecated.

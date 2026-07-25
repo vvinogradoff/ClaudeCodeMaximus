@@ -1,0 +1,459 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TessynDesktop.ViewModels"
+        xmlns:views="using:TessynDesktop.Views"
+        xmlns:converters="using:TessynDesktop.Converters"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="TessynDesktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="TessynDesktop"
+        Icon="avares://TessynDesktop/Assets/avalonia-logo.ico"
+        SystemDecorations="BorderOnly"
+        Width="1400" Height="900"
+        MinWidth="800" MinHeight="500">
+
+    <Panel>
+
+        <!-- Main content -->
+        <DockPanel>
+
+            <!-- Title bar: toolbar icons on left, window controls on right, drag anywhere in between -->
+            <DockPanel DockPanel.Dock="Top" LastChildFill="True"
+                       PointerPressed="OnMenuBarPointerPressed"
+                       Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                <!-- Window control buttons — docked right -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="0">
+                    <TextBlock Text="&#x26A0;" VerticalAlignment="Center"
+                               FontSize="13" Foreground="Orange" Margin="0,0,4,0"
+                               IsVisible="{Binding IsRunningFromBuildOutput}"
+                               ToolTip.Tip="Running from project build output — will not be updated on restart"/>
+                    <TextBlock x:Name="BuildNumberText" VerticalAlignment="Center"
+                               FontSize="10" Opacity="0.4" Margin="0,0,8,0"/>
+                    <Button x:Name="MinimizeBtn" Content="&#x2013;" Width="46" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="16" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Minimize" Click="OnMinimizeClick"/>
+                    <Button x:Name="MaximizeBtn" Content="&#x25A1;" Width="46" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="14" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Maximize / Restore" Click="OnMaximizeRestoreClick"/>
+                    <Button x:Name="CloseBtn" Content="&#x2715;" Width="46" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="13" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Close" Click="OnCloseClick"/>
+                </StackPanel>
+                <!-- Toolbar icons -->
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="0">
+                    <!-- Chevron: toggle tree panel visibility -->
+                    <Button x:Name="TreeToggleBtn" Width="36" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="14" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Toggle session tree"
+                            Command="{Binding ToggleTreePanelCommand}">
+                        <Panel>
+                            <!-- Show chevron-left when tree is visible (click to hide) -->
+                            <TextBlock Text="&#x276E;" IsVisible="{Binding IsTreePanelVisible}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- Show chevron-right when tree is hidden (click to show) -->
+                            <TextBlock Text="&#x276F;" IsVisible="{Binding !IsTreePanelVisible}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Panel>
+                    </Button>
+                    <!-- Hamburger: settings menu -->
+                    <Button Width="36" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="16" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Settings">
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Settings" Command="{Binding OpenSettingsCommand}"/>
+                                <MenuItem Header="-"/>
+                                <MenuItem Header="Exit" Command="{Binding ExitCommand}"/>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                        <TextBlock Text="&#x2630;" FontSize="16"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <!-- Day/Night theme toggle -->
+                    <Button Width="36" Height="30"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="15" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Toggle light/dark theme"
+                            Command="{Binding ToggleThemeCommand}">
+                        <Panel>
+                            <!-- Sun icon when dark theme active (click to switch to light) -->
+                            <TextBlock Text="&#x2600;" IsVisible="{Binding IsDarkTheme}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- Moon icon when light theme active (click to switch to dark) -->
+                            <TextBlock Text="&#x263D;" IsVisible="{Binding !IsDarkTheme}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Panel>
+                    </Button>
+
+                    <!-- Separator -->
+                    <Border Width="1" Height="18" Margin="4,0"
+                            Background="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                            VerticalAlignment="Center"/>
+
+                    <!-- FR.11 Session Instruction Toolbar -->
+                    <!-- Auto-Commit toggle (FR.11.3) — tri-state: Do-not-commit (unchecked) -> Commit (checked) -> No preference (indeterminate) -->
+                    <ToggleButton x:Name="AutoCommitToggle"
+                                  IsThreeState="True"
+                                  IsChecked="{Binding IsAutoCommit}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="{Binding #AutoCommitToggle.IsChecked, Converter={x:Static converters:AutoCommitTooltipConverter.Instance}}">
+                        <ToggleButton.Styles>
+                            <Style Selector="ToggleButton#AutoCommitToggle:checked /template/ ContentPresenter">
+                                <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+                            </Style>
+                            <Style Selector="ToggleButton#AutoCommitToggle:indeterminate /template/ ContentPresenter">
+                                <Setter Property="Background" Value="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+                            </Style>
+                        </ToggleButton.Styles>
+                        <!-- Glyph binds to the button's own IsChecked (not the VM) so it always mirrors the
+                             live tri-state control regardless of VM change notifications. -->
+                        <TextBlock Text="{Binding #AutoCommitToggle.IsChecked, Converter={x:Static converters:AutoCommitGlyphConverter.Instance}}"
+                                   FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- New Branch toggle (FR.11.4) -->
+                    <ToggleButton IsChecked="{Binding IsNewBranch}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="New Branch: create a new git branch for this prompt (one-shot)">
+                        <TextBlock Text="&#x2442;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- Auto-Document toggle (FR.11.5) -->
+                    <ToggleButton IsChecked="{Binding IsAutoDocument}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="Auto-Document: update project docs after each prompt">
+                        <TextBlock Text="&#x270E;" FontSize="13"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- Auto-Compact toggle (FR.11.6) -->
+                    <ToggleButton IsChecked="{Binding IsAutoCompact}"
+                                  IsEnabled="{Binding HasActiveSession}"
+                                  Width="30" Height="26" Padding="0"
+                                  Background="Transparent" BorderThickness="1"
+                                  BorderBrush="Transparent"
+                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                  ToolTip.Tip="Auto-Compact: compact session after this prompt (one-shot)">
+                        <TextBlock Text="&#x29C9;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <!-- Clear session button (FR.11.7) -->
+                    <Button x:Name="ClearSessionBtn"
+                            IsEnabled="{Binding CanClear}"
+                            Width="30" Height="26" Padding="0"
+                            Background="Transparent" BorderThickness="1"
+                            BorderBrush="Transparent"
+                            VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Terminate session: detach the JSONL session immediately (with confirmation)">
+                        <TextBlock Text="&#x2672;" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
+                <!-- Recent sessions navigator dropdown -->
+                <ComboBox x:Name="RecentSessionsCombo"
+                          DockPanel.Dock="Left"
+                          ItemsSource="{Binding RecentDropdownSessions}"
+                          SelectedItem="{Binding SelectedRecentSession}"
+                          PlaceholderText="Recent sessions…"
+                          DropDownOpened="OnRecentDropDownOpened"
+                          VerticalAlignment="Center"
+                          Width="440"
+                          MaxDropDownHeight="400"
+                          Margin="4,0,0,0"
+                          FontSize="13"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          HorizontalContentAlignment="Stretch">
+                    <ComboBox.Styles>
+                        <Style Selector="ComboBox#RecentSessionsCombo">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo /template/ Border#Background">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo:pointerover /template/ Border#Background">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo:pressed /template/ Border#Background">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo:focus /template/ Border#Background">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                        <Style Selector="ComboBox#RecentSessionsCombo /template/ TextBlock#PlaceholderTextBlock">
+                            <Setter Property="FontSize" Value="13"/>
+                            <Setter Property="Opacity" Value="0.75"/>
+                        </Style>
+                        <!-- Selected-item box: plain session name only (no recency chrome — that's dropdown-only) -->
+                        <Style Selector="ComboBox#RecentSessionsCombo /template/ ContentPresenter#ContentPresenter">
+                            <Setter Property="ContentTemplate">
+                                <DataTemplate x:CompileBindings="False">
+                                    <TextBlock Text="{Binding Name}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </DataTemplate>
+                            </Setter>
+                        </Style>
+                    </ComboBox.Styles>
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:CompileBindings="False">
+                            <Border HorizontalAlignment="Stretch"
+                                    Background="{Binding RecencyBrush}"
+                                    CornerRadius="2" Padding="0">
+                                <Grid>
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="2,1,2,1">
+                                        <!-- Status indicator: upper half = active/external, lower half = resumable -->
+                                        <Grid Grid.Column="0" Width="8" Height="16" VerticalAlignment="Center" RowDefinitions="8,8">
+                                            <Panel Grid.Row="0">
+                                                <Rectangle Width="8" Height="8" Fill="DarkRed"
+                                                           IsVisible="{Binding IsRunning}"/>
+                                                <Rectangle Width="8" Height="8" Fill="Orange" Opacity="0.8"
+                                                           IsVisible="{Binding IsExternallyActive}"/>
+                                            </Panel>
+                                            <Rectangle Grid.Row="1" Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
+                                                       IsVisible="{Binding IsResumable}"/>
+                                        </Grid>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                                                   Margin="6,0,0,0"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <!-- Folder name (top) and profile name (bottom), right-aligned and smaller than the session name -->
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center"
+                                                    HorizontalAlignment="Right"
+                                                    Margin="6,0,0,0" Spacing="0">
+                                            <TextBlock Text="{Binding DirectoryLabel}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="10" Opacity="0.6"
+                                                       MaxWidth="120"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding ProfileName}"
+                                                       IsVisible="{Binding ProfileName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="10" Opacity="0.6"
+                                                       MaxWidth="120"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <!-- Scheduled indicator: black, non-interactive -->
+                                        <TextBlock Grid.Column="3" Text="&#x23F0;" FontSize="11"
+                                                   Foreground="Black"
+                                                   VerticalAlignment="Center"
+                                                   Margin="6,0,0,0"
+                                                   IsHitTestVisible="False"
+                                                   IsVisible="{Binding HasSchedules}"
+                                                   ToolTip.Tip="Has active schedules"/>
+                                        <!-- Hide from recent list -->
+                                        <Button Grid.Column="4"
+                                                Width="22" Height="22" Padding="0"
+                                                Margin="6,0,0,0"
+                                                Background="Transparent" BorderThickness="0"
+                                                Click="OnHideRecentSessionClick"
+                                                ToolTip.Tip="Hide from recent list">
+                                            <TextBlock Text="&#x1F441;" FontSize="12"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+                                    </Grid>
+                                    <!-- Dotted dark green border overlay for recently-active sessions -->
+                                    <Rectangle IsVisible="{Binding IsRecentlyActive}"
+                                               Stroke="DarkGreen"
+                                               StrokeThickness="1"
+                                               StrokeDashArray="3,2"
+                                               RadiusX="2" RadiusY="2"
+                                               Fill="Transparent"
+                                               IsHitTestVisible="False"
+                                               HorizontalAlignment="Stretch"
+                                               VerticalAlignment="Stretch"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <!-- Empty space for drag -->
+                <Border Background="Transparent"/>
+            </DockPanel>
+
+            <!-- FR.18 — Status bar: model pricing (left) + usage progress bars (right) -->
+            <Border DockPanel.Dock="Bottom"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="0.3*"/>
+                        <ColumnDefinition Width="0.7*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: model ID + pricing -->
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding StatusBarModelText}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="8,0"
+                               TextTrimming="CharacterEllipsis"
+                               Opacity="0.8"/>
+
+                    <!-- Right: two stacked thin progress bars (5h on top, 7d below) — 70% of status bar -->
+                    <StackPanel Grid.Column="1"
+                                Orientation="Vertical"
+                                Spacing="0"
+                                IsVisible="{Binding HasUsageData}"
+                                VerticalAlignment="Stretch">
+                        <!-- 5-hour window bar -->
+                        <Grid Height="13">
+                            <ProgressBar Value="{Binding FiveHourUtilization}"
+                                         Maximum="100" Minimum="0"
+                                         Foreground="#888888"
+                                         Background="Transparent"
+                                         VerticalAlignment="Stretch"
+                                         HorizontalAlignment="Stretch"/>
+                            <TextBlock Text="{Binding FiveHourLabel}"
+                                       FontSize="9"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                        <!-- 7-day window bar (pixel-adjacent, no gap) -->
+                        <Grid Height="13">
+                            <ProgressBar Value="{Binding SevenDayUtilization}"
+                                         Maximum="100" Minimum="0"
+                                         Foreground="#888888"
+                                         Background="Transparent"
+                                         VerticalAlignment="Stretch"
+                                         HorizontalAlignment="Stretch"/>
+                            <TextBlock Text="{Binding SevenDayLabel}"
+                                       FontSize="9"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Two-panel layout -->
+            <Grid x:Name="MainContentGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="280" MinWidth="180" MaxWidth="600"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left panel: Tree / Recent tabs -->
+                <Border Grid.Column="0"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="0,0,1,0"
+                        IsVisible="{Binding IsTreePanelVisible}">
+                    <TabControl x:Name="LeftPanelTabs" Padding="0"
+                                SelectedIndex="{Binding SelectedLeftTabIndex}">
+                        <TabControl.Styles>
+                            <Style Selector="TabItem">
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="Padding" Value="10,4"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </TabControl.Styles>
+                        <TabItem Header="Tree">
+                            <views:SessionTreeView DataContext="{Binding SessionTree}"/>
+                        </TabItem>
+                        <TabItem Header="Recent">
+                            <views:RecentSessionsView DataContext="{Binding RecentSessions}"/>
+                        </TabItem>
+                    </TabControl>
+                </Border>
+
+                <GridSplitter Grid.Column="1"
+                              ResizeDirection="Columns"
+                              Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                              IsVisible="{Binding IsTreePanelVisible}"/>
+
+                <!-- Right panel -->
+                <Panel Grid.Column="2">
+                    <TextBlock Text="Select or create a session"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Opacity="0.4"
+                               FontSize="16"
+                               IsVisible="{Binding ActiveSession, Converter={x:Static ObjectConverters.IsNull}}"/>
+
+                    <ContentControl Content="{Binding ActiveSession}">
+                        <ContentControl.DataTemplates>
+                            <DataTemplate DataType="vm:SessionViewModel">
+                                <views:SessionView/>
+                            </DataTemplate>
+                        </ContentControl.DataTemplates>
+                    </ContentControl>
+                </Panel>
+
+            </Grid>
+        </DockPanel>
+
+        <!-- In-window modal overlay -->
+        <Panel x:Name="OverlayPanel" IsVisible="False" Background="#80000000">
+
+            <!-- Confirm dialog -->
+            <Border x:Name="ConfirmCard" IsVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="24,20" Width="460" MaxWidth="600">
+                <StackPanel Spacing="16">
+                    <TextBlock x:Name="ConfirmMessage" TextWrapping="Wrap" FontSize="14"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button x:Name="ConfirmCancelBtn" Content="Cancel"/>
+                        <Button x:Name="ConfirmOkBtn"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Input dialog -->
+            <Border x:Name="InputCard" IsVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="24,20" Width="340">
+                <StackPanel Spacing="10">
+                    <TextBlock x:Name="InputCardTitle" FontWeight="SemiBold" FontSize="14"/>
+                    <TextBlock x:Name="InputCardPrompt" Opacity="0.7"/>
+                    <TextBox x:Name="InputCardBox"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button x:Name="InputCancelBtn" Content="Cancel"/>
+                        <Button x:Name="InputOkBtn" Content="OK"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+        </Panel>
+
+        <!-- Screensaver overlay: last child = highest z-order, covers entire window.
+             Dismissed instantly on any mouse click or keystroke. -->
+        <Panel x:Name="ScreensaverPanel" IsVisible="False" Background="Black"
+               PointerPressed="OnScreensaverPointerPressed">
+            <Image x:Name="ScreensaverImage"
+                   Stretch="UniformToFill"
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Stretch"/>
+        </Panel>
+
+    </Panel>
+
+</Window>

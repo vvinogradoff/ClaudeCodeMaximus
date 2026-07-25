@@ -216,6 +216,10 @@
 - [DONE] Disabled when no session selected (`IsEnabled="{Binding HasActiveSession}"`)
 - [DONE] Tooltips on each button
 
+### P8.8 Cross-profile session adoption (FR.11.13) ✓
+- [DONE] `IClaudeSessionStatusService.TryAdoptSessionFromOtherProfile` — locates a session's JSONL under any other profile (Default + every profile dir, including removed ones) and moves (not copies) it into the active profile's store
+- [DONE] Wired into interactive send (`TurnController.SendAsyncCore`), Auto-Compact (`TurnController.SendCompactionPromptAsync`), and headless/orchestrated turns (`SessionTurnService.RunTurnAsync`, replacing the old Default-only resumability preflight)
+
 ### P8.8 MainWindowViewModel — Forwarding ✓
 - [DONE] Forwarding properties delegate to `ActiveSession`
 - [DONE] `RaiseInstructionToolbarChanged()` on session switch
