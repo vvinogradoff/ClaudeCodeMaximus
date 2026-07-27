@@ -316,8 +316,11 @@ public sealed class TurnController : ReactiveObject, IDisposable
 
 		// FR.14.3 / FR.14.11 — ensure the per-node MCP config file exists so the claude process
 		// receives --mcp-config and can reach the host scheduling/orchestration tools.
+		// MCP tools are a separate mechanism from the built-in --tools flag — the CLI still sends
+		// them to the model even when --tools "" is set — so skip --mcp-config entirely for models
+		// that don't support tool calling (e.g. tool-incapable local Ollama models).
 		string? mcpConfigPath = null;
-		if (_appSettings.Settings.AgentToolsEnabled)
+		if (_appSettings.Settings.AgentToolsEnabled && !_models.SelectedModelDisablesTools)
 			mcpConfigPath = await _mcpServer.EnsureConfigFileAsync(_node.Model.NodeId, _node.Model.AgentToken);
 
 		// Serialize only the CLI dispatch, not the UI updates above. This preserves the

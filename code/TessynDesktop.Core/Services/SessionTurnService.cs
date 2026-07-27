@@ -81,7 +81,22 @@ public sealed class SessionTurnService : ISessionTurnService
 		try
 		{
 			var profileConfigDir = ResolveProfileConfigDir(node);
-			var mcpConfigPath    = _appSettings.Settings.AgentToolsEnabled
+
+			// Resolve effective model for this session (FR.16.5 bug fix):
+			// node.ModelId → per-directory setting → app-level setting.
+			var effectiveModelId = ResolveEffectiveModel(node);
+			var modelInfo        = string.IsNullOrEmpty(effectiveModelId)
+				? null
+				: _modelService.GetCachedModels().FirstOrDefault(m => m.Id == effectiveModelId);
+			var ollamaBaseUrl    = modelInfo?.Provider == ModelProvider.Ollama
+				? _appSettings.Settings.OllamaBaseUrl
+				: null;
+			var disableTools     = modelInfo is { Provider: ModelProvider.Ollama, SupportsTools: false };
+
+			// MCP tools (e.g. the cmx orchestration server) are a separate mechanism from the
+			// built-in --tools flag — the CLI still sends them to the model even when --tools ""
+			// is set. Skip --mcp-config entirely for models that don't support tool calling.
+			var mcpConfigPath = _appSettings.Settings.AgentToolsEnabled && !disableTools
 				? await _mcpServer.Value.EnsureConfigFileAsync(node.NodeId, node.AgentToken)
 				: null;
 
@@ -124,17 +139,6 @@ public sealed class SessionTurnService : ISessionTurnService
 				if (priorTurns.Count > 1)
 					messageToSend = InstructionBlockBuilder.BuildContextPreamble(entries, augmentedPrompt);
 			}
-
-			// Resolve effective model for this session (FR.16.5 bug fix):
-			// node.ModelId → per-directory setting → app-level setting.
-			var effectiveModelId = ResolveEffectiveModel(node);
-			var modelInfo        = string.IsNullOrEmpty(effectiveModelId)
-				? null
-				: _modelService.GetCachedModels().FirstOrDefault(m => m.Id == effectiveModelId);
-			var ollamaBaseUrl    = modelInfo?.Provider == ModelProvider.Ollama
-				? _appSettings.Settings.OllamaBaseUrl
-				: null;
-			var disableTools     = modelInfo is { Provider: ModelProvider.Ollama, SupportsTools: false };
 
 			var resultText        = new StringBuilder();
 			var isError           = false;
