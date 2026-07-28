@@ -322,6 +322,13 @@
                                           FontSize="12"
                                           MinWidth="90"
                                           Padding="6,3"/>
+                                <ToggleButton IsChecked="{Binding IsChromeEnabled}"
+                                              Content="&#x1F310;"
+                                              FontSize="13"
+                                              VerticalAlignment="Center"
+                                              Padding="7,2"
+                                              Margin="6,0,0,0"
+                                              ToolTip.Tip="Browser control (--chrome): let Claude drive Chrome via the Claude-in-Chrome extension. Experimental — the spawn runs in -p mode; requires an OAuth profile and the installed extension."/>
                             </StackPanel>
                         </DockPanel>
                     </Border>

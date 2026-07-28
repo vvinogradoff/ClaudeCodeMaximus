@@ -28,6 +28,7 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 	private int _selectedModelIndex;
 	private int _selectedEffortIndex;
 	private bool _isUpdatingModels;
+	private bool _isChromeEnabled;
 
 	/// <summary>Display names for the model selector (populated dynamically from IClaudeModelService).</summary>
 	public ObservableCollection<string> AvailableModels { get; } = [];
@@ -103,6 +104,17 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 		_selectedEffortIndex > 0 && _selectedEffortIndex < EffortValues.Length
 			? EffortValues[_selectedEffortIndex]
 			: null;
+
+	/// <summary>
+	/// Experimental per-session toggle: when true, the claude spawn receives <c>--chrome</c> so the CLI
+	/// attempts to connect to the Claude-in-Chrome extension for browser control. In-memory only
+	/// (not persisted per directory); resets to off on session switch / app restart.
+	/// </summary>
+	public bool IsChromeEnabled
+	{
+		get => _isChromeEnabled;
+		set => this.RaiseAndSetIfChanged(ref _isChromeEnabled, value);
+	}
 
 	public ModelSelectionController(IClaudeModelService modelService, IAppSettingsService appSettings, DirectoryNodeModel? directoryModel)
 	{

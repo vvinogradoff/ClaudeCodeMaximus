@@ -350,6 +350,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				mcpConfigPath:    mcpConfigPath,
 				ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
 				disableTools:     _models.SelectedModelDisablesTools,
+				chrome:           _models.IsChromeEnabled,
 				cancellationToken: ct);
 
 			if (_needsContextRetry)
@@ -383,6 +384,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 					effort:           _models.SelectedEffort,
 					ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
 					disableTools:     _models.SelectedModelDisablesTools,
+					chrome:           _models.IsChromeEnabled,
 					cancellationToken: ct);
 			}
 

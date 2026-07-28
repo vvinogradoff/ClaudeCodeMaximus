@@ -271,6 +271,13 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>Returns the effort value for --effort flag, or null if Default is selected.</summary>
 	public string? SelectedEffort => _models.SelectedEffort;
 
+	/// <summary>Experimental per-session toggle: append <c>--chrome</c> to the claude spawn (browser control).</summary>
+	public bool IsChromeEnabled
+	{
+		get => _models.IsChromeEnabled;
+		set => _models.IsChromeEnabled = value;
+	}
+
 	/// <summary>Entries for the profile selector (Default, stored profiles, "New..."). Rebuilt when profiles change.</summary>
 	public ObservableCollection<ProfileListItemModel> AvailableProfiles => _profiles.AvailableProfiles;
 

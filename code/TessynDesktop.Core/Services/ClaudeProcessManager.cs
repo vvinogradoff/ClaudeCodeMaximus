@@ -48,9 +48,10 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		string? mcpConfigPath = null,
 		string? ollamaBaseUrl = null,
 		bool disableTools = false,
+		bool chrome = false,
 		CancellationToken cancellationToken = default)
 	{
-		var args = BuildArguments(sessionId, model, effort, mcpConfigPath, disableTools);
+		var args = BuildArguments(sessionId, model, effort, mcpConfigPath, disableTools, chrome);
 		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir} ConfigDir={ConfigDir} OllamaBaseUrl={OllamaBaseUrl}",
 			claudePath, args, workingDirectory, profileConfigDir, ollamaBaseUrl);
 
@@ -236,7 +237,8 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		string? model = null,
 		string? effort = null,
 		string? mcpConfigPath = null,
-		bool disableTools = false)
+		bool disableTools = false,
+		bool chrome = false)
 	{
 		// -p (--print) forces non-interactive single-prompt mode.
 		// --verbose is required by claude when combining --print with stream-json output.
@@ -252,6 +254,11 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			args += $" --mcp-config \"{mcpConfigPath}\"";
 		if (disableTools)
 			args += " --tools \"\"";
+		// Experimental browser control (FR pending): asks the CLI to connect to the
+		// Claude-in-Chrome extension. Interaction-centric feature; behaviour under -p is
+		// unverified — the toggle exists so the flag can be exercised and observed.
+		if (chrome)
+			args += " --chrome";
 		return args;
 	}
 
