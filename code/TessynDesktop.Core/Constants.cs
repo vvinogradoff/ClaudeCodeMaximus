@@ -177,6 +177,11 @@ Output the compacted conversation in this EXACT format (no preamble, no wrapping
 <compacted assistant response — may merge multiple related responses>
 
 Use the original timestamps from the conversation. Each entry starts with a [timestamp] ROLE header line, followed by the content, followed by a blank line. Do NOT include any text before the first [timestamp] header or after the last entry.
+
+SESSION TRANSCRIPT TO COMPACT:
+---
+{1}
+---
 """;
 	}
 

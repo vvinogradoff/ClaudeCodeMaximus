@@ -218,12 +218,19 @@
 
 ### P8.8 Cross-profile session adoption (FR.11.13) ✓
 - [DONE] `IClaudeSessionStatusService.TryAdoptSessionFromOtherProfile` — locates a session's JSONL under any other profile (Default + every profile dir, including removed ones) and moves (not copies) it into the active profile's store
-- [DONE] Wired into interactive send (`TurnController.SendAsyncCore`), Auto-Compact (`TurnController.SendCompactionPromptAsync`), and headless/orchestrated turns (`SessionTurnService.RunTurnAsync`, replacing the old Default-only resumability preflight)
+- [DONE] Wired into interactive send (`TurnController.SendAsyncCore`) and headless/orchestrated turns (`SessionTurnService.RunTurnAsync`, replacing the old Default-only resumability preflight). No longer used by Auto-Compact as of P8.10 below — its compaction call is stateless and needs no `--resume` lookup at all.
 
 ### P8.9 Auto-Compact failure safety (FR.11.6) ✓
 - [DONE] `SendCompactionPromptAsync` now tracks `evt.IsError` across the compaction turn's stream events; any error (auth/reauth failure, non-zero exit code, etc.) or a wholly empty result aborts applying the result — no file rewrite, no JSONL detach — even if partial assistant text was captured first
 - [DONE] Fixes bug: a reauth request mid-compaction was previously treated as a successful (empty) compaction, clearing the session
 - [DONE] Failure surfaces a system message in the Output Panel; an invalid-credentials failure also sets `HasAuthError`
+
+### P8.10 Embed transcript directly into compaction, drop --resume (FR.11.6) ✓
+- [DONE] `SessionPromptComposer.BuildCompactionTranscript()` — reads the text Session File, takes USER/ASSISTANT entries since the last `[COMPACTION]` marker (or the whole file if none), formats each as `[timestamp] ROLE` + content
+- [DONE] `Constants.Instructions.CompactionPromptTemplate` extended with a `SESSION TRANSCRIPT TO COMPACT:` section (`{1}` placeholder)
+- [DONE] `TurnController.SendCompactionPromptAsync` now sends the compaction call statelessly (`sessionId: null`); removed the now-pointless cross-profile-adoption pre-call (P8.8) since nothing is resumed anymore
+- [DONE] `BuildCompactionPrompt()` returns `null` when there's nothing to compact yet; caller shows `[Nothing to compact]` and skips the CLI call entirely instead of making a wasted request
+- [DONE] Fixes bug: compaction previously relied on Claude's own resumed JSONL memory, which is incomplete when a session has been resumed under different profiles (Cross-Profile Session Adoption only relocates whichever single JSONL currently exists) or when Anthropic and local Ollama turns are mixed within one session — both silently compacted only part of what the user saw in the Output Panel
 
 ### P8.8 MainWindowViewModel — Forwarding ✓
 - [DONE] Forwarding properties delegate to `ActiveSession`

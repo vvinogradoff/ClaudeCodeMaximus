@@ -598,12 +598,16 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	{
 		_log.Information("Starting auto-compaction for session {FileName}", _node.FileName);
 
-		// Cross-profile session adoption (FR.11.13): a session compacted under a different
-		// profile than the one it was created under would otherwise fail with "No conversation
-		// found" and compact nothing. Locate and move the JSONL into the active profile first.
-		var compactionSessionId = _node.Model.ClaudeSessionId;
-		if (compactionSessionId != null)
-			_sessionStatus.TryAdoptSessionFromOtherProfile(_node.Model.WorkingDirectory, compactionSessionId, _profiles.SelectedProfileConfigDir);
+		// The compaction prompt embeds the full session transcript directly (FR.11.6), sourced
+		// from the always-complete text Session File rather than relying on --resume — so this
+		// call is intentionally stateless (sessionId: null) and needs no cross-profile lookup.
+		var compactionPrompt = _composer.BuildCompactionPrompt();
+		if (compactionPrompt == null)
+		{
+			_log.Information("Nothing to compact for session {FileName}", _node.FileName);
+			Dispatcher.UIThread.Post(() => _content.AddSystemMessage("[Nothing to compact]"));
+			return;
+		}
 
 		Dispatcher.UIThread.Post(() => _content.Messages.Add(new MessageEntryViewModel
 		{
@@ -620,8 +624,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		await _processManager.SendMessageAsync(
 			workingDirectory: _node.Model.WorkingDirectory,
 			claudePath:       _appSettings.Settings.ClaudePath,
-			sessionId:        _node.Model.ClaudeSessionId,
-			userMessage:      _composer.BuildCompactionPrompt(),
+			sessionId:        null,
+			userMessage:      compactionPrompt,
 			model:            _models.SelectedModelId,
 			profileConfigDir: _profiles.SelectedProfileConfigDir,
 			effort:           _models.SelectedEffort,
