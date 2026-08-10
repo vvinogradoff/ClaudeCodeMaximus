@@ -614,6 +614,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		}));
 
 		var compactedContent = new StringBuilder();
+		var hadError = false;
+		string? compactionErrorContent = null;
 
 		await _processManager.SendMessageAsync(
 			workingDirectory: _node.Model.WorkingDirectory,
@@ -627,6 +629,15 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			disableTools:     _models.SelectedModelDisablesTools,
 			onEvent:          evt =>
 			{
+				// Any error event (auth failure, exit-code failure, etc.) marks the whole
+				// compaction turn as failed (FR.11.6) — even if some assistant text was
+				// also captured, it must not be treated as a valid compacted result.
+				if (evt.IsError)
+				{
+					hadError = true;
+					compactionErrorContent ??= evt.Content;
+					return;
+				}
 				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
 					compactedContent.AppendLine(evt.Content);
 				// Session ID from the compaction response is intentionally NOT stored:
@@ -634,7 +645,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			});
 
 		var compacted = compactedContent.ToString().Trim();
-		if (!string.IsNullOrEmpty(compacted))
+		if (!hadError && !string.IsNullOrEmpty(compacted))
 		{
 			// Write COMPACTION separator followed by the compacted conversation
 			// (Claude outputs entries in session file format: [timestamp] ROLE\ncontent\n)
@@ -668,13 +679,29 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		}
 		else
 		{
-			_log.Warning("Compaction returned empty content for session {FileName}; keeping original", _node.FileName);
+			var statusMessage = hadError
+				? $"[Compaction failed — session left unchanged: {compactionErrorContent}]"
+				: "[Compaction returned no content — session left unchanged]";
+
+			if (hadError)
+			{
+				_log.Warning("Compaction failed for session {FileName}; keeping original. Error: {Error}", _node.FileName, compactionErrorContent);
+				if (!string.IsNullOrEmpty(compactionErrorContent)
+					&& compactionErrorContent.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
+					Dispatcher.UIThread.Post(() => _profiles.HasAuthError = true);
+			}
+			else
+			{
+				_log.Warning("Compaction returned empty content for session {FileName}; keeping original", _node.FileName);
+			}
+
 			Dispatcher.UIThread.Post(() =>
 			{
 				for (var i = _content.Messages.Count - 1; i >= 0; i--)
 				{
 					if (_content.Messages[i].IsProgress) _content.Messages.RemoveAt(i);
 				}
+				_content.AddSystemMessage(statusMessage);
 			});
 		}
 	}

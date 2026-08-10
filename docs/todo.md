@@ -220,6 +220,11 @@
 - [DONE] `IClaudeSessionStatusService.TryAdoptSessionFromOtherProfile` — locates a session's JSONL under any other profile (Default + every profile dir, including removed ones) and moves (not copies) it into the active profile's store
 - [DONE] Wired into interactive send (`TurnController.SendAsyncCore`), Auto-Compact (`TurnController.SendCompactionPromptAsync`), and headless/orchestrated turns (`SessionTurnService.RunTurnAsync`, replacing the old Default-only resumability preflight)
 
+### P8.9 Auto-Compact failure safety (FR.11.6) ✓
+- [DONE] `SendCompactionPromptAsync` now tracks `evt.IsError` across the compaction turn's stream events; any error (auth/reauth failure, non-zero exit code, etc.) or a wholly empty result aborts applying the result — no file rewrite, no JSONL detach — even if partial assistant text was captured first
+- [DONE] Fixes bug: a reauth request mid-compaction was previously treated as a successful (empty) compaction, clearing the session
+- [DONE] Failure surfaces a system message in the Output Panel; an invalid-credentials failure also sets `HasAuthError`
+
 ### P8.8 MainWindowViewModel — Forwarding ✓
 - [DONE] Forwarding properties delegate to `ActiveSession`
 - [DONE] `RaiseInstructionToolbarChanged()` on session switch
