@@ -331,6 +331,8 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// <summary>Default Claude credentials path for the system-wide (non-profiled) account.</summary>
 		public const string DefaultClaudeRelativePath = ".claude";
 		public const double PollingIntervalMinutes = 5.0;
+		/// <summary>Severity value meaning "no elevated usage" — the API's own default and what a staleness-zeroed window is reset to (FR.18.8).</summary>
+		public const string NormalSeverity = "normal";
 	}
 
 	/// <summary>Constants for local Ollama model discovery and routing (FR.12.13, FR.12.14).</summary>

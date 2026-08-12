@@ -45,9 +45,12 @@ public sealed class ClaudeUsageService : IClaudeUsageService
         _cts.Dispose();
         _cts = new CancellationTokenSource();
 
-        // Restore per-profile cached data immediately (null = no previous data = show zeros)
+        // Restore per-profile cached data immediately (null = no previous data = show zeros).
+        // Any window whose reset time has already passed is zeroed (FR.18.8) — a frozen
+        // percentage from a window that rolled over while this profile was inactive is
+        // actively misleading, not merely outdated.
         CachedUsage = credentialsFilePath != null && _profileCache.TryGetValue(credentialsFilePath, out var cached)
-            ? cached
+            ? ClaudeUsageStalenessService.ZeroStaleWindows(cached, DateTimeOffset.UtcNow)
             : null;
 
         // Notify UI of the profile switch immediately so bars reflect new state
@@ -140,8 +143,8 @@ public sealed class ClaudeUsageService : IClaudeUsageService
                 ? sr.GetDateTimeOffset() : DateTimeOffset.UtcNow.AddDays(7);
 
             // Extract severity from limits[] (group="session" → 5h, group="weekly" → 7d)
-            var fiveHourSeverity = "normal";
-            var sevenDaySeverity = "normal";
+            var fiveHourSeverity = Constants.Usage.NormalSeverity;
+            var sevenDaySeverity = Constants.Usage.NormalSeverity;
 
             if (root.TryGetProperty("limits", out var limits) &&
                 limits.ValueKind == JsonValueKind.Array)
@@ -150,7 +153,7 @@ public sealed class ClaudeUsageService : IClaudeUsageService
                 {
                     if (!limit.TryGetProperty("group", out var grpEl)) continue;
                     var group    = grpEl.GetString() ?? "";
-                    var severity = limit.TryGetProperty("severity", out var sevEl) ? sevEl.GetString() ?? "normal" : "normal";
+                    var severity = limit.TryGetProperty("severity", out var sevEl) ? sevEl.GetString() ?? Constants.Usage.NormalSeverity : Constants.Usage.NormalSeverity;
 
                     if (group == "session") fiveHourSeverity = severity;
                     else if (group == "weekly") sevenDaySeverity = severity;

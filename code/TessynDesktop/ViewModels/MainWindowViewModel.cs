@@ -416,11 +416,19 @@ public sealed class MainWindowViewModel : ViewModelBase
 			return;
 		}
 
+		var now = DateTimeOffset.UtcNow;
 		var fiveReset  = usage.FiveHourResetsAt.ToLocalTime();
 		var sevenReset = usage.SevenDayResetsAt.ToLocalTime();
 
-		FiveHourLabel = $"5h: {usage.FiveHourUtilization:0}%  resets {fiveReset:HH:mm}";
-		SevenDayLabel = $"7d: {usage.SevenDayUtilization:0}%  resets {sevenReset:ddd}";
+		// A stale window's reset time is already in the past — showing it reads as broken,
+		// so the "resets …" suffix is omitted until a fresh fetch supplies a current one (FR.18.8).
+		FiveHourLabel = ClaudeUsageStalenessService.IsFiveHourStale(usage, now)
+			? $"5h: {usage.FiveHourUtilization:0}%"
+			: $"5h: {usage.FiveHourUtilization:0}%  resets {fiveReset:HH:mm}";
+
+		SevenDayLabel = ClaudeUsageStalenessService.IsSevenDayStale(usage, now)
+			? $"7d: {usage.SevenDayUtilization:0}%"
+			: $"7d: {usage.SevenDayUtilization:0}%  resets {sevenReset:ddd}";
 	}
 
 	/// <summary>
