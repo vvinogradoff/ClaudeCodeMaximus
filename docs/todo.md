@@ -314,11 +314,19 @@
 - [DONE] "Remove" (✕) button in command bar, right-docked, visible when `HasAuthError` and non-Default profile selected (FR.12.18)
 - [DONE] Remove: strips profile from settings list, renames config dir to `<ProfileId>_rem` (collision-safe), resets selection to Default (FR.12.18)
 
-### P10.6 Profile dropdown context menu (FR.12.19)
+### P10.6 Profile Rename/Delete (FR.12.19)
 - [DONE] `ProfileListItemModel` (DisplayName + ProfileId) backs `AvailableProfiles` so rename/delete target a specific profile, not by display-name matching
-- [DONE] ComboBox ItemTemplate context menu: "Rename..." and "Delete", no-op for Default/"New..." entries
+- [DONE] ~~ComboBox ItemTemplate context menu~~ — implemented, then found never reliably testable/used (nested `ContextMenu`-inside-`ComboBox`-`Popup` is a known-fragile Avalonia pattern); replaced with plain "Rename"/"Delete" command-bar buttons acting on the current selection
+- [DONE] `ProfileController.CanManageSelectedProfile` — true when a stored (non-Default) profile is selected; drives the new buttons' visibility, independent of `HasAuthError`
 - [DONE] `SessionViewModel.RenameProfile` — updates stored `DisplayName` via input dialog
-- [DONE] `SessionViewModel.DeleteProfile` — same removal as FR.12.18 Remove button, usable without an active auth error; `HandleRemoveProfile` (✕ button) now delegates to it
+- [DONE] `SessionViewModel.DeleteProfile` — same removal as FR.12.18 Remove button, usable without an active auth error; `HandleRemoveProfile` (✕ button) still uses it for the auth-error-gated path, now alongside the always-visible Delete button
+- [DONE] `ProfileListItemModel.IsSystem` flag; Default entry prefixed `"[Sys] "` and rendered dark grey (`BoolToSystemProfileForegroundConverter`), stored profiles stay black
+- [DONE] Re-authenticate/Rename/Delete buttons switched from text labels to icons (🔑/✏/🗑), with `ToolTip.Tip` retained for discoverability; ✕ Remove kept its existing icon
+- [DONE] ✕ Remove button now confirms before deleting (previously fired immediately) — both it and Delete route through a shared `ConfirmAndDeleteSelectedProfileAsync` in `SessionView.axaml.cs`
+- [DONE] Re-authenticate button visibility has gone back and forth (always-visible ↔ `IsVisible="{Binding HasAuthError}"`) while the ISSUE-004 fix awaited a real deployment to test against; currently **always-visible** per explicit request — see ISSUE-004 for why the running app couldn't yet reflect the fix (stale `[Publish]` build, unrelated to this binding)
+- [DONE] Fixed root cause of `HasAuthError` never firing: `ParseResultEvent` only read `"errors"`/`"error"` JSON fields; auth-failure text lives in `"result"` (ISSUE-004)
+- [DONE] Confirmed after restart onto a fresh build: right-click on a Profile dropdown row indeed does not open a context menu — validates the ISSUE-005 nested-popup hypothesis. Not urgent (buttons cover the functionality); no fix attempted this round.
+- [DONE] Buttons moved out of the always-visible command bar into a flyout `Popup`, opened by clicking a "Profile: ▾" toggle label (`ProfileActionsToggle`) — was crowding the bar. Buttons shrunk (`Padding="4,2"`). Popup uses `IsLightDismissEnabled="False"` + one-way `IsOpen` binding to `ProfileActionsToggle.IsChecked` (mirrors the existing `AutocompletePopup` pattern in this file) rather than light-dismiss, to avoid the toggle visually desyncing from the popup's open state.
 
 ---
 
@@ -558,7 +566,132 @@
 - [DONE] Skill pointer folded into `Constants.Instructions.NoWorkflowTool` — surfaced once per fresh session under the existing `IsAgentToolsEnabled && IsNewSession` gate, not repeated every turn
 - [DONE] Provisioned immediately into all 7 currently-registered profiles by hand (the running app instance hosting this session can't be restarted to pick up the new build without severing it) — verified byte-identical across all 7 against the un-indented `Constants.cs` source
 
+## Phase 23 — Favorite Sessions (FR.9.7)
+
+### P23.1 Model & persistence
+- [ ] `SessionNodeModel.IsFavorite` (bool), persisted via existing tree serialization
+- [ ] `SessionNodeViewModel.IsFavorite` — reactive, writes through to `Model.IsFavorite`
+- [ ] `SessionViewModel.IsFavorite` passthrough (persists via `_appSettings.Save()`)
+
+### P23.2 Recent-dropdown inclusion + affordance
+- [ ] `MainWindowViewModel.RefreshRecentDropdown` — favorites always included regardless of recency/hidden state; sort order unchanged
+- [ ] Extracted, unit-tested predicate for dropdown inclusion
+- [ ] `MainWindowViewModel.SetFavorite(session, value)`
+- [ ] Dropdown row: star (favorited, click to un-favorite) vs hide icon (not favorited, click to hide) — mutually exclusive by `IsFavorite`
+- [ ] Replace hide icon glyph (👁) with monochrome ⦸ (U+29B8)
+
+### P23.3 UI
+- [ ] Shared star `StreamGeometry` resource in `App.axaml`
+- [ ] Command-bar star `ToggleButton` in `SessionView.axaml`, left of Model selector (grey/transparent unchecked, black/gold checked)
+- [ ] Display-only favorite star in `SessionTreeView.axaml` and `RecentSessionsView.axaml` top row, right side, above last-activity date/time
+
+### P23.4 Tests
+- [ ] Unit tests for the recent-dropdown inclusion predicate (favorite+stale+hidden included; non-favorite+stale excluded; non-favorite+hidden excluded; non-favorite+recent+not-hidden included)
+
+---
+
+## Phase 24 — Streaming Session Mode (FR.19) ✓ DONE
+
+### [DONE] P24.0 Spike — verify `--input-format stream-json` against the installed CLI (gate before any other P24 work)
+- [DONE] Confirmed exact spawn args and stdin-message JSON schema empirically: one JSON object per line, `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}}`, stdin never closed. `claude` does not exit after a turn's `result` event under `--input-format stream-json` — confirmed via a standalone Node harness, not assumed from `--help` text.
+- [DONE] Confirmed a `run_in_background` bash task survives across turns: the process spontaneously emitted an unprompted `task_notification` → `assistant` message reporting the background task's completion mid-way between two explicit sends, with no app-side polling.
+
+### [DONE] P24.1 Persistent process lifecycle (FR.19.2, FR.19.3, FR.19.4, FR.19.5)
+- [DONE] `Services/ClaudeStreamEventParser.cs` — extracted from `ClaudeProcessManager` (same static parsing logic, now shared)
+- [DONE] `Services/ClaudeProcessLauncher.cs` — extracted the `ProcessStartInfo` build + Windows cmd.exe retry + profile/Ollama/proxy env-var setup from `ClaudeProcessManager.TryStartProcess`, shared by both One-shot and Streaming managers
+- [DONE] `Services/IClaudeStreamingSessionManager.cs` + `ClaudeStreamingSessionManager.cs` — `EnsureStarted`, `SendTurnAsync` (turn-boundary via the next `result` event), `IsAlive`, `Stop` (kills process tree), `TerminateAll`, `ProcessExited` event
+- [DONE] `MainWindowViewModel.TerminateAllSessions` calls `IClaudeStreamingSessionManager.TerminateAll()` alongside the existing one-shot `TerminateAll()`
+- [DONE] **Bug found and fixed during verification**: `Encoding.UTF8` (used for `StandardInputEncoding`/`StandardOutputEncoding`/`StandardErrorEncoding` in the launcher) writes a BOM preamble on the first write to a redirected stream. One-shot Mode's `--input-format text` silently tolerated the stray BOM character at the start of every prompt ever sent; `--input-format stream-json`'s strict per-line JSON parser rejected it outright ("Unrecognized token"). Fixed by switching to `new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)` for all three streams — benefits both modes.
+
+### [DONE] P24.2 Model & persistence (FR.19.6)
+- [DONE] `SessionNodeModel.IsStreamingMode` (bool, default false), persisted via existing tree serialization
+
+### [DONE] P24.3 Turn routing + Stop semantics (FR.19.1, FR.19.4, FR.19.5, FR.19.7, FR.19.8)
+- [DONE] `TurnController.SendAsyncCore` branches between One-shot Mode (existing path, now also passing `disallowNativeScheduling`) and Streaming Session Mode (`SendViaStreamingAsync`, new manager)
+- [DONE] `CanStop` extended: `IsBusy || IsNodeRunning || IsStreamingProcessAlive`
+- [DONE] `Stop()` kills the streaming process first when one is alive (takes priority over the one-shot cancel/orchestrated-cancel paths)
+- [DONE] `IsStreamingMode` setter defers to a confirmation dialog (`StreamingDisableConfirmationRequested` event, mirroring `CancelScheduleRequested`) when turning off while a process is alive; `SessionView.axaml.cs` wires it to `ShowConfirmOverlayAsync`
+- [DONE] Model/Profile/Effort `ComboBox`es bound `IsEnabled="{Binding !IsStreamingProcessAlive}"` in `SessionView.axaml`
+
+### [DONE] P24.4 Steering gating (FR.19.9, FR.19.10; amends FR.11.2, FR.14.11)
+- [DONE] `InstructionOptionsModel.IsStreamingMode`; `InstructionBlockBuilder.Build` omits `NativeSchedulingRedirect` when `IsStreamingMode` is true, keeps `NoWorkflowTool` unconditional on mode
+- [DONE] Threaded through both call sites: `SessionPromptComposer.BuildInstructionBlock` (from `_node.Model.IsStreamingMode`) and `SessionTurnService.RunTurnAsync` (hardcoded `false` — headless turns are always one-shot, FR.19.11)
+- [DONE] `Constants.Instructions.NativeSchedulingToolNames` array; `ClaudeProcessManager.BuildArguments` appends `--disallowed-tools` from it when `disallowNativeScheduling` is true; all One-shot Mode call sites (main send, context retry, compaction, mid-run corrections) pass `AgentToolsEnabled` for this flag. Streaming spawns never pass it.
+
+### [DONE] P24.5 Headless-turn limitation (FR.19.11) — documentation only, no code change planned for v1
+- [DONE] Confirmed `SessionTurnService` routes scheduled/orchestrated turns through the existing one-shot `--resume` path unconditionally, unaffected by the target session's `IsStreamingMode`
+
+### [DONE] P24.6 UI (FR.19.1)
+- [DONE] Streaming `ToggleButton` (📡) in `SessionView.axaml`, beside the existing `--chrome` toggle in the command bar
+
+### P24.7 Tests
+- [DONE] `InstructionBlockBuilder` gating unit tests (mode × `AgentToolsEnabled` × `IsNewSession` matrix) — `InstructionBlockBuilderTests.cs`, 5 tests
+- [DONE] Streaming manager lifecycle verified end-to-end against the real CLI via a throwaway harness project (not committed as an automated test — this codebase has no precedent for mocking `Process`; `ClaudeProcessManager` itself has never had unit tests, see the deferred backlog item below): confirmed single spawn reused across two turns, correct turn-boundary detection, `Stop` kills the process and fires `ProcessExited`, and `SendTurnAsync` throws after Stop
+- [ ] `CanStop`/toggle-confirmation tests — deferred; no existing test precedent for ViewModel-layer classes in this codebase (`TurnController`/`SessionViewModel` live in the `TessynDesktop` project, not `.Core`, and pull in Avalonia/ReactiveUI)
+- [ ] E2E use case for Streaming Session Mode — deferred, needs Architect sign-off on whether it belongs in the existing E2E harness
+
+---
+
+## Phase 25 — Usage Cache Staleness on Profile Selection (FR.18.8) ✓ DONE
+
+### P25.1 Staleness policy & wiring
+- [DONE] `Services/ClaudeUsageStalenessService.cs` — static `IsFiveHourStale`/`IsSevenDayStale`/`ZeroStaleWindows`, mirroring the existing `ModelTierService` pure-utility pattern (no interface, no DI registration)
+- [DONE] `Constants.Usage.NormalSeverity`; replaced the 4 inline `"normal"` literals in `ClaudeUsageService.ParseUsage`
+- [DONE] `ClaudeUsageService.SetActiveProfile` — cache-restore path now runs through `ZeroStaleWindows` before being shown
+- [DONE] `MainWindowViewModel.UpdateStatusBarUsage` — reuses `IsFiveHourStale`/`IsSevenDayStale` to suppress the "resets …" suffix for whichever window was just zeroed
+
+### P25.2 Tests
+- [DONE] `ClaudeUsageStalenessServiceTests.cs` — fresh/five-hour-stale/seven-day-stale/both-stale/exact-boundary cases, 9 tests
+
+### P25.3 Docs
+- [DONE] `docs/requirements.md` — FR.18.8
+
+---
+
+## Phase 26 — External MCP Server Registry & Background Model Routing (FR.20, FR.12.20) ✓ DONE
+
+### [DONE] P26.1 Background ("small-fast") model routing (FR.12.20)
+- [DONE] `ClaudeProcessLauncher.TryStartProcess` — sets `ANTHROPIC_SMALL_FAST_MODEL` to the curated Haiku catalog entry (FR.18.7, `Constants.ClaudeAssist.PreferredModelId`) for Anthropic-routed sessions only
+- [DONE] Confirmed Ollama-routed sessions never set `ANTHROPIC_SMALL_FAST_MODEL` — the line lives in the Anthropic-routing `else` branch, never the Ollama `if` branch
+
+### [DONE] P26.2 Registry data model & persistence (FR.20.1)
+- [DONE] `Models/ExternalMcpServerModel.cs` — Id, DisplayName, Enabled, Transport (Stdio/Http), Command/Arguments/WorkingDirectory, Url, AuthType (None/StaticHeader/OAuth2), StaticHeaderName/Value, OAuth config
+- [DONE] `Models/McpOAuthConfig.cs`, `McpServerTransport.cs`, `McpServerAuthType.cs`, `McpTokenRecord.cs`, `McpAuthorizeResult.cs`
+- [DONE] `AppSettingsModel.ExternalMcpServers` (`List<ExternalMcpServerModel>`)
+
+### [DONE] P26.3 OAuth client (FR.20.3–FR.20.6)
+- [DONE] `Services/IMcpOAuthService.cs` / `McpOAuthService.cs` — endpoint discovery (`.well-known/oauth-protected-resource` resolves the authorization-server base, then `.well-known/oauth-authorization-server` for the actual endpoints), fallback to manual config
+- [DONE] Dynamic Client Registration (RFC 7591) attempt when `registration_endpoint` is present
+- [DONE] Interactive authorization: PKCE (S256) + ephemeral loopback `HttpListener` + system browser + code exchange
+- [DONE] Token storage: DPAPI-protected (`ProtectedData`, `CurrentUser`) files under `%AppData%\TessynDesktop\mcp-tokens\<Id>.token` (`McpTokenStore`)
+- [DONE] Transparent refresh (`GetValidAccessTokenAsync`) before each `--mcp-config` build; marks entry "Needs re-authorization" and omits it from that turn's config on refresh failure
+
+### [DONE] P26.4 CLI merge (FR.20.2)
+- [DONE] `Services/IMcpConfigMerger.cs` / `McpConfigMerger.cs` — extracted from `AgentMcpServer` (single `IMcpOAuthService` dependency, independently unit-testable) to build the registry-derived `mcpServers` entries; `AgentMcpServer.BuildMcpConfigJsonAsync` merges its output alongside the always-present `cmx` entry
+- [DONE] Stdio → `type:"stdio"` + split args; Http → `type:"http"` + resolved bearer/static header; disabled entries and unauthorized/refresh-failed OAuth2 entries omitted entirely
+- [DONE] Reuses the existing tool-capability gate — tool-incapable Ollama models still skip `--mcp-config` entirely (verified at both the interactive send path in `TurnController` and the headless path in `SessionTurnService`)
+
+### [DONE] P26.5 Settings UI (FR.20.7)
+- [DONE] New "MCP Servers" tab in `SettingsWindow.axaml` — list (enable checkbox, transport/auth summary, live status) + Add/Edit/Remove/Authorize buttons acting on the current selection (mirrors the P10.6 profile-management pattern)
+- [DONE] `McpServerRowViewModel` — per-row display + status (`Not connected` / `Connected as <identity>` / `Needs re-authorization` / `—` for non-OAuth2 entries), computed from `IMcpTokenStore.Load` + `McpOAuthConfig` flags
+- [DONE] `McpServerEditViewModel` + `Views/McpServerEditDialog` — full Add/Edit form covering Stdio and Http × None/StaticHeader/OAuth2, with conditional field visibility; preserves `DiscoveryCompleted`/`NeedsReauthorization`/`ConnectedIdentity` across an edit of an already-authorized entry
+- [DONE] `Views/ConfirmDialog` — new generic Yes/No dialog (reusable from any owner `Window`, unlike `MainWindow.ShowConfirmOverlayAsync` which only renders into `MainWindow`'s own visual tree); used for the destructive Remove action
+- **Implementation note:** registry Add/Edit/Remove/Enable-toggle persist immediately (`_appSettings.Save()` on each action), independent of the Settings window's main Save button which continues to govern the window's other (copied-field) settings — chosen because Authorize already has its own immediate side effect (network call + token write), so gating the rest of the registry behind a separate Save click would be an inconsistent, partial undo story
+
+### [DONE] P26.6 Tests
+- [DONE] `McpConfigMergerTests.cs` — enabled/disabled entries, Stdio vs Http shape, None/StaticHeader/OAuth2 header resolution, unauthorized OAuth2 entry omitted, mixed-entry filtering (9 tests)
+- [DONE] `McpOAuthServiceTests.cs` — non-OAuth entry, never-authorized, valid non-expiring token (no HTTP call), far-from-expiry (no refresh), near-expiry (triggers refresh), successful refresh + persistence, refresh response omitting `refresh_token`, no-refresh-token failure, refresh-endpoint-error failure, refresh-endpoint-throws failure, `NeedsReauthorization` cleared on subsequent success (11 tests), via a hand-rolled `FakeHttpMessageHandler` (no mocking library, matching this project's existing test conventions)
+- [DONE] `McpTokenStoreTests.cs` — DPAPI round-trip (all fields, null refresh/expiry), overwrite, delete, no-file, independent per-server-id storage (6 tests)
+- Full suite: 266 passing, 0 failing
+
+---
+
 ## Backlog / Future
+
+- [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/VS-MCP-Server_Automation-Approaches-Research.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
+- [ ] **Claude-CLI-free agent loop (planned after the VS/Roslyn server)** — in-process C# agentic loop (Microsoft.Extensions.AI `IChatClient`/`FunctionInvokingChatClient` + OllamaSharp + official Anthropic SDK + official MCP C# SDK as an MCP client) replacing the `claude` subprocess for Ollama (and optionally direct-Anthropic) turns; consumes the same FR.20 registry + token store instead of re-implementing OAuth. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
+
+- [ ] **Investigate whether Claude Code's own context compaction silently drops the once-per-fresh-process instruction steering** — `InstructionOptionsModel.IsNewSession` currently gates `NativeSchedulingRedirect`/`NoWorkflowTool` on `ClaudeSessionId == null`, so within a *resumed* (never-detached) session the redirects are sent once and never again; if Claude Code internally compacts context mid-session, the steering may fall out of context and never return, even though `ClaudeSessionId` stays non-null throughout. We already parse `system`/`compact` stream events (`TurnController.HandleStreamEvent`, `SessionTurnService.HandleEvent`) — a fix, if the hypothesis is confirmed, would re-inject the redirects on the next turn after a `compact` event. Raised while investigating unreliable native-scheduling steering; not yet confirmed or scheduled.
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion
 - [ ] Session file watcher (detect disk deletion so tree delete button becomes available)

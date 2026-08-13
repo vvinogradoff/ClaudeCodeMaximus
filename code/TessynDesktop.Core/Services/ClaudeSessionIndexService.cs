@@ -18,18 +18,18 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeAssistService _assistService;
 	private readonly string _dbPath;
-	private readonly string _claudeProjectsDir;
+	private readonly IReadOnlyList<string> _claudeProjectsDirs;
 
 	public ClaudeSessionIndexService(
 		IClaudeSessionImportService importService,
 		IClaudeAssistService assistService,
 		string? dbPath = null,
-		string? claudeProjectsDir = null)
+		IReadOnlyList<string>? claudeProjectsDirs = null)
 	{
 		_importService = importService;
 		_assistService = assistService;
 		_dbPath = dbPath ?? GetDefaultDbPath();
-		_claudeProjectsDir = claudeProjectsDir ?? GetDefaultClaudeProjectsDir();
+		_claudeProjectsDirs = claudeProjectsDirs ?? GetDefaultClaudeProjectsDirs();
 
 		Directory.CreateDirectory(Path.GetDirectoryName(_dbPath)!);
 		InitializeSchema();
@@ -41,10 +41,29 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		return Path.Combine(appData, Constants.AppDataFolderName, "session-index.db");
 	}
 
-	private static string GetDefaultClaudeProjectsDir()
+	/// <summary>
+	/// Every Claude CLI home whose <c>projects/</c> folder may hold session JSONL for this app:
+	/// the OS-default <c>~/.claude</c>, plus one per Claude account profile — each profile launches
+	/// its <c>claude</c> processes with <c>CLAUDE_CONFIG_DIR</c> pointed at its own
+	/// <c>%AppData%\TessynDesktop\profiles\&lt;profileId&gt;</c>, so its sessions never land under
+	/// <c>~/.claude</c> (see <see cref="ClaudeProfileService"/>).
+	/// </summary>
+	private static IReadOnlyList<string> GetDefaultClaudeProjectsDirs()
 	{
+		var dirs = new List<string>();
+
 		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		return Path.Combine(userProfile, Constants.ClaudeSessions.ClaudeHomeFolderName, Constants.ClaudeSessions.ProjectsFolderName);
+		dirs.Add(Path.Combine(userProfile, Constants.ClaudeSessions.ClaudeHomeFolderName, Constants.ClaudeSessions.ProjectsFolderName));
+
+		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+		var profilesRoot = Path.Combine(appData, Constants.AppDataFolderName, Constants.ProfilesFolderName);
+		if (Directory.Exists(profilesRoot))
+		{
+			foreach (var profileDir in Directory.GetDirectories(profilesRoot))
+				dirs.Add(Path.Combine(profileDir, Constants.ClaudeSessions.ProjectsFolderName));
+		}
+
+		return dirs;
 	}
 
 	private string ConnectionString => $"Data Source={_dbPath}";
@@ -89,38 +108,41 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 	private int ReindexCore(CancellationToken cancellationToken)
 	{
-		if (!Directory.Exists(_claudeProjectsDir))
-		{
-			_log.Debug("ReindexAsync: no {Dir} found, nothing to index", _claudeProjectsDir);
-			return 0;
-		}
-
 		using var conn = new SqliteConnection(ConnectionString);
 		conn.Open();
 
 		var indexed = 0;
-		foreach (var slugDir in Directory.GetDirectories(_claudeProjectsDir))
+		foreach (var claudeProjectsDir in _claudeProjectsDirs)
 		{
-			cancellationToken.ThrowIfCancellationRequested();
-			var slug = Path.GetFileName(slugDir);
+			if (!Directory.Exists(claudeProjectsDir))
+			{
+				_log.Debug("ReindexAsync: no {Dir} found, skipping", claudeProjectsDir);
+				continue;
+			}
 
-			foreach (var jsonlPath in Directory.GetFiles(slugDir, "*" + Constants.ClaudeSessions.SessionFileExtension))
+			foreach (var slugDir in Directory.GetDirectories(claudeProjectsDir))
 			{
 				cancellationToken.ThrowIfCancellationRequested();
+				var slug = Path.GetFileName(slugDir);
 
-				var externalId = Path.GetFileNameWithoutExtension(jsonlPath);
-				if (string.IsNullOrEmpty(externalId))
-					continue;
+				foreach (var jsonlPath in Directory.GetFiles(slugDir, "*" + Constants.ClaudeSessions.SessionFileExtension))
+				{
+					cancellationToken.ThrowIfCancellationRequested();
 
-				long mtimeTicks;
-				try { mtimeTicks = File.GetLastWriteTimeUtc(jsonlPath).Ticks; }
-				catch (IOException) { continue; } // file removed mid-scan
+					var externalId = Path.GetFileNameWithoutExtension(jsonlPath);
+					if (string.IsNullOrEmpty(externalId))
+						continue;
 
-				if (GetStoredMtime(conn, externalId) == mtimeTicks)
-					continue; // unchanged since last index
+					long mtimeTicks;
+					try { mtimeTicks = File.GetLastWriteTimeUtc(jsonlPath).Ticks; }
+					catch (IOException) { continue; } // file removed mid-scan
 
-				if (IndexSession(conn, externalId, slug, jsonlPath, mtimeTicks))
-					indexed++;
+					if (GetStoredMtime(conn, externalId) == mtimeTicks)
+						continue; // unchanged since last index
+
+					if (IndexSession(conn, externalId, slug, jsonlPath, mtimeTicks))
+						indexed++;
+				}
 			}
 		}
 

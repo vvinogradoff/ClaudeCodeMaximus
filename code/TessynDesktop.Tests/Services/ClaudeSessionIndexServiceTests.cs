@@ -54,7 +54,7 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
         Directory.CreateDirectory(_projectsDir);
         var dbPath = Path.Combine(_tempRoot, "index.db");
 
-        _service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assistService, dbPath, _projectsDir);
+        _service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assistService, dbPath, [_projectsDir]);
     }
 
     public void Dispose()
@@ -135,7 +135,7 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
         var emptyDir = Path.Combine(_tempRoot, "does-not-exist");
         var service = new ClaudeSessionIndexService(
             new ClaudeSessionImportService(), _assistService,
-            Path.Combine(_tempRoot, "other.db"), emptyDir);
+            Path.Combine(_tempRoot, "other.db"), [emptyDir]);
 
         var count = await service.ReindexAsync();
 

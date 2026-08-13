@@ -239,6 +239,18 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
+	/// <summary>Whether this session is marked as a favorite (FR.9.7). Pins it in the recent-sessions dropdown regardless of recency.</summary>
+	public bool IsFavorite
+	{
+		get => _node.IsFavorite;
+		set
+		{
+			_node.IsFavorite = value;
+			this.RaisePropertyChanged();
+			_appSettings.Save();
+		}
+	}
+
 	/// <summary>Display names for the model selector (populated dynamically from IClaudeModelService).</summary>
 	public ObservableCollection<string> AvailableModels => _models.AvailableModels;
 
@@ -278,6 +290,26 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		set => _models.IsChromeEnabled = value;
 	}
 
+	/// <summary>Streaming Session Mode toggle (FR.19.1, FR.19.6). Turning it off while a process is alive raises <see cref="StreamingDisableConfirmationRequested"/> instead of applying immediately.</summary>
+	public bool IsStreamingMode
+	{
+		get => _turn.IsStreamingMode;
+		set => _turn.IsStreamingMode = value;
+	}
+
+	/// <summary>True when a Streaming Session Mode process is alive for this session (FR.19.3) — drives the locked Model/Profile/Effort selectors (FR.19.8).</summary>
+	public bool IsStreamingProcessAlive => _turn.IsStreamingProcessAlive;
+
+	/// <summary>Raised when the user tries to turn Streaming Session Mode off while its process is alive, requesting a confirmation dialog from the View (FR.19.7).</summary>
+	public event Action? StreamingDisableConfirmationRequested
+	{
+		add => _turn.StreamingDisableConfirmationRequested += value;
+		remove => _turn.StreamingDisableConfirmationRequested -= value;
+	}
+
+	/// <summary>Called by the View after the user confirms turning Streaming Session Mode off (FR.19.7).</summary>
+	public void ConfirmStreamingModeOff() => _turn.ConfirmStreamingModeOff();
+
 	/// <summary>Entries for the profile selector (Default, stored profiles, "New..."). Rebuilt when profiles change.</summary>
 	public ObservableCollection<ProfileListItemModel> AvailableProfiles => _profiles.AvailableProfiles;
 
@@ -296,6 +328,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	/// <summary>True when the Remove button should be shown: an auth error is active and a non-Default profile is selected (FR.12.18).</summary>
 	public bool CanRemoveProfile => _profiles.CanRemoveProfile;
+
+	/// <summary>True when a stored (non-Default, non-"New...") profile is currently selected. Drives Rename/Delete button visibility (FR.12.19), independent of auth-error state.</summary>
+	public bool CanManageSelectedProfile => _profiles.CanManageSelectedProfile;
 
 	/// <summary>Persisted vertical scroll offset for the message area.</summary>
 	public double ScrollOffset
@@ -323,6 +358,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		SessionNodeViewModel node,
 		ISessionFileService fileService,
 		IClaudeProcessManager processManager,
+		IClaudeStreamingSessionManager streamingManager,
 		IAppSettingsService appSettings,
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
@@ -352,7 +388,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_models = new ModelSelectionController(modelService, appSettings, _directoryModel);
 		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
 		var composer = new SessionPromptComposer(fileService, appSettings, node);
-		_turn = new TurnController(node, fileService, draftService, processManager, appSettings, mcpServer, daemonClient,
+		_turn = new TurnController(node, fileService, draftService, processManager, streamingManager, appSettings, mcpServer, daemonClient,
 			sessionStatus, _content, _models, _profiles, composer);
 		turn = _turn;
 

@@ -34,13 +34,15 @@ public sealed class SessionPromptComposer
 	/// (<c>SessionTurnService</c>) turns emit identical instructions. <paramref name="isNewSession"/>
 	/// should be true only when this turn is about to start a fresh claude process (no
 	/// ClaudeSessionId/ExternalId yet) — the tool-usage bans are gated on it so they are sent once
-	/// per fresh process instead of on every turn.
+	/// per fresh process instead of on every turn. <paramref name="isStreamingMode"/> reflects the
+	/// mode of the spawn this turn is actually going to (FR.19.9), gating the native-scheduling
+	/// redirect specifically.
 	/// </summary>
-	public string BuildInstructionBlock(bool? isAutoCommit, bool isNewBranch, bool isAutoDocument, bool isNewSession)
+	public string BuildInstructionBlock(bool? isAutoCommit, bool isNewBranch, bool isAutoDocument, bool isNewSession, bool isStreamingMode)
 	{
 		var options = new InstructionOptionsModel(
 			isAutoCommit, isNewBranch, isAutoDocument,
-			_appSettings.Settings.AgentToolsEnabled, isNewSession);
+			_appSettings.Settings.AgentToolsEnabled, isNewSession, isStreamingMode);
 		return InstructionBlockBuilder.Build(options);
 	}
 

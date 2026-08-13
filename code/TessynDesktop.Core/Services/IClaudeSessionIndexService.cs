@@ -8,8 +8,10 @@ namespace TessynDesktop.Services;
 
 /// <summary>
 /// Owns a persistent, machine-wide SQLite FTS5 index over every Claude CLI session JSONL under
-/// <c>~/.claude/projects/*/</c>, plus a persisted title cache — the in-process replacement for the
-/// NodeJS tessyn daemon's cross-project search and title-generation features (Stage 6).
+/// <c>~/.claude/projects/*/</c> and under each Claude account profile's own config directory
+/// (<c>%AppData%\TessynDesktop\profiles\&lt;profileId&gt;\projects\*/</c>), plus a persisted title
+/// cache — the in-process replacement for the NodeJS tessyn daemon's cross-project search and
+/// title-generation features (Stage 6).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public interface IClaudeSessionIndexService

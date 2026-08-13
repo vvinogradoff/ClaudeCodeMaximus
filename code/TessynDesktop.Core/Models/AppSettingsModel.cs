@@ -108,4 +108,11 @@ public sealed class AppSettingsModel
 	/// Default true — disable to suppress all result toasts.
 	/// </summary>
 	public bool NotificationsEnabled { get; set; } = true;
+
+	/// <summary>
+	/// External MCP Server Registry (FR.20.1): user-managed servers merged into every session's
+	/// --mcp-config alongside the in-process cmx server. Independent of claude.ai's own MCP
+	/// connector registrations (FR.20.8).
+	/// </summary>
+	public List<ExternalMcpServerModel> ExternalMcpServers { get; set; } = [];
 }

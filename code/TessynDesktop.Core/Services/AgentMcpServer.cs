@@ -34,6 +34,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly ISessionFileService       _fileService;
 	private readonly IClaudeModelService       _modelService;
 	private readonly TdcpServer                _tdcpServer;
+	private readonly IMcpConfigMerger          _configMerger;
 
 	// Enforced concurrent worker cap (FR.15.5).
 	private readonly SemaphoreSlim _workerSemaphore =
@@ -55,7 +56,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		ISessionRegistry registry,
 		ISessionFileService fileService,
 		IClaudeModelService modelService,
-		TdcpServer tdcpServer)
+		TdcpServer tdcpServer,
+		IMcpConfigMerger configMerger)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -64,6 +66,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_fileService  = fileService;
 		_modelService = modelService;
 		_tdcpServer   = tdcpServer;
+		_configMerger = configMerger;
 	}
 
 	public void Start()
@@ -113,7 +116,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_log.Information("AgentMcpServer stopped");
 	}
 
-	public Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken)
+	public async Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken)
 	{
 		// A blank nodeId/agentToken (session created before identity backfill, or a latent gap
 		// in a creation path) would still produce a non-null config path whose token header is
@@ -121,7 +124,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		// then reports as mcp_servers:[{"status":"failed"}] with zero cmx tools, no error surfaced.
 		if (!_appSettings.Settings.AgentToolsEnabled || _port == 0
 		    || string.IsNullOrEmpty(nodeId) || string.IsNullOrEmpty(agentToken))
-			return Task.FromResult<string?>(null);
+			return null;
 
 		var dir  = Path.Combine(
 			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -130,13 +133,13 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		Directory.CreateDirectory(dir);
 
 		var path    = Path.Combine(dir, $"{nodeId}.json");
-		var content = BuildMcpConfigJson(agentToken);
+		var content = await BuildMcpConfigJsonAsync(agentToken);
 
-		// Re-write if missing or the port/token changed.
+		// Re-write if missing or the port/token/registry contents changed.
 		if (!File.Exists(path) || File.ReadAllText(path) != content)
 			File.WriteAllText(path, content, Encoding.UTF8);
 
-		return Task.FromResult<string?>(path);
+		return path;
 	}
 
 	// ── Private helpers ───────────────────────────────────────────────────────
@@ -157,26 +160,33 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			child.ProfileName = profileName;
 	}
 
-	private string BuildMcpConfigJson(string agentToken)
+	/// <summary>
+	/// Builds the full --mcp-config content: the always-present cmx server (FR.14.1) plus every
+	/// enabled External MCP Server Registry entry (FR.20.2), merged into one mcpServers map.
+	/// </summary>
+	private async Task<string> BuildMcpConfigJsonAsync(string agentToken)
 	{
 		// "type":"http" is required by the claude CLI to recognise this as an HTTP MCP server;
 		// without it the entry is silently ignored (mcp_servers:[]).
 		// The "headers" object is forwarded on every request so the server can map the token to the calling node.
-		return JsonSerializer.Serialize(new
+		var mcpServers = new Dictionary<string, object>
 		{
-			mcpServers = new Dictionary<string, object>
+			[Constants.Agent.McpServerName] = new
 			{
-				[Constants.Agent.McpServerName] = new
+				type    = "http",
+				url     = $"http://127.0.0.1:{_port}{Constants.Agent.McpEndpointPath}",
+				headers = new Dictionary<string, string>
 				{
-					type    = "http",
-					url     = $"http://127.0.0.1:{_port}{Constants.Agent.McpEndpointPath}",
-					headers = new Dictionary<string, string>
-					{
-						[Constants.Agent.TokenHeader] = agentToken,
-					},
+					[Constants.Agent.TokenHeader] = agentToken,
 				},
 			},
-		}, new JsonSerializerOptions { WriteIndented = true });
+		};
+
+		var registryServers = await _configMerger.BuildRegistryServersAsync(_appSettings.Settings.ExternalMcpServers);
+		foreach (var (id, server) in registryServers)
+			mcpServers[id] = server;
+
+		return JsonSerializer.Serialize(new { mcpServers }, new JsonSerializerOptions { WriteIndented = true });
 	}
 
 	private async Task AcceptLoopAsync(CancellationToken ct)

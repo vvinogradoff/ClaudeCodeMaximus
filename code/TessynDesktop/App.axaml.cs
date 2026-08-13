@@ -110,7 +110,9 @@ public partial class App : Application
 		services.AddSingleton<IDirectoryLabelService, DirectoryLabelService>();
 		services.AddSingleton<ISessionFileService, SessionFileService>();
 		services.AddSingleton<IDraftService, DraftService>();
+		services.AddSingleton<ClaudeProcessLauncher>();
 		services.AddSingleton<IClaudeProcessManager, ClaudeProcessManager>();
+		services.AddSingleton<IClaudeStreamingSessionManager, ClaudeStreamingSessionManager>();
 		services.AddSingleton<ISelfUpdateService, SelfUpdateService>();
 		services.AddSingleton<IClaudeSessionStatusService, ClaudeSessionStatusService>();
 		services.AddSingleton<ISessionSearchService, SessionSearchService>();
@@ -126,6 +128,12 @@ public partial class App : Application
 		services.AddSingleton<IClaudeSessionIndexService, ClaudeSessionIndexService>();
 		services.AddSingleton<ISessionRegistry, SessionRegistry>();
 		services.AddSingleton<SessionTreeViewModel>();
+
+		// External MCP Server Registry (FR.20).
+		services.AddSingleton<System.Net.Http.HttpClient>();
+		services.AddSingleton<IMcpTokenStore, McpTokenStore>();
+		services.AddSingleton<IMcpOAuthService, McpOAuthService>();
+		services.AddSingleton<IMcpConfigMerger, McpConfigMerger>();
 
 		// Agent orchestration singletons (FR.14, FR.15).
 		// Lazy<T> registrations break the circular dependency between ISessionTurnService ↔ IAgentMcpServer.

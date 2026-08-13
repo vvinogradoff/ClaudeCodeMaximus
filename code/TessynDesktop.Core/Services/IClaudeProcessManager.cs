@@ -16,9 +16,12 @@ public interface IClaudeProcessManager
 	int ActiveProcessCount { get; }
 
 	/// <summary>
-	/// Spawns a claude process for one user turn. Writes userMessage to stdin, reads
-	/// stdout as stream-json events, calls onEvent for each parsed event, then exits.
+	/// Spawns a claude process for one user turn (One-shot Mode, FR.19). Writes userMessage to
+	/// stdin, reads stdout as stream-json events, calls onEvent for each parsed event, then exits.
 	/// When ollamaBaseUrl is set the process is routed to local Ollama (no profile/proxy).
+	/// <paramref name="disallowNativeScheduling"/> passes <c>--disallowed-tools</c> for the native
+	/// scheduling tools (FR.19.10), hard-blocking what the instruction-block redirect (FR.14.11)
+	/// only advises against.
 	/// </summary>
 	Task SendMessageAsync(
 		string workingDirectory,
@@ -33,6 +36,7 @@ public interface IClaudeProcessManager
 		string? ollamaBaseUrl = null,
 		bool disableTools = false,
 		bool chrome = false,
+		bool disallowNativeScheduling = false,
 		CancellationToken cancellationToken = default);
 
 	/// <summary>

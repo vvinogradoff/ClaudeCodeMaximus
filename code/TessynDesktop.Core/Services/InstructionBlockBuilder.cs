@@ -39,11 +39,15 @@ public static class InstructionBlockBuilder
 		// redirects would point at nothing) AND only at the start of a fresh claude process
 		// (IsNewSession) — these are session-level policy, not per-turn state, and repeating them
 		// on every turn reads as a prompt injection to the model and is sometimes ignored outright.
-		if (options.IsAgentToolsEnabled && options.IsNewSession)
-		{
+		//
+		// FR.19.9 — The native-scheduling redirect is additionally gated on !IsStreamingMode: its
+		// rationale (the process dies between turns) doesn't hold for a persistent streaming process.
+		// NoWorkflowTool is unconditional on mode — the concern it addresses (subagents invisible to
+		// the session tree) applies regardless of process lifetime.
+		if (options.IsAgentToolsEnabled && options.IsNewSession && !options.IsStreamingMode)
 			lines.AppendLine($"- {Constants.Instructions.NativeSchedulingRedirect}");
+		if (options.IsAgentToolsEnabled && options.IsNewSession)
 			lines.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
-		}
 
 		// FR.11.2 — omit the block entirely when there is nothing to say (Auto-Commit silent and
 		// no other toggle active), instead of appending a dangling preamble with no instructions.

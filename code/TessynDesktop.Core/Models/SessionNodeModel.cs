@@ -100,4 +100,20 @@ public sealed class SessionNodeModel
 	/// any newer activity makes it reappear without needing to clear this field.
 	/// </summary>
 	public DateTimeOffset? RecentIgnoredAt { get; set; }
+
+	/// <summary>
+	/// Whether the user has marked this session as a favorite (FR.9.7). Favorited sessions always
+	/// remain in the top-bar recent-sessions dropdown regardless of recency or <see cref="RecentIgnoredAt"/>.
+	/// </summary>
+	public bool IsFavorite { get; set; }
+
+	/// <summary>
+	/// Streaming Session Mode toggle (FR.19.6): when <c>true</c>, interactive sends on this session
+	/// spawn a single persistent <c>claude</c> process (<c>--input-format stream-json</c>) that stays
+	/// alive across turns instead of the default One-shot Mode (one process per turn). Sticky and
+	/// persisted like <see cref="IsAutoDocument"/> — unlike the in-memory-only chrome toggle, it
+	/// survives app restarts, though no process is auto-respawned on restart. Headless (scheduled,
+	/// orchestrated) turns always ignore this and run one-shot (FR.19.11).
+	/// </summary>
+	public bool IsStreamingMode { get; set; }
 }

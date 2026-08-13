@@ -121,9 +121,12 @@ public sealed class SessionTurnService : ISessionTurnService
 			// evaluated here (after the resumability check above) so the tool-usage bans re-inject
 			// whenever a fresh claude process is actually about to start — including a context reset —
 			// not just on the session's very first-ever turn.
+			// IsStreamingMode is always false here — headless/scheduled/orchestrated turns always run
+			// via the one-shot --resume path regardless of the target session's own streaming toggle
+			// (FR.19.11), so the instruction block should describe this spawn's actual (one-shot) mode.
 			var options          = new InstructionOptionsModel(
 				node.IsAutoCommit, false, node.IsAutoDocument,
-				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null);
+				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: false);
 			var instructionBlock = InstructionBlockBuilder.Build(options);
 			var augmentedPrompt  = prompt + instructionBlock;
 
@@ -161,6 +164,7 @@ public sealed class SessionTurnService : ISessionTurnService
 				mcpConfigPath:    mcpConfigPath,
 				ollamaBaseUrl:    ollamaBaseUrl,
 				disableTools:     disableTools,
+				disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
 				cancellationToken: ct);
 
 			return new TurnResultModel(resultText.ToString(), node.ClaudeSessionId, isError, errorMessage,

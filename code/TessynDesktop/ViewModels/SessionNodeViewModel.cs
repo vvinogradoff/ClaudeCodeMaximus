@@ -25,6 +25,7 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private DateTimeOffset? _lastResponseTimestamp;
 	private DateTimeOffset? _lastDraftEditTimestamp;
 	private DateTimeOffset? _recentIgnoredAt;
+	private bool _isFavorite;
 	private bool _hasSchedules;
 	private string _directoryLabel = string.Empty;
 	private IBrush? _recencyBrush;
@@ -202,6 +203,20 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	public bool IsHiddenFromRecent =>
 		_recentIgnoredAt.HasValue && (!LastActivityTimestamp.HasValue || _recentIgnoredAt.Value >= LastActivityTimestamp.Value);
 
+	/// <summary>
+	/// True when the user has marked this session as a favorite (FR.9.7). Favorited sessions always
+	/// remain in the top-bar recent-sessions dropdown regardless of recency or <see cref="IsHiddenFromRecent"/>.
+	/// </summary>
+	public bool IsFavorite
+	{
+		get => _isFavorite;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _isFavorite, value);
+			Model.IsFavorite = value;
+		}
+	}
+
 	/// <summary>True when this session has one or more active schedules (FR.14). Refreshed by the recent-dropdown rebuild.</summary>
 	public bool HasSchedules
 	{
@@ -279,5 +294,6 @@ public sealed class SessionNodeViewModel : ViewModelBase
 		Model = model;
 		_name = model.Name;
 		_recentIgnoredAt = model.RecentIgnoredAt;
+		_isFavorite = model.IsFavorite;
 	}
 }

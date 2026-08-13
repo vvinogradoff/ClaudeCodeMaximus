@@ -515,6 +515,14 @@ public partial class MainWindow : Window
 			vm.HideSessionFromRecent(session);
 	}
 
+	private void OnUnfavoriteRecentSessionClick(object? sender, RoutedEventArgs e)
+	{
+		e.Handled = true;
+		if (sender is Button { DataContext: SessionNodeViewModel session }
+		    && DataContext is MainWindowViewModel vm)
+			vm.SetFavorite(session, false);
+	}
+
 	// ── Window control buttons ────────────────────────────────────────────────
 
 	private void OnMinimizeClick(object? sender, RoutedEventArgs e) =>

@@ -67,10 +67,18 @@ public static class Constants
 		/// <summary>
 		/// FR.14.11 — Redirects Claude away from the CLI's built-in scheduling tools toward the
 		/// host MCP-served equivalents, because the claude process is terminated between turns
-		/// and any native-tool schedules would be silently lost.
+		/// and any native-tool schedules would be silently lost. Only emitted in One-shot Mode
+		/// (FR.19.9) — omitted entirely for a session in Streaming Session Mode.
 		/// </summary>
 		public const string NativeSchedulingRedirect =
 			"This CLI is terminated between turns. Do NOT use `ScheduleWakeup`, `CronCreate`, `CronList`, or `CronDelete` — schedules set via those tools will not survive. Use the TessynDesktop MCP tools instead: `mcp__" + Agent.McpServerName + "__schedule_wake` (accepts `inSeconds`, `at` ISO time, or `cron`), `mcp__" + Agent.McpServerName + "__list_schedules`, `mcp__" + Agent.McpServerName + "__cancel_schedule`. These are persisted by the host application and re-arm across CLI restarts.";
+
+		/// <summary>
+		/// FR.19.10 — Native tool names passed to <c>--disallowed-tools</c> on One-shot Mode spawns
+		/// when AgentToolsEnabled is true, hard-blocking the tools <see cref="NativeSchedulingRedirect"/>
+		/// only advises against. Not applied to Streaming Session Mode spawns.
+		/// </summary>
+		public static readonly string[] NativeSchedulingToolNames = ["ScheduleWakeup", "CronCreate", "CronList", "CronDelete"];
 
 		/// <summary>
 		/// Redirects Claude away from the Claude Code <c>Workflow</c> tool, the <c>Agent</c> tool's
@@ -190,6 +198,13 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const int TitleBatchSize = 20;
 		public const int TimeoutMs = 60000;
 		public const string PreferredModel = "haiku";
+
+		/// <summary>
+		/// Full curated-catalog model ID (FR.18.7) for the preferred Haiku model. Single source of
+		/// truth for both the catalog entry (ClaudeModelService) and the ANTHROPIC_SMALL_FAST_MODEL
+		/// env var (FR.12.20) — both need the versioned ID, not just the "haiku" alias.
+		/// </summary>
+		public const string PreferredModelId = "claude-haiku-4-5-20251001";
 	}
 
 	public static class KeyBindings
@@ -344,6 +359,26 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string AuthToken         = "ollama";
 		public const int    DiscoveryTimeoutMs = 2500;
 		public const int    ShowTimeoutMs      = 3000;
+	}
+
+	/// <summary>Constants for the External MCP Server Registry and its OAuth 2.1 client role (FR.20).</summary>
+	public static class ExternalMcp
+	{
+		/// <summary>Folder under %AppData%\TessynDesktop holding DPAPI-protected per-server token files (FR.20.5).</summary>
+		public const string TokenStoreFolderName = "mcp-tokens";
+		public const string TokenFileExtension   = ".token";
+
+		public const string WellKnownProtectedResourcePath   = "/.well-known/oauth-protected-resource";
+		public const string WellKnownAuthorizationServerPath = "/.well-known/oauth-authorization-server";
+
+		/// <summary>Loopback redirect path used for the interactive PKCE authorization flow (FR.20.4).</summary>
+		public const string RedirectPath = "/callback";
+
+		/// <summary>How long the interactive authorization flow waits for the browser redirect before giving up.</summary>
+		public const int AuthorizeTimeoutMs = 120_000;
+
+		/// <summary>Safety margin before actual expiry at which a token is proactively refreshed (FR.20.6).</summary>
+		public const int TokenExpiryMarginSeconds = 60;
 	}
 
 

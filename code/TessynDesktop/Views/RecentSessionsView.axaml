@@ -62,6 +62,14 @@
                                                                    IsVisible="{Binding HasDraftText}"
                                                                    ToolTip.Tip="Has unsent text"/>
                                                     </StackPanel>
+                                                    <Path Grid.Row="0" Grid.ColumnSpan="2"
+                                                          Data="{StaticResource StarGeometry}"
+                                                          Stretch="Uniform" Width="11" Height="11"
+                                                          Fill="Gold" Stroke="Black" StrokeThickness="1.3"
+                                                          HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                          Margin="0,0,4,0"
+                                                          IsVisible="{Binding IsFavorite}"
+                                                          ToolTip.Tip="Favorite"/>
                                                     <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                                                                Text="{Binding ProfileName}"
                                                                IsVisible="{Binding ProfileName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"

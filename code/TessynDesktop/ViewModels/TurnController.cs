@@ -28,6 +28,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private readonly ISessionFileService _fileService;
 	private readonly IDraftService _draftService;
 	private readonly IClaudeProcessManager _processManager;
+	private readonly IClaudeStreamingSessionManager _streamingManager;
 	private readonly IAppSettingsService _appSettings;
 	private readonly IAgentMcpServer _mcpServer;
 	private readonly IDaemonClient _daemonClient;
@@ -74,8 +75,62 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		}
 	}
 
-	/// <summary>True when the Stop button should be shown: a local send is in flight, or the node has an active orchestrated turn.</summary>
-	public bool CanStop => IsBusy || IsNodeRunning;
+	/// <summary>
+	/// True when the Stop button should be shown: a local send is in flight, the node has an
+	/// active orchestrated turn, or a Streaming Session Mode process is alive for this session
+	/// (FR.19.4) — shown for the process's whole lifetime, not only while it is actively streaming
+	/// output, since the app cannot know in advance whether more output (a background task, a
+	/// native schedule) is still pending.
+	/// </summary>
+	public bool CanStop => IsBusy || IsNodeRunning || IsStreamingProcessAlive;
+
+	/// <summary>True when a Streaming Session Mode process is currently alive for this session (FR.19.3).</summary>
+	public bool IsStreamingProcessAlive => _streamingManager.IsAlive(_node.Model.NodeId);
+
+	/// <summary>
+	/// Streaming Session Mode toggle (FR.19.1, FR.19.6): sticky, persisted on the session node.
+	/// Turning it OFF while a process is alive does not apply immediately — it raises
+	/// <see cref="StreamingDisableConfirmationRequested"/> instead, and the change only takes
+	/// effect if the caller (the View, after user confirmation) calls <see cref="ConfirmStreamingModeOff"/>.
+	/// </summary>
+	public bool IsStreamingMode
+	{
+		get => _node.Model.IsStreamingMode;
+		set
+		{
+			if (value == _node.Model.IsStreamingMode) return;
+
+			if (!value && IsStreamingProcessAlive)
+			{
+				StreamingDisableConfirmationRequested?.Invoke();
+				this.RaisePropertyChanged(); // re-pulls the still-true value, reverting the bound toggle
+				return;
+			}
+
+			_node.Model.IsStreamingMode = value;
+			_appSettings.Save();
+			this.RaisePropertyChanged();
+		}
+	}
+
+	/// <summary>Raised when the user tries to turn Streaming Session Mode off while its process is alive (FR.19.7).</summary>
+	public event Action? StreamingDisableConfirmationRequested;
+
+	/// <summary>Called by the View after the user confirms turning Streaming Session Mode off (FR.19.7). Kills the process and applies the toggle.</summary>
+	public void ConfirmStreamingModeOff()
+	{
+		_streamingManager.Stop(_node.Model.NodeId);
+		_node.Model.IsStreamingMode = false;
+		_appSettings.Save();
+		NotifyStreamingStateChanged();
+	}
+
+	private void NotifyStreamingStateChanged()
+	{
+		this.RaisePropertyChanged(nameof(IsStreamingMode));
+		this.RaisePropertyChanged(nameof(IsStreamingProcessAlive));
+		this.RaisePropertyChanged(nameof(CanStop));
+	}
 
 	public string ThinkingDuration
 	{
@@ -159,6 +214,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		ISessionFileService fileService,
 		IDraftService draftService,
 		IClaudeProcessManager processManager,
+		IClaudeStreamingSessionManager streamingManager,
 		IAppSettingsService appSettings,
 		IAgentMcpServer mcpServer,
 		IDaemonClient daemonClient,
@@ -168,31 +224,49 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		ProfileController profiles,
 		SessionPromptComposer composer)
 	{
-		_node           = node;
-		_fileService    = fileService;
-		_draftService   = draftService;
-		_processManager = processManager;
-		_appSettings    = appSettings;
-		_mcpServer      = mcpServer;
-		_daemonClient   = daemonClient;
-		_sessionStatus  = sessionStatus;
-		_content        = content;
-		_models         = models;
-		_profiles       = profiles;
-		_composer       = composer;
+		_node             = node;
+		_fileService      = fileService;
+		_draftService     = draftService;
+		_processManager   = processManager;
+		_streamingManager = streamingManager;
+		_appSettings      = appSettings;
+		_mcpServer        = mcpServer;
+		_daemonClient     = daemonClient;
+		_sessionStatus    = sessionStatus;
+		_content          = content;
+		_models           = models;
+		_profiles         = profiles;
+		_composer         = composer;
 
 		node.WhenAnyValue(x => x.IsRunning).Subscribe(running => IsNodeRunning = running);
+		_streamingManager.ProcessExited += OnStreamingProcessExited;
+	}
+
+	private void OnStreamingProcessExited(string nodeId)
+	{
+		if (nodeId != _node.Model.NodeId) return;
+		Dispatcher.UIThread.Post(NotifyStreamingStateChanged);
 	}
 
 	public void Dispose()
 	{
+		_streamingManager.ProcessExited -= OnStreamingProcessExited;
 		lock (_ctsLock) { foreach (var c in _activeCts) c.Dispose(); _activeCts.Clear(); }
 	}
 
-	/// <summary>Cancels an in-flight local send, or requests cancellation of an orchestrated turn (bound to StopCommand).</summary>
+	/// <summary>
+	/// Cancels an in-flight local send, requests cancellation of an orchestrated turn, or kills an
+	/// alive Streaming Session Mode process (FR.19.5, bound to StopCommand). The streaming case
+	/// takes priority since it terminates the whole process rather than just the current turn.
+	/// </summary>
 	public void Stop()
 	{
-		if (IsBusy)
+		if (IsStreamingProcessAlive)
+		{
+			_streamingManager.Stop(_node.Model.NodeId);
+			_log.Information("Stop requested — terminating streaming process for session {FileName}", _node.FileName);
+		}
+		else if (IsBusy)
 		{
 			List<CancellationTokenSource> snapshot;
 			lock (_ctsLock) snapshot = [.._activeCts];
@@ -292,7 +366,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		if (sessionId != null)
 			_sessionStatus.TryAdoptSessionFromOtherProfile(_node.Model.WorkingDirectory, sessionId, _profiles.SelectedProfileConfigDir);
 
-		var instructionBlock = _composer.BuildInstructionBlock(IsAutoCommit, wasNewBranch, IsAutoDocument, sessionId == null);
+		var instructionBlock = _composer.BuildInstructionBlock(IsAutoCommit, wasNewBranch, IsAutoDocument, sessionId == null, _node.Model.IsStreamingMode);
 		var augmentedMessage = message + instructionBlock;
 
 		// Proactive context reload (FR.11.10): if file has history but no session ID, wrap with context
@@ -338,54 +412,66 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				await turnLock.WaitAsync(ct);
 				lockAcquired = true;
 			}
-			await _processManager.SendMessageAsync(
-				workingDirectory: _node.Model.WorkingDirectory,
-				claudePath:       _appSettings.Settings.ClaudePath,
-				sessionId:        sessionId,
-				userMessage:      messageToSend,
-				onEvent:          HandleStreamEvent,
-				model:            _models.SelectedModelId,
-				profileConfigDir: _profiles.SelectedProfileConfigDir,
-				effort:           _models.SelectedEffort,
-				mcpConfigPath:    mcpConfigPath,
-				ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
-				disableTools:     _models.SelectedModelDisablesTools,
-				chrome:           _models.IsChromeEnabled,
-				cancellationToken: ct);
 
-			if (_needsContextRetry)
+			if (_node.Model.IsStreamingMode)
 			{
-				_needsContextRetry = false;
-				var enrichedMessage = _composer.BuildContextPreamble(augmentedMessage);
-
-				Dispatcher.UIThread.Post(() =>
-				{
-					var last = _content.Messages.Count > 0 ? _content.Messages[^1] : null;
-					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-						last.Content = "Resuming session with conversation history...";
-					else
-						_content.Messages.Add(new MessageEntryViewModel
-						{
-							Role       = Constants.SessionFile.RoleSystem,
-							Content    = "Resuming session with conversation history...",
-							Timestamp  = DateTimeOffset.UtcNow,
-							IsProgress = true,
-						});
-				});
-
+				// Streaming Session Mode (FR.19): no --resume "No conversation found" retry path —
+				// the same open process carries the conversation, so context-retry doesn't apply.
+				await SendViaStreamingAsync(sessionId, messageToSend, mcpConfigPath, ct);
+			}
+			else
+			{
 				await _processManager.SendMessageAsync(
 					workingDirectory: _node.Model.WorkingDirectory,
 					claudePath:       _appSettings.Settings.ClaudePath,
-					sessionId:        null,
-					userMessage:      enrichedMessage,
+					sessionId:        sessionId,
+					userMessage:      messageToSend,
 					onEvent:          HandleStreamEvent,
 					model:            _models.SelectedModelId,
 					profileConfigDir: _profiles.SelectedProfileConfigDir,
 					effort:           _models.SelectedEffort,
+					mcpConfigPath:    mcpConfigPath,
 					ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
 					disableTools:     _models.SelectedModelDisablesTools,
 					chrome:           _models.IsChromeEnabled,
+					disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
 					cancellationToken: ct);
+
+				if (_needsContextRetry)
+				{
+					_needsContextRetry = false;
+					var enrichedMessage = _composer.BuildContextPreamble(augmentedMessage);
+
+					Dispatcher.UIThread.Post(() =>
+					{
+						var last = _content.Messages.Count > 0 ? _content.Messages[^1] : null;
+						if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
+							last.Content = "Resuming session with conversation history...";
+						else
+							_content.Messages.Add(new MessageEntryViewModel
+							{
+								Role       = Constants.SessionFile.RoleSystem,
+								Content    = "Resuming session with conversation history...",
+								Timestamp  = DateTimeOffset.UtcNow,
+								IsProgress = true,
+							});
+					});
+
+					await _processManager.SendMessageAsync(
+						workingDirectory: _node.Model.WorkingDirectory,
+						claudePath:       _appSettings.Settings.ClaudePath,
+						sessionId:        null,
+						userMessage:      enrichedMessage,
+						onEvent:          HandleStreamEvent,
+						model:            _models.SelectedModelId,
+						profileConfigDir: _profiles.SelectedProfileConfigDir,
+						effort:           _models.SelectedEffort,
+						ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
+						disableTools:     _models.SelectedModelDisablesTools,
+						chrome:           _models.IsChromeEnabled,
+						disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
+						cancellationToken: ct);
+				}
 			}
 
 			// Post-response: handle Auto-Compact (FR.11.6)
@@ -428,6 +514,35 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				_node.IsRunning = false;
 			}
 		}
+	}
+
+	/// <summary>
+	/// Sends one turn via Streaming Session Mode (FR.19): ensures the session's persistent process
+	/// is running (spawning it with the current model/profile/effort/mcp config if this is the
+	/// first turn), then writes the turn to its open stdin and awaits the next result event.
+	/// <see cref="HandleStreamEvent"/> is reused unchanged — it processes a <see cref="ClaudeStreamEvent"/>
+	/// the same way regardless of whether it came from a one-shot or a streaming process.
+	/// </summary>
+	private async Task SendViaStreamingAsync(string? sessionId, string messageToSend, string? mcpConfigPath, CancellationToken ct)
+	{
+		var nodeId = _node.Model.NodeId;
+		var spawnParams = new StreamingSpawnParams(
+			WorkingDirectory: _node.Model.WorkingDirectory,
+			ClaudePath:       _appSettings.Settings.ClaudePath,
+			SessionId:        sessionId,
+			ProfileConfigDir: _profiles.SelectedProfileConfigDir,
+			Model:            _models.SelectedModelId,
+			Effort:           _models.SelectedEffort,
+			McpConfigPath:    mcpConfigPath,
+			OllamaBaseUrl:    _models.SelectedLocalBaseUrl,
+			DisableTools:     _models.SelectedModelDisablesTools,
+			Chrome:           _models.IsChromeEnabled);
+
+		var justStarted = _streamingManager.EnsureStarted(nodeId, spawnParams, HandleStreamEvent);
+		if (justStarted)
+			Dispatcher.UIThread.Post(NotifyStreamingStateChanged);
+
+		await _streamingManager.SendTurnAsync(nodeId, messageToSend, ct);
 	}
 
 	private void HandleStreamEvent(ClaudeStreamEvent evt)
@@ -631,6 +746,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			effort:           _models.SelectedEffort,
 			ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
 			disableTools:     _models.SelectedModelDisablesTools,
+			disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
 			onEvent:          evt =>
 			{
 				// Any error event (auth failure, exit-code failure, etc.) marks the whole
@@ -736,6 +852,10 @@ public sealed class TurnController : ReactiveObject, IDisposable
 
 		_log.Information("Mid-run {Toggle} toggle: {State}, sending correction prompt", toggleName, label);
 
+		// Note: like headless turns (FR.19.11), a mid-run correction always spawns a one-shot
+		// --resume process against ClaudeSessionId regardless of whether the session is in
+		// Streaming Session Mode — if a streaming process is also holding that same session ID
+		// open, this is the same class of known v1 limitation, not solved here.
 		_ = _processManager.SendMessageAsync(
 			workingDirectory: _node.Model.WorkingDirectory,
 			claudePath:       _appSettings.Settings.ClaudePath,
@@ -746,6 +866,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			effort:           _models.SelectedEffort,
 			ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
 			disableTools:     _models.SelectedModelDisablesTools,
+			disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
 			onEvent:          evt =>
 			{
 				// Capture session ID updates but don't write to file or UI

@@ -11,6 +11,10 @@ namespace TessynDesktop.Models;
 /// of on every turn — repeating them each turn reads as a prompt injection to the model and is
 /// sometimes ignored outright. Per-turn toggles (auto-commit, branch, document) are unaffected
 /// and still re-assert every turn since the user can change them between turns.
+/// <see cref="IsStreamingMode"/> additionally gates the native-scheduling redirect (FR.19.9):
+/// it describes the mode of the spawn this instruction block is being sent to, not any sticky
+/// per-session setting — headless turns (always One-shot Mode, FR.19.11) pass <c>false</c> here
+/// regardless of the target session's own streaming toggle.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 /// <param name="IsAutoCommit">
@@ -22,4 +26,5 @@ public sealed record InstructionOptionsModel(
 	bool IsNewBranch,
 	bool IsAutoDocument,
 	bool IsAgentToolsEnabled,
-	bool IsNewSession);
+	bool IsNewSession,
+	bool IsStreamingMode);

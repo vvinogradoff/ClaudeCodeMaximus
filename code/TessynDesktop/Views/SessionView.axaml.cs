@@ -69,6 +69,7 @@ public partial class SessionView : UserControl
 			_subscribedVm.ScrollOffset = MessageScroller.Offset.Y;
 			_subscribedVm.Messages.CollectionChanged -= OnMessagesChanged;
 			_subscribedVm.CancelScheduleRequested -= OnCancelScheduleRequested;
+			_subscribedVm.StreamingDisableConfirmationRequested -= OnStreamingDisableConfirmationRequested;
 			UnsubscribeProgressMessage();
 		}
 
@@ -78,6 +79,7 @@ public partial class SessionView : UserControl
 		{
 			_subscribedVm.Messages.CollectionChanged += OnMessagesChanged;
 			_subscribedVm.CancelScheduleRequested += OnCancelScheduleRequested;
+			_subscribedVm.StreamingDisableConfirmationRequested += OnStreamingDisableConfirmationRequested;
 			// Restore persisted scroll position (or bottom for new sessions)
 			var savedOffset = _subscribedVm.ScrollOffset;
 			Dispatcher.UIThread.Post(() =>
@@ -103,6 +105,21 @@ public partial class SessionView : UserControl
 
 		if (confirmed)
 			vm.CancelAllSchedules();
+	}
+
+	private async void OnStreamingDisableConfirmationRequested()
+	{
+		if (DataContext is not SessionViewModel vm) return;
+
+		var ownerWindow = TopLevel.GetTopLevel(this) as MainWindow;
+		if (ownerWindow == null) return;
+
+		var confirmed = await ownerWindow.ShowConfirmOverlayAsync(
+			"Turn off Streaming Session Mode? This will terminate the running claude process, including any in-progress background work.",
+			"Turn off Streaming");
+
+		if (confirmed)
+			vm.ConfirmStreamingModeOff();
 	}
 
 	private void OnInputKeyDown(object? sender, KeyEventArgs e)
@@ -407,36 +424,44 @@ public partial class SessionView : UserControl
 		return null;
 	}
 
-	// ── Profile dropdown context menu (Rename/Delete) ────────────────────────
+	// ── Profile Rename/Delete buttons (act on the currently selected profile) ──
+	// Plain command-bar buttons rather than a dropdown-item context menu: a ContextMenu
+	// nested inside a ComboBox's own dropdown Popup is a known-fragile pattern in Avalonia
+	// (nested popups), so this avoids that risk entirely.
 
-	private async void OnProfileContextMenuClicked(object? sender, RoutedEventArgs e)
+	private async void OnRenameSelectedProfileClicked(object? sender, RoutedEventArgs e)
 	{
-		if (sender is not MenuItem { Parent: ContextMenu cm } mi || DataContext is not SessionViewModel vm)
-			return;
+		if (DataContext is not SessionViewModel vm) return;
+		if (vm.SelectedProfileIndex <= 0 || vm.SelectedProfileIndex >= vm.AvailableProfiles.Count) return;
 
-		var item = (cm.PlacementTarget?.DataContext ?? cm.DataContext) as ProfileListItemModel;
-		if (item?.ProfileId is null)
-			return; // "Default" and "New..." entries have no profile identity to rename/delete
-
+		var item = vm.AvailableProfiles[vm.SelectedProfileIndex];
 		var ownerWindow = TopLevel.GetTopLevel(this) as MainWindow;
-		if (ownerWindow is null)
-			return;
+		if (ownerWindow is null) return;
 
-		switch (mi.Tag as string)
-		{
-			case "RenameProfile":
-				var newName = await ownerWindow.ShowInputOverlayAsync("Rename Profile", "New name:", item.DisplayName);
-				if (!string.IsNullOrEmpty(newName))
-					vm.RenameProfile(item, newName);
-				break;
+		var newName = await ownerWindow.ShowInputOverlayAsync("Rename Profile", "New name:", item.DisplayName);
+		if (!string.IsNullOrEmpty(newName))
+			vm.RenameProfile(item, newName);
+	}
 
-			case "DeleteProfile":
-				var confirmed = await ownerWindow.ShowConfirmOverlayAsync(
-					$"Remove profile '{item.DisplayName}' from the list?\n\nIts config directory will be preserved (renamed with a \"_rem\" suffix), not deleted.",
-					"Yes, remove");
-				if (confirmed)
-					vm.DeleteProfile(item);
-				break;
-		}
+	private async void OnDeleteSelectedProfileClicked(object? sender, RoutedEventArgs e) =>
+		await ConfirmAndDeleteSelectedProfileAsync();
+
+	private async void OnRemoveProfileClicked(object? sender, RoutedEventArgs e) =>
+		await ConfirmAndDeleteSelectedProfileAsync();
+
+	private async Task ConfirmAndDeleteSelectedProfileAsync()
+	{
+		if (DataContext is not SessionViewModel vm) return;
+		if (vm.SelectedProfileIndex <= 0 || vm.SelectedProfileIndex >= vm.AvailableProfiles.Count) return;
+
+		var item = vm.AvailableProfiles[vm.SelectedProfileIndex];
+		var ownerWindow = TopLevel.GetTopLevel(this) as MainWindow;
+		if (ownerWindow is null) return;
+
+		var confirmed = await ownerWindow.ShowConfirmOverlayAsync(
+			$"Remove profile '{item.DisplayName}' from the list?\n\nIts config directory will be preserved (renamed with a \"_rem\" suffix), not deleted.",
+			"Yes, remove");
+		if (confirmed)
+			vm.DeleteProfile(item);
 	}
 }

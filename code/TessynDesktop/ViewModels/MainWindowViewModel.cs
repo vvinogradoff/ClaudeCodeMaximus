@@ -10,6 +10,7 @@ using TessynDesktop.Models;
 using TessynDesktop.Services;
 using ReactiveUI;
 using Serilog;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TessynDesktop.ViewModels;
 
@@ -19,6 +20,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IAppSettingsService _appSettings;
 	private readonly ISessionFileService _fileService;
 	private readonly IClaudeProcessManager _processManager;
+	private readonly IClaudeStreamingSessionManager _streamingManager;
 	private readonly IDraftService _draftService;
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
@@ -213,6 +215,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IAppSettingsService appSettings,
 		ISessionFileService fileService,
 		IClaudeProcessManager processManager,
+		IClaudeStreamingSessionManager streamingManager,
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
@@ -229,6 +232,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_appSettings      = appSettings;
 		_fileService      = fileService;
 		_processManager   = processManager;
+		_streamingManager = streamingManager;
 		_draftService     = draftService;
 		_codeIndexService = codeIndexService;
 		_profileService   = profileService;
@@ -332,7 +336,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _sessionStatus);
+				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _sessionStatus);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache[cacheKey] = vm;
@@ -459,11 +463,16 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 	public int ActiveSessionCount => _processManager.ActiveProcessCount;
 
-	public void TerminateAllSessions() => _processManager.TerminateAll();
+	public void TerminateAllSessions()
+	{
+		_processManager.TerminateAll();
+		_streamingManager.TerminateAll();
+	}
 
 	private void OpenSettings()
 	{
-		var vm     = new SettingsViewModel(_appSettings);
+		var mcpTokenStore = App.Services.GetRequiredService<IMcpTokenStore>();
+		var vm     = new SettingsViewModel(_appSettings, mcpTokenStore);
 		var window = new Views.SettingsWindow { DataContext = vm };
 		window.Closed += (_, _) =>
 		{
@@ -524,7 +533,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			SessionTree.SelectedSession = node;
 	}
 
-	/// <summary>Rebuilds the top-bar recent-sessions dropdown from sessions active in the last 24 h.</summary>
+	/// <summary>Rebuilds the top-bar recent-sessions dropdown from favorites plus sessions active in the last 24 h.</summary>
 	public void RefreshRecentDropdown()
 	{
 		var all = new List<SessionNodeViewModel>();
@@ -532,7 +541,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			CollectRecentSessions(dir.Children, all);
 
 		all = all
-			.Where(s => s.IsRecentlyActive && !s.IsHiddenFromRecent)
+			.Where(s => RecentSessionVisibilityService.ShouldShowInRecentDropdown(s.IsFavorite, s.IsRecentlyActive, s.IsHiddenFromRecent))
 			.OrderByDescending(s => s.LastActivityTimestamp)
 			.ToList();
 
@@ -559,12 +568,20 @@ public sealed class MainWindowViewModel : ViewModelBase
 		}
 	}
 
-	/// <summary>Hides a session from the top-bar recent dropdown until its next real activity (FR — recent dropdown hide).</summary>
+	/// <summary>Hides a session from the top-bar recent dropdown until its next real activity (FR.9.6).</summary>
 	public void HideSessionFromRecent(SessionNodeViewModel session)
 	{
 		session.RecentIgnoredAt = DateTimeOffset.UtcNow;
 		_appSettings.Save();
 		RefreshRecentDropdown();
+	}
+
+	/// <summary>Sets a session's favorite state (FR.9.7). Does not rebuild the dropdown so the row stays in
+	/// place with the hide icon taking over from the star, rather than the row disappearing mid-interaction.</summary>
+	public void SetFavorite(SessionNodeViewModel session, bool value)
+	{
+		session.IsFavorite = value;
+		_appSettings.Save();
 	}
 
 	private static void CollectRecentSessions(ObservableCollection<ViewModelBase> children, List<SessionNodeViewModel> result)

@@ -11,6 +11,8 @@ namespace TessynDesktop.ViewModels;
 public sealed class SettingsViewModel : ViewModelBase
 {
 	private readonly IAppSettingsService _appSettings;
+	private readonly IMcpTokenStore _mcpTokenStore;
+	private McpServerRowViewModel? _selectedMcpServer;
 	private string _sessionFilesRoot;
 	private string _claudePath;
 	private string _sourceCodesLocation;
@@ -174,9 +176,21 @@ public sealed class SettingsViewModel : ViewModelBase
 	/// </summary>
 	public ObservableCollection<KeyBindingEntryViewModel> KeyBindingEntries { get; } = [];
 
-	public SettingsViewModel(IAppSettingsService appSettings)
+	/// <summary>External MCP Server Registry rows (FR.20.7). Unlike the fields above, edits here
+	/// persist immediately rather than waiting for the window's Save button — see
+	/// <see cref="McpServerRowViewModel"/>.</summary>
+	public ObservableCollection<McpServerRowViewModel> McpServers { get; } = [];
+
+	public McpServerRowViewModel? SelectedMcpServer
 	{
-		_appSettings = appSettings;
+		get => _selectedMcpServer;
+		set => this.RaiseAndSetIfChanged(ref _selectedMcpServer, value);
+	}
+
+	public SettingsViewModel(IAppSettingsService appSettings, IMcpTokenStore mcpTokenStore)
+	{
+		_appSettings   = appSettings;
+		_mcpTokenStore = mcpTokenStore;
 		_sessionFilesRoot = appSettings.Settings.SessionFilesRoot;
 		_claudePath = appSettings.Settings.ClaudePath;
 		_sourceCodesLocation = appSettings.Settings.SourceCodesLocation;
@@ -204,6 +218,7 @@ public sealed class SettingsViewModel : ViewModelBase
 		SaveCommand = ReactiveCommand.Create(Save);
 
 		LoadKeyBindings();
+		LoadMcpServers();
 	}
 
 	private void LoadKeyBindings()
@@ -211,6 +226,50 @@ public sealed class SettingsViewModel : ViewModelBase
 		KeyBindingEntries.Clear();
 		foreach (var (action, binding) in _appSettings.Settings.KeyBindings.Bindings)
 			KeyBindingEntries.Add(new KeyBindingEntryViewModel(action, binding));
+	}
+
+	private void LoadMcpServers()
+	{
+		McpServers.Clear();
+		foreach (var entry in _appSettings.Settings.ExternalMcpServers)
+			McpServers.Add(new McpServerRowViewModel(entry, _mcpTokenStore, _appSettings.Save));
+	}
+
+	/// <summary>Appends a newly-created registry entry (FR.20.1) and persists immediately.</summary>
+	public void AddMcpServer(ExternalMcpServerModel model)
+	{
+		_appSettings.Settings.ExternalMcpServers.Add(model);
+		_appSettings.Save();
+		McpServers.Add(new McpServerRowViewModel(model, _mcpTokenStore, _appSettings.Save));
+	}
+
+	/// <summary>Replaces an edited registry entry in place (by <see cref="ExternalMcpServerModel.Id"/>) and persists immediately.</summary>
+	public void ReplaceMcpServer(McpServerRowViewModel row, ExternalMcpServerModel updated)
+	{
+		var list  = _appSettings.Settings.ExternalMcpServers;
+		var index = list.FindIndex(e => e.Id == updated.Id);
+		if (index >= 0)
+			list[index] = updated;
+		_appSettings.Save();
+
+		var rowIndex = McpServers.IndexOf(row);
+		var newRow   = new McpServerRowViewModel(updated, _mcpTokenStore, _appSettings.Save);
+		if (rowIndex >= 0)
+			McpServers[rowIndex] = newRow;
+		if (SelectedMcpServer == row)
+			SelectedMcpServer = newRow;
+	}
+
+	/// <summary>Removes a registry entry and its stored OAuth token (if any), and persists immediately.</summary>
+	public void RemoveMcpServer(McpServerRowViewModel row)
+	{
+		_appSettings.Settings.ExternalMcpServers.RemoveAll(e => e.Id == row.Model.Id);
+		_appSettings.Save();
+		_mcpTokenStore.Delete(row.Model.Id);
+
+		McpServers.Remove(row);
+		if (SelectedMcpServer == row)
+			SelectedMcpServer = null;
 	}
 
 	private void LoadColorsFromTheme()

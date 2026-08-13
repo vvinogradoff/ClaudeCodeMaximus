@@ -49,6 +49,7 @@ public sealed class ProfileController : ReactiveObject
 			}
 
 			this.RaiseAndSetIfChanged(ref _selectedProfileIndex, value);
+			this.RaisePropertyChanged(nameof(CanManageSelectedProfile));
 			if (_directoryModel != null)
 				_directoryModel.SelectedProfileIndex = value;
 			_appSettings.Settings.SelectedProfileIndex = value;
@@ -81,6 +82,13 @@ public sealed class ProfileController : ReactiveObject
 	/// <summary>True when the Remove button should be shown: an auth error is active and a non-Default profile is selected (FR.12.18).</summary>
 	public bool CanRemoveProfile => HasAuthError && _selectedProfileIndex > 0;
 
+	/// <summary>
+	/// True when a stored (non-Default, non-"New...") profile is currently selected. Drives visibility
+	/// of the command-bar Rename/Delete buttons (FR.12.19) — independent of auth-error state, unlike
+	/// <see cref="CanRemoveProfile"/>.
+	/// </summary>
+	public bool CanManageSelectedProfile => _selectedProfileIndex > 0;
+
 	public ProfileController(
 		IClaudeProfileService profileService,
 		IAppSettingsService appSettings,
@@ -98,11 +106,15 @@ public sealed class ProfileController : ReactiveObject
 			0, Math.Max(0, AvailableProfiles.Count - 2));
 	}
 
+	/// <summary>Builds the "Default" entry — the base, non-isolated claude auth identity, prefixed to distinguish it from stored profiles.</summary>
+	private ProfileListItemModel BuildDefaultEntry() =>
+		new($"[Sys] {_defaultProfileDisplayName ?? "Default"}", null, isSystem: true);
+
 	/// <summary>Rebuilds the AvailableProfiles list from appsettings. Always ends with "New...".</summary>
 	public void RebuildProfileList()
 	{
 		AvailableProfiles.Clear();
-		AvailableProfiles.Add(new ProfileListItemModel(_defaultProfileDisplayName ?? "Default", null));
+		AvailableProfiles.Add(BuildDefaultEntry());
 		foreach (var p in _appSettings.Settings.Profiles)
 			AvailableProfiles.Add(new ProfileListItemModel(p.DisplayName, p.ProfileId));
 		AvailableProfiles.Add(new ProfileListItemModel("New...", null));
@@ -135,6 +147,7 @@ public sealed class ProfileController : ReactiveObject
 			_selectedProfileIndex = 0;
 		}
 		this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+		this.RaisePropertyChanged(nameof(CanManageSelectedProfile));
 	}
 
 	/// <summary>Resolves the default profile email on first load (fire-and-forget).</summary>
@@ -152,7 +165,7 @@ public sealed class ProfileController : ReactiveObject
 			Dispatcher.UIThread.Post(() =>
 			{
 				if (AvailableProfiles.Count > 0)
-					AvailableProfiles[0] = new ProfileListItemModel(email, null);
+					AvailableProfiles[0] = BuildDefaultEntry();
 			});
 		}
 	}
@@ -211,6 +224,7 @@ public sealed class ProfileController : ReactiveObject
 				RebuildProfileList();
 				_selectedProfileIndex = newIndex;
 				this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+				this.RaisePropertyChanged(nameof(CanManageSelectedProfile));
 			});
 
 			_content.AddSystemMessage($"Profile '{displayName}' added and selected.");
@@ -256,7 +270,7 @@ public sealed class ProfileController : ReactiveObject
 				Dispatcher.UIThread.Post(() =>
 				{
 					if (AvailableProfiles.Count > 0)
-						AvailableProfiles[0] = new ProfileListItemModel(email, null);
+						AvailableProfiles[0] = BuildDefaultEntry();
 				});
 			}
 
@@ -333,6 +347,7 @@ public sealed class ProfileController : ReactiveObject
 		{
 			RebuildProfileList();
 			this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+			this.RaisePropertyChanged(nameof(CanManageSelectedProfile));
 		});
 
 		_content.AddSystemMessage(

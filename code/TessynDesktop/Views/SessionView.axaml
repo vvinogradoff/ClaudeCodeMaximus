@@ -3,12 +3,36 @@
              xmlns:vm="using:TessynDesktop.ViewModels"
              xmlns:views="using:TessynDesktop.Views"
              xmlns:models="using:TessynDesktop.Models"
+             xmlns:converters="using:TessynDesktop.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              x:Class="TessynDesktop.Views.SessionView"
              x:Name="Root"
              x:DataType="vm:SessionViewModel">
+
+    <UserControl.Styles>
+        <!-- Favorite star toggle: grey/transparent when off, black-stroked gold when favorited -->
+        <Style Selector="ToggleButton.fav Path">
+            <Setter Property="Fill" Value="Transparent"/>
+            <Setter Property="Stroke" Value="Gray"/>
+        </Style>
+        <Style Selector="ToggleButton.fav:checked Path">
+            <Setter Property="Fill" Value="Gold"/>
+            <Setter Property="Stroke" Value="Black"/>
+        </Style>
+        <!-- Profile-actions label toggle: looks like the plain "Profile:" text label, no button chrome -->
+        <Style Selector="ToggleButton.linklike">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Opacity" Value="0.7"/>
+        </Style>
+        <Style Selector="ToggleButton.linklike:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+    </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,5,120">
 
@@ -256,59 +280,86 @@
                             CornerRadius="4"
                             Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
                         <DockPanel>
-                            <StackPanel DockPanel.Dock="Right"
-                                        Orientation="Horizontal"
-                                        Spacing="6"
-                                        Margin="12,0,0,0">
-                                <Button Content="Re-authenticate"
-                                        IsVisible="{Binding HasAuthError}"
-                                        Command="{Binding ReauthenticateCommand}"
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        Padding="8,3"
-                                        ToolTip.Tip="Re-authenticate the selected profile"/>
-                                <Button Content="&#x2715;"
-                                        IsVisible="{Binding CanRemoveProfile}"
-                                        Command="{Binding RemoveProfileCommand}"
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        Padding="8,3"
-                                        ToolTip.Tip="Remove the selected profile"/>
-                            </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ToggleButton Classes="fav"
+                                              IsChecked="{Binding IsFavorite}"
+                                              VerticalAlignment="Center"
+                                              Padding="4"
+                                              Background="Transparent"
+                                              BorderThickness="0"
+                                              ToolTip.Tip="Mark this session as a favorite">
+                                    <Path Data="{StaticResource StarGeometry}"
+                                          Stretch="Uniform"
+                                          Width="14" Height="14"
+                                          StrokeThickness="1.3"/>
+                                </ToggleButton>
                                 <TextBlock Text="Model:"
                                            VerticalAlignment="Center"
                                            FontSize="12" Opacity="0.7"/>
                                 <ComboBox ItemsSource="{Binding AvailableModels}"
                                           SelectedIndex="{Binding SelectedModelIndex}"
+                                          IsEnabled="{Binding !IsStreamingProcessAlive}"
                                           VerticalAlignment="Center"
                                           FontSize="12"
                                           MinWidth="100"
                                           Padding="6,3"/>
-                                <TextBlock Text="Profile:"
-                                           VerticalAlignment="Center"
-                                           FontSize="12" Opacity="0.7"
-                                           Margin="12,0,0,0"/>
+                                <ToggleButton x:Name="ProfileActionsToggle"
+                                              Classes="linklike"
+                                              Content="Profile: &#x25BE;"
+                                              VerticalAlignment="Center"
+                                              Margin="12,0,0,0"
+                                              ToolTip.Tip="Profile actions (re-authenticate, rename, delete)"/>
+                                <Popup PlacementTarget="{Binding #ProfileActionsToggle}"
+                                       Placement="Bottom"
+                                       IsOpen="{Binding #ProfileActionsToggle.IsChecked, Mode=OneWay}"
+                                       IsLightDismissEnabled="False">
+                                    <Border Padding="4"
+                                            CornerRadius="4"
+                                            BorderThickness="1"
+                                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                            Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                                        <StackPanel Orientation="Horizontal" Spacing="2">
+                                            <Button Content="&#x1F511;"
+                                                    Command="{Binding ReauthenticateCommand}"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="12"
+                                                    Padding="4,2"
+                                                    ToolTip.Tip="Re-authenticate the selected profile"/>
+                                            <Button Content="&#x2715;"
+                                                    IsVisible="{Binding CanRemoveProfile}"
+                                                    Click="OnRemoveProfileClicked"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="12"
+                                                    Padding="4,2"
+                                                    ToolTip.Tip="Remove the selected profile"/>
+                                            <Button Content="&#x270F;"
+                                                    IsVisible="{Binding CanManageSelectedProfile}"
+                                                    Click="OnRenameSelectedProfileClicked"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="12"
+                                                    Padding="4,2"
+                                                    ToolTip.Tip="Rename the selected profile"/>
+                                            <Button Content="&#x1F5D1;"
+                                                    IsVisible="{Binding CanManageSelectedProfile}"
+                                                    Click="OnDeleteSelectedProfileClicked"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="12"
+                                                    Padding="4,2"
+                                                    ToolTip.Tip="Delete the selected profile"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
                                 <ComboBox ItemsSource="{Binding AvailableProfiles}"
                                           SelectedIndex="{Binding SelectedProfileIndex}"
+                                          IsEnabled="{Binding !IsStreamingProcessAlive}"
                                           VerticalAlignment="Center"
                                           FontSize="12"
                                           MinWidth="120"
                                           Padding="6,3">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="models:ProfileListItemModel">
-                                            <TextBlock Text="{Binding DisplayName}">
-                                                <TextBlock.ContextMenu>
-                                                    <ContextMenu>
-                                                        <MenuItem Header="Rename..."
-                                                                  Tag="RenameProfile"
-                                                                  Click="OnProfileContextMenuClicked"/>
-                                                        <MenuItem Header="Delete"
-                                                                  Tag="DeleteProfile"
-                                                                  Click="OnProfileContextMenuClicked"/>
-                                                    </ContextMenu>
-                                                </TextBlock.ContextMenu>
-                                            </TextBlock>
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       Foreground="{Binding IsSystem, Converter={x:Static converters:BoolToSystemProfileForegroundConverter.Instance}}"/>
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
@@ -318,6 +369,7 @@
                                            Margin="12,0,0,0"/>
                                 <ComboBox ItemsSource="{Binding AvailableEfforts}"
                                           SelectedIndex="{Binding SelectedEffortIndex}"
+                                          IsEnabled="{Binding !IsStreamingProcessAlive}"
                                           VerticalAlignment="Center"
                                           FontSize="12"
                                           MinWidth="90"
@@ -329,6 +381,13 @@
                                               Padding="7,2"
                                               Margin="6,0,0,0"
                                               ToolTip.Tip="Browser control (--chrome): let Claude drive Chrome via the Claude-in-Chrome extension. Experimental — the spawn runs in -p mode; requires an OAuth profile and the installed extension."/>
+                                <ToggleButton IsChecked="{Binding IsStreamingMode}"
+                                              Content="&#x1F4E1;"
+                                              FontSize="13"
+                                              VerticalAlignment="Center"
+                                              Padding="7,2"
+                                              Margin="6,0,0,0"
+                                              ToolTip.Tip="Streaming Session Mode (FR.19): keep one claude process alive across turns instead of spawning a fresh one each time, so native background tasks and scheduling survive between turns. Stop terminates the process; turning this off while it's running asks for confirmation first."/>
                             </StackPanel>
                         </DockPanel>
                     </Border>

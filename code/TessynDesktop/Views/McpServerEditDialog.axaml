@@ -1,0 +1,112 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TessynDesktop.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="TessynDesktop.Views.McpServerEditDialog"
+        x:DataType="vm:McpServerEditViewModel"
+        Title="{Binding WindowTitle}"
+        Width="480" Height="640"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <DockPanel Margin="14">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+            <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap"
+                       MaxWidth="280" VerticalAlignment="Center"/>
+            <Button Content="Cancel" Click="OnCancel" IsCancel="True"/>
+            <Button Content="Save" Click="OnSave" IsDefault="True"/>
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="10">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Display Name" FontWeight="SemiBold"/>
+                    <TextBox Text="{Binding DisplayName}"/>
+                </StackPanel>
+
+                <CheckBox Content="Enabled" IsChecked="{Binding Enabled}"/>
+
+                <Separator/>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Transport" FontWeight="SemiBold"/>
+                    <ComboBox ItemsSource="{Binding TransportOptions}" SelectedItem="{Binding Transport}"
+                              HorizontalAlignment="Stretch"/>
+                </StackPanel>
+
+                <StackPanel Spacing="8" IsVisible="{Binding IsStdio}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Command" FontWeight="SemiBold"/>
+                        <TextBox Text="{Binding Command}" Watermark="e.g. roslyn-mcp.exe"/>
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Arguments" FontWeight="SemiBold"/>
+                        <TextBox Text="{Binding Arguments}" Watermark="e.g. --stdio"/>
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Working Directory" FontWeight="SemiBold"/>
+                        <TextBox Text="{Binding WorkingDirectory}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="8" IsVisible="{Binding IsHttp}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="URL" FontWeight="SemiBold"/>
+                        <TextBox Text="{Binding Url}" Watermark="https://mcp.example.com"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Authentication" FontWeight="SemiBold"/>
+                        <ComboBox ItemsSource="{Binding AuthTypeOptions}" SelectedItem="{Binding AuthType}"
+                                  HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="8" IsVisible="{Binding IsStaticHeader}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Header Name" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding StaticHeaderName}" Watermark="e.g. Authorization"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Header Value" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding StaticHeaderValue}" Watermark="e.g. Bearer &lt;token&gt;"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Spacing="8" IsVisible="{Binding IsOAuth2}">
+                        <TextBlock Text="Endpoints left blank are discovered automatically from the server's .well-known metadata on Authorize."
+                                   FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Authorization Endpoint" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding AuthorizationEndpoint}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Token Endpoint" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding TokenEndpoint}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Registration Endpoint (optional)" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding RegistrationEndpoint}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Client ID (leave blank to use Dynamic Client Registration)" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding ClientId}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Client Secret (optional)" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding ClientSecret}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Scopes (space-delimited, optional)" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding Scopes}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+
+</Window>
