@@ -395,12 +395,15 @@
                 <!-- Right column: Send/Stop/Schedule/Gear buttons (unchanged size) -->
                 <Grid Grid.Column="1" RowDefinitions="*,Auto,Auto,*" Margin="8,0,0,0">
                     <Button Grid.Row="0"
+                            x:Name="SendButton"
                             Content="Send"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
                             VerticalAlignment="Stretch"
                             VerticalContentAlignment="Center"
-                            Command="{Binding SendCommand}"/>
+                            Command="{Binding SendCommand}"
+                            PointerPressed="OnSendButtonPointerPressed"
+                            ToolTip.Tip="Send (Ctrl+Enter). Right-click to schedule a delayed send."/>
                     <Button Grid.Row="1"
                             Content="&#x25A0;"
                             FontSize="12"

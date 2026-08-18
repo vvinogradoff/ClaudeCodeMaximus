@@ -292,6 +292,38 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	/// <summary>Raised after InputText should be cleared (the send has captured the message and started).</summary>
 	public event Action? InputCleared;
 
+	/// <summary>
+	/// Schedules the message as a delayed self-wake turn (FR.14.4, FR.14.5) instead of sending it
+	/// immediately — the UI counterpart to the schedule_wake MCP tool, reusing the exact same
+	/// scheduling engine (right-click on Send, SessionView). Clears the input box the same way an
+	/// immediate send does; the instruction block, context preamble, and everything else a normal
+	/// turn needs is built later by SessionTurnService.RunTurnAsync when the schedule actually fires
+	/// — nothing about that path needs to change to support this.
+	/// </summary>
+	public void ScheduleSend(string inputText, TimeSpan delay)
+	{
+		var message = inputText.Trim();
+		if (string.IsNullOrEmpty(message))
+			return;
+
+		InputCleared?.Invoke();
+		_draftService.DeleteDraft(_node.FileName);
+
+		var fireAtUtc = DateTimeOffset.UtcNow.Add(delay);
+		_daemonClient.AddSchedule(new ScheduleModel
+		{
+			ScheduleId   = Guid.NewGuid().ToString("N")[..8],
+			TargetNodeId = _node.Model.NodeId,
+			Prompt       = message,
+			Note         = Constants.Agent.DelayedSendNote,
+			Kind         = ScheduleKind.Delay,
+			FireAtUtc    = fireAtUtc,
+		});
+
+		_content.AddSystemMessage($"[Delayed send scheduled — fires at {fireAtUtc.LocalDateTime:yyyy-MM-dd HH:mm}]");
+		_log.Information("Delayed send scheduled for session {FileName}: fires at {FireAt}", _node.FileName, fireAtUtc);
+	}
+
 	private async Task SendAsyncCore(string message)
 	{
 		InputCleared?.Invoke();

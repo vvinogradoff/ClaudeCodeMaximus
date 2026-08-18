@@ -92,6 +92,23 @@ public partial class SessionView : UserControl
 		}
 	}
 
+	private async void OnSendButtonPointerPressed(object? sender, PointerPressedEventArgs e)
+	{
+		if (!e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+			return;
+		e.Handled = true;
+
+		if (DataContext is not SessionViewModel vm || string.IsNullOrWhiteSpace(vm.InputText))
+			return;
+
+		var ownerWindow = TopLevel.GetTopLevel(this) as MainWindow;
+		if (ownerWindow == null) return;
+
+		var delay = await ownerWindow.ShowScheduleDelayOverlayAsync();
+		if (delay.HasValue)
+			vm.ScheduleSend(delay.Value);
+	}
+
 	private async void OnCancelScheduleRequested()
 	{
 		if (DataContext is not SessionViewModel vm) return;

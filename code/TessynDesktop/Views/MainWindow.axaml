@@ -453,6 +453,31 @@
                 </StackPanel>
             </Border>
 
+            <!-- Schedule delay dialog: right-click on Send (FR.14) -->
+            <Border x:Name="ScheduleDelayCard" IsVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="24,20" Width="340">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Schedule Send" FontWeight="SemiBold" FontSize="14"/>
+                    <TextBlock Text="Delay sending this message by:" Opacity="0.7"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBox x:Name="ScheduleDelayAmountBox" Width="80"/>
+                        <ComboBox x:Name="ScheduleDelayUnitCombo" Width="120" SelectedIndex="0">
+                            <ComboBoxItem Content="Minutes"/>
+                            <ComboBoxItem Content="Hours"/>
+                            <ComboBoxItem Content="Days"/>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button x:Name="ScheduleDelayCancelBtn" Content="Cancel"/>
+                        <Button x:Name="ScheduleDelayOkBtn" Content="Schedule"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
         </Panel>
 
         <!-- Screensaver overlay: last child = highest z-order, covers entire window.

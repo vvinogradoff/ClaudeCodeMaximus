@@ -686,6 +686,19 @@
 
 ---
 
+## Phase 27 — UI-Initiated Delayed Send (FR.14.12) ✓ DONE
+
+### P27.1 Schedule-on-right-click
+- [DONE] `Constants.Agent.DelayedSendNote` — note text recorded on UI-created schedules
+- [DONE] `TurnController.ScheduleSend(inputText, delay)` — builds a `Delay`-kind self-wake `ScheduleModel` (same shape as `AgentMcpServer.ScheduleWakeAsync`) and calls `IDaemonClient.AddSchedule`; clears the input box/draft and posts a UI-only confirmation system message with the fire time
+- [DONE] `SessionViewModel.ScheduleSend(delay)` — thin forwarding method (mirrors `DetachSession`)
+- [DONE] `MainWindow` — new `ScheduleDelayCard` overlay (amount TextBox + Minutes/Hours/Days ComboBox) and `ShowScheduleDelayOverlayAsync()`, following the existing `ShowConfirmOverlayAsync`/`ShowInputOverlayAsync` TaskCompletionSource pattern
+- [DONE] `SessionView` — Send button gets `PointerPressed` right-click detection (mirrors `OnMenuBarPointerPressed`'s button-discrimination pattern); no-ops when the input box is empty
+- [DONE] No changes needed to `SchedulerService`, `ScheduleModel`, or `SessionTurnService` — the feature is pure UI wiring onto the existing, already-tested scheduling engine
+- Build green; full suite 270 passing, 0 failing (no new automated tests: the scheduling engine itself is unchanged and already covered by `SchedulerServiceTests`, and `TurnController`/`SessionViewModel`/`MainWindow` are Avalonia-bound ViewModel/View-layer classes with no existing test precedent in this codebase, per the P24.7 note)
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/VS-MCP-Server_Automation-Approaches-Research.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.

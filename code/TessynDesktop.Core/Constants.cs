@@ -253,6 +253,9 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// <summary>Prefix prepended to scheduled turn prompts as a SYSTEM message.</summary>
 		public const string ScheduledTurnSystemPrefix = "[Scheduled]";
 
+		/// <summary>Note recorded on a schedule created via the Send button's right-click "delay send" popup.</summary>
+		public const string DelayedSendNote = "Delayed send";
+
 		/// <summary>Prefix used in async mailbox messages posted to the supervisor.</summary>
 		public const string WorkerFinishedPrefix = "[Worker finished]";
 

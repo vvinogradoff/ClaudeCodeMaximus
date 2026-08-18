@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -470,6 +471,69 @@ public partial class MainWindow : Window
 		InputCard.IsVisible    = false;
 
 		return result;
+	}
+
+	// ── Overlay: schedule delay dialog ────────────────────────────────────────
+
+	/// <summary>
+	/// Prompts for a delay amount + unit and returns the resulting TimeSpan, or null if cancelled.
+	/// Used by the Send button's right-click handler (SessionView) to schedule a delayed self-wake
+	/// turn via the same scheduling engine exposed to agents as the schedule_wake MCP tool (FR.14).
+	/// </summary>
+	public async Task<TimeSpan?> ShowScheduleDelayOverlayAsync()
+	{
+		var tcs = new TaskCompletionSource<TimeSpan?>();
+
+		ScheduleDelayAmountBox.Text          = "30";
+		ScheduleDelayUnitCombo.SelectedIndex = 0;
+		ScheduleDelayCard.IsVisible          = true;
+		OverlayPanel.IsVisible               = true;
+		ScheduleDelayAmountBox.Focus();
+		ScheduleDelayAmountBox.SelectAll();
+
+		void Submit()
+		{
+			var delay = ParseScheduleDelay();
+			if (delay.HasValue)
+				tcs.TrySetResult(delay);
+		}
+
+		void OnOk(object? s, RoutedEventArgs _)    => Submit();
+		void OnCancel(object? s, RoutedEventArgs _) => tcs.TrySetResult(null);
+		void OnKeyDown(object? s, KeyEventArgs e)
+		{
+			if (e.Key == Key.Enter)  { e.Handled = true; Submit(); }
+			if (e.Key == Key.Escape) { e.Handled = true; tcs.TrySetResult(null); }
+		}
+
+		ScheduleDelayOkBtn.Click       += OnOk;
+		ScheduleDelayCancelBtn.Click   += OnCancel;
+		ScheduleDelayAmountBox.KeyDown += OnKeyDown;
+
+		var result = await tcs.Task;
+
+		ScheduleDelayOkBtn.Click       -= OnOk;
+		ScheduleDelayCancelBtn.Click   -= OnCancel;
+		ScheduleDelayAmountBox.KeyDown -= OnKeyDown;
+
+		OverlayPanel.IsVisible      = false;
+		ScheduleDelayCard.IsVisible = false;
+
+		return result;
+	}
+
+	private TimeSpan? ParseScheduleDelay()
+	{
+		var text = ScheduleDelayAmountBox.Text?.Trim();
+		if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var amount) || amount <= 0)
+			return null;
+
+		return ScheduleDelayUnitCombo.SelectedIndex switch
+		{
+			1 => TimeSpan.FromHours(amount),
+			2 => TimeSpan.FromDays(amount),
+			_ => TimeSpan.FromMinutes(amount),
+		};
 	}
 
 	// ── Window drag via title bar ─────────────────────────────────────────────

@@ -561,4 +561,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// </summary>
 	public void DetachSession(string displayMessage = "[Session detached — next prompt will use text session as context]") =>
 		_turn.DetachSession(displayMessage);
+
+	/// <summary>
+	/// Schedules the current input text to be sent after a delay instead of immediately (right-click
+	/// on Send, SessionView) — lands on the same self-wake scheduling engine exposed to agents as the
+	/// schedule_wake MCP tool (FR.14).
+	/// </summary>
+	public void ScheduleSend(TimeSpan delay) => _turn.ScheduleSend(InputText, delay);
 }
