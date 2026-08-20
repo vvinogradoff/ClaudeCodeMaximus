@@ -68,7 +68,7 @@
                     <StackPanel Spacing="4">
                         <TextBlock Text="Authentication" FontWeight="SemiBold"/>
                         <ComboBox ItemsSource="{Binding AuthTypeOptions}" SelectedItem="{Binding AuthType}"
-                                  HorizontalAlignment="Stretch" IsEnabled="{Binding !IsDiscovering}"/>
+                                  HorizontalAlignment="Stretch"/>
                     </StackPanel>
 
                     <StackPanel Spacing="8" IsVisible="{Binding IsStaticHeader}">
@@ -99,7 +99,7 @@
                         </StackPanel>
                         <StackPanel Spacing="4">
                             <TextBlock Text="Client ID (leave blank to use Dynamic Client Registration)" FontWeight="SemiBold"/>
-                            <TextBox Text="{Binding ClientId}" IsEnabled="{Binding !IsDiscovering}"/>
+                            <TextBox Text="{Binding ClientId}"/>
                         </StackPanel>
                         <StackPanel Spacing="4">
                             <TextBlock Text="Client Secret (optional)" FontWeight="SemiBold"/>

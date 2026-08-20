@@ -52,6 +52,15 @@ public partial class McpServerEditDialog : Window
 
 	private async void OnUrlLostFocus(object? sender, RoutedEventArgs e)
 	{
+		// Yield before touching IsDiscovering (which disables the just-blurred URL field and the
+		// OAuth endpoint fields via IsEnabled bindings): mutating focusable controls synchronously,
+		// still on the call stack of the LostFocus routed event that's dispatching, is re-entrant
+		// input-manager territory. Posting the rest of the work to the next UI-thread turn lets that
+		// dispatch finish unwinding first — otherwise disabling a control while focus is still mid-move
+		// (e.g. tabbing from URL into an already-configured OAuth2 entry's now-visible endpoint fields)
+		// only reproduced as a hang on a *second* open of the dialog, not the first.
+		await Task.Yield();
+
 		if (_vm == null)
 			return;
 
