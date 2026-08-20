@@ -149,7 +149,7 @@ public sealed class McpOAuthService : IMcpOAuthService
 		var oauth = server.OAuth;
 
 		if (!oauth.DiscoveryCompleted)
-			await TryDiscoverAsync(server.Url, oauth, cancellationToken);
+			await DiscoverAsync(server.Url, oauth, cancellationToken);
 
 		if (string.IsNullOrEmpty(oauth.AuthorizationEndpoint) || string.IsNullOrEmpty(oauth.TokenEndpoint))
 			return new McpAuthorizeResult(false,
@@ -229,8 +229,11 @@ public sealed class McpOAuthService : IMcpOAuthService
 	/// Best-effort: on any failure, endpoints simply stay whatever was entered manually (possibly
 	/// empty), and DiscoveryCompleted is still set so a manual retry doesn't loop forever.
 	/// </summary>
-	private async Task TryDiscoverAsync(string baseUrl, McpOAuthConfig oauth, CancellationToken ct)
+	public async Task DiscoverAsync(string baseUrl, McpOAuthConfig oauth, CancellationToken cancellationToken = default)
 	{
+		using var timeoutCts = new CancellationTokenSource(Constants.ExternalMcp.DiscoveryTimeoutMs);
+		using var linkedCts  = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+		var ct = linkedCts.Token;
 		var trimmedBase = baseUrl.TrimEnd('/');
 		try
 		{

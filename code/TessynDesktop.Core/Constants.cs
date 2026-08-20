@@ -382,6 +382,16 @@ SESSION TRANSCRIPT TO COMPACT:
 
 		/// <summary>Safety margin before actual expiry at which a token is proactively refreshed (FR.20.6).</summary>
 		public const int TokenExpiryMarginSeconds = 60;
+
+		/// <summary>
+		/// Upper bound on <see cref="IMcpOAuthService.DiscoverAsync"/>'s well-known metadata probes.
+		/// Independent of the shared <see cref="System.Net.Http.HttpClient"/>'s default 100s timeout —
+		/// a server that never returns 404 for unknown paths (e.g. one that proxies every GET into its
+		/// streamable-HTTP MCP handler) can otherwise hang the probe and buffer an unbounded response
+		/// body in memory for the full 100s, and discovery re-fires on every URL-field focus loss with
+		/// no de-dupe, compounding the leak per attempt.
+		/// </summary>
+		public const int DiscoveryTimeoutMs = 8_000;
 	}
 
 

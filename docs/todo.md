@@ -684,6 +684,12 @@
 - [DONE] `McpTokenStoreTests.cs` — DPAPI round-trip (all fields, null refresh/expiry), overwrite, delete, no-file, independent per-server-id storage (6 tests)
 - Full suite: 266 passing, 0 failing
 
+### [DONE] P26.7 Bug fix — unbounded discovery-on-blur could hang Settings with climbing memory (FR.20.3)
+- [DONE] `Constants.ExternalMcp.DiscoveryTimeoutMs` (8s) — `McpOAuthService.DiscoverAsync` now bounds its `.well-known/...` probes to this internal timeout via a linked `CancellationTokenSource`, independent of the shared `HttpClient`'s 100s default; without it, a server that doesn't 404 unknown paths could hold the connection open and let `GetStringAsync` buffer an unbounded response body in memory
+- [DONE] `McpServerEditDialog` cancels any in-flight discovery before starting a new one on the next URL-field `LostFocus`, and on dialog close — previously every focus loss fired an un-cancelled, un-de-duped discovery request, so repeatedly tabbing in/out of the URL field could stack up multiple concurrent unbounded probes
+- [DONE] `McpServerEditViewModel.IsDiscovering` — bound in `McpServerEditDialog.axaml` to disable the URL and OAuth endpoint fields (and show a "Discovering…" label) while a probe is running, per the Architect's request
+- [DONE] `McpOAuthServiceTests` (15 tests) still green after the timeout change
+
 ---
 
 ## Phase 27 — UI-Initiated Delayed Send (FR.14.12) ✓ DONE

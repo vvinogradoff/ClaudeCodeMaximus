@@ -1,8 +1,11 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using TessynDesktop.Models;
+using TessynDesktop.Services;
 using TessynDesktop.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TessynDesktop.Views;
 
@@ -10,10 +13,12 @@ namespace TessynDesktop.Views;
 public partial class McpServerEditDialog : Window
 {
 	private McpServerEditViewModel? _vm;
+	private CancellationTokenSource? _discoveryCts;
 
 	public McpServerEditDialog()
 	{
 		InitializeComponent();
+		Closed += (_, _) => _discoveryCts?.Cancel();
 	}
 
 	public static async Task<ExternalMcpServerModel?> ShowAsync(Window owner, ExternalMcpServerModel? existing)
@@ -44,4 +49,17 @@ public partial class McpServerEditDialog : Window
 	}
 
 	private void OnCancel(object? sender, RoutedEventArgs e) => Close();
+
+	private async void OnUrlLostFocus(object? sender, RoutedEventArgs e)
+	{
+		if (_vm == null)
+			return;
+
+		_discoveryCts?.Cancel();
+		_discoveryCts?.Dispose();
+		_discoveryCts = new CancellationTokenSource();
+
+		var mcpOAuth = App.Services.GetRequiredService<IMcpOAuthService>();
+		await _vm.DiscoverEndpointsAsync(mcpOAuth, _discoveryCts.Token);
+	}
 }

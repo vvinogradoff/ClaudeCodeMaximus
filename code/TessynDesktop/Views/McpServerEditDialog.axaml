@@ -56,13 +56,19 @@
                 <StackPanel Spacing="8" IsVisible="{Binding IsHttp}">
                     <StackPanel Spacing="4">
                         <TextBlock Text="URL" FontWeight="SemiBold"/>
-                        <TextBox Text="{Binding Url}" Watermark="https://mcp.example.com"/>
+                        <TextBox Text="{Binding Url}" Watermark="https://mcp.example.com" LostFocus="OnUrlLostFocus"
+                                 IsEnabled="{Binding !IsDiscovering}"/>
+                        <TextBlock Text="Discovering OAuth endpoints…" FontSize="11" Opacity="0.7"
+                                   IsVisible="{Binding IsDiscovering}"/>
+                        <TextBlock Text="OAuth endpoints below are auto-probed from this URL as soon as you leave the field."
+                                   FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                                   IsVisible="{Binding !IsDiscovering}"/>
                     </StackPanel>
 
                     <StackPanel Spacing="4">
                         <TextBlock Text="Authentication" FontWeight="SemiBold"/>
                         <ComboBox ItemsSource="{Binding AuthTypeOptions}" SelectedItem="{Binding AuthType}"
-                                  HorizontalAlignment="Stretch"/>
+                                  HorizontalAlignment="Stretch" IsEnabled="{Binding !IsDiscovering}"/>
                     </StackPanel>
 
                     <StackPanel Spacing="8" IsVisible="{Binding IsStaticHeader}">
@@ -81,19 +87,19 @@
                                    FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
                         <StackPanel Spacing="4">
                             <TextBlock Text="Authorization Endpoint" FontWeight="SemiBold"/>
-                            <TextBox Text="{Binding AuthorizationEndpoint}"/>
+                            <TextBox Text="{Binding AuthorizationEndpoint}" IsEnabled="{Binding !IsDiscovering}"/>
                         </StackPanel>
                         <StackPanel Spacing="4">
                             <TextBlock Text="Token Endpoint" FontWeight="SemiBold"/>
-                            <TextBox Text="{Binding TokenEndpoint}"/>
+                            <TextBox Text="{Binding TokenEndpoint}" IsEnabled="{Binding !IsDiscovering}"/>
                         </StackPanel>
                         <StackPanel Spacing="4">
                             <TextBlock Text="Registration Endpoint (optional)" FontWeight="SemiBold"/>
-                            <TextBox Text="{Binding RegistrationEndpoint}"/>
+                            <TextBox Text="{Binding RegistrationEndpoint}" IsEnabled="{Binding !IsDiscovering}"/>
                         </StackPanel>
                         <StackPanel Spacing="4">
                             <TextBlock Text="Client ID (leave blank to use Dynamic Client Registration)" FontWeight="SemiBold"/>
-                            <TextBox Text="{Binding ClientId}"/>
+                            <TextBox Text="{Binding ClientId}" IsEnabled="{Binding !IsDiscovering}"/>
                         </StackPanel>
                         <StackPanel Spacing="4">
                             <TextBlock Text="Client Secret (optional)" FontWeight="SemiBold"/>

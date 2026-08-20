@@ -1,5 +1,8 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using TessynDesktop.Models;
+using TessynDesktop.Services;
 using ReactiveUI;
 
 namespace TessynDesktop.ViewModels;
@@ -152,6 +155,56 @@ public sealed class McpServerEditViewModel : ViewModelBase
 	}
 
 	public string? ErrorMessage { get; private set; }
+
+	private bool _isDiscovering;
+
+	/// <summary>
+	/// True while <see cref="DiscoverEndpointsAsync"/> is in flight. Bound in the Add/Edit dialog to
+	/// disable the URL and OAuth endpoint fields so the user gets visual feedback and can't stack up
+	/// edits while a probe is running. The caller (the dialog) is responsible for cancelling a prior
+	/// in-flight call before starting a new one — see <see cref="McpServerEditDialog.OnUrlLostFocus"/> —
+	/// so at most one probe is ever actually running against the network.
+	/// </summary>
+	public bool IsDiscovering
+	{
+		get => _isDiscovering;
+		private set => this.RaiseAndSetIfChanged(ref _isDiscovering, value);
+	}
+
+	/// <summary>
+	/// Best-effort auto-fill of the OAuth endpoint fields (FR.20.3), triggered when the URL field
+	/// loses focus in the Add/Edit dialog — ahead of the user ever clicking Authorize. Only runs for
+	/// an Http transport with a non-empty URL; never overwrites an endpoint the user already typed.
+	/// Failures are silent (network log only) since this is a convenience, not a requirement.
+	/// </summary>
+	public async Task DiscoverEndpointsAsync(IMcpOAuthService oauthService, CancellationToken cancellationToken = default)
+	{
+		if (Transport != McpServerTransport.Http || string.IsNullOrWhiteSpace(Url))
+			return;
+
+		var probe = new McpOAuthConfig
+		{
+			AuthorizationEndpoint = AuthorizationEndpoint,
+			TokenEndpoint         = TokenEndpoint,
+			RegistrationEndpoint  = RegistrationEndpoint,
+			ClientId              = ClientId,
+		};
+
+		IsDiscovering = true;
+		try
+		{
+			await oauthService.DiscoverAsync(Url.Trim(), probe, cancellationToken);
+
+			AuthorizationEndpoint = probe.AuthorizationEndpoint;
+			TokenEndpoint         = probe.TokenEndpoint;
+			if (!string.IsNullOrEmpty(probe.RegistrationEndpoint))
+				RegistrationEndpoint = probe.RegistrationEndpoint;
+		}
+		finally
+		{
+			IsDiscovering = false;
+		}
+	}
 
 	public McpServerEditViewModel(ExternalMcpServerModel? existing)
 	{
