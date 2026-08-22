@@ -7,9 +7,10 @@ namespace TessynDesktop.Tests.Services;
 public sealed class InstructionBlockBuilderTests
 {
     private static InstructionOptionsModel Options(
-        bool isAgentToolsEnabled, bool isNewSession, bool isStreamingMode) =>
+        bool isAgentToolsEnabled, bool isNewSession, bool isStreamingMode, bool isTelegramEnabled = false) =>
         new(IsAutoCommit: null, IsNewBranch: false, IsAutoDocument: false,
-            IsAgentToolsEnabled: isAgentToolsEnabled, IsNewSession: isNewSession, IsStreamingMode: isStreamingMode);
+            IsAgentToolsEnabled: isAgentToolsEnabled, IsNewSession: isNewSession, IsStreamingMode: isStreamingMode,
+            IsTelegramEnabled: isTelegramEnabled);
 
     [Fact]
     public void Build_OneShotNewSessionAgentToolsEnabled_IncludesBothRedirects()
@@ -65,5 +66,43 @@ public sealed class InstructionBlockBuilderTests
 
         Assert.NotEqual(string.Empty, block);
         Assert.Contains("Session preferences", block);
+    }
+
+    // ── FR.21.3 — TelegramNotifyGuidance gating ────────────────────────────────
+
+    [Fact]
+    public void Build_AgentToolsAndTelegramEnabledOnNewSession_IncludesTelegramNotifyGuidance()
+    {
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: true, isNewSession: true, isStreamingMode: false, isTelegramEnabled: true));
+
+        Assert.Contains(Constants.Instructions.TelegramNotifyGuidance, block);
+    }
+
+    [Fact]
+    public void Build_TelegramDisabled_OmitsTelegramNotifyGuidance()
+    {
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: true, isNewSession: true, isStreamingMode: false, isTelegramEnabled: false));
+
+        Assert.DoesNotContain(Constants.Instructions.TelegramNotifyGuidance, block);
+    }
+
+    [Fact]
+    public void Build_NotANewSession_OmitsTelegramNotifyGuidanceEvenIfEnabled()
+    {
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: true, isNewSession: false, isStreamingMode: false, isTelegramEnabled: true));
+
+        Assert.DoesNotContain(Constants.Instructions.TelegramNotifyGuidance, block);
+    }
+
+    [Fact]
+    public void Build_AgentToolsDisabled_OmitsTelegramNotifyGuidanceEvenIfTelegramEnabled()
+    {
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: false, isNewSession: true, isStreamingMode: false, isTelegramEnabled: true));
+
+        Assert.DoesNotContain(Constants.Instructions.TelegramNotifyGuidance, block);
     }
 }

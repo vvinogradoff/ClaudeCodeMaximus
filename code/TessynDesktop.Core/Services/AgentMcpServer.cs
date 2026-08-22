@@ -35,6 +35,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly IClaudeModelService       _modelService;
 	private readonly TdcpServer                _tdcpServer;
 	private readonly IMcpConfigMerger          _configMerger;
+	private readonly ITelegramBridgeService    _telegramBridge;
 
 	// Enforced concurrent worker cap (FR.15.5).
 	private readonly SemaphoreSlim _workerSemaphore =
@@ -57,7 +58,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		ISessionFileService fileService,
 		IClaudeModelService modelService,
 		TdcpServer tdcpServer,
-		IMcpConfigMerger configMerger)
+		IMcpConfigMerger configMerger,
+		ITelegramBridgeService telegramBridge)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -67,6 +69,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_modelService = modelService;
 		_tdcpServer   = tdcpServer;
 		_configMerger = configMerger;
+		_telegramBridge = telegramBridge;
 	}
 
 	public void Start()
@@ -345,7 +348,10 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				WorkflowLogSchema()),
 			BuildToolDef("get_budget",
 				"Return token usage and remaining budget for the caller's active orchestrations (FR.15.6).",
-				EmptyObjectSchema()));
+				EmptyObjectSchema()),
+			BuildToolDef("notify_user",
+				"Send the user a notification or plain-text question via the Telegram Bridge (FR.21.3). Fire-and-forget — there is no blocking 'ask and wait' tool; end your turn after calling this and the user's reply will arrive as your next prompt.",
+				NotifyUserSchema()));
 
 		return new JsonObject { ["tools"] = tools };
 	}
@@ -372,6 +378,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			"workflow_phase"       => WorkflowPhase(arguments, callerNode),
 			"workflow_log"         => WorkflowLog(arguments, callerNode),
 			"get_budget"           => GetBudget(callerNode),
+			"notify_user"          => await NotifyUserAsync(arguments, callerNode),
 			_                      => throw new McpMethodNotFoundException(name),
 		};
 	}
@@ -875,6 +882,17 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			: string.Join("\n", entries));
 	}
 
+	private async Task<JsonNode> NotifyUserAsync(JsonNode? args, SessionNodeModel callerNode)
+	{
+		var message = args?["message"]?.GetValue<string>()
+		              ?? throw new McpToolException("'message' is required");
+
+		var sent = await _telegramBridge.NotifyAsync(callerNode.NodeId, message);
+		return BuildTextContent(sent
+			? "Notification sent."
+			: "Notification not sent — the Telegram Bridge is disabled or unreachable (see application logs).");
+	}
+
 	// ── Helpers: tier enforcement + output shaping ────────────────────────────
 
 	/// <summary>Resolves the caller's effective model for tier comparison (FR.16.4).</summary>
@@ -1181,6 +1199,16 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"title": { "type": "string", "description": "Phase title written to the session file." }
 			},
 			"required": ["title"]
+		}
+		""")!;
+
+	private static JsonNode NotifyUserSchema() => JsonNode.Parse("""
+		{
+			"type": "object",
+			"properties": {
+				"message": { "type": "string", "description": "Notification or question text to send to the user's Telegram." }
+			},
+			"required": ["message"]
 		}
 		""")!;
 

@@ -23,6 +23,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly ISessionRegistry             _registry;
 	private readonly IClaudeSessionStatusService  _sessionStatus;
 	private readonly IClaudeModelService          _modelService;
+	private readonly Lazy<ITelegramBridgeService> _telegramBridge;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
 	private readonly ConcurrentDictionary<string, SemaphoreSlim> _turnLocks = new();
@@ -38,7 +39,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		Lazy<IAgentMcpServer> mcpServer,
 		ISessionRegistry registry,
 		IClaudeSessionStatusService sessionStatus,
-		IClaudeModelService modelService)
+		IClaudeModelService modelService,
+		Lazy<ITelegramBridgeService> telegramBridge)
 	{
 		_processManager = processManager;
 		_fileService    = fileService;
@@ -48,6 +50,7 @@ public sealed class SessionTurnService : ISessionTurnService
 		_registry       = registry;
 		_sessionStatus  = sessionStatus;
 		_modelService   = modelService;
+		_telegramBridge = telegramBridge;
 	}
 
 	public SemaphoreSlim GetTurnLock(string nodeId) =>
@@ -77,6 +80,11 @@ public sealed class SessionTurnService : ISessionTurnService
 
 		// Signal running state via the registry (SessionTreeViewModel observes TreeChanged).
 		_registry.SetSessionRunning(node.NodeId, true);
+
+		// FR.21.2 — lazily ensure a Telegram topic exists for this session on its first activity
+		// since the bridge was enabled. Fire-and-forget: EnsureTopicForSessionAsync never throws
+		// and must never delay or fail the turn it was piggybacked on.
+		_ = _telegramBridge.Value.EnsureTopicForSessionAsync(node);
 
 		try
 		{
@@ -126,7 +134,8 @@ public sealed class SessionTurnService : ISessionTurnService
 			// (FR.19.11), so the instruction block should describe this spawn's actual (one-shot) mode.
 			var options          = new InstructionOptionsModel(
 				node.IsAutoCommit, false, node.IsAutoDocument,
-				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: false);
+				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: false,
+				IsTelegramEnabled: _appSettings.Settings.TelegramEnabled);
 			var instructionBlock = InstructionBlockBuilder.Build(options);
 			var augmentedPrompt  = prompt + instructionBlock;
 

@@ -70,6 +70,36 @@
                             <TextBlock Text="A Windows toast appears when a scheduled or orchestrated turn finishes and the session is not currently open."
                                        FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
                         </StackPanel>
+
+                        <Separator Margin="0,4"/>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Telegram Bridge" FontWeight="SemiBold"/>
+                            <CheckBox Content="Enable Telegram Bridge"
+                                      IsChecked="{Binding TelegramEnabled}"/>
+                            <TextBlock Text="Sessions can notify you and you can reply, browse, and message sessions from a Telegram bot. See docs/requirements.md FR.21 for one-time bot/supergroup setup."
+                                       FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Bot Token" Margin="0,8,0,0"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding TelegramBotTokenInput}"
+                                         PasswordChar="•" Watermark="Paste token from @BotFather"/>
+                                <Button Grid.Column="1" Content="Save Token" Margin="4,0,0,0"
+                                        Command="{Binding SaveTelegramTokenCommand}"/>
+                            </Grid>
+                            <TextBlock Text="{Binding TelegramTokenStatus}" FontSize="11" Opacity="0.6"/>
+
+                            <TextBlock Text="Supergroup Chat ID" Margin="0,8,0,0"/>
+                            <TextBox Text="{Binding TelegramChatId}" Watermark="e.g. -1001234567890"/>
+
+                            <TextBlock Text="Allowed Telegram User IDs" Margin="0,8,0,0"/>
+                            <TextBox Text="{Binding TelegramAllowedUserIds}" Watermark="Comma-separated, e.g. 123456789, 987654321"/>
+
+                            <TextBlock Text="Mention Handle" Margin="0,8,0,0"/>
+                            <TextBox Text="{Binding TelegramMentionHandle}" Watermark="e.g. @harmlessevil"/>
+                            <TextBlock Text="Prefixed onto notification pings (turn-completion, notify_user) so they stand out from the mirrored conversation text sharing the same topic. Leave blank for no prefix."
+                                       FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

@@ -32,6 +32,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private readonly IAppSettingsService _appSettings;
 	private readonly IAgentMcpServer _mcpServer;
 	private readonly IDaemonClient _daemonClient;
+	private readonly ITelegramBridgeService _telegramBridge;
 	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly SessionContentViewModel _content;
 	private readonly ModelSelectionController _models;
@@ -218,6 +219,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		IAppSettingsService appSettings,
 		IAgentMcpServer mcpServer,
 		IDaemonClient daemonClient,
+		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
 		SessionContentViewModel content,
 		ModelSelectionController models,
@@ -232,6 +234,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_appSettings      = appSettings;
 		_mcpServer        = mcpServer;
 		_daemonClient     = daemonClient;
+		_telegramBridge   = telegramBridge;
 		_sessionStatus    = sessionStatus;
 		_content          = content;
 		_models           = models;
@@ -351,6 +354,10 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_busyCount++;
 		IsBusy = true;
 		_node.IsRunning = true;
+
+		// FR.21.2 — lazily ensure a Telegram topic exists for this session on its first interactive
+		// activity since the bridge was enabled. Fire-and-forget: never throws, never delays the turn.
+		_ = _telegramBridge.EnsureTopicForSessionAsync(_node.Model);
 
 		// Start timer only for the first concurrent send; subsequent sends keep the running clock
 		if (_thinkingTimer == null)

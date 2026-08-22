@@ -78,7 +78,7 @@ public sealed class SessionRegistry : ISessionRegistry
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {
-                var found = FindInSessions(dir.Sessions, dir.Groups, nodeId, byNodeId: true);
+                var found = FindInSessions(dir.Sessions, dir.Groups, s => s.NodeId == nodeId);
                 if (found != null) return found;
             }
             return null;
@@ -91,7 +91,20 @@ public sealed class SessionRegistry : ISessionRegistry
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {
-                var found = FindInSessions(dir.Sessions, dir.Groups, token, byNodeId: false);
+                var found = FindInSessions(dir.Sessions, dir.Groups, s => s.AgentToken == token);
+                if (found != null) return found;
+            }
+            return null;
+        }
+    }
+
+    public SessionNodeModel? FindModelByFileName(string fileName)
+    {
+        lock (_lock)
+        {
+            foreach (var dir in _appSettings.Settings.Tree)
+            {
+                var found = FindInSessions(dir.Sessions, dir.Groups, s => s.FileName == fileName);
                 if (found != null) return found;
             }
             return null;
@@ -524,17 +537,16 @@ public sealed class SessionRegistry : ISessionRegistry
     private static SessionNodeModel? FindInSessions(
         List<SessionNodeModel> sessions,
         List<GroupNodeModel> groups,
-        string key, bool byNodeId)
+        Func<SessionNodeModel, bool> predicate)
     {
         foreach (var s in sessions)
         {
-            var match = byNodeId ? s.NodeId == key : s.AgentToken == key;
-            if (match) return s;
+            if (predicate(s)) return s;
         }
 
         foreach (var g in groups)
         {
-            var found = FindInSessions(g.Sessions, g.Groups, key, byNodeId);
+            var found = FindInSessions(g.Sessions, g.Groups, predicate);
             if (found != null) return found;
         }
 
@@ -575,12 +587,18 @@ public sealed class SessionRegistry : ISessionRegistry
             && _sessionStatus.IsSessionResumable(s.WorkingDirectory, s.ClaudeSessionId);
 
         string? lastPrompt = null;
+        DateTimeOffset? lastActivityUtc = null;
         try
         {
             var entries = _fileService.ReadEntries(s.FileName);
             var lastUser = entries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
             if (lastUser != null)
                 lastPrompt = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+
+            // Last entry of any role (FR.21.8) — used by the Telegram Bridge's /sessions command
+            // as a cheap activity signal; not the same 24h-recency rule the UI dropdown uses.
+            if (entries.Count > 0)
+                lastActivityUtc = entries[^1].Timestamp;
         }
         catch { /* session file may not exist — omit */ }
 
@@ -591,7 +609,9 @@ public sealed class SessionRegistry : ISessionRegistry
             WorkingDirectory: s.WorkingDirectory,
             IsRunning:        IsSessionRunning(s.NodeId),
             IsResumable:      isResumable,
-            LastPrompt:       lastPrompt);
+            LastPrompt:       lastPrompt,
+            IsFavorite:       s.IsFavorite,
+            LastActivityUtc:  lastActivityUtc);
     }
 
     private static void CollectIds(

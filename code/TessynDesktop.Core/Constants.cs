@@ -103,6 +103,16 @@ public static class Constants
 			"`mcp__" + Agent.McpServerName + "__set_session_model` to switch the model of a child session mid-orchestration. " +
 			"For detailed guidance on orchestrating multi-session workflows, or on how to respond if you were spawned as a worker by another session, use the `" + Agent.OrchestrationSkillName + "` skill.";
 
+		/// <summary>
+		/// FR.21.3 — Emitted once per fresh session (alongside <see cref="NoWorkflowTool"/>) when both
+		/// agent tools and the Telegram Bridge are enabled. Deliberately steers Claude toward a
+		/// fire-and-forget notification instead of any blocking "ask and wait" pattern, since there is
+		/// no such tool — a mid-turn block on a Telegram reply has no reliable way to time out if the
+		/// user is away from their phone or Telegram is unreachable (see FR.21.3 rationale).
+		/// </summary>
+		public const string TelegramNotifyGuidance =
+			"A Telegram bridge is available: call `mcp__" + Agent.McpServerName + "__notify_user` to send the user a notification or ask them a plain-text question. There is no blocking \"ask and wait\" tool — after calling notify_user, end your turn normally instead of waiting idle for a reply. The user's Telegram reply arrives later as an ordinary new prompt in this same session.";
+
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
 		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
 		public const string MidRunAutoCommitOff = "Correction: Ignore previous instructions about committing to git. Do not commit any changes.";
@@ -394,6 +404,31 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const int DiscoveryTimeoutMs = 8_000;
 	}
 
+
+	/// <summary>Constants for the Telegram Notification Bridge (FR.21).</summary>
+	public static class Telegram
+	{
+		/// <summary>Bot API base URL. The bot token and method name are appended: "{BotApiBaseUrl}{token}/{method}".</summary>
+		public const string BotApiBaseUrl = "https://api.telegram.org/bot";
+
+		/// <summary>Long-poll timeout passed to getUpdates. The HTTP client timeout is set higher than this.</summary>
+		public const int LongPollTimeoutSeconds = 30;
+
+		/// <summary>File name for the DPAPI-protected bot token under %AppData%\TessynDesktop (FR.21.6).</summary>
+		public const string TokenFileName = "telegram-token.dat";
+
+		/// <summary>Max entries returned by the /open command, mirroring the read_session tool's default.</summary>
+		public const int OpenCommandEntryCount = 20;
+
+		/// <summary>Telegram's own forum topic name length limit.</summary>
+		public const int MaxTopicNameLength = 128;
+
+		/// <summary>
+		/// Chunk size for mirrored messages (FR.21.9). Telegram's real per-message cap is 4096
+		/// UTF-16 code units; this leaves headroom for role prefixes (e.g. "USER: ").
+		/// </summary>
+		public const int MaxMessageLength = 4000;
+	}
 
 	public static class ClaudeSessions
 	{

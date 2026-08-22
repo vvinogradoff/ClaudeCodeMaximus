@@ -20,6 +20,7 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
 
     public SessionNodeModel? FindByNodeIdResult { get; set; }
     public SessionNodeModel? FindByAgentTokenResult { get; set; }
+    public SessionNodeModel? FindByFileNameResult { get; set; }
     public (string directoryLabel, string treePath) LocationResult { get; set; } = ("dir", "path");
     public bool IsRunningResult { get; set; }
     public string? SetRunningNodeId { get; private set; }
@@ -82,6 +83,7 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
 
     public SessionNodeModel? FindModelByNodeId(string nodeId) => FindByNodeIdResult;
     public SessionNodeModel? FindModelByAgentToken(string token) => FindByAgentTokenResult;
+    public SessionNodeModel? FindModelByFileName(string fileName) => FindByFileNameResult;
     public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session) => LocationResult;
     public bool IsSessionRunning(string nodeId) => IsRunningResult;
     public void SetSessionRunning(string nodeId, bool isRunning) { SetRunningNodeId = nodeId; SetRunningValue = isRunning; }
@@ -237,6 +239,9 @@ internal sealed class InProcFakeFileService : ISessionFileService
     public string? LastFileExistsFile { get; private set; }
     public string? LastGetFullPathFile { get; private set; }
 
+    public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
+    public void RaiseEntryAppended(SessionEntryAppendedEventArgs e) => EntryAppended?.Invoke(this, e);
+
     public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName) { LastReadEntriesFile = fileName; return ReadEntriesResult; }
     public bool SessionFileExists(string fileName) { LastFileExistsFile = fileName; return SessionFileExistsResult; }
     public string GetFullPath(string fileName) { LastGetFullPathFile = fileName; return GetFullPathResult; }
@@ -361,6 +366,17 @@ public sealed class InProcDaemonClientTests
         _registry.FindByAgentTokenResult = node;
 
         var result = _client.FindSessionByAgentToken("tok-abc");
+
+        Assert.Same(node, result);
+    }
+
+    [Fact]
+    public void FindSessionByFileName_DelegatesToRegistry()
+    {
+        var node = MakeNode();
+        _registry.FindByFileNameResult = node;
+
+        var result = _client.FindSessionByFileName("node-1.txt");
 
         Assert.Same(node, result);
     }
@@ -622,6 +638,24 @@ public sealed class InProcDaemonClientTests
         _client.ScheduleChanged += (_, _) => count++;
 
         Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void EntryAppended_FiresWhenFileServiceRaisesEvent()
+    {
+        SessionEntryAppendedEventArgs? received = null;
+        _client.EntryAppended += (_, e) => received = e;
+        var args = new SessionEntryAppendedEventArgs
+        {
+            FileName = "f.txt",
+            Entry = new SessionEntryModel { Timestamp = DateTimeOffset.UtcNow, Role = "USER", Content = "hi" },
+        };
+
+        _fileService.RaiseEntryAppended(args);
+
+        Assert.NotNull(received);
+        Assert.Equal("f.txt", received!.FileName);
+        Assert.Equal("hi", received.Entry.Content);
     }
 
     // ── Initialization ───────────────────────────────────────────────────────────

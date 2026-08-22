@@ -115,4 +115,44 @@ public sealed class AppSettingsModel
 	/// connector registrations (FR.20.8).
 	/// </summary>
 	public List<ExternalMcpServerModel> ExternalMcpServers { get; set; } = [];
+
+	/// <summary>
+	/// Master toggle for the Telegram Notification Bridge (FR.21). When false, the bridge does not
+	/// start and <c>notify_user</c>/<c>ITelegramBridgeService</c> calls are no-ops. The bot token
+	/// itself is never stored here — see the Telegram Token Store (FR.21.6).
+	/// </summary>
+	public bool TelegramEnabled { get; set; }
+
+	/// <summary>
+	/// Chat ID of the Topics-enabled Telegram supergroup the bridge posts to (FR.21.1). Every
+	/// inbound update from any other chat is dropped.
+	/// </summary>
+	public long TelegramChatId { get; set; }
+
+	/// <summary>
+	/// Telegram numeric user IDs authorized to message the bot (FR.21.1). Messages from anyone
+	/// else are logged and dropped, even inside <see cref="TelegramChatId"/>.
+	/// </summary>
+	public List<long> TelegramAllowedUserIds { get; set; } = [];
+
+	/// <summary>
+	/// Persisted NodeId → Telegram <c>message_thread_id</c> map (FR.21.1, FR.21.2). The reverse
+	/// lookup used to route inbound messages is rebuilt in memory from this on
+	/// <see cref="Services.ITelegramBridgeService.Start"/>.
+	/// </summary>
+	public Dictionary<string, int> TelegramTopicThreadIdsByNodeId { get; set; } = [];
+
+	/// <summary>
+	/// Last-processed Telegram <c>update_id</c> + 1 (FR.21.1), persisted so an app restart does not
+	/// replay already-handled updates through <c>getUpdates</c>.
+	/// </summary>
+	public long TelegramUpdateOffset { get; set; }
+
+	/// <summary>
+	/// Telegram @handle (e.g. "@harmlessevil") prefixed onto notification pings — <c>notify_user</c>
+	/// and scheduled/orchestrated completion pings (FR.21.10). Empty means no prefix. Never applied
+	/// to mirrored conversation text (FR.21.9), only to pings, so routine back-and-forth doesn't page
+	/// the user on every line.
+	/// </summary>
+	public string TelegramMentionHandle { get; set; } = string.Empty;
 }

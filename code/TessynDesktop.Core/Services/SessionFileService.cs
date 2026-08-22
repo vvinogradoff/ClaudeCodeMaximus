@@ -16,6 +16,8 @@ public sealed class SessionFileService : ISessionFileService
 		_appSettings = appSettings;
 	}
 
+	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
+
 	public string CreateSessionFile()
 	{
 		var timestamp = DateTime.UtcNow.ToString(Constants.SessionFileNameDateFormat);
@@ -28,14 +30,41 @@ public sealed class SessionFileService : ISessionFileService
 
 	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null)
 	{
-		var entry = BuildEntryText(DateTimeOffset.UtcNow, role, content, profileName, modelId, effort);
+		var timestamp = DateTimeOffset.UtcNow;
+		var entry = BuildEntryText(timestamp, role, content, profileName, modelId, effort);
 		AppendToFile(fileName, entry);
+
+		EntryAppended?.Invoke(this, new SessionEntryAppendedEventArgs
+		{
+			FileName = fileName,
+			Entry = new SessionEntryModel
+			{
+				Timestamp = timestamp,
+				Role = role,
+				Content = content,
+				ProfileName = profileName,
+				ModelId = modelId,
+				Effort = effort,
+			},
+		});
 	}
 
 	public void AppendCompactionSeparator(string fileName)
 	{
-		var header = FormatHeader(DateTimeOffset.UtcNow, Constants.SessionFile.RoleCompaction);
+		var timestamp = DateTimeOffset.UtcNow;
+		var header = FormatHeader(timestamp, Constants.SessionFile.RoleCompaction);
 		AppendToFile(fileName, header + Environment.NewLine);
+
+		EntryAppended?.Invoke(this, new SessionEntryAppendedEventArgs
+		{
+			FileName = fileName,
+			Entry = new SessionEntryModel
+			{
+				Timestamp = timestamp,
+				Role = Constants.SessionFile.RoleCompaction,
+				Content = string.Empty,
+			},
+		});
 	}
 
 	public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName)

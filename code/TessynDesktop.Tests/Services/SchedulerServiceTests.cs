@@ -52,6 +52,7 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
     }
 
     public SessionNodeModel? FindModelByAgentToken(string token) => null;
+    public SessionNodeModel? FindModelByFileName(string fileName) => null;
     public void LoadFromSettings() { }
 
     public DirectoryNodeModel AddDirectory(string path) => throw new NotImplementedException();

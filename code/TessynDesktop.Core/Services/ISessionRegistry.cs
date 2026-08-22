@@ -65,6 +65,9 @@ public interface ISessionRegistry
     SessionNodeModel? FindModelByNodeId(string nodeId);
     SessionNodeModel? FindModelByAgentToken(string token);
 
+    /// <summary>Finds the session owning a given session file name (FR.21.9 — resolves an appended entry's session).</summary>
+    SessionNodeModel? FindModelByFileName(string fileName);
+
     // ── CRUD – Directory ──────────────────────────────────────────────────────
 
     DirectoryNodeModel AddDirectory(string path);

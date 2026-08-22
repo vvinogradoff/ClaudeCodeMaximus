@@ -42,7 +42,8 @@ public sealed class SessionPromptComposer
 	{
 		var options = new InstructionOptionsModel(
 			isAutoCommit, isNewBranch, isAutoDocument,
-			_appSettings.Settings.AgentToolsEnabled, isNewSession, isStreamingMode);
+			_appSettings.Settings.AgentToolsEnabled, isNewSession, isStreamingMode,
+			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled);
 		return InstructionBlockBuilder.Build(options);
 	}
 

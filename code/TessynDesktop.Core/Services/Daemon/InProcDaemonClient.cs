@@ -39,12 +39,14 @@ public sealed class InProcDaemonClient : IDaemonClient
 		// push notifications on the change channel; in-process they are a direct relay.
 		_registry.TreeChanged += (s, e) => TreeChanged?.Invoke(this, e);
 		_scheduler.ScheduleChanged += (s, e) => ScheduleChanged?.Invoke(this, e);
+		_fileService.EntryAppended += (s, e) => EntryAppended?.Invoke(this, e);
 	}
 
 	// ── Change notification ─────────────────────────────────────────────────────
 
 	public event EventHandler<TreeChangedEventArgs>? TreeChanged;
 	public event EventHandler? ScheduleChanged;
+	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 
@@ -59,6 +61,8 @@ public sealed class InProcDaemonClient : IDaemonClient
 	public SessionNodeModel? FindSessionByNodeId(string nodeId) => _registry.FindModelByNodeId(nodeId);
 
 	public SessionNodeModel? FindSessionByAgentToken(string token) => _registry.FindModelByAgentToken(token);
+
+	public SessionNodeModel? FindSessionByFileName(string fileName) => _registry.FindModelByFileName(fileName);
 
 	public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session)
 		=> _registry.GetSessionLocation(session);

@@ -78,6 +78,16 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 	public event EventHandler<TreeChangedEventArgs>? TreeChanged;
 	public event EventHandler?                       ScheduleChanged;
 
+	/// <summary>
+	/// Not yet wired over TDCP — <c>content.appended</c> push is specified (tdcp-spec.md §5) but not
+	/// implemented; only <see cref="InProcDaemonClient"/> relays it today. Subscribing is a silent
+	/// no-op rather than a throw since it's an event, not a call the caller can wrap in a try/catch
+	/// at the point of failure.
+	/// </summary>
+#pragma warning disable CS0067 // Never raised until content.appended SSE push exists — see doc comment.
+	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
+#pragma warning restore CS0067
+
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 
 	/// <summary>
@@ -127,6 +137,11 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 		var p = new JsonObject { ["token"] = token };
 		return CallAsync<SessionNodeModel>("tree.findByToken", p).GetAwaiter().GetResult();
 	}
+
+	/// <summary>Not available over the TDCP wire yet — no <c>tree.findByFileName</c> method is specified; see tdcp-spec.md §5.</summary>
+	public SessionNodeModel? FindSessionByFileName(string fileName) =>
+		throw new NotSupportedException(
+			"FindSessionByFileName is not available over the TDCP wire yet; see tdcp-spec.md §5.");
 
 	public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session)
 	{

@@ -15,10 +15,16 @@ internal sealed class FakeSessionFileService : ISessionFileService
     public bool FileExists { get; set; } = true;
     private int _counter;
 
+    /// <summary>Optional canned entries per file name, consumed by <see cref="ReadEntries"/> (FR.21.8 tests).</summary>
+    public Dictionary<string, IReadOnlyList<SessionEntryModel>> Entries { get; } = new();
+
+    public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
+
     public string CreateSessionFile() => $"session-{_counter++}.txt";
     public bool SessionFileExists(string fileName) => FileExists;
     public void DeleteSessionFile(string fileName) { }
-    public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName) => Array.Empty<SessionEntryModel>();
+    public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName) =>
+        Entries.TryGetValue(fileName, out var entries) ? entries : Array.Empty<SessionEntryModel>();
     public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null) { }
     public void AppendCompactionSeparator(string fileName) { }
     public string GetFullPath(string fileName) => fileName;
@@ -255,6 +261,39 @@ public sealed class SessionRegistryTests : IDisposable
         Assert.Same(session, found);
     }
 
+    // ── 6b. FindModelByFileName (FR.21.9) ────────────────────────────────────
+
+    [Fact]
+    public void FindModelByFileName_FindsSessionInDirectory()
+    {
+        var dir = _registry.AddDirectory(AnyPath("m2"));
+        var session = _registry.AddSession(dir, "FileSession");
+
+        var found = _registry.FindModelByFileName(session.FileName);
+
+        Assert.Same(session, found);
+    }
+
+    [Fact]
+    public void FindModelByFileName_FindsSessionNestedInGroup()
+    {
+        var dir = _registry.AddDirectory(AnyPath("m3"));
+        var group = _registry.AddGroup(dir, "G3");
+        var session = _registry.AddSessionToGroup(group, "GrpFileSession");
+
+        var found = _registry.FindModelByFileName(session.FileName);
+
+        Assert.Same(session, found);
+    }
+
+    [Fact]
+    public void FindModelByFileName_ReturnsNullForUnknown()
+    {
+        var result = _registry.FindModelByFileName("nonexistent.txt");
+
+        Assert.Null(result);
+    }
+
     // ── 7. RenameSession ──────────────────────────────────────────────────────
 
     [Fact]
@@ -419,5 +458,39 @@ public sealed class SessionRegistryTests : IDisposable
         var ids = _registry.CollectAllClaudeSessionIds();
 
         Assert.Contains("grp-claude-id", ids);
+    }
+
+    // ── 12. BuildAgentSessionSummaries (FR.21.8) ──────────────────────────────
+
+    [Fact]
+    public void BuildAgentSessionSummaries_IncludesIsFavoriteAndLastActivityUtc()
+    {
+        var dir = _registry.AddDirectory(AnyPath("x"));
+        var session = _registry.AddSession(dir, "FavSession");
+        session.IsFavorite = true;
+
+        var lastTimestamp = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
+        _fileService.Entries[session.FileName] = new List<SessionEntryModel>
+        {
+            new() { Timestamp = lastTimestamp.AddMinutes(-5), Role = Constants.SessionFile.RoleUser, Content = "first" },
+            new() { Timestamp = lastTimestamp, Role = Constants.SessionFile.RoleAssistant, Content = "last" },
+        };
+
+        var summary = Assert.Single(_registry.BuildAgentSessionSummaries());
+
+        Assert.True(summary.IsFavorite);
+        Assert.Equal(lastTimestamp, summary.LastActivityUtc);
+    }
+
+    [Fact]
+    public void BuildAgentSessionSummaries_NoEntries_LastActivityUtcIsNull()
+    {
+        var dir = _registry.AddDirectory(AnyPath("y"));
+        _registry.AddSession(dir, "EmptySession");
+
+        var summary = Assert.Single(_registry.BuildAgentSessionSummaries());
+
+        Assert.False(summary.IsFavorite);
+        Assert.Null(summary.LastActivityUtc);
     }
 }

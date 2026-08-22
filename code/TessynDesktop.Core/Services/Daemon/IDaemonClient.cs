@@ -32,6 +32,9 @@ public interface IDaemonClient
 	/// <summary>Raised when a schedule is added, removed, or fires. Used to refresh session UI.</summary>
 	event EventHandler? ScheduleChanged;
 
+	/// <summary>Raised when a single entry is appended to a session file (FR.21.9) — the tap point external mirrors (e.g. the Telegram bridge) subscribe to instead of depending on ISessionFileService directly.</summary>
+	event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
+
 	// ── Tree read ───────────────────────────────────────────────────────────────
 
 	/// <summary>The authoritative directory list (source of truth for the tree projection).</summary>
@@ -42,6 +45,9 @@ public interface IDaemonClient
 
 	SessionNodeModel? FindSessionByNodeId(string nodeId);
 	SessionNodeModel? FindSessionByAgentToken(string token);
+
+	/// <summary>Finds the session owning a given session file name (FR.21.9).</summary>
+	SessionNodeModel? FindSessionByFileName(string fileName);
 
 	/// <summary>Resolves the (directory label, tree path) location of a session for header display.</summary>
 	(string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session);

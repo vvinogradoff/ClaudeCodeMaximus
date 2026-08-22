@@ -52,6 +52,10 @@ public partial class App : Application
 			Services.GetRequiredService<ISkillProvisioningService>().ProvisionAll();
 		}
 
+		// Start the Telegram Bridge (FR.21) — independent toggle from AgentToolsEnabled.
+		if (appSettings.Settings.TelegramEnabled)
+			Services.GetRequiredService<ITelegramBridgeService>().Start();
+
 		// Wire toast click-to-activate before the window opens so early clicks are not missed (FR.16).
 		var mainVm = Services.GetRequiredService<MainWindowViewModel>();
 		var notifications = Services.GetRequiredService<INotificationService>();
@@ -73,6 +77,8 @@ public partial class App : Application
 					Services.GetRequiredService<IAgentMcpServer>().Stop();
 					Services.GetRequiredService<ISchedulerService>().Stop();
 				}
+				if (appSettings.Settings.TelegramEnabled)
+					Services.GetRequiredService<ITelegramBridgeService>().Stop();
 			};
 
 			// Build/refresh the cross-project session search index in the background (Stage 6).
@@ -141,10 +147,18 @@ public partial class App : Application
 		services.AddSingleton<IAgentMcpServer, AgentMcpServer>();
 		services.AddSingleton<ISchedulerService, SchedulerService>();
 		services.AddSingleton<ISkillProvisioningService, SkillProvisioningService>();
-		services.AddSingleton<INotificationService, WindowsNotificationService>();
+		services.AddSingleton<WindowsNotificationService>();
+		services.AddSingleton<INotificationService, CompositeNotificationService>();
 		services.AddSingleton(sp => new Lazy<ISessionTurnService>(sp.GetRequiredService<ISessionTurnService>));
 		services.AddSingleton(sp => new Lazy<IAgentMcpServer>(sp.GetRequiredService<IAgentMcpServer>));
 		services.AddSingleton(sp => new Lazy<ISchedulerService>(sp.GetRequiredService<ISchedulerService>));
+
+		// Telegram Notification Bridge (FR.21). Lazy<ITelegramBridgeService> breaks the circular
+		// dependency between ISessionTurnService (topic-ensure hook) ↔ ITelegramBridgeService (turn runner).
+		services.AddSingleton<ITelegramTokenStore, TelegramTokenStore>();
+		services.AddSingleton<ITelegramClient, TelegramClient>();
+		services.AddSingleton<ITelegramBridgeService, TelegramBridgeService>();
+		services.AddSingleton(sp => new Lazy<ITelegramBridgeService>(sp.GetRequiredService<ITelegramBridgeService>));
 
 		// UI/daemon boundary (Stage 4): the UI talks to the daemon-owned domain through IDaemonClient.
 		// In-process today; swapped for a TDCP wire adapter in Stage 5 with no ViewModel changes.

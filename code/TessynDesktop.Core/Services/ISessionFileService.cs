@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TessynDesktop.Models;
 
@@ -10,6 +11,9 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public interface ISessionFileService
 {
+	/// <summary>Raised after a single entry is appended (FR.21.9) — see <see cref="SessionEntryAppendedEventArgs"/>.</summary>
+	event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
+
 	/// <summary>Creates a new session file and returns its bare file name.</summary>
 	string CreateSessionFile();
 

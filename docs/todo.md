@@ -706,6 +706,64 @@
 
 ---
 
+## Phase 28 — Telegram Notification Bridge (FR.21)
+
+### P28.1 Data model & constants ✓ DONE
+- [DONE] `AppSettingsModel`: `TelegramEnabled`, `TelegramChatId`, `TelegramAllowedUserIds`, `TelegramTopicThreadIdsByNodeId`, `TelegramUpdateOffset` (FR.21.1)
+- [DONE] `Constants.Telegram` (API base URL, long-poll timeout, token file name)
+- [DONE] `TurnSource.Telegram` new enum value
+- [DONE] `SessionSummaryModel` gains `IsFavorite`, `LastActivityUtc`; `SessionRegistry.BuildSummary` populates both (FR.21.8)
+- [DONE] `InstructionOptionsModel` gains `IsTelegramEnabled`; `Constants.Instructions.TelegramNotifyGuidance`; `InstructionBlockBuilder` emits it once per fresh session when agent tools + Telegram are both enabled (FR.21.3)
+
+### P28.2 Core services ✓ DONE
+- [DONE] `ITelegramTokenStore` / `TelegramTokenStore` — DPAPI single-file bot token store (FR.21.6)
+- [DONE] `ITelegramClient` / `TelegramClient` — raw Bot API HTTP wrapper (sendMessage, createForumTopic, getUpdates)
+- [DONE] `ITelegramBridgeService` / `TelegramBridgeService` — Start/Stop long-poll loop, `EnsureTopicForSessionAsync`, `NotifyAsync`, inbound routing + `/sessions` + `/open` (FR.21.2, FR.21.4)
+- [DONE] Hook `EnsureTopicForSessionAsync` into `SessionTurnService.RunTurnAsync` (headless: scheduled/orchestrated/Telegram-triggered) and `TurnController.SendAsyncCore` (interactive)
+- [DONE] `mcp__cmx__notify_user` tool on `AgentMcpServer` (FR.21.3)
+- [DONE] `CompositeNotificationService` (app project) wraps `WindowsNotificationService` + `ITelegramBridgeService.NotifyAsync`, registered as `INotificationService` (FR.21.5)
+- [DONE] DI wiring in `App.axaml.cs`: token store, client, bridge service (+ `Lazy<>` pair with `SessionTurnService` to avoid a DI cycle), Start/Stop alongside `AgentMcpServer`/`SchedulerService`, gated on `TelegramEnabled`
+
+### P28.3 Settings UI ✓ DONE
+- [DONE] Telegram panel: enable toggle, bot token field + immediate-save action, chat ID field, allowed-user-IDs field (FR.21.7)
+
+### P28.4 Tests (see `docs/testcases/TC-21-Telegram-Bridge.md`) ✓ DONE (automated)
+- [DONE] `TelegramTokenStoreTests`, `TelegramClientTests`, `TelegramBridgeServiceTests`
+- [DONE] `SessionRegistryTests` / `InstructionBlockBuilderTests` additions
+- [DONE] Full suite green (300 passing, 0 failing)
+- [ ] Manual E2E checklist run against a real bot/supergroup (requires the Architect to provision a bot per FR.21's setup steps) before marking FR.21 fully verified end-to-end
+  - [DONE] UC-21.1 (notify_user → topic auto-created, message delivered) — verified 2026-08-20 against `@VitalyTessynBot` / "Tessyn Desktop" supergroup
+  - [DONE] UC-21.2/UC-21.3 (reply in topic → routed back as a turn on the correct session, response posted back to the topic) — verified 2026-08-20; confirmed the per-node turn lock correctly queues a Telegram-routed turn behind an in-flight interactive turn on the same session
+  - [ ] UC-21.4 (`/sessions`), UC-21.5 (`/open`), UC-21.6 (unauthorized sender dropped), and update-offset persistence across an app restart — not yet exercised live
+
+---
+
+## Phase 29 — Telegram as a Daemon Client (FR.21.9–FR.21.11)
+
+Reworks the Telegram Bridge from a notification-only channel into a full mirror of every session's conversation, and moves it onto the `IDaemonClient` boundary instead of Core service internals. Long polling only (D1) — the webhook/S3 relay (`tdcp-spec.md` §3) stays parked, see requirements.md Out of Scope.
+
+### P29.1 Universal I/O mirror (FR.21.9)
+- [DONE] `SessionEntryAppendedEventArgs` model; `ISessionFileService.EntryAppended` raised by `AppendMessage`/`AppendCompactionSeparator` (not by the bulk `RewriteSessionFile`/`WriteSessionFile` paths)
+- [DONE] `ISessionRegistry.FindModelByFileName` / `IDaemonClient.FindSessionByFileName` — resolves an appended entry's session for topic lookup
+- [DONE] `IDaemonClient.EntryAppended` relayed by `InProcDaemonClient` from `ISessionFileService`, same pattern as `TreeChanged`/`ScheduleChanged`
+- [DONE] `TelegramBridgeService` subscribes on `Start()`: role-based prefixes (`USER:`, `⚙️`, none for assistant), skips empty `COMPACTION` entries, chunks over ~4096 chars on newline boundaries, echo-suppresses the `ROLE=USER` entry a `TurnSource.Telegram` turn appends for its own routed message
+
+### P29.2 Bridge as a daemon client (FR.21.10)
+- [DONE] `TelegramBridgeService` constructor swapped from `ISessionRegistry`/`Lazy<ISessionTurnService>`/`ISessionFileService` to `IDaemonClient` (`IDirectoryLabelService`/`IAppSettingsService`/`ITelegramClient` remain direct — stateless utilities outside the daemon domain)
+- [DONE] `AppSettingsModel.TelegramMentionHandle`; `TelegramBridgeService.NotifyAsync` prefixes it onto outbound pings (`notify_user`, scheduled/orchestrated completion)
+- [DONE] `CompositeNotificationService.ShowResult` posts a short completion ping instead of the full assistant text (mirror already streamed it)
+- [DONE] Settings UI: mention-handle field alongside chat ID / allowed-user-IDs (FR.21.7)
+
+### P29.3 Telegram-driven turn control (FR.21.11)
+- [DONE] `/stop` inside a session's own topic calls `IDaemonClient.CancelTurn`
+
+### P29.4 Tests
+- [DONE] `SessionFileServiceTests`, `SessionRegistryTests`, `InProcDaemonClientTests` additions for the new event/lookup
+- [DONE] `TelegramBridgeServiceTests` rewritten onto a fake `IDaemonClient`; new coverage for mirror prefixes/chunking/echo-suppression, mention-ping prefix, and `/stop`
+- [ ] Manual E2E re-run against a real bot/supergroup (extends the Phase 28 checklist) — not yet exercised live
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/VS-MCP-Server_Automation-Approaches-Research.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.

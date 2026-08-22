@@ -12,4 +12,7 @@ public enum TurnSource
 
 	/// <summary>Turn was triggered by a supervisor session via orchestration tools (FR.15).</summary>
 	Orchestrated,
+
+	/// <summary>Turn was triggered by a user reply inside a session's Telegram topic (FR.21.4).</summary>
+	Telegram,
 }

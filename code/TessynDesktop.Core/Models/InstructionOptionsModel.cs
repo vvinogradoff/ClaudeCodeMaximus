@@ -27,4 +27,5 @@ public sealed record InstructionOptionsModel(
 	bool IsAutoDocument,
 	bool IsAgentToolsEnabled,
 	bool IsNewSession,
-	bool IsStreamingMode);
+	bool IsStreamingMode,
+	bool IsTelegramEnabled = false);

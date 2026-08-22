@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Reactive;
 using TessynDesktop.Models;
 using TessynDesktop.Services;
@@ -12,6 +13,7 @@ public sealed class SettingsViewModel : ViewModelBase
 {
 	private readonly IAppSettingsService _appSettings;
 	private readonly IMcpTokenStore _mcpTokenStore;
+	private readonly ITelegramTokenStore _telegramTokenStore;
 	private McpServerRowViewModel? _selectedMcpServer;
 	private string _sessionFilesRoot;
 	private string _claudePath;
@@ -22,6 +24,12 @@ public sealed class SettingsViewModel : ViewModelBase
 	private string _screensaverTimeout;
 	private string _screensaverSlideshowInterval;
 	private bool _notificationsEnabled;
+	private bool _telegramEnabled;
+	private string _telegramChatId;
+	private string _telegramAllowedUserIds;
+	private string _telegramMentionHandle;
+	private string _telegramBotTokenInput = string.Empty;
+	private string _telegramTokenStatus;
 
 	// Color fields for the currently selected theme
 	private string _inputBoxBackground;
@@ -95,6 +103,54 @@ public sealed class SettingsViewModel : ViewModelBase
 		get => _notificationsEnabled;
 		set => this.RaiseAndSetIfChanged(ref _notificationsEnabled, value);
 	}
+
+	/// <summary>Master toggle for the Telegram Notification Bridge (FR.21.7).</summary>
+	public bool TelegramEnabled
+	{
+		get => _telegramEnabled;
+		set => this.RaiseAndSetIfChanged(ref _telegramEnabled, value);
+	}
+
+	/// <summary>Chat ID of the Topics-enabled Telegram supergroup the bridge posts to (FR.21.1).</summary>
+	public string TelegramChatId
+	{
+		get => _telegramChatId;
+		set => this.RaiseAndSetIfChanged(ref _telegramChatId, value);
+	}
+
+	/// <summary>Comma-separated Telegram numeric user IDs authorized to message the bot (FR.21.1).</summary>
+	public string TelegramAllowedUserIds
+	{
+		get => _telegramAllowedUserIds;
+		set => this.RaiseAndSetIfChanged(ref _telegramAllowedUserIds, value);
+	}
+
+	/// <summary>@handle prefixed onto notification pings — never onto mirrored conversation text (FR.21.10).</summary>
+	public string TelegramMentionHandle
+	{
+		get => _telegramMentionHandle;
+		set => this.RaiseAndSetIfChanged(ref _telegramMentionHandle, value);
+	}
+
+	/// <summary>
+	/// Staging field for a newly-entered bot token — never round-tripped from storage (FR.21.6);
+	/// only <see cref="SaveTelegramTokenCommand"/> writes it, immediately, like the MCP registry's
+	/// immediate-persist actions (FR.20.7).
+	/// </summary>
+	public string TelegramBotTokenInput
+	{
+		get => _telegramBotTokenInput;
+		set => this.RaiseAndSetIfChanged(ref _telegramBotTokenInput, value);
+	}
+
+	/// <summary>"Configured" / "Not set" — never shows the token itself.</summary>
+	public string TelegramTokenStatus
+	{
+		get => _telegramTokenStatus;
+		private set => this.RaiseAndSetIfChanged(ref _telegramTokenStatus, value);
+	}
+
+	public ReactiveCommand<Unit, Unit> SaveTelegramTokenCommand { get; }
 
 	public string InputBoxBackground
 	{
@@ -187,10 +243,11 @@ public sealed class SettingsViewModel : ViewModelBase
 		set => this.RaiseAndSetIfChanged(ref _selectedMcpServer, value);
 	}
 
-	public SettingsViewModel(IAppSettingsService appSettings, IMcpTokenStore mcpTokenStore)
+	public SettingsViewModel(IAppSettingsService appSettings, IMcpTokenStore mcpTokenStore, ITelegramTokenStore telegramTokenStore)
 	{
 		_appSettings   = appSettings;
 		_mcpTokenStore = mcpTokenStore;
+		_telegramTokenStore = telegramTokenStore;
 		_sessionFilesRoot = appSettings.Settings.SessionFilesRoot;
 		_claudePath = appSettings.Settings.ClaudePath;
 		_sourceCodesLocation = appSettings.Settings.SourceCodesLocation;
@@ -200,6 +257,11 @@ public sealed class SettingsViewModel : ViewModelBase
 		_screensaverSlideshowInterval = appSettings.Settings.ScreensaverSlideshowInterval.ToString();
 		_isDarkTheme = appSettings.Settings.Theme == "Dark";
 		_notificationsEnabled = appSettings.Settings.NotificationsEnabled;
+		_telegramEnabled = appSettings.Settings.TelegramEnabled;
+		_telegramChatId = appSettings.Settings.TelegramChatId == 0 ? string.Empty : appSettings.Settings.TelegramChatId.ToString();
+		_telegramAllowedUserIds = string.Join(", ", appSettings.Settings.TelegramAllowedUserIds);
+		_telegramMentionHandle = appSettings.Settings.TelegramMentionHandle;
+		_telegramTokenStatus = telegramTokenStore.Load() is null ? "Not set" : "Configured";
 
 		var colors = _isDarkTheme ? appSettings.Settings.DarkColors : appSettings.Settings.LightColors;
 		_inputBoxBackground    = colors.InputBoxBackground;
@@ -216,9 +278,24 @@ public sealed class SettingsViewModel : ViewModelBase
 		_recency60MinBackground = colors.Recency60MinBackground;
 
 		SaveCommand = ReactiveCommand.Create(Save);
+		SaveTelegramTokenCommand = ReactiveCommand.Create(SaveTelegramToken);
 
 		LoadKeyBindings();
 		LoadMcpServers();
+	}
+
+	/// <summary>
+	/// Persists the entered bot token immediately via DPAPI (FR.21.6), independent of the window's
+	/// main Save button — mirrors the MCP registry's immediate-persist actions (FR.20.7).
+	/// </summary>
+	private void SaveTelegramToken()
+	{
+		if (string.IsNullOrWhiteSpace(TelegramBotTokenInput))
+			return;
+
+		_telegramTokenStore.Save(TelegramBotTokenInput.Trim());
+		TelegramBotTokenInput = string.Empty;
+		TelegramTokenStatus = "Configured";
 	}
 
 	private void LoadKeyBindings()
@@ -299,6 +376,15 @@ public sealed class SettingsViewModel : ViewModelBase
 		_appSettings.Settings.ScreensaverTimeout = int.TryParse(_screensaverTimeout, out var st) ? Math.Max(0, st) : 120;
 		_appSettings.Settings.ScreensaverSlideshowInterval = int.TryParse(_screensaverSlideshowInterval, out var si) ? Math.Max(1, si) : 10;
 		_appSettings.Settings.NotificationsEnabled = _notificationsEnabled;
+		_appSettings.Settings.TelegramEnabled = _telegramEnabled;
+		_appSettings.Settings.TelegramChatId = long.TryParse(_telegramChatId, out var chatId) ? chatId : 0;
+		_appSettings.Settings.TelegramAllowedUserIds = _telegramAllowedUserIds
+			.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+			.Select(s => long.TryParse(s, out var id) ? (long?)id : null)
+			.Where(id => id.HasValue)
+			.Select(id => id!.Value)
+			.ToList();
+		_appSettings.Settings.TelegramMentionHandle = _telegramMentionHandle;
 		_appSettings.Settings.Theme = _isDarkTheme ? "Dark" : "Light";
 
 		// Save colors to the appropriate theme

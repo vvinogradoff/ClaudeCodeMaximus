@@ -98,6 +98,49 @@ public sealed class SessionFileServiceTests : IDisposable
 		Assert.Equal("Line one\r\nLine two\r\nLine three", entries[0].Content, ignoreLineEndingDifferences: true);
 	}
 
+	// ── EntryAppended (FR.21.9) ───────────────────────────────────────────────────
+
+	[Fact]
+	public void AppendMessage_RaisesEntryAppended_WithMatchingFileNameAndEntry()
+	{
+		var fileName = _sut.CreateSessionFile();
+		SessionEntryAppendedEventArgs? received = null;
+		_sut.EntryAppended += (_, e) => received = e;
+
+		_sut.AppendMessage(fileName, Constants.SessionFile.RoleUser, "hello");
+
+		Assert.NotNull(received);
+		Assert.Equal(fileName, received!.FileName);
+		Assert.Equal(Constants.SessionFile.RoleUser, received.Entry.Role);
+		Assert.Equal("hello", received.Entry.Content);
+	}
+
+	[Fact]
+	public void AppendCompactionSeparator_RaisesEntryAppended_WithEmptyContent()
+	{
+		var fileName = _sut.CreateSessionFile();
+		SessionEntryAppendedEventArgs? received = null;
+		_sut.EntryAppended += (_, e) => received = e;
+
+		_sut.AppendCompactionSeparator(fileName);
+
+		Assert.NotNull(received);
+		Assert.Equal(Constants.SessionFile.RoleCompaction, received!.Entry.Role);
+		Assert.Equal(string.Empty, received.Entry.Content);
+	}
+
+	[Fact]
+	public void RewriteSessionFile_DoesNotRaiseEntryAppended()
+	{
+		var fileName = _sut.CreateSessionFile();
+		var raised = false;
+		_sut.EntryAppended += (_, _) => raised = true;
+
+		_sut.RewriteSessionFile(fileName, "[2026-01-01 00:00] USER\nbulk\n");
+
+		Assert.False(raised);
+	}
+
 	[Fact]
 	public void SessionFileExists_ReturnsTrueForCreatedFile_FalseForMissing()
 	{

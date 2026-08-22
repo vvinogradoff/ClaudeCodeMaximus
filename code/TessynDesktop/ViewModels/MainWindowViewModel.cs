@@ -30,6 +30,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ISelfUpdateService _selfUpdate;
 	private readonly IAgentMcpServer _mcpServer;
 	private readonly IDaemonClient _daemonClient;
+	private readonly ITelegramBridgeService _telegramBridge;
 	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
@@ -227,6 +228,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		SessionTreeViewModel sessionTree,
 		IAgentMcpServer mcpServer,
 		IDaemonClient daemonClient,
+		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus)
 	{
 		_appSettings      = appSettings;
@@ -242,6 +244,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_selfUpdate       = selfUpdate;
 		_mcpServer        = mcpServer;
 		_daemonClient     = daemonClient;
+		_telegramBridge   = telegramBridge;
 		_sessionStatus    = sessionStatus;
 		SessionTree       = sessionTree;
 		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
@@ -336,7 +339,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _sessionStatus);
+				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _telegramBridge, _sessionStatus);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache[cacheKey] = vm;
@@ -472,7 +475,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private void OpenSettings()
 	{
 		var mcpTokenStore = App.Services.GetRequiredService<IMcpTokenStore>();
-		var vm     = new SettingsViewModel(_appSettings, mcpTokenStore);
+		var telegramTokenStore = App.Services.GetRequiredService<ITelegramTokenStore>();
+		var vm     = new SettingsViewModel(_appSettings, mcpTokenStore, telegramTokenStore);
 		var window = new Views.SettingsWindow { DataContext = vm };
 		window.Closed += (_, _) =>
 		{

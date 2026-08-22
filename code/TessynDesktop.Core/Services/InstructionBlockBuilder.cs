@@ -49,6 +49,11 @@ public static class InstructionBlockBuilder
 		if (options.IsAgentToolsEnabled && options.IsNewSession)
 			lines.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
 
+		// FR.21.3 — same once-per-fresh-session gating as NoWorkflowTool: this is session-level
+		// policy (a tool exists), not per-turn state.
+		if (options.IsAgentToolsEnabled && options.IsTelegramEnabled && options.IsNewSession)
+			lines.AppendLine($"- {Constants.Instructions.TelegramNotifyGuidance}");
+
 		// FR.11.2 — omit the block entirely when there is nothing to say (Auto-Commit silent and
 		// no other toggle active), instead of appending a dangling preamble with no instructions.
 		if (lines.Length == 0)

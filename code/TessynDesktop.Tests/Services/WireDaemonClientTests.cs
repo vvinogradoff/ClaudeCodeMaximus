@@ -22,6 +22,7 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public string? SelectedNodeIdValue { get; set; }
     public SessionNodeModel? FindByNodeIdResult { get; set; }
     public SessionNodeModel? FindByTokenResult { get; set; }
+    public SessionNodeModel? FindByFileNameResult { get; set; }
     public (string directoryLabel, string treePath) LocationResult { get; set; } = ("dir", "path");
     public bool IsRunningResult { get; set; }
     public TurnResultModel RunResult { get; set; } = new(AssistantText: "ok", SessionId: null);
@@ -37,6 +38,7 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public string? LastSetSelectedNodeId { get; private set; }
     public string? LastFindByNodeIdArg { get; private set; }
     public string? LastFindByTokenArg { get; private set; }
+    public string? LastFindByFileNameArg { get; private set; }
     public SessionNodeModel? LastLocationNode { get; private set; }
     public string? LastIsRunningNodeId { get; private set; }
     public string? LastSetRunningNodeId { get; private set; }
@@ -59,9 +61,11 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
 
     public event EventHandler<TreeChangedEventArgs>? TreeChanged;
     public event EventHandler?                       ScheduleChanged;
+    public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 
     public void RaiseTreeChanged(TreeChangedEventArgs e) => TreeChanged?.Invoke(this, e);
     public void RaiseScheduleChanged()                   => ScheduleChanged?.Invoke(this, EventArgs.Empty);
+    public void RaiseEntryAppended(SessionEntryAppendedEventArgs e) => EntryAppended?.Invoke(this, e);
 
     // ── IDaemonClient ──────────────────────────────────────────────────────────
 
@@ -83,6 +87,12 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     {
         LastFindByTokenArg = token;
         return FindByTokenResult;
+    }
+
+    public SessionNodeModel? FindSessionByFileName(string fileName)
+    {
+        LastFindByFileNameArg = fileName;
+        return FindByFileNameResult;
     }
 
     public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session)

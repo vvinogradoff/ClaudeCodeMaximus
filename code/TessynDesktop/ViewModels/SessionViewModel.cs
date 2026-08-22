@@ -367,6 +367,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IClaudeModelService modelService,
 		IAgentMcpServer mcpServer,
 		IDaemonClient daemonClient,
+		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus)
 	{
 		_node         = node;
@@ -389,7 +390,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
 		var composer = new SessionPromptComposer(fileService, appSettings, node);
 		_turn = new TurnController(node, fileService, draftService, processManager, streamingManager, appSettings, mcpServer, daemonClient,
-			sessionStatus, _content, _models, _profiles, composer);
+			telegramBridge, sessionStatus, _content, _models, _profiles, composer);
 		turn = _turn;
 
 		_content.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
