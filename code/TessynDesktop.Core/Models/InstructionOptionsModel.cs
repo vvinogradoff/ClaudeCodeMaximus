@@ -13,8 +13,10 @@ namespace TessynDesktop.Models;
 /// and still re-assert every turn since the user can change them between turns.
 /// <see cref="IsStreamingMode"/> additionally gates the native-scheduling redirect (FR.19.9):
 /// it describes the mode of the spawn this instruction block is being sent to, not any sticky
-/// per-session setting — headless turns (always One-shot Mode, FR.19.11) pass <c>false</c> here
-/// regardless of the target session's own streaming toggle.
+/// per-session setting. A headless turn passes <c>false</c> when it spawns its own one-shot
+/// --resume process (FR.19.11, the common case), or <c>true</c> when it is instead routed into an
+/// already-alive Streaming Session Mode process (FR.19.13) — the value always reflects where the
+/// turn is actually going, not the target session's persisted streaming toggle in isolation.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 /// <param name="IsAutoCommit">

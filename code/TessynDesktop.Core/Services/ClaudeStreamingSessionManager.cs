@@ -20,6 +20,8 @@ public sealed class ClaudeStreamingSessionManager : IClaudeStreamingSessionManag
 		public required Action<ClaudeStreamEvent> OnEvent;
 		public readonly object Lock = new();
 		public TaskCompletionSource<bool>? PendingTurn;
+		/// <summary>Additive, per-turn observer — see <see cref="IClaudeStreamingSessionManager.SendTurnAsync"/>.</summary>
+		public Action<ClaudeStreamEvent>? TurnObserver;
 	}
 
 	private readonly ClaudeProcessLauncher _launcher;
@@ -68,13 +70,13 @@ public sealed class ClaudeStreamingSessionManager : IClaudeStreamingSessionManag
 		return true;
 	}
 
-	public async Task SendTurnAsync(string nodeId, string userMessage, CancellationToken cancellationToken)
+	public async Task SendTurnAsync(string nodeId, string userMessage, CancellationToken cancellationToken, Action<ClaudeStreamEvent>? onTurnEvent = null)
 	{
 		if (!_handles.TryGetValue(nodeId, out var handle))
 			throw new InvalidOperationException($"No streaming process is alive for node {nodeId}");
 
 		var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-		lock (handle.Lock) handle.PendingTurn = tcs;
+		lock (handle.Lock) { handle.PendingTurn = tcs; handle.TurnObserver = onTurnEvent; }
 
 		var line = BuildStreamInputLine(userMessage);
 		_log.Debug("Writing streaming turn to node {NodeId} stdin ({Length} chars)", nodeId, userMessage.Length);
@@ -130,10 +132,14 @@ public sealed class ClaudeStreamingSessionManager : IClaudeStreamingSessionManag
 
 				handle.OnEvent(evt);
 
+				Action<ClaudeStreamEvent>? observer;
+				lock (handle.Lock) observer = handle.TurnObserver;
+				observer?.Invoke(evt);
+
 				if (evt.Type == "result")
 				{
 					TaskCompletionSource<bool>? pending;
-					lock (handle.Lock) { pending = handle.PendingTurn; handle.PendingTurn = null; }
+					lock (handle.Lock) { pending = handle.PendingTurn; handle.PendingTurn = null; handle.TurnObserver = null; }
 					pending?.TrySetResult(true);
 				}
 			}

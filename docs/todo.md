@@ -764,6 +764,20 @@ Reworks the Telegram Bridge from a notification-only channel into a full mirror 
 
 ---
 
+## Phase 30 — Streaming/Headless Context Divergence Fix (FR.19.13)
+
+Confirmed live bug (reported by the Architect against the "LoRA training of LLM" session, 2026-08-26): a headless turn (Telegram/scheduled/orchestrated) against a session with an alive Streaming Session Mode process used to spawn a competing one-shot `--resume` process, silently diverging from the persistent process's own in-memory context — see `docs/issues/Streaming-Headless-Context-Divergence.md` for the full incident writeup.
+
+- [DONE] `IClaudeStreamingSessionManager.SendTurnAsync` gains an optional, additive `onTurnEvent` observer param — delivered alongside (not instead of) the process's existing primary `onEvent` callback, so a second caller can observe a turn's outcome without disturbing the UI's own file/UI writes (`ClaudeStreamingSessionManager`'s `Handle.TurnObserver`)
+- [DONE] `SessionTurnService.RunTurnAsync` checks `IClaudeStreamingSessionManager.IsAlive(nodeId)` before the one-shot path; when alive, routes via the new `RunTurnViaStreamingAsync` (sends through the persistent process, observes events only to build `TurnResultModel`, does not append assistant/system content itself)
+- [DONE] `InstructionOptionsModel`/`SessionTurnService` doc comments updated to match (`IsStreamingMode: true` on the redirected path)
+- [DONE] `docs/requirements.md` FR.19.11 rewritten (no longer describes headless-vs-streaming as an unsolved limitation), new FR.19.13 added; `docs/glossary.md` "Persistent Session Process" updated + new "Streaming Redirect" term
+- [DONE] `docs/issues/Streaming-Headless-Context-Divergence.md` — full investigation/resolution writeup (first entry in `/docs/issues/`)
+- [DONE] `SessionTurnServiceTests.cs` (new) — one-shot fallback baseline + streaming-redirect coverage (routes correctly, does not double-append assistant content, propagates errors/tokens, sends the augmented prompt, running-state set/unset)
+- [ ] Manual re-verification against the actual "LoRA training of LLM" session (or any Streaming Session Mode session) — send a Telegram message while a desktop tab is open on the same session, confirm the next desktop-typed turn has full context — not yet exercised live post-fix
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/VS-MCP-Server_Automation-Approaches-Research.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.

@@ -15,15 +15,16 @@ public sealed class SessionTurnService : ISessionTurnService
 {
 	private static readonly ILogger _log = Log.ForContext<SessionTurnService>();
 
-	private readonly IClaudeProcessManager        _processManager;
-	private readonly ISessionFileService          _fileService;
-	private readonly IAppSettingsService          _appSettings;
-	private readonly IClaudeProfileService        _profileService;
-	private readonly Lazy<IAgentMcpServer>        _mcpServer;
-	private readonly ISessionRegistry             _registry;
-	private readonly IClaudeSessionStatusService  _sessionStatus;
-	private readonly IClaudeModelService          _modelService;
-	private readonly Lazy<ITelegramBridgeService> _telegramBridge;
+	private readonly IClaudeProcessManager           _processManager;
+	private readonly ISessionFileService             _fileService;
+	private readonly IAppSettingsService             _appSettings;
+	private readonly IClaudeProfileService           _profileService;
+	private readonly Lazy<IAgentMcpServer>           _mcpServer;
+	private readonly ISessionRegistry                _registry;
+	private readonly IClaudeSessionStatusService     _sessionStatus;
+	private readonly IClaudeModelService             _modelService;
+	private readonly Lazy<ITelegramBridgeService>    _telegramBridge;
+	private readonly IClaudeStreamingSessionManager  _streamingManager;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
 	private readonly ConcurrentDictionary<string, SemaphoreSlim> _turnLocks = new();
@@ -40,17 +41,19 @@ public sealed class SessionTurnService : ISessionTurnService
 		ISessionRegistry registry,
 		IClaudeSessionStatusService sessionStatus,
 		IClaudeModelService modelService,
-		Lazy<ITelegramBridgeService> telegramBridge)
+		Lazy<ITelegramBridgeService> telegramBridge,
+		IClaudeStreamingSessionManager streamingManager)
 	{
-		_processManager = processManager;
-		_fileService    = fileService;
-		_appSettings    = appSettings;
-		_profileService = profileService;
-		_mcpServer      = mcpServer;
-		_registry       = registry;
-		_sessionStatus  = sessionStatus;
-		_modelService   = modelService;
-		_telegramBridge = telegramBridge;
+		_processManager   = processManager;
+		_fileService      = fileService;
+		_appSettings      = appSettings;
+		_profileService   = profileService;
+		_mcpServer        = mcpServer;
+		_registry         = registry;
+		_sessionStatus    = sessionStatus;
+		_modelService     = modelService;
+		_telegramBridge   = telegramBridge;
+		_streamingManager = streamingManager;
 	}
 
 	public SemaphoreSlim GetTurnLock(string nodeId) =>
@@ -88,6 +91,21 @@ public sealed class SessionTurnService : ISessionTurnService
 
 		try
 		{
+			// Write clean prompt (without instruction block) to the session file. Common to both
+			// branches below — the streaming branch needs it recorded here too, since (unlike the
+			// interactive desktop path) nothing else writes the user's own message for a headless turn.
+			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt);
+
+			// FR.19.13 — if a Streaming Session Mode process is already alive for this node (started
+			// by the interactive desktop path), route this headless turn into it instead of spawning
+			// a competing one-shot --resume process against the same ClaudeSessionId. Two independent
+			// processes touching the same session caused a confirmed bug: the one-shot process reads
+			// and extends the on-disk JSONL, but the already-running persistent process has no way to
+			// notice — its own in-memory context silently falls behind, so its next answer looks like
+			// it "forgot" the headless-sourced exchange. See docs/issues/Streaming-Headless-Context-Divergence.md.
+			if (_streamingManager.IsAlive(node.NodeId))
+				return await RunTurnViaStreamingAsync(node, prompt, ct);
+
 			var profileConfigDir = ResolveProfileConfigDir(node);
 
 			// Resolve effective model for this session (FR.16.5 bug fix):
@@ -108,9 +126,6 @@ public sealed class SessionTurnService : ISessionTurnService
 				? await _mcpServer.Value.EnsureConfigFileAsync(node.NodeId, node.AgentToken)
 				: null;
 
-			// Write clean prompt (without instruction block) to the session file.
-			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt);
-
 			// Cross-profile session adoption (FR.11.13): before validating resumability, try to
 			// locate the session's JSONL under the resolved profile and, if it's actually sitting
 			// under a different profile, move it into place so --resume works there natively.
@@ -129,9 +144,9 @@ public sealed class SessionTurnService : ISessionTurnService
 			// evaluated here (after the resumability check above) so the tool-usage bans re-inject
 			// whenever a fresh claude process is actually about to start — including a context reset —
 			// not just on the session's very first-ever turn.
-			// IsStreamingMode is always false here — headless/scheduled/orchestrated turns always run
-			// via the one-shot --resume path regardless of the target session's own streaming toggle
-			// (FR.19.11), so the instruction block should describe this spawn's actual (one-shot) mode.
+			// IsStreamingMode is false here — this is the one-shot --resume branch, reached only when
+			// no Streaming Session Mode process is alive for this node (FR.19.11/19.13); when one is
+			// alive, RunTurnViaStreamingAsync (above) handles the turn instead, with IsStreamingMode true.
 			var options          = new InstructionOptionsModel(
 				node.IsAutoCommit, false, node.IsAutoDocument,
 				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: false,
@@ -193,6 +208,55 @@ public sealed class SessionTurnService : ISessionTurnService
 
 			_registry.SetSessionRunning(node.NodeId, false);
 		}
+	}
+
+	/// <summary>
+	/// Routes a headless turn (scheduler/orchestration/Telegram) into an already-alive Streaming
+	/// Session Mode process instead of a competing one-shot --resume process (FR.19.13). Deliberately
+	/// does NOT write the assistant/system output to the session file or touch node.ClaudeSessionId
+	/// here — the process's primary event callback (bound by the SessionViewModel/TurnController that
+	/// started it and keeps it alive for as long as the session node exists) already does both for
+	/// every event on this process, exactly as if the message had been typed on the desktop. This
+	/// method only observes the same events, additively, to build the TurnResultModel this headless
+	/// caller needs to return — see IClaudeStreamingSessionManager.SendTurnAsync's onTurnEvent param.
+	/// </summary>
+	private async Task<TurnResultModel> RunTurnViaStreamingAsync(SessionNodeModel node, string prompt, CancellationToken ct)
+	{
+		var options = new InstructionOptionsModel(
+			node.IsAutoCommit, false, node.IsAutoDocument,
+			_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: true,
+			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled);
+		var augmentedPrompt = prompt + InstructionBlockBuilder.Build(options);
+
+		var resultText       = new StringBuilder();
+		var isError          = false;
+		string? errorMessage = null;
+		int inputTokens = 0, outputTokens = 0;
+		double costUsd  = 0;
+
+		void ObserveEvent(ClaudeStreamEvent evt)
+		{
+			switch (evt.Type)
+			{
+				case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
+					resultText.Append(evt.Content);
+					break;
+				case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
+					isError      = true;
+					errorMessage = evt.Content;
+					break;
+				case "result" when !evt.IsError:
+					inputTokens  = evt.InputTokens;
+					outputTokens = evt.OutputTokens;
+					costUsd      = evt.CostUsd;
+					break;
+			}
+		}
+
+		await _streamingManager.SendTurnAsync(node.NodeId, augmentedPrompt, ct, ObserveEvent);
+
+		return new TurnResultModel(resultText.ToString(), node.ClaudeSessionId, isError, errorMessage,
+		                           inputTokens, outputTokens, costUsd);
 	}
 
 	private void HandleEvent(

@@ -33,7 +33,15 @@ public interface IClaudeStreamingSessionManager
 	/// background-task notification firing between turns) arriving before this turn's own result
 	/// is a known race in this v1 implementation; it is not otherwise guarded against.
 	/// </summary>
-	Task SendTurnAsync(string nodeId, string userMessage, CancellationToken cancellationToken);
+	/// <param name="onTurnEvent">
+	/// Optional, additive observer scoped to just this turn — every event delivered to it is also
+	/// delivered to the process's primary <c>onEvent</c> callback (bound via <see cref="EnsureStarted"/>)
+	/// unchanged; this does not rebind or replace it. Lets a second caller (e.g. a headless turn
+	/// routed here because a process happens to already be alive — see FR.19.13) observe the turn's
+	/// outcome (content, tokens, errors) to build its own return value, without disturbing whichever
+	/// UI is already bound as the primary callback and already owns file/UI writes for this process.
+	/// </param>
+	Task SendTurnAsync(string nodeId, string userMessage, CancellationToken cancellationToken, Action<ClaudeStreamEvent>? onTurnEvent = null);
 
 	/// <summary>True when a streaming process is currently alive for this node.</summary>
 	bool IsAlive(string nodeId);
