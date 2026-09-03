@@ -190,15 +190,15 @@ Subsequent messages continue after the separator. The full pre-compaction histor
 
 ## Non-Functional Requirements
 
-**NFR.1 — Cross-platform:** Runs on Windows, macOS, and Linux. Platform-specific code (path resolution, process launching, app data directory) is isolated behind interfaces.
+**NR.1 — Cross-platform:** Runs on Windows, macOS, and Linux. Platform-specific code (path resolution, process launching, app data directory) is isolated behind interfaces.
 
-**NFR.2 — Performance:** Session tree is responsive for up to 500 sessions. Search via full file scan is acceptable for v1; may be slow on large sets.
+**NR.2 — Performance:** Session tree is responsive for up to 500 sessions. Search via full file scan is acceptable for v1; may be slow on large sets.
 
-**NFR.3 — Durability:** Session file appends are flushed immediately. `appsettings.json` is written atomically.
+**NR.3 — Durability:** Session file appends are flushed immediately. `appsettings.json` is written atomically.
 
-**NFR.4 — Architecture:** MVVM with Avalonia + ReactiveUI. One ViewModel per significant view. Models and services have no UI dependencies.
+**NR.4 — Architecture:** MVVM with Avalonia + ReactiveUI. One ViewModel per significant view. Models and services have no UI dependencies.
 
-**NFR.5 — Testability:** Session file I/O, tree persistence, and process management are behind interfaces; unit tests require no real `claude` process or real filesystem.
+**NR.5 — Testability:** Session file I/O, tree persistence, and process management are behind interfaces; unit tests require no real `claude` process or real filesystem.
 
 ---
 
@@ -477,7 +477,7 @@ Profile authentication (`CLAUDE_CONFIG_DIR`) and HTTPS proxy settings are **not*
 
 **Profile actions flyout:** Re-authenticate, Remove, Rename, and Delete (FR.12.17–12.19) live in a flyout `Popup`, not directly in the command bar — they were crowding it. The **"Profile:"** label is a toggle (`Profile: ▾`); clicking it opens a small popup below the label containing the (up to four) applicable icon buttons, sized compactly (`Padding="4,2"`). The popup closes when the label is clicked again (no click-outside light-dismiss, to avoid the toggle's checked state desyncing from the popup's open state — mirrors the existing `AutocompletePopup` pattern elsewhere in `SessionView.axaml`).
 
-**FR.12.17 — Re-authenticate button:** When `HasAuthError` is true, a **key icon (🔑)** button appears in the profile actions flyout. Clicking it re-runs the same interactive auth login flow used for profile creation (FR.12.7), targeting the **currently selected profile's** config directory (or no `CLAUDE_CONFIG_DIR` override, if Default is selected). On success (`claude auth status` returns an email), `HasAuthError` is cleared and a confirmation message is appended to the session. On failure/cancellation, `HasAuthError` remains set and a failure message is appended. (Currently shown unconditionally rather than gated on `HasAuthError`, per an explicit interim request — see ISSUE-004.)
+**FR.12.17 — Re-authenticate button:** When `HasAuthError` is true, a **key icon (🔑)** button appears in the profile actions flyout. Clicking it re-runs the same interactive auth login flow used for profile creation (FR.12.7), targeting the **currently selected profile's** config directory (or no `CLAUDE_CONFIG_DIR` override, if Default is selected). On success (`claude auth status` returns an email), `HasAuthError` is cleared and a confirmation message is appended to the session. On failure/cancellation, `HasAuthError` remains set and a failure message is appended. (Currently shown unconditionally rather than gated on `HasAuthError`, per an explicit interim request — see ISSUE.004.)
 
 **FR.12.18 — Remove profile button:** When `HasAuthError` is true **and** a non-Default profile is selected, a **✕** button appears in the flyout alongside Re-authenticate. Clicking it asks for confirmation (destination directory is preserved, not deleted — see below), then:
 1. Removes the profile's entry from `AppSettingsModel.Profiles` (the app no longer lists or selects it).
@@ -794,7 +794,7 @@ By default every turn spawns a fresh, one-shot `claude -p` process that reads on
 
 **FR.19.12 — Compaction and mid-run corrections unaffected:** Auto-Compact (FR.11.6) and mid-run toggle corrections (FR.11.12) continue to use independent, stateless one-shot `claude` calls (`sessionId: null`) regardless of the session's Streaming Session Mode setting — they are not routed through the persistent streaming process.
 
-**FR.19.13 — Headless turns redirect into an already-alive streaming process (fixes a confirmed context-divergence bug):** Before falling back to FR.19.11's one-shot path, `SessionTurnService.RunTurnAsync` checks `IClaudeStreamingSessionManager.IsAlive(nodeId)`; if a Streaming Session Mode process is already alive for the target session, the turn is written to that process's open stdin (`SendTurnAsync`) instead of spawning a competing one-shot `--resume` process against the same `ClaudeSessionId`. This closes the gap FR.19.11 originally left open as an "accepted v1 limitation": a one-shot `--resume` process reads and extends the session's on-disk JSONL, but an already-running persistent process has no mechanism to notice that external change — its own in-memory conversation state silently diverges, so its next answer reads as if it "forgot" the headless-sourced exchange, even though the exchange is correctly present in both the on-disk JSONL and the Tessyn session file. Confirmed via live reproduction through the Telegram bridge; full incident writeup and evidence trail in `docs/issues/Streaming-Headless-Context-Divergence.md`.
+**FR.19.13 — Headless turns redirect into an already-alive streaming process (fixes a confirmed context-divergence bug):** Before falling back to FR.19.11's one-shot path, `SessionTurnService.RunTurnAsync` checks `IClaudeStreamingSessionManager.IsAlive(nodeId)`; if a Streaming Session Mode process is already alive for the target session, the turn is written to that process's open stdin (`SendTurnAsync`) instead of spawning a competing one-shot `--resume` process against the same `ClaudeSessionId`. This closes the gap FR.19.11 originally left open as an "accepted v1 limitation": a one-shot `--resume` process reads and extends the session's on-disk JSONL, but an already-running persistent process has no mechanism to notice that external change — its own in-memory conversation state silently diverges, so its next answer reads as if it "forgot" the headless-sourced exchange, even though the exchange is correctly present in both the on-disk JSONL and the Tessyn session file. Confirmed via live reproduction through the Telegram bridge; full incident writeup and evidence trail in `docs/issues/ISSUE.006.streaming-headless-context-divergence.md`.
 - **Result plumbing without touching file/UI writes:** `IClaudeStreamingSessionManager.SendTurnAsync` gains an optional, additive `onTurnEvent` observer parameter — delivered every event for just this turn, alongside (not instead of) the process's existing primary `onEvent` callback (bound by whichever `TurnController` started and keeps the process alive). `SessionTurnService` uses this purely to build the `TurnResultModel` (assistant text, tokens, error state) its own caller needs; the primary callback remains solely responsible for appending assistant/system content to the session file and updating the UI, exactly as if the message had been typed on the desktop — this is what avoids a double-write.
 - **Scope:** since the check is on `SessionTurnService.RunTurnAsync` itself, this applies uniformly to Scheduled, Orchestrated, and Telegram-routed turns — the bug was never Telegram-specific, only surfaced there first because Telegram is the headless source most likely to interleave with an open desktop tab in Streaming Session Mode.
 - **Not covered:** the streaming process's spawn-time arguments (model, effort, MCP config) cannot be changed by a redirected headless turn — it always runs with whatever the process was started with. The assistant/system file entries for a redirected turn also do not carry `model=`/`effort=` metadata, since that stamping is owned by `TurnController`'s own per-turn pending-fields plumbing (UI-layer state), which a headless caller in Core has no access to and does not attempt to replicate — a minor, accepted cosmetic gap, not a functional one.
@@ -906,6 +906,22 @@ The bot token itself is **not** in `AppSettingsModel` — see FR.21.6.
 4. Get the group's chat ID (negative number, e.g. `-100xxxxxxxxxx`) — e.g. temporarily add `@RawDataBot` (or `@getidsbot`) to the group, read the chat ID it posts, then remove it; or send any message in the group and inspect the `getUpdates` response (`https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser) for `"chat":{"id":-100xxxxxxxxxx,...}`.
 5. Get your own numeric Telegram user ID (message `@userinfobot` directly — it replies with your ID).
 6. Enter the bot token, chat ID, and your user ID into Tessyn's Settings → Telegram panel.
+
+---
+
+### FR.22 — Session Completion Sound
+
+A per-session, opt-in audible cue for the interactive command bar, independent of the desktop toast/Telegram channels (FR.16, FR.21), which only fire for scheduled/orchestrated (headless) turns.
+
+**FR.22.1 — Trigger point:** The sound fires when `TurnController.SendAsyncCore` clears the "Claude is thinking…" state on natural completion of the last concurrent send (the same point that stops the thinking timer and sets `IsBusy`/`IsRunning` false) — for both One-shot Mode (the spawned process exits) and Streaming Session Mode (`SendViaStreamingAsync` returns on the result event). It does not fire when the turn ends via user-initiated Stop (`OperationCanceledException` path) or any other non-natural termination.
+
+**FR.22.2 — Per-session toggle:** `SessionNodeModel.PlayCompletionSound` (bool, default `true`), persisted like `IsStreamingMode`. Exposed via a bell-glyph (🔔) `ToggleButton` in the command bar, to the right of the Streaming Session Mode toggle. To fit three toggle buttons (`--chrome`, Streaming, Completion Sound) in the available space, all three are rendered as fixed-size squares (26×26, no padding) with reduced inter-button spacing, replacing their previous wider `Padding="7,2"` rendering.
+
+**FR.22.3 — Per-session throttle:** No more than one sound per session within a configurable window (`AppSettingsModel.SessionCompletionSoundThrottleSeconds`, default 180 = 3 minutes). Enforced by `ISessionSoundService` (app-lifetime singleton) tracking last-played timestamp per `NodeId` in memory — a session that finishes multiple turns in quick succession (e.g. rapid follow-up prompts) is not spammed with sounds; a session that has been quiet for longer than the window is not blocked from playing.
+
+**FR.22.4 — Sound source and playback:** `AppSettingsModel.SessionCompletionSoundFile` (string, default `%WINDIR%\Media\Windows Notify.wav`) names a `.wav` file. `ISessionSoundService` plays it via the Win32 `winmm.dll` `PlaySound` API (`SND_ASYNC | SND_FILENAME`) — chosen over `System.Media.SoundPlayer` or a NuGet audio package to avoid a project-reference change. Playback failures (missing file, no audio device) are logged and swallowed; they never fail or delay a turn.
+
+**FR.22.5 — Sound picker:** Settings → Notifications gains a "Session completion sound" control group: a dropdown populated by `ISessionSoundService.GetAvailableSounds()` (every `.wav` under `%WINDIR%\Media\`, i.e. the Windows default sound library), a **Test** button that plays the selected sound immediately (bypassing the throttle), and a throttle-seconds numeric field bound to `SessionCompletionSoundThrottleSeconds`.
 
 ---
 

@@ -34,6 +34,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private readonly IDaemonClient _daemonClient;
 	private readonly ITelegramBridgeService _telegramBridge;
 	private readonly IClaudeSessionStatusService _sessionStatus;
+	private readonly ISessionSoundService _soundService;
 	private readonly SessionContentViewModel _content;
 	private readonly ModelSelectionController _models;
 	private readonly ProfileController _profiles;
@@ -54,6 +55,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private bool _isNewBranch;
 	private bool _isAutoCompact;
 	private bool _midRunAutoCompactState;
+	private bool _anyCancelledInBatch;
 
 	public bool IsBusy
 	{
@@ -116,6 +118,23 @@ public sealed class TurnController : ReactiveObject, IDisposable
 
 	/// <summary>Raised when the user tries to turn Streaming Session Mode off while its process is alive (FR.19.7).</summary>
 	public event Action? StreamingDisableConfirmationRequested;
+
+	/// <summary>
+	/// Session Completion Sound toggle (FR.22.2): sticky, persisted on the session node, default on.
+	/// When true, <see cref="ISessionSoundService.PlayCompletionSound"/> fires each time this
+	/// session's "Claude is thinking…" state clears on natural completion (not on Stop).
+	/// </summary>
+	public bool PlayCompletionSound
+	{
+		get => _node.Model.PlayCompletionSound;
+		set
+		{
+			if (value == _node.Model.PlayCompletionSound) return;
+			_node.Model.PlayCompletionSound = value;
+			_appSettings.Save();
+			this.RaisePropertyChanged();
+		}
+	}
 
 	/// <summary>Called by the View after the user confirms turning Streaming Session Mode off (FR.19.7). Kills the process and applies the toggle.</summary>
 	public void ConfirmStreamingModeOff()
@@ -221,6 +240,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		IDaemonClient daemonClient,
 		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
+		ISessionSoundService soundService,
 		SessionContentViewModel content,
 		ModelSelectionController models,
 		ProfileController profiles,
@@ -236,6 +256,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_daemonClient     = daemonClient;
 		_telegramBridge   = telegramBridge;
 		_sessionStatus    = sessionStatus;
+		_soundService     = soundService;
 		_content          = content;
 		_models           = models;
 		_profiles         = profiles;
@@ -364,6 +385,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		{
 			_thinkingStartedAt = DateTimeOffset.UtcNow;
 			ThinkingDuration = "0:00";
+			_anyCancelledInBatch = false;
 			_thinkingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
 			_thinkingTimer.Tick += OnThinkingTimerTick;
 			_thinkingTimer.Start();
@@ -523,6 +545,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		}
 		catch (OperationCanceledException)
 		{
+			_anyCancelledInBatch = true;
 			_log.Information("Send interrupted by user for session {FileName}", _node.FileName);
 			_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, "[Interrupted by user]");
 			_content.Messages.Add(new MessageEntryViewModel
@@ -551,6 +574,10 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				ThinkingDuration = string.Empty;
 				IsBusy = false;
 				_node.IsRunning = false;
+
+				// FR.22.1: only on natural completion of the whole batch, never after user Stop.
+				if (!_anyCancelledInBatch && _node.Model.PlayCompletionSound)
+					_soundService.PlayCompletionSound(_node.Model.NodeId);
 			}
 		}
 	}

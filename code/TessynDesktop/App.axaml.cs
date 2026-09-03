@@ -149,6 +149,7 @@ public partial class App : Application
 		services.AddSingleton<ISkillProvisioningService, SkillProvisioningService>();
 		services.AddSingleton<WindowsNotificationService>();
 		services.AddSingleton<INotificationService, CompositeNotificationService>();
+		services.AddSingleton<ISessionSoundService, SessionSoundService>();
 		services.AddSingleton(sp => new Lazy<ISessionTurnService>(sp.GetRequiredService<ISessionTurnService>));
 		services.AddSingleton(sp => new Lazy<IAgentMcpServer>(sp.GetRequiredService<IAgentMcpServer>));
 		services.AddSingleton(sp => new Lazy<ISchedulerService>(sp.GetRequiredService<ISchedulerService>));

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace TessynDesktop.Models;
 
@@ -155,4 +157,19 @@ public sealed class AppSettingsModel
 	/// the user on every line.
 	/// </summary>
 	public string TelegramMentionHandle { get; set; } = string.Empty;
+
+	/// <summary>
+	/// Path to the .wav file played by the Session Completion Sound (FR.22.4). Default is a
+	/// stock Windows sound; any file under the Windows sound library (or elsewhere) may be chosen.
+	/// </summary>
+	public string SessionCompletionSoundFile { get; set; } = Path.Combine(
+		Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+		Constants.SessionSound.SoundLibrarySubfolder,
+		Constants.SessionSound.DefaultSoundFileName);
+
+	/// <summary>
+	/// Minimum seconds between Session Completion Sound plays for the same session (FR.22.3).
+	/// Default 180 (3 minutes).
+	/// </summary>
+	public int SessionCompletionSoundThrottleSeconds { get; set; } = Constants.SessionSound.DefaultThrottleSeconds;
 }

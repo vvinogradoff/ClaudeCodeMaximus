@@ -350,6 +350,22 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string Aumid = "Duxre.TessynDesktop";
 	}
 
+	/// <summary>Constants for the Session Completion Sound (FR.22).</summary>
+	public static class SessionSound
+	{
+		/// <summary>Subfolder under the Windows install directory holding the stock sound library.</summary>
+		public const string SoundLibrarySubfolder = "Media";
+
+		/// <summary>File name (within <see cref="SoundLibrarySubfolder"/>) of the default completion sound.</summary>
+		public const string DefaultSoundFileName = "Windows Notify.wav";
+
+		/// <summary>Default per-session throttle window (3 minutes).</summary>
+		public const int DefaultThrottleSeconds = 180;
+
+		/// <summary>Search pattern used to enumerate the sound library.</summary>
+		public const string SoundFileSearchPattern = "*.wav";
+	}
+
 	/// <summary>Constants for plan-usage polling via the Anthropic OAuth usage endpoint (FR.18).</summary>
 	public static class Usage
 	{

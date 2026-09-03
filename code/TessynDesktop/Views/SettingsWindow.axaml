@@ -69,6 +69,22 @@
                                       IsChecked="{Binding NotificationsEnabled}"/>
                             <TextBlock Text="A Windows toast appears when a scheduled or orchestrated turn finishes and the session is not currently open."
                                        FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Session completion sound" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableCompletionSounds}"
+                                          SelectedItem="{Binding SessionCompletionSoundFile}"/>
+                                <Button Grid.Column="1" Content="Test" Margin="4,0,0,0"
+                                        Command="{Binding TestCompletionSoundCommand}"/>
+                            </Grid>
+                            <Grid ColumnDefinitions="120,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding SessionCompletionSoundThrottleSeconds}"
+                                         Watermark="180"/>
+                                <TextBlock Grid.Column="1" Text="seconds between sounds (per session)" VerticalAlignment="Center"
+                                           Margin="8,0,0,0" Opacity="0.6"/>
+                            </Grid>
+                            <TextBlock Text="Plays in the command bar's 🔔 toggle (per session, default on) when a turn finishes thinking naturally — not when stopped."
+                                       FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
                         </StackPanel>
 
                         <Separator Margin="0,4"/>

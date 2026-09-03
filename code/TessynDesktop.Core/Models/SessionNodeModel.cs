@@ -116,4 +116,11 @@ public sealed class SessionNodeModel
 	/// orchestrated) turns always ignore this and run one-shot (FR.19.11).
 	/// </summary>
 	public bool IsStreamingMode { get; set; }
+
+	/// <summary>
+	/// Session Completion Sound toggle (FR.22.2): when <c>true</c> (the default), an audible cue
+	/// plays when this session's "Claude is thinking…" state clears on natural turn completion
+	/// (not on user-initiated Stop). Sticky and persisted like <see cref="IsStreamingMode"/>.
+	/// </summary>
+	public bool PlayCompletionSound { get; set; } = true;
 }

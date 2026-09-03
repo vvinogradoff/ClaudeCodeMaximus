@@ -32,6 +32,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IDaemonClient _daemonClient;
 	private readonly ITelegramBridgeService _telegramBridge;
 	private readonly IClaudeSessionStatusService _sessionStatus;
+	private readonly ISessionSoundService _soundService;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
@@ -229,7 +230,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IAgentMcpServer mcpServer,
 		IDaemonClient daemonClient,
 		ITelegramBridgeService telegramBridge,
-		IClaudeSessionStatusService sessionStatus)
+		IClaudeSessionStatusService sessionStatus,
+		ISessionSoundService soundService)
 	{
 		_appSettings      = appSettings;
 		_fileService      = fileService;
@@ -246,6 +248,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_daemonClient     = daemonClient;
 		_telegramBridge   = telegramBridge;
 		_sessionStatus    = sessionStatus;
+		_soundService     = soundService;
 		SessionTree       = sessionTree;
 		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
@@ -339,7 +342,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _telegramBridge, _sessionStatus);
+				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _telegramBridge, _sessionStatus, _soundService);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache[cacheKey] = vm;
@@ -476,7 +479,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	{
 		var mcpTokenStore = App.Services.GetRequiredService<IMcpTokenStore>();
 		var telegramTokenStore = App.Services.GetRequiredService<ITelegramTokenStore>();
-		var vm     = new SettingsViewModel(_appSettings, mcpTokenStore, telegramTokenStore);
+		var vm     = new SettingsViewModel(_appSettings, mcpTokenStore, telegramTokenStore, _soundService);
 		var window = new Views.SettingsWindow { DataContext = vm };
 		window.Closed += (_, _) =>
 		{

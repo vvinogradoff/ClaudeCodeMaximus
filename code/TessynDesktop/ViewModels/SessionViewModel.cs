@@ -310,6 +310,13 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>Called by the View after the user confirms turning Streaming Session Mode off (FR.19.7).</summary>
 	public void ConfirmStreamingModeOff() => _turn.ConfirmStreamingModeOff();
 
+	/// <summary>Session Completion Sound toggle (FR.22.2). Sticky, persisted, default on.</summary>
+	public bool PlayCompletionSound
+	{
+		get => _turn.PlayCompletionSound;
+		set => _turn.PlayCompletionSound = value;
+	}
+
 	/// <summary>Entries for the profile selector (Default, stored profiles, "New..."). Rebuilt when profiles change.</summary>
 	public ObservableCollection<ProfileListItemModel> AvailableProfiles => _profiles.AvailableProfiles;
 
@@ -368,7 +375,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IAgentMcpServer mcpServer,
 		IDaemonClient daemonClient,
 		ITelegramBridgeService telegramBridge,
-		IClaudeSessionStatusService sessionStatus)
+		IClaudeSessionStatusService sessionStatus,
+		ISessionSoundService soundService)
 	{
 		_node         = node;
 		_fileService  = fileService;
@@ -390,7 +398,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
 		var composer = new SessionPromptComposer(fileService, appSettings, node);
 		_turn = new TurnController(node, fileService, draftService, processManager, streamingManager, appSettings, mcpServer, daemonClient,
-			telegramBridge, sessionStatus, _content, _models, _profiles, composer);
+			telegramBridge, sessionStatus, soundService, _content, _models, _profiles, composer);
 		turn = _turn;
 
 		_content.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);

@@ -14,6 +14,7 @@ public sealed class SettingsViewModel : ViewModelBase
 	private readonly IAppSettingsService _appSettings;
 	private readonly IMcpTokenStore _mcpTokenStore;
 	private readonly ITelegramTokenStore _telegramTokenStore;
+	private readonly ISessionSoundService _soundService;
 	private McpServerRowViewModel? _selectedMcpServer;
 	private string _sessionFilesRoot;
 	private string _claudePath;
@@ -24,6 +25,8 @@ public sealed class SettingsViewModel : ViewModelBase
 	private string _screensaverTimeout;
 	private string _screensaverSlideshowInterval;
 	private bool _notificationsEnabled;
+	private string _sessionCompletionSoundFile;
+	private string _sessionCompletionSoundThrottleSeconds;
 	private bool _telegramEnabled;
 	private string _telegramChatId;
 	private string _telegramAllowedUserIds;
@@ -103,6 +106,25 @@ public sealed class SettingsViewModel : ViewModelBase
 		get => _notificationsEnabled;
 		set => this.RaiseAndSetIfChanged(ref _notificationsEnabled, value);
 	}
+
+	/// <summary>Every .wav under the Windows sound library, for the Session Completion Sound picker (FR.22.5).</summary>
+	public ObservableCollection<string> AvailableCompletionSounds { get; } = [];
+
+	/// <summary>Selected .wav path played by the Session Completion Sound (FR.22.4).</summary>
+	public string SessionCompletionSoundFile
+	{
+		get => _sessionCompletionSoundFile;
+		set => this.RaiseAndSetIfChanged(ref _sessionCompletionSoundFile, value);
+	}
+
+	/// <summary>Minimum seconds between Session Completion Sound plays for the same session (FR.22.3).</summary>
+	public string SessionCompletionSoundThrottleSeconds
+	{
+		get => _sessionCompletionSoundThrottleSeconds;
+		set => this.RaiseAndSetIfChanged(ref _sessionCompletionSoundThrottleSeconds, value);
+	}
+
+	public ReactiveCommand<Unit, Unit> TestCompletionSoundCommand { get; }
 
 	/// <summary>Master toggle for the Telegram Notification Bridge (FR.21.7).</summary>
 	public bool TelegramEnabled
@@ -243,11 +265,12 @@ public sealed class SettingsViewModel : ViewModelBase
 		set => this.RaiseAndSetIfChanged(ref _selectedMcpServer, value);
 	}
 
-	public SettingsViewModel(IAppSettingsService appSettings, IMcpTokenStore mcpTokenStore, ITelegramTokenStore telegramTokenStore)
+	public SettingsViewModel(IAppSettingsService appSettings, IMcpTokenStore mcpTokenStore, ITelegramTokenStore telegramTokenStore, ISessionSoundService soundService)
 	{
 		_appSettings   = appSettings;
 		_mcpTokenStore = mcpTokenStore;
 		_telegramTokenStore = telegramTokenStore;
+		_soundService  = soundService;
 		_sessionFilesRoot = appSettings.Settings.SessionFilesRoot;
 		_claudePath = appSettings.Settings.ClaudePath;
 		_sourceCodesLocation = appSettings.Settings.SourceCodesLocation;
@@ -257,6 +280,8 @@ public sealed class SettingsViewModel : ViewModelBase
 		_screensaverSlideshowInterval = appSettings.Settings.ScreensaverSlideshowInterval.ToString();
 		_isDarkTheme = appSettings.Settings.Theme == "Dark";
 		_notificationsEnabled = appSettings.Settings.NotificationsEnabled;
+		_sessionCompletionSoundFile = appSettings.Settings.SessionCompletionSoundFile;
+		_sessionCompletionSoundThrottleSeconds = appSettings.Settings.SessionCompletionSoundThrottleSeconds.ToString();
 		_telegramEnabled = appSettings.Settings.TelegramEnabled;
 		_telegramChatId = appSettings.Settings.TelegramChatId == 0 ? string.Empty : appSettings.Settings.TelegramChatId.ToString();
 		_telegramAllowedUserIds = string.Join(", ", appSettings.Settings.TelegramAllowedUserIds);
@@ -279,10 +304,25 @@ public sealed class SettingsViewModel : ViewModelBase
 
 		SaveCommand = ReactiveCommand.Create(Save);
 		SaveTelegramTokenCommand = ReactiveCommand.Create(SaveTelegramToken);
+		TestCompletionSoundCommand = ReactiveCommand.Create(TestCompletionSound);
 
 		LoadKeyBindings();
 		LoadMcpServers();
+		LoadAvailableSounds();
 	}
+
+	/// <summary>Populates the sound picker (FR.22.5), adding the currently configured file if it fell outside the stock library.</summary>
+	private void LoadAvailableSounds()
+	{
+		foreach (var file in _soundService.GetAvailableSounds())
+			AvailableCompletionSounds.Add(file);
+
+		if (!string.IsNullOrWhiteSpace(_sessionCompletionSoundFile) && !AvailableCompletionSounds.Contains(_sessionCompletionSoundFile))
+			AvailableCompletionSounds.Insert(0, _sessionCompletionSoundFile);
+	}
+
+	/// <summary>Plays the currently selected sound immediately, bypassing the per-session throttle (FR.22.5).</summary>
+	private void TestCompletionSound() => _soundService.PlayTestSound(_sessionCompletionSoundFile);
 
 	/// <summary>
 	/// Persists the entered bot token immediately via DPAPI (FR.21.6), independent of the window's
@@ -376,6 +416,9 @@ public sealed class SettingsViewModel : ViewModelBase
 		_appSettings.Settings.ScreensaverTimeout = int.TryParse(_screensaverTimeout, out var st) ? Math.Max(0, st) : 120;
 		_appSettings.Settings.ScreensaverSlideshowInterval = int.TryParse(_screensaverSlideshowInterval, out var si) ? Math.Max(1, si) : 10;
 		_appSettings.Settings.NotificationsEnabled = _notificationsEnabled;
+		_appSettings.Settings.SessionCompletionSoundFile = _sessionCompletionSoundFile;
+		_appSettings.Settings.SessionCompletionSoundThrottleSeconds =
+			int.TryParse(_sessionCompletionSoundThrottleSeconds, out var soundThrottle) ? Math.Max(0, soundThrottle) : Constants.SessionSound.DefaultThrottleSeconds;
 		_appSettings.Settings.TelegramEnabled = _telegramEnabled;
 		_appSettings.Settings.TelegramChatId = long.TryParse(_telegramChatId, out var chatId) ? chatId : 0;
 		_appSettings.Settings.TelegramAllowedUserIds = _telegramAllowedUserIds
