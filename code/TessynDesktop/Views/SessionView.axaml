@@ -378,6 +378,8 @@
                                               Content="&#x1F310;"
                                               FontSize="13"
                                               VerticalAlignment="Center"
+                                              HorizontalContentAlignment="Center"
+                                              VerticalContentAlignment="Center"
                                               Width="26" Height="26" Padding="0"
                                               Margin="3,0,0,0"
                                               ToolTip.Tip="Browser control (--chrome): let Claude drive Chrome via the Claude-in-Chrome extension. Experimental — the spawn runs in -p mode; requires an OAuth profile and the installed extension."/>
@@ -385,6 +387,8 @@
                                               Content="&#x1F4E1;"
                                               FontSize="13"
                                               VerticalAlignment="Center"
+                                              HorizontalContentAlignment="Center"
+                                              VerticalContentAlignment="Center"
                                               Width="26" Height="26" Padding="0"
                                               Margin="3,0,0,0"
                                               ToolTip.Tip="Streaming Session Mode (FR.19): keep one claude process alive across turns instead of spawning a fresh one each time, so native background tasks and scheduling survive between turns. Stop terminates the process; turning this off while it's running asks for confirmation first."/>
@@ -392,6 +396,8 @@
                                               Content="&#x1F514;"
                                               FontSize="13"
                                               VerticalAlignment="Center"
+                                              HorizontalContentAlignment="Center"
+                                              VerticalContentAlignment="Center"
                                               Width="26" Height="26" Padding="0"
                                               Margin="3,0,0,0"
                                               ToolTip.Tip="Session Completion Sound (FR.22): play a sound when this session finishes thinking and responds. Per-session, throttled (default 3 min between sounds); configure the sound and throttle in Settings → Notifications."/>
