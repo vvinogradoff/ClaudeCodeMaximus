@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "deny": [
+      "ScheduleWakeup",
+      "CronCreate",
+      "CronList",
+      "CronDelete"
+    ]
+  }
+}
