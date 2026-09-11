@@ -802,7 +802,7 @@ Curates the native tool + MCP surface handed to the claude CLI for local (Ollama
 
 ### P31.4 Tests
 - [DONE] `LocalToolProfileResolverTests.cs` (7) + `ClaudeProcessManagerBuildArgumentsTests.cs` (6) — resolver decision (Anthropic/tool-incapable/null → `null`, default-lean, custom echo, empty selection) and `--tools`/`--strict-mcp-config` arg assembly (`BuildArguments` made `internal` + `InternalsVisibleTo`). Full suite: 362/362 pass.
-- [ ] Follow-up: a dedicated `AgentMcpServer` filtered-config unit test (include/exclude `cmx` + external ids) — currently covered only indirectly via `SessionTurnService`.
+- [DONE] `AgentMcpServerLocalConfigTests.cs` (5) — filtered `--mcp-config` JSON via the extracted `internal AgentMcpServer.BuildMcpConfigJson`: subset of external ids, `cmx` present w/ token header, `cmx`-only, `null`=all registry servers, empty=empty map.
 - See `docs/testcases/TC.LC.01-Local-Tool-Profile.md` for the full integration test list.
 
 ### P31.5 Docs
