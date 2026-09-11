@@ -25,7 +25,10 @@ public interface IClaudeSessionIndexService
 
 	/// <summary>
 	/// Full-text searches indexed message content across all projects, ranked by relevance
-	/// (FTS5 bm25). Optionally scoped to a single project slug and/or role.
+	/// (FTS5 bm25, exact-phrase matches preferred over incidental term co-occurrence). Optionally
+	/// scoped to a single project slug and/or role. Capped by <paramref name="limit"/> (default 50)
+	/// — intended for a ranked top-N results display, not a full membership test (see
+	/// <see cref="SearchMatchingSessionIdsAsync"/> for that).
 	/// </summary>
 	Task<IReadOnlyList<SessionSearchResultModel>> SearchAsync(
 		string query,
@@ -34,6 +37,14 @@ public interface IClaudeSessionIndexService
 		int? limit = null,
 		int? offset = null,
 		CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Returns the distinct set of external IDs with at least one matching message — unranked and
+	/// uncapped, unlike <see cref="SearchAsync"/>. Use this to filter/hide already-known tree nodes
+	/// by content match, where a hard result-count limit would silently drop genuine matches.
+	/// </summary>
+	Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(
+		string query, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Returns a title for each summary — from the persisted cache when one already exists,

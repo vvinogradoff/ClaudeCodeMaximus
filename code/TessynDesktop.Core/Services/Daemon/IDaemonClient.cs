@@ -150,6 +150,9 @@ public interface IDaemonClient
 		string query, string? projectSlug = null, string? role = null,
 		int? limit = null, int? offset = null, CancellationToken cancellationToken = default);
 
+	/// <summary>Distinct external IDs with at least one matching message — unranked and uncapped, for content-filtering the tree.</summary>
+	Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, CancellationToken cancellationToken = default);
+
 	/// <summary>Returns a title per summary — cached if already generated, otherwise generates and persists it.</summary>
 	Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
 		IReadOnlyList<ClaudeSessionSummaryModel> summaries,

@@ -158,6 +158,7 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	public Task<IReadOnlyList<SessionSearchResultModel>> SearchSessionsAsync(
 		string query, string? projectSlug = null, string? role = null,
 		int? limit = null, int? offset = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 	public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
 		IReadOnlyList<ClaudeSessionSummaryModel> summaries,
 		Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null,

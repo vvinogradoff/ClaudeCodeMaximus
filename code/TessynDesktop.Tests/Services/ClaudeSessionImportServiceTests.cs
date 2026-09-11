@@ -168,6 +168,61 @@ public sealed class ClaudeSessionImportServiceTests : IDisposable
 		Assert.Equal("Hello Claude", entries[0].Content);
 	}
 
+	// --- ParseJsonlSessionForIndexing tests (search-index-only tool_result extraction) ---
+
+	[Fact]
+	public void ParseJsonlSessionForIndexing_ExtractsToolResultContent_StringFormat()
+	{
+		var path = WriteJsonlFile("test-tool-result-string",
+			JsonLine("user", """{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents with a needle in it"}]}""", "2026-03-10T10:00:00Z"));
+
+		var entries = _sut.ParseJsonlSessionForIndexing(path);
+
+		var entry = Assert.Single(entries);
+		Assert.Equal(Constants.SessionFile.RoleToolResult, entry.Role);
+		Assert.Equal("file contents with a needle in it", entry.Content);
+	}
+
+	[Fact]
+	public void ParseJsonlSessionForIndexing_ExtractsToolResultContent_ArrayFormat()
+	{
+		var path = WriteJsonlFile("test-tool-result-array",
+			JsonLine("user", """{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":[{"type":"text","text":"research findings here"}]}]}""", "2026-03-10T10:00:00Z"));
+
+		var entries = _sut.ParseJsonlSessionForIndexing(path);
+
+		var entry = Assert.Single(entries);
+		Assert.Equal(Constants.SessionFile.RoleToolResult, entry.Role);
+		Assert.Equal("research findings here", entry.Content);
+	}
+
+	[Fact]
+	public void ParseJsonlSessionForIndexing_ExtractsMultipleToolResultBlocks_FromSameTurn()
+	{
+		var path = WriteJsonlFile("test-tool-result-multi",
+			JsonLine("user", """{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"first result"},{"type":"tool_result","tool_use_id":"toolu_2","content":"second result"}]}""", "2026-03-10T10:00:00Z"));
+
+		var entries = _sut.ParseJsonlSessionForIndexing(path);
+
+		Assert.Equal(2, entries.Count);
+		Assert.All(entries, e => Assert.Equal(Constants.SessionFile.RoleToolResult, e.Role));
+		Assert.Equal("first result", entries[0].Content);
+		Assert.Equal("second result", entries[1].Content);
+	}
+
+	[Fact]
+	public void ParseJsonlSession_DoesNotExtractToolResultContent()
+	{
+		// The display/import-facing parser must stay unaffected — tool_result content would
+		// otherwise flood the session view and imported .txt files with raw tool output.
+		var path = WriteJsonlFile("test-tool-result-excluded",
+			JsonLine("user", """{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"should not appear"}]}""", "2026-03-10T10:00:00Z"));
+
+		var entries = _sut.ParseJsonlSession(path);
+
+		Assert.Empty(entries);
+	}
+
 	// --- DiscoverSessions tests (uses the projectsDirsOverride constructor param to fake the
 	// OS-default + per-profile "projects" roots without touching the real ~/.claude / %AppData%) ---
 

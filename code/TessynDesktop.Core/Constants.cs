@@ -25,6 +25,13 @@ public static class Constants
 		public const string RoleAssistant = "ASSISTANT";
 		public const string RoleSystem = "SYSTEM";
 		public const string RoleCompaction = "COMPACTION";
+
+		/// <summary>
+		/// Text content of a <c>tool_result</c> block (Read/Grep/Bash/WebFetch/Task-subagent output,
+		/// etc.). Only emitted by <see cref="IClaudeSessionImportService.ParseJsonlSessionForIndexing"/>
+		/// for search-index purposes — never rendered in the session view or exported .txt files.
+		/// </summary>
+		public const string RoleToolResult = "TOOL_RESULT";
 		public const string TimestampFormat = "yyyy-MM-ddTHH:mm:ssZ";
 	}
 

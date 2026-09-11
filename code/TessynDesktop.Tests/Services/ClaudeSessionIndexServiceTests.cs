@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Data.Sqlite;
 using TessynDesktop.Models;
 using TessynDesktop.Services;
 using Xunit;
@@ -81,6 +83,18 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
         return path;
     }
 
+    /// <summary>Writes a session file with a single user turn carrying one tool_result block.</summary>
+    private string WriteToolResultSession(string slug, string externalId, string toolResultContent)
+    {
+        var slugDir = Path.Combine(_projectsDir, slug);
+        Directory.CreateDirectory(slugDir);
+        var path = Path.Combine(slugDir, externalId + ".jsonl");
+        var line = """{"type":"user","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"""
+            + JsonSerializer.Serialize(toolResultContent) + "}]}}";
+        File.WriteAllLines(path, [line]);
+        return path;
+    }
+
     // ── Reindex ───────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -140,6 +154,61 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
         var count = await service.ReindexAsync();
 
         Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public async Task ReindexAsync_IndexesToolResultContent()
+    {
+        WriteToolResultSession("-Users-x-project-a", "session-1", "the research findings mention Visual Studio integration");
+
+        await _service.ReindexAsync();
+
+        var results = await _service.SearchAsync("Visual Studio");
+        var result = Assert.Single(results);
+        Assert.Equal("TOOL_RESULT", result.Role);
+    }
+
+    [Fact]
+    public async Task ReindexAsync_RebuildsAlreadyIndexedSessions_WhenIndexContentVersionIsBehind()
+    {
+        // Simulate a database left over from before tool_result indexing existed: the session row
+        // is already present with a matching mtime (so the plain incremental check would skip it)
+        // but the schema's user_version predates the current content version.
+        var path = WriteToolResultSession("-Users-x-project-a", "session-1", "needle content");
+        var mtimeTicks = File.GetLastWriteTimeUtc(path).Ticks;
+        var dbPath = Path.Combine(_tempRoot, "stale-version.db");
+
+        using (var conn = new SqliteConnection($"Data Source={dbPath}"))
+        {
+            conn.Open();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = """
+                    CREATE TABLE sessions (
+                        external_id TEXT PRIMARY KEY, project_slug TEXT NOT NULL, jsonl_path TEXT NOT NULL,
+                        mtime_ticks INTEGER NOT NULL, title TEXT, title_generated_at_ticks INTEGER,
+                        first_user_prompt TEXT, message_count INTEGER NOT NULL,
+                        created_ticks INTEGER NOT NULL, last_used_ticks INTEGER NOT NULL);
+                    CREATE VIRTUAL TABLE messages USING fts5(content, role UNINDEXED, external_id UNINDEXED,
+                        project_slug UNINDEXED, message_index UNINDEXED, timestamp_ticks UNINDEXED);
+                    INSERT INTO sessions (external_id, project_slug, jsonl_path, mtime_ticks, message_count, created_ticks, last_used_ticks)
+                    VALUES ('session-1', '-Users-x-project-a', @path, @mtime, 1, 0, 0);
+                    """;
+                cmd.Parameters.AddWithValue("@path", path);
+                cmd.Parameters.AddWithValue("@mtime", mtimeTicks);
+                cmd.ExecuteNonQuery();
+            }
+            using var versionCmd = conn.CreateCommand();
+            versionCmd.CommandText = "PRAGMA user_version = 1;";
+            versionCmd.ExecuteNonQuery();
+        }
+
+        var service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assistService, dbPath, [_projectsDir]);
+        var count = await service.ReindexAsync();
+
+        Assert.Equal(1, count); // rebuilt despite matching mtime, because the stored version was behind
+        var results = await service.SearchAsync("needle");
+        Assert.Single(results);
     }
 
     // ── Search ────────────────────────────────────────────────────────────────────
@@ -212,6 +281,64 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
     {
         var results = await _service.SearchAsync("   ");
         Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task SearchAsync_PrefersExactPhraseMatches_OverIncidentalCoOccurrence()
+    {
+        // "visual" and "studio" both present but not adjacent — an AND-of-terms match, not a phrase.
+        WriteSession("-Users-x-project-a", "session-1", ("user", "our visual identity redesign uses a new color studio"));
+        // Genuine adjacent phrase match.
+        WriteSession("-Users-x-project-a", "session-2", ("user", "we should use visual studio for this"));
+        await _service.ReindexAsync();
+
+        var results = await _service.SearchAsync("visual studio");
+
+        var result = Assert.Single(results);
+        Assert.Equal("session-2", result.ExternalId);
+    }
+
+    [Fact]
+    public async Task SearchAsync_FallsBackToTermCoOccurrence_WhenNoPhraseMatchExists()
+    {
+        WriteSession("-Users-x-project-a", "session-1", ("user", "our visual identity redesign uses a new color studio"));
+        await _service.ReindexAsync();
+
+        var results = await _service.SearchAsync("visual studio");
+
+        Assert.Single(results);
+    }
+
+    // ── SearchMatchingSessionIdsAsync (unranked, uncapped tree-filter lookup) ─────────
+
+    [Fact]
+    public async Task SearchMatchingSessionIdsAsync_ReturnsEveryMatch_EvenBeyondSearchAsyncsDefaultCap()
+    {
+        for (var i = 0; i < 55; i++)
+            WriteSession("-Users-x-project-a", $"session-{i}", ("user", $"keyword occurrence number {i}"));
+        await _service.ReindexAsync();
+
+        var ids = await _service.SearchMatchingSessionIdsAsync("keyword");
+
+        Assert.Equal(55, ids.Count); // exceeds SearchAsync's default 50-row LIMIT
+    }
+
+    [Fact]
+    public async Task SearchMatchingSessionIdsAsync_ReturnsEmpty_ForEmptyQuery()
+    {
+        var ids = await _service.SearchMatchingSessionIdsAsync("   ");
+        Assert.Empty(ids);
+    }
+
+    [Fact]
+    public async Task SearchMatchingSessionIdsAsync_ReturnsEmpty_WhenNoMatch()
+    {
+        WriteSession("-Users-x-project-a", "session-1", ("user", "hello world"));
+        await _service.ReindexAsync();
+
+        var ids = await _service.SearchMatchingSessionIdsAsync("nonexistent");
+
+        Assert.Empty(ids);
     }
 
     // ── Titles ────────────────────────────────────────────────────────────────────

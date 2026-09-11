@@ -259,6 +259,7 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
 {
     public int ReindexResult { get; set; }
     public IReadOnlyList<SessionSearchResultModel> SearchResult { get; set; } = Array.Empty<SessionSearchResultModel>();
+    public IReadOnlySet<string> MatchingSessionIdsResult { get; set; } = new HashSet<string>();
     public IReadOnlyDictionary<string, string> EnsureTitlesResult { get; set; } = new Dictionary<string, string>();
     public IReadOnlyList<ClaudeSessionSummaryModel> SummariesResult { get; set; } = Array.Empty<ClaudeSessionSummaryModel>();
 
@@ -267,6 +268,7 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
     public string? LastSearchRole { get; private set; }
     public int? LastSearchLimit { get; private set; }
     public int? LastSearchOffset { get; private set; }
+    public string? LastMatchingIdsQuery { get; private set; }
     public IReadOnlyList<ClaudeSessionSummaryModel>? LastEnsureTitlesSummaries { get; private set; }
     public IReadOnlyList<string>? LastGetSummariesExternalIds { get; private set; }
 
@@ -282,6 +284,12 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
         LastSearchLimit = limit;
         LastSearchOffset = offset;
         return Task.FromResult(SearchResult);
+    }
+
+    public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, CancellationToken cancellationToken = default)
+    {
+        LastMatchingIdsQuery = query;
+        return Task.FromResult(MatchingSessionIdsResult);
     }
 
     public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(

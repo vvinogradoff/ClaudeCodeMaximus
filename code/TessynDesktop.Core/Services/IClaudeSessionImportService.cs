@@ -28,6 +28,15 @@ public interface IClaudeSessionImportService
 	IReadOnlyList<SessionEntryModel> ParseJsonlSessionRaw(string jsonlPath);
 
 	/// <summary>
+	/// Parses a Claude Code JSONL session file for search-index purposes only: same as
+	/// <see cref="ParseJsonlSession"/> (USER, ASSISTANT, tool-use SYSTEM entries) plus a
+	/// TOOL_RESULT entry for every <c>tool_result</c> block's text content — the output of
+	/// Read/Grep/Bash/WebFetch/Task-subagent calls, which carries most of a session's
+	/// substantive content but is otherwise invisible to search (FR.13.15).
+	/// </summary>
+	IReadOnlyList<SessionEntryModel> ParseJsonlSessionForIndexing(string jsonlPath);
+
+	/// <summary>
 	/// Caches a generated title for a session ID. Survives across dialog open/close cycles.
 	/// </summary>
 	void CacheTitle(string sessionId, string title);

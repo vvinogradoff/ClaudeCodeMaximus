@@ -79,12 +79,15 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 	}
 
 	public IReadOnlyList<SessionEntryModel> ParseJsonlSession(string jsonlPath)
-		=> ParseJsonlSessionCore(jsonlPath, raw: false);
+		=> ParseJsonlSessionCore(jsonlPath, raw: false, includeToolResults: false);
 
 	public IReadOnlyList<SessionEntryModel> ParseJsonlSessionRaw(string jsonlPath)
-		=> ParseJsonlSessionCore(jsonlPath, raw: true);
+		=> ParseJsonlSessionCore(jsonlPath, raw: true, includeToolResults: false);
 
-	private IReadOnlyList<SessionEntryModel> ParseJsonlSessionCore(string jsonlPath, bool raw)
+	public IReadOnlyList<SessionEntryModel> ParseJsonlSessionForIndexing(string jsonlPath)
+		=> ParseJsonlSessionCore(jsonlPath, raw: false, includeToolResults: true);
+
+	private IReadOnlyList<SessionEntryModel> ParseJsonlSessionCore(string jsonlPath, bool raw, bool includeToolResults = false)
 	{
 		var entries = new List<SessionEntryModel>();
 		string? lastPlanFilePath = null;
@@ -113,7 +116,7 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 				switch (type)
 				{
 					case "user":
-						ParseUserEvent(root, timestamp, entries, raw);
+						ParseUserEvent(root, timestamp, entries, raw, includeToolResults);
 						break;
 					case "assistant":
 						ParseAssistantEvent(root, timestamp, entries,
@@ -202,22 +205,84 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 		};
 	}
 
-	private static void ParseUserEvent(JsonElement root, DateTimeOffset timestamp, List<SessionEntryModel> entries, bool raw = false)
+	private static void ParseUserEvent(JsonElement root, DateTimeOffset timestamp, List<SessionEntryModel> entries,
+		bool raw = false, bool includeToolResults = false)
 	{
 		var content = ExtractUserContent(root, maxLength: 0, raw: raw);
-		if (string.IsNullOrWhiteSpace(content))
-			return;
 
-		// Skip system-injected content (XML tags, slash commands) — but not in raw mode
-		if (!raw && IsSystemInjectedContent(content))
-			return;
-
-		entries.Add(new SessionEntryModel
+		// Skip system-injected content (XML tags, slash commands) — but not in raw mode. A pure
+		// tool-result turn (no "text" block) yields null content here, which is fine: the
+		// tool_result extraction below runs independently of whether a text entry was added.
+		if (!string.IsNullOrWhiteSpace(content) && (raw || !IsSystemInjectedContent(content)))
 		{
-			Timestamp = timestamp,
-			Role = Constants.SessionFile.RoleUser,
-			Content = content,
-		});
+			entries.Add(new SessionEntryModel
+			{
+				Timestamp = timestamp,
+				Role = Constants.SessionFile.RoleUser,
+				Content = content,
+			});
+		}
+
+		if (includeToolResults)
+			AppendToolResultEntries(root, timestamp, entries);
+	}
+
+	/// <summary>
+	/// Extracts the text content of every <c>tool_result</c> block in a user-turn's message
+	/// content array — the actual output of Read/Grep/Bash/WebFetch/Task-subagent calls — and
+	/// adds a TOOL_RESULT entry per block. Index-only; never used for display or import.
+	/// </summary>
+	private static void AppendToolResultEntries(JsonElement root, DateTimeOffset timestamp, List<SessionEntryModel> entries)
+	{
+		if (!root.TryGetProperty("message", out var msg))
+			return;
+		if (!msg.TryGetProperty("content", out var contentEl) || contentEl.ValueKind != JsonValueKind.Array)
+			return;
+
+		foreach (var block in contentEl.EnumerateArray())
+		{
+			if (!block.TryGetProperty("type", out var bt) || bt.GetString() != "tool_result")
+				continue;
+
+			var text = ExtractToolResultText(block);
+			if (string.IsNullOrWhiteSpace(text))
+				continue;
+
+			entries.Add(new SessionEntryModel
+			{
+				Timestamp = timestamp,
+				Role = Constants.SessionFile.RoleToolResult,
+				Content = text,
+			});
+		}
+	}
+
+	/// <summary>
+	/// A tool_result block's "content" is either a plain string or an array of blocks (mirroring
+	/// the user-content array fallback in <see cref="ExtractUserContent"/>) — only "text" blocks
+	/// are extracted; image blocks are skipped.
+	/// </summary>
+	private static string? ExtractToolResultText(JsonElement toolResultBlock)
+	{
+		if (!toolResultBlock.TryGetProperty("content", out var content))
+			return null;
+
+		if (content.ValueKind == JsonValueKind.String)
+			return content.GetString();
+
+		if (content.ValueKind == JsonValueKind.Array)
+		{
+			var sb = new StringBuilder();
+			foreach (var block in content.EnumerateArray())
+			{
+				if (block.TryGetProperty("type", out var bt) && bt.GetString() == "text"
+					&& block.TryGetProperty("text", out var text))
+					sb.Append(text.GetString());
+			}
+			return sb.Length > 0 ? sb.ToString() : null;
+		}
+
+		return null;
 	}
 
 	private static void ParseAssistantEvent(JsonElement root, DateTimeOffset timestamp,

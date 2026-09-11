@@ -946,10 +946,11 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		{
 			try
 			{
-				var results = await _daemon.SearchSessionsAsync(query, cancellationToken: cts.Token);
+				// Unranked, uncapped membership test — not SearchSessionsAsync's ranked top-N, which
+				// would silently drop genuine matches in this tree whenever other projects on the
+				// machine happen to score higher on the same terms (see ISSUE.007).
+				var matchingExternalIds = await _daemon.SearchMatchingSessionIdsAsync(query, cts.Token);
 				if (cts.Token.IsCancellationRequested) return;
-
-				var matchingExternalIds = results.Select(r => r.ExternalId).ToHashSet();
 
 				Dispatcher.UIThread.Post(() =>
 				{
@@ -1006,7 +1007,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		return anyVisible;
 	}
 
-	private static bool ApplyFilterToChildrenByExternalId(ObservableCollection<ViewModelBase> children, HashSet<string> matchingExternalIds)
+	private static bool ApplyFilterToChildrenByExternalId(ObservableCollection<ViewModelBase> children, IReadOnlySet<string> matchingExternalIds)
 	{
 		var anyVisible = false;
 
