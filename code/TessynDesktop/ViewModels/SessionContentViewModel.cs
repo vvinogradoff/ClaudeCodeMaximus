@@ -29,12 +29,21 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 	private readonly Func<bool> _isBusyProvider;
 	private bool _isMarkdownMode = true;
 	private bool _isClaudeSessionView;
-	private List<MessageEntryViewModel>? _maximusMessagesSnapshot;
+	private List<MessageEntryViewModel>? _tessynMessagesSnapshot;
 	private FileSystemWatcher? _fileWatcher;
 	private FileSystemWatcher? _jsonlWatcher;
 	private Timer? _fileChangeDebounceTimer;
 	private Timer? _jsonlChangeDebounceTimer;
+	private Timer? _externalActivityTimeoutTimer;
 	private int _lastKnownEntryCount;
+
+	/// <summary>
+	/// Safety-net window for <see cref="SessionNodeViewModel.IsExternallyActive"/>: if the external
+	/// process dies mid-turn without ever appending a terminal "result" entry (e.g. a crash), the
+	/// JSONL watcher never fires again and the flag would otherwise stay stuck true forever. 45s
+	/// comfortably exceeds normal inter-chunk gaps during streaming while still recovering quickly.
+	/// </summary>
+	private static readonly TimeSpan ExternalActivityTimeout = TimeSpan.FromSeconds(45);
 
 	public ObservableCollection<MessageEntryViewModel> Messages { get; } = [];
 
@@ -141,7 +150,7 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 
 	private void StartFileWatcher()
 	{
-		// Watch the Maximus .txt session file
+		// Watch the Tessyn .txt session file
 		try
 		{
 			var fullPath = _fileService.GetFullPath(_node.FileName);
@@ -264,6 +273,21 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 			var isActive = type is "progress" or "assistant";
 
 			Dispatcher.UIThread.Post(() => _node.IsExternallyActive = isActive);
+
+			if (isActive)
+			{
+				_externalActivityTimeoutTimer?.Dispose();
+				_externalActivityTimeoutTimer = new Timer(
+					_ => Dispatcher.UIThread.Post(() => _node.IsExternallyActive = false),
+					null,
+					ExternalActivityTimeout,
+					Timeout.InfiniteTimeSpan);
+			}
+			else
+			{
+				_externalActivityTimeoutTimer?.Dispose();
+				_externalActivityTimeoutTimer = null;
+			}
 		}
 		catch
 		{
@@ -386,7 +410,7 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 			var newEntries = displayable.Skip(_lastKnownEntryCount).ToList();
 			_log.Information("JSONL watcher: {Count} new entries detected from JSONL", newEntries.Count);
 
-			// Append new entries to the Maximus .txt file for persistence
+			// Append new entries to the Tessyn .txt file for persistence
 			foreach (var entry in newEntries)
 				_fileService.AppendMessage(_node.FileName, entry.Role, entry.Content);
 
@@ -424,8 +448,8 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 	{
 		if (showClaude)
 		{
-			// Snapshot current Maximus messages so we can restore them
-			_maximusMessagesSnapshot = new List<MessageEntryViewModel>(Messages);
+			// Snapshot current Tessyn messages so we can restore them
+			_tessynMessagesSnapshot = new List<MessageEntryViewModel>(Messages);
 
 			var allPaths = GetAllJsonlPaths();
 			if (allPaths.Count == 0)
@@ -466,13 +490,13 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 		}
 		else
 		{
-			// Restore the Maximus messages
+			// Restore the Tessyn messages
 			Messages.Clear();
-			if (_maximusMessagesSnapshot != null)
+			if (_tessynMessagesSnapshot != null)
 			{
-				foreach (var msg in _maximusMessagesSnapshot)
+				foreach (var msg in _tessynMessagesSnapshot)
 					Messages.Add(msg);
-				_maximusMessagesSnapshot = null;
+				_tessynMessagesSnapshot = null;
 			}
 		}
 	}
@@ -540,5 +564,6 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 		_jsonlWatcher?.Dispose();
 		_fileChangeDebounceTimer?.Dispose();
 		_jsonlChangeDebounceTimer?.Dispose();
+		_externalActivityTimeoutTimer?.Dispose();
 	}
 }

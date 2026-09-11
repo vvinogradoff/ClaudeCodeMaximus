@@ -285,6 +285,13 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	/// </summary>
 	public void Stop()
 	{
+		// Immediate UX safety valve: DetectExternalActivity (SessionContentViewModel) is the only
+		// other writer of this flag and is purely reactive to JSONL file-change events, so it can
+		// get stuck true if the process dies without writing a terminal "result" entry. Clearing it
+		// here is safe even if a genuinely separate external process is still running — the very
+		// next real JSONL write flips it back to true through the normal detection path.
+		_node.IsExternallyActive = false;
+
 		if (IsStreamingProcessAlive)
 		{
 			_streamingManager.Stop(_node.Model.NodeId);
@@ -361,7 +368,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			return;
 		}
 
-		// Switch back to Maximus view if currently showing Claude's JSONL
+		// Switch back to Tessyn view if currently showing Claude's JSONL
 		if (_content.IsClaudeSessionView)
 			_content.IsClaudeSessionView = false;
 
