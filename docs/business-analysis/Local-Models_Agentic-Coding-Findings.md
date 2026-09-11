@@ -23,11 +23,12 @@ This is the basis for FR.12.21's Local Tool Profile: rather than trying to make 
 
 ## Recommended local models for agentic coding
 
-Based on the above, models purpose-tuned for **code + tool-calling** noticeably outperform general-purpose or abliterated variants at tool discipline, independent of raw parameter count:
+Based on the above, models purpose-tuned for **code + tool-calling** noticeably outperform general-purpose or abliterated variants at tool discipline, independent of raw parameter count. The following are ranked for a ~32 GB-VRAM / 64 GB unified-memory machine (e.g. an Asus Z13 / Ryzen AI Max+ "Strix Halo"). Benchmark/spec figures below are from published sources, not local testing here:
 
-- **`devstral`** — purpose-built for agentic coding workflows; strong tool-call discipline.
+- **`qwen3.6:35b-a3b`** — *top pick for this hardware class.* 35B-total / **3B-active** sparse-MoE (hybrid Gated-DeltaNet linear attention + MoE), so it runs at roughly 3B-model speed while carrying 35B of knowledge; **262K** native context; native `tools`/`tool_choice` function calling with reasoning preserved across tool calls. Strong agentic-coding scores: **SWE-bench Verified 73.4**, SWE-bench Multilingual 67.2, Pro 49.5, **Terminal-Bench 2.0 51.5** (Terminal-Bench maps most directly to Claude-Code-style tool loops). Fits at **Q4_K_M (~24 GB)** inside a 32 GB VRAM budget; on unified memory, KV cache overflow spills to fast system RAM rather than choking, so mid/long contexts stay usable (full 262K would want ~48 GB or a smaller quant). Released 2026-04-15, Apache 2.0. Ollama gotcha: MoE models can under-utilise the GPU with default settings — ensure all layers offload and set a sane `num_ctx`.
+- **`devstral`** — purpose-built for agentic coding; strong tool-call discipline; a lighter (24B dense) fallback when VRAM/context headroom is tighter.
 - **`qwen3-coder:30b`** — coder-tuned Qwen3 variant; good balance of capability and reliability for local hardware.
-- **`qwen2.5-coder:32b`** — coder-tuned Qwen2.5 variant; mature, widely used for local agentic coding.
+- **`qwen2.5-coder:32b`** — coder-tuned Qwen2.5 variant (dense); mature and widely used, but slower than the A3B MoE above at similar quality.
 
 **Coder-tuned beats general-purpose or abliterated for tool discipline.** A general-purpose chat model (even a larger one) or an abliterated variant of any model is more likely to mis-call tools than a smaller coder-tuned model, because tool-call formatting discipline is part of what the coder-tuning process specifically reinforces. Abliteration in particular strips safety training in a way that appears to also degrade instruction-following precision relevant to structured tool calls.
 
