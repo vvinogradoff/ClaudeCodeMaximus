@@ -32,6 +32,24 @@
         <Style Selector="ToggleButton.linklike:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent"/>
         </Style>
+
+        <!--
+          Compact command-bar selectors (~120px closed box, FR.12.22). Avalonia's ComboBox binds its
+          dropdown Popup's width to the control's own width by default, which would clip a wide list
+          (model IDs, profile names) down to 120px — override the named template parts (PART_Popup,
+          PART_ItemsPresenter) back to auto/content width so the fly-out itself stays full-width.
+        -->
+        <Style Selector="ComboBox.cmxCompact">
+            <Setter Property="Width" Value="120"/>
+        </Style>
+        <Style Selector="ComboBox.cmxCompact /template/ Popup#PART_Popup">
+            <Setter Property="Width" Value="NaN"/>
+            <Setter Property="MinWidth" Value="0"/>
+        </Style>
+        <Style Selector="ComboBox.cmxCompact /template/ ItemsPresenter#PART_ItemsPresenter">
+            <Setter Property="Width" Value="NaN"/>
+            <Setter Property="MinWidth" Value="0"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,5,120">
@@ -296,13 +314,24 @@
                                 <TextBlock Text="Model:"
                                            VerticalAlignment="Center"
                                            FontSize="12" Opacity="0.7"/>
-                                <ComboBox ItemsSource="{Binding AvailableModels}"
+                                <ComboBox Classes="cmxCompact"
+                                          ItemsSource="{Binding AvailableModels}"
                                           SelectedIndex="{Binding SelectedModelIndex}"
                                           IsEnabled="{Binding !IsStreamingProcessAlive}"
                                           VerticalAlignment="Center"
+                                          HorizontalContentAlignment="Right"
                                           FontSize="12"
-                                          MinWidth="100"
-                                          Padding="6,3"/>
+                                          Padding="6,3">
+                                    <!-- Closed box only: left-truncate long model IDs so the distinctive
+                                         suffix (e.g. "…pus-4-8") stays visible. Deliberately NOT ItemTemplate —
+                                         that would also truncate the full-width dropdown list below. -->
+                                    <ComboBox.SelectionBoxItemTemplate>
+                                        <DataTemplate x:CompileBindings="False">
+                                            <TextBlock Text="{Binding Converter={x:Static converters:LeftEllipsisConverter.Instance}, ConverterParameter=8}"
+                                                       TextAlignment="Right"/>
+                                        </DataTemplate>
+                                    </ComboBox.SelectionBoxItemTemplate>
+                                </ComboBox>
                                 <ToggleButton x:Name="ProfileActionsToggle"
                                               Classes="linklike"
                                               Content="Profile: &#x25BE;"
@@ -349,12 +378,12 @@
                                         </StackPanel>
                                     </Border>
                                 </Popup>
-                                <ComboBox ItemsSource="{Binding AvailableProfiles}"
+                                <ComboBox Classes="cmxCompact"
+                                          ItemsSource="{Binding AvailableProfiles}"
                                           SelectedIndex="{Binding SelectedProfileIndex}"
                                           IsEnabled="{Binding !IsStreamingProcessAlive}"
                                           VerticalAlignment="Center"
                                           FontSize="12"
-                                          MinWidth="120"
                                           Padding="6,3">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="models:ProfileListItemModel">
@@ -367,13 +396,44 @@
                                            VerticalAlignment="Center"
                                            FontSize="12" Opacity="0.7"
                                            Margin="12,0,0,0"/>
-                                <ComboBox ItemsSource="{Binding AvailableEfforts}"
+                                <ComboBox Classes="cmxCompact"
+                                          ItemsSource="{Binding AvailableEfforts}"
                                           SelectedIndex="{Binding SelectedEffortIndex}"
                                           IsEnabled="{Binding !IsStreamingProcessAlive}"
                                           VerticalAlignment="Center"
                                           FontSize="12"
-                                          MinWidth="90"
                                           Padding="6,3"/>
+
+                                <ToggleButton x:Name="ToolProfileToggle"
+                                              Classes="linklike"
+                                              Content="{Binding ToolProfileSummary}"
+                                              IsVisible="{Binding IsLocalModelSelected}"
+                                              IsEnabled="{Binding IsLocalToolSelectorEnabled}"
+                                              ToolTip.Tip="{Binding ToolProfileToggleTooltip}"
+                                              VerticalAlignment="Center"
+                                              Width="120"
+                                              Margin="12,0,0,0"/>
+                                <Popup PlacementTarget="{Binding #ToolProfileToggle}"
+                                       Placement="Bottom"
+                                       IsOpen="{Binding #ToolProfileToggle.IsChecked, Mode=OneWay}"
+                                       IsLightDismissEnabled="False">
+                                    <Border Padding="8"
+                                            CornerRadius="4"
+                                            BorderThickness="1"
+                                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                            Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                                        <ItemsControl ItemsSource="{Binding ToolProfileItems}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ToolProfileItemViewModel">
+                                                    <CheckBox Content="{Binding Name}"
+                                                              IsChecked="{Binding IsEnabled}"
+                                                              FontSize="12"
+                                                              Margin="0,2"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+                                </Popup>
                                 <ToggleButton IsChecked="{Binding IsChromeEnabled}"
                                               Content="&#x1F310;"
                                               FontSize="13"

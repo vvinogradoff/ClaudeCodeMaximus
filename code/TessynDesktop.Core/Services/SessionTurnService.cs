@@ -119,12 +119,34 @@ public sealed class SessionTurnService : ISessionTurnService
 				: null;
 			var disableTools     = modelInfo is { Provider: ModelProvider.Ollama, SupportsTools: false };
 
-			// MCP tools (e.g. the cmx orchestration server) are a separate mechanism from the
-			// built-in --tools flag — the CLI still sends them to the model even when --tools ""
-			// is set. Skip --mcp-config entirely for models that don't support tool calling.
-			var mcpConfigPath = _appSettings.Settings.AgentToolsEnabled && !disableTools
-				? await _mcpServer.Value.EnsureConfigFileAsync(node.NodeId, node.AgentToken)
-				: null;
+			// Local Tool Profile (FR.12.21): a tool-capable local Ollama model gets the directory's
+			// curated --tools list plus a filtered, --strict-mcp-config'd --mcp-config instead of the
+			// unrestricted Anthropic default. LocalToolProfileResolver is the single source of truth
+			// shared with the interactive TurnController path.
+			var directoryModel = _appSettings.Settings.Tree.FirstOrDefault(d =>
+				string.Equals(d.Path, node.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
+			var localProfile   = LocalToolProfileResolver.Resolve(modelInfo, directoryModel);
+
+			string? mcpConfigPath;
+			var strictMcpConfig  = false;
+			LocalToolSpec? localToolSpec = null;
+
+			if (localProfile != null)
+			{
+				strictMcpConfig = true;
+				localToolSpec   = localProfile.ToolSpec;
+				mcpConfigPath   = await _mcpServer.Value.EnsureConfigFileAsync(
+					node.NodeId, node.AgentToken, localProfile.IncludeCmxMcp, localProfile.IncludedExternalMcpServerIds);
+			}
+			else
+			{
+				// MCP tools (e.g. the cmx orchestration server) are a separate mechanism from the
+				// built-in --tools flag — the CLI still sends them to the model even when --tools ""
+				// is set. Skip --mcp-config entirely for models that don't support tool calling.
+				mcpConfigPath = _appSettings.Settings.AgentToolsEnabled && !disableTools
+					? await _mcpServer.Value.EnsureConfigFileAsync(node.NodeId, node.AgentToken)
+					: null;
+			}
 
 			// Cross-profile session adoption (FR.11.13): before validating resumability, try to
 			// locate the session's JSONL under the resolved profile and, if it's actually sitting
@@ -189,6 +211,8 @@ public sealed class SessionTurnService : ISessionTurnService
 				ollamaBaseUrl:    ollamaBaseUrl,
 				disableTools:     disableTools,
 				disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
+				localToolSpec:    localToolSpec,
+				strictMcpConfig:  strictMcpConfig,
 				cancellationToken: ct);
 
 			return new TurnResultModel(resultText.ToString(), node.ClaudeSessionId, isError, errorMessage,

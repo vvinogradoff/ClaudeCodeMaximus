@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace TessynDesktop.Services;
@@ -29,4 +30,12 @@ public interface IAgentMcpServer
 	/// Returns null when <c>AgentToolsEnabled</c> is false.
 	/// </summary>
 	Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken);
+
+	/// <summary>
+	/// Local Tool Profile variant (FR.12.21): writes a filtered <c>--mcp-config</c> file containing
+	/// only the cmx server (when <paramref name="includeCmx"/>) and the External MCP Server Registry
+	/// entries named in <paramref name="externalServerIds"/>, instead of every enabled entry. Returns
+	/// null when nothing is selected, so the caller omits <c>--mcp-config</c> entirely.
+	/// </summary>
+	Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken, bool includeCmx, IReadOnlyList<string> externalServerIds);
 }

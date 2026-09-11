@@ -21,7 +21,11 @@ public interface IClaudeProcessManager
 	/// When ollamaBaseUrl is set the process is routed to local Ollama (no profile/proxy).
 	/// <paramref name="disallowNativeScheduling"/> passes <c>--disallowed-tools</c> for the native
 	/// scheduling tools (FR.19.10), hard-blocking what the instruction-block redirect (FR.14.11)
-	/// only advises against.
+	/// only advises against. <paramref name="localToolSpec"/> and <paramref name="strictMcpConfig"/>
+	/// implement the Local Tool Profile (FR.12.21): when set, <c>--tools</c> is restricted to the
+	/// given native tool names (independent of MCP tools — see <c>LocalToolSpec</c>) and
+	/// <c>--strict-mcp-config</c> is passed so only the filtered <paramref name="mcpConfigPath"/>
+	/// contents are visible, not any ambient project/user MCP config.
 	/// </summary>
 	Task SendMessageAsync(
 		string workingDirectory,
@@ -37,6 +41,8 @@ public interface IClaudeProcessManager
 		bool disableTools = false,
 		bool chrome = false,
 		bool disallowNativeScheduling = false,
+		LocalToolSpec? localToolSpec = null,
+		bool strictMcpConfig = false,
 		CancellationToken cancellationToken = default);
 
 	/// <summary>

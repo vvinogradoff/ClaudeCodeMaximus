@@ -399,6 +399,21 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const int    ShowTimeoutMs      = 3000;
 	}
 
+	/// <summary>
+	/// Constants for the Local Tool Profile feature (FR.12.21) — the curated set of native tools/MCP
+	/// servers supplied to the claude CLI for a directory whose effective model is a tool-capable
+	/// local Ollama model (weak local models mis-call tools when handed the full default set).
+	/// </summary>
+	public static class LocalTools
+	{
+		/// <summary>Selectable native tool catalog for the Local Tool Profile picker.</summary>
+		public static readonly string[] Catalog =
+			["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "NotebookEdit", "TodoWrite"];
+
+		/// <summary>Default lean native-tool set applied when a directory has no explicit LocalToolProfile.</summary>
+		public static readonly string[] DefaultNativeTools = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS"];
+	}
+
 	/// <summary>Constants for the External MCP Server Registry and its OAuth 2.1 client role (FR.20).</summary>
 	public static class ExternalMcp
 	{

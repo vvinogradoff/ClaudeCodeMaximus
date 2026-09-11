@@ -290,6 +290,21 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		set => _models.IsChromeEnabled = value;
 	}
 
+	/// <summary>True when the selected model is a local Ollama model — gates the Local Tool Profile selector (FR.12.21, FR.12.22).</summary>
+	public bool IsLocalModelSelected => _models.IsLocalModelSelected;
+
+	/// <summary>False when the selected local model doesn't support tool calling at all — the selector is shown disabled rather than hidden.</summary>
+	public bool IsLocalToolSelectorEnabled => _models.IsLocalToolSelectorEnabled;
+
+	/// <summary>Tooltip for the Local Tool Profile toggle button.</summary>
+	public string ToolProfileToggleTooltip => _models.ToolProfileToggleTooltip;
+
+	/// <summary>Compact summary shown on the Local Tool Profile toggle button (e.g. "Tools: 5").</summary>
+	public string ToolProfileSummary => _models.ToolProfileSummary;
+
+	/// <summary>Checkbox rows for the Local Tool Profile popup: native tools, cmx orchestration, and registered external MCP servers (FR.12.21).</summary>
+	public ObservableCollection<ToolProfileItemViewModel> ToolProfileItems => _models.ToolProfileItems;
+
 	/// <summary>Streaming Session Mode toggle (FR.19.1, FR.19.6). Turning it off while a process is alive raises <see cref="StreamingDisableConfirmationRequested"/> instead of applying immediately.</summary>
 	public bool IsStreamingMode
 	{

@@ -48,6 +48,7 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 				_directoryModel.SelectedModelId = modelId;
 			_appSettings.Settings.SelectedModelId = modelId;
 			_appSettings.Save();
+			OnSelectedModelChanged();
 		}
 	}
 
@@ -85,6 +86,47 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 	public bool SelectedModelDisablesTools =>
 		_selectedModelIndex > 0 && _selectedModelIndex <= _modelInfos.Count
 		&& !_modelInfos[_selectedModelIndex - 1].SupportsTools;
+
+	/// <summary>
+	/// Full <see cref="ClaudeModelInfo"/> for the selected model, or null when Default is selected.
+	/// Used by <see cref="LocalToolProfileResolver"/> (FR.12.21) to decide whether the Local Tool
+	/// Profile applies to this turn.
+	/// </summary>
+	public ClaudeModelInfo? SelectedModelInfo =>
+		_selectedModelIndex > 0 && _selectedModelIndex <= _modelInfos.Count
+			? _modelInfos[_selectedModelIndex - 1]
+			: null;
+
+	/// <summary>The directory node this session lives under, or null. Used by <see cref="LocalToolProfileResolver"/> (FR.12.21).</summary>
+	public DirectoryNodeModel? DirectoryModel => _directoryModel;
+
+	/// <summary>
+	/// True when the selected model is a local Ollama model — gates visibility of the Local Tool
+	/// Profile selector (FR.12.22). Anthropic models and "Default" never show it.
+	/// </summary>
+	public bool IsLocalModelSelected => SelectedModelInfo?.Provider == ModelProvider.Ollama;
+
+	/// <summary>
+	/// True when the Local Tool Profile selector should be interactive. False when the selected
+	/// local model doesn't support tool calling at all (FR.12.13) — such models get zero tools
+	/// regardless of any profile, so the selector is shown but disabled rather than hidden.
+	/// </summary>
+	public bool IsLocalToolSelectorEnabled => SelectedModelInfo?.SupportsTools ?? true;
+
+	/// <summary>Tooltip for the Local Tool Profile toggle, explaining why it's disabled when applicable.</summary>
+	public string ToolProfileToggleTooltip => IsLocalToolSelectorEnabled
+		? "Local Tool Profile (FR.12.21): curate the native tools and MCP servers exposed to this local model."
+		: "This model does not support tool calling.";
+
+	/// <summary>Compact summary shown on the Local Tool Profile toggle button (e.g. "Tools: 5").</summary>
+	public string ToolProfileSummary => $"Tools: {ToolProfileItems.Count(i => i.IsEnabled)}";
+
+	/// <summary>
+	/// One row per selectable native tool (<see cref="Constants.LocalTools.Catalog"/>), the cmx
+	/// orchestration MCP server, and every registered External MCP Server Registry entry (FR.12.21).
+	/// Rebuilt whenever the selected model changes; toggling a row persists immediately.
+	/// </summary>
+	public ObservableCollection<ToolProfileItemViewModel> ToolProfileItems { get; } = [];
 
 	/// <summary>Selected effort index. 0=Default. Persisted per directory.</summary>
 	public int SelectedEffortIndex
@@ -134,6 +176,8 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 		_selectedEffortIndex = Math.Clamp(
 			directoryModel?.SelectedEffortIndex ?? 0,
 			0, EffortValues.Length - 1);
+
+		RebuildToolProfileItems();
 	}
 
 	/// <summary>Rebuilds the AvailableModels collection from _modelInfos. Index 0 is "Default"; entries show true model IDs (FR.12.3).</summary>
@@ -172,6 +216,7 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 
 		_isUpdatingModels = false;
 		this.RaisePropertyChanged(nameof(SelectedModelIndex));
+		OnSelectedModelChanged();
 	}
 
 	/// <summary>
@@ -204,6 +249,71 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 
 		this.RaisePropertyChanged(nameof(SelectedModelIndex));
 		this.RaisePropertyChanged(nameof(SelectedEffortIndex));
+		OnSelectedModelChanged();
+	}
+
+	/// <summary>
+	/// Refreshes everything that depends on which model is selected: the Local Tool Profile
+	/// selector's visibility/enablement and its checkbox list (FR.12.21, FR.12.22).
+	/// </summary>
+	private void OnSelectedModelChanged()
+	{
+		RebuildToolProfileItems();
+		this.RaisePropertyChanged(nameof(IsLocalModelSelected));
+		this.RaisePropertyChanged(nameof(IsLocalToolSelectorEnabled));
+		this.RaisePropertyChanged(nameof(ToolProfileToggleTooltip));
+	}
+
+	/// <summary>
+	/// Rebuilds <see cref="ToolProfileItems"/> from <see cref="DirectoryNodeModel.LocalToolProfile"/>
+	/// (or the default lean profile when null — <see cref="LocalToolProfileResolver"/>) and the
+	/// currently registered External MCP Server Registry entries.
+	/// </summary>
+	private void RebuildToolProfileItems()
+	{
+		ToolProfileItems.Clear();
+
+		var profile        = _directoryModel?.LocalToolProfile;
+		var enabledNative   = profile?.NativeTools ?? new List<string>(Constants.LocalTools.DefaultNativeTools);
+		var includeCmx      = profile?.IncludeCmxMcp ?? false;
+		var enabledExternal = profile?.IncludedExternalMcpServerIds ?? new List<string>();
+
+		foreach (var toolName in Constants.LocalTools.Catalog)
+			ToolProfileItems.Add(new ToolProfileItemViewModel(
+				toolName, ToolProfileItemKind.Native, null, enabledNative.Contains(toolName), PersistToolProfile));
+
+		ToolProfileItems.Add(new ToolProfileItemViewModel(
+			"cmx orchestration", ToolProfileItemKind.Cmx, null, includeCmx, PersistToolProfile));
+
+		foreach (var server in _appSettings.Settings.ExternalMcpServers)
+			ToolProfileItems.Add(new ToolProfileItemViewModel(
+				server.DisplayName, ToolProfileItemKind.ExternalMcp, server.Id, enabledExternal.Contains(server.Id), PersistToolProfile));
+
+		this.RaisePropertyChanged(nameof(ToolProfileSummary));
+	}
+
+	/// <summary>Writes the current checkbox states back to <see cref="DirectoryNodeModel.LocalToolProfile"/> immediately — no separate "Save" step in this UI.</summary>
+	private void PersistToolProfile()
+	{
+		this.RaisePropertyChanged(nameof(ToolProfileSummary));
+
+		if (_directoryModel == null)
+			return;
+
+		_directoryModel.LocalToolProfile = new LocalToolProfileModel
+		{
+			NativeTools = ToolProfileItems
+				.Where(i => i.Kind == ToolProfileItemKind.Native && i.IsEnabled)
+				.Select(i => i.Name)
+				.ToList(),
+			IncludeCmxMcp = ToolProfileItems
+				.Any(i => i.Kind == ToolProfileItemKind.Cmx && i.IsEnabled),
+			IncludedExternalMcpServerIds = ToolProfileItems
+				.Where(i => i.Kind == ToolProfileItemKind.ExternalMcp && i.IsEnabled)
+				.Select(i => i.ExternalId!)
+				.ToList(),
+		};
+		_appSettings.Save();
 	}
 
 	public void Dispose() => _modelService.ModelsUpdated -= OnModelsUpdated;

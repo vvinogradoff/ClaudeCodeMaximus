@@ -26,4 +26,11 @@ public sealed class DirectoryNodeModel
 
 	/// <summary>Selected effort level index for sessions under this directory. 0=Default.</summary>
 	public int SelectedEffortIndex { get; set; }
+
+	/// <summary>
+	/// Curated tool/MCP profile applied to sessions under this directory when the effective model is
+	/// a local (Ollama) model that supports tool calling (FR.12.21). Null = default lean profile
+	/// (see <see cref="TessynDesktop.Services.LocalToolProfileResolver"/>). Ignored for Anthropic models.
+	/// </summary>
+	public LocalToolProfileModel? LocalToolProfile { get; set; }
 }

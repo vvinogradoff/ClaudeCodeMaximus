@@ -208,8 +208,12 @@ public sealed class ClaudeStreamingSessionManager : IClaudeStreamingSessionManag
 			args += $" --effort {p.Effort}";
 		if (!string.IsNullOrEmpty(p.McpConfigPath))
 			args += $" --mcp-config \"{p.McpConfigPath}\"";
+		if (p.StrictMcpConfig)
+			args += " --strict-mcp-config";
 		if (p.DisableTools)
 			args += " --tools \"\"";
+		else if (p.LocalToolSpec != null)
+			args += $" --tools \"{string.Join(' ', p.LocalToolSpec.NativeToolNames)}\"";
 		if (p.Chrome)
 			args += " --chrome";
 		// No --disallowed-tools here — Streaming Session Mode omits the native-scheduling hard

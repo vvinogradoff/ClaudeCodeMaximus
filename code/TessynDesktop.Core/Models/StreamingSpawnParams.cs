@@ -17,4 +17,6 @@ public sealed record StreamingSpawnParams(
 	string? McpConfigPath,
 	string? OllamaBaseUrl,
 	bool DisableTools,
-	bool Chrome);
+	bool Chrome,
+	LocalToolSpec? LocalToolSpec = null,
+	bool StrictMcpConfig = false);

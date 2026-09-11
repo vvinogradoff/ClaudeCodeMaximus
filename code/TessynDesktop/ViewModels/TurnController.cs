@@ -449,13 +449,29 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		lock (_ctsLock) _activeCts.Add(cts);
 		var ct = cts.Token;
 
+		// Local Tool Profile (FR.12.21): a tool-capable local Ollama model gets the directory's
+		// curated --tools list plus a filtered, --strict-mcp-config'd --mcp-config instead of the
+		// unrestricted Anthropic default. LocalToolProfileResolver is the single source of truth
+		// shared with the headless SessionTurnService path.
+		var localProfile = LocalToolProfileResolver.Resolve(_models.SelectedModelInfo, _models.DirectoryModel);
+
+		string? mcpConfigPath = null;
+		var strictMcpConfig = false;
+		LocalToolSpec? localToolSpec = null;
+
+		if (localProfile != null)
+		{
+			strictMcpConfig = true;
+			localToolSpec   = localProfile.ToolSpec;
+			mcpConfigPath   = await _mcpServer.EnsureConfigFileAsync(
+				_node.Model.NodeId, _node.Model.AgentToken, localProfile.IncludeCmxMcp, localProfile.IncludedExternalMcpServerIds);
+		}
 		// FR.14.3 / FR.14.11 — ensure the per-node MCP config file exists so the claude process
 		// receives --mcp-config and can reach the host scheduling/orchestration tools.
 		// MCP tools are a separate mechanism from the built-in --tools flag — the CLI still sends
 		// them to the model even when --tools "" is set — so skip --mcp-config entirely for models
 		// that don't support tool calling (e.g. tool-incapable local Ollama models).
-		string? mcpConfigPath = null;
-		if (_appSettings.Settings.AgentToolsEnabled && !_models.SelectedModelDisablesTools)
+		else if (_appSettings.Settings.AgentToolsEnabled && !_models.SelectedModelDisablesTools)
 			mcpConfigPath = await _mcpServer.EnsureConfigFileAsync(_node.Model.NodeId, _node.Model.AgentToken);
 
 		// Serialize only the CLI dispatch, not the UI updates above. This preserves the
@@ -478,7 +494,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			{
 				// Streaming Session Mode (FR.19): no --resume "No conversation found" retry path —
 				// the same open process carries the conversation, so context-retry doesn't apply.
-				await SendViaStreamingAsync(sessionId, messageToSend, mcpConfigPath, ct);
+				await SendViaStreamingAsync(sessionId, messageToSend, mcpConfigPath, localToolSpec, strictMcpConfig, ct);
 			}
 			else
 			{
@@ -496,6 +512,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 					disableTools:     _models.SelectedModelDisablesTools,
 					chrome:           _models.IsChromeEnabled,
 					disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
+					localToolSpec:    localToolSpec,
+					strictMcpConfig:  strictMcpConfig,
 					cancellationToken: ct);
 
 				if (_needsContextRetry)
@@ -527,10 +545,13 @@ public sealed class TurnController : ReactiveObject, IDisposable
 						model:            _models.SelectedModelId,
 						profileConfigDir: _profiles.SelectedProfileConfigDir,
 						effort:           _models.SelectedEffort,
+						mcpConfigPath:    mcpConfigPath,
 						ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
 						disableTools:     _models.SelectedModelDisablesTools,
 						chrome:           _models.IsChromeEnabled,
 						disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
+						localToolSpec:    localToolSpec,
+						strictMcpConfig:  strictMcpConfig,
 						cancellationToken: ct);
 				}
 			}
@@ -589,7 +610,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	/// <see cref="HandleStreamEvent"/> is reused unchanged — it processes a <see cref="ClaudeStreamEvent"/>
 	/// the same way regardless of whether it came from a one-shot or a streaming process.
 	/// </summary>
-	private async Task SendViaStreamingAsync(string? sessionId, string messageToSend, string? mcpConfigPath, CancellationToken ct)
+	private async Task SendViaStreamingAsync(string? sessionId, string messageToSend, string? mcpConfigPath,
+		LocalToolSpec? localToolSpec, bool strictMcpConfig, CancellationToken ct)
 	{
 		var nodeId = _node.Model.NodeId;
 		var spawnParams = new StreamingSpawnParams(
@@ -602,7 +624,9 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			McpConfigPath:    mcpConfigPath,
 			OllamaBaseUrl:    _models.SelectedLocalBaseUrl,
 			DisableTools:     _models.SelectedModelDisablesTools,
-			Chrome:           _models.IsChromeEnabled);
+			Chrome:           _models.IsChromeEnabled,
+			LocalToolSpec:    localToolSpec,
+			StrictMcpConfig:  strictMcpConfig);
 
 		var justStarted = _streamingManager.EnsureStarted(nodeId, spawnParams, HandleStreamEvent);
 		if (justStarted)
@@ -802,6 +826,12 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		var hadError = false;
 		string? compactionErrorContent = null;
 
+		// Local Tool Profile (FR.12.21): restrict native tools the same way an ordinary turn would —
+		// a weak local model is just as prone to mis-calling tools on a compaction turn as on any
+		// other. No --mcp-config is built for compaction either way (unchanged from before this
+		// feature), so only the --tools/--strict-mcp-config pair applies here.
+		var compactionLocalProfile = LocalToolProfileResolver.Resolve(_models.SelectedModelInfo, _models.DirectoryModel);
+
 		await _processManager.SendMessageAsync(
 			workingDirectory: _node.Model.WorkingDirectory,
 			claudePath:       _appSettings.Settings.ClaudePath,
@@ -813,6 +843,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
 			disableTools:     _models.SelectedModelDisablesTools,
 			disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
+			localToolSpec:    compactionLocalProfile?.ToolSpec,
+			strictMcpConfig:  compactionLocalProfile != null,
 			onEvent:          evt =>
 			{
 				// Any error event (auth failure, exit-code failure, etc.) marks the whole
@@ -922,6 +954,9 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		// --resume process against ClaudeSessionId regardless of whether the session is in
 		// Streaming Session Mode — if a streaming process is also holding that same session ID
 		// open, this is the same class of known v1 limitation, not solved here.
+		// Local Tool Profile (FR.12.21) applies here too — see SendCompactionPromptAsync's comment.
+		var correctionLocalProfile = LocalToolProfileResolver.Resolve(_models.SelectedModelInfo, _models.DirectoryModel);
+
 		_ = _processManager.SendMessageAsync(
 			workingDirectory: _node.Model.WorkingDirectory,
 			claudePath:       _appSettings.Settings.ClaudePath,
@@ -933,6 +968,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
 			disableTools:     _models.SelectedModelDisablesTools,
 			disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
+			localToolSpec:    correctionLocalProfile?.ToolSpec,
+			strictMcpConfig:  correctionLocalProfile != null,
 			onEvent:          evt =>
 			{
 				// Capture session ID updates but don't write to file or UI

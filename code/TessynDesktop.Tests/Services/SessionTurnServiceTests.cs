@@ -24,6 +24,7 @@ internal sealed class FakeProcessManagerForTurnService : IClaudeProcessManager
 		Action<ClaudeStreamEvent> onEvent, string? model = null, string? profileConfigDir = null,
 		string? effort = null, string? mcpConfigPath = null, string? ollamaBaseUrl = null,
 		bool disableTools = false, bool chrome = false, bool disallowNativeScheduling = false,
+		LocalToolSpec? localToolSpec = null, bool strictMcpConfig = false,
 		CancellationToken cancellationToken = default)
 	{
 		Calls.Add((workingDirectory, sessionId, userMessage));
@@ -155,6 +156,7 @@ internal sealed class FakeMcpServerForTurnService : IAgentMcpServer
 	public void Start() => throw new NotImplementedException();
 	public void Stop() => throw new NotImplementedException();
 	public Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken) => throw new NotImplementedException();
+	public Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken, bool includeCmx, IReadOnlyList<string> externalServerIds) => throw new NotImplementedException();
 }
 
 internal sealed class FakeBridgeForTurnService : ITelegramBridgeService

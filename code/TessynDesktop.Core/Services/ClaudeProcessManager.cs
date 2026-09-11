@@ -49,9 +49,12 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		bool disableTools = false,
 		bool chrome = false,
 		bool disallowNativeScheduling = false,
+		LocalToolSpec? localToolSpec = null,
+		bool strictMcpConfig = false,
 		CancellationToken cancellationToken = default)
 	{
-		var args = BuildArguments(sessionId, model, effort, mcpConfigPath, disableTools, chrome, disallowNativeScheduling);
+		var args = BuildArguments(sessionId, model, effort, mcpConfigPath, disableTools, chrome, disallowNativeScheduling,
+			localToolSpec, strictMcpConfig);
 		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir} ConfigDir={ConfigDir} OllamaBaseUrl={OllamaBaseUrl}",
 			claudePath, args, workingDirectory, profileConfigDir, ollamaBaseUrl);
 
@@ -215,14 +218,17 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		return args;
 	}
 
-	private static string BuildArguments(
+	/// <summary>Internal (not private) so <c>TessynDesktop.Tests</c> can assert on assembled CLI args directly (FR.12.21 test seam — see AssemblyInfo.cs).</summary>
+	internal static string BuildArguments(
 		string? sessionId,
 		string? model = null,
 		string? effort = null,
 		string? mcpConfigPath = null,
 		bool disableTools = false,
 		bool chrome = false,
-		bool disallowNativeScheduling = false)
+		bool disallowNativeScheduling = false,
+		LocalToolSpec? localToolSpec = null,
+		bool strictMcpConfig = false)
 	{
 		// -p (--print) forces non-interactive single-prompt mode.
 		// --verbose is required by claude when combining --print with stream-json output.
@@ -236,8 +242,12 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			args += $" --effort {effort}";
 		if (!string.IsNullOrEmpty(mcpConfigPath))
 			args += $" --mcp-config \"{mcpConfigPath}\"";
+		if (strictMcpConfig)
+			args += " --strict-mcp-config";
 		if (disableTools)
 			args += " --tools \"\"";
+		else if (localToolSpec != null)
+			args += $" --tools \"{string.Join(' ', localToolSpec.NativeToolNames)}\"";
 		// Experimental browser control (FR pending): asks the CLI to connect to the
 		// Claude-in-Chrome extension. Interaction-centric feature; behaviour under -p is
 		// unverified — the toggle exists so the flag can be exercised and observed.

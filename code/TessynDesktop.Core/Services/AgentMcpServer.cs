@@ -136,9 +136,35 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		Directory.CreateDirectory(dir);
 
 		var path    = Path.Combine(dir, $"{nodeId}.json");
-		var content = await BuildMcpConfigJsonAsync(agentToken);
+		var content = await BuildMcpConfigJsonAsync(agentToken, includeCmx: true, externalServerIds: null);
 
 		// Re-write if missing or the port/token/registry contents changed.
+		if (!File.Exists(path) || File.ReadAllText(path) != content)
+			File.WriteAllText(path, content, Encoding.UTF8);
+
+		return path;
+	}
+
+	public async Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken, bool includeCmx, IReadOnlyList<string> externalServerIds)
+	{
+		// The cmx server itself still needs the same preconditions as the full-config path (a live
+		// listener plus a valid node identity to authenticate the handshake) — silently drop it
+		// rather than emit a config entry that will immediately fail (see EnsureConfigFileAsync above).
+		var effectiveIncludeCmx = includeCmx && _appSettings.Settings.AgentToolsEnabled && _port != 0
+		                          && !string.IsNullOrEmpty(nodeId) && !string.IsNullOrEmpty(agentToken);
+
+		if (!effectiveIncludeCmx && externalServerIds.Count == 0)
+			return null; // nothing selected — caller omits --mcp-config entirely
+
+		var dir = Path.Combine(
+			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+			Constants.AppDataFolderName,
+			Constants.Agent.McpConfigFolderName);
+		Directory.CreateDirectory(dir);
+
+		var path    = Path.Combine(dir, $"{nodeId}.local.json");
+		var content = await BuildMcpConfigJsonAsync(agentToken, effectiveIncludeCmx, externalServerIds);
+
 		if (!File.Exists(path) || File.ReadAllText(path) != content)
 			File.WriteAllText(path, content, Encoding.UTF8);
 
@@ -164,30 +190,50 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	}
 
 	/// <summary>
-	/// Builds the full --mcp-config content: the always-present cmx server (FR.14.1) plus every
-	/// enabled External MCP Server Registry entry (FR.20.2), merged into one mcpServers map.
+	/// Builds the --mcp-config content: the cmx server (FR.14.1, when <paramref name="includeCmx"/>)
+	/// plus External MCP Server Registry entries (FR.20.2), merged into one mcpServers map.
+	/// <paramref name="externalServerIds"/> null means "every enabled entry" (the full-config path
+	/// used for Anthropic sessions); a non-null list restricts to just those IDs (the Local Tool
+	/// Profile path, FR.12.21).
 	/// </summary>
-	private async Task<string> BuildMcpConfigJsonAsync(string agentToken)
+	private async Task<string> BuildMcpConfigJsonAsync(string agentToken, bool includeCmx, IReadOnlyList<string>? externalServerIds)
 	{
+		var registryServers = await _configMerger.BuildRegistryServersAsync(_appSettings.Settings.ExternalMcpServers);
+		return BuildMcpConfigJson(includeCmx, _port, agentToken, registryServers, externalServerIds);
+	}
+
+	/// <summary>
+	/// Pure merge/serialize step of <see cref="BuildMcpConfigJsonAsync"/>, extracted so
+	/// <c>TessynDesktop.Tests</c> can assert on the filtering behavior (FR.12.21) without
+	/// constructing a full <see cref="AgentMcpServer"/> (HTTP listener, registry, scheduler, etc.).
+	/// </summary>
+	internal static string BuildMcpConfigJson(
+		bool includeCmx, int port, string agentToken,
+		IReadOnlyDictionary<string, object> registryServers, IReadOnlyList<string>? externalServerIds)
+	{
+		var mcpServers = new Dictionary<string, object>();
+
 		// "type":"http" is required by the claude CLI to recognise this as an HTTP MCP server;
 		// without it the entry is silently ignored (mcp_servers:[]).
 		// The "headers" object is forwarded on every request so the server can map the token to the calling node.
-		var mcpServers = new Dictionary<string, object>
+		if (includeCmx)
 		{
-			[Constants.Agent.McpServerName] = new
+			mcpServers[Constants.Agent.McpServerName] = new
 			{
 				type    = "http",
-				url     = $"http://127.0.0.1:{_port}{Constants.Agent.McpEndpointPath}",
+				url     = $"http://127.0.0.1:{port}{Constants.Agent.McpEndpointPath}",
 				headers = new Dictionary<string, string>
 				{
 					[Constants.Agent.TokenHeader] = agentToken,
 				},
-			},
-		};
+			};
+		}
 
-		var registryServers = await _configMerger.BuildRegistryServersAsync(_appSettings.Settings.ExternalMcpServers);
 		foreach (var (id, server) in registryServers)
-			mcpServers[id] = server;
+		{
+			if (externalServerIds == null || externalServerIds.Contains(id))
+				mcpServers[id] = server;
+		}
 
 		return JsonSerializer.Serialize(new { mcpServers }, new JsonSerializerOptions { WriteIndented = true });
 	}

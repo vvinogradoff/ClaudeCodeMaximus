@@ -779,6 +779,40 @@ Confirmed live bug (reported by the Architect against the "LoRA training of LLM"
 
 ---
 
+## Phase 31 — Local Tool Profile (FR.12.21, FR.12.22)
+
+Curates the native tool + MCP surface handed to the claude CLI for local (Ollama) model turns, since weak/quantized/abliterated local models mis-call tools out of the full ~30-tool surface even though the Ollama-served Anthropic `/v1/messages` protocol itself correctly handles `tools`/`tool_use`. See `docs/business-analysis/Local-Models_Agentic-Coding-Findings.md` for the empirical findings behind this phase.
+
+### P31.1 Data model & persistence (FR.12.21)
+- [DONE] `Models/LocalToolProfileModel.cs` — `List<string> NativeTools`, `bool IncludeCmxMcp`, `List<string> IncludedExternalMcpServerIds`
+- [DONE] `Models/DirectoryNodeModel.cs` — add nullable `LocalToolProfile` property; `null` = default lean profile (backward-compatible, no migration needed)
+- [DONE] `Constants.cs` — `Constants.LocalTools` with `DefaultNativeTools` (`Read`/`Write`/`Edit`/`Bash`/`Glob`/`Grep`/`LS`) + full selectable `Catalog` (core + `WebFetch`/`WebSearch`/`NotebookEdit`/`TodoWrite`/`Task`)
+
+### P31.2 CLI argument/config wiring (FR.12.21)
+- [DONE] `Services/LocalToolProfileResolver.cs` — single source of truth: `DirectoryNodeModel.LocalToolProfile` (or default lean) → `LocalToolProfileResolution`, only when the session's model is `ModelProvider.Ollama` and `SupportsTools = true` (returns `null` otherwise). Shared by headless + interactive paths.
+- [DONE] `ClaudeProcessManager.BuildArguments` (+ `StreamingSpawnParams`/`ClaudeStreamingSessionManager`) — append `--tools "<space-separated names>"` (or `""` for empty) per the resolved `LocalToolSpec`
+- [DONE] `--mcp-config` build for local turns — `AgentMcpServer.EnsureConfigFileAsync` overload filters to `cmx` (if `IncludeCmxMcp`) + matching `IncludedExternalMcpServerIds`; append `--strict-mcp-config`; omit `--mcp-config` when nothing selected
+- [DONE] Tool-incapable local models (`SupportsTools = false`) continue to get `--tools ""` and no `--mcp-config` regardless of any saved profile (resolver returns `null`; existing `disableTools` path unchanged)
+- [DONE] Anthropic-routed sessions unaffected — resolver returns `null`, no `--tools`/`--strict-mcp-config` emitted (covered by a regression test)
+
+### P31.3 Command bar UI (FR.12.22)
+- [DONE] Model/Profile/Effort selector boxes fixed to 120px via `ComboBox.cmxCompact`; dropdown flyouts keep natural width (template-part `Width` overrides on `PART_Popup`/`PART_ItemsPresenter`)
+- [DONE] `Converters/LeftEllipsisConverter.cs` — left-truncating converter wired to the Model box via `SelectionBoxItemTemplate` (right-aligned; `ConverterParameter=8`)
+- [DONE] Local Tool Profile selector: `ToolProfileToggle` toggle-label + `Popup` checkbox list (native tools + `cmx` + external MCP servers), matching the existing `ProfileActionsToggle`/`Popup` pattern — visible only when the directory's selected model is local; disabled w/ tooltip when tool-incapable
+
+### P31.4 Tests
+- [DONE] `LocalToolProfileResolverTests.cs` (7) + `ClaudeProcessManagerBuildArgumentsTests.cs` (6) — resolver decision (Anthropic/tool-incapable/null → `null`, default-lean, custom echo, empty selection) and `--tools`/`--strict-mcp-config` arg assembly (`BuildArguments` made `internal` + `InternalsVisibleTo`). Full suite: 362/362 pass.
+- [ ] Follow-up: a dedicated `AgentMcpServer` filtered-config unit test (include/exclude `cmx` + external ids) — currently covered only indirectly via `SessionTurnService`.
+- See `docs/testcases/TC.LC.01-Local-Tool-Profile.md` for the full integration test list.
+
+### P31.5 Docs
+- [DONE] `docs/requirements.md` — FR.12.21, FR.12.22; FR.12.14 bare-host bug fix
+- [DONE] `docs/glossary.md` — Local Tool Profile entry; ANTHROPIC_BASE_URL/Local Model/Model Provider updated
+- [DONE] `docs/usecases/UC.LC.01-Local-Tool-Profile.md`, `docs/testcases/TC.LC.01-Local-Tool-Profile.md`
+- [DONE] `docs/business-analysis/Local-Models_Agentic-Coding-Findings.md`
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/RESEARCH.01.VS-MCP-Server-Automation-Approaches.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
