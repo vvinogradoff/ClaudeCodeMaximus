@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 
 namespace TessynDesktop;
 
@@ -470,6 +472,57 @@ SESSION TRANSCRIPT TO COMPACT:
 				chars[i] = char.IsLetterOrDigit(c) || c == '-' ? c : '-';
 			}
 			return new string(chars);
+		}
+
+		/// <summary>
+		/// Every Claude CLI home whose <c>projects/</c> folder may hold session JSONL for this app:
+		/// the OS-default <c>~/.claude</c>, plus one per Claude account profile directory under
+		/// <c>%AppData%/TessynDesktop/profiles/</c> — active profiles and ones removed via FR.12.18
+		/// (renamed with a <c>_rem</c> suffix, directory otherwise untouched) alike, since each
+		/// profile launches its <c>claude</c> processes with <c>CLAUDE_CONFIG_DIR</c> pointed at its
+		/// own directory, so its sessions never land under <c>~/.claude</c>.
+		/// </summary>
+		public static IReadOnlyList<string> GetAllProjectsDirs()
+		{
+			var dirs = new List<string>();
+
+			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+			dirs.Add(Path.Combine(userProfile, ClaudeHomeFolderName, ProjectsFolderName));
+
+			var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+			var profilesRoot = Path.Combine(appData, AppDataFolderName, ProfilesFolderName);
+			if (Directory.Exists(profilesRoot))
+			{
+				foreach (var profileDir in Directory.GetDirectories(profilesRoot))
+					dirs.Add(Path.Combine(profileDir, ProjectsFolderName));
+			}
+
+			return dirs;
+		}
+
+		/// <summary>
+		/// Searches every directory from <paramref name="projectsDirs"/> (defaults to
+		/// <see cref="GetAllProjectsDirs"/>) for <c>{slug}/{sessionId}.jsonl</c>, returning the first
+		/// match. Used so a session's JSONL can still be located after its originating profile is
+		/// removed (FR.12.18) — the tree entry and its own compact log always survive removal, but
+		/// without this, any feature reading the live Claude JSONL directly (resumability, the raw
+		/// Claude Session View, cross-profile import) could only ever find sessions under the
+		/// OS-default <c>~/.claude</c>.
+		/// </summary>
+		public static string? FindExistingJsonlPath(
+			string workingDirectory, string sessionId, IReadOnlyList<string>? projectsDirs = null)
+		{
+			var slug = BuildProjectSlug(workingDirectory);
+			var fileName = sessionId + SessionFileExtension;
+
+			foreach (var projectsDir in projectsDirs ?? GetAllProjectsDirs())
+			{
+				var candidate = Path.Combine(projectsDir, slug, fileName);
+				if (File.Exists(candidate))
+					return candidate;
+			}
+
+			return null;
 		}
 	}
 }

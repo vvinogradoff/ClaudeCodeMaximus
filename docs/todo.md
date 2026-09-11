@@ -323,10 +323,11 @@
 - [DONE] `ProfileListItemModel.IsSystem` flag; Default entry prefixed `"[Sys] "` and rendered dark grey (`BoolToSystemProfileForegroundConverter`), stored profiles stay black
 - [DONE] Re-authenticate/Rename/Delete buttons switched from text labels to icons (🔑/✏/🗑), with `ToolTip.Tip` retained for discoverability; ✕ Remove kept its existing icon
 - [DONE] ✕ Remove button now confirms before deleting (previously fired immediately) — both it and Delete route through a shared `ConfirmAndDeleteSelectedProfileAsync` in `SessionView.axaml.cs`
-- [DONE] Re-authenticate button visibility has gone back and forth (always-visible ↔ `IsVisible="{Binding HasAuthError}"`) while the ISSUE-004 fix awaited a real deployment to test against; currently **always-visible** per explicit request — see ISSUE-004 for why the running app couldn't yet reflect the fix (stale `[Publish]` build, unrelated to this binding)
-- [DONE] Fixed root cause of `HasAuthError` never firing: `ParseResultEvent` only read `"errors"`/`"error"` JSON fields; auth-failure text lives in `"result"` (ISSUE-004)
-- [DONE] Confirmed after restart onto a fresh build: right-click on a Profile dropdown row indeed does not open a context menu — validates the ISSUE-005 nested-popup hypothesis. Not urgent (buttons cover the functionality); no fix attempted this round.
+- [DONE] Re-authenticate button visibility has gone back and forth (always-visible ↔ `IsVisible="{Binding HasAuthError}"`) while the ISSUE.004 fix awaited a real deployment to test against; currently **always-visible** per explicit request — see ISSUE.004 for why the running app couldn't yet reflect the fix (stale `[Publish]` build, unrelated to this binding)
+- [DONE] Fixed root cause of `HasAuthError` never firing: `ParseResultEvent` only read `"errors"`/`"error"` JSON fields; auth-failure text lives in `"result"` (ISSUE.004)
+- [DONE] Confirmed after restart onto a fresh build: right-click on a Profile dropdown row indeed does not open a context menu — validates the ISSUE.005 nested-popup hypothesis. Not urgent (buttons cover the functionality); no fix attempted this round.
 - [DONE] Buttons moved out of the always-visible command bar into a flyout `Popup`, opened by clicking a "Profile: ▾" toggle label (`ProfileActionsToggle`) — was crowding the bar. Buttons shrunk (`Padding="4,2"`). Popup uses `IsLightDismissEnabled="False"` + one-way `IsOpen` binding to `ProfileActionsToggle.IsChecked` (mirrors the existing `AutocompletePopup` pattern in this file) rather than light-dismiss, to avoid the toggle visually desyncing from the popup's open state.
+- [DONE] Fixed: a removed (`_rem`) profile's tree sessions kept their name/compact log (never depended on the profile), but every feature that reads the *live Claude CLI JSONL* directly — resumability dot, raw "Claude Session View" toggle + its file watcher, and the Import picker's cross-project discovery — hardcoded `~/.claude/projects/<slug>/`, so they went blind for any session run under a non-Default profile once that profile could no longer be found there (worse after removal, but really any non-Default profile, active or `_rem`). Added `Constants.ClaudeSessions.GetAllProjectsDirs()`/`FindExistingJsonlPath(...)` (Default + every directory under `profiles/`, active or `_rem`, mirroring the ISSUE.003 index fix) and switched `ClaudeSessionStatusService.IsSessionResumable`, `SessionContentViewModel.BuildJsonlPathForSessionId`/`StartJsonlWatcher`, and `ClaudeSessionImportService.DiscoverSessions` (now takes an optional `projectsDirsOverride` for testing) to use it.
 
 ---
 
@@ -523,7 +524,7 @@
 
 ## Phase 20 — Instruction-Block Injection Timing + /deep-research Ban (FR.14, FR.15)
 
-### P20.1 Fix scheduled-turn profile mismatch (ISSUE-001) — DONE
+### P20.1 Fix scheduled-turn profile mismatch (ISSUE.001) — DONE
 - [DONE] `Services/SessionTurnService.cs` — `ResolveProfileConfigDir` now scans the session's own history for the last recorded `ProfileName` (same as `SessionViewModel.RestoreLastUsedSettings`), instead of reading the shared per-directory `SelectedProfileIndex` — fixes scheduled/orchestrated turns authenticating as the wrong account and getting 401s
 
 ### P20.2 Ban /deep-research skill alongside Workflow/Agent — DONE
@@ -538,13 +539,13 @@
 
 ---
 
-## Phase 21 — Orchestrated Child Profile Inheritance (ISSUE-002) — DONE
+## Phase 21 — Orchestrated Child Profile Inheritance (ISSUE.002) — DONE
 
 ### P21.1 Fix spawned children falling back to Default profile — DONE
 - [DONE] `Models/SessionNodeModel.cs` — add persisted `ProfileName` (pinned profile for a session's headless turns; null = resolve from history, then Default)
 - [DONE] `Services/ISessionTurnService.cs` / `SessionTurnService.cs` — add `ResolveProfileName(node)` (returns pinned `ProfileName` if set, else last profile from history); `ResolveProfileConfigDir` now builds on it
 - [DONE] `Services/AgentMcpServer.cs` — `InheritSupervisorProfile(child, supervisor)`, called in `spawn_session`, `orchestrate_parallel`, and `orchestrate_pipeline` right after child creation, pinning the supervisor's resolved profile onto the child so it authenticates with the same account instead of falling back to a possibly-revoked Default
-- Documented as `docs/issues/ISSUE-002-orchestrated-child-profile-inheritance.md`; `ISSUE-001` marked fixed with a pointer to this follow-on
+- Documented as `docs/issues/ISSUE.002.orchestrated-child-profile-inheritance.md`; `ISSUE.001` marked fixed with a pointer to this follow-on
 
 ---
 
@@ -727,14 +728,14 @@
 ### P28.3 Settings UI ✓ DONE
 - [DONE] Telegram panel: enable toggle, bot token field + immediate-save action, chat ID field, allowed-user-IDs field (FR.21.7)
 
-### P28.4 Tests (see `docs/testcases/TC-21-Telegram-Bridge.md`) ✓ DONE (automated)
+### P28.4 Tests (see `docs/testcases/TC.21-Telegram-Bridge.md`) ✓ DONE (automated)
 - [DONE] `TelegramTokenStoreTests`, `TelegramClientTests`, `TelegramBridgeServiceTests`
 - [DONE] `SessionRegistryTests` / `InstructionBlockBuilderTests` additions
 - [DONE] Full suite green (300 passing, 0 failing)
 - [ ] Manual E2E checklist run against a real bot/supergroup (requires the Architect to provision a bot per FR.21's setup steps) before marking FR.21 fully verified end-to-end
-  - [DONE] UC-21.1 (notify_user → topic auto-created, message delivered) — verified 2026-08-20 against `@VitalyTessynBot` / "Tessyn Desktop" supergroup
-  - [DONE] UC-21.2/UC-21.3 (reply in topic → routed back as a turn on the correct session, response posted back to the topic) — verified 2026-08-20; confirmed the per-node turn lock correctly queues a Telegram-routed turn behind an in-flight interactive turn on the same session
-  - [ ] UC-21.4 (`/sessions`), UC-21.5 (`/open`), UC-21.6 (unauthorized sender dropped), and update-offset persistence across an app restart — not yet exercised live
+  - [DONE] UC.21.1 (notify_user → topic auto-created, message delivered) — verified 2026-08-20 against `@VitalyTessynBot` / "Tessyn Desktop" supergroup
+  - [DONE] UC.21.2/UC.21.3 (reply in topic → routed back as a turn on the correct session, response posted back to the topic) — verified 2026-08-20; confirmed the per-node turn lock correctly queues a Telegram-routed turn behind an in-flight interactive turn on the same session
+  - [ ] UC.21.4 (`/sessions`), UC.21.5 (`/open`), UC.21.6 (unauthorized sender dropped), and update-offset persistence across an app restart — not yet exercised live
 
 ---
 
@@ -766,13 +767,13 @@ Reworks the Telegram Bridge from a notification-only channel into a full mirror 
 
 ## Phase 30 — Streaming/Headless Context Divergence Fix (FR.19.13)
 
-Confirmed live bug (reported by the Architect against the "LoRA training of LLM" session, 2026-08-26): a headless turn (Telegram/scheduled/orchestrated) against a session with an alive Streaming Session Mode process used to spawn a competing one-shot `--resume` process, silently diverging from the persistent process's own in-memory context — see `docs/issues/Streaming-Headless-Context-Divergence.md` for the full incident writeup.
+Confirmed live bug (reported by the Architect against the "LoRA training of LLM" session, 2026-08-26): a headless turn (Telegram/scheduled/orchestrated) against a session with an alive Streaming Session Mode process used to spawn a competing one-shot `--resume` process, silently diverging from the persistent process's own in-memory context — see `docs/issues/ISSUE.006.streaming-headless-context-divergence.md` for the full incident writeup.
 
 - [DONE] `IClaudeStreamingSessionManager.SendTurnAsync` gains an optional, additive `onTurnEvent` observer param — delivered alongside (not instead of) the process's existing primary `onEvent` callback, so a second caller can observe a turn's outcome without disturbing the UI's own file/UI writes (`ClaudeStreamingSessionManager`'s `Handle.TurnObserver`)
 - [DONE] `SessionTurnService.RunTurnAsync` checks `IClaudeStreamingSessionManager.IsAlive(nodeId)` before the one-shot path; when alive, routes via the new `RunTurnViaStreamingAsync` (sends through the persistent process, observes events only to build `TurnResultModel`, does not append assistant/system content itself)
 - [DONE] `InstructionOptionsModel`/`SessionTurnService` doc comments updated to match (`IsStreamingMode: true` on the redirected path)
 - [DONE] `docs/requirements.md` FR.19.11 rewritten (no longer describes headless-vs-streaming as an unsolved limitation), new FR.19.13 added; `docs/glossary.md` "Persistent Session Process" updated + new "Streaming Redirect" term
-- [DONE] `docs/issues/Streaming-Headless-Context-Divergence.md` — full investigation/resolution writeup (first entry in `/docs/issues/`)
+- [DONE] `docs/issues/ISSUE.006.streaming-headless-context-divergence.md` — full investigation/resolution writeup (first entry in `/docs/issues/`)
 - [DONE] `SessionTurnServiceTests.cs` (new) — one-shot fallback baseline + streaming-redirect coverage (routes correctly, does not double-append assistant content, propagates errors/tokens, sends the augmented prompt, running-state set/unset)
 - [ ] Manual re-verification against the actual "LoRA training of LLM" session (or any Streaming Session Mode session) — send a Telegram message while a desktop tab is open on the same session, confirm the next desktop-typed turn has full context — not yet exercised live post-fix
 
@@ -780,7 +781,7 @@ Confirmed live bug (reported by the Architect against the "LoRA training of LLM"
 
 ## Backlog / Future
 
-- [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/VS-MCP-Server_Automation-Approaches-Research.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
+- [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/RESEARCH.01.VS-MCP-Server-Automation-Approaches.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
 - [ ] **Claude-CLI-free agent loop (planned after the VS/Roslyn server)** — in-process C# agentic loop (Microsoft.Extensions.AI `IChatClient`/`FunctionInvokingChatClient` + OllamaSharp + official Anthropic SDK + official MCP C# SDK as an MCP client) replacing the `claude` subprocess for Ollama (and optionally direct-Anthropic) turns; consumes the same FR.20 registry + token store instead of re-implementing OAuth. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
 
 - [ ] **Investigate whether Claude Code's own context compaction silently drops the once-per-fresh-process instruction steering** — `InstructionOptionsModel.IsNewSession` currently gates `NativeSchedulingRedirect`/`NoWorkflowTool` on `ClaudeSessionId == null`, so within a *resumed* (never-detached) session the redirects are sent once and never again; if Claude Code internally compacts context mid-session, the steering may fall out of context and never return, even though `ClaudeSessionId` stays non-null throughout. We already parse `system`/`compact` stream events (`TurnController.HandleStreamEvent`, `SessionTurnService.HandleEvent`) — a fix, if the hypothesis is confirmed, would re-inject the redirects on the next turn after a `compact` event. Raised while investigating unreliable native-scheduling steering; not yet confirmed or scheduled.

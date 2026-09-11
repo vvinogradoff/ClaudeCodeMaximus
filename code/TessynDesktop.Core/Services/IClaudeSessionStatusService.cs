@@ -8,8 +8,9 @@ namespace TessynDesktop.Services;
 public interface IClaudeSessionStatusService
 {
 	/// <summary>
-	/// Returns true if the Claude Code session file exists at
-	/// ~/.claude/projects/{slug}/{claudeSessionId}.jsonl.
+	/// Returns true if the Claude Code session file {slug}/{claudeSessionId}.jsonl exists under
+	/// any known Claude CLI home — the OS-default ~/.claude plus every profile directory under
+	/// %AppData%/TessynDesktop/profiles/, active or removed via FR.12.18.
 	/// </summary>
 	bool IsSessionResumable(string workingDirectory, string claudeSessionId);
 

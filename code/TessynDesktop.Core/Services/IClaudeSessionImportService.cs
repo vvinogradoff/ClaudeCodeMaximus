@@ -7,8 +7,10 @@ namespace TessynDesktop.Services;
 public interface IClaudeSessionImportService
 {
 	/// <summary>
-	/// Scans ~/.claude/projects/&lt;slug&gt;/ for JSONL session files and returns
-	/// summary metadata for each discovered session (FR.13.2, FR.13.3).
+	/// Scans &lt;projects-dir&gt;/&lt;slug&gt;/ for JSONL session files across every known Claude CLI
+	/// home — the OS-default ~/.claude plus every profile directory under
+	/// %AppData%/TessynDesktop/profiles/ (active or removed via FR.12.18) — and returns summary
+	/// metadata for each discovered session (FR.13.2, FR.13.3).
 	/// Pre-populates GeneratedTitle from cache for previously titled sessions.
 	/// </summary>
 	IReadOnlyList<ClaudeSessionSummaryModel> DiscoverSessions(string workingDirectory);

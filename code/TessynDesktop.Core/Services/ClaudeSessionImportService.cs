@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using TessynDesktop.Models;
@@ -17,6 +18,13 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 	/// <summary>Session ID → generated title cache. Survives across dialog open/close cycles.</summary>
 	private readonly ConcurrentDictionary<string, string> _titleCache = new();
 
+	private readonly IReadOnlyList<string>? _projectsDirsOverride;
+
+	public ClaudeSessionImportService(IReadOnlyList<string>? projectsDirsOverride = null)
+	{
+		_projectsDirsOverride = projectsDirsOverride;
+	}
+
 	public void CacheTitle(string sessionId, string title)
 		=> _titleCache[sessionId] = title;
 
@@ -26,48 +34,48 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 	public IReadOnlyList<ClaudeSessionSummaryModel> DiscoverSessions(string workingDirectory)
 	{
 		var slug = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
-		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		var slugDir = Path.Combine(
-			userProfile,
-			Constants.ClaudeSessions.ClaudeHomeFolderName,
-			Constants.ClaudeSessions.ProjectsFolderName,
-			slug);
+		var projectsDirs = _projectsDirsOverride ?? Constants.ClaudeSessions.GetAllProjectsDirs();
 
-		if (!Directory.Exists(slugDir))
+		// Keyed by session ID so a file discovered under an earlier-scanned root (e.g. the
+		// OS-default) wins over the same ID surfacing under another profile directory.
+		var results = new Dictionary<string, ClaudeSessionSummaryModel>();
+
+		foreach (var projectsDir in projectsDirs)
 		{
-			_log.Information("Import: no slug directory found at {SlugDir}", slugDir);
-			return [];
-		}
-
-		var results = new List<ClaudeSessionSummaryModel>();
-
-		foreach (var jsonlPath in Directory.GetFiles(slugDir, "*" + Constants.ClaudeSessions.SessionFileExtension))
-		{
-			var sessionId = Path.GetFileNameWithoutExtension(jsonlPath);
-			if (string.IsNullOrEmpty(sessionId))
+			var slugDir = Path.Combine(projectsDir, slug);
+			if (!Directory.Exists(slugDir))
 				continue;
 
-			try
+			foreach (var jsonlPath in Directory.GetFiles(slugDir, "*" + Constants.ClaudeSessions.SessionFileExtension))
 			{
-				var summary = ExtractSummary(sessionId, jsonlPath);
-				if (summary == null || summary.MessageCount == 0)
+				var sessionId = Path.GetFileNameWithoutExtension(jsonlPath);
+				if (string.IsNullOrEmpty(sessionId) || results.ContainsKey(sessionId))
 					continue;
 
-				// Apply cached title if available
-				var cached = GetCachedTitle(sessionId);
-				if (cached != null)
-					summary.GeneratedTitle = cached;
-				results.Add(summary);
-			}
-			catch (Exception ex)
-			{
-				_log.Warning(ex, "Import: failed to extract summary from {Path}", jsonlPath);
+				try
+				{
+					var summary = ExtractSummary(sessionId, jsonlPath);
+					if (summary == null || summary.MessageCount == 0)
+						continue;
+
+					// Apply cached title if available
+					var cached = GetCachedTitle(sessionId);
+					if (cached != null)
+						summary.GeneratedTitle = cached;
+					results[sessionId] = summary;
+				}
+				catch (Exception ex)
+				{
+					_log.Warning(ex, "Import: failed to extract summary from {Path}", jsonlPath);
+				}
 			}
 		}
 
-		results.Sort((a, b) => b.LastUsed.CompareTo(a.LastUsed));
-		_log.Information("Import: discovered {Count} sessions for slug {Slug}", results.Count, slug);
-		return results;
+		var list = results.Values.ToList();
+		list.Sort((a, b) => b.LastUsed.CompareTo(a.LastUsed));
+		_log.Information("Import: discovered {Count} sessions for slug {Slug} across {DirCount} profile roots",
+			list.Count, slug, projectsDirs.Count);
+		return list;
 	}
 
 	public IReadOnlyList<SessionEntryModel> ParseJsonlSession(string jsonlPath)

@@ -175,21 +175,33 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 
 		try
 		{
-			var slug = Constants.ClaudeSessions.BuildProjectSlug(_node.Model.WorkingDirectory);
-			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-			var jsonlDir = Path.Combine(
-				userProfile,
-				Constants.ClaudeSessions.ClaudeHomeFolderName,
-				Constants.ClaudeSessions.ProjectsFolderName,
-				slug);
+			// Prefer wherever the JSONL already lives (any profile, active or removed); fall back
+			// to the OS-default location for a session that hasn't written one yet.
+			var existingPath = Constants.ClaudeSessions.FindExistingJsonlPath(_node.Model.WorkingDirectory, sessionId);
 
-			var jsonlFileName = sessionId + Constants.ClaudeSessions.SessionFileExtension;
-			var jsonlPath = Path.Combine(jsonlDir, jsonlFileName);
+			string jsonlDir;
+			string jsonlFileName;
+			if (existingPath != null)
+			{
+				jsonlDir = Path.GetDirectoryName(existingPath)!;
+				jsonlFileName = Path.GetFileName(existingPath);
+			}
+			else
+			{
+				var slug = Constants.ClaudeSessions.BuildProjectSlug(_node.Model.WorkingDirectory);
+				var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+				jsonlDir = Path.Combine(
+					userProfile,
+					Constants.ClaudeSessions.ClaudeHomeFolderName,
+					Constants.ClaudeSessions.ProjectsFolderName,
+					slug);
+				jsonlFileName = sessionId + Constants.ClaudeSessions.SessionFileExtension;
+			}
 
 			if (!Directory.Exists(jsonlDir))
 				return;
 
-			_log.Debug("Starting JSONL watcher for {Path}", jsonlPath);
+			_log.Debug("Starting JSONL watcher for {Path}", Path.Combine(jsonlDir, jsonlFileName));
 
 			_jsonlWatcher = new FileSystemWatcher(jsonlDir, jsonlFileName)
 			{
@@ -491,19 +503,18 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 		return result;
 	}
 
+	/// <summary>
+	/// Locates the JSONL for <paramref name="sessionId"/> under any known Claude CLI home — the
+	/// OS-default plus every profile directory (active or removed) — so this session's raw Claude
+	/// Session View and file watching keep working even after its originating profile is removed
+	/// (FR.12.18). Returns null if it can't be found anywhere.
+	/// </summary>
 	private string? BuildJsonlPathForSessionId(string sessionId)
 	{
 		if (string.IsNullOrEmpty(_node.Model.WorkingDirectory))
 			return null;
 
-		var slug = Constants.ClaudeSessions.BuildProjectSlug(_node.Model.WorkingDirectory);
-		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		return Path.Combine(
-			userProfile,
-			Constants.ClaudeSessions.ClaudeHomeFolderName,
-			Constants.ClaudeSessions.ProjectsFolderName,
-			slug,
-			sessionId + Constants.ClaudeSessions.SessionFileExtension);
+		return Constants.ClaudeSessions.FindExistingJsonlPath(_node.Model.WorkingDirectory, sessionId);
 	}
 
 	/// <summary>Converts a persisted session entry into a display view-model. Public so TurnController can reuse it when rewriting Messages after compaction.</summary>

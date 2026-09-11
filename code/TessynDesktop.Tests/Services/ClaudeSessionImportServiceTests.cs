@@ -168,10 +168,52 @@ public sealed class ClaudeSessionImportServiceTests : IDisposable
 		Assert.Equal("Hello Claude", entries[0].Content);
 	}
 
-	// --- DiscoverSessions tests (uses temp dir as fake slug dir) ---
-	// Note: DiscoverSessions reads from ~/.claude which we can't mock easily.
-	// These tests validate the parsing/summary extraction logic indirectly through ParseJsonlSession.
-	// Full discovery integration tests would need a mock filesystem.
+	// --- DiscoverSessions tests (uses the projectsDirsOverride constructor param to fake the
+	// OS-default + per-profile "projects" roots without touching the real ~/.claude / %AppData%) ---
+
+	[Fact]
+	public void DiscoverSessions_FindsSessions_AcrossMultipleProjectsDirs()
+	{
+		var defaultDir = Path.Combine(_tempDir, "default", "projects");
+		var removedProfileDir = Path.Combine(_tempDir, "profile_2_rem", "projects");
+		Directory.CreateDirectory(defaultDir);
+		Directory.CreateDirectory(removedProfileDir);
+
+		var workingDirectory = @"C:\proj";
+		var slug = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
+
+		WriteSlugJsonlFile(defaultDir, slug, "session-default",
+			JsonLine("user", """{"role":"user","content":"Hi from default"}""", "2026-03-10T10:00:00Z"));
+		// Simulates a session that only ever ran under a profile later removed (renamed "_rem").
+		WriteSlugJsonlFile(removedProfileDir, slug, "session-removed-profile",
+			JsonLine("user", """{"role":"user","content":"Hi from removed profile"}""", "2026-03-11T10:00:00Z"));
+
+		var sut = new ClaudeSessionImportService([defaultDir, removedProfileDir]);
+		var results = sut.DiscoverSessions(workingDirectory);
+
+		Assert.Equal(2, results.Count);
+		Assert.Contains(results, r => r.SessionId == "session-default");
+		Assert.Contains(results, r => r.SessionId == "session-removed-profile");
+	}
+
+	[Fact]
+	public void DiscoverSessions_ReturnsEmpty_WhenSlugMissingFromAllDirs()
+	{
+		var defaultDir = Path.Combine(_tempDir, "default", "projects");
+		Directory.CreateDirectory(defaultDir);
+
+		var sut = new ClaudeSessionImportService([defaultDir]);
+		var results = sut.DiscoverSessions(@"C:\nonexistent-project");
+
+		Assert.Empty(results);
+	}
+
+	private static void WriteSlugJsonlFile(string projectsDir, string slug, string sessionId, params string[] lines)
+	{
+		var slugDir = Path.Combine(projectsDir, slug);
+		Directory.CreateDirectory(slugDir);
+		File.WriteAllLines(Path.Combine(slugDir, sessionId + Constants.ClaudeSessions.SessionFileExtension), lines, Encoding.UTF8);
+	}
 
 	// --- Slug building tests (shared via Constants) ---
 

@@ -42,29 +42,11 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	}
 
 	/// <summary>
-	/// Every Claude CLI home whose <c>projects/</c> folder may hold session JSONL for this app:
-	/// the OS-default <c>~/.claude</c>, plus one per Claude account profile — each profile launches
-	/// its <c>claude</c> processes with <c>CLAUDE_CONFIG_DIR</c> pointed at its own
-	/// <c>%AppData%\TessynDesktop\profiles\&lt;profileId&gt;</c>, so its sessions never land under
-	/// <c>~/.claude</c> (see <see cref="ClaudeProfileService"/>).
+	/// Every Claude CLI home whose <c>projects/</c> folder may hold session JSONL for this app.
+	/// See <see cref="Constants.ClaudeSessions.GetAllProjectsDirs"/> for the full rationale.
 	/// </summary>
 	private static IReadOnlyList<string> GetDefaultClaudeProjectsDirs()
-	{
-		var dirs = new List<string>();
-
-		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		dirs.Add(Path.Combine(userProfile, Constants.ClaudeSessions.ClaudeHomeFolderName, Constants.ClaudeSessions.ProjectsFolderName));
-
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		var profilesRoot = Path.Combine(appData, Constants.AppDataFolderName, Constants.ProfilesFolderName);
-		if (Directory.Exists(profilesRoot))
-		{
-			foreach (var profileDir in Directory.GetDirectories(profilesRoot))
-				dirs.Add(Path.Combine(profileDir, Constants.ClaudeSessions.ProjectsFolderName));
-		}
-
-		return dirs;
-	}
+		=> Constants.ClaudeSessions.GetAllProjectsDirs();
 
 	private string ConnectionString => $"Data Source={_dbPath}";
 

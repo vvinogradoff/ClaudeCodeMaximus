@@ -24,19 +24,10 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 
 		try
 		{
-			var slug = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
-			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-			var sessionPath = Path.Combine(
-				userProfile,
-				Constants.ClaudeSessions.ClaudeHomeFolderName,
-				Constants.ClaudeSessions.ProjectsFolderName,
-				slug,
-				claudeSessionId + Constants.ClaudeSessions.SessionFileExtension);
-
-			var exists = File.Exists(sessionPath);
-			_log.Debug("Resumability check: {SessionId} slug={Slug} path={Path} exists={Exists}",
-				claudeSessionId, slug, sessionPath, exists);
-			return exists;
+			var sessionPath = Constants.ClaudeSessions.FindExistingJsonlPath(workingDirectory, claudeSessionId);
+			_log.Debug("Resumability check: {SessionId} wd={WorkingDirectory} path={Path} exists={Exists}",
+				claudeSessionId, workingDirectory, sessionPath, sessionPath != null);
+			return sessionPath != null;
 		}
 		catch (Exception ex)
 		{
