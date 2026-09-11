@@ -20,6 +20,9 @@ internal sealed class FakeMcpOAuthServiceForMerge : IMcpOAuthService
 
 	public Task<McpAuthorizeResult> AuthorizeInteractiveAsync(ExternalMcpServerModel server, CancellationToken cancellationToken = default)
 		=> Task.FromResult(new McpAuthorizeResult(true, "n/a"));
+
+	public Task DiscoverAsync(string baseUrl, McpOAuthConfig oauth, CancellationToken cancellationToken = default)
+		=> Task.CompletedTask;
 }
 
 /// <remarks>Created by Claude</remarks>

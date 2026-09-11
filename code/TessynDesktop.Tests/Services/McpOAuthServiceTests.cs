@@ -267,4 +267,87 @@ public sealed class McpOAuthServiceTests : IDisposable
 
 		Assert.False(server.OAuth.NeedsReauthorization);
 	}
+
+	// ── DiscoverAsync (FR.20.3 auto-fill) ─────────────────────────────────────
+
+	[Fact]
+	public async Task DiscoverAsync_ProtectedResourceListsAuthServer_ProbesResolvedBaseForEndpoints()
+	{
+		_handler.Responder = req =>
+		{
+			var uri = req.RequestUri!.ToString();
+			if (uri == "https://mcp.example.com/.well-known/oauth-protected-resource")
+				return new HttpResponseMessage(HttpStatusCode.OK)
+				{
+					Content = new StringContent("""{"authorization_servers":["https://auth.example.com"]}"""),
+				};
+			if (uri == "https://auth.example.com/.well-known/oauth-authorization-server")
+				return new HttpResponseMessage(HttpStatusCode.OK)
+				{
+					Content = new StringContent("""{"authorization_endpoint":"https://auth.example.com/authorize","token_endpoint":"https://auth.example.com/token"}"""),
+				};
+			throw new InvalidOperationException($"Unexpected request to {uri}");
+		};
+		var oauth = new McpOAuthConfig();
+		var service = MakeService();
+
+		await service.DiscoverAsync("https://mcp.example.com", oauth);
+
+		Assert.Equal("https://auth.example.com/authorize", oauth.AuthorizationEndpoint);
+		Assert.Equal("https://auth.example.com/token", oauth.TokenEndpoint);
+		Assert.True(oauth.DiscoveryCompleted);
+	}
+
+	[Fact]
+	public async Task DiscoverAsync_NoProtectedResourceDocument_FallsBackToResourceOwnBase()
+	{
+		_handler.Responder = req =>
+		{
+			var uri = req.RequestUri!.ToString();
+			if (uri == "https://mcp.example.com/.well-known/oauth-protected-resource")
+				return new HttpResponseMessage(HttpStatusCode.NotFound);
+			if (uri == "https://mcp.example.com/.well-known/oauth-authorization-server")
+				return new HttpResponseMessage(HttpStatusCode.OK)
+				{
+					Content = new StringContent("""{"authorization_endpoint":"https://mcp.example.com/authorize","token_endpoint":"https://mcp.example.com/token"}"""),
+				};
+			throw new InvalidOperationException($"Unexpected request to {uri}");
+		};
+		var oauth = new McpOAuthConfig();
+		var service = MakeService();
+
+		await service.DiscoverAsync("https://mcp.example.com", oauth);
+
+		Assert.Equal("https://mcp.example.com/authorize", oauth.AuthorizationEndpoint);
+		Assert.Equal("https://mcp.example.com/token", oauth.TokenEndpoint);
+	}
+
+	[Fact]
+	public async Task DiscoverAsync_EndpointAlreadySet_DoesNotOverwrite()
+	{
+		_handler.Responder = _ => new HttpResponseMessage(HttpStatusCode.OK)
+		{
+			Content = new StringContent("""{"authorization_endpoint":"https://discovered.example.com/authorize","token_endpoint":"https://discovered.example.com/token"}"""),
+		};
+		var oauth = new McpOAuthConfig { AuthorizationEndpoint = "https://manual.example.com/authorize" };
+		var service = MakeService();
+
+		await service.DiscoverAsync("https://mcp.example.com", oauth);
+
+		Assert.Equal("https://manual.example.com/authorize", oauth.AuthorizationEndpoint);
+		Assert.Equal("https://discovered.example.com/token", oauth.TokenEndpoint);
+	}
+
+	[Fact]
+	public async Task DiscoverAsync_AllRequestsFail_SetsDiscoveryCompletedWithoutThrowing()
+	{
+		_handler.Responder = _ => throw new HttpRequestException("unreachable");
+		var oauth = new McpOAuthConfig();
+		var service = MakeService();
+
+		await service.DiscoverAsync("https://mcp.example.com", oauth);
+
+		Assert.True(oauth.DiscoveryCompleted);
+		Assert.Equal("", oauth.AuthorizationEndpoint);
+	}
 }
