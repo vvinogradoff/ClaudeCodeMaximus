@@ -29,6 +29,8 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 	private int _selectedEffortIndex;
 	private bool _isUpdatingModels;
 	private bool _isChromeEnabled;
+	private bool _isLocalToolsRestrictionEnabled = true;
+	private bool _isToolProfilePopupOpen;
 
 	/// <summary>Display names for the model selector (populated dynamically from IClaudeModelService).</summary>
 	public ObservableCollection<string> AvailableModels { get; } = [];
@@ -113,13 +115,53 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 	/// </summary>
 	public bool IsLocalToolSelectorEnabled => SelectedModelInfo?.SupportsTools ?? true;
 
-	/// <summary>Tooltip for the Local Tool Profile toggle, explaining why it's disabled when applicable.</summary>
-	public string ToolProfileToggleTooltip => IsLocalToolSelectorEnabled
-		? "Local Tool Profile (FR.12.21): curate the native tools and MCP servers exposed to this local model."
-		: "This model does not support tool calling.";
+	/// <summary>
+	/// Tooltip for the Local Tools button. "This model does not support tool calling." (when
+	/// <see cref="IsLocalToolSelectorEnabled"/> is false) takes precedence over everything else.
+	/// Otherwise explains the click-vs-hold gesture and whether restriction is currently applied.
+	/// </summary>
+	public string ToolProfileToggleTooltip
+	{
+		get
+		{
+			if (!IsLocalToolSelectorEnabled)
+				return "This model does not support tool calling.";
+
+			return IsLocalToolsRestrictionEnabled
+				? "Local Tool Profile (FR.12.21): this local model is restricted to a curated set of tools/MCP servers. Click to disable (full access), hold to edit the tool list."
+				: "Tool restriction is off — this local model gets the full native tool set. Click to re-enable, hold to edit the tool list.";
+		}
+	}
 
 	/// <summary>Compact summary shown on the Local Tool Profile toggle button (e.g. "Tools: 5").</summary>
 	public string ToolProfileSummary => $"Tools: {ToolProfileItems.Count(i => i.IsEnabled)}";
+
+	/// <summary>
+	/// Master on/off switch for applying the curated profile (<see cref="LocalToolProfileModel.Enabled"/>).
+	/// False ⇒ the local model gets the full unrestricted native-tool + MCP behavior even though a
+	/// customized selection may still be saved underneath.
+	/// </summary>
+	public bool IsLocalToolsRestrictionEnabled => _isLocalToolsRestrictionEnabled;
+
+	/// <summary>Flips <see cref="IsLocalToolsRestrictionEnabled"/> and persists it immediately (a short click on the Local Tools button).</summary>
+	public void ToggleLocalToolsRestrictionEnabled()
+	{
+		_isLocalToolsRestrictionEnabled = !_isLocalToolsRestrictionEnabled;
+		this.RaisePropertyChanged(nameof(IsLocalToolsRestrictionEnabled));
+		this.RaisePropertyChanged(nameof(ToolProfileToggleTooltip));
+		PersistToolProfile();
+	}
+
+	/// <summary>
+	/// Transient UI state (never persisted): whether the Local Tools checkbox-list popup is open.
+	/// Bound TwoWay to the Popup's <c>IsOpen</c> so Avalonia's light-dismiss can close it and flow
+	/// the closed state back here (a hold gesture in code-behind sets this true to open it).
+	/// </summary>
+	public bool IsToolProfilePopupOpen
+	{
+		get => _isToolProfilePopupOpen;
+		set => this.RaiseAndSetIfChanged(ref _isToolProfilePopupOpen, value);
+	}
 
 	/// <summary>
 	/// One row per selectable native tool (<see cref="Constants.LocalTools.Catalog"/>), the cmx
@@ -278,6 +320,8 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 		var includeCmx      = profile?.IncludeCmxMcp ?? false;
 		var enabledExternal = profile?.IncludedExternalMcpServerIds ?? new List<string>();
 
+		_isLocalToolsRestrictionEnabled = profile?.Enabled ?? true;
+
 		foreach (var toolName in Constants.LocalTools.Catalog)
 			ToolProfileItems.Add(new ToolProfileItemViewModel(
 				toolName, ToolProfileItemKind.Native, null, enabledNative.Contains(toolName), PersistToolProfile));
@@ -289,6 +333,7 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 			ToolProfileItems.Add(new ToolProfileItemViewModel(
 				server.DisplayName, ToolProfileItemKind.ExternalMcp, server.Id, enabledExternal.Contains(server.Id), PersistToolProfile));
 
+		this.RaisePropertyChanged(nameof(IsLocalToolsRestrictionEnabled));
 		this.RaisePropertyChanged(nameof(ToolProfileSummary));
 	}
 
@@ -302,6 +347,7 @@ public sealed class ModelSelectionController : ReactiveObject, IDisposable
 
 		_directoryModel.LocalToolProfile = new LocalToolProfileModel
 		{
+			Enabled = _isLocalToolsRestrictionEnabled,
 			NativeTools = ToolProfileItems
 				.Where(i => i.Kind == ToolProfileItemKind.Native && i.IsEnabled)
 				.Select(i => i.Name)

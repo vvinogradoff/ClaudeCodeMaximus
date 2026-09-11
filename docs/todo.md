@@ -811,6 +811,16 @@ Curates the native tool + MCP surface handed to the claude CLI for local (Ollama
 - [DONE] `docs/usecases/UC.LC.01-Local-Tool-Profile.md`, `docs/testcases/TC.LC.01-Local-Tool-Profile.md`
 - [DONE] `docs/business-analysis/Local-Models_Agentic-Coding-Findings.md`
 
+### P31.6 — Local Tools master switch + command-bar refinements (FR.12.22 amendment, FR.12.23)
+- [DONE] Model/Profile/Effort `.cmxCompact` local `Width` overrides changed to Model ~120px / Profile ~100px / Effort ~60px (dropdown flyouts still open at natural width)
+- [DONE] `:latest` stripped from the Model box's *displayed* text only (closed-box label + open dropdown list) — `ModelDisplayText` helper + `OllamaLatestSuffixConverter` (list) + `LeftEllipsisConverter` extended to strip-then-truncate (closed box); underlying `SelectedModelId` string, `--model` flag, and `LocalToolProfileResolver` matching untouched
+- [DONE] `LocalToolProfileModel.Enabled` (bool, default `true`, backward-compatible deserialization for profiles saved before this field existed)
+- [DONE] `LocalToolProfileResolver.Resolve` — returns `null` when `Enabled == false`, regardless of saved `NativeTools`/`IncludeCmxMcp`/`IncludedExternalMcpServerIds`; saved selection left untouched for when re-enabled; covered by a new resolver test
+- [DONE] Relocated the Local Tool Profile control out of the selector row to a 26×26 icon-style button (🔧) next to the Session Completion Sound button (FR.22); visible only for local models, disabled (existing tooltip) when the model doesn't support tools
+- [DONE] Short-click vs press-and-hold (~450ms `DispatcherTimer`) gesture on the relocated button, implemented via manual `PointerPressed`/`PointerReleased`/`PointerCaptureLost` handlers (plain `Button`, not `ToggleButton`): short click toggles+persists `Enabled`; hold opens the native-tools/`cmx`/external-MCP checkbox popup (`IsOpen` bound `TwoWay`, `IsLightDismissEnabled=True`) without touching `Enabled`; clicking away or clicking the button again while open just closes the popup; checkbox/label clicks inside the popup toggle+persist that tool immediately and keep the popup open. Dimmed via a bound `Classes.toolsOff` + `Button.toolsOff` style when the master switch is off. Verified: build 0 errors, full suite 368/368 (was 367, +1 for the `Enabled=false` bypass test). Not run in the live app — hold-timing feel and dim opacity worth a manual check.
+- [ ] Dimmed-opacity visual state when `Enabled` is false, full opacity when true (FR.11.9 convention)
+- [ ] Resolver test: `LocalToolProfileResolver_Resolve_EnabledFalse_ReturnsNullRegardlessOfSavedSelection`
+
 ---
 
 ## Backlog / Future

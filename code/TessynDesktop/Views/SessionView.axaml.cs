@@ -26,6 +26,8 @@ public partial class SessionView : UserControl
 	private bool _isAtBottom = true;
 	private MessageEntryViewModel? _subscribedProgressMsg;
 	private CrossBlockSelectionHandler? _crossBlockSelection;
+	private DispatcherTimer? _toolsHoldTimer;
+	private bool _toolsHoldFired;
 
 	/// <summary>Threshold in pixels — if within this distance of the bottom, consider "at bottom".</summary>
 	private const double AtBottomThreshold = 30;
@@ -480,5 +482,54 @@ public partial class SessionView : UserControl
 			"Yes, remove");
 		if (confirmed)
 			vm.DeleteProfile(item);
+	}
+
+	// ── Local Tools button (FR.12.21): click flips the master restriction switch, hold opens the
+	// checkbox-list popup. A plain Button (not ToggleButton) since we need full manual control over
+	// press/release/hold instead of the built-in checked-state toggle. ──
+
+	private void OnToolsButtonPointerPressed(object? sender, PointerPressedEventArgs e)
+	{
+		_toolsHoldFired = false;
+		_toolsHoldTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+		_toolsHoldTimer.Tick += (_, _) =>
+		{
+			_toolsHoldTimer?.Stop();
+			_toolsHoldFired = true;
+			if (DataContext is SessionViewModel vm)
+				vm.IsToolProfilePopupOpen = true;
+		};
+		_toolsHoldTimer.Start();
+	}
+
+	private void OnToolsButtonPointerReleased(object? sender, PointerReleasedEventArgs e)
+	{
+		_toolsHoldTimer?.Stop();
+		_toolsHoldTimer = null;
+
+		if (DataContext is not SessionViewModel vm) return;
+
+		if (_toolsHoldFired)
+		{
+			// Hold already opened the popup — do nothing more.
+			_toolsHoldFired = false;
+			return;
+		}
+
+		if (vm.IsToolProfilePopupOpen)
+		{
+			// Short click while the popup is open — just close it.
+			vm.IsToolProfilePopupOpen = false;
+			return;
+		}
+
+		vm.ToggleLocalToolsRestrictionEnabled();
+	}
+
+	private void OnToolsButtonPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+	{
+		_toolsHoldTimer?.Stop();
+		_toolsHoldTimer = null;
+		_toolsHoldFired = false;
 	}
 }

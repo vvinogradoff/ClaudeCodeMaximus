@@ -16,17 +16,22 @@ public static class LocalToolProfileResolver
 	/// Returns null when the effective model is not a tool-capable local Ollama model — Anthropic
 	/// sessions keep the unrestricted default (no --tools flag, full --mcp-config), and Ollama
 	/// models with SupportsTools=false already get zero tools/MCP via the pre-existing disableTools
-	/// path, so they don't need a further restriction here. Otherwise resolves
-	/// <paramref name="directoryModel"/>'s <see cref="LocalToolProfileModel"/>, falling back to the
-	/// curated default lean set (<see cref="Constants.LocalTools.DefaultNativeTools"/>) with no MCP
-	/// servers when the directory has no explicit profile.
+	/// path, so they don't need a further restriction here. Also returns null when the directory's
+	/// profile has its master switch (<see cref="LocalToolProfileModel.Enabled"/>) turned off — the
+	/// same unrestricted bypass, even though a customized selection is still saved underneath.
+	/// Otherwise resolves <paramref name="directoryModel"/>'s <see cref="LocalToolProfileModel"/>,
+	/// falling back to the curated default lean set (<see cref="Constants.LocalTools.DefaultNativeTools"/>)
+	/// with no MCP servers when the directory has no explicit profile.
 	/// </summary>
 	public static LocalToolProfileResolution? Resolve(ClaudeModelInfo? modelInfo, DirectoryNodeModel? directoryModel)
 	{
 		if (modelInfo is not { Provider: ModelProvider.Ollama, SupportsTools: true })
 			return null;
 
-		var profile           = directoryModel?.LocalToolProfile;
+		var profile = directoryModel?.LocalToolProfile;
+		if (profile?.Enabled == false)
+			return null;
+
 		var nativeTools        = profile?.NativeTools ?? new List<string>(Constants.LocalTools.DefaultNativeTools);
 		var includeCmx         = profile?.IncludeCmxMcp ?? false;
 		var externalServerIds  = profile?.IncludedExternalMcpServerIds ?? new List<string>();

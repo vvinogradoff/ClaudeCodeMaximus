@@ -105,4 +105,22 @@ public sealed class LocalToolProfileResolverTests
 		Assert.NotNull(result);
 		Assert.Empty(result!.ToolSpec.NativeToolNames);
 	}
+
+	[Fact]
+	public void Resolve_ToolCapableOllamaModel_ProfileDisabled_ReturnsNull_EvenWithCustomSelection()
+	{
+		// Master on/off switch: a saved, non-default selection must NOT be applied while
+		// Enabled=false — the bypass wins over any saved customization, not just the default-lean case.
+		var profile = new LocalToolProfileModel
+		{
+			Enabled = false,
+			NativeTools = ["Read", "Bash", "WebFetch", "TodoWrite"],
+			IncludeCmxMcp = true,
+			IncludedExternalMcpServerIds = ["server-a"],
+		};
+
+		var result = LocalToolProfileResolver.Resolve(OllamaModel(), Directory(profile));
+
+		Assert.Null(result);
+	}
 }

@@ -32,6 +32,11 @@
         <Style Selector="ToggleButton.linklike:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent"/>
         </Style>
+        <!-- Local Tools button (FR.12.21): dimmed while the master restriction switch is off, so
+             "full unrestricted access" is visually distinct from "curated profile applied". -->
+        <Style Selector="Button.toolsOff">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
 
         <!--
           Compact command-bar selectors (~120px closed box, FR.12.22). Avalonia's ComboBox binds its
@@ -323,14 +328,22 @@
                                           FontSize="12"
                                           Padding="6,3">
                                     <!-- Closed box only: left-truncate long model IDs so the distinctive
-                                         suffix (e.g. "…pus-4-8") stays visible. Deliberately NOT ItemTemplate —
-                                         that would also truncate the full-width dropdown list below. -->
+                                         suffix (e.g. "…pus-4-8") stays visible. Deliberately NOT the
+                                         same template as ItemTemplate below — that would also
+                                         truncate the full-width dropdown list. -->
                                     <ComboBox.SelectionBoxItemTemplate>
                                         <DataTemplate x:CompileBindings="False">
                                             <TextBlock Text="{Binding Converter={x:Static converters:LeftEllipsisConverter.Instance}, ConverterParameter=8}"
                                                        TextAlignment="Right"/>
                                         </DataTemplate>
                                     </ComboBox.SelectionBoxItemTemplate>
+                                    <!-- Dropdown list: full untruncated text, just with the redundant
+                                         ":latest" Ollama tag stripped for display (FR.12.22). -->
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:CompileBindings="False">
+                                            <TextBlock Text="{Binding Converter={x:Static converters:OllamaLatestSuffixConverter.Instance}}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
                                 </ComboBox>
                                 <ToggleButton x:Name="ProfileActionsToggle"
                                               Classes="linklike"
@@ -383,6 +396,7 @@
                                           SelectedIndex="{Binding SelectedProfileIndex}"
                                           IsEnabled="{Binding !IsStreamingProcessAlive}"
                                           VerticalAlignment="Center"
+                                          Width="100"
                                           FontSize="12"
                                           Padding="6,3">
                                     <ComboBox.ItemTemplate>
@@ -401,39 +415,10 @@
                                           SelectedIndex="{Binding SelectedEffortIndex}"
                                           IsEnabled="{Binding !IsStreamingProcessAlive}"
                                           VerticalAlignment="Center"
+                                          Width="60"
                                           FontSize="12"
                                           Padding="6,3"/>
 
-                                <ToggleButton x:Name="ToolProfileToggle"
-                                              Classes="linklike"
-                                              Content="{Binding ToolProfileSummary}"
-                                              IsVisible="{Binding IsLocalModelSelected}"
-                                              IsEnabled="{Binding IsLocalToolSelectorEnabled}"
-                                              ToolTip.Tip="{Binding ToolProfileToggleTooltip}"
-                                              VerticalAlignment="Center"
-                                              Width="120"
-                                              Margin="12,0,0,0"/>
-                                <Popup PlacementTarget="{Binding #ToolProfileToggle}"
-                                       Placement="Bottom"
-                                       IsOpen="{Binding #ToolProfileToggle.IsChecked, Mode=OneWay}"
-                                       IsLightDismissEnabled="False">
-                                    <Border Padding="8"
-                                            CornerRadius="4"
-                                            BorderThickness="1"
-                                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                                            Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-                                        <ItemsControl ItemsSource="{Binding ToolProfileItems}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:ToolProfileItemViewModel">
-                                                    <CheckBox Content="{Binding Name}"
-                                                              IsChecked="{Binding IsEnabled}"
-                                                              FontSize="12"
-                                                              Margin="0,2"/>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </Border>
-                                </Popup>
                                 <ToggleButton IsChecked="{Binding IsChromeEnabled}"
                                               Content="&#x1F310;"
                                               FontSize="13"
@@ -461,6 +446,42 @@
                                               Width="26" Height="26" Padding="0"
                                               Margin="3,0,0,0"
                                               ToolTip.Tip="Session Completion Sound (FR.22): play a sound when this session finishes thinking and responds. Per-session, throttled (default 3 min between sounds); configure the sound and throttle in Settings → Notifications."/>
+                                <Button x:Name="ToolsButton"
+                                        Classes.toolsOff="{Binding !IsLocalToolsRestrictionEnabled}"
+                                        Content="&#x1F527;"
+                                        IsVisible="{Binding IsLocalModelSelected}"
+                                        IsEnabled="{Binding IsLocalToolSelectorEnabled}"
+                                        ToolTip.Tip="{Binding ToolProfileToggleTooltip}"
+                                        PointerPressed="OnToolsButtonPointerPressed"
+                                        PointerReleased="OnToolsButtonPointerReleased"
+                                        PointerCaptureLost="OnToolsButtonPointerCaptureLost"
+                                        FontSize="13"
+                                        VerticalAlignment="Center"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Width="26" Height="26" Padding="0"
+                                        Margin="3,0,0,0"/>
+                                <Popup PlacementTarget="{Binding #ToolsButton}"
+                                       Placement="Bottom"
+                                       IsOpen="{Binding IsToolProfilePopupOpen, Mode=TwoWay}"
+                                       IsLightDismissEnabled="True">
+                                    <Border Padding="8"
+                                            CornerRadius="4"
+                                            BorderThickness="1"
+                                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                            Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                                        <ItemsControl ItemsSource="{Binding ToolProfileItems}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ToolProfileItemViewModel">
+                                                    <CheckBox Content="{Binding Name}"
+                                                              IsChecked="{Binding IsEnabled}"
+                                                              FontSize="12"
+                                                              Margin="0,2"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+                                </Popup>
                             </StackPanel>
                         </DockPanel>
                     </Border>

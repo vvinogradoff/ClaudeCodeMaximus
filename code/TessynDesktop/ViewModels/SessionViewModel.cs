@@ -305,6 +305,19 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>Checkbox rows for the Local Tool Profile popup: native tools, cmx orchestration, and registered external MCP servers (FR.12.21).</summary>
 	public ObservableCollection<ToolProfileItemViewModel> ToolProfileItems => _models.ToolProfileItems;
 
+	/// <summary>Master on/off switch for applying the curated Local Tool Profile (a short click on the Local Tools button flips this).</summary>
+	public bool IsLocalToolsRestrictionEnabled => _models.IsLocalToolsRestrictionEnabled;
+
+	/// <summary>Flips <see cref="IsLocalToolsRestrictionEnabled"/> and persists immediately.</summary>
+	public void ToggleLocalToolsRestrictionEnabled() => _models.ToggleLocalToolsRestrictionEnabled();
+
+	/// <summary>Whether the Local Tools checkbox-list popup is open (transient UI state; a hold gesture on the Local Tools button opens it).</summary>
+	public bool IsToolProfilePopupOpen
+	{
+		get => _models.IsToolProfilePopupOpen;
+		set => _models.IsToolProfilePopupOpen = value;
+	}
+
 	/// <summary>Streaming Session Mode toggle (FR.19.1, FR.19.6). Turning it off while a process is alive raises <see cref="StreamingDisableConfirmationRequested"/> instead of applying immediately.</summary>
 	public bool IsStreamingMode
 	{
