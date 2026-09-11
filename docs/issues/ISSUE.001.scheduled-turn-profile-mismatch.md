@@ -1,4 +1,4 @@
-# ISSUE-001: Scheduled turns fail with 401 due to profile-resolution mismatch
+# ISSUE.001: Scheduled turns fail with 401 due to profile-resolution mismatch
 
 ## Symptom
 
@@ -68,6 +68,6 @@ consults the old shared per-directory field.
 ## Status
 
 Fixed via **Option 1** — `SessionTurnService.ResolveProfileConfigDir` now resolves the
-profile from the session's own history, matching the interactive path. See ISSUE-002 for
+profile from the session's own history, matching the interactive path. See ISSUE.002 for
 a follow-on case this exposed: freshly-spawned child sessions have no history to scan and
 so fell back to the Default profile until profile inheritance was added.

@@ -12,7 +12,7 @@
 >
 > **Done & verified (Stages 1–4) — suite at 128 tests, build green:**
 > 1. `ISessionRegistry` extracted from `SessionTreeViewModel` — headless services (Turn, McpServer,
->    Scheduler) no longer depend on a ViewModel (NFR.4 layering violation fixed).
+>    Scheduler) no longer depend on a ViewModel (NR.4 layering violation fixed).
 > 2. Engine tests added (ModelTier, SessionRegistry, Scheduler).
 > 3. `ClaudeMaximus.Core` class library carved out — all Models + ~47 Services moved; UI keeps only
 >    Avalonia-bound services (`ThemeApplicator`, `KeyBindingService`, `WindowsNotificationService`);
@@ -22,7 +22,7 @@
 >    (`docs/refactoring/tdcp-spec.md`) + `InProcDaemonClientTests` (delegation/event-relay).
 >
 > **Decisions (CONFIRMED):** **D3** (2026-07-18) — WPF (not WinForms), built later as a separate
-> thin client; Avalonia stays the sole thin client through the split. NFR.1 → Windows-only
+> thin client; Avalonia stays the sole thin client through the split. NR.1 → Windows-only
 > (Architect owns the requirements edit). **D4** (2026-07-19) — TDCP as its *own* protocol,
 > **JSON-RPC 2.0 over Streamable HTTP** (MCP-style: POST→JSON-or-SSE, GET→SSE push), co-hosted with
 > (not folded into) the MCP server. Chosen to unify with MCP's own transport and fit every stack.

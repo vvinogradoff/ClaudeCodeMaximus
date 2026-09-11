@@ -1,4 +1,4 @@
-# Streaming-Headless-Context-Divergence
+# ISSUE.006 — Streaming Headless Context Divergence
 
 **Status:** Resolved (FR.19.13, 2026-08-26)
 **Affects:** Any session in Streaming Session Mode (FR.19) that also receives a headless turn — Telegram-routed (FR.21.4), Scheduled (FR.14), or Orchestrated (FR.15).

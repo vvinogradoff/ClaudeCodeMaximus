@@ -1,4 +1,4 @@
-# Visual Studio Automation for an MCP Server — Research Summary
+# RESEARCH.01 — Visual Studio Automation for an MCP Server — Research Summary
 
 *Researched 2026-08-12. Web-search-verified; no implementation performed.*
 

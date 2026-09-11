@@ -1,4 +1,4 @@
-# ISSUE-002: Orchestrated/spawned child sessions fail with 401 (profile not inherited)
+# ISSUE.002: Orchestrated/spawned child sessions fail with 401 (profile not inherited)
 
 ## Symptom
 
@@ -21,7 +21,7 @@ Observed 2026-07-15 on session "Research on CNN for the project", which spawned
 ## Root Cause
 
 Auth is selected entirely by `CLAUDE_CONFIG_DIR`, which is derived from the profile
-resolved for the turn (`ClaudeProcessManager.TryStartProcess`). After ISSUE-001 was
+resolved for the turn (`ClaudeProcessManager.TryStartProcess`). After ISSUE.001 was
 fixed, `SessionTurnService.ResolveProfileConfigDir` resolves the profile by scanning the
 **session's own file history** for the last user entry that recorded a `ProfileName`.
 
@@ -31,7 +31,7 @@ the scan finds nothing and returns `null` → the CLI falls back to the **Defaul
 is common when the user actively works under a non-default account — every child turn
 401s, while the supervisor (whose history records a valid profile) authenticates fine.
 
-In short: the profile-from-history fix (ISSUE-001) is correct for sessions that have
+In short: the profile-from-history fix (ISSUE.001) is correct for sessions that have
 history, but spawned children start with none and had no mechanism to inherit their
 supervisor's account.
 
@@ -65,5 +65,5 @@ account propagates down the whole orchestration tree.
 
 ## Status
 
-Fixed — build clean, 45/45 tests pass. Related: ISSUE-001 (the history-scan resolution
+Fixed — build clean, 45/45 tests pass. Related: ISSUE.001 (the history-scan resolution
 this builds on).

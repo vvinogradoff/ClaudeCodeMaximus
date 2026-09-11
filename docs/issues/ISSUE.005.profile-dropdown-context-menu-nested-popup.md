@@ -1,4 +1,4 @@
-# ISSUE-005: Profile Rename/Delete moved from a dropdown context menu to buttons (nested-popup risk)
+# ISSUE.005: Profile Rename/Delete moved from a dropdown context menu to buttons (nested-popup risk)
 
 ## Symptom
 
@@ -12,7 +12,7 @@ never observably functional in a live session.
 Two separate causes were in play, and it's important not to conflate them:
 
 1. **Stale deployment (confirmed, unrelated to this issue's fix):** the running
-   `[Publish]` build was ~12 days out of date — see ISSUE-004's "Deployment gotcha"
+   `[Publish]` build was ~12 days out of date — see ISSUE.004's "Deployment gotcha"
    section. This alone could explain "not there" for *recent* changes, but the
    context-menu code had been in place since well before that stale snapshot, so it does
    not fully explain a feature that "never worked since it was built."
@@ -59,7 +59,7 @@ out of the dropdown entirely:
 
 Fixed (redesigned) — build clean, 226/226 tests pass.
 
-**Update:** after restarting onto a current build (resolving the ISSUE-004 stale-deployment
+**Update:** after restarting onto a current build (resolving the ISSUE.004 stale-deployment
 gotcha), the user confirmed the original right-click context menu genuinely does not open —
 validating the nested-popup hypothesis above, not just the stale-deployment one. Bringing
 the right-click interaction back is explicitly **not urgent** (the button-based replacement

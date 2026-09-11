@@ -1,4 +1,4 @@
-# ISSUE-003: Session search (tree + global) returns empty results for almost every query
+# ISSUE.003: Session search (tree + global) returns empty results for almost every query
 
 ## Symptom
 

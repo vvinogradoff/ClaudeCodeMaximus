@@ -217,3 +217,38 @@ The app runs from `C:\Projects\Personal\Tessyn\[Publish]`, NOT from the build ou
 Do NOT use `-o` to redirect build output. On each startup the self-update mechanism (`SelfUpdateService`) scans `bin/Debug/net*/` (under `SourceCodesLocation` from appsettings) for the newest build and copies it into the directory the app runs from — i.e. `C:\Projects\Personal\Tessyn\[Publish]`. Because the copy target is the run directory, `SourceCodesLocation` must point at the tree containing `TessynDesktop.csproj` (e.g. `C:\Projects\Personal\Tessyn`); it is not auto-discovered from `[Publish]`, which is a sibling of `code/`, not an ancestor of the `.sln`.
 
 Do NOT use the `Tempcmx-build` folder — it is deprecated.
+
+## Documentation ID Conventions
+
+All requirement, use case, test case, issue, and research documents in this
+project use a standardized dot-separated ID scheme. When creating or editing
+project documentation, always assign/reference IDs using these exact forms:
+
+- `FR.<NN>` — Functional Requirement (global numbering)
+- `FR.<Section>.<NN>` — Functional Requirement (numbered section-scoped)
+- `FR.<Code>.<NN>` — Functional Requirement (feature-coded, e.g. `FR.AUTH.03`)
+- `TR.<Code>.<NN>` — Technical Requirement (feature-coded)
+- `NR.<NN>` — Non-Functional Requirement (global numbering)
+- `NR.<Section>.<NNN>` — Non-Functional Requirement (section-scoped)
+- `US.<NN>` — User Story
+- `UC.<Code>.<NN>` — Use Case (feature-coded)
+- `TC.<Code>.<NN>` — Test Case (feature-coded)
+- `TC.<Code>.<NN>-<Variant>` — Test Case scenario variant (e.g. `TC.CP.001-1`)
+- `ISSUE.<NN>` — Issue (sequential, one file per issue under `docs/issues/`)
+- `ISSUE.<NN>.<slug>` — Issue with descriptive slug (filename form:
+  `ISSUE.<NN>.<kebab-slug>.md`)
+- `RESEARCH.<NN>` — Research / analysis document
+
+Rules:
+1. Always use `.` as the separator between the prefix and every
+   numeric/code segment — never `-` (except inside a `TC` variant suffix,
+   and inside slugs).
+2. `<Code>` is an uppercase short feature tag (e.g. `AUTH`, `CP`, `SF`) —
+   pick one per feature area and reuse it consistently.
+3. `<NN>`/`<NNN>` is a zero-padded sequential number scoped to its parent
+   (section, code, or document) — match the existing digit width used
+   elsewhere in the same document.
+4. New issue files go under `docs/issues/` named `ISSUE.<NN>.<slug>.md`,
+   with the ID repeated in the file's `#` title.
+5. Never reuse or renumber an existing ID — always take the next free
+   number in its scope.

@@ -1,4 +1,4 @@
-# ISSUE-004: Auth-error detection (FR.12.16) never fires — `result` event error text was never parsed
+# ISSUE.004: Auth-error detection (FR.12.16) never fires — `result` event error text was never parsed
 
 ## Symptom
 
