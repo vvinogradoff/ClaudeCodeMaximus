@@ -755,7 +755,7 @@ public partial class SessionTreeView : UserControl
 				return;
 
 			var confirmed = await ownerWindow.ShowConfirmOverlayAsync(
-				$"Delete session \"{session.Name}\"?\n\nThis removes the session from Maximus and deletes its local file. The original Claude Code session is not affected.",
+				$"Delete session \"{session.Name}\"?\n\nThis removes the session from Tessyn and deletes its local file. The original Claude Code session is not affected.",
 				"Delete");
 
 			if (!confirmed)

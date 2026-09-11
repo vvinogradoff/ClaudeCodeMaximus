@@ -1,11 +1,11 @@
-# ClaudeMaximus launcher
+# TessynDesktop launcher
 # Starts the app, then rebuilds when it closes so changes are ready for the next run.
 
 $projectRoot = $PSScriptRoot
-$exe = Join-Path $projectRoot "code\ClaudeMaximus\bin\Debug\net9.0\ClaudeMaximus.exe"
-$sln = Join-Path $projectRoot "code\ClaudeMaximus.sln"
+$exe = Join-Path $projectRoot "code\TessynDesktop\bin\Debug\net9.0-windows10.0.17763.0\TessynDesktop.exe"
+$sln = Join-Path $projectRoot "code\TessynDesktop.sln"
 
-Write-Host "Starting ClaudeMaximus..." -ForegroundColor Cyan
+Write-Host "Starting TessynDesktop..." -ForegroundColor Cyan
 Start-Process -FilePath $exe -Wait
 
 Write-Host ""

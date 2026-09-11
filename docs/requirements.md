@@ -1,8 +1,8 @@
-# ClaudeMaximus — Requirements
+# TessynDesktop — Requirements
 
 ## Project Overview
 
-**ClaudeMaximus** is a cross-platform Avalonia desktop application that wraps the Claude Code CLI tool, providing a structured session management UI. It does not replace Claude Code — it hosts it, stores its history, and presents it in an organized, navigable interface.
+**TessynDesktop** is a cross-platform Avalonia desktop application that wraps the Claude Code CLI tool, providing a structured session management UI. It does not replace Claude Code — it hosts it, stores its history, and presents it in an organized, navigable interface.
 
 ---
 
@@ -135,7 +135,7 @@ Subsequent messages continue after the separator. The full pre-compaction histor
 
 ### FR.4 — Application Configuration
 
-**FR.4.1** All application configuration is stored in a single `appsettings.json` file in the platform application data directory (e.g., `%APPDATA%\ClaudeMaximus\appsettings.json` on Windows).
+**FR.4.1** All application configuration is stored in a single `appsettings.json` file in the platform application data directory (e.g., `%APPDATA%\TessynDesktop\appsettings.json` on Windows).
 
 **FR.4.2 — Tree structure in appsettings.json:** The complete tree (Directory nodes with their paths, Group nodes with their names, Session nodes with their names and bound session file paths) is persisted in `appsettings.json`. Directory nodes are the roots; Group and Session nodes are nested within.
 
@@ -230,7 +230,7 @@ Maximum 15 results displayed.
 **FR.7.7 — Insertion Behavior:** When the user accepts a suggestion (via Tab or Enter):
 - The trigger text (`#query` or `##query`) is removed from the input
 - For files: the relative path from the working directory is inserted (e.g., `ViewModels/SessionViewModel.cs`)
-- For symbols: the fully qualified name including namespace is inserted (e.g., `ClaudeMaximus.ViewModels.SessionViewModel`)
+- For symbols: the fully qualified name including namespace is inserted (e.g., `TessynDesktop.ViewModels.SessionViewModel`)
 
 **FR.7.8 — Popup Behavior:**
 - The popup appears above the input textbox (intellisense-style)
@@ -256,7 +256,7 @@ Maximum 15 results displayed.
 
 **FR.8.2 — Build output detection:** On startup, the app checks whether it is running from the project's build output directory (`bin/Debug/net9.0/` under the source location). If so, an internal `IsRunningFromBuildOutput` flag is set and the self-update is disabled for that session. A warning icon (⚠) is displayed in the title bar with a tooltip explaining that the app will not be updated on restart.
 
-**FR.8.3 — Update on exit:** On application exit, if `SourceCodesLocation` is set and the app is NOT running from build output, the app checks `bin/Debug/net9.0/` for a newer `ClaudeMaximus.dll` (by comparing file timestamps against the running copy). If a newer build is found, a PowerShell script is spawned as a visible console process to copy the updated files into the running directory after the app exits.
+**FR.8.3 — Update on exit:** On application exit, if `SourceCodesLocation` is set and the app is NOT running from build output, the app checks `bin/Debug/net9.0/` for a newer `TessynDesktop.dll` (by comparing file timestamps against the running copy). If a newer build is found, a PowerShell script is spawned as a visible console process to copy the updated files into the running directory after the app exits.
 
 **FR.8.4** The copy script retries with progressive backoff delays of 1, 2, 4, 8, 16, 32, and 64 seconds (7 attempts total). If all attempts fail, the script exits silently.
 
@@ -435,7 +435,7 @@ Anthropic models appear first, Ollama models after. Each entry displays the true
 **FR.12.6 — Profile selection:** The command bar contains a profile selector (ComboBox) to the right of the model selector. Each profile uses a separate `CLAUDE_CONFIG_DIR` directory, giving it an isolated authentication context with the Claude CLI. The dropdown displays the account email as the display text. A "Default" entry (index 0, no env var override) uses the CLI's default authentication. A "New..." entry at the bottom of the list triggers profile creation (FR.12.7).
 
 **FR.12.7 — Profile creation flow:** When "New..." is selected in the profile dropdown:
-1. A unique profile ID is generated (`profile_1`, `profile_2`, etc.) and a corresponding config directory created under `%APPDATA%\ClaudeMaximus\profiles\<profileId>\`
+1. A unique profile ID is generated (`profile_1`, `profile_2`, etc.) and a corresponding config directory created under `%APPDATA%\TessynDesktop\profiles\<profileId>\`
 2. A visible console window is spawned running `claude auth login` with `CLAUDE_CONFIG_DIR` set to the profile's config directory. On Windows, a temporary `.bat` file is written to the config directory that sets the env var via `set`, uses `call` to invoke the `.cmd` wrapper (ensuring cmd.exe waits for the full auth flow including the OAuth browser callback), and ends with a `pause` so the user sees the result. The `.bat` file is cleaned up after the process exits.
 3. After the console process exits, `claude auth status` is queried (with `CLAUDE_CONFIG_DIR` set) to verify authentication succeeded and retrieve the account email. If the email query fails (auth was not completed), the profile is not added and a failure message is shown.
 4. The profile is added to the persisted list with the email as display name
@@ -443,7 +443,7 @@ Anthropic models appear first, Ollama models after. Each entry displays the true
 
 The dropdown selection reverts to the previous value while auth is in progress, preventing the "New..." item from being persisted as the selected index.
 
-**FR.12.8 — Profile persistence:** Profiles are stored in `appsettings.json` as a list of `ClaudeProfileModel` objects with `ProfileId` (string, used as the config subdirectory name) and `DisplayName` (string, typically the account email). The selected profile index is persisted per working directory (stored as `SelectedProfileIndex` on each `DirectoryNodeModel`). Index 0 = Default (no env var), indices 1..N map to stored profiles. New directories default to index 0. Each profile's auth state lives in `%APPDATA%\ClaudeMaximus\profiles\<ProfileId>\`.
+**FR.12.8 — Profile persistence:** Profiles are stored in `appsettings.json` as a list of `ClaudeProfileModel` objects with `ProfileId` (string, used as the config subdirectory name) and `DisplayName` (string, typically the account email). The selected profile index is persisted per working directory (stored as `SelectedProfileIndex` on each `DirectoryNodeModel`). Index 0 = Default (no env var), indices 1..N map to stored profiles. New directories default to index 0. Each profile's auth state lives in `%APPDATA%\TessynDesktop\profiles\<ProfileId>\`.
 
 **FR.12.9 — Profile config dir injection:** When a non-default profile is selected, the `CLAUDE_CONFIG_DIR` environment variable is set to the profile's config directory on all spawned `claude` CLI processes (user messages, context retries, compaction, and mid-run corrections). This isolates session IDs, auth tokens, and settings per profile.
 
@@ -528,7 +528,7 @@ The Default profile cannot be removed (the Remove button never appears while Def
 
 ### FR.13 — Session Import
 
-The application supports importing Claude Code sessions that were created outside of ClaudeMaximus (e.g., from the terminal, VS Code, JetBrains, or other tools). Import converts a Claude Code JSONL session file into the ClaudeMaximus session format and adds it to the session tree, preserving the Claude session ID for immediate resumability.
+The application supports importing Claude Code sessions that were created outside of TessynDesktop (e.g., from the terminal, VS Code, JetBrains, or other tools). Import converts a Claude Code JSONL session file into the TessynDesktop session format and adds it to the session tree, preserving the Claude session ID for immediate resumability.
 
 **FR.13.1 — Entry point:** The context menu on Directory and Group nodes shall include an "Import Claude Session" option. This scopes the import to the working directory of the selected node.
 
@@ -554,7 +554,7 @@ The application supports importing Claude Code sessions that were created outsid
 
 **FR.13.6 — Search box:** The picker includes a search text box. Pressing Enter sends the query along with session summaries to the Claude CLI for semantic matching (see FR.13.9). Results are reordered by relevance. When the Claude CLI is unavailable, search falls back to case-insensitive substring matching against first user prompts.
 
-**FR.13.7 — JSONL parsing:** The import service parses a Claude Code JSONL file into ClaudeMaximus session entries. Parsing rules:
+**FR.13.7 — JSONL parsing:** The import service parses a Claude Code JSONL file into TessynDesktop session entries. Parsing rules:
 
 | JSONL event type | Action |
 |---|---|
@@ -577,7 +577,7 @@ The model is selected using a fallback order: Haiku (preferred for speed/cost), 
 
 **FR.13.11 — Import execution:** For each selected session, the import process:
 1. Parses the JSONL file into session entries (per FR.13.7)
-2. Creates a new ClaudeMaximus session file (standard naming: `YYYY-MM-dd-HHmm-{6random}.txt`)
+2. Creates a new TessynDesktop session file (standard naming: `YYYY-MM-dd-HHmm-{6random}.txt`)
 3. Writes all parsed entries to the file using the standard session file format (`[timestamp] ROLE` headers)
 4. Creates a `SessionNodeModel` with: the generated title (or truncated first prompt) as `Name`, the new file as `FileName`, the working directory from the parent node, and the original Claude session ID as `ClaudeSessionId`
 5. Adds the session node to the tree under the selected parent (Directory or Group)
@@ -638,7 +638,7 @@ The application allows any session to schedule a future turn against itself or a
 
 **FR.14.10 — Scheduled turn visibility:** A scheduled turn's prompt is appended to the session file as a `USER` entry, and the response as an `ASSISTANT` entry. A `SYSTEM` entry `[Scheduled: <note>]` is prepended to the prompt so the trigger is visible in the session view. The session file watcher (`FR.3.1`, `SessionViewModel`) picks up the new entries and updates the output panel for any session that is currently open.
 
-**FR.14.11 — Native scheduling redirect:** When `AgentToolsEnabled` is true **and** the session is in One-shot Mode (FR.19), the hidden instruction block (FR.11.2, FR.11.10) includes a directive redirecting Claude away from the CLI's built-in scheduling tools (`ScheduleWakeup`, `CronCreate`, `CronList`, `CronDelete`) toward the ClaudeMaximus MCP scheduling tools (`mcp__cmx__schedule_wake`, `mcp__cmx__list_schedules`, `mcp__cmx__cancel_schedule`). **Rationale:** in One-shot Mode the `claude` process is terminated after each turn, so schedules registered via the CLI's built-in tools live only within that process's lifetime and are silently lost. The MCP-served scheduling tools delegate to the host-side `SchedulerService`, which persists schedules to `appsettings.json` and re-arms them on app startup (FR.14.7, FR.14.8). When `AgentToolsEnabled` is false, or when the session is in Streaming Session Mode (FR.19.10), the redirect line is omitted. As of **FR.19.11**, One-shot Mode spawns also pass `--disallowed-tools` for the same four native tools when `AgentToolsEnabled` is true, making the redirect an enforced block rather than an advisory instruction.
+**FR.14.11 — Native scheduling redirect:** When `AgentToolsEnabled` is true **and** the session is in One-shot Mode (FR.19), the hidden instruction block (FR.11.2, FR.11.10) includes a directive redirecting Claude away from the CLI's built-in scheduling tools (`ScheduleWakeup`, `CronCreate`, `CronList`, `CronDelete`) toward the TessynDesktop MCP scheduling tools (`mcp__cmx__schedule_wake`, `mcp__cmx__list_schedules`, `mcp__cmx__cancel_schedule`). **Rationale:** in One-shot Mode the `claude` process is terminated after each turn, so schedules registered via the CLI's built-in tools live only within that process's lifetime and are silently lost. The MCP-served scheduling tools delegate to the host-side `SchedulerService`, which persists schedules to `appsettings.json` and re-arms them on app startup (FR.14.7, FR.14.8). When `AgentToolsEnabled` is false, or when the session is in Streaming Session Mode (FR.19.10), the redirect line is omitted. As of **FR.19.11**, One-shot Mode spawns also pass `--disallowed-tools` for the same four native tools when `AgentToolsEnabled` is true, making the redirect an enforced block rather than an advisory instruction.
 
 **FR.14.12 — UI-initiated delayed send:** Right-clicking the Send button (SessionView) opens a "Schedule Send" popup prompting for a delay amount and unit (Minutes / Hours / Days) instead of sending the composed message immediately. Confirming registers a **Delay**-kind self-wake schedule (FR.14.5, FR.14.6) targeting the session's own `NodeId`, using the identical scheduling engine exposed to agents as the `schedule_wake` MCP tool (`ISchedulerService`/`IDaemonClient.AddSchedule`) — the eventual turn is fired by the same `SchedulerService.FireScheduleAsync` → `SessionTurnService.RunTurnAsync` path used for any other scheduled turn (FR.14.9, FR.14.10), so instruction-block building, context preamble, and cross-profile session adoption all apply unchanged with no additional code. The input box is cleared immediately (mirroring an ordinary send) and a one-off system message in the output panel confirms the scheduled fire time; this message is UI-only and is not written to the session file. The existing per-session schedule indicator (clock icon, shown next to Send/Stop whenever the session has an active schedule, with a tooltip and a cancel action) applies unchanged, since a UI-created schedule is indistinguishable from one an agent creates. Left-click Send behavior is unaffected. Right-clicking with an empty input box is a no-op — there is nothing to schedule.
 
@@ -777,7 +777,7 @@ GET https://api.anthropic.com/api/oauth/usage
 Authorization: Bearer <access_token>
 anthropic-beta: oauth-2025-04-20
 ```
-The access token is read from the active profile's `.credentials.json` file (`claudeAiOauth.accessToken`). For the default profile the file is at `~/.claude/.credentials.json`; for named profiles it is at `%APPDATA%\ClaudeMaximus\profiles\<profileId>\.credentials.json`.
+The access token is read from the active profile's `.credentials.json` file (`claudeAiOauth.accessToken`). For the default profile the file is at `~/.claude/.credentials.json`; for named profiles it is at `%APPDATA%\TessynDesktop\profiles\<profileId>\.credentials.json`.
 
 **FR.18.5 — Failure behaviour (token rejection):** If the endpoint returns HTTP 401 (token expired or invalid), the usage fetch stops and is not retried for the remainder of the app session. Any previously cached usage data remains visible. If no cached data is available the bars are hidden entirely (`HasUsageData = false`).
 

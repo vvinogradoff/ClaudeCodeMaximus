@@ -155,7 +155,7 @@ public sealed class ClaudeSessionImportServiceTests : IDisposable
 	[Fact]
 	public void ParseJsonlSession_StripsInjectedInstructions()
 	{
-		// Simulate a JSONL user message that contains Maximus-injected instruction block
+		// Simulate a JSONL user message that contains Tessyn-injected instruction block
 		var augmented = "Hello Claude" + Constants.Instructions.Delimiter
 		                + "\n- Once you have completed the request, commit all your changes to git.";
 		var escaped = JsonEncodedText.Encode(augmented).ToString();

@@ -1,4 +1,4 @@
-$path = 'C:\Projects\oDesk\Duxre\Code\ClaudeMaximus\code\ClaudeMaximus\Views\SessionView.axaml.cs'
+$path = 'C:\Projects\oDesk\Duxre\Code\Tessyn\code\TessynDesktop\Views\SessionView.axaml.cs'
 $src = @"
 using System;
 using System.Collections.Specialized;
@@ -6,10 +6,10 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
-using ClaudeMaximus.ViewModels;
+using TessynDesktop.ViewModels;
 using Serilog;
 
-namespace ClaudeMaximus.Views;
+namespace TessynDesktop.Views;
 
 /// <remarks>Created by Claude</remarks>
 public partial class SessionView : UserControl

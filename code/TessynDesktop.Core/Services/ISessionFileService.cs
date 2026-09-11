@@ -28,7 +28,7 @@ public interface ISessionFileService
 
 	bool SessionFileExists(string fileName);
 
-	/// <summary>Deletes the Maximus session .txt file if it exists. Does NOT touch the Claude JSONL.</summary>
+	/// <summary>Deletes the Tessyn session .txt file if it exists. Does NOT touch the Claude JSONL.</summary>
 	void DeleteSessionFile(string fileName);
 
 	/// <summary>Returns the full filesystem path for a session file name.</summary>

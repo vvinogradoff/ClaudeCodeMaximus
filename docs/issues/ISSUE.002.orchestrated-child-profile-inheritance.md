@@ -61,7 +61,7 @@ account propagates down the whole orchestration tree.
   profile later changes, already-spawned children keep the pinned one.
 - If the account driving the supervisor is itself revoked, children will inherit the same
   revoked account and still 401 — by design (they mirror the supervisor). The remedy in
-  that case is re-authenticating that profile in ClaudeMaximus.
+  that case is re-authenticating that profile in TessynDesktop.
 
 ## Status
 

@@ -1,14 +1,14 @@
-$path = 'C:\Projects\oDesk\Duxre\Code\ClaudeMaximus\code\ClaudeMaximus\Views\SessionView.axaml'
+$path = 'C:\Projects\oDesk\Duxre\Code\Tessyn\code\TessynDesktop\Views\SessionView.axaml'
 $xml = @"
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:ClaudeMaximus.ViewModels"
-             xmlns:converters="using:ClaudeMaximus.Converters"
+             xmlns:vm="using:TessynDesktop.ViewModels"
+             xmlns:converters="using:TessynDesktop.Converters"
              xmlns:md="using:Markdown.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
-             x:Class="ClaudeMaximus.Views.SessionView"
+             x:Class="TessynDesktop.Views.SessionView"
              x:Name="Root"
              x:DataType="vm:SessionViewModel">
 

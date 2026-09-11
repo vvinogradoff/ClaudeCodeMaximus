@@ -29,9 +29,9 @@ Cross-platform desktop GUI for managing Claude Code sessions, backed by the [Tes
 ## Setup
 
 ```bash
-git clone https://github.com/sapph1re/ClaudeCodeMaximus.git
-cd ClaudeCodeMaximus
-dotnet build code/ClaudeMaximus.sln
+git clone https://github.com/sapph1re/Tessyn.git
+cd Tessyn
+dotnet build code/TessynDesktop.sln
 ```
 
 Start the daemon:
@@ -41,10 +41,10 @@ tessyn start
 
 Run the app:
 ```bash
-dotnet run --project code/ClaudeMaximus/ClaudeMaximus.csproj
+dotnet run --project code/TessynDesktop/TessynDesktop.csproj
 ```
 
-On first launch, enable daemon mode in `appsettings.json` (located in `~/Library/Application Support/ClaudeMaximus/` on macOS):
+On first launch, enable daemon mode in `appsettings.json` (located in `~/Library/Application Support/TessynDesktop/` on macOS):
 ```json
 {
   "UseTessynDaemon": true

@@ -1,4 +1,4 @@
-# ClaudeMaximus — TODO
+# TessynDesktop — TODO
 
 ## Phase 1 — Shell & Tree ✓ DONE
 
