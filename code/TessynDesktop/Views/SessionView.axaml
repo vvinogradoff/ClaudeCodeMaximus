@@ -55,6 +55,31 @@
             <Setter Property="Width" Value="NaN"/>
             <Setter Property="MinWidth" Value="0"/>
         </Style>
+
+        <!--
+          Suppress the built-in drop-down arrow (FR.12.22): FluentTheme's default ComboBox template
+          (Avalonia.Themes.Fluent 11.3.9, Controls/ComboBox.xaml) reserves a fixed Grid
+          ColumnDefinitions="*,32" column for a hit-test-invisible PathIcon x:Name="DropDownGlyph" —
+          clicking anywhere on the box already opens the dropdown via the templated ComboBox itself,
+          not that glyph, so it's pure decoration, worst on the 60px-wide Effort box where it eats
+          about half the control. Hide the glyph, then let the content-holding parts span both grid
+          columns so the reclaimed width goes to the text instead of sitting empty. (ColumnSpan is a
+          registered attached AvaloniaProperty, unlike ColumnDefinitions itself, so it styles cleanly
+          via the same named-template-part pattern as the PART_Popup/PART_ItemsPresenter overrides
+          above — no need to touch/duplicate the ControlTemplate.)
+        -->
+        <Style Selector="ComboBox.cmxCompact /template/ PathIcon#DropDownGlyph">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="ComboBox.cmxCompact /template/ ContentControl#ContentPresenter">
+            <Setter Property="(Grid.ColumnSpan)" Value="2"/>
+        </Style>
+        <Style Selector="ComboBox.cmxCompact /template/ TextBlock#PlaceholderTextBlock">
+            <Setter Property="(Grid.ColumnSpan)" Value="2"/>
+        </Style>
+        <Style Selector="ComboBox.cmxCompact /template/ TextBox#PART_EditableTextBox">
+            <Setter Property="(Grid.ColumnSpan)" Value="2"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,5,120">
