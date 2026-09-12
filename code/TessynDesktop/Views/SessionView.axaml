@@ -352,14 +352,19 @@
                                           HorizontalContentAlignment="Right"
                                           FontSize="12"
                                           Padding="6,3">
-                                    <!-- Closed box only: left-truncate long model IDs so the distinctive
-                                         suffix (e.g. "…pus-4-8") stays visible. Deliberately NOT the
-                                         same template as ItemTemplate below — that would also
-                                         truncate the full-width dropdown list. -->
+                                    <!-- Closed box only: left-truncate long model IDs, sized to the box's
+                                         actual available width (TextTrimming.LeadingCharacterEllipsis), so
+                                         the distinctive suffix (e.g. "…pus-4-8") stays visible instead of a
+                                         fixed character count. Deliberately NOT the same template as
+                                         ItemTemplate below — that would also truncate the full-width
+                                         dropdown list. -->
                                     <ComboBox.SelectionBoxItemTemplate>
                                         <DataTemplate x:CompileBindings="False">
-                                            <TextBlock Text="{Binding Converter={x:Static converters:LeftEllipsisConverter.Instance}, ConverterParameter=8}"
-                                                       TextAlignment="Right"/>
+                                            <TextBlock Text="{Binding Converter={x:Static converters:OllamaLatestSuffixConverter.Instance}}"
+                                                       HorizontalAlignment="Stretch"
+                                                       TextAlignment="Right"
+                                                       TextWrapping="NoWrap"
+                                                       TextTrimming="LeadingCharacterEllipsis"/>
                                         </DataTemplate>
                                     </ComboBox.SelectionBoxItemTemplate>
                                     <!-- Dropdown list: full untruncated text, just with the redundant

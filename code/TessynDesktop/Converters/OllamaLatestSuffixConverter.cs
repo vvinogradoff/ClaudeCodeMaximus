@@ -5,9 +5,8 @@ using Avalonia.Data.Converters;
 namespace TessynDesktop.Converters;
 
 /// <summary>
-/// Strips a trailing Ollama ":latest" tag for display (FR.12.22) — no truncation, unlike
-/// <see cref="LeftEllipsisConverter"/>. Used on the Model dropdown's full-width item list so long
-/// entries stay untruncated while still losing the redundant tag.
+/// Strips a trailing Ollama ":latest" tag for display (FR.12.22) — no truncation. Used on the Model
+/// dropdown's full-width item list so long entries stay untruncated while still losing the redundant tag.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class OllamaLatestSuffixConverter : IValueConverter
