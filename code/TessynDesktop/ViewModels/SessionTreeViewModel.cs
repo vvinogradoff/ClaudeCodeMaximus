@@ -818,7 +818,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			if (!string.IsNullOrEmpty(vm.Model.NodeId))
 				byNodeId[vm.Model.NodeId] = vm;
 
-		// Move sub-sessions: remove from flat container, add to supervisor's SubSessions
+		// Move sub-sessions: remove from flat container, add to supervisor's SubSessions.
+		// Track which containers lose a session so we can prune groups emptied by the move.
+		var containersThatLostSessions = new HashSet<ObservableCollection<ViewModelBase>>();
 		foreach (var (vm, container) in all)
 		{
 			if (string.IsNullOrEmpty(vm.Model.SupervisorNodeId)) continue;
@@ -826,7 +828,43 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 			container.Remove(vm);
 			supervisor.SubSessions.Add(vm);
+			containersThatLostSessions.Add(container);
 		}
+
+		// Remove any group left empty purely because the reorg re-parented its sessions under a
+		// supervisor. This makes a restarted tree match the live/runtime view: when orchestration
+		// spawns a child with a group argument, the registry persists it inside an auto-created
+		// group, but at runtime HandleRegistrySessionAdded renders that child nested under its
+		// supervisor and never projects the group. On reload the group VM is built from the model,
+		// so without this its re-parented children leave behind a visible empty husk. The group
+		// survives in the model, so the orchestrator (which resolves sessions by NodeId, not tree
+		// position) is unaffected.
+		foreach (var dir in Directories)
+			PruneGroupsEmptiedByReorg(dir.Children, containersThatLostSessions);
+	}
+
+	/// <summary>
+	/// Removes group VMs emptied purely by <see cref="ReorganizeSubSessions"/> re-parenting their
+	/// sessions under a supervisor. Only groups whose own child collection lost a session are pruned,
+	/// so a genuinely empty user-created group (which never held a session) is left intact.
+	/// </summary>
+	private static void PruneGroupsEmptiedByReorg(
+		ObservableCollection<ViewModelBase> children,
+		HashSet<ObservableCollection<ViewModelBase>> containersThatLostSessions)
+	{
+		var toRemove = new List<GroupNodeViewModel>();
+		foreach (var child in children)
+		{
+			if (child is not GroupNodeViewModel group) continue;
+
+			PruneGroupsEmptiedByReorg(group.Children, containersThatLostSessions);
+
+			if (group.Children.Count == 0 && containersThatLostSessions.Contains(group.Children))
+				toRemove.Add(group);
+		}
+
+		foreach (var group in toRemove)
+			children.Remove(group);
 	}
 
 	private static void CollectAllSessions(
