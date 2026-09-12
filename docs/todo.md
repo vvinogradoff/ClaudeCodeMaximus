@@ -763,6 +763,12 @@ Reworks the Telegram Bridge from a notification-only channel into a full mirror 
 - [DONE] `TelegramBridgeServiceTests` rewritten onto a fake `IDaemonClient`; new coverage for mirror prefixes/chunking/echo-suppression, mention-ping prefix, and `/stop`
 - [ ] Manual E2E re-run against a real bot/supergroup (extends the Phase 28 checklist) — not yet exercised live
 
+### P29.5 Duplicate entries in the session pane (fix)
+Reported by the Architect against a Telegram-bridged session right after a machine restart: the user message and the assistant reply both appeared twice in the pane. Root cause was a pre-existing race between `SessionContentViewModel`'s two file watchers (`.txt` and JSONL), which only became load-bearing once daemon-orchestrated turns (this phase) kept both watchers armed for a turn's full duration — see `docs/issues/ISSUE.009.jsonl-watcher-txt-writeback-duplicate-entries.md` for the full writeup.
+- [DONE] `SessionContentViewModel.RefreshFromJsonl` now writes new entries to the `.txt` file inside the same `Dispatcher.UIThread.Post` callback that adds them to `Messages`, after the `Messages.Add` loop — closing the async gap the `.txt` watcher's own debounced refresh could race
+- [DONE] `docs/issues/ISSUE.009.jsonl-watcher-txt-writeback-duplicate-entries.md` — investigation/resolution writeup
+- [ ] Manual re-verification against a live Telegram-bridged session under load (e.g. right after a restart) — not yet exercised live post-fix
+
 ---
 
 ## Phase 30 — Streaming/Headless Context Divergence Fix (FR.19.13)

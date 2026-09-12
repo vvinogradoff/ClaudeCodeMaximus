@@ -410,16 +410,21 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 			var newEntries = displayable.Skip(_lastKnownEntryCount).ToList();
 			_log.Information("JSONL watcher: {Count} new entries detected from JSONL", newEntries.Count);
 
-			// Append new entries to the Tessyn .txt file for persistence
-			foreach (var entry in newEntries)
-				_fileService.AppendMessage(_node.FileName, entry.Role, entry.Content);
-
 			_lastKnownEntryCount = displayable.Count;
 
 			Dispatcher.UIThread.Post(() =>
 			{
 				foreach (var entry in newEntries)
 					Messages.Add(EntryToViewModel(entry));
+
+				// Append to the Tessyn .txt file only now that Messages already reflects these
+				// entries. Writing before Messages.Add let the .txt FileSystemWatcher's own
+				// debounced RefreshFromFile race this Dispatcher.Post — if the UI thread was busy
+				// (e.g. right after an app/machine restart) RefreshFromFile could see the same
+				// entries as "new" (Messages.Count not yet incremented) and re-add them, duplicating
+				// both the user message and the assistant reply in the pane.
+				foreach (var entry in newEntries)
+					_fileService.AppendMessage(_node.FileName, entry.Role, entry.Content);
 
 				var lastUser = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
 				if (lastUser != null)
