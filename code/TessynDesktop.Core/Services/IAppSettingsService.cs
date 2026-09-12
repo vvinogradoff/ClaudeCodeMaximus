@@ -12,4 +12,14 @@ public interface IAppSettingsService
 	AppSettingsModel Settings { get; }
 	void Load();
 	void Save();
+
+	/// <summary>
+	/// Shared lock guarding <see cref="Save"/>/<see cref="Load"/> and all in-memory mutations of
+	/// <see cref="Settings"/>'s tree (ISSUE — concurrent-settings-save-lost-update). Callers that
+	/// mutate the shared <see cref="Settings"/> graph from a background/worker thread and then call
+	/// <see cref="Save"/> must hold this lock across both the mutation and the Save call — e.g.
+	/// <c>SessionRegistry</c>'s tree-mutation methods. <c>lock</c> (Monitor) is reentrant on the same
+	/// thread, so calling <see cref="Save"/> while already holding this lock does not deadlock.
+	/// </summary>
+	object SyncRoot { get; }
 }

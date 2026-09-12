@@ -194,7 +194,7 @@ Subsequent messages continue after the separator. The full pre-compaction histor
 
 **NR.2 — Performance:** Session tree is responsive for up to 500 sessions. Search via full file scan is acceptable for v1; may be slow on large sets.
 
-**NR.3 — Durability:** Session file appends are flushed immediately. `appsettings.json` is written atomically.
+**NR.3 — Durability:** Session file appends are flushed immediately. `appsettings.json` is written atomically (temp-write + rename) AND all reads/writes are serialized under a single process-wide lock (`IAppSettingsService.SyncRoot`), so concurrent Saves from multiple threads (orchestration workers, Streaming Session Mode, UI toggles) can no longer race and silently lose an update (see ISSUE.008).
 
 **NR.4 — Architecture:** MVVM with Avalonia + ReactiveUI. One ViewModel per significant view. Models and services have no UI dependencies.
 

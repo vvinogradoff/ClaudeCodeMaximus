@@ -13,7 +13,11 @@ namespace TessynDesktop.Services;
 /// Owns the authoritative <see cref="DirectoryNodeModel"/> / <see cref="GroupNodeModel"/> /
 /// <see cref="SessionNodeModel"/> tree. Persists via <see cref="IAppSettingsService"/> and raises
 /// <see cref="TreeChanged"/> when the tree changes, so <c>SessionTreeViewModel</c> can re-project.
-/// Thread-safe: model mutations take a lock; the running-state dictionary uses concurrent primitives.
+/// Thread-safe: model mutations take <see cref="IAppSettingsService.SyncRoot"/> — the SAME lock
+/// <see cref="IAppSettingsService.Save"/>/<see cref="IAppSettingsService.Load"/> take internally —
+/// rather than a private lock of its own, so a tree mutation and its subsequent Save can never be
+/// split by a concurrent Save from another thread (ISSUE concurrent-settings-save-lost-update).
+/// The running-state dictionary uses concurrent primitives instead, since it's transient/never persisted.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionRegistry : ISessionRegistry
@@ -27,8 +31,6 @@ public sealed class SessionRegistry : ISessionRegistry
 
     // Running state: NodeId → bool (transient, never persisted).
     private readonly ConcurrentDictionary<string, bool> _runningNodes = new();
-
-    private readonly object _lock = new();
 
     public event EventHandler<TreeChangedEventArgs>? TreeChanged;
 
@@ -53,7 +55,7 @@ public sealed class SessionRegistry : ISessionRegistry
     public void LoadFromSettings()
     {
         var dirty = false;
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {
@@ -74,7 +76,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public SessionNodeModel? FindModelByNodeId(string nodeId)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {
@@ -87,7 +89,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public SessionNodeModel? FindModelByAgentToken(string token)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {
@@ -100,7 +102,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public SessionNodeModel? FindModelByFileName(string fileName)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {
@@ -117,7 +119,7 @@ public sealed class SessionRegistry : ISessionRegistry
     {
         var normalised = Path.GetFullPath(path);
 
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             var existing = _appSettings.Settings.Tree.FirstOrDefault(d =>
                 string.Equals(d.Path, normalised, StringComparison.OrdinalIgnoreCase));
@@ -133,7 +135,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public bool TryDeleteDirectory(DirectoryNodeModel directory)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             if (directory.Groups.Count != 0 || directory.Sessions.Count != 0)
                 return false;
@@ -151,7 +153,7 @@ public sealed class SessionRegistry : ISessionRegistry
     public GroupNodeModel AddGroup(DirectoryNodeModel parent, string name)
     {
         var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.Path };
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             parent.Groups.Add(model);
             _appSettings.Save();
@@ -164,7 +166,7 @@ public sealed class SessionRegistry : ISessionRegistry
     public GroupNodeModel AddGroupToGroup(GroupNodeModel parent, string name)
     {
         var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.WorkingDirectory };
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             parent.Groups.Add(model);
             _appSettings.Save();
@@ -178,7 +180,7 @@ public sealed class SessionRegistry : ISessionRegistry
     {
         if (!CanDeleteGroup(group)) return false;
 
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             parent.Groups.Remove(group);
             _appSettings.Save();
@@ -192,7 +194,7 @@ public sealed class SessionRegistry : ISessionRegistry
     {
         if (!CanDeleteGroup(group)) return false;
 
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             parent.Groups.Remove(group);
             _appSettings.Save();
@@ -204,7 +206,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public void RenameGroup(GroupNodeModel group, string newName)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             group.Name = newName;
             _appSettings.Save();
@@ -218,7 +220,7 @@ public sealed class SessionRegistry : ISessionRegistry
     public SessionNodeModel AddSession(DirectoryNodeModel parent, string name)
     {
         var model = CreateSessionModel(name, parent.Path);
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             parent.Sessions.Add(model);
             _appSettings.Save();
@@ -231,7 +233,7 @@ public sealed class SessionRegistry : ISessionRegistry
     public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name)
     {
         var model = CreateSessionModel(name, parent.WorkingDirectory);
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             parent.Sessions.Add(model);
             _appSettings.Save();
@@ -250,7 +252,7 @@ public sealed class SessionRegistry : ISessionRegistry
             ClaudeSessionId  = claudeSessionId,
             ExternalId       = claudeSessionId,
         };
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             parent.Sessions.Add(model);
             _appSettings.Save();
@@ -269,7 +271,7 @@ public sealed class SessionRegistry : ISessionRegistry
             ClaudeSessionId  = claudeSessionId,
             ExternalId       = claudeSessionId,
         };
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             parent.Sessions.Add(model);
             _appSettings.Save();
@@ -284,7 +286,7 @@ public sealed class SessionRegistry : ISessionRegistry
         if (!forceDelete && _fileService.SessionFileExists(session.FileName))
             return false;
 
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             if (forceDelete)
                 _fileService.DeleteSessionFile(session.FileName);
@@ -302,7 +304,7 @@ public sealed class SessionRegistry : ISessionRegistry
         if (!forceDelete && _fileService.SessionFileExists(session.FileName))
             return false;
 
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             if (forceDelete)
                 _fileService.DeleteSessionFile(session.FileName);
@@ -317,7 +319,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public void RenameSession(SessionNodeModel session, string newName)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             session.Name = newName;
             _appSettings.Save();
@@ -330,7 +332,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {
@@ -346,7 +348,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             index = Math.Clamp(index, 0, parent.Sessions.Count);
             parent.Sessions.Insert(index, session);
@@ -359,7 +361,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             index = Math.Clamp(index, 0, parent.Sessions.Count);
             parent.Sessions.Insert(index, session);
@@ -379,7 +381,7 @@ public sealed class SessionRegistry : ISessionRegistry
         DirectoryNodeModel? dir;
         GroupNodeModel? targetGroup = null;
 
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             dir = _appSettings.Settings.Tree.FirstOrDefault(d =>
                 string.Equals(d.Path, workingDir, StringComparison.OrdinalIgnoreCase));
@@ -427,7 +429,7 @@ public sealed class SessionRegistry : ISessionRegistry
     {
         var result = new List<SessionSummaryModel>();
 
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {
@@ -443,7 +445,7 @@ public sealed class SessionRegistry : ISessionRegistry
     {
         var ids = new HashSet<string>();
 
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             foreach (var dir in _appSettings.Settings.Tree)
                 CollectIds(dir.Sessions, dir.Groups, ids);
@@ -454,7 +456,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session)
     {
-        lock (_lock)
+        lock (_appSettings.SyncRoot)
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {

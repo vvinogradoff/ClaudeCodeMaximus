@@ -11,6 +11,7 @@ namespace TessynDesktop.Tests.Services;
 internal sealed class FakeAppSettingsServiceForSound : IAppSettingsService
 {
 	public AppSettingsModel Settings { get; } = new();
+	public object SyncRoot { get; } = new();
 
 	public void Load() { }
 	public void Save() { }

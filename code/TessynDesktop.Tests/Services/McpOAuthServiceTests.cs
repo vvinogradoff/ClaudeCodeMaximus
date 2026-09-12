@@ -15,6 +15,7 @@ namespace TessynDesktop.Tests.Services;
 internal sealed class FakeAppSettingsServiceForOAuth : IAppSettingsService
 {
 	public AppSettingsModel Settings { get; } = new();
+	public object SyncRoot { get; } = new();
 	public int SaveCallCount { get; private set; }
 
 	public void Load() { }

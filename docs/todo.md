@@ -821,6 +821,13 @@ Curates the native tool + MCP surface handed to the claude CLI for local (Ollama
 - [ ] Dimmed-opacity visual state when `Enabled` is false, full opacity when true (FR.11.9 convention)
 - [ ] Resolver test: `LocalToolProfileResolver_Resolve_EnabledFalse_ReturnsNullRegardlessOfSavedSelection`
 
+### Bugfix — Concurrent `appsettings.json` Save lost updates (ISSUE.008)
+- [DONE] Root cause: `AppSettingsService.Save()` was a completely unsynchronized full-graph serialize + atomic rename; concurrent Saves from multiple threads (orchestration workers, Streaming Session Mode, per-turn Saves) could race, with a stale-snapshot Save landing last and silently overwriting a newer one (e.g. one that had just added an orchestrated sub-agent session node) — confirmed cause of orchestrated worker sessions vanishing from the tree (NR.3)
+- [DONE] Fix: `IAppSettingsService.SyncRoot` (backed by `AppSettingsService`'s private `_gate`) now guards the full bodies of `Save()`/`Load()`; `SessionRegistry`'s tree-mutation methods now take that same lock (its own private `_lock` removed — reentrant `lock`, no deadlock) instead of a separate one, so a registry mutation and its Save can never be split by a concurrent Save from another thread
+- [DONE] `AppSettingsServiceConcurrencyTests.cs` (3 tests) — many-threads lost-update repro (mutate+Save under `SyncRoot`, fresh `Load()` confirms every node survived), concurrent mutate-vs-redundant-Save (no `InvalidOperationException`), and bare unsynchronized `Save()` calls from multiple threads with no caller-side lock (mirrors `SessionTurnService`/UI-toggle call sites) — manually verified this last test fails (reproducible `IOException` on the shared `.tmp` path) with the lock removed from `Save()`, passes with it restored. Full suite: 371/371 pass.
+- [DONE] `docs/requirements.md` NR.3 amended; `docs/issues/ISSUE.008.concurrent-settings-save-lost-update.md` written
+- Known residual (not addressed this round): a background Save is only serialized against a *UI-thread* mutation if that UI code path also takes `SyncRoot` — most UI toggles currently call `Save()` bare (now safe against torn writes/lost Saves thanks to the internal lock) but don't wrap their own field mutation in the lock. Not the data-loss path that caused this issue (that was registry-mutation-vs-Save, now fully closed); flagged as a minor follow-up.
+
 ---
 
 ## Backlog / Future
