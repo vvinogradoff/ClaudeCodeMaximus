@@ -341,29 +341,34 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 		try
 		{
 			var entries = _fileService.ReadEntries(_node.FileName);
-			var currentCount = 0;
 
-			// Count non-empty entries to compare with current Messages
-			var newEntries = new List<SessionEntryModel>();
+			var displayable = new List<SessionEntryModel>();
 			foreach (var entry in entries)
 			{
 				if (entry.Role != Constants.SessionFile.RoleCompaction
 				    && string.IsNullOrWhiteSpace(entry.Content))
 					continue;
 
-				currentCount++;
-				if (currentCount > Messages.Count)
-					newEntries.Add(entry);
+				displayable.Add(entry);
 			}
 
-			if (newEntries.Count == 0)
+			if (displayable.Count == 0)
 				return;
 
-			_log.Information("FileWatcher: {Count} new entries detected in {FileName}",
-				newEntries.Count, _node.FileName);
-
+			// Decide which entries are actually new inside the posted UI-thread callback, against
+			// Messages.Count read at execution time rather than a snapshot taken here on the
+			// timer thread — otherwise a delay before the post runs (e.g. a busy UI thread) lets
+			// another in-flight update land first, making stale entries look "new" again and
+			// duplicating them (see ISSUE.009).
 			Dispatcher.UIThread.Post(() =>
 			{
+				if (displayable.Count <= Messages.Count)
+					return;
+
+				var newEntries = displayable.Skip(Messages.Count).ToList();
+				_log.Information("FileWatcher: {Count} new entries detected in {FileName}",
+					newEntries.Count, _node.FileName);
+
 				foreach (var entry in newEntries)
 					Messages.Add(EntryToViewModel(entry));
 
@@ -414,8 +419,24 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 
 			Dispatcher.UIThread.Post(() =>
 			{
+				// Defensive dedup (ISSUE.009 follow-up): _lastKnownEntryCount is captured by
+				// re-reading the JSONL file, which can race a persistent (Streaming Session Mode)
+				// process's own disk flush of the entry TurnController's HandleStreamEvent just
+				// wrote via the primary path. If that flush lands after this method's snapshot but
+				// before the count is next refreshed, the same entry is treated as "new" here and
+				// would otherwise be appended a second time (with none of HandleStreamEvent's
+				// model/effort metadata) both on screen and in the persisted .txt file. Skip any
+				// entry whose role/content exactly matches the current tail of Messages.
+				var addedEntries = new List<SessionEntryModel>();
 				foreach (var entry in newEntries)
+				{
+					var last = Messages.Count > 0 ? Messages[^1] : null;
+					if (last != null && last.Role == entry.Role && last.Content == entry.Content)
+						continue;
+
 					Messages.Add(EntryToViewModel(entry));
+					addedEntries.Add(entry);
+				}
 
 				// Append to the Tessyn .txt file only now that Messages already reflects these
 				// entries. Writing before Messages.Add let the .txt FileSystemWatcher's own
@@ -423,10 +444,10 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 				// (e.g. right after an app/machine restart) RefreshFromFile could see the same
 				// entries as "new" (Messages.Count not yet incremented) and re-add them, duplicating
 				// both the user message and the assistant reply in the pane.
-				foreach (var entry in newEntries)
+				foreach (var entry in addedEntries)
 					_fileService.AppendMessage(_node.FileName, entry.Role, entry.Content);
 
-				var lastUser = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
+				var lastUser = addedEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
 				if (lastUser != null)
 				{
 					_node.LastPromptTimestamp = lastUser.Timestamp;
@@ -434,7 +455,7 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 					_node.ProfileName = lastUser.ProfileName;
 				}
 
-				var lastAssistant = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleAssistant);
+				var lastAssistant = addedEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleAssistant);
 				if (lastAssistant != null)
 					_node.LastResponseTimestamp = lastAssistant.Timestamp;
 			});

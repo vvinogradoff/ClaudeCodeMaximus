@@ -769,6 +769,11 @@ Reported by the Architect against a Telegram-bridged session right after a machi
 - [DONE] `docs/issues/ISSUE.009.jsonl-watcher-txt-writeback-duplicate-entries.md` — investigation/resolution writeup
 - [ ] Manual re-verification against a live Telegram-bridged session under load (e.g. right after a restart) — not yet exercised live post-fix
 
+**Follow-up (2026-09-14):** first fix only closed the *display*-only variant. A second, distinct race duplicated an assistant reply for real on disk in a Streaming Session Mode (FR.19) session ("VPN test stand") sent through the normal UI — unrelated to Telegram. Root cause: `TurnController`'s pre-`IsBusy=false` JSONL-entry-count snapshot can go stale when a persistent process's transcript JSONL flush lands after the snapshot but before the "turn complete" signal, letting the JSONL watcher replay the last entry. See the "Follow-up (2026-09-14)" section of `docs/issues/ISSUE.009...md`.
+- [DONE] `RefreshFromJsonl` now skips any candidate entry matching the current tail of `Messages` (role + content), checked live inside the `Dispatcher.UIThread.Post` callback
+- [DONE] `RefreshFromFile` restructured so its "is this new" decision also runs inside the post, against `Messages.Count` read at execution time, closing the same class of race for symmetry
+- [ ] Manual re-verification against a live Streaming Session Mode turn — not yet exercised live post-fix
+
 ---
 
 ## Phase 30 — Streaming/Headless Context Divergence Fix (FR.19.13)
