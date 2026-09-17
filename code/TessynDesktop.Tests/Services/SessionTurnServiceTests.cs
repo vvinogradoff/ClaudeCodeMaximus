@@ -312,6 +312,7 @@ public sealed class SessionTurnServiceTests : IDisposable
 			return Task.CompletedTask;
 		};
 		var node = MakeNode();
+		node.IsAutoCommit = true; // explicit commit to produce a non-empty instruction block
 
 		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
 

@@ -54,7 +54,7 @@ public sealed class SessionNodeModel
 	/// Do-not-commit, <c>null</c> = No preference (no commit-related instruction is emitted).
 	/// Persisted across app restarts. New sessions default to Do-not-commit.
 	/// </summary>
-	public bool? IsAutoCommit { get; set; } = false;
+	public bool? IsAutoCommit { get; set; } = null;
 
 	/// <summary>Per-session auto-document toggle (FR.11.5). Persisted across app restarts.</summary>
 	public bool IsAutoDocument { get; set; }
