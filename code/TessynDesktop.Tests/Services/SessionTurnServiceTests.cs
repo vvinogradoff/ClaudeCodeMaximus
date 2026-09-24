@@ -234,6 +234,67 @@ public sealed class SessionTurnServiceTests : IDisposable
 		Assert.Contains(_fileService.AppendCalls, c => c.role == Constants.SessionFile.RoleAssistant && c.content == "hi there");
 	}
 
+	// ── OAuth refresh-race auto-retry (ISSUE.010) ─────────────────────────────────
+
+	[Fact]
+	public async Task RunTurnAsync_OAuthRefreshRace_RetriesOnceAndSucceeds()
+	{
+		// A transient cross-process OAuth refresh-token race must not be reported as a real auth
+		// failure — the turn should retry once, silently, and succeed.
+		_streamingManager.AliveResult = false;
+		var callCount = 0;
+		_processManager.EmitEvents = onEvent =>
+		{
+			callCount++;
+			if (callCount == 1)
+			{
+				onEvent(new ClaudeStreamEvent { Type = "result", IsError = true, Content = Constants.Auth.OAuthRefreshRaceMarker });
+			}
+			else
+			{
+				onEvent(new ClaudeStreamEvent { Type = "assistant", Content = "hi there" });
+				onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "sess-1" });
+			}
+			return Task.CompletedTask;
+		};
+		var node = MakeNode();
+
+		var result = await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.Equal(2, _processManager.Calls.Count);
+		Assert.False(result.IsError);
+		Assert.Equal("hi there", result.AssistantText);
+		Assert.DoesNotContain(_fileService.AppendCalls, c => c.content.Contains(Constants.Auth.OAuthRefreshRaceMarker));
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_StreamingProcessAlive_OAuthRefreshRace_RetriesOnceAndSucceeds()
+	{
+		_streamingManager.AliveResult = true;
+		var callCount = 0;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			callCount++;
+			if (callCount == 1)
+			{
+				onTurnEvent(new ClaudeStreamEvent { Type = "result", IsError = true, Content = Constants.Auth.OAuthRefreshRaceMarker });
+			}
+			else
+			{
+				onTurnEvent(new ClaudeStreamEvent { Type = "assistant", Content = "streamed reply" });
+				onTurnEvent(new ClaudeStreamEvent { Type = "result" });
+			}
+			return Task.CompletedTask;
+		};
+		var node = MakeNode();
+
+		var result = await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.Equal(2, _streamingManager.SendTurnCalls.Count);
+		Assert.False(result.IsError);
+		Assert.Equal("streamed reply", result.AssistantText);
+	}
+
 	// ── Streaming redirect (FR.19.13 fix) ─────────────────────────────────────────
 
 	[Fact]

@@ -45,6 +45,20 @@ public static class Constants
 		/// <summary>Substring of the Claude CLI's 401 error text (FR.12.16).</summary>
 		public const string InvalidCredentialsMarker = "Invalid authentication credentials";
 
+		/// <summary>
+		/// Substring of the Claude CLI's transient token-refresh-race error text (ISSUE.010): two
+		/// <c>claude</c> processes sharing one <c>CLAUDE_CONFIG_DIR</c> can both attempt to refresh a
+		/// near-expiry OAuth token at once — the loser presents an already-rotated refresh token and
+		/// the CLI reports this, even though the account itself is not actually revoked.
+		/// </summary>
+		public const string OAuthRefreshRaceMarker = "OAuth session expired and could not be refreshed";
+
+		/// <summary>
+		/// Delay before the single auto-retry of a turn that failed with <see cref="OAuthRefreshRaceMarker"/>
+		/// (ISSUE.010) — gives the concurrent process time to finish writing its refreshed credentials.
+		/// </summary>
+		public const int OAuthRefreshRaceRetryDelayMs = 1500;
+
 		/// <summary>Suffix appended to a removed profile's config directory name (FR.12.18).</summary>
 		public const string RemovedDirectorySuffix = "_rem";
 	}

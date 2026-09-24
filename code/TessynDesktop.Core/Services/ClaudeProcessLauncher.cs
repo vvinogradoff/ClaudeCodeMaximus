@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
@@ -28,6 +29,12 @@ public sealed class ClaudeProcessLauncher
 
 	private readonly IAppSettingsService _appSettings;
 
+	// ISSUE.010: keys the per-CLAUDE_CONFIG_DIR spawn lock below. All "Default profile" spawns
+	// (profileConfigDir null/empty — no CLAUDE_CONFIG_DIR override) share one key since they all
+	// hit the same literal ~/.claude credential store regardless of caller.
+	private const string DefaultProfileLockKey = "(default-profile)";
+	private readonly ConcurrentDictionary<string, object> _spawnLocks = new(StringComparer.OrdinalIgnoreCase);
+
 	public ClaudeProcessLauncher(IAppSettingsService appSettings)
 	{
 		_appSettings = appSettings;
@@ -38,6 +45,14 @@ public sealed class ClaudeProcessLauncher
 	/// if the direct spawn fails — 'claude' is often a .cmd file which requires cmd.exe to launch
 	/// when UseShellExecute=false.
 	/// </summary>
+	/// <remarks>
+	/// ISSUE.010: the spawn itself is serialized per <paramref name="profileConfigDir"/> — the CLI
+	/// checks/refreshes its OAuth token at startup, and two processes launched at the same instant
+	/// against the same <c>CLAUDE_CONFIG_DIR</c> can race a refresh-token rotation, leaving whichever
+	/// loses unable to authenticate ("OAuth session expired and could not be refreshed") even though
+	/// the account itself is fine. The lock is held only around the launch call, not the process's
+	/// subsequent lifetime, so turns sharing a profile still run fully in parallel once started.
+	/// </remarks>
 	public Process? Start(
 		string claudePath,
 		string arguments,
@@ -45,16 +60,23 @@ public sealed class ClaudeProcessLauncher
 		string? profileConfigDir = null,
 		string? ollamaBaseUrl = null)
 	{
-		var process = TryStartProcess(claudePath, arguments, workingDirectory, profileConfigDir, ollamaBaseUrl);
+		var spawnLock = _spawnLocks.GetOrAdd(
+			string.IsNullOrEmpty(profileConfigDir) ? DefaultProfileLockKey : profileConfigDir,
+			_ => new object());
 
-		if (process == null && OperatingSystem.IsWindows())
+		lock (spawnLock)
 		{
-			var cmdArgs = $"/c \"{claudePath}\" {arguments}";
-			_log.Debug("Direct spawn failed — retrying via cmd.exe /c. Args={CmdArgs}", cmdArgs);
-			process = TryStartProcess("cmd.exe", cmdArgs, workingDirectory, profileConfigDir, ollamaBaseUrl);
-		}
+			var process = TryStartProcess(claudePath, arguments, workingDirectory, profileConfigDir, ollamaBaseUrl);
 
-		return process;
+			if (process == null && OperatingSystem.IsWindows())
+			{
+				var cmdArgs = $"/c \"{claudePath}\" {arguments}";
+				_log.Debug("Direct spawn failed — retrying via cmd.exe /c. Args={CmdArgs}", cmdArgs);
+				process = TryStartProcess("cmd.exe", cmdArgs, workingDirectory, profileConfigDir, ollamaBaseUrl);
+			}
+
+			return process;
+		}
 	}
 
 	private Process? TryStartProcess(

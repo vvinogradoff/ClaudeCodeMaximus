@@ -189,13 +189,14 @@ public sealed class SessionTurnService : ISessionTurnService
 					messageToSend = InstructionBlockBuilder.BuildContextPreamble(entries, augmentedPrompt);
 			}
 
-			var resultText        = new StringBuilder();
-			var isError           = false;
-			string? errorMessage  = null;
-			int inputTokens       = 0, outputTokens = 0;
-			double costUsd        = 0;
-			var firstAssistant    = true;
-			var pendingModelId    = effectiveModelId ?? "default";
+			var resultText          = new StringBuilder();
+			var isError             = false;
+			string? errorMessage    = null;
+			int inputTokens         = 0, outputTokens = 0;
+			double costUsd          = 0;
+			var firstAssistant      = true;
+			var pendingModelId      = effectiveModelId ?? "default";
+			var needsAuthRaceRetry  = false;
 
 			await _processManager.SendMessageAsync(
 				workingDirectory: node.WorkingDirectory,
@@ -204,7 +205,7 @@ public sealed class SessionTurnService : ISessionTurnService
 				userMessage:      messageToSend,
 				onEvent:          evt => HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
 				                                     ref inputTokens, ref outputTokens, ref costUsd,
-				                                     ref firstAssistant, pendingModelId),
+				                                     ref firstAssistant, ref needsAuthRaceRetry, pendingModelId),
 				model:            effectiveModelId,
 				profileConfigDir: profileConfigDir,
 				mcpConfigPath:    mcpConfigPath,
@@ -214,6 +215,33 @@ public sealed class SessionTurnService : ISessionTurnService
 				localToolSpec:    localToolSpec,
 				strictMcpConfig:  strictMcpConfig,
 				cancellationToken: ct);
+
+			if (needsAuthRaceRetry)
+			{
+				// ISSUE.010 — transient cross-process OAuth refresh-token race, not a real auth
+				// failure (see Constants.Auth.OAuthRefreshRaceMarker). Retry once, silently.
+				needsAuthRaceRetry = false;
+				_log.Information("OAuth refresh race for node {NodeId} — retrying turn once", node.NodeId);
+				await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+
+				await _processManager.SendMessageAsync(
+					workingDirectory: node.WorkingDirectory,
+					claudePath:       _appSettings.Settings.ClaudePath,
+					sessionId:        sessionId,
+					userMessage:      messageToSend,
+					onEvent:          evt => HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
+					                                     ref inputTokens, ref outputTokens, ref costUsd,
+					                                     ref firstAssistant, ref needsAuthRaceRetry, pendingModelId),
+					model:            effectiveModelId,
+					profileConfigDir: profileConfigDir,
+					mcpConfigPath:    mcpConfigPath,
+					ollamaBaseUrl:    ollamaBaseUrl,
+					disableTools:     disableTools,
+					disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
+					localToolSpec:    localToolSpec,
+					strictMcpConfig:  strictMcpConfig,
+					cancellationToken: ct);
+			}
 
 			return new TurnResultModel(resultText.ToString(), node.ClaudeSessionId, isError, errorMessage,
 			                           inputTokens, outputTokens, costUsd);
@@ -252,11 +280,12 @@ public sealed class SessionTurnService : ISessionTurnService
 			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled);
 		var augmentedPrompt = prompt + InstructionBlockBuilder.Build(options);
 
-		var resultText       = new StringBuilder();
-		var isError          = false;
-		string? errorMessage = null;
+		var resultText         = new StringBuilder();
+		var isError            = false;
+		string? errorMessage   = null;
 		int inputTokens = 0, outputTokens = 0;
 		double costUsd  = 0;
+		var needsAuthRaceRetry = false;
 
 		void ObserveEvent(ClaudeStreamEvent evt)
 		{
@@ -264,6 +293,13 @@ public sealed class SessionTurnService : ISessionTurnService
 			{
 				case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
 					resultText.Append(evt.Content);
+					break;
+				case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
+					&& evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase):
+					// ISSUE.010 — transient cross-process OAuth refresh-token race, not a real auth
+					// failure. TurnController's own HandleStreamEvent (the process's primary callback)
+					// already suppressed the file write for this event — just flag the retry here too.
+					needsAuthRaceRetry = true;
 					break;
 				case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
 					isError      = true;
@@ -279,6 +315,14 @@ public sealed class SessionTurnService : ISessionTurnService
 
 		await _streamingManager.SendTurnAsync(node.NodeId, augmentedPrompt, ct, ObserveEvent);
 
+		if (needsAuthRaceRetry)
+		{
+			needsAuthRaceRetry = false;
+			_log.Information("OAuth refresh race for node {NodeId} (streaming) — retrying turn once", node.NodeId);
+			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+			await _streamingManager.SendTurnAsync(node.NodeId, augmentedPrompt, ct, ObserveEvent);
+		}
+
 		return new TurnResultModel(resultText.ToString(), node.ClaudeSessionId, isError, errorMessage,
 		                           inputTokens, outputTokens, costUsd);
 	}
@@ -293,6 +337,7 @@ public sealed class SessionTurnService : ISessionTurnService
 		ref int outputTokens,
 		ref double costUsd,
 		ref bool firstAssistant,
+		ref bool needsAuthRaceRetry,
 		string pendingModelId)
 	{
 		switch (evt.Type)
@@ -315,9 +360,13 @@ public sealed class SessionTurnService : ISessionTurnService
 				break;
 
 			case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-				// Suppress the "No conversation found" message — context reload would be needed
-				// but is not yet implemented for headless turns (backlog item).
+				// Suppress "No conversation found" (context reload not yet implemented for headless
+				// turns, backlog item) and the ISSUE.010 OAuth refresh-race marker (the result event
+				// below already flags the retry) — both are transient infrastructure noise, not
+				// user-facing failures.
 				if (!evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker,
+				        StringComparison.OrdinalIgnoreCase)
+				    && !evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker,
 				        StringComparison.OrdinalIgnoreCase))
 					_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
 				break;
@@ -328,6 +377,13 @@ public sealed class SessionTurnService : ISessionTurnService
 				outputTokens = evt.OutputTokens;
 				costUsd      = evt.CostUsd;
 				_appSettings.Save();
+				break;
+
+			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
+				&& evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase):
+				// ISSUE.010 — transient cross-process OAuth refresh-token race, not a real auth
+				// failure. Flag for the caller's single silent auto-retry; don't record as an error.
+				needsAuthRaceRetry = true;
 				break;
 
 			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):

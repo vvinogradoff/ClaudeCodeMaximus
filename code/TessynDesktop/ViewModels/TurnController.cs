@@ -50,6 +50,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
 	private bool _needsContextRetry;
+	private bool _needsAuthRaceRetry;
 	private readonly object _ctsLock = new();
 	private readonly List<CancellationTokenSource> _activeCts = new();
 	private bool _isNewBranch;
@@ -523,6 +524,31 @@ public sealed class TurnController : ReactiveObject, IDisposable
 					strictMcpConfig:  strictMcpConfig,
 					cancellationToken: ct);
 
+				if (_needsAuthRaceRetry)
+				{
+					_needsAuthRaceRetry = false;
+					_log.Information("Retrying turn after transient OAuth refresh race for session {FileName}", _node.FileName);
+					await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+
+					await _processManager.SendMessageAsync(
+						workingDirectory: _node.Model.WorkingDirectory,
+						claudePath:       _appSettings.Settings.ClaudePath,
+						sessionId:        sessionId,
+						userMessage:      messageToSend,
+						onEvent:          HandleStreamEvent,
+						model:            _models.SelectedModelId,
+						profileConfigDir: _profiles.SelectedProfileConfigDir,
+						effort:           _models.SelectedEffort,
+						mcpConfigPath:    mcpConfigPath,
+						ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
+						disableTools:     _models.SelectedModelDisablesTools,
+						chrome:           _models.IsChromeEnabled,
+						disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
+						localToolSpec:    localToolSpec,
+						strictMcpConfig:  strictMcpConfig,
+						cancellationToken: ct);
+				}
+
 				if (_needsContextRetry)
 				{
 					_needsContextRetry = false;
@@ -640,6 +666,16 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			Dispatcher.UIThread.Post(NotifyStreamingStateChanged);
 
 		await _streamingManager.SendTurnAsync(nodeId, messageToSend, ct);
+
+		if (_needsAuthRaceRetry)
+		{
+			// ISSUE.010 — same transient cross-process OAuth refresh race as the one-shot path;
+			// the streaming process is still alive, so retrying just writes the turn again.
+			_needsAuthRaceRetry = false;
+			_log.Information("Retrying streaming turn after transient OAuth refresh race for session {FileName}", _node.FileName);
+			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+			await _streamingManager.SendTurnAsync(nodeId, messageToSend, ct);
+		}
 	}
 
 	private void HandleStreamEvent(ClaudeStreamEvent evt)
@@ -656,9 +692,9 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				_fileService.AppendCompactionSeparator(_node.FileName);
 				break;
 			case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-				// When context retry is pending, suppress stderr-based errors (they echo the
-				// same "No conversation found" that the result event already handled).
-				if (_needsContextRetry)
+				// When context retry or an auth-race retry is pending, suppress stderr-based errors
+				// (they echo the same error the result event already handled).
+				if (_needsContextRetry || _needsAuthRaceRetry)
 					return;
 				if (evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase))
 				{
@@ -666,6 +702,12 @@ public sealed class TurnController : ReactiveObject, IDisposable
 					_node.Model.ClaudeSessionId = null;
 					_appSettings.Save();
 					_needsContextRetry = true;
+					return;
+				}
+				if (evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase))
+				{
+					_log.Information("OAuth refresh race (system error) for session {FileName} — will retry once", _node.FileName);
+					_needsAuthRaceRetry = true;
 					return;
 				}
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
@@ -680,6 +722,14 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				_node.Model.ClaudeSessionId = null;
 				_appSettings.Save();
 				_needsContextRetry = true;
+				return;
+			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
+				&& evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase):
+				// ISSUE.010 — transient cross-process OAuth refresh-token race, not a real auth
+				// failure (see Constants.Auth.OAuthRefreshRaceMarker). Set flag for a single silent
+				// auto-retry; skip file write and UI post so it never reads as a real failure.
+				_log.Information("OAuth refresh race for session {FileName} — will retry once", _node.FileName);
+				_needsAuthRaceRetry = true;
 				return;
 			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
 				_log.Warning("Claude result error: {Error}", evt.Content);
