@@ -17,7 +17,8 @@ public sealed class ClaudeModelService : IClaudeModelService
     private static readonly IReadOnlyList<ClaudeModelInfo> CuratedAnthropicModels =
     [
         new("claude-fable-5",            "fable",   "Fable 5",    InputPricePerMillion: 10m, OutputPricePerMillion: 50m),
-        new("claude-opus-5",             "opus",    "Opus 5",     InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
+        new("claude-opus-5-5",           "opus",    "Opus 5.5",   InputPricePerMillion:  4m, OutputPricePerMillion: 20m),
+        new("claude-opus-5",             "",        "Opus 5",     InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
         new("claude-opus-4-8",           "",        "Opus 4.8",   InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
         new("claude-opus-4-7",           "",        "Opus 4.7",   InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
         new("claude-opus-4-6",           "",        "Opus 4.6",   InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
