@@ -9,17 +9,43 @@ public sealed class DirectoryLabelServiceTests
 {
 	private readonly DirectoryLabelService _sut = new();
 
+	[Theory]
+	[InlineData(@"C:\Projects\oDesk\HardStop", "HardStop")]
+	[InlineData(@"C:\Projects\oDesk\HardStop\", "HardStop")]
+	[InlineData(@"C:\Projects\oDesk\HardStop\Code\", "HardStop")]
+	[InlineData(@"C:\Projects\oDesk\HardStop\data", "HardStop")]
+	[InlineData(@"C:\Projects\oDesk\HardStop\Code\Docs", "HardStop")]
+	[InlineData(@"C:\Projects\oDesk\HardStop\Code\Data", "HardStop")]
+	[InlineData(@"C:\Projects\EyeLabX\Code\EyeCura\", "EyeCura")]
+	[InlineData(@"C:\Projects\Personal\QuickBooksSQL\ContentManagementSystem\", "ContentManagementSystem")]
+	[InlineData(@"C:\Code", "Code")]
+	[InlineData(@"C:\code\", "code")]
+	[InlineData(@"C:\", @"C:\")]
+	[InlineData(@"C:", @"C:\")]
+	[InlineData(@"\\server\share\Proj", "Proj")]
+	[InlineData("/home/u/proj/Code", "proj")]
+	[InlineData("/home/u/proj", "proj")]
+	[InlineData("", "")]
+	public void GetLabel_PathVariants_ReturnsExpectedLabel(string path, string expected)
+		=> Assert.Equal(expected, _sut.GetLabel(path));
+
 	[Fact]
-	public void GetLabel_WhenGitRootIsTheDirectory_ReturnsDirectoryNameOnly()
+	public void GetLabel_WhenWellKnownFolderCasingDiffers_MatchesCaseInsensitivelyAndKeepsParentCasing()
+		=> Assert.Equal("MyApp", _sut.GetLabel(@"C:\Proj\MyApp\CODE"));
+
+	[Fact]
+	public void GetLabel_WhenLastSegmentHasMixedCasing_KeepsOriginalCasing()
+		=> Assert.Equal("mYapp", _sut.GetLabel(@"C:\Proj\mYapp"));
+
+	[Fact]
+	public void GetLabel_WhenGitRootIsTheDirectory_ReturnsDirectoryName()
 	{
 		var tempDir = Path.Combine(Path.GetTempPath(), "cm_test_gitroot");
-		var gitDir = Path.Combine(tempDir, ".git");
-		Directory.CreateDirectory(gitDir);
+		Directory.CreateDirectory(Path.Combine(tempDir, ".git"));
 
 		try
 		{
-			var label = _sut.GetLabel(tempDir);
-			Assert.Equal("cm_test_gitroot", label);
+			Assert.Equal("cm_test_gitroot", _sut.GetLabel(tempDir));
 		}
 		finally
 		{
@@ -28,39 +54,16 @@ public sealed class DirectoryLabelServiceTests
 	}
 
 	[Fact]
-	public void GetLabel_WhenGitRootIsTheDirectory_WithTrailingSeparator_ReturnsDirectoryNameOnly()
-	{
-		var tempDir = Path.Combine(Path.GetTempPath(), "cm_test_gitroot_trail");
-		var gitDir  = Path.Combine(tempDir, ".git");
-		Directory.CreateDirectory(gitDir);
-
-		try
-		{
-			// Folder pickers on Windows return paths with a trailing separator
-			var pathWithTrailingSep = tempDir + Path.DirectorySeparatorChar;
-			var label = _sut.GetLabel(pathWithTrailingSep);
-			Assert.Equal("cm_test_gitroot_trail", label);
-			Assert.NotEmpty(label);
-		}
-		finally
-		{
-			Directory.Delete(tempDir, recursive: true);
-		}
-	}
-
-	[Fact]
-	public void GetLabel_WhenGitRootIsAncestor_ReturnsGitRootNamePlusRelativePath()
+	public void GetLabel_WhenGitRootIsAncestor_ReturnsOwnLastSegmentOnly()
 	{
 		var tempDir = Path.Combine(Path.GetTempPath(), "cm_test_ancestor");
 		var subDir = Path.Combine(tempDir, "Datum.Web", "EmailTemplates");
-		var gitDir = Path.Combine(tempDir, ".git");
 		Directory.CreateDirectory(subDir);
-		Directory.CreateDirectory(gitDir);
+		Directory.CreateDirectory(Path.Combine(tempDir, ".git"));
 
 		try
 		{
-			var label = _sut.GetLabel(subDir);
-			Assert.Equal(Path.Combine("cm_test_ancestor", "Datum.Web", "EmailTemplates"), label);
+			Assert.Equal("EmailTemplates", _sut.GetLabel(subDir));
 		}
 		finally
 		{
@@ -69,20 +72,24 @@ public sealed class DirectoryLabelServiceTests
 	}
 
 	[Fact]
-	public void GetLabel_WhenNoGitRoot_ReturnsFullPath()
+	public void GetLabel_WhenNoGitRootAnywhere_ReturnsLastSegmentNotFullPath()
 	{
-		// Use a temp path that definitely has no .git above it
 		var tempDir = Path.Combine(Path.GetTempPath(), "cm_test_nogit_" + Path.GetRandomFileName());
 		Directory.CreateDirectory(tempDir);
 
 		try
 		{
 			var label = _sut.GetLabel(tempDir);
-			Assert.Equal(Path.GetFullPath(tempDir), label);
+			Assert.Equal(Path.GetFileName(tempDir), label);
+			Assert.NotEqual(Path.GetFullPath(tempDir), label);
 		}
 		finally
 		{
 			Directory.Delete(tempDir, recursive: true);
 		}
 	}
+
+	[Fact]
+	public void GetLabel_WhenPathDoesNotExist_StillReturnsLastSegment()
+		=> Assert.Equal("Missing", _sut.GetLabel(Path.Combine(Path.GetTempPath(), "cm_nonexistent_" + Path.GetRandomFileName(), "Missing")));
 }

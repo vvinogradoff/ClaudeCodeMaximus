@@ -23,7 +23,7 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public sealed class TelegramBridgeService : ITelegramBridgeService
 {
-	private static readonly ILogger _log = Log.ForContext<TelegramBridgeService>();
+	private ILogger _log = Log.ForContext<TelegramBridgeService>();
 
 	private readonly IAppSettingsService _appSettings;
 	private readonly ITelegramClient _client;
@@ -42,6 +42,24 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	private readonly ConcurrentDictionary<string, string> _suppressNextUserAppend = new();
 
 	private CancellationTokenSource? _cts;
+
+	/// <summary>Logger override (tests capture entries with a hand-written sink); defaults to the static Serilog logger.</summary>
+	public ILogger Logger { get => _log; set => _log = value; }
+
+	/// <summary>
+	/// The single wait seam for topic reconciliation (FR.21.18): the throttle pauses and the 429
+	/// <c>retry_after</c> wait all go through it. Defaults to <see cref="Task.Delay(TimeSpan, CancellationToken)"/>.
+	/// </summary>
+	public Func<TimeSpan, CancellationToken, Task> DelayAsync { get; set; } = Task.Delay;
+
+	/// <summary>Pause after a rename that really changed the topic name (FR.21.18). Settable so tests do not sleep for seconds.</summary>
+	public int TopicRenameIntervalMs { get; set; } = Constants.Telegram.TopicRenameIntervalMs;
+
+	/// <summary>Pause after a TOPIC_NOT_MODIFIED result (FR.21.18). Settable so tests do not sleep.</summary>
+	public int TopicRenameNoOpIntervalMs { get; set; } = Constants.Telegram.TopicRenameNoOpIntervalMs;
+
+	/// <summary>The background topic name reconciliation started by <see cref="Start"/> (FR.21.18); completes when the run ends or is cancelled. Never faults.</summary>
+	public Task ReconciliationTask { get; private set; } = Task.CompletedTask;
 
 	public TelegramBridgeService(
 		IAppSettingsService appSettings,
@@ -73,7 +91,15 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 		_daemon.EntryAppended += OnEntryAppended;
 
 		_cts = new CancellationTokenSource();
-		_ = PollLoopAsync(_cts.Token);
+		var token = _cts.Token;
+		_ = PollLoopAsync(token);
+		// Runs never overlap: a new run waits for the previous one (including its final save). Runs never fault.
+		var previous = ReconciliationTask;
+		ReconciliationTask = Task.Run(async () =>
+		{
+			await previous;
+			await ReconcileTopicNamesAsync(token);
+		});
 		_log.Information("TelegramBridgeService started. Known topics: {Count}", _nodeIdByThreadId.Count);
 	}
 
@@ -98,13 +124,16 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			if (_appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey(node.NodeId))
 				return;
 
-			var label = _labelService.GetLabel(node.WorkingDirectory);
-			var topicName = $"{label} / {node.Name}";
+			var topicName = BuildTopicName(node);
 			var threadId = await _client.CreateForumTopicAsync(_appSettings.Settings.TelegramChatId, topicName);
 
-			_appSettings.Settings.TelegramTopicThreadIdsByNodeId[node.NodeId] = threadId;
+			lock (_appSettings.SyncRoot)
+			{
+				_appSettings.Settings.TelegramTopicThreadIdsByNodeId[node.NodeId] = threadId;
+				_appSettings.Settings.TelegramTopicNamesByNodeId[node.NodeId] = topicName;
+				_appSettings.Save();
+			}
 			_nodeIdByThreadId[threadId] = node.NodeId;
-			_appSettings.Save();
 		}
 		catch (Exception ex)
 		{
@@ -115,6 +144,120 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			_topicLock.Release();
 		}
 	}
+
+	/// <summary>The FR.21.2 topic name, shared by topic creation and reconciliation (untruncated; the client truncates).</summary>
+	private string BuildTopicName(SessionNodeModel node) =>
+		$"{_labelService.GetLabel(node.WorkingDirectory)} / {node.Name}";
+
+	// ── Topic name reconciliation (FR.21.18) ────────────────────────────────────
+
+	private async Task ReconcileTopicNamesAsync(CancellationToken ct)
+	{
+		if (_appSettings.Settings.TelegramChatId == 0)
+			return;
+
+		var unsaved = 0;
+		try
+		{
+			KeyValuePair<string, int>[] snapshot;
+			lock (_appSettings.SyncRoot)
+				snapshot = _appSettings.Settings.TelegramTopicThreadIdsByNodeId.ToArray();
+
+			foreach (var (nodeId, threadId) in snapshot)
+			{
+				ct.ThrowIfCancellationRequested();
+
+				var node = _daemon.FindSessionByNodeId(nodeId);
+				if (node == null)
+					continue; // orphan — leave the mapping untouched
+
+				var desired = BuildTopicName(node);
+				string? applied;
+				lock (_appSettings.SyncRoot)
+					_appSettings.Settings.TelegramTopicNamesByNodeId.TryGetValue(nodeId, out applied);
+				if (applied == desired)
+					continue;
+
+				bool renamed;
+				try
+				{
+					renamed = await EditTopicWithRetryAsync(threadId, desired, ct);
+				}
+				catch (TelegramApiException ex) when (IsChatLevelError(ex))
+				{
+					_log.Warning("TelegramBridgeService: topic rename stopped, chat-level error ({Code}: {Description})", ex.ErrorCode, ex.Description);
+					return;
+				}
+				catch (TelegramApiException ex) when (ex.ErrorCode == 429)
+				{
+					_log.Warning("TelegramBridgeService: topic rename stopped, rate limit hit again after retry ({Description})", ex.Description);
+					return;
+				}
+				catch (TelegramApiException ex)
+				{
+					_log.Warning("TelegramBridgeService: could not rename topic {ThreadId} of session {NodeId} ({Code}: {Description}); skipping", threadId, nodeId, ex.ErrorCode, ex.Description);
+					await DelayAsync(TimeSpan.FromMilliseconds(TopicRenameNoOpIntervalMs), ct);
+					continue;
+				}
+
+				lock (_appSettings.SyncRoot)
+				{
+					_appSettings.Settings.TelegramTopicNamesByNodeId[nodeId] = desired;
+					if (++unsaved >= Constants.Telegram.TopicRenameSaveBatchSize)
+					{
+						_appSettings.Save();
+						unsaved = 0;
+					}
+				}
+
+				await DelayAsync(TimeSpan.FromMilliseconds(renamed ? TopicRenameIntervalMs : TopicRenameNoOpIntervalMs), ct);
+			}
+		}
+		catch (OperationCanceledException) when (ct.IsCancellationRequested)
+		{
+			// Bridge stopped — quiet exit. (A cancellation without a stop request, e.g. an HttpClient timeout, is a network failure below.)
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "TelegramBridgeService: topic name reconciliation stopped; it will retry on next start");
+		}
+		finally
+		{
+			if (unsaved > 0)
+			{
+				try
+				{
+					lock (_appSettings.SyncRoot)
+						_appSettings.Save();
+				}
+				catch (Exception ex)
+				{
+					_log.Warning(ex, "TelegramBridgeService: failed to save topic names");
+				}
+			}
+		}
+	}
+
+	/// <summary>Edits the topic; on HTTP 429 waits <c>retry_after</c> and retries once. Returns true when renamed, false when not modified.</summary>
+	private async Task<bool> EditTopicWithRetryAsync(int threadId, string name, CancellationToken ct)
+	{
+		var chatId = _appSettings.Settings.TelegramChatId;
+		try
+		{
+			return await _client.EditForumTopicAsync(chatId, threadId, name, ct);
+		}
+		catch (TelegramApiException ex) when (ex.ErrorCode == 429)
+		{
+			await DelayAsync(TimeSpan.FromSeconds(Math.Clamp(ex.RetryAfterSeconds ?? 1, 1, 300)), ct);
+			return await _client.EditForumTopicAsync(chatId, threadId, name, ct);
+		}
+	}
+
+	/// <summary>Rights problems and a missing chat affect every topic — the run stops instead of skipping.</summary>
+	private static bool IsChatLevelError(TelegramApiException ex) =>
+		ex.ErrorCode is 401 or 403
+		|| ex.Description.Contains("not enough rights", StringComparison.OrdinalIgnoreCase)
+		|| ex.Description.Contains("chat not found", StringComparison.OrdinalIgnoreCase);
 
 	public async Task<bool> NotifyAsync(string nodeId, string message)
 	{

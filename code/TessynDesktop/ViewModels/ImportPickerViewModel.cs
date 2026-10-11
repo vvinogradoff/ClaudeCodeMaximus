@@ -195,7 +195,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	public bool HasCrossProjectWarning => CrossProjectWarning != null;
 
 	/// <summary>Switches the import target to the suggested original project directory.</summary>
-	public void SwitchToOriginalDirectory()
+	public void SwitchToOriginalDirectory(IDirectoryLabelService labelService)
 	{
 		var path = SuggestedOriginalPath;
 		if (string.IsNullOrEmpty(path)) return;
@@ -212,8 +212,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		}
 
 		// Add and select
-		var dirName = System.IO.Path.GetFileName(path.TrimEnd('/', '\\'));
-		AddNewDirectoryTarget(path, dirName);
+		AddNewDirectoryTarget(path, labelService.GetLabel(path));
 	}
 
 	/// <summary>Called by the view when a checkbox is clicked to update warnings.</summary>

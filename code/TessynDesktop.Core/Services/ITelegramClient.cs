@@ -20,6 +20,9 @@ public interface ITelegramClient
 	/// <summary>Creates a forum topic in a Topics-enabled supergroup. Returns its message_thread_id.</summary>
 	Task<int> CreateForumTopicAsync(long chatId, string name, CancellationToken ct = default);
 
+	/// <summary>Renames a forum topic (FR.21.18). Returns false when Telegram answers TOPIC_NOT_MODIFIED; any other failure throws <see cref="TelegramApiException"/>.</summary>
+	Task<bool> EditForumTopicAsync(long chatId, int messageThreadId, string name, CancellationToken ct = default);
+
 	/// <summary>Long-polls for updates since <paramref name="offset"/> (exclusive), waiting up to <paramref name="timeoutSeconds"/>.</summary>
 	/// <remarks>
 	/// Returns one <see cref="TelegramUpdate"/> per raw update, including non-actionable markers

@@ -86,7 +86,7 @@ public partial class ImportPickerWindow : Window
 	private void OnSwitchToOriginalClicked(object? sender, RoutedEventArgs e)
 	{
 		if (DataContext is ImportPickerViewModel vm)
-			vm.SwitchToOriginalDirectory();
+			vm.SwitchToOriginalDirectory(App.Services.GetRequiredService<IDirectoryLabelService>());
 	}
 
 	private void OnImportClicked(object? sender, RoutedEventArgs e)

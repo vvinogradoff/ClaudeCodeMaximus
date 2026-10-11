@@ -61,7 +61,8 @@
                                   x:CompileBindings="False"
                                   ItemsSource="{Binding Children}">
                     <Border HorizontalAlignment="Stretch" Background="Transparent"
-                            DragDrop.AllowDrop="True">
+                            DragDrop.AllowDrop="True"
+                            ToolTip.Tip="{Binding Path}">
                         <Border.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Add Group"   Tag="AddGroupToDirectory"   Click="OnContextMenuClicked"/>

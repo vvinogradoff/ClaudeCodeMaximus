@@ -32,6 +32,17 @@ internal sealed class FakeTelegramClientForBridge : ITelegramClient
 		return Task.FromResult(NextThreadId++);
 	}
 
+	public List<(long chatId, int threadId, string name)> EditedTopics { get; } = new();
+
+	/// <summary>Per-call behaviour of <see cref="EditForumTopicAsync"/>; default = rename succeeds (true).</summary>
+	public Func<int, string, CancellationToken, Task<bool>>? EditBehavior { get; set; }
+
+	public Task<bool> EditForumTopicAsync(long chatId, int messageThreadId, string name, CancellationToken ct = default)
+	{
+		lock (EditedTopics) EditedTopics.Add((chatId, messageThreadId, name));
+		return EditBehavior?.Invoke(messageThreadId, name, ct) ?? Task.FromResult(true);
+	}
+
 	public List<(long offset, int timeoutSeconds)> Polls { get; } = new();
 	public Dictionary<string, TelegramFileInfo> Files { get; } = new();
 	public Dictionary<string, Exception> GetFileErrors { get; } = new();
@@ -231,6 +242,7 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 	public void Dispose()
 	{
 		_service?.Stop();
+		_service?.ReconciliationTask.Wait(TimeSpan.FromSeconds(5)); // its final settings save must land before the temp dir goes
 		if (Directory.Exists(_tempDir))
 			Directory.Delete(_tempDir, recursive: true);
 	}

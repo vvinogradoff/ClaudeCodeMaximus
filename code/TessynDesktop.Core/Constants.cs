@@ -360,6 +360,25 @@ SESSION TRANSCRIPT TO COMPACT:
 			""";
 	}
 
+	/// <summary>
+	/// Well-known project-structure folder names (FR.1.3). When a directory node's last path segment is one of
+	/// these, its display label is the parent folder's name instead (e.g. "HardStop\Code" is shown as "HardStop").
+	/// </summary>
+	public static class WellKnownFolders
+	{
+		/// <summary>Source code folder.</summary>
+		public const string Code = "Code";
+
+		/// <summary>Documentation folder.</summary>
+		public const string Docs = "Docs";
+
+		/// <summary>Data folder.</summary>
+		public const string Data = "Data";
+
+		/// <summary>All well-known project folder names; matched case-insensitively.</summary>
+		public static readonly string[] All = [Code, Docs, Data];
+	}
+
 	/// <summary>Constants for Windows toast notifications (FR.16).</summary>
 	public static class Notifications
 	{
@@ -497,6 +516,19 @@ SESSION TRANSCRIPT TO COMPACT:
 
 		/// <summary>Timeout of the single extra poll made after a batch ending in a media group (FR.21.16).</summary>
 		public const int AlbumFollowUpPollSeconds = 1;
+
+		/// <summary>
+		/// Pause after a topic rename that really changed the name (FR.21.18). Each rename posts a service
+		/// message into the group, whose flood limit is about 20 messages/minute; 6 s keeps half of that
+		/// budget for normal bridge traffic.
+		/// </summary>
+		public const int TopicRenameIntervalMs = 6000;
+
+		/// <summary>Pause after an edit that Telegram answered with TOPIC_NOT_MODIFIED (no service message posted, FR.21.18).</summary>
+		public const int TopicRenameNoOpIntervalMs = 1000;
+
+		/// <summary>Topic name reconciliation saves settings after this many recorded names (FR.21.18).</summary>
+		public const int TopicRenameSaveBatchSize = 20;
 	}
 
 	public static class ClaudeSessions

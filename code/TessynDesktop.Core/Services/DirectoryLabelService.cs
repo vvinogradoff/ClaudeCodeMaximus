@@ -1,53 +1,39 @@
-using System.IO;
+using System;
+using System.Linq;
 
 namespace TessynDesktop.Services;
 
 /// <remarks>Created by Claude</remarks>
 public sealed class DirectoryLabelService : IDirectoryLabelService
 {
+	private static readonly char[] Separators = ['\\', '/'];
+
 	/// <summary>
-	/// Returns the display label for a directory path.
-	/// Walks up the directory tree to find the nearest .git root.
-	/// - If .git is at the given path itself: returns just the directory name.
-	/// - If .git is in an ancestor: returns "gitRootName\relative\path\to\dir".
-	/// - If no .git found anywhere: returns the full absolute path.
+	/// Returns the display label for a directory path (FR.1.3). Pure string logic: no filesystem or git access.
+	/// - Takes the last path segment (both separators accepted, trailing separators ignored).
+	/// - While that segment is a well-known project folder (Code, Docs, Data) and has a parent that is not a
+	///   drive designator, uses the parent instead; repeats.
+	/// - A drive root (e.g. "C:\") is returned as "C:\".
 	/// </summary>
 	public string GetLabel(string directoryPath)
 	{
-		// TrimEnd separators so Path.GetFileName never returns empty string
-		// for paths like "C:\datum_api\" that come from folder pickers.
-		var normalised = TrimSeparators(Path.GetFullPath(directoryPath));
-		var gitRoot    = FindGitRoot(normalised);
+		var segments = directoryPath.Split(Separators, StringSplitOptions.RemoveEmptyEntries);
+		if (segments.Length == 0)
+			return directoryPath;
 
-		if (gitRoot == null)
-			return normalised;
+		var index = segments.Length - 1;
+		while (index > 0
+			&& IsWellKnownFolder(segments[index])
+			&& !IsDriveDesignator(segments[index - 1]))
+			index--;
 
-		gitRoot = TrimSeparators(gitRoot);
-
-		if (string.Equals(gitRoot, normalised, System.StringComparison.OrdinalIgnoreCase))
-			return Path.GetFileName(normalised);
-
-		var gitRootName = Path.GetFileName(gitRoot);
-		var relative    = Path.GetRelativePath(gitRoot, normalised);
-		return Path.Combine(gitRootName, relative);
+		var label = segments[index];
+		return IsDriveDesignator(label) ? label + '\\' : label;
 	}
 
-	private static string TrimSeparators(string path)
-		=> path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+	private static bool IsWellKnownFolder(string segment)
+		=> Constants.WellKnownFolders.All.Contains(segment, StringComparer.OrdinalIgnoreCase);
 
-	private static string? FindGitRoot(string startPath)
-	{
-		var current = startPath;
-		while (!string.IsNullOrEmpty(current))
-		{
-			if (Directory.Exists(Path.Combine(current, ".git")))
-				return current;
-
-			var parent = Path.GetDirectoryName(current);
-			if (parent == current)
-				break;
-			current = parent;
-		}
-		return null;
-	}
+	private static bool IsDriveDesignator(string segment)
+		=> segment.Length == 2 && char.IsAsciiLetter(segment[0]) && segment[1] == ':';
 }

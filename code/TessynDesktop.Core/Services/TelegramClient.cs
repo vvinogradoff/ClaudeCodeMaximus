@@ -47,6 +47,49 @@ public sealed class TelegramClient : ITelegramClient
 		return doc.RootElement.GetProperty("result").GetProperty("message_thread_id").GetInt32();
 	}
 
+	public async Task<bool> EditForumTopicAsync(long chatId, int messageThreadId, string name, CancellationToken ct = default)
+	{
+		var truncatedName = name.Length > Constants.Telegram.MaxTopicNameLength
+			? name[..Constants.Telegram.MaxTopicNameLength]
+			: name;
+
+		var payload = new { chat_id = chatId, message_thread_id = messageThreadId, name = truncatedName };
+		using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+		using var response = await _httpClient.PostAsync(BuildUrl("editForumTopic"), content, ct);
+
+		var body = await response.Content.ReadAsStringAsync(ct);
+		JsonDocument? doc = null;
+		try { doc = JsonDocument.Parse(body); }
+		catch (JsonException) { /* non-JSON error body — reported below with the HTTP status */ }
+
+		using (doc)
+		{
+			var root = doc?.RootElement;
+			if (response.IsSuccessStatusCode && root is { ValueKind: JsonValueKind.Object } ok
+				&& ok.TryGetProperty("ok", out var okElement) && okElement.ValueKind == JsonValueKind.True)
+				return true;
+
+			var description = body;
+			var errorCode = (int)response.StatusCode;
+			int? retryAfter = null;
+			if (root is { ValueKind: JsonValueKind.Object } obj)
+			{
+				if (obj.TryGetProperty("description", out var descElement) && descElement.ValueKind == JsonValueKind.String)
+					description = descElement.GetString() ?? body;
+				if (obj.TryGetProperty("error_code", out var codeElement) && codeElement.TryGetInt32(out var code))
+					errorCode = code;
+				if (obj.TryGetProperty("parameters", out var parameters) && parameters.ValueKind == JsonValueKind.Object
+					&& parameters.TryGetProperty("retry_after", out var retryElement) && retryElement.TryGetInt32(out var seconds))
+					retryAfter = seconds;
+			}
+
+			if (description.Contains("TOPIC_NOT_MODIFIED", StringComparison.OrdinalIgnoreCase))
+				return false;
+
+			throw new TelegramApiException(errorCode, description, retryAfter);
+		}
+	}
+
 	public async Task<IReadOnlyList<TelegramUpdate>> GetUpdatesAsync(long offset, int timeoutSeconds, CancellationToken ct = default)
 	{
 		var url = $"{BuildUrl("getUpdates")}?timeout={timeoutSeconds}&offset={offset}";

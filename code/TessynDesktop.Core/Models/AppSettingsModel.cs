@@ -145,6 +145,13 @@ public sealed class AppSettingsModel
 	public Dictionary<string, int> TelegramTopicThreadIdsByNodeId { get; set; } = [];
 
 	/// <summary>
+	/// Persisted NodeId → last-applied (untruncated) Telegram topic name (FR.21.1), recorded at topic
+	/// creation and by topic name reconciliation (FR.21.18). Telegram cannot return a topic's name, so
+	/// this is the only record of what was applied. Remove an entry wherever its thread-id mapping is removed.
+	/// </summary>
+	public Dictionary<string, string> TelegramTopicNamesByNodeId { get; set; } = [];
+
+	/// <summary>
 	/// Last-processed Telegram <c>update_id</c> + 1 (FR.21.1), persisted so an app restart does not
 	/// replay already-handled updates through <c>getUpdates</c>.
 	/// </summary>

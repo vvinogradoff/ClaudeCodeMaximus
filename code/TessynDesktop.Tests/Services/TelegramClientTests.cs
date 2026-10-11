@@ -91,6 +91,83 @@ public sealed class TelegramClientTests
 	}
 
 	[Fact]
+	public async Task EditForumTopicAsync_Success_PostsRequestShapeAndReturnsTrue()
+	{
+		_handler.Responder = _ => JsonResponse("""{"ok":true,"result":true}""");
+
+		var renamed = await MakeClient().EditForumTopicAsync(-100123, 42, "HardStop / Fix login");
+
+		Assert.True(renamed);
+		Assert.Contains("editForumTopic", _handler.LastRequest!.RequestUri!.ToString());
+		using var doc = System.Text.Json.JsonDocument.Parse(_handler.LastRequestBody!);
+		Assert.Equal(-100123, doc.RootElement.GetProperty("chat_id").GetInt64());
+		Assert.Equal(42, doc.RootElement.GetProperty("message_thread_id").GetInt32());
+		Assert.Equal("HardStop / Fix login", doc.RootElement.GetProperty("name").GetString());
+	}
+
+	[Fact]
+	public async Task EditForumTopicAsync_NameOverMaxLength_SendsTruncatedTo128()
+	{
+		_handler.Responder = _ => JsonResponse("""{"ok":true,"result":true}""");
+
+		await MakeClient().EditForumTopicAsync(-100123, 42, new string('x', 300));
+
+		using var doc = System.Text.Json.JsonDocument.Parse(_handler.LastRequestBody!);
+		Assert.Equal(Constants.Telegram.MaxTopicNameLength, doc.RootElement.GetProperty("name").GetString()!.Length);
+	}
+
+	[Fact]
+	public async Task EditForumTopicAsync_TopicNotModified_ReturnsFalseWithoutThrowing()
+	{
+		_handler.Responder = _ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+		{
+			Content = new StringContent("""{"ok":false,"error_code":400,"description":"Bad Request: TOPIC_NOT_MODIFIED"}"""),
+		};
+
+		Assert.False(await MakeClient().EditForumTopicAsync(-100123, 42, "Same"));
+	}
+
+	[Fact]
+	public async Task EditForumTopicAsync_OtherError_ThrowsTelegramApiExceptionWithCodeAndDescription()
+	{
+		_handler.Responder = _ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+		{
+			Content = new StringContent("""{"ok":false,"error_code":400,"description":"Bad Request: TOPIC_ID_INVALID"}"""),
+		};
+
+		var ex = await Assert.ThrowsAsync<TelegramApiException>(() => MakeClient().EditForumTopicAsync(-100123, 42, "x"));
+
+		Assert.Equal(400, ex.ErrorCode);
+		Assert.Equal("Bad Request: TOPIC_ID_INVALID", ex.Description);
+		Assert.Null(ex.RetryAfterSeconds);
+	}
+
+	[Fact]
+	public async Task EditForumTopicAsync_RateLimit_ThrowsWithRetryAfterSeconds()
+	{
+		_handler.Responder = _ => new HttpResponseMessage((HttpStatusCode)429)
+		{
+			Content = new StringContent("""{"ok":false,"error_code":429,"description":"Too Many Requests: retry after 7","parameters":{"retry_after":7}}"""),
+		};
+
+		var ex = await Assert.ThrowsAsync<TelegramApiException>(() => MakeClient().EditForumTopicAsync(-100123, 42, "x"));
+
+		Assert.Equal(429, ex.ErrorCode);
+		Assert.Equal(7, ex.RetryAfterSeconds);
+	}
+
+	[Fact]
+	public async Task SendMessageAsync_ApiError_StillThrowsInvalidOperationException()
+	{
+		_handler.Responder = _ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+		{
+			Content = new StringContent("""{"ok":false,"error_code":400,"description":"Bad Request"}"""),
+		};
+
+		await Assert.ThrowsAsync<InvalidOperationException>(() => MakeClient().SendMessageAsync(-100123, "hi", null));
+	}
+
+	[Fact]
 	public async Task GetUpdatesAsync_ParsesMultipleUpdates_IncludingOptionalMessageThreadId()
 	{
 		_handler.Responder = _ => JsonResponse("""
