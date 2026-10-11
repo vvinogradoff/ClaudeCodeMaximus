@@ -32,19 +32,51 @@ internal sealed class FakeTelegramClientForBridge : ITelegramClient
 		return Task.FromResult(NextThreadId++);
 	}
 
+	public List<(long offset, int timeoutSeconds)> Polls { get; } = new();
+	public Dictionary<string, TelegramFileInfo> Files { get; } = new();
+	public Dictionary<string, Exception> GetFileErrors { get; } = new();
+	public Exception? DownloadError { get; set; }
+	public List<(string filePath, string destination)> Downloads { get; } = new();
+
 	public async Task<IReadOnlyList<TelegramUpdate>> GetUpdatesAsync(long offset, int timeoutSeconds, CancellationToken ct = default)
 	{
 		IReadOnlyList<TelegramUpdate>? batch = null;
 		lock (UpdateBatches)
+		{
+			Polls.Add((offset, timeoutSeconds));
 			if (UpdateBatches.Count > 0)
 				batch = UpdateBatches.Dequeue();
+		}
 
 		if (batch != null)
 			return batch;
 
+		// Short follow-up polls (album handling, FR.21.16) just come back empty.
+		if (timeoutSeconds < Constants.Telegram.LongPollTimeoutSeconds)
+		{
+			await Task.Delay(20, ct);
+			return Array.Empty<TelegramUpdate>();
+		}
+
 		// No more canned batches — block like a real long-poll with nothing new, until cancelled.
 		await Task.Delay(Timeout.Infinite, ct);
 		return Array.Empty<TelegramUpdate>();
+	}
+
+	public Task<TelegramFileInfo> GetFileAsync(string fileId, CancellationToken ct = default)
+	{
+		if (GetFileErrors.TryGetValue(fileId, out var error))
+			throw error;
+		return Task.FromResult(Files.TryGetValue(fileId, out var info) ? info : new TelegramFileInfo($"files/{fileId}", 10));
+	}
+
+	public Task DownloadFileAsync(string filePath, string destinationPath, CancellationToken ct = default)
+	{
+		if (DownloadError != null)
+			throw DownloadError;
+		lock (Downloads) Downloads.Add((filePath, destinationPath));
+		File.WriteAllText(destinationPath, "data");
+		return Task.CompletedTask;
 	}
 }
 
@@ -170,7 +202,7 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 /// <remarks>Created by Claude</remarks>
-public sealed class TelegramBridgeServiceTests : IDisposable
+public sealed partial class TelegramBridgeServiceTests : IDisposable
 {
 	private readonly string _tempDir;
 	private readonly AppSettingsService _appSettings;
@@ -204,7 +236,8 @@ public sealed class TelegramBridgeServiceTests : IDisposable
 	}
 
 	private TelegramBridgeService BuildService() =>
-		_service = new TelegramBridgeService(_appSettings, _client, _daemon, _labelService);
+		_service = new TelegramBridgeService(_appSettings, _client, _daemon, _labelService,
+			new TelegramInbox(_client, Path.Combine(_tempDir, "inbox")));
 
 	private static SessionNodeModel MakeNode(string nodeId, string name = "Session") =>
 		new() { NodeId = nodeId, Name = name, FileName = $"{nodeId}.txt", WorkingDirectory = @"C:\proj" };

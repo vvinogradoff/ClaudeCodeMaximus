@@ -482,6 +482,21 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// UTF-16 code units; this leaves headroom for role prefixes (e.g. "USER: ").
 		/// </summary>
 		public const int MaxMessageLength = 4000;
+
+		/// <summary>Bot API file download base URL: "{BotApiFileBaseUrl}{token}/{file_path}" (FR.21.14).</summary>
+		public const string BotApiFileBaseUrl = "https://api.telegram.org/file/bot";
+
+		/// <summary>The cloud Bot API cannot download files larger than this (FR.21.14).</summary>
+		public const long MaxBotDownloadBytes = 20L * 1024 * 1024;
+
+		/// <summary>Folder under %AppData%\TessynDesktop holding downloaded inbound attachments, in yyyy-MM-dd subfolders (FR.21.14).</summary>
+		public const string InboxFolderName = "telegram-inbox";
+
+		/// <summary>Inbox files older than this are deleted when the bridge starts (FR.21.14).</summary>
+		public const int InboxRetentionDays = 30;
+
+		/// <summary>Timeout of the single extra poll made after a batch ending in a media group (FR.21.16).</summary>
+		public const int AlbumFollowUpPollSeconds = 1;
 	}
 
 	public static class ClaudeSessions

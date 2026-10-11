@@ -72,6 +72,16 @@ Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements
 
 **Outcome:** The bot never responds to, or is discoverable as functional by, anyone outside the configured allow-list.
 
+## UC.21.7 — User sends files from Telegram
+
+**Trigger:** The User sends a photo, document, video, audio, voice note, video note, animation, or an album of these (optionally with a caption) inside a session's Telegram topic.
+
+1. The bridge acknowledges the update, validates sender/chat as in UC.21.3, and (for an album) waits for the rest of the group (FR.21.16).
+2. Each attachment is downloaded to `%AppData%\TessynDesktop\telegram-inbox\yyyy-MM-dd\` (files over 20 MB or failed downloads become a note line instead).
+3. A turn runs with the caption/text followed by one `[attachment: <absolute path>]` line per file; the session can upload/read the files by path.
+
+**Outcome:** The User can attach files to a session from Telegram. Unsupported updates never cause the bridge to re-poll in a tight loop.
+
 ---
 
 ## Out of scope for this use case set

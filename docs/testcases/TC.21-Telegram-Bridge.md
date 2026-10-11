@@ -38,6 +38,24 @@ All Telegram Bot API calls are abstracted behind `ITelegramClient`, so these tes
 - `Build_TelegramDisabled_OmitsTelegramNotifyGuidance`.
 - `Build_NotANewSession_OmitsTelegramNotifyGuidanceEvenIfEnabled` (mirrors the existing once-per-fresh-session gating already tested for `NoWorkflowTool`).
 
+### TC.21.6 — Update acknowledgement and attachment parsing (`TelegramClientTests`, `TelegramBridgeServiceTests`) — FR.21.12, FR.21.13; ISSUE.011
+- `GetUpdatesAsync_ReturnsEveryUpdate_FlagsNonActionable` (non-message, edited_message, message without `from`, unsupported type).
+- `GetUpdatesAsync_Caption_UsedAsText`, `..._Photo_TakesLargestSize`, `..._Document/Video/Audio/Voice/VideoNote/Animation_Parsed`.
+- `PollLoop_OnlyNonActionableUpdates_AdvancesAndPersistsOffsetPastMaxUpdateId`; `PollLoop_FilteredChatUpdates_StillAcknowledged`.
+- Plain-text `/sessions`, `/open`, `/stop` handling unchanged (existing TC.21.3 tests); `HandleUpdate_CaptionLooksLikeCommandWithAttachment_NotTreatedAsCommand`. Tests live in `TelegramBridgeServiceAttachmentTests.cs` / `TelegramClientAttachmentTests.cs`.
+
+### TC.21.7 — Download, storage and turn text (`TelegramInboxTests`, `TelegramClientTests`, `TelegramBridgeServiceTests`) — FR.21.14, FR.21.15, FR.21.17
+- `GetFileAsync_/DownloadFileAsync_` URL shape via fake handler; "file is too big" mapped to a too-large result.
+- File naming: `{updateId}-{index}-{name}{ext}`, sanitization, extension inference (name → MIME → file_path, photo → `.jpg`), collision-free names.
+- `BuildTurnText`: text + `[attachment: path]` lines; > 20 MB note line; download-failure note line; text-only unchanged; attachment-only message.
+- `HandleUpdate_AttachmentMessage_RoutesTurnWithAttachmentLines_AndEchoStillSuppressed`; `HandleUpdate_DownloadFails_StillRoutesTextWithFailureLine`.
+- `Cleanup_DeletesFilesOlderThan30Days_KeepsRecent`.
+
+### TC.21.8 — Albums (`TelegramBridgeServiceTests`) — FR.21.16
+- `Album_SameBatch_CoalescedIntoOneTurn_FirstCaptionWins_OrderPreserved`.
+- `Album_SplitAcrossBatches_FollowUpPollMergesIntoOneTurn`.
+- `Album_FollowedByOtherUpdate_DispatchedWithoutFollowUpPoll`.
+
 ## Manual / E2E verification (requires a real bot + supergroup — cannot run in CI)
 
 Follow FR.21's setup steps to provision a real bot, supergroup, and chat ID first.

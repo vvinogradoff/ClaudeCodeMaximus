@@ -29,6 +29,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	private readonly ITelegramClient _client;
 	private readonly IDaemonClient _daemon;
 	private readonly IDirectoryLabelService _labelService;
+	private readonly TelegramInbox _inbox;
 
 	// In-memory reverse lookup (thread → NodeId) rebuilt from the persisted forward map on Start().
 	// The forward map (NodeId → thread) lives in AppSettingsModel and is the source of truth.
@@ -46,12 +47,14 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 		IAppSettingsService appSettings,
 		ITelegramClient client,
 		IDaemonClient daemon,
-		IDirectoryLabelService labelService)
+		IDirectoryLabelService labelService,
+		TelegramInbox? inbox = null)
 	{
 		_appSettings = appSettings;
 		_client = client;
 		_daemon = daemon;
 		_labelService = labelService;
+		_inbox = inbox ?? new TelegramInbox(client, TelegramInbox.DefaultRootDirectory());
 	}
 
 	public void Start()
@@ -64,6 +67,8 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 		_nodeIdByThreadId.Clear();
 		foreach (var kv in _appSettings.Settings.TelegramTopicThreadIdsByNodeId)
 			_nodeIdByThreadId[kv.Value] = kv.Key;
+
+		_inbox.CleanupOlderThan(TimeSpan.FromDays(Constants.Telegram.InboxRetentionDays)); // FR.21.14
 
 		_daemon.EntryAppended += OnEntryAppended;
 
@@ -222,10 +227,21 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 				var updates = await _client.GetUpdatesAsync(
 					_appSettings.Settings.TelegramUpdateOffset, Constants.Telegram.LongPollTimeoutSeconds, ct);
 
-				foreach (var update in updates)
-				{
-					_appSettings.Settings.TelegramUpdateOffset = update.UpdateId + 1;
+				Acknowledge(updates);
+				var actionable = updates.Where(u => u.IsActionable).ToList();
 
+				// FR.21.16 — a batch ending in a media group may be split from the rest of its album:
+				// one short extra poll (from the already-advanced offset) before dispatching it.
+				if (actionable.Count > 0 && actionable[^1].MediaGroupId != null)
+				{
+					var followUp = await _client.GetUpdatesAsync(
+						_appSettings.Settings.TelegramUpdateOffset, Constants.Telegram.AlbumFollowUpPollSeconds, ct);
+					Acknowledge(followUp);
+					actionable.AddRange(followUp.Where(u => u.IsActionable));
+				}
+
+				foreach (var update in CoalesceAlbums(actionable))
+				{
 					try
 					{
 						await HandleUpdateAsync(update);
@@ -235,9 +251,6 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 						_log.Warning(ex, "TelegramBridgeService: failed to handle update {UpdateId}", update.UpdateId);
 					}
 				}
-
-				if (updates.Count > 0)
-					_appSettings.Save();
 			}
 			catch (OperationCanceledException) when (ct.IsCancellationRequested)
 			{
@@ -249,6 +262,52 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 				try { await Task.Delay(TimeSpan.FromSeconds(5), ct); }
 				catch (OperationCanceledException) { return; }
 			}
+		}
+	}
+
+	/// <summary>FR.21.12: advances and persists the offset past EVERY update in the batch, actionable or not.</summary>
+	private void Acknowledge(IReadOnlyList<TelegramUpdate> updates)
+	{
+		if (updates.Count == 0)
+			return;
+
+		var next = updates.Max(u => u.UpdateId) + 1;
+		if (next > _appSettings.Settings.TelegramUpdateOffset)
+			_appSettings.Settings.TelegramUpdateOffset = next;
+		_appSettings.Save();
+	}
+
+	/// <summary>
+	/// FR.21.16: merges messages sharing a <c>media_group_id</c> (same chat + thread) into one update at
+	/// the position of the group's first message — first non-empty caption wins, attachments in order.
+	/// Updates without a media group pass through unchanged.
+	/// </summary>
+	private static IEnumerable<TelegramUpdate> CoalesceAlbums(IReadOnlyList<TelegramUpdate> updates)
+	{
+		var groups = updates
+			.Where(u => u.MediaGroupId != null)
+			.GroupBy(u => (u.ChatId, u.MessageThreadId, u.MediaGroupId))
+			.ToDictionary(g => g.Key, g => g.ToList());
+		var emitted = new HashSet<(long, int?, string?)>();
+
+		foreach (var update in updates)
+		{
+			if (update.MediaGroupId == null)
+			{
+				yield return update;
+				continue;
+			}
+
+			var key = (update.ChatId, update.MessageThreadId, update.MediaGroupId);
+			if (!emitted.Add(key))
+				continue;
+
+			var members = groups[key];
+			yield return members[0] with
+			{
+				Text = members.Select(m => m.Text).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? string.Empty,
+				Attachments = members.SelectMany(m => m.Attachments ?? Array.Empty<TelegramAttachment>()).ToList(),
+			};
 		}
 	}
 
@@ -268,13 +327,17 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 
 		var text = update.Text.Trim();
 
-		if (text.Equals("/sessions", StringComparison.OrdinalIgnoreCase))
+		// Slash commands are only recognized in plain text messages; a caption on an attachment
+		// is prompt text (FR.21.13).
+		var isPlainText = !update.HasAttachments;
+
+		if (isPlainText && text.Equals("/sessions", StringComparison.OrdinalIgnoreCase))
 		{
 			await _client.SendMessageAsync(update.ChatId, BuildSessionsList(), update.MessageThreadId);
 			return;
 		}
 
-		if (text.StartsWith("/open", StringComparison.OrdinalIgnoreCase))
+		if (isPlainText && text.StartsWith("/open", StringComparison.OrdinalIgnoreCase))
 		{
 			var arg = text.Length > 5 ? text[5..].Trim() : string.Empty;
 			await _client.SendMessageAsync(update.ChatId, BuildOpenReply(arg), update.MessageThreadId);
@@ -285,7 +348,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 		{
 			// FR.21.11 — /stop cancels the mapped session's in-flight turn rather than being routed
 			// to it as a prompt.
-			if (text.Equals("/stop", StringComparison.OrdinalIgnoreCase))
+			if (isPlainText && text.Equals("/stop", StringComparison.OrdinalIgnoreCase))
 			{
 				var cancelled = _daemon.CancelTurn(nodeId);
 				await _client.SendMessageAsync(update.ChatId,
@@ -295,7 +358,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 
 			// Fire-and-forget: a turn can run for minutes, and must never stall the poll loop from
 			// processing other updates (other sessions, other topics) or picking up the next batch.
-			_ = RouteToSessionAsync(nodeId, text, update.ChatId, update.MessageThreadId);
+			_ = RouteToSessionAsync(nodeId, text, update, update.ChatId, update.MessageThreadId);
 			return;
 		}
 
@@ -309,7 +372,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	/// reaches the topic via the Universal I/O Mirror (FR.21.9, <see cref="OnEntryAppended"/>) as
 	/// <c>SessionTurnService.RunTurnAsync</c> appends it — there is no separate "post the reply" step.
 	/// </summary>
-	private Task RouteToSessionAsync(string nodeId, string text, long chatId, int? messageThreadId) =>
+	private Task RouteToSessionAsync(string nodeId, string messageText, TelegramUpdate update, long chatId, int? messageThreadId) =>
 		Task.Run(async () =>
 		{
 			var node = _daemon.FindSessionByNodeId(nodeId);
@@ -317,6 +380,15 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			{
 				await _client.SendMessageAsync(chatId, "This session no longer exists.", messageThreadId);
 				return;
+			}
+
+			// FR.21.14/15 — attachments are downloaded here (off the poll loop) and appended as lines.
+			// DownloadAsync turns every per-file failure into a line, so the text is never lost.
+			var text = messageText;
+			if (update.HasAttachments)
+			{
+				var lines = await _inbox.DownloadAsync(update.UpdateId, update.Attachments!);
+				text = TelegramInbox.BuildTurnText(messageText, lines);
 			}
 
 			_suppressNextUserAppend[nodeId] = text;

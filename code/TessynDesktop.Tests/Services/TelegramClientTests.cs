@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -118,14 +120,18 @@ public sealed class TelegramClientTests
 	}
 
 	[Fact]
-	public async Task GetUpdatesAsync_SkipsNonMessageAndTextlessUpdates()
+	public async Task GetUpdatesAsync_ReturnsEveryUpdate_FlagsNonActionable()
 	{
+		// FR.21.12 — non-actionable updates are still returned so the caller acknowledges them.
 		_handler.Responder = _ => JsonResponse("""
 		{
 			"ok": true,
 			"result": [
-				{ "update_id": 1, "edited_message": { "message_id": 1, "chat": {"id": 1}, "from": {"id": 1} } },
-				{ "update_id": 2, "message": { "message_id": 2, "chat": {"id": 1}, "from": {"id": 1}, "sticker": {} } }
+				{ "update_id": 1, "edited_message": { "message_id": 1, "chat": {"id": 1}, "from": {"id": 1}, "text": "edit" } },
+				{ "update_id": 2, "message": { "message_id": 2, "chat": {"id": 1}, "from": {"id": 1}, "sticker": {} } },
+				{ "update_id": 3, "message": { "message_id": 3, "chat": {"id": 1}, "text": "no sender" } },
+				{ "update_id": 4, "my_chat_member": {} },
+				{ "update_id": 5, "message": { "message_id": 5, "chat": {"id": 1}, "from": {"id": 1}, "text": "ok" } }
 			]
 		}
 		""");
@@ -133,7 +139,8 @@ public sealed class TelegramClientTests
 
 		var updates = await client.GetUpdatesAsync(0, 30);
 
-		Assert.Empty(updates);
+		Assert.Equal(new long[] { 1, 2, 3, 4, 5 }, updates.Select(u => u.UpdateId));
+		Assert.Equal(new[] { false, false, false, false, true }, updates.Select(u => u.IsActionable));
 	}
 
 	[Fact]
