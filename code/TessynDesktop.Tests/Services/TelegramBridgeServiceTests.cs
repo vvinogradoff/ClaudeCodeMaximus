@@ -43,6 +43,17 @@ internal sealed class FakeTelegramClientForBridge : ITelegramClient
 		return EditBehavior?.Invoke(messageThreadId, name, ct) ?? Task.FromResult(true);
 	}
 
+	public List<(long chatId, int threadId)> DeletedTopics { get; } = new();
+
+	/// <summary>Per-call behaviour of <see cref="DeleteForumTopicAsync"/>; default = delete succeeds (true).</summary>
+	public Func<int, CancellationToken, Task<bool>>? DeleteBehavior { get; set; }
+
+	public Task<bool> DeleteForumTopicAsync(long chatId, int messageThreadId, CancellationToken ct = default)
+	{
+		lock (DeletedTopics) DeletedTopics.Add((chatId, messageThreadId));
+		return DeleteBehavior?.Invoke(messageThreadId, ct) ?? Task.FromResult(true);
+	}
+
 	public List<(long offset, int timeoutSeconds)> Polls { get; } = new();
 	public Dictionary<string, TelegramFileInfo> Files { get; } = new();
 	public Dictionary<string, Exception> GetFileErrors { get; } = new();
@@ -251,8 +262,8 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 		_service = new TelegramBridgeService(_appSettings, _client, _daemon, _labelService,
 			new TelegramInbox(_client, Path.Combine(_tempDir, "inbox")));
 
-	private static SessionNodeModel MakeNode(string nodeId, string name = "Session") =>
-		new() { NodeId = nodeId, Name = name, FileName = $"{nodeId}.txt", WorkingDirectory = @"C:\proj" };
+	private static SessionNodeModel MakeNode(string nodeId, string name = "Session", int orchestrationDepth = 0) =>
+		new() { NodeId = nodeId, Name = name, FileName = $"{nodeId}.txt", WorkingDirectory = @"C:\proj", OrchestrationDepth = orchestrationDepth };
 
 	// ── EnsureTopicForSessionAsync ───────────────────────────────────────────────
 
@@ -642,6 +653,109 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 		await WaitUntil(() => _client.SentMessages.Count > 0);
 
 		Assert.Contains("No turn is currently running", _client.SentMessages[0].text);
+	}
+
+	// ── Worker Session exclusion (FR.21.19) ─────────────────────────────────────
+
+	[Fact]
+	public async Task EnsureTopicForSessionAsync_WorkerSession_DoesNotCreateTopic()
+	{
+		var svc = BuildService();
+		var node = MakeNode("worker-1", "Worker", orchestrationDepth: 1);
+
+		await svc.EnsureTopicForSessionAsync(node);
+
+		Assert.Empty(_client.CreatedTopics);
+		Assert.False(_appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey("worker-1"));
+	}
+
+	[Fact]
+	public async Task NotifyAsync_WorkerSession_ReturnsFalse_NoTopicNoSend()
+	{
+		var svc = BuildService();
+		var node = MakeNode("worker-1", "Worker", orchestrationDepth: 1);
+		_daemon.AddNode(node);
+
+		var sent = await svc.NotifyAsync("worker-1", "a question from a subagent");
+
+		Assert.False(sent);
+		Assert.Empty(_client.CreatedTopics);
+		Assert.Empty(_client.SentMessages);
+	}
+
+	[Fact]
+	public async Task EntryAppended_WorkerSession_DoesNotMirror()
+	{
+		var node = MakeNode("worker-1", "Worker", orchestrationDepth: 1);
+		_daemon.AddNode(node);
+		var svc = BuildService();
+		svc.Start();
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "worker output");
+
+		await Task.Delay(200);
+		Assert.Empty(_client.SentMessages);
+		Assert.Empty(_client.CreatedTopics);
+	}
+
+	[Fact]
+	public async Task HandleUpdate_SessionsCommand_ExcludesWorkerSessionsEvenIfFavorited()
+	{
+		_daemon.Summaries.AddRange(new[]
+		{
+			new SessionSummaryModel("node-top", "Supervisor", "Dir", @"C:\a", IsRunning: true, IsResumable: true, LastPrompt: null, IsFavorite: true, OrchestrationDepth: 0),
+			new SessionSummaryModel("node-worker", "Worker", "Dir", @"C:\b", IsRunning: true, IsResumable: true, LastPrompt: null, IsFavorite: true, OrchestrationDepth: 1),
+		});
+		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-worker"] = 9;
+
+		_client.UpdateBatches.Enqueue(new[]
+		{
+			new TelegramUpdate(1, ChatId: -1001, FromUserId: 555, Text: "/sessions", MessageThreadId: null),
+		});
+
+		var svc = BuildService();
+		svc.Start();
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+
+		var reply = _client.SentMessages[0].text;
+		Assert.Contains("Supervisor", reply);
+		Assert.DoesNotContain("Worker", reply);
+	}
+
+	[Fact]
+	public async Task Start_DeletesExistingTopicsForWorkerSessions_AndRemovesMappings()
+	{
+		var supervisor = MakeNode("node-top", "Supervisor", orchestrationDepth: 0);
+		var worker = MakeNode("node-worker", "Worker", orchestrationDepth: 1);
+		_daemon.AddNode(supervisor);
+		_daemon.AddNode(worker);
+		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-top"] = 5;
+		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-worker"] = 9;
+		_appSettings.Settings.TelegramTopicNamesByNodeId["node-worker"] = "Dir / Worker";
+
+		var svc = BuildService();
+		svc.Start();
+		await svc.ReconciliationTask;
+
+		Assert.Contains((-1001L, 9), _client.DeletedTopics);
+		Assert.False(_appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey("node-worker"));
+		Assert.False(_appSettings.Settings.TelegramTopicNamesByNodeId.ContainsKey("node-worker"));
+		Assert.True(_appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey("node-top")); // untouched
+	}
+
+	[Fact]
+	public async Task Start_WorkerTopicDeleteFails_LeavesMappingForRetry()
+	{
+		var worker = MakeNode("node-worker", "Worker", orchestrationDepth: 1);
+		_daemon.AddNode(worker);
+		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-worker"] = 9;
+		_client.DeleteBehavior = (_, _) => throw new TelegramApiException(500, "internal error", null);
+
+		var svc = BuildService();
+		svc.Start();
+		await svc.ReconciliationTask;
+
+		Assert.True(_appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey("node-worker"));
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────

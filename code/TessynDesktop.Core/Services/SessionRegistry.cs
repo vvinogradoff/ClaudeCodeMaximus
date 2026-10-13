@@ -613,7 +613,8 @@ public sealed class SessionRegistry : ISessionRegistry
             IsResumable:      isResumable,
             LastPrompt:       lastPrompt,
             IsFavorite:       s.IsFavorite,
-            LastActivityUtc:  lastActivityUtc);
+            LastActivityUtc:  lastActivityUtc,
+            OrchestrationDepth: s.OrchestrationDepth);
     }
 
     private static void CollectIds(

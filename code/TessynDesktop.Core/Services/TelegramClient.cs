@@ -90,6 +90,46 @@ public sealed class TelegramClient : ITelegramClient
 		}
 	}
 
+	public async Task<bool> DeleteForumTopicAsync(long chatId, int messageThreadId, CancellationToken ct = default)
+	{
+		var payload = new { chat_id = chatId, message_thread_id = messageThreadId };
+		using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+		using var response = await _httpClient.PostAsync(BuildUrl("deleteForumTopic"), content, ct);
+
+		var body = await response.Content.ReadAsStringAsync(ct);
+		JsonDocument? doc = null;
+		try { doc = JsonDocument.Parse(body); }
+		catch (JsonException) { /* non-JSON error body — reported below with the HTTP status */ }
+
+		using (doc)
+		{
+			var root = doc?.RootElement;
+			if (response.IsSuccessStatusCode && root is { ValueKind: JsonValueKind.Object } ok
+				&& ok.TryGetProperty("ok", out var okElement) && okElement.ValueKind == JsonValueKind.True)
+				return true;
+
+			var description = body;
+			var errorCode = (int)response.StatusCode;
+			int? retryAfter = null;
+			if (root is { ValueKind: JsonValueKind.Object } obj)
+			{
+				if (obj.TryGetProperty("description", out var descElement) && descElement.ValueKind == JsonValueKind.String)
+					description = descElement.GetString() ?? body;
+				if (obj.TryGetProperty("error_code", out var codeElement) && codeElement.TryGetInt32(out var code))
+					errorCode = code;
+				if (obj.TryGetProperty("parameters", out var parameters) && parameters.ValueKind == JsonValueKind.Object
+					&& parameters.TryGetProperty("retry_after", out var retryElement) && retryElement.TryGetInt32(out var seconds))
+					retryAfter = seconds;
+			}
+
+			// Already gone (deleted earlier, or never existed) — the desired post-condition either way.
+			if (description.Contains("TOPIC_ID_INVALID", StringComparison.OrdinalIgnoreCase))
+				return true;
+
+			throw new TelegramApiException(errorCode, description, retryAfter);
+		}
+	}
+
 	public async Task<IReadOnlyList<TelegramUpdate>> GetUpdatesAsync(long offset, int timeoutSeconds, CancellationToken ct = default)
 	{
 		var url = $"{BuildUrl("getUpdates")}?timeout={timeoutSeconds}&offset={offset}";

@@ -23,6 +23,13 @@ public interface ITelegramClient
 	/// <summary>Renames a forum topic (FR.21.18). Returns false when Telegram answers TOPIC_NOT_MODIFIED; any other failure throws <see cref="TelegramApiException"/>.</summary>
 	Task<bool> EditForumTopicAsync(long chatId, int messageThreadId, string name, CancellationToken ct = default);
 
+	/// <summary>
+	/// Deletes a forum topic (FR.21.19, cleanup of pre-existing Worker Session topics). Returns true
+	/// on success or when Telegram answers <c>TOPIC_ID_INVALID</c> (already gone — the desired state
+	/// either way); any other failure throws <see cref="TelegramApiException"/>.
+	/// </summary>
+	Task<bool> DeleteForumTopicAsync(long chatId, int messageThreadId, CancellationToken ct = default);
+
 	/// <summary>Long-polls for updates since <paramref name="offset"/> (exclusive), waiting up to <paramref name="timeoutSeconds"/>.</summary>
 	/// <remarks>
 	/// Returns one <see cref="TelegramUpdate"/> per raw update, including non-actionable markers

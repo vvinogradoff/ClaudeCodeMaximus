@@ -16,4 +16,5 @@ public sealed record SessionSummaryModel(
 	bool IsResumable,
 	string? LastPrompt,
 	bool IsFavorite = false,
-	DateTimeOffset? LastActivityUtc = null);
+	DateTimeOffset? LastActivityUtc = null,
+	int OrchestrationDepth = 0);

@@ -58,7 +58,11 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	/// <summary>Pause after a TOPIC_NOT_MODIFIED result (FR.21.18). Settable so tests do not sleep.</summary>
 	public int TopicRenameNoOpIntervalMs { get; set; } = Constants.Telegram.TopicRenameNoOpIntervalMs;
 
-	/// <summary>The background topic name reconciliation started by <see cref="Start"/> (FR.21.18); completes when the run ends or is cancelled. Never faults.</summary>
+	/// <summary>
+	/// The background topic maintenance started by <see cref="Start"/>: Worker Session topic cleanup
+	/// (FR.21.19) followed by topic name reconciliation (FR.21.18). Completes when the run ends or is
+	/// cancelled. Never faults.
+	/// </summary>
 	public Task ReconciliationTask { get; private set; } = Task.CompletedTask;
 
 	public TelegramBridgeService(
@@ -93,11 +97,14 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 		_cts = new CancellationTokenSource();
 		var token = _cts.Token;
 		_ = PollLoopAsync(token);
-		// Runs never overlap: a new run waits for the previous one (including its final save). Runs never fault.
+		// Runs never overlap: a new run waits for the previous one (including its final save). Runs never
+		// fault. Worker-session topic cleanup (FR.21.19) runs first so reconciliation (FR.21.18) never
+		// renames a topic that's about to be deleted.
 		var previous = ReconciliationTask;
 		ReconciliationTask = Task.Run(async () =>
 		{
 			await previous;
+			await CleanupWorkerTopicsAsync(token);
 			await ReconcileTopicNamesAsync(token);
 		});
 		_log.Information("TelegramBridgeService started. Known topics: {Count}", _nodeIdByThreadId.Count);
@@ -113,6 +120,8 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	public async Task EnsureTopicForSessionAsync(SessionNodeModel node)
 	{
 		if (!_appSettings.Settings.TelegramEnabled || _appSettings.Settings.TelegramChatId == 0)
+			return;
+		if (node.OrchestrationDepth > 0) // FR.21.19 — Worker Sessions never get a topic
 			return;
 		if (_appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey(node.NodeId))
 			return;
@@ -148,6 +157,66 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	/// <summary>The FR.21.2 topic name, shared by topic creation and reconciliation (untruncated; the client truncates).</summary>
 	private string BuildTopicName(SessionNodeModel node) =>
 		$"{_labelService.GetLabel(node.WorkingDirectory)} / {node.Name}";
+
+	// ── Worker Session topic cleanup (FR.21.19) ─────────────────────────────────
+
+	/// <summary>
+	/// Deletes the Telegram topic of any session that turns out to be a Worker Session
+	/// (<c>OrchestrationDepth &gt; 0</c>) and removes its mapping — covers topics created for worker
+	/// sessions before this exclusion existed, and self-heals if one ever slips through again. An
+	/// orphan (node no longer found) is left untouched, matching FR.21.18's existing orphan policy —
+	/// there is no way to tell whether a since-deleted node was a worker.
+	/// </summary>
+	private async Task CleanupWorkerTopicsAsync(CancellationToken ct)
+	{
+		if (_appSettings.Settings.TelegramChatId == 0)
+			return;
+
+		try
+		{
+			KeyValuePair<string, int>[] snapshot;
+			lock (_appSettings.SyncRoot)
+				snapshot = _appSettings.Settings.TelegramTopicThreadIdsByNodeId.ToArray();
+
+			foreach (var (nodeId, threadId) in snapshot)
+			{
+				ct.ThrowIfCancellationRequested();
+
+				var node = _daemon.FindSessionByNodeId(nodeId);
+				if (node == null || node.OrchestrationDepth == 0)
+					continue;
+
+				try
+				{
+					await _client.DeleteForumTopicAsync(_appSettings.Settings.TelegramChatId, threadId, ct);
+				}
+				catch (TelegramApiException ex)
+				{
+					_log.Warning("TelegramBridgeService: failed to delete worker-session topic {ThreadId} of session {NodeId} ({Code}: {Description}); will retry on next start",
+						threadId, nodeId, ex.ErrorCode, ex.Description);
+					continue; // leave the mapping intact for a retry
+				}
+
+				lock (_appSettings.SyncRoot)
+				{
+					_appSettings.Settings.TelegramTopicThreadIdsByNodeId.Remove(nodeId);
+					_appSettings.Settings.TelegramTopicNamesByNodeId.Remove(nodeId);
+					_appSettings.Save();
+				}
+				_nodeIdByThreadId.TryRemove(threadId, out _);
+
+				await DelayAsync(TimeSpan.FromMilliseconds(TopicRenameNoOpIntervalMs), ct);
+			}
+		}
+		catch (OperationCanceledException) when (ct.IsCancellationRequested)
+		{
+			// Bridge stopped — quiet exit.
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "TelegramBridgeService: worker-session topic cleanup stopped; it will retry on next start");
+		}
+	}
 
 	// ── Topic name reconciliation (FR.21.18) ────────────────────────────────────
 
@@ -269,6 +338,8 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			var node = _daemon.FindSessionByNodeId(nodeId);
 			if (node == null)
 				return false;
+			if (node.OrchestrationDepth > 0) // FR.21.19 — Worker Sessions never post to Telegram
+				return false;
 
 			await EnsureTopicForSessionAsync(node);
 
@@ -300,6 +371,8 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 
 		var node = _daemon.FindSessionByFileName(e.FileName);
 		if (node == null)
+			return;
+		if (node.OrchestrationDepth > 0) // FR.21.19 — Worker Sessions are never mirrored
 			return;
 
 		if (e.Entry.Role == Constants.SessionFile.RoleUser
@@ -551,6 +624,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	private string BuildSessionsList()
 	{
 		var summaries = _daemon.BuildAgentSessionSummaries()
+			.Where(s => s.OrchestrationDepth == 0) // FR.21.19 — Worker Sessions never appear, favorited or not
 			.Where(s => s.IsFavorite || _appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey(s.NodeId))
 			.ToList();
 
