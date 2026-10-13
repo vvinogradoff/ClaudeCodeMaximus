@@ -240,4 +240,59 @@ public sealed class TelegramClientTests
 		await Assert.ThrowsAsync<InvalidOperationException>(() => client.SendMessageAsync(1, "hi", null));
 		Assert.Null(_handler.LastRequest);
 	}
+
+	[Fact]
+	public async Task DeleteForumTopicAsync_Success_PostsRequestShapeAndReturnsTrue()
+	{
+		_handler.Responder = _ => JsonResponse("""{"ok":true,"result":true}""");
+
+		var deleted = await MakeClient().DeleteForumTopicAsync(-100123, 42);
+
+		Assert.True(deleted);
+		Assert.Contains("deleteForumTopic", _handler.LastRequest!.RequestUri!.ToString());
+		using var doc = System.Text.Json.JsonDocument.Parse(_handler.LastRequestBody!);
+		Assert.Equal(-100123, doc.RootElement.GetProperty("chat_id").GetInt64());
+		Assert.Equal(42, doc.RootElement.GetProperty("message_thread_id").GetInt32());
+	}
+
+	[Fact]
+	public async Task DeleteForumTopicAsync_TopicIdInvalid_ReturnsTrueWithoutThrowing()
+	{
+		// Already gone (deleted earlier, or never existed) is the desired post-condition either way.
+		_handler.Responder = _ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+		{
+			Content = new StringContent("""{"ok":false,"error_code":400,"description":"Bad Request: TOPIC_ID_INVALID"}"""),
+		};
+
+		Assert.True(await MakeClient().DeleteForumTopicAsync(-100123, 42));
+	}
+
+	[Fact]
+	public async Task DeleteForumTopicAsync_OtherError_ThrowsTelegramApiExceptionWithCodeAndDescription()
+	{
+		_handler.Responder = _ => new HttpResponseMessage(HttpStatusCode.Forbidden)
+		{
+			Content = new StringContent("""{"ok":false,"error_code":403,"description":"Forbidden: not enough rights to manage topics"}"""),
+		};
+
+		var ex = await Assert.ThrowsAsync<TelegramApiException>(() => MakeClient().DeleteForumTopicAsync(-100123, 42));
+
+		Assert.Equal(403, ex.ErrorCode);
+		Assert.Equal("Forbidden: not enough rights to manage topics", ex.Description);
+		Assert.Null(ex.RetryAfterSeconds);
+	}
+
+	[Fact]
+	public async Task DeleteForumTopicAsync_RateLimit_ThrowsWithRetryAfterSeconds()
+	{
+		_handler.Responder = _ => new HttpResponseMessage((HttpStatusCode)429)
+		{
+			Content = new StringContent("""{"ok":false,"error_code":429,"description":"Too Many Requests: retry after 3","parameters":{"retry_after":3}}"""),
+		};
+
+		var ex = await Assert.ThrowsAsync<TelegramApiException>(() => MakeClient().DeleteForumTopicAsync(-100123, 42));
+
+		Assert.Equal(429, ex.ErrorCode);
+		Assert.Equal(3, ex.RetryAfterSeconds);
+	}
 }

@@ -857,6 +857,21 @@ Replaces the `.git`-root directory label with a short last-segment rule (well-kn
 
 ---
 
+## Phase 33 — Orchestrated Children Excluded from the Telegram Bridge (FR.21.19) ✓ DONE
+
+Stops Worker Sessions (`OrchestrationDepth > 0`) from ever reaching Telegram — no topic creation, no Universal I/O Mirror entries, no `notify_user` pings, excluded from `/sessions` — so a Supervisor Session fanning out many workers only ever shows its own topic. Cleans up topics already created for existing worker sessions.
+
+- [DONE] `ITelegramClient.DeleteForumTopicAsync` + `TelegramClient` implementation (Bot API `deleteForumTopic`; `TOPIC_ID_INVALID` counts as success)
+- [DONE] `TelegramBridgeService`: worker-session guard in `EnsureTopicForSessionAsync`, `OnEntryAppended`, `NotifyAsync`; `BuildSessionsList` excludes worker sessions
+- [DONE] `TelegramBridgeService.Start()`: cleanup pass over `TelegramTopicThreadIdsByNodeId` deletes worker-session topics and removes their mappings, chained before topic name reconciliation (FR.21.18)
+- [DONE] `SessionSummaryModel.OrchestrationDepth`; `SessionRegistry.BuildSummary` populates it
+- [DONE] Tests: `TelegramBridgeServiceTests` additions for the three guards, `/sessions` exclusion, and startup cleanup (success + retry-on-failure)
+- [DONE] Tests: `TelegramClientTests` additions for `DeleteForumTopicAsync` (success, `TOPIC_ID_INVALID`, other error, rate limit) — TC.21.11
+- [DONE] Docs — FR.21.19, glossary Telegram Bridge entry, UC.21.9/UC.21.10, TC.21.11/TC.21.12, manual E2E item 8 (written; awaiting Architect review)
+- Full suite: 486/486 pass (482 + 4 new `DeleteForumTopicAsync` client tests).
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/RESEARCH.01.VS-MCP-Server-Automation-Approaches.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.

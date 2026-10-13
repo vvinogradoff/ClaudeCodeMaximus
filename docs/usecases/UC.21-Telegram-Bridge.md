@@ -93,6 +93,26 @@ Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements
 
 **Outcome:** The User's topic list gradually shows the short names (e.g. `HardStop / <session>`) without any manual action; bridge messaging works normally throughout, and later starts only touch topics whose session was renamed.
 
+## UC.21.9 — Worker Sessions never reach Telegram
+
+**Trigger:** The User's session (plain, or acting as a Supervisor Session) spawns one or more Worker Sessions via `spawn_session`, `orchestrate_parallel`, or `orchestrate_pipeline` — e.g. Opus fanning out 40 subagents for a large task.
+
+1. Each Worker Session runs its own turns normally, but `OrchestrationDepth > 0` on every one of them means the bridge excludes them outright (FR.21.19): no topic is ever created for a worker, none of its USER/ASSISTANT/SYSTEM entries are mirrored, and an explicit `notify_user` call made by a worker produces no Telegram message at all.
+2. `/sessions` never lists a Worker Session, favorited or not.
+3. The depth-0 session that actually started the orchestration behaves exactly as any other session — its own topic gets the Supervisor's prompts, responses, and any of its own `notify_user` pings.
+
+**Outcome:** A single topic represents the work the User actually started, regardless of how many workers it fans out to internally — the group never gets cluttered with one topic per subagent.
+
+## UC.21.10 — Pre-existing Worker Session topics are cleaned up automatically
+
+**Trigger:** The bridge starts while a Worker Session topic already exists in `TelegramTopicThreadIdsByNodeId` — created before FR.21.19 existed, or in case the depth-0 exclusion is ever bypassed some other way.
+
+1. `Start()` runs a cleanup pass — chained before topic name reconciliation (UC.21.8) in the same background task, so a worker topic is never renamed moments before being deleted.
+2. For every mapped topic whose session now resolves to `OrchestrationDepth > 0`, the bridge calls `deleteForumTopic` and removes both the thread-id and last-applied-name mappings (and the in-memory reverse lookup).
+3. A topic already gone on Telegram's side (`TOPIC_ID_INVALID`) counts as success — the mapping is still cleaned up. Any other delete failure leaves the mapping in place for a retry on the next start. An orphaned mapping (session no longer found at all) is left untouched, same as topic rename reconciliation — there's no way to tell whether a deleted node was a worker.
+
+**Outcome:** Worker Session topics created before the exclusion existed disappear from the group automatically the next time the app starts, with no manual cleanup needed.
+
 ---
 
 ## Out of scope for this use case set

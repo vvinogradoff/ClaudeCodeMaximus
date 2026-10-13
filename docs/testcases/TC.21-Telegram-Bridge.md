@@ -90,6 +90,21 @@ Run against a fake `HttpMessageHandler`.
 - `Start_FirstEditBlocks_ReturnsImmediatelyAndPollingProceeds` — `Start()` does not wait for the reconciliation.
 - `Start_StopThenStartAgainWhileFirstEditBlocked_SecondRunWaitsForFirstToEnd` — runs never overlap.
 
+### TC.21.11 — `DeleteForumTopicAsync` (`TelegramClientTests`) — FR.21.19
+Run against a fake `HttpMessageHandler`, mirroring TC.21.9's style.
+- `DeleteForumTopicAsync_Success_PostsRequestShapeAndReturnsTrue` — POSTs `deleteForumTopic` with JSON `chat_id` and `message_thread_id` equal to the inputs; returns `true` on `{"ok":true,"result":true}`.
+- `DeleteForumTopicAsync_TopicIdInvalid_ReturnsTrueWithoutThrowing` — `{"ok":false,"error_code":400,"description":"Bad Request: TOPIC_ID_INVALID"}` returns `true` (already gone is the desired post-condition).
+- `DeleteForumTopicAsync_OtherError_ThrowsTelegramApiExceptionWithCodeAndDescription` — e.g. 403 "not enough rights" throws `TelegramApiException` with `ErrorCode`/`Description`; `RetryAfterSeconds` is `null` when the response has no `parameters`.
+- `DeleteForumTopicAsync_RateLimit_ThrowsWithRetryAfterSeconds` — 429 with `parameters.retry_after` 3 throws `TelegramApiException` with `RetryAfterSeconds == 3`.
+
+### TC.21.12 — Worker Session exclusion (`TelegramBridgeService` tests, fake `IDaemonClient`/`ITelegramClient`) — FR.21.19; UC.21.9, UC.21.10
+- `EnsureTopicForSessionAsync_WorkerSession_DoesNotCreateTopic` — `OrchestrationDepth > 0` skips topic creation entirely; no mapping is persisted.
+- `NotifyAsync_WorkerSession_ReturnsFalse_NoTopicNoSend` — a worker's `notify_user` call returns `false` and sends nothing.
+- `EntryAppended_WorkerSession_DoesNotMirror` — a worker's appended USER/ASSISTANT/SYSTEM entries are never mirrored and never trigger topic creation.
+- `HandleUpdate_SessionsCommand_ExcludesWorkerSessionsEvenIfFavorited` — `/sessions` omits a worker even when `IsFavorite` is true and it already has a mapped topic.
+- `Start_DeletesExistingTopicsForWorkerSessions_AndRemovesMappings` — a pre-existing worker-session topic is deleted via `DeleteForumTopicAsync` and both its `TelegramTopicThreadIdsByNodeId`/`TelegramTopicNamesByNodeId` entries are removed; a depth-0 session's topic is left untouched.
+- `Start_WorkerTopicDeleteFails_LeavesMappingForRetry` — a delete failure (e.g. HTTP 500) leaves the mapping in place so the next `Start()` retries it.
+
 ## Manual / E2E verification (requires a real bot + supergroup — cannot run in CI)
 
 Follow FR.21's setup steps to provision a real bot, supergroup, and chat ID first.
@@ -101,3 +116,4 @@ Follow FR.21's setup steps to provision a real bot, supergroup, and chat ID firs
 5. **UC.21.6** — From a second Telegram account not on the allow-list, message the bot directly; confirm no reply and a warning in the Tessyn log.
 6. Restart Tessyn mid-session and confirm `TelegramUpdateOffset` persistence prevents replayed/duplicate command handling for messages sent before the restart.
 7. **FR.21.18 / UC.21.8** — With existing topics named with full paths (e.g. `C:\Projects\oDesk\HardStop / ...`), restart Tessyn with the bridge enabled. Confirm the app and bridge respond immediately, and that topics are renamed gradually (about one per 6 s, each leaving a "topic renamed" service message) to `HardStop / <session>`. Restart again and confirm no topics are renamed. Rename a session in the tree, restart, and confirm only that topic is renamed.
+8. **FR.21.19 / UC.21.9 / UC.21.10** — Have a session spawn several Worker Sessions (e.g. `orchestrate_parallel` with a handful of tasks). Confirm no topic appears for any worker, only the originating session's own topic shows activity, and `/sessions` never lists a worker. Then, with one or more worker topics already present from before this exclusion existed (or created by temporarily bypassing the guard), restart Tessyn and confirm those topics are deleted from the group automatically on the next start, with the originating session's own topic left untouched.
