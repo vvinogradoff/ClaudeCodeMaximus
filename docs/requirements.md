@@ -28,27 +28,42 @@ This is equivalent to writing a custom terminal emulator or IDE plugin that runs
 
 | Type | Physical existence | Renameable | Purpose |
 |---|---|---|---|
-| **Directory** | Real filesystem directory | No — name is derived from the path | Top-level entry; defines the working directory for all sessions beneath it |
+| **Directory** | Real filesystem directory | No — name is derived from the path (FR.1.3) | Top-level entry; defines the working directory for all sessions beneath it |
 | **Group** | `appsettings.json` only | Yes | Intermediate organisational node; no session, no working directory of its own |
 | **Session** | Session file on disk; name stored in `appsettings.json` | Yes | Terminal node; represents one Claude Code conversation |
 
-**FR.1.3 — Directory node display name:** Derived from the working directory path relative to its `.git` root:
-- If `.git` is at the root of the working directory, show only that directory name (e.g., `datum_api` for `C:\Projects\...\datum_api`).
-- If the working directory is a subdirectory below a `.git` root, show the path from the `.git` root directory name downward (e.g., `datum_api\Datum.Web\EmailTemplates`).
-- If no `.git` root is found anywhere above the path, show the full absolute path.
-- Directory node display names are never overridden by the user.
+**FR.1.3 — Directory node display name:** Derived from the working directory path by a pure string rule (`IDirectoryLabelService.GetLabel`); the filesystem is not accessed and git (`.git` roots) is **not** consulted:
+1. Split the path on both `\` and `/`, dropping empty segments (so trailing separators, UNC `\\` prefixes and forward-slash paths are handled). If there are no segments, the input is returned unchanged.
+2. Take the last segment as the candidate. While the candidate is a **well-known project folder** name (`Constants` list: `Code`, `Docs`, `Data`; compared case-insensitively; not user-configurable), a previous segment exists, and that previous segment is not a drive designator (`X:`), move to the previous segment. Stripping repeats (`HardStop\Code\Data` → `HardStop`).
+3. If the chosen segment is a drive designator (the path is a drive root), the label is that segment with a trailing `\` (`C:\` → `C:\`).
+4. The label keeps the segment's original casing.
+5. The label is computed at display time and is never persisted; directory node display names are never overridden by the user.
+6. The directory node in the session tree shows the full working-directory path as a tooltip, since the label no longer reveals it.
+
+| Path | Label |
+|---|---|
+| `C:\Projects\oDesk\HardStop` | `HardStop` |
+| `C:\Projects\oDesk\HardStop\Code\` | `HardStop` |
+| `C:\Projects\oDesk\HardStop\Code\Docs` | `HardStop` |
+| `C:\Projects\EyeLabX\Code\EyeCura\` | `EyeCura` (only the *last* segment is replaced) |
+| `C:\Code` | `Code` (parent is a drive designator) |
+| `C:\` | `C:\` |
+| `\\server\share\Proj` | `Proj` |
+| `/home/u/proj/Code` | `proj` |
+
+Different directories may therefore share a label (e.g. `HardStop` and `HardStop\Code` both show `HardStop`). Duplicates are prevented by path (FR.1.5), never by label. The same label is used wherever a directory is named: tree, recent-sessions dropdown, import pickers (including the "switch to original directory" target), `list_sessions` `dirLabel` (FR.15.1) and Telegram topic names (FR.21.2).
 
 **FR.1.4 — Working directory inheritance:** All Session nodes nested under a Directory node (at any depth, through any number of Group nodes) inherit the Directory node's path as the `claude` process working directory.
 
 **FR.1.5 — Adding nodes:**
-- **Add Directory:** user selects a folder via a directory picker; a new top-level Directory node is created. If a Directory node for that path already exists, no duplicate is created.
+- **Add Directory:** user selects a folder via a directory picker; a new top-level Directory node is created. If a Directory node for that path already exists, no duplicate is created (duplicates are detected by path, not by display label — FR.1.3).
 - **Add Group:** user right-clicks a Directory or Group node and selects "Add Group"; a new named Group node is created as a child. Name is entered inline.
 - **Add Session:** user right-clicks a Directory or Group node and selects "Add Session"; a new Session node is created as a child, a session file is created on disk (see FR.3), and a name is entered inline.
 - **New Session shortcut (no tree selection):** if the user triggers "New Session" without a tree context, they are first prompted to select a working directory. If a matching Directory node exists it is used; otherwise a new Directory node is created.
 
 **FR.1.6 — Renaming:**
 - Group nodes and Session nodes may be renamed via inline editing (double-click label, or context menu → Rename).
-- Directory nodes may not be renamed; their display name always reflects the filesystem path.
+- Directory nodes may not be renamed; their display name is always derived from the filesystem path per FR.1.3.
 - Renamed names are stored in `appsettings.json`.
 
 **FR.1.7 — Deletion rules:**
@@ -657,7 +672,7 @@ A supervisor session can spawn and control worker sessions. All workers are **pe
 **FR.15.1 — Orchestration tools:**
 | Tool | Required args | Optional args | Effect |
 |---|---|---|---|
-| `list_sessions` | — | — | Returns summary of all sessions in the tree: nodeId, name, dirLabel, isRunning, isResumable, lastPrompt. |
+| `list_sessions` | — | — | Returns summary of all sessions in the tree: nodeId, name, dirLabel (directory label per FR.1.3), isRunning, isResumable, lastPrompt. |
 | `spawn_session` | `name` | `workingDir`, `parentNodeId`, `prompt`, `model`, `group`, `outputFormat` | Creates a **new** session node, runs the first turn, returns `{nodeId, resultText}`. `model` is tier-enforced (FR.16). |
 | `send_to_session` | `nodeId`, `prompt` | `mode` (wait/async), `outputFormat` | **Resumes** an existing session node, runs a turn. In `wait` mode returns the result synchronously. In `async` mode posts the result back to the supervisor when done. `outputFormat` is advisory markdown shaping guidance (FR.15.7). |
 | `read_session` | `nodeId` | `lastN` | Returns the last N session file entries for the given node. |
@@ -901,12 +916,13 @@ A bidirectional bridge between Tessyn sessions and a Telegram bot, letting a ses
 | `TelegramChatId` | long | The forum-topic supergroup's chat ID. Every inbound update from any other chat is dropped. |
 | `TelegramAllowedUserIds` | `List<long>` | Telegram numeric user IDs authorized to message the bot. Everyone else's messages are logged and dropped, even inside the correct chat. |
 | `TelegramTopicThreadIdsByNodeId` | `Dictionary<string, int>` | Persisted NodeId → Telegram `message_thread_id` map. The reverse lookup (thread → NodeId) is rebuilt in memory from this on `Start()`. |
+| `TelegramTopicNamesByNodeId` | `Dictionary<string, string>` | Persisted NodeId → last-applied topic name (untruncated), recorded at topic creation (FR.21.2) and by topic name reconciliation (FR.21.18). Defaults to empty. No code path currently removes thread-id mappings; any future removal must also remove the corresponding entry here (FR.21.18). |
 | `TelegramUpdateOffset` | long | Last-processed Telegram `update_id` + 1, persisted so a restart does not replay already-handled updates. |
 | `TelegramMentionHandle` | string | @handle (e.g. `@harmlessevil`) prefixed onto notification pings (FR.21.10). Empty = no prefix. Never prefixed onto mirrored conversation text (FR.21.9) — only pings, so routine back-and-forth doesn't page the user on every line. |
 
 The bot token itself is **not** in `AppSettingsModel` — see FR.21.6.
 
-**FR.21.2 — Topic-per-session, created lazily on first activity:** The first time a session runs a turn — interactive (`TurnController.SendAsyncCore`) or headless (`SessionTurnService.RunTurnAsync`, which also covers scheduled, orchestrated, and Telegram-triggered turns) — while `TelegramEnabled` is true, `ITelegramBridgeService.EnsureTopicForSessionAsync` fire-and-forget-creates a Telegram forum topic named `"{directory label} / {session name}"` via `createForumTopic` and persists the NodeId → thread mapping. Sessions never touched while the bridge is enabled never get a topic — there is no bulk backfill over session history. Errors (offline, bot misconfigured) are logged and swallowed; a topic-creation failure never fails or delays the turn it was piggybacked on.
+**FR.21.2 — Topic-per-session, created lazily on first activity:** The first time a session runs a turn — interactive (`TurnController.SendAsyncCore`) or headless (`SessionTurnService.RunTurnAsync`, which also covers scheduled, orchestrated, and Telegram-triggered turns) — while `TelegramEnabled` is true, `ITelegramBridgeService.EnsureTopicForSessionAsync` fire-and-forget-creates a Telegram forum topic named `"{directory label} / {session name}"` via `createForumTopic` and persists the NodeId → thread mapping. The directory label follows FR.1.3, derived from the session's working directory (e.g. `HardStop / Fix login`); the name actually applied is recorded as the last-applied topic name (`TelegramTopicNamesByNodeId`, FR.21.1). Names are truncated to 128 characters (`Constants.Telegram.MaxTopicNameLength`) when sent. Sessions never touched while the bridge is enabled never get a topic — there is no bulk backfill over session history. Errors (offline, bot misconfigured) are logged and swallowed; a topic-creation failure never fails or delays the turn it was piggybacked on.
 
 **FR.21.3 — Outbound: notifications and questions:** A new `mcp__cmx__notify_user` tool (`AgentMcpServer`) lets a running session send an arbitrary message to the user's Telegram, ensuring its topic exists first. There is deliberately **no blocking "ask and wait" tool** — a `TaskCompletionSource`-style block risks getting stuck indefinitely on Telegram connectivity issues or the user simply being away from their phone, with no clean way to time out a mid-turn CLI process. Instead, `Constants.Instructions.TelegramNotifyGuidance` (emitted once per fresh session, alongside `NoWorkflowTool`, when `AgentToolsEnabled && TelegramEnabled`) instructs Claude to call `notify_user` with the question in plain text and then end its turn normally — the user's reply becomes the next ordinary prompt via FR.21.4, resuming the same session. The message is posted with the configured `TelegramMentionHandle` prefix (FR.21.10) so it stands out among the mirrored conversation text (FR.21.9) sharing the same topic.
 
@@ -956,12 +972,21 @@ The absolute path is exact (the downstream consumer is an LLM that uploads the f
 
 **FR.21.17 — Download robustness and logging:** Download/`getFile` errors are caught per attachment, logged as warnings (message only, no URL — the URL contains the bot token), and rendered as an `[attachment download failed: ...]` line. The poll loop is never interrupted.
 
+**FR.21.18 — Topic name reconciliation:** Topic names are not readable back from Telegram, so the bridge reconciles them against the persisted last-applied names (`TelegramTopicNamesByNodeId`, FR.21.1).
+- **Trigger:** `Start()` launches a background run that never blocks `Start()` or the poll loop and stops (cancellation) when the bridge stops. It works over a snapshot of `TelegramTopicThreadIdsByNodeId`. The run happens only when `TelegramChatId` is set (non-zero) — the same guard as topic creation (FR.21.2); otherwise it does nothing. Runs never overlap: a run started by `Start()` after a `Stop()` waits until the previous run, including its final save, has finished.
+- **Per topic:** look up the session by NodeId; an orphan (no such session) is skipped and its mapping left untouched. Compute the current FR.21.2 name for the session (`{directory label} / {session name}`). If it equals the stored last-applied name, skip with no API call. Otherwise call `ITelegramClient.EditForumTopicAsync` (Bot API `editForumTopic`; returns `true` when renamed, `false` when Telegram answers `TOPIC_NOT_MODIFIED`, throws `TelegramApiException` carrying `ErrorCode`, `Description` and `RetryAfterSeconds` for any other failure; the name is truncated as in FR.21.2).
+- **Outcomes:** renamed **or** "not modified" counts as success — the current name is recorded as the last-applied name. HTTP 429: wait `retry_after` seconds (cancellable), clamped to 1–300 s (1 s when `retry_after` is missing), and retry the same topic once; if it fails again the run stops. Run-stopping API errors: a rights error (401/403, or a description containing "not enough rights") or a chat-level error (a description containing "chat not found") — each logs a single warning and stops the run. Any other API error (e.g. deleted topic, `TOPIC_ID_INVALID`): log a warning, skip the topic, wait `TopicRenameNoOpIntervalMs` (1000 ms) and continue with the next topic. Non-API exception (network), including an HTTP timeout: log and stop the run (the next start retries). Cancellation is quiet only when the bridge itself is stopping; a cancellation caused by an HTTP timeout is a network failure and is handled as such.
+- **Throttle:** after a real rename wait `Constants.Telegram.TopicRenameIntervalMs` (6000 ms); after a "not modified" result wait `TopicRenameNoOpIntervalMs` (1000 ms) — every real rename posts a service message into the group, whose flood limit is about 20 messages/minute, and this keeps half of that budget for normal bridge traffic. No wait follows a skip that made no API call.
+- **Persistence:** recorded names are saved to settings after every 20 recorded names and once more at the end of the run (including stop/cancel), under the settings synchronization used elsewhere by the bridge.
+- **Mappings:** no code path currently removes `TelegramTopicThreadIdsByNodeId` entries; any future removal must also remove the corresponding `TelegramTopicNamesByNodeId` entry.
+- **Effect:** topics created before FR.1.3's short labels are migrated gradually, once, in the background (a large installation may take tens of minutes); afterwards each start renames only topics whose session was renamed since the name was last applied.
+
 **Setup (manual, one-time, outside the app):**
 1. Message `@BotFather` on Telegram → `/newbot` → record the bot token.
 2. Create a regular Telegram group (there is no separate "create supergroup" action — any regular group silently upgrades to a supergroup the moment Topics, below, is turned on):
    - Compose/pencil icon → **New Group** → add at least one member (the bot itself, if its username is already known, or any placeholder contact) → name it (e.g. "Tessyn Sessions") → create.
    - Open the group's info panel → **Edit** (pencil) → toggle **Topics** on. This both enables forum topics and upgrades the group to a supergroup — regular groups and channels cannot host forum topics.
-3. Add the bot to the group as a member (Group Info → Add Members → search its username), then promote it: Group Info → Administrators → Add Admin → select the bot → ensure **Manage Topics** is enabled (required for `createForumTopic`) → confirm/save the admin rights (some clients require an explicit checkmark tap, not just toggling switches). A bot that is only a plain member operates in Telegram's **Privacy Mode** — it only sees messages that are commands or that mention/reply to it, not ordinary text — and the group's own UI may surface this as "this bot has no access to messages" while it's still unpromoted. Making it admin (as above) bypasses Privacy Mode automatically; no separate BotFather setting is needed once that's done.
+3. Add the bot to the group as a member (Group Info → Add Members → search its username), then promote it: Group Info → Administrators → Add Admin → select the bot → ensure **Manage Topics** is enabled (required for `createForumTopic` and `editForumTopic`) → confirm/save the admin rights (some clients require an explicit checkmark tap, not just toggling switches). A bot that is only a plain member operates in Telegram's **Privacy Mode** — it only sees messages that are commands or that mention/reply to it, not ordinary text — and the group's own UI may surface this as "this bot has no access to messages" while it's still unpromoted. Making it admin (as above) bypasses Privacy Mode automatically; no separate BotFather setting is needed once that's done.
 4. Get the group's chat ID (negative number, e.g. `-100xxxxxxxxxx`) — e.g. temporarily add `@RawDataBot` (or `@getidsbot`) to the group, read the chat ID it posts, then remove it; or send any message in the group and inspect the `getUpdates` response (`https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser) for `"chat":{"id":-100xxxxxxxxxx,...}`.
 5. Get your own numeric Telegram user ID (message `@userinfobot` directly — it replies with your ID).
 6. Enter the bot token, chat ID, and your user ID into Tessyn's Settings → Telegram panel.

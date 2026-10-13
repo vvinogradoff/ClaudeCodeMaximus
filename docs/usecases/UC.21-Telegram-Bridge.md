@@ -20,7 +20,7 @@ Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements
 
 1. The Telegram Bridge ensures a topic exists for the session (creating one if this is the session's first activity since the bridge went live).
 2. The message is posted into that topic.
-3. The User sees the notification on their phone/desktop Telegram client, labeled with the session's topic name (`{directory label} / {session name}`).
+3. The User sees the notification on their phone/desktop Telegram client, labeled with the session's topic name (`{directory label} / {session name}`, where the directory label is the short label of FR.1.3, e.g. `HardStop / Fix login`).
 
 **Outcome:** The User is informed without needing the Tessyn window open or focused.
 
@@ -81,6 +81,17 @@ Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements
 3. A turn runs with the caption/text followed by one `[attachment: <absolute path>]` line per file; the session can upload/read the files by path.
 
 **Outcome:** The User can attach files to a session from Telegram. Unsupported updates never cause the bridge to re-poll in a tight loop.
+
+## UC.21.8 — Existing topics are renamed at bridge start
+
+**Trigger:** The bridge starts (app launch, or the bridge is enabled in Settings) while topics already exist whose names no longer match the current naming (e.g. topics created with full-path labels before FR.1.3, or sessions renamed since).
+
+1. `Start()` returns immediately; a background reconciliation begins (FR.21.18) — only if a chat ID is configured, and never overlapping a previous run.
+2. For each mapped topic whose session still exists, the current name (`{directory label} / {session name}`) is compared with the last-applied name; equal names are skipped with no Telegram call.
+3. Differing names are applied with `editForumTopic`, one at a time, paced (6 s after a real rename, 1 s after a no-op) to stay within Telegram's group flood limit; the applied name is recorded and progress is saved periodically.
+4. On a rate-limit (429) the run waits (1–300 s) and retries once; on a rights error, a "chat not found" error, a network failure or an HTTP timeout it stops and the next start retries; a deleted topic is skipped (after a short pause).
+
+**Outcome:** The User's topic list gradually shows the short names (e.g. `HardStop / <session>`) without any manual action; bridge messaging works normally throughout, and later starts only touch topics whose session was renamed.
 
 ---
 

@@ -841,6 +841,22 @@ Curates the native tool + MCP surface handed to the claude CLI for local (Ollama
 
 ---
 
+## Phase 32 — Short directory labels & Telegram topic renaming (FR.1.3, FR.21.2, FR.21.18)
+
+Replaces the `.git`-root directory label with a short last-segment rule (well-known project folders stripped), shows the full path as a tooltip, and renames existing Telegram topics in the background to the new naming. Use cases: `UC.DL.01`, `UC.21.8`; test cases: `TC.DL.01`, `TC.21.9`, `TC.21.10`.
+
+- [DONE] Constants (`Constants` well-known project folder list; `Telegram.TopicRenameIntervalMs` = 6000, `TopicRenameNoOpIntervalMs` = 1000) + new `DirectoryLabelService.GetLabel` rule (FR.1.3)
+- [DONE] Directory node tooltip with the full path in the session tree (FR.1.3)
+- [DONE] `DirectoryLabelServiceTests` — label cases per TC.DL.01.1 (FR.1.3)
+- [DONE] `ITelegramClient.EditForumTopicAsync` + `TelegramClient` implementation + new `TelegramApiException` (FR.21.18)
+- [DONE] `AppSettingsModel.TelegramTopicNamesByNodeId`; record name at topic creation (FR.21.1, FR.21.2); no code path removes mappings today
+- [DONE] Background topic name reconciliation on bridge `Start()` — shared `BuildTopicName`, outcome handling, throttle, progress saves (FR.21.18)
+- [DONE] Telegram tests — `EditForumTopicAsync` (TC.21.9) and reconciliation (TC.21.10)
+- [DONE] Docs — FR.1.3, FR.21.1/21.2/21.18, glossary, UC.DL.01, UC.21.8, TC.DL.01, TC.21.9–21.10, business-analysis notes (written; awaiting Architect review)
+- Full suite: 476/476 pass (run twice). Business analysis: `docs/business-analysis/Session-Tree_Directory-Label-derivation.md`, `docs/business-analysis/Telegram-Bridge_Topic-Name-Reconciliation.md`.
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/RESEARCH.01.VS-MCP-Server-Automation-Approaches.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
