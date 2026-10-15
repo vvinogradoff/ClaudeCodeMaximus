@@ -172,7 +172,7 @@ public sealed class SessionTurnService : ISessionTurnService
 			var options          = new InstructionOptionsModel(
 				node.IsAutoCommit, false, node.IsAutoDocument,
 				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: false,
-				IsTelegramEnabled: _appSettings.Settings.TelegramEnabled);
+				IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0);
 			var instructionBlock = InstructionBlockBuilder.Build(options);
 			var augmentedPrompt  = prompt + instructionBlock;
 
@@ -277,7 +277,7 @@ public sealed class SessionTurnService : ISessionTurnService
 		var options = new InstructionOptionsModel(
 			node.IsAutoCommit, false, node.IsAutoDocument,
 			_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: true,
-			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled);
+			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0);
 		var augmentedPrompt = prompt + InstructionBlockBuilder.Build(options);
 
 		var resultText         = new StringBuilder();

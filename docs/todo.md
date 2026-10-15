@@ -872,6 +872,21 @@ Stops Worker Sessions (`OrchestrationDepth > 0`) from ever reaching Telegram —
 
 ---
 
+## Phase 34 — Discourage notify_user Misuse by Workers and Subagents (FR.21.20)
+
+Architect reported getting notified too often from subagents, even though FR.21.19 already blocks `notify_user` server-side for genuine Worker Sessions (distinct `NodeId`/token). The remaining gap: a Claude-Code-native `Task`-tool subagent shares its parent session's token entirely, so Tessyn has no server-side signal to block it — only prompt-level discouragement is possible there.
+
+- [DONE] `notify_user` tool's MCP description (`AgentMcpServer`) rewritten: top-level session only, never from a worker/subagent, one message per need the user must act on, not progress updates
+- [DONE] `Constants.Instructions.TelegramNotifyGuidance` carries the same restraint wording
+- [DONE] `cmx-orchestration` skill's "As a worker" section gains an explicit "don't call notify_user" line (previously said nothing about it)
+- [DONE] `InstructionOptionsModel.IsWorkerSession` (true when `OrchestrationDepth > 0`); `InstructionBlockBuilder.Build` suppresses `TelegramNotifyGuidance` entirely for a Worker Session — stacks with FR.21.19's runtime no-op so a worker is never even told the tool exists
+- [DONE] Wired at both `SessionTurnService.RunTurnAsync` call sites (one-shot + FR.19.13 streaming redirect) and `SessionPromptComposer.BuildInstructionBlock` (interactive path)
+- [DONE] Tests: `InstructionBlockBuilderTests` (worker-session suppression), `SessionTurnServiceTests` (end-to-end: top-level includes the guidance, worker omits it)
+- [DONE] Docs: FR.21.20, glossary `notify_user tool` entry updated
+- Accepted residual limitation: a Task-tool subagent can still technically call `notify_user` if it disregards the description/skill guidance — not enforceable server-side the way genuine Worker Sessions are.
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/RESEARCH.01.VS-MCP-Server-Automation-Approaches.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.

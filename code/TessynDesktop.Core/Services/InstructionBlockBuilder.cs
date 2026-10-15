@@ -50,8 +50,10 @@ public static class InstructionBlockBuilder
 			lines.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
 
 		// FR.21.3 — same once-per-fresh-session gating as NoWorkflowTool: this is session-level
-		// policy (a tool exists), not per-turn state.
-		if (options.IsAgentToolsEnabled && options.IsTelegramEnabled && options.IsNewSession)
+		// policy (a tool exists), not per-turn state. FR.21.20 — never emitted for a Worker Session:
+		// its own notify_user call is dropped outright by the bridge (FR.21.19), so the guidance
+		// would only invite a wasted call.
+		if (options.IsAgentToolsEnabled && options.IsTelegramEnabled && options.IsNewSession && !options.IsWorkerSession)
 			lines.AppendLine($"- {Constants.Instructions.TelegramNotifyGuidance}");
 
 		// FR.11.2 — omit the block entirely when there is nothing to say (Auto-Commit silent and

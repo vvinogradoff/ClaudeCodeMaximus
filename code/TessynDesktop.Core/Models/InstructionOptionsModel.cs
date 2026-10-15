@@ -23,6 +23,12 @@ namespace TessynDesktop.Models;
 /// Tri-state Auto-Commit (FR.11.3): <c>true</c> = Commit, <c>false</c> = Do-not-commit,
 /// <c>null</c> = No preference (no commit-related line is emitted).
 /// </param>
+/// <param name="IsWorkerSession">
+/// True for a Worker Session (<c>OrchestrationDepth &gt; 0</c>, FR.21.19) — suppresses
+/// <see cref="Constants.Instructions.TelegramNotifyGuidance"/> entirely, since a Worker Session's
+/// own <c>notify_user</c> call is dropped outright by the Telegram Bridge and telling it the tool
+/// exists only invites a wasted call. Does not affect any other instruction line.
+/// </param>
 public sealed record InstructionOptionsModel(
 	bool? IsAutoCommit,
 	bool IsNewBranch,
@@ -30,4 +36,5 @@ public sealed record InstructionOptionsModel(
 	bool IsAgentToolsEnabled,
 	bool IsNewSession,
 	bool IsStreamingMode,
-	bool IsTelegramEnabled = false);
+	bool IsTelegramEnabled = false,
+	bool IsWorkerSession = false);

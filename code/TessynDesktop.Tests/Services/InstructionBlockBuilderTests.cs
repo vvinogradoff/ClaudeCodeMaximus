@@ -7,10 +7,11 @@ namespace TessynDesktop.Tests.Services;
 public sealed class InstructionBlockBuilderTests
 {
     private static InstructionOptionsModel Options(
-        bool isAgentToolsEnabled, bool isNewSession, bool isStreamingMode, bool isTelegramEnabled = false) =>
+        bool isAgentToolsEnabled, bool isNewSession, bool isStreamingMode, bool isTelegramEnabled = false,
+        bool isWorkerSession = false) =>
         new(IsAutoCommit: null, IsNewBranch: false, IsAutoDocument: false,
             IsAgentToolsEnabled: isAgentToolsEnabled, IsNewSession: isNewSession, IsStreamingMode: isStreamingMode,
-            IsTelegramEnabled: isTelegramEnabled);
+            IsTelegramEnabled: isTelegramEnabled, IsWorkerSession: isWorkerSession);
 
     [Fact]
     public void Build_OneShotNewSessionAgentToolsEnabled_IncludesBothRedirects()
@@ -102,6 +103,18 @@ public sealed class InstructionBlockBuilderTests
     {
         var block = InstructionBlockBuilder.Build(
             Options(isAgentToolsEnabled: false, isNewSession: true, isStreamingMode: false, isTelegramEnabled: true));
+
+        Assert.DoesNotContain(Constants.Instructions.TelegramNotifyGuidance, block);
+    }
+
+    [Fact]
+    public void Build_WorkerSession_OmitsTelegramNotifyGuidanceEvenIfOtherwiseEligible()
+    {
+        // FR.21.20 — a Worker Session's own notify_user call is dropped outright by the bridge
+        // (FR.21.19), so telling it the tool exists would only invite a wasted call.
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: true, isNewSession: true, isStreamingMode: false,
+                isTelegramEnabled: true, isWorkerSession: true));
 
         Assert.DoesNotContain(Constants.Instructions.TelegramNotifyGuidance, block);
     }

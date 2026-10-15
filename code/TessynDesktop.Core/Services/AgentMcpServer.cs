@@ -396,7 +396,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"Return token usage and remaining budget for the caller's active orchestrations (FR.15.6).",
 				EmptyObjectSchema()),
 			BuildToolDef("notify_user",
-				"Send the user a notification or plain-text question via the Telegram Bridge (FR.21.3). Fire-and-forget — there is no blocking 'ask and wait' tool; end your turn after calling this and the user's reply will arrive as your next prompt.",
+				"Send the user a notification or plain-text question via the Telegram Bridge (FR.21.3) — only for the top-level session the user is talking to. Never call from a worker session (its own call is dropped outright, FR.21.19) or a Task-tool subagent — report back to your supervisor instead. Use only when the user must personally act or decide; one message per need, not progress updates. Fire-and-forget — there is no blocking 'ask and wait' tool; end your turn after calling this and the user's reply will arrive as your next prompt.",
 				NotifyUserSchema()));
 
 		return new JsonObject { ["tools"] = tools };

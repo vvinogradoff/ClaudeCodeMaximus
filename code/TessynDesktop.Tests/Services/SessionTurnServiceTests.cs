@@ -383,6 +383,45 @@ public sealed class SessionTurnServiceTests : IDisposable
 	}
 
 	[Fact]
+	public async Task RunTurnAsync_StreamingProcessAlive_TopLevelSession_IncludesTelegramNotifyGuidance()
+	{
+		_appSettings.Settings.AgentToolsEnabled = true;
+		_appSettings.Settings.TelegramEnabled = true;
+		_streamingManager.AliveResult = true;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			onTurnEvent(new ClaudeStreamEvent { Type = "result" });
+			return Task.CompletedTask;
+		};
+		var node = MakeNode(); // OrchestrationDepth 0 — a top-level session, not a worker
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.Contains(Constants.Instructions.TelegramNotifyGuidance, _streamingManager.SendTurnCalls[0].userMessage);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_StreamingProcessAlive_WorkerSession_OmitsTelegramNotifyGuidance()
+	{
+		// FR.21.20 — a Worker Session's own notify_user call is dropped outright by the bridge
+		// (FR.21.19), so it must never even be told the tool exists.
+		_appSettings.Settings.AgentToolsEnabled = true;
+		_appSettings.Settings.TelegramEnabled = true;
+		_streamingManager.AliveResult = true;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			onTurnEvent(new ClaudeStreamEvent { Type = "result" });
+			return Task.CompletedTask;
+		};
+		var node = MakeNode();
+		node.OrchestrationDepth = 1;
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.DoesNotContain(Constants.Instructions.TelegramNotifyGuidance, _streamingManager.SendTurnCalls[0].userMessage);
+	}
+
+	[Fact]
 	public async Task RunTurnAsync_StreamingProcessAlive_SetsRunningTrueThenFalse()
 	{
 		_streamingManager.AliveResult = true;

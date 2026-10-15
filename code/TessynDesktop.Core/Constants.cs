@@ -134,7 +134,7 @@ public static class Constants
 		/// user is away from their phone or Telegram is unreachable (see FR.21.3 rationale).
 		/// </summary>
 		public const string TelegramNotifyGuidance =
-			"A Telegram bridge is available: call `mcp__" + Agent.McpServerName + "__notify_user` to send the user a notification or ask them a plain-text question. There is no blocking \"ask and wait\" tool — after calling notify_user, end your turn normally instead of waiting idle for a reply. The user's Telegram reply arrives later as an ordinary new prompt in this same session.";
+			"A Telegram bridge is available: call `mcp__" + Agent.McpServerName + "__notify_user` to send the user a notification or ask them a plain-text question — but only from this top-level session, never from a worker or Task-tool subagent (report back to your supervisor instead), and only when the user must personally act or decide, one message per need, not progress updates. There is no blocking \"ask and wait\" tool — after calling notify_user, end your turn normally instead of waiting idle for a reply. The user's Telegram reply arrives later as an ordinary new prompt in this same session.";
 
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
 		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
@@ -357,6 +357,9 @@ SESSION TRANSCRIPT TO COMPACT:
 			- You are headless and the CLI process is terminated between turns. Never use the CLI's
 			  native `ScheduleWakeup`/`CronCreate`/`CronList`/`CronDelete` — those schedules won't
 			  survive. Use `mcp__cmx__schedule_wake` if you need to poll or resume later.
+			- Do not call `notify_user` — a worker session's message is dropped before it ever reaches
+			  Telegram (it's reserved for the top-level session the user is actually talking to); put
+			  anything the user needs to see in your final response to your supervisor instead.
 			""";
 	}
 
