@@ -136,6 +136,14 @@ public static class Constants
 		public const string TelegramNotifyGuidance =
 			"A Telegram bridge is available: call `mcp__" + Agent.McpServerName + "__notify_user` to send the user a notification or ask them a plain-text question — but only from this top-level session, never from a worker or Task-tool subagent (report back to your supervisor instead), and only when the user must personally act or decide, one message per need, not progress updates. There is no blocking \"ask and wait\" tool — after calling notify_user, end your turn normally instead of waiting idle for a reply. The user's Telegram reply arrives later as an ordinary new prompt in this same session.";
 
+		/// <summary>
+		/// FR.21.24 — Emitted on every turn the scheduler started (not once per session), when agent
+		/// tools and the Telegram Bridge are enabled and the session is not a Worker Session. Nothing
+		/// tells the user such a turn finished, so it must ask for them explicitly, and only when needed.
+		/// </summary>
+		public const string ScheduledTurnNotifyReminder =
+			"The scheduler started this turn, so the user may not be watching and is not told when it finishes. If — and only if — your reply needs the user to decide or act, call `mcp__" + Agent.McpServerName + "__notify_user` once with that ask. Otherwise do not call it.";
+
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
 		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
 		public const string MidRunAutoCommitOff = "Correction: Ignore previous instructions about committing to git. Do not commit any changes.";

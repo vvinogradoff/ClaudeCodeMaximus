@@ -8,10 +8,10 @@ public sealed class InstructionBlockBuilderTests
 {
     private static InstructionOptionsModel Options(
         bool isAgentToolsEnabled, bool isNewSession, bool isStreamingMode, bool isTelegramEnabled = false,
-        bool isWorkerSession = false) =>
+        bool isWorkerSession = false, bool isScheduledTurn = false) =>
         new(IsAutoCommit: null, IsNewBranch: false, IsAutoDocument: false,
             IsAgentToolsEnabled: isAgentToolsEnabled, IsNewSession: isNewSession, IsStreamingMode: isStreamingMode,
-            IsTelegramEnabled: isTelegramEnabled, IsWorkerSession: isWorkerSession);
+            IsTelegramEnabled: isTelegramEnabled, IsWorkerSession: isWorkerSession, IsScheduledTurn: isScheduledTurn);
 
     [Fact]
     public void Build_OneShotNewSessionAgentToolsEnabled_IncludesBothRedirects()
@@ -117,5 +117,67 @@ public sealed class InstructionBlockBuilderTests
                 isTelegramEnabled: true, isWorkerSession: true));
 
         Assert.DoesNotContain(Constants.Instructions.TelegramNotifyGuidance, block);
+    }
+
+    [Fact]
+    public void Build_ScheduledTurnWithAgentToolsAndTelegram_IncludesScheduledTurnNotifyReminder()
+    {
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: true, isNewSession: true, isStreamingMode: false,
+                isTelegramEnabled: true, isWorkerSession: false, isScheduledTurn: true));
+
+        Assert.Contains(Constants.Instructions.ScheduledTurnNotifyReminder, block);
+    }
+
+    [Fact]
+    public void Build_ScheduledTurn_IncludesReminderEvenWhenNotANewSession()
+    {
+        // FR.21.24 - describes this turn, not session policy: no once-per-fresh-session gate.
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: true, isNewSession: false, isStreamingMode: false,
+                isTelegramEnabled: true, isWorkerSession: false, isScheduledTurn: true));
+
+        Assert.Contains(Constants.Instructions.ScheduledTurnNotifyReminder, block);
+        Assert.DoesNotContain(Constants.Instructions.TelegramNotifyGuidance, block);
+    }
+
+    [Fact]
+    public void Build_ScheduledTurn_WorkerSession_OmitsReminder()
+    {
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: true, isNewSession: true, isStreamingMode: false,
+                isTelegramEnabled: true, isWorkerSession: true, isScheduledTurn: true));
+
+        Assert.DoesNotContain(Constants.Instructions.ScheduledTurnNotifyReminder, block);
+    }
+
+    [Fact]
+    public void Build_ScheduledTurn_TelegramDisabled_OmitsReminder()
+    {
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: true, isNewSession: true, isStreamingMode: false,
+                isTelegramEnabled: false, isWorkerSession: false, isScheduledTurn: true));
+
+        Assert.DoesNotContain(Constants.Instructions.ScheduledTurnNotifyReminder, block);
+    }
+
+    [Fact]
+    public void Build_ScheduledTurn_AgentToolsDisabled_OmitsReminder()
+    {
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: false, isNewSession: true, isStreamingMode: false,
+                isTelegramEnabled: true, isWorkerSession: false, isScheduledTurn: true));
+
+        Assert.DoesNotContain(Constants.Instructions.ScheduledTurnNotifyReminder, block);
+    }
+
+    [Fact]
+    public void Build_NotAScheduledTurn_OmitsReminder()
+    {
+        var block = InstructionBlockBuilder.Build(
+            Options(isAgentToolsEnabled: true, isNewSession: true, isStreamingMode: false,
+                isTelegramEnabled: true, isWorkerSession: false, isScheduledTurn: false));
+
+        Assert.DoesNotContain(Constants.Instructions.ScheduledTurnNotifyReminder, block);
     }
 }

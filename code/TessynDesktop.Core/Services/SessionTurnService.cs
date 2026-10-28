@@ -84,6 +84,10 @@ public sealed class SessionTurnService : ISessionTurnService
 		// Signal running state via the registry (SessionTreeViewModel observes TreeChanged).
 		_registry.SetSessionRunning(node.NodeId, true);
 
+		// FR.21.22 — reported once from the finally block, after the turn's last entry is appended.
+		var turnCancelled = false;
+		string? turnErrorText = null;
+
 		// FR.21.2 — lazily ensure a Telegram topic exists for this session on its first activity
 		// since the bridge was enabled. Fire-and-forget: EnsureTopicForSessionAsync never throws
 		// and must never delay or fail the turn it was piggybacked on.
@@ -104,7 +108,11 @@ public sealed class SessionTurnService : ISessionTurnService
 			// notice — its own in-memory context silently falls behind, so its next answer looks like
 			// it "forgot" the headless-sourced exchange. See docs/issues/Streaming-Headless-Context-Divergence.md.
 			if (_streamingManager.IsAlive(node.NodeId))
-				return await RunTurnViaStreamingAsync(node, prompt, ct);
+			{
+				var streamed  = await RunTurnViaStreamingAsync(node, prompt, source, ct);
+				turnErrorText = streamed.IsError ? streamed.ErrorMessage : null;
+				return streamed;
+			}
 
 			var profileConfigDir = ResolveProfileConfigDir(node);
 
@@ -172,7 +180,8 @@ public sealed class SessionTurnService : ISessionTurnService
 			var options          = new InstructionOptionsModel(
 				node.IsAutoCommit, false, node.IsAutoDocument,
 				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: false,
-				IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0);
+				IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0,
+				IsScheduledTurn: source == TurnSource.Scheduled);
 			var instructionBlock = InstructionBlockBuilder.Build(options);
 			var augmentedPrompt  = prompt + instructionBlock;
 
@@ -243,6 +252,9 @@ public sealed class SessionTurnService : ISessionTurnService
 					cancellationToken: ct);
 			}
 
+			// Errors the retry above recovered from never reach errorMessage (the race result is not
+			// recorded as an error), so a successful retry reports no error text.
+			turnErrorText = isError ? errorMessage : null;
 			return new TurnResultModel(resultText.ToString(), node.ClaudeSessionId, isError, errorMessage,
 			                           inputTokens, outputTokens, costUsd);
 		}
@@ -250,10 +262,29 @@ public sealed class SessionTurnService : ISessionTurnService
 		{
 			_log.Information("Turn cancelled for node {NodeId}", node.NodeId);
 			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, "[Turn cancelled]");
+			turnCancelled = true;
+			turnErrorText = null;
 			return new TurnResultModel(string.Empty, node.ClaudeSessionId, IsError: true, ErrorMessage: "Cancelled");
+		}
+		catch (Exception ex)
+		{
+			// Unexpected failure: the turn still ended, so TurnCompleted fires (not cancelled) with the
+			// exception message as its error text; the exception itself propagates unchanged.
+			turnErrorText = ex.Message;
+			throw;
 		}
 		finally
 		{
+			// FR.21.22 — before the turn lock is released, so the event stays ordered ahead of the next turn.
+			try
+			{
+				_fileService.NotifyTurnCompleted(node.FileName, turnCancelled, turnErrorText);
+			}
+			catch (Exception ex)
+			{
+				_log.Warning(ex, "TurnCompleted handler failed for node {NodeId}", node.NodeId);
+			}
+
 			_activeCts.TryRemove(node.NodeId, out _);
 			linkedCts.Dispose();
 			turnLock.Release();
@@ -272,12 +303,13 @@ public sealed class SessionTurnService : ISessionTurnService
 	/// method only observes the same events, additively, to build the TurnResultModel this headless
 	/// caller needs to return — see IClaudeStreamingSessionManager.SendTurnAsync's onTurnEvent param.
 	/// </summary>
-	private async Task<TurnResultModel> RunTurnViaStreamingAsync(SessionNodeModel node, string prompt, CancellationToken ct)
+	private async Task<TurnResultModel> RunTurnViaStreamingAsync(SessionNodeModel node, string prompt, TurnSource source, CancellationToken ct)
 	{
 		var options = new InstructionOptionsModel(
 			node.IsAutoCommit, false, node.IsAutoDocument,
 			_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: true,
-			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0);
+			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0,
+			IsScheduledTurn: source == TurnSource.Scheduled);
 		var augmentedPrompt = prompt + InstructionBlockBuilder.Build(options);
 
 		var resultText         = new StringBuilder();

@@ -56,6 +56,10 @@ public static class InstructionBlockBuilder
 		if (options.IsAgentToolsEnabled && options.IsTelegramEnabled && options.IsNewSession && !options.IsWorkerSession)
 			lines.AppendLine($"- {Constants.Instructions.TelegramNotifyGuidance}");
 
+		// FR.21.24 — describes this turn, not session policy, so no IsNewSession gate.
+		if (options.IsAgentToolsEnabled && options.IsTelegramEnabled && options.IsScheduledTurn && !options.IsWorkerSession)
+			lines.AppendLine($"- {Constants.Instructions.ScheduledTurnNotifyReminder}");
+
 		// FR.11.2 — omit the block entirely when there is nothing to say (Auto-Commit silent and
 		// no other toggle active), instead of appending a dangling preamble with no instructions.
 		if (lines.Length == 0)

@@ -29,6 +29,11 @@ namespace TessynDesktop.Models;
 /// own <c>notify_user</c> call is dropped outright by the Telegram Bridge and telling it the tool
 /// exists only invites a wasted call. Does not affect any other instruction line.
 /// </param>
+/// <param name="IsScheduledTurn">
+/// True when the scheduler started this turn (<c>TurnSource.Scheduled</c>, FR.21.24) — adds
+/// <see cref="Constants.Instructions.ScheduledTurnNotifyReminder"/> on every such turn, since
+/// it describes this turn rather than session policy.
+/// </param>
 public sealed record InstructionOptionsModel(
 	bool? IsAutoCommit,
 	bool IsNewBranch,
@@ -37,4 +42,5 @@ public sealed record InstructionOptionsModel(
 	bool IsNewSession,
 	bool IsStreamingMode,
 	bool IsTelegramEnabled = false,
-	bool IsWorkerSession = false);
+	bool IsWorkerSession = false,
+	bool IsScheduledTurn = false);

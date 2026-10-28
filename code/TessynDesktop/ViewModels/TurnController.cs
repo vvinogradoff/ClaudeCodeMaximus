@@ -51,6 +51,11 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private int _busyCount;
 	private bool _needsContextRetry;
 	private bool _needsAuthRaceRetry;
+
+	// FR.21.22 — error-result text of the send currently holding the turn lock, reported via
+	// ISessionFileService.NotifyTurnCompleted. Only written by HandleStreamEvent while a send holds
+	// the lock (sends are serialized per node), reset when a send acquires it and on every retry.
+	private string? _sendErrorText;
 	private readonly object _ctsLock = new();
 	private readonly List<CancellationTokenSource> _activeCts = new();
 	private bool _isNewBranch;
@@ -489,6 +494,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		var nodeId   = _node.Model.NodeId;
 		var turnLock = string.IsNullOrEmpty(nodeId) ? null : _daemonClient.GetTurnLock(nodeId);
 		bool lockAcquired = false;
+		var sendCancelled = false;
+		string? sendErrorText = null;
 
 		try
 		{
@@ -497,6 +504,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				await turnLock.WaitAsync(ct);
 				lockAcquired = true;
 			}
+			_sendErrorText = null;
 
 			if (_node.Model.IsStreamingMode)
 			{
@@ -600,6 +608,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		catch (OperationCanceledException)
 		{
 			_anyCancelledInBatch = true;
+			sendCancelled = true;
 			_log.Information("Send interrupted by user for session {FileName}", _node.FileName);
 			_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, "[Interrupted by user]");
 			_content.Messages.Add(new MessageEntryViewModel
@@ -611,6 +620,18 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		}
 		finally
 		{
+			// FR.21.22 — once per send, after its last entry is appended and before the lock is
+			// released (the next queued send resets _sendErrorText as soon as it acquires the lock).
+			if (lockAcquired) sendErrorText = sendCancelled ? null : _sendErrorText;
+			try
+			{
+				_fileService.NotifyTurnCompleted(_node.FileName, sendCancelled, sendErrorText);
+			}
+			catch (Exception ex)
+			{
+				_log.Warning(ex, "TurnCompleted handler failed for session {FileName}", _node.FileName);
+			}
+
 			if (lockAcquired) turnLock?.Release();
 			lock (_ctsLock) _activeCts.Remove(cts);
 			cts.Dispose();
@@ -702,12 +723,14 @@ public sealed class TurnController : ReactiveObject, IDisposable
 					_node.Model.ClaudeSessionId = null;
 					_appSettings.Save();
 					_needsContextRetry = true;
+					_sendErrorText = null;
 					return;
 				}
 				if (evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase))
 				{
 					_log.Information("OAuth refresh race (system error) for session {FileName} — will retry once", _node.FileName);
 					_needsAuthRaceRetry = true;
+					_sendErrorText = null;
 					return;
 				}
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
@@ -722,6 +745,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				_node.Model.ClaudeSessionId = null;
 				_appSettings.Save();
 				_needsContextRetry = true;
+				_sendErrorText = null;
 				return;
 			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
 				&& evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase):
@@ -730,9 +754,11 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				// auto-retry; skip file write and UI post so it never reads as a real failure.
 				_log.Information("OAuth refresh race for session {FileName} — will retry once", _node.FileName);
 				_needsAuthRaceRetry = true;
+				_sendErrorText = null;
 				return;
 			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
 				_log.Warning("Claude result error: {Error}", evt.Content);
+				_sendErrorText = evt.Content;
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
 				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
 					Dispatcher.UIThread.Post(() => _profiles.HasAuthError = true);

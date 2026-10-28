@@ -162,7 +162,7 @@ internal sealed class FakeMcpServerForTurnService : IAgentMcpServer
 	public int Port => 0;
 	public void Start() => throw new NotImplementedException();
 	public void Stop() => throw new NotImplementedException();
-	public Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken) => throw new NotImplementedException();
+	public Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken) => Task.FromResult<string?>(null);
 	public Task<string?> EnsureConfigFileAsync(string nodeId, string agentToken, bool includeCmx, IReadOnlyList<string> externalServerIds) => throw new NotImplementedException();
 }
 
@@ -442,5 +442,151 @@ public sealed class SessionTurnServiceTests : IDisposable
 		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
 
 		Assert.Equal(new[] { (node.NodeId, true), (node.NodeId, false) }, _registry.SetRunningCalls);
+	}
+
+	// ── Turn Completed event (FR.21.22) ───────────────────────────────────────────
+
+	[Fact]
+	public async Task RunTurnAsync_RaisesTurnCompletedOnceAfterLastEntry()
+	{
+		_streamingManager.AliveResult = false;
+		_processManager.EmitEvents = onEvent =>
+		{
+			onEvent(new ClaudeStreamEvent { Type = "assistant", Content = "hi there" });
+			onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "sess-1" });
+			return Task.CompletedTask;
+		};
+		var node = MakeNode();
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		var call = Assert.Single(_fileService.TurnCompletedCalls);
+		Assert.Equal(node.FileName, call.fileName);
+		Assert.False(call.cancelled);
+		Assert.Null(call.errorText);
+		Assert.Equal(_fileService.AppendCalls.Count, call.appendCountAtCall);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_Cancelled_RaisesTurnCompletedWithCancelledTrue()
+	{
+		_streamingManager.AliveResult = false;
+		_processManager.EmitEvents = _ => throw new OperationCanceledException();
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Scheduled);
+
+		var call = Assert.Single(_fileService.TurnCompletedCalls);
+		Assert.True(call.cancelled);
+		Assert.Null(call.errorText);
+		Assert.Contains(_fileService.AppendCalls, c => c.content == "[Turn cancelled]");
+		Assert.Equal(_fileService.AppendCalls.Count, call.appendCountAtCall);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_ErrorResult_RaisesTurnCompletedWithErrorText()
+	{
+		const string limitText = "You've hit your session limit · resets 1:50pm";
+		_streamingManager.AliveResult = false;
+		_processManager.EmitEvents = onEvent =>
+		{
+			onEvent(new ClaudeStreamEvent { Type = "result", IsError = true, Content = limitText });
+			return Task.CompletedTask;
+		};
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Scheduled);
+
+		var call = Assert.Single(_fileService.TurnCompletedCalls);
+		Assert.False(call.cancelled);
+		Assert.Equal(limitText, call.errorText);
+		Assert.Equal(_fileService.AppendCalls.Count, call.appendCountAtCall);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_AuthRaceRetriedSuccessfully_NoErrorText()
+	{
+		_streamingManager.AliveResult = false;
+		var callCount = 0;
+		_processManager.EmitEvents = onEvent =>
+		{
+			callCount++;
+			if (callCount == 1)
+				onEvent(new ClaudeStreamEvent { Type = "result", IsError = true, Content = Constants.Auth.OAuthRefreshRaceMarker });
+			else
+			{
+				onEvent(new ClaudeStreamEvent { Type = "assistant", Content = "hi there" });
+				onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "sess-1" });
+			}
+			return Task.CompletedTask;
+		};
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Scheduled);
+
+		var call = Assert.Single(_fileService.TurnCompletedCalls);
+		Assert.False(call.cancelled);
+		Assert.Null(call.errorText);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_UnexpectedException_StillRaisesTurnCompletedOnce()
+	{
+		_streamingManager.AliveResult = false;
+		_processManager.EmitEvents = _ => throw new InvalidOperationException("kaput");
+
+		await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Scheduled));
+
+		var call = Assert.Single(_fileService.TurnCompletedCalls);
+		Assert.False(call.cancelled);
+		Assert.Equal("kaput", call.errorText);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_StreamingRedirect_RaisesTurnCompleted()
+	{
+		_streamingManager.AliveResult = true;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			onTurnEvent(new ClaudeStreamEvent { Type = "assistant", Content = "streamed reply" });
+			onTurnEvent(new ClaudeStreamEvent { Type = "result", IsError = true, Content = "boom" });
+			return Task.CompletedTask;
+		};
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Scheduled);
+
+		var call = Assert.Single(_fileService.TurnCompletedCalls);
+		Assert.False(call.cancelled);
+		Assert.Equal("boom", call.errorText);
+	}
+
+	// ── Scheduled-turn notify reminder (FR.21.24) ─────────────────────────────────
+
+	[Theory]
+	[InlineData(TurnSource.Scheduled, true)]
+	[InlineData(TurnSource.User, false)]
+	[InlineData(TurnSource.Orchestrated, false)]
+	[InlineData(TurnSource.Telegram, false)]
+	public async Task RunTurnAsync_ScheduledSource_SendsReminder_OtherSourcesDoNot(TurnSource source, bool expectReminder)
+	{
+		_appSettings.Settings.AgentToolsEnabled = true;
+		_appSettings.Settings.TelegramEnabled = true;
+
+		// One-shot call site.
+		_streamingManager.AliveResult = false;
+		_processManager.EmitEvents = onEvent =>
+		{
+			onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "sess-1" });
+			return Task.CompletedTask;
+		};
+		await _sut.RunTurnAsync(MakeNode("one-shot"), "hello", source);
+		Assert.Equal(expectReminder, _processManager.Calls[0].userMessage.Contains(Constants.Instructions.ScheduledTurnNotifyReminder));
+
+		// Streaming-redirect call site.
+		_streamingManager.AliveResult = true;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			onTurnEvent(new ClaudeStreamEvent { Type = "result" });
+			return Task.CompletedTask;
+		};
+		await _sut.RunTurnAsync(MakeNode("streaming"), "hello", source);
+		Assert.Equal(expectReminder, _streamingManager.SendTurnCalls[0].userMessage.Contains(Constants.Instructions.ScheduledTurnNotifyReminder));
 	}
 }
