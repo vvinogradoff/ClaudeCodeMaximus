@@ -16,13 +16,14 @@ Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements
 
 ## UC.21.1 — Session notifies the user
 
-**Trigger:** A session calls `mcp__cmx__notify_user` with a message, or a scheduled/orchestrated turn completes.
+**Trigger:** A session calls `mcp__cmx__notify_user` with a message. Nothing else triggers a notification — in particular, a turn finishing (scheduled, orchestrated, Mailbox Delivery or interactive) is never announced (FR.21.5, ISSUE.012). A Worker Session's call reaches neither channel (FR.21.19).
 
 1. The Telegram Bridge ensures a topic exists for the session (creating one if this is the session's first activity since the bridge went live).
-2. The message is posted into that topic.
+2. The message is posted into that topic, prefixed with the mention handle and sent with sound — the only bridge message that makes a sound (FR.21.21).
 3. The User sees the notification on their phone/desktop Telegram client, labeled with the session's topic name (`{directory label} / {session name}`, where the directory label is the short label of FR.1.3, e.g. `HardStop / Fix login`).
+4. At the same time, if desktop notifications are enabled, a Windows toast shows the same message under the same name (FR.21.5); clicking it selects the session in Tessyn.
 
-**Outcome:** The User is informed without needing the Tessyn window open or focused.
+**Outcome:** The User is informed without needing the Tessyn window open or focused — and when the phone rings or a toast appears, a session actually needs them.
 
 ## UC.21.2 — Session asks a plain-text question
 
@@ -42,7 +43,7 @@ Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements
 1. The Telegram Bridge validates the sender's chat ID and user ID against the configured allow-list; anything else is dropped silently (logged).
 2. The topic's `message_thread_id` is looked up in the Topic Map to find the target NodeId.
 3. A turn is run against that session (`TurnSource.Telegram`) with the message text as the prompt.
-4. The assistant's response (or an error) is posted back into the same topic.
+4. The turn's output reaches the same topic through the Universal I/O Mirror, silently — by default only its final answer, including an error such as a usage-limit message (FR.21.21, FR.21.22).
 
 **Outcome:** The User can carry on a conversation with any session entirely from Telegram.
 
@@ -99,7 +100,7 @@ Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements
 
 1. Each Worker Session runs its own turns normally, but `OrchestrationDepth > 0` on every one of them means the bridge excludes them outright (FR.21.19): no topic is ever created for a worker, none of its USER/ASSISTANT/SYSTEM entries are mirrored, and an explicit `notify_user` call made by a worker produces no Telegram message at all.
 2. `/sessions` never lists a Worker Session, favorited or not.
-3. The depth-0 session that actually started the orchestration behaves exactly as any other session — its own topic gets the Supervisor's prompts, responses, and any of its own `notify_user` pings.
+3. The depth-0 session that actually started the orchestration behaves exactly as any other session — its own topic gets the Supervisor's answers (or, in Full mode, its prompts and responses too) and any of its own `notify_user` pings (UC.21.12).
 
 **Outcome:** A single topic represents the work the User actually started, regardless of how many workers it fans out to internally — the group never gets cluttered with one topic per subagent.
 
@@ -113,9 +114,32 @@ Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements
 
 **Outcome:** Worker Session topics created before the exclusion existed disappear from the group automatically the next time the app starts, with no manual cleanup needed.
 
+## UC.21.11 — User follows sessions in Telegram without being disturbed
+
+**Trigger:** Sessions run turns — from the desktop, from Telegram, or headless — while the User keeps the Telegram group unmuted.
+
+1. Each turn's output is mirrored according to the Mirror Mode (FR.21.22). In the default `AnswersOnly` mode, the bridge holds the turn's latest assistant text and posts it once, when the turn completes; the narration a turn emits between tool calls, the User's own prompts and system lines are not posted. A stopped turn posts nothing. A turn that ends in an error also posts the error text exactly as reported — so when a session hits its usage limit, the topic shows e.g. `You've hit your session limit · resets 1:50pm`, once.
+2. Every mirrored message, and every reply to `/sessions`, `/open` and `/stop`, is sent silently (FR.21.21): it appears in the topic and the unread count, but the phone makes no sound.
+3. In `Full` mode every entry is mirrored as before, still silently, except that a Mailbox Delivery is shown as a single `⚙️` line instead of the workers' full results (FR.21.23). In `Off` mode nothing is mirrored.
+4. A `notify_user` message (UC.21.1) is the only one that makes a sound.
+
+**Outcome:** Topics stay readable — one answer per turn by default — and the User's phone only makes a sound when a session actually needs them.
+
+## UC.21.12 — A long orchestration reaches the User only when they are needed
+
+**Trigger:** A Supervisor Session fans work out with `send_to_session` in `async` mode and/or arms self-wakes, while the User is away from the desktop.
+
+1. Each worker result reaches the supervisor as a Mailbox Delivery; results that arrive while the supervisor is busy are merged into one delivery turn (UC.15.1). Self-wakes fire as scheduled turns.
+2. None of these turns announces its completion — no Telegram ping, no desktop toast (FR.21.5) and no completion sound (FR.22).
+3. Every scheduled turn carries a hidden reminder (FR.21.24) that the User may not be watching: the supervisor calls `notify_user` once if — and only if — its reply needs the User to decide or act (UC.21.1, UC.21.2), and otherwise stays silent.
+4. In `AnswersOnly` mode the supervisor's topic receives one silent answer per delivery or wake turn (UC.21.11).
+
+**Outcome:** An orchestration with many workers rings the User's phone only at the moments it actually needs them (on 2026-10-28 that would have been about 5–6 pings for the day instead of 24, ISSUE.012).
+
 ---
 
 ## Out of scope for this use case set
 
 - Blocking "ask and wait for reply" behavior (see FR.21.3 rationale) — UC.21.2 is fire-and-forget by design.
 - Closing/archiving a session's topic when the session is deleted or hidden.
+- Rate limits, cooldowns, quiet hours or presence-aware suppression for `notify_user`, and redaction of secrets in mirrored text — declined in ISSUE.012.

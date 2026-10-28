@@ -887,6 +887,23 @@ Architect reported getting notified too often from subagents, even though FR.21.
 
 ---
 
+## Phase 35 — Notification noise (ISSUE.012)
+
+The Architect's phone rang about once a minute on 2026-10-28: 22 automatic `✅ finished` pings (18 noise) plus 209 audible mirror messages, against 2 genuine `notify_user` pings. Only `notify_user` may make a sound from now on. Use cases: `UC.21.1`, `UC.21.11`, `UC.21.12`, `UC.15.1`; test cases: `TC.21.2`, `TC.21.13`–`TC.21.17`, `TC.15.1`.
+
+- [ ] Docs drafted — ISSUE.012; FR.14.9, FR.15.1/15.3/15.11, new FR.15.12; FR.21 intro, FR.21.1/21.3/21.4/21.7/21.9/21.10, FR.21.5 (changed), new FR.21.21–FR.21.24; FR.22 intro; out-of-scope list; glossary; UC.21, new UC.15; TC.21, new TC.15 (written; awaiting Architect review)
+- [ ] Notification channels (FR.21.5): `SchedulerService` drops `INotificationService` and reports nothing; `INotificationService.ShowResult` → `ShowUserNotification(nodeId, title, message)`; `WindowsNotificationService` shows the `notify_user` message titled `{directory label} / {session name}`; delete `CompositeNotificationService` and register `WindowsNotificationService` as `INotificationService` in `App.axaml.cs`; `AgentMcpServer.NotifyUserAsync` drops Worker Sessions, then fans out to the Telegram Bridge and the toast and names the delivering channels in its result; relabel the Settings checkbox and hint
+- [ ] Silent delivery — `ITelegramClient.SendMessageAsync(…, disableNotification)`; only `NotifyAsync` sends with sound (FR.21.21)
+- [ ] Turn Completed event (with `cancelled` flag and the turn's error text) — `ISessionFileService.NotifyTurnCompleted`/`TurnCompleted`, relayed as `IDaemonClient.TurnCompleted` (`InProcDaemonClient` relay, `WireDaemonClient` declaration like `EntryAppended`); raised by `SessionTurnService.RunTurnAsync` and `TurnController.SendAsyncCore` (FR.21.22)
+- [ ] Mirror modes — `TelegramMirrorMode` setting (default `AnswersOnly`) + Settings → Telegram dropdown; per-session pending-answer logic in `TelegramBridgeService`, plus posting the turn's error text (usage limits must stay visible) unless it repeats the answer (FR.21.22)
+- [ ] Full-mode Mailbox Delivery one-liner (FR.21.23)
+- [ ] `InstructionOptionsModel.IsScheduledTurn` + `Constants.Instructions.ScheduledTurnNotifyReminder` + builder gating; set at both `RunTurnAsync` call sites (FR.21.24)
+- [ ] `cmx-orchestration` skill — supervisor guidance on delivery turns, self-wakes and `notify_user` (FR.15.11)
+- [ ] Mailbox coalescing — `ScheduleModel.IsMailboxDelivery`, `SchedulerService.AddOrMergeMailboxDelivery`, hold-while-busy in `Poll`, async `send_to_session` path switched to it, `mode` description updated (FR.15.3, FR.15.12)
+- [ ] Tests per TC.21.2, TC.21.13–TC.21.17 and TC.15.1; full suite green
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/RESEARCH.01.VS-MCP-Server-Automation-Approaches.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
