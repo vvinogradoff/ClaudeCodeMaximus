@@ -359,6 +359,11 @@ SESSION TRANSCRIPT TO COMPACT:
 			(`MaxOrchestrationDepth`) and concurrency (`MaxConcurrentWorkers`) limits are enforced —
 			expect an error if you nest or fan out too aggressively.
 
+			Worker results (async send_to_session) and wake-ups arrive as scheduled turns the user is not watching, and nothing tells the user that such a turn finished.
+			Call notify_user once, and only when the user must decide or act — never to narrate progress or each worker's arrival.
+			Keep delivery turns short.
+			Don't arm polling or "fallback" self-wakes to collect async results: they arrive on their own, and several results that arrive while you're busy are delivered together in one turn. Use a self-wake only for a real deadline, or as a long-interval check on a worker that may be stuck.
+
 			## As a worker
 
 			If you were spawned by another session (check `list_sessions` or just notice your prompt
