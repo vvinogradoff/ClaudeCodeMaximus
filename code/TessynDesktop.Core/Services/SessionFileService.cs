@@ -18,6 +18,16 @@ public sealed class SessionFileService : ISessionFileService
 
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 
+	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+
+	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText) =>
+		TurnCompleted?.Invoke(this, new SessionTurnCompletedEventArgs
+		{
+			FileName  = fileName,
+			Cancelled = cancelled,
+			ErrorText = errorText,
+		});
+
 	public string CreateSessionFile()
 	{
 		var timestamp = DateTime.UtcNow.ToString(Constants.SessionFileNameDateFormat);

@@ -88,6 +88,14 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 #pragma warning restore CS0067
 
+	/// <summary>
+	/// Not yet wired over TDCP (FR.21.22) — like <see cref="EntryAppended"/>, only
+	/// <see cref="InProcDaemonClient"/> relays it today, and subscribing here is a silent no-op.
+	/// </summary>
+#pragma warning disable CS0067 // Never raised until a TDCP push for turn completion exists — see doc comment.
+	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+#pragma warning restore CS0067
+
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 
 	/// <summary>

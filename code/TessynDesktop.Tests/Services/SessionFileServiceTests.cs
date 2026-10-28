@@ -129,6 +129,26 @@ public sealed class SessionFileServiceTests : IDisposable
 		Assert.Equal(string.Empty, received.Entry.Content);
 	}
 
+	// ── TurnCompleted (FR.21.22) ──────────────────────────────────────────────────
+
+	[Fact]
+	public void NotifyTurnCompleted_RaisesTurnCompleted_WritesNothing()
+	{
+		var fileName = _sut.CreateSessionFile();
+		_sut.AppendMessage(fileName, Constants.SessionFile.RoleAssistant, "answer");
+		var before = File.ReadAllText(_sut.GetFullPath(fileName));
+		SessionTurnCompletedEventArgs? received = null;
+		_sut.TurnCompleted += (_, e) => received = e;
+
+		_sut.NotifyTurnCompleted(fileName, cancelled: false, errorText: "You've hit your session limit");
+
+		Assert.NotNull(received);
+		Assert.Equal(fileName, received!.FileName);
+		Assert.False(received.Cancelled);
+		Assert.Equal("You've hit your session limit", received.ErrorText);
+		Assert.Equal(before, File.ReadAllText(_sut.GetFullPath(fileName)));
+	}
+
 	[Fact]
 	public void RewriteSessionFile_DoesNotRaiseEntryAppended()
 	{

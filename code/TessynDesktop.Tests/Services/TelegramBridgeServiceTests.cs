@@ -140,6 +140,10 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	public event EventHandler<TreeChangedEventArgs>? TreeChanged { add { } remove { } }
 	public event EventHandler? ScheduleChanged { add { } remove { } }
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
+	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+
+	public void RaiseTurnCompleted(string fileName, bool cancelled = false, string? errorText = null) =>
+		TurnCompleted?.Invoke(this, new SessionTurnCompletedEventArgs { FileName = fileName, Cancelled = cancelled, ErrorText = errorText });
 
 	public void RaiseEntryAppended(string fileName, string role, string content) =>
 		EntryAppended?.Invoke(this, new SessionEntryAppendedEventArgs

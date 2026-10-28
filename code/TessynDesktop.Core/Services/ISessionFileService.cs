@@ -14,6 +14,15 @@ public interface ISessionFileService
 	/// <summary>Raised after a single entry is appended (FR.21.9) — see <see cref="SessionEntryAppendedEventArgs"/>.</summary>
 	event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 
+	/// <summary>Raised once per turn after its last entry is appended (FR.21.22) — see <see cref="SessionTurnCompletedEventArgs"/>.</summary>
+	event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+
+	/// <summary>
+	/// Reports that a turn on <paramref name="fileName"/> has ended and all of its entries have been
+	/// appended (FR.21.22). Raises <see cref="TurnCompleted"/>; writes nothing to the file.
+	/// </summary>
+	void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText);
+
 	/// <summary>Creates a new session file and returns its bare file name.</summary>
 	string CreateSessionFile();
 

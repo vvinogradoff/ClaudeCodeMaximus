@@ -242,6 +242,10 @@ internal sealed class InProcFakeFileService : ISessionFileService
     public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
     public void RaiseEntryAppended(SessionEntryAppendedEventArgs e) => EntryAppended?.Invoke(this, e);
 
+    public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+    public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText) =>
+        TurnCompleted?.Invoke(this, new SessionTurnCompletedEventArgs { FileName = fileName, Cancelled = cancelled, ErrorText = errorText });
+
     public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName) { LastReadEntriesFile = fileName; return ReadEntriesResult; }
     public bool SessionFileExists(string fileName) { LastFileExistsFile = fileName; return SessionFileExistsResult; }
     public string GetFullPath(string fileName) { LastGetFullPathFile = fileName; return GetFullPathResult; }
@@ -664,6 +668,20 @@ public sealed class InProcDaemonClientTests
         Assert.NotNull(received);
         Assert.Equal("f.txt", received!.FileName);
         Assert.Equal("hi", received.Entry.Content);
+    }
+
+    [Fact]
+    public void TurnCompleted_FiresWhenFileServiceRaisesEvent()
+    {
+        SessionTurnCompletedEventArgs? received = null;
+        _client.TurnCompleted += (_, e) => received = e;
+
+        _fileService.NotifyTurnCompleted("f.txt", cancelled: false, errorText: "You've hit your session limit");
+
+        Assert.NotNull(received);
+        Assert.Equal("f.txt", received!.FileName);
+        Assert.False(received.Cancelled);
+        Assert.Equal("You've hit your session limit", received.ErrorText);
     }
 
     // ── Initialization ───────────────────────────────────────────────────────────

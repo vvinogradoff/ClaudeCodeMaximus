@@ -19,6 +19,8 @@ internal sealed class FakeSessionFileService : ISessionFileService
     public Dictionary<string, IReadOnlyList<SessionEntryModel>> Entries { get; } = new();
 
     public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
+    public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
+    public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText) { }
 
     public string CreateSessionFile() => $"session-{_counter++}.txt";
     public bool SessionFileExists(string fileName) => FileExists;

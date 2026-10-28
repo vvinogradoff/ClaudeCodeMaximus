@@ -73,6 +73,13 @@ internal sealed class FakeFileServiceForTurnService : ISessionFileService
 	public IReadOnlyList<SessionEntryModel> ReadEntriesResult { get; set; } = Array.Empty<SessionEntryModel>();
 
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
+	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
+
+	/// <summary>Every <see cref="NotifyTurnCompleted"/> call, with <see cref="AppendCalls"/>.Count at the time — so tests can check it came after the turn's last entry (FR.21.22).</summary>
+	public List<(string fileName, bool cancelled, string? errorText, int appendCountAtCall)> TurnCompletedCalls { get; } = new();
+
+	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText)
+		=> TurnCompletedCalls.Add((fileName, cancelled, errorText, AppendCalls.Count));
 
 	public string CreateSessionFile() => throw new NotImplementedException();
 

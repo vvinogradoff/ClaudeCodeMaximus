@@ -40,6 +40,7 @@ public sealed class InProcDaemonClient : IDaemonClient
 		_registry.TreeChanged += (s, e) => TreeChanged?.Invoke(this, e);
 		_scheduler.ScheduleChanged += (s, e) => ScheduleChanged?.Invoke(this, e);
 		_fileService.EntryAppended += (s, e) => EntryAppended?.Invoke(this, e);
+		_fileService.TurnCompleted += (s, e) => TurnCompleted?.Invoke(this, e);
 	}
 
 	// ── Change notification ─────────────────────────────────────────────────────
@@ -47,6 +48,7 @@ public sealed class InProcDaemonClient : IDaemonClient
 	public event EventHandler<TreeChangedEventArgs>? TreeChanged;
 	public event EventHandler? ScheduleChanged;
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
+	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 

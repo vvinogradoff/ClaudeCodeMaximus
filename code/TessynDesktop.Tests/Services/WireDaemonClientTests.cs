@@ -62,6 +62,7 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public event EventHandler<TreeChangedEventArgs>? TreeChanged;
     public event EventHandler?                       ScheduleChanged;
     public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
+    public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
 
     public void RaiseTreeChanged(TreeChangedEventArgs e) => TreeChanged?.Invoke(this, e);
     public void RaiseScheduleChanged()                   => ScheduleChanged?.Invoke(this, EventArgs.Empty);

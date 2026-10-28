@@ -35,6 +35,9 @@ public interface IDaemonClient
 	/// <summary>Raised when a single entry is appended to a session file (FR.21.9) — the tap point external mirrors (e.g. the Telegram bridge) subscribe to instead of depending on ISessionFileService directly.</summary>
 	event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 
+	/// <summary>Raised once per finished turn, after its last entry was appended (FR.21.22) — relayed from ISessionFileService.TurnCompleted so the Telegram bridge can post a turn's final answer.</summary>
+	event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+
 	// ── Tree read ───────────────────────────────────────────────────────────────
 
 	/// <summary>The authoritative directory list (source of truth for the tree projection).</summary>
