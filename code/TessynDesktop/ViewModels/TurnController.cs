@@ -620,16 +620,21 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		}
 		finally
 		{
-			// FR.21.22 — once per send, after its last entry is appended and before the lock is
-			// released (the next queued send resets _sendErrorText as soon as it acquires the lock).
-			if (lockAcquired) sendErrorText = sendCancelled ? null : _sendErrorText;
-			try
+			// FR.21.22 — once per send that actually ran, after its last entry is appended and before
+			// the lock is released (the next queued send resets _sendErrorText as soon as it acquires
+			// the lock). A send stopped while still queued behind another turn never ran one, so it
+			// reports nothing — reporting it cancelled would drop the running turn's pending answer.
+			if (lockAcquired || turnLock == null)
 			{
-				_fileService.NotifyTurnCompleted(_node.FileName, sendCancelled, sendErrorText);
-			}
-			catch (Exception ex)
-			{
-				_log.Warning(ex, "TurnCompleted handler failed for session {FileName}", _node.FileName);
+				sendErrorText = sendCancelled ? null : _sendErrorText;
+				try
+				{
+					_fileService.NotifyTurnCompleted(_node.FileName, sendCancelled, sendErrorText);
+				}
+				catch (Exception ex)
+				{
+					_log.Warning(ex, "TurnCompleted handler failed for session {FileName}", _node.FileName);
+				}
 			}
 
 			if (lockAcquired) turnLock?.Release();
