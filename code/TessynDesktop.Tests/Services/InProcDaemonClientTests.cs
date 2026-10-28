@@ -220,6 +220,7 @@ internal sealed class InProcFakeScheduler : ISchedulerService
     public void Stop() { }
 
     public void AddSchedule(ScheduleModel schedule) { AddedSchedule = schedule; _schedules.Add(schedule); }
+    public void AddOrMergeMailboxDelivery(string supervisorNodeId, string workerName, string resultText) { }
     public bool RemoveSchedule(string scheduleId) { RemovedScheduleId = scheduleId; return RemoveResult; }
 
     public IReadOnlyList<ScheduleModel> GetSchedules(string? targetNodeId = null)

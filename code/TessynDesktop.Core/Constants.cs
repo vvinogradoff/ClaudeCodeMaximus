@@ -300,6 +300,12 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// <summary>Prefix used in async mailbox messages posted to the supervisor.</summary>
 		public const string WorkerFinishedPrefix = "[Worker finished]";
 
+		/// <summary>Note of a Mailbox Delivery carrying one worker result (FR.15.3). Arg 0 = worker name.</summary>
+		public const string MailboxSingleNoteFormat = "Worker '{0}' result";
+
+		/// <summary>Note of a Mailbox Delivery that merged several worker results (FR.15.12). Arg 0 = count, arg 1 = names in arrival order.</summary>
+		public const string MailboxMergedNoteFormat = "Worker results ({0}): {1}";
+
 		/// <summary>Timeout in ms for a scheduled turn; after this the turn is cancelled.</summary>
 		public const int ScheduledTurnTimeoutMs = 3_600_000; // 1 hour
 

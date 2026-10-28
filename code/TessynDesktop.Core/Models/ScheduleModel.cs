@@ -36,4 +36,10 @@ public sealed class ScheduleModel
 
 	/// <summary>Maximum number of times a cron schedule fires before auto-cancellation (0 = unlimited).</summary>
 	public int MaxFires { get; set; }
+
+	/// <summary>
+	/// True for a Mailbox Delivery (FR.15.3, FR.15.12): the delay-0 schedule that hands async worker results to
+	/// their supervisor. Such a schedule is merged into while pending and held while its target is busy.
+	/// </summary>
+	public bool IsMailboxDelivery { get; set; }
 }

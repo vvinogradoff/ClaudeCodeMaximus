@@ -5,7 +5,7 @@ using Serilog;
 namespace TessynDesktop.Services;
 
 /// <summary>
-/// Windows toast notification implementation using Microsoft.Toolkit.Uwp.Notifications (FR.16).
+/// Windows toast notification implementation using Microsoft.Toolkit.Uwp.Notifications (FR.16, FR.21.5).
 /// Works for unpackaged desktop apps on Windows 10 1809+ and Windows 11.
 /// If the toast system cannot be initialised (e.g. running in a restricted context) all calls
 /// are silently swallowed so the app continues functioning normally.
@@ -57,36 +57,31 @@ public sealed class WindowsNotificationService : INotificationService
 		}
 	}
 
-	public void ShowResult(string nodeId, string sessionName, string assistantText, string? note)
+	public bool ShowUserNotification(string nodeId, string title, string message)
 	{
 		if (!_appSettings.Settings.NotificationsEnabled)
-			return;
-
-		if (string.IsNullOrWhiteSpace(assistantText))
-			return;
+			return false;
 
 		try
 		{
-			var body = assistantText.Length > Constants.Notifications.MaxBodyChars
-				? assistantText[..Constants.Notifications.MaxBodyChars].TrimEnd() + "…"
-				: assistantText;
+			var body = message.Length > Constants.Notifications.MaxBodyChars
+				? message[..Constants.Notifications.MaxBodyChars].TrimEnd() + "…"
+				: message;
 
-			var builder = new ToastContentBuilder()
+			new ToastContentBuilder()
 				.AddArgument(Constants.Notifications.ArgNodeId, nodeId)
-				.AddText(sessionName)   // line 1 — title (bold)
-				.AddText(body);          // line 2 — body
-
-			if (!string.IsNullOrWhiteSpace(note))
-				builder.AddAttributionText(note);
-
-			builder.Show();
-			_log.Debug("Toast shown for session {Name} node {NodeId}", sessionName, nodeId);
+				.AddText(title)   // line 1 — title (bold)
+				.AddText(body)    // line 2 — body
+				.Show();
+			_log.Debug("Toast shown for node {NodeId}: {Title}", nodeId, title);
+			return true;
 		}
 		catch (Exception ex)
 		{
 			// Toast system unavailable (e.g. running in a session without notification support).
-			// Log once and carry on — this must never crash the app.
-			_log.Warning(ex, "Could not show toast notification for session {Name}", sessionName);
+			// Log and carry on — this must never crash the app.
+			_log.Warning(ex, "Could not show toast notification for {Title}", title);
+			return false;
 		}
 	}
 }

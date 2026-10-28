@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using TessynDesktop.Models;
@@ -22,7 +23,6 @@ public sealed class SchedulerService : ISchedulerService
 	private readonly IAppSettingsService    _appSettings;
 	private readonly ISessionTurnService    _turnService;
 	private readonly ISessionRegistry       _registry;
-	private readonly INotificationService   _notifications;
 
 	private Timer? _timer;
 	private readonly object _lock = new();
@@ -32,13 +32,11 @@ public sealed class SchedulerService : ISchedulerService
 	public SchedulerService(
 		IAppSettingsService appSettings,
 		ISessionTurnService turnService,
-		ISessionRegistry registry,
-		INotificationService notifications)
+		ISessionRegistry registry)
 	{
 		_appSettings   = appSettings;
 		_turnService   = turnService;
 		_registry      = registry;
-		_notifications = notifications;
 	}
 
 	public void Start()
@@ -66,6 +64,45 @@ public sealed class SchedulerService : ISchedulerService
 
 		_log.Information("Schedule added: {Id} kind={Kind} target={Target} fireAt={At}",
 			schedule.ScheduleId, schedule.Kind, schedule.TargetNodeId, schedule.FireAtUtc);
+		ScheduleChanged?.Invoke(this, EventArgs.Empty);
+	}
+
+	public void AddOrMergeMailboxDelivery(string supervisorNodeId, string workerName, string resultText)
+	{
+		var block = $"{Constants.Agent.WorkerFinishedPrefix} {workerName}\n{resultText}";
+		ScheduleModel schedule;
+
+		// The merge and Poll/FireScheduleAsync's removal both run under _lock, so a result either lands in a
+		// delivery that has not been claimed yet or finds none and starts a new one — never lost, never twice.
+		lock (_lock)
+		{
+			var pending = _appSettings.Settings.Schedules.FirstOrDefault(
+				s => s.IsMailboxDelivery && s.TargetNodeId == supervisorNodeId);
+			if (pending != null)
+			{
+				pending.Prompt = $"{pending.Prompt}\n\n{block}";
+				pending.Note   = BuildMergedNote(pending.Note, workerName);
+				schedule = pending;
+			}
+			else
+			{
+				schedule = new ScheduleModel
+				{
+					ScheduleId        = Guid.NewGuid().ToString("N")[..8],
+					TargetNodeId      = supervisorNodeId,
+					Prompt            = block,
+					Note              = string.Format(Constants.Agent.MailboxSingleNoteFormat, workerName),
+					Kind              = ScheduleKind.Delay,
+					FireAtUtc         = DateTimeOffset.UtcNow,
+					IsMailboxDelivery = true,
+				};
+				_appSettings.Settings.Schedules.Add(schedule);
+			}
+		}
+		_appSettings.Save();
+
+		_log.Information("Mailbox delivery {Id} for supervisor {Target}: {Note}",
+			schedule.ScheduleId, supervisorNodeId, schedule.Note);
 		ScheduleChanged?.Invoke(this, EventArgs.Empty);
 	}
 
@@ -136,13 +173,34 @@ public sealed class SchedulerService : ISchedulerService
 		_appSettings.Save();
 	}
 
-	private void Poll()
+	private static readonly Regex _singleNote = new(
+		"^Worker '(?<name>.*)' result$", RegexOptions.Singleline | RegexOptions.Compiled);
+	private static readonly Regex _mergedNote = new(
+		@"^Worker results \((?<n>\d+)\): (?<names>.*)$", RegexOptions.Singleline | RegexOptions.Compiled);
+
+	/// <summary>Builds the note of a mailbox delivery after one more worker result was merged into it (FR.15.12).</summary>
+	private static string BuildMergedNote(string currentNote, string workerName)
+	{
+		var merged = _mergedNote.Match(currentNote);
+		if (merged.Success)
+			return string.Format(Constants.Agent.MailboxMergedNoteFormat,
+				int.Parse(merged.Groups["n"].Value) + 1, $"{merged.Groups["names"].Value}, {workerName}");
+
+		var single = _singleNote.Match(currentNote);
+		var first  = single.Success ? single.Groups["name"].Value : currentNote;
+		return string.Format(Constants.Agent.MailboxMergedNoteFormat, 2, $"{first}, {workerName}");
+	}
+
+	internal void Poll()
 	{
 		var now = DateTimeOffset.UtcNow;
 		List<ScheduleModel> due;
 		lock (_lock)
 			due = _appSettings.Settings.Schedules
 				.Where(s => s.FireAtUtc.HasValue && s.FireAtUtc.Value <= now)
+				// FR.14.9, FR.15.12: a Mailbox Delivery stays pending while its target has a turn in progress,
+				// so results that keep arriving merge into it instead of each queueing on the turn lock.
+				.Where(s => !(s.IsMailboxDelivery && _turnService.GetTurnLock(s.TargetNodeId).CurrentCount == 0))
 				.ToList();
 
 		foreach (var s in due)
@@ -179,7 +237,9 @@ public sealed class SchedulerService : ISchedulerService
 			else
 			{
 				shouldRemove = true;
-				_appSettings.Settings.Schedules.Remove(schedule);
+				// A mailbox delivery already claimed by another fire must not be delivered twice.
+				if (!_appSettings.Settings.Schedules.Remove(schedule) && schedule.IsMailboxDelivery)
+					return;
 			}
 		}
 		_appSettings.Save();
@@ -190,23 +250,14 @@ public sealed class SchedulerService : ISchedulerService
 			? schedule.Prompt
 			: $"{Constants.Agent.ScheduledTurnSystemPrefix} {schedule.Note}\n{schedule.Prompt}";
 
-		TurnResultModel? result = null;
 		using var cts = new CancellationTokenSource(Constants.Agent.ScheduledTurnTimeoutMs);
 		try
 		{
-			result = await _turnService.RunTurnAsync(targetNode, prompt, TurnSource.Scheduled, cts.Token);
+			await _turnService.RunTurnAsync(targetNode, prompt, TurnSource.Scheduled, cts.Token);
 		}
 		catch (Exception ex)
 		{
 			_log.Warning(ex, "SchedulerService: turn failed for schedule {Id}", schedule.ScheduleId);
-		}
-
-		if (result != null && !result.IsError && !string.IsNullOrWhiteSpace(result.AssistantText))
-		{
-			// Suppress the toast when the session is currently visible (selected) in the UI.
-			var isSelected = _registry.SelectedNodeId == targetNode.NodeId;
-			if (!isSelected)
-				_notifications.ShowResult(targetNode.NodeId, targetNode.Name, result.AssistantText, schedule.Note);
 		}
 
 		if (!shouldRemove)

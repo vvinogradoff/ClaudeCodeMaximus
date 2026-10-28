@@ -23,6 +23,12 @@ public interface ISchedulerService
 	/// <summary>Adds a schedule, persists immediately, and wakes the timer if needed.</summary>
 	void AddSchedule(ScheduleModel schedule);
 
+	/// <summary>
+	/// Hands an async worker's result to its supervisor as a Mailbox Delivery (FR.15.3, FR.15.12): appends it to
+	/// the supervisor's pending delivery if there is one, otherwise adds a new delay-0 delivery.
+	/// </summary>
+	void AddOrMergeMailboxDelivery(string supervisorNodeId, string workerName, string resultText);
+
 	/// <summary>Removes a schedule by ID. Returns true if found and removed.</summary>
 	bool RemoveSchedule(string scheduleId);
 

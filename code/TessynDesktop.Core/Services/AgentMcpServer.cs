@@ -36,6 +36,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly TdcpServer                _tdcpServer;
 	private readonly IMcpConfigMerger          _configMerger;
 	private readonly ITelegramBridgeService    _telegramBridge;
+	private readonly INotificationService      _notifications;
+	private readonly IDirectoryLabelService    _labelService;
 
 	// Enforced concurrent worker cap (FR.15.5).
 	private readonly SemaphoreSlim _workerSemaphore =
@@ -59,7 +61,9 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		IClaudeModelService modelService,
 		TdcpServer tdcpServer,
 		IMcpConfigMerger configMerger,
-		ITelegramBridgeService telegramBridge)
+		ITelegramBridgeService telegramBridge,
+		INotificationService notifications,
+		IDirectoryLabelService labelService)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -70,6 +74,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_tdcpServer   = tdcpServer;
 		_configMerger = configMerger;
 		_telegramBridge = telegramBridge;
+		_notifications  = notifications;
+		_labelService   = labelService;
 	}
 
 	public void Start()
@@ -396,13 +402,13 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"Return token usage and remaining budget for the caller's active orchestrations (FR.15.6).",
 				EmptyObjectSchema()),
 			BuildToolDef("notify_user",
-				"Send the user a notification or plain-text question via the Telegram Bridge (FR.21.3) — only for the top-level session the user is talking to. Never call from a worker session (its own call is dropped outright, FR.21.19) or a Task-tool subagent — report back to your supervisor instead. Use only when the user must personally act or decide; one message per need, not progress updates. Fire-and-forget — there is no blocking 'ask and wait' tool; end your turn after calling this and the user's reply will arrive as your next prompt.",
+				"Send the user a notification or plain-text question — to their Telegram (FR.21.3) and as a desktop notification (FR.21.5) — only for the top-level session the user is talking to. Never call from a worker session (its own call is dropped outright, FR.21.19) or a Task-tool subagent — report back to your supervisor instead. Use only when the user must personally act or decide; one message per need, not progress updates. Fire-and-forget — there is no blocking 'ask and wait' tool; end your turn after calling this and the user's reply will arrive as your next prompt.",
 				NotifyUserSchema()));
 
 		return new JsonObject { ["tools"] = tools };
 	}
 
-	private async Task<JsonNode> HandleToolCallAsync(JsonNode? @params, SessionNodeModel callerNode)
+	internal async Task<JsonNode> HandleToolCallAsync(JsonNode? @params, SessionNodeModel callerNode)
 	{
 		var name      = @params?["name"]?.GetValue<string>()
 		                ?? throw new McpToolException("Missing tool name");
@@ -632,18 +638,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				{
 					var result = await _turnService.Value.RunTurnAsync(
 						targetSnapshot, augmentedPrompt, TurnSource.Orchestrated);
-					var workerName = targetSnapshot.Name;
-					var mailboxMsg = $"{Constants.Agent.WorkerFinishedPrefix} {workerName}\n{result.AssistantText}";
-					var mailbox    = new ScheduleModel
-					{
-						ScheduleId   = Guid.NewGuid().ToString("N")[..8],
-						TargetNodeId = callerSnapshot.NodeId,
-						Prompt       = mailboxMsg,
-						Note         = $"Worker '{workerName}' result",
-						Kind         = ScheduleKind.Delay,
-						FireAtUtc    = DateTimeOffset.UtcNow,
-					};
-					_scheduler.Value.AddSchedule(mailbox);
+					_scheduler.Value.AddOrMergeMailboxDelivery(
+						callerSnapshot.NodeId, targetSnapshot.Name, result.AssistantText);
 				}
 				catch (Exception ex)
 				{
@@ -933,10 +929,36 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		var message = args?["message"]?.GetValue<string>()
 		              ?? throw new McpToolException("'message' is required");
 
-		var sent = await _telegramBridge.NotifyAsync(callerNode.NodeId, message);
-		return BuildTextContent(sent
-			? "Notification sent."
-			: "Notification not sent — the Telegram Bridge is disabled or unreachable (see application logs).");
+		// FR.21.19: a Worker Session's call is dropped before any channel.
+		if (callerNode.OrchestrationDepth > 0)
+			return BuildTextContent("Notification not sent — worker sessions cannot notify the user. Report to your supervisor instead.");
+
+		// FR.21.5: Telegram and the desktop toast are independent — a failure in one must not stop the other.
+		var channels = new List<string>();
+		try
+		{
+			if (await _telegramBridge.NotifyAsync(callerNode.NodeId, message))
+				channels.Add("Telegram");
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "notify_user: Telegram channel failed for node {NodeId}", callerNode.NodeId);
+		}
+
+		try
+		{
+			var title = $"{_labelService.GetLabel(callerNode.WorkingDirectory)} / {callerNode.Name}";
+			if (_notifications.ShowUserNotification(callerNode.NodeId, title, message))
+				channels.Add("desktop");
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "notify_user: desktop channel failed for node {NodeId}", callerNode.NodeId);
+		}
+
+		return BuildTextContent(channels.Count > 0
+			? $"Notification sent ({string.Join(", ", channels)})."
+			: "Notification not sent — neither the Telegram Bridge nor desktop notifications are enabled or reachable (see application logs).");
 	}
 
 	// ── Helpers: tier enforcement + output shaping ────────────────────────────
@@ -1145,7 +1167,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			"properties": {
 				"nodeId":       { "type": "string", "description": "NodeId of the session to resume." },
 				"prompt":       { "type": "string" },
-				"mode":         { "type": "string", "enum": ["wait", "async"], "description": "wait=block for result, async=return immediately and post result via mailbox." },
+				"mode":         { "type": "string", "enum": ["wait", "async"], "description": "wait=block for result, async=return immediately and post the result back to you via mailbox. Async results that arrive while you are busy are delivered together in one turn once you are idle." },
 				"outputFormat": { "type": "string", "description": "Optional markdown/free-text description of the desired response shape. Advisory guidance appended to the prompt — not validated (FR.15.7)." }
 			},
 			"required": ["nodeId", "prompt"]
@@ -1252,7 +1274,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		{
 			"type": "object",
 			"properties": {
-				"message": { "type": "string", "description": "Notification or question text to send to the user's Telegram." }
+				"message": { "type": "string", "description": "Notification or question text to send to the user (Telegram and desktop)." }
 			},
 			"required": ["message"]
 		}

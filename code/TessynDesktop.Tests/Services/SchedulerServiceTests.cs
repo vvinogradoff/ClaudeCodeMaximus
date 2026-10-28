@@ -18,6 +18,9 @@ internal sealed class FakeTurnService : ISessionTurnService
     public List<(string nodeId, string prompt)> Calls { get; } = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    /// <summary>The single turn lock every node shares; tests hold it to simulate a turn in progress.</summary>
+    public SemaphoreSlim TurnLock => _lock;
+
     public SemaphoreSlim GetTurnLock(string nodeId) => _lock;
 
     public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt,
@@ -80,12 +83,6 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
     public bool IsSessionRunning(string nodeId) => false;
 }
 
-internal sealed class FakeNotificationService : INotificationService
-{
-    public void ShowResult(string nodeId, string sessionName, string assistantText, string? note) { }
-    public void RegisterActivationHandler(Action<string> onNodeIdActivated) { }
-}
-
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 /// <remarks>Created by Claude</remarks>
@@ -95,7 +92,6 @@ public sealed class SchedulerServiceTests : IDisposable
     private readonly AppSettingsService _appSettings;
     private readonly FakeTurnService _turnService;
     private readonly FakeSessionRegistry _registry;
-    private readonly FakeNotificationService _notifications;
     private SchedulerService? _service;
 
     public SchedulerServiceTests()
@@ -105,11 +101,10 @@ public sealed class SchedulerServiceTests : IDisposable
         _appSettings   = new AppSettingsService(_tempDir);
         _turnService   = new FakeTurnService();
         _registry      = new FakeSessionRegistry();
-        _notifications = new FakeNotificationService();
     }
 
     private SchedulerService BuildService() =>
-        _service = new SchedulerService(_appSettings, _turnService, _registry, _notifications);
+        _service = new SchedulerService(_appSettings, _turnService, _registry);
 
     public void Dispose()
     {
@@ -327,5 +322,217 @@ public sealed class SchedulerServiceTests : IDisposable
             .FirstOrDefault(s => s.ScheduleId == schedule.ScheduleId);
 
         Assert.Null(remaining);
+    }
+
+    // ── TC.21.17: no completion notification ──────────────────────────────────
+
+    [Fact]
+    public async Task FireSchedule_CompletedTurn_RunsTurnWithoutAnyNotification()
+    {
+        // SchedulerService no longer has a notification dependency; a finished turn just runs and the
+        // one-shot schedule is removed as before.
+        const string nodeId = "node-no-notify";
+        _registry.AddNode(MakeNode(nodeId));
+        var svc = BuildService();
+        var schedule = OneShotSchedule(nodeId, DateTimeOffset.UtcNow.AddMinutes(-1));
+        _appSettings.Settings.Schedules.Add(schedule);
+
+        svc.Start();
+        await Task.Delay(300);
+
+        Assert.Contains(_turnService.Calls, c => c.nodeId == nodeId);
+        Assert.DoesNotContain(_appSettings.Settings.Schedules, s => s.ScheduleId == schedule.ScheduleId);
+    }
+
+    // ── TC.15.1: mailbox coalescing ───────────────────────────────────────────
+
+    [Fact]
+    public void AddOrMergeMailboxDelivery_NoPendingDelivery_AddsDelayZeroMailboxSchedule()
+    {
+        var svc = BuildService();
+
+        svc.AddOrMergeMailboxDelivery("sup", "W1", "result one");
+
+        var s = Assert.Single(_appSettings.Settings.Schedules);
+        Assert.Equal("sup", s.TargetNodeId);
+        Assert.True(s.IsMailboxDelivery);
+        Assert.Equal(ScheduleKind.Delay, s.Kind);
+        Assert.Equal("Worker 'W1' result", s.Note);
+        Assert.Equal("[Worker finished] W1\nresult one", s.Prompt);
+    }
+
+    [Fact]
+    public void AddOrMergeMailboxDelivery_PendingDeliveryExists_AppendsResultAndUpdatesNote()
+    {
+        var svc = BuildService();
+        svc.AddOrMergeMailboxDelivery("sup", "W1", "one");
+        svc.AddOrMergeMailboxDelivery("sup", "W2", "two");
+
+        var s = Assert.Single(_appSettings.Settings.Schedules);
+        Assert.Equal("[Worker finished] W1\none\n\n[Worker finished] W2\ntwo", s.Prompt);
+        Assert.Equal("Worker results (2): W1, W2", s.Note);
+
+        svc.AddOrMergeMailboxDelivery("sup", "W3", "three");
+        Assert.Equal("Worker results (3): W1, W2, W3", Assert.Single(_appSettings.Settings.Schedules).Note);
+    }
+
+    [Fact]
+    public void AddOrMergeMailboxDelivery_DifferentSupervisors_NotMerged()
+    {
+        var svc = BuildService();
+        svc.AddOrMergeMailboxDelivery("sup-a", "W1", "one");
+        svc.AddOrMergeMailboxDelivery("sup-b", "W2", "two");
+
+        Assert.Equal(2, _appSettings.Settings.Schedules.Count);
+        Assert.All(_appSettings.Settings.Schedules, s => Assert.Equal(1, CountOccurrences(s.Prompt, "[Worker finished]")));
+    }
+
+    [Fact]
+    public async Task AddOrMergeMailboxDelivery_ConcurrentCalls_NoResultLost()
+    {
+        const int n = 50;
+        var svc = BuildService();
+
+        await Task.WhenAll(Enumerable.Range(0, n).Select(i =>
+            Task.Run(() => svc.AddOrMergeMailboxDelivery("sup", $"W{i}", $"text-{i}"))));
+
+        var all = string.Join("\n", _appSettings.Settings.Schedules.Select(s => s.Prompt));
+        for (var i = 0; i < n; i++)
+            Assert.Equal(1, CountOccurrences(all, $"[Worker finished] W{i}\ntext-{i}"));
+    }
+
+    [Fact]
+    public async Task Poll_DueMailboxDelivery_TargetBusy_StaysPendingAndRunsNoTurn()
+    {
+        const string nodeId = "node-busy";
+        _registry.AddNode(MakeNode(nodeId));
+        var svc = BuildService();
+        svc.AddOrMergeMailboxDelivery(nodeId, "W1", "one");
+
+        await _turnService.TurnLock.WaitAsync();
+        try
+        {
+            svc.Poll();
+            await Task.Delay(300);
+
+            Assert.Single(_appSettings.Settings.Schedules);
+            Assert.Empty(_turnService.Calls);
+        }
+        finally
+        {
+            _turnService.TurnLock.Release();
+        }
+    }
+
+    [Fact]
+    public async Task Poll_DueMailboxDelivery_TargetIdle_FiresOneTurnWithAllMergedResults()
+    {
+        const string nodeId = "node-merge-fire";
+        _registry.AddNode(MakeNode(nodeId));
+        var svc = BuildService();
+        svc.AddOrMergeMailboxDelivery(nodeId, "W1", "one");
+        svc.AddOrMergeMailboxDelivery(nodeId, "W2", "two");
+
+        await _turnService.TurnLock.WaitAsync();
+        svc.Poll();
+        await Task.Delay(300);
+        Assert.Empty(_turnService.Calls);
+        Assert.Single(_appSettings.Settings.Schedules);
+        _turnService.TurnLock.Release();
+        svc.Poll();
+
+        await WaitForAsync(() => _turnService.Calls.Count >= 1);
+        await Task.Delay(200);
+
+        var call = Assert.Single(_turnService.Calls);
+        Assert.Contains("[Worker finished] W1\none", call.prompt);
+        Assert.Contains("[Worker finished] W2\ntwo", call.prompt);
+        Assert.True(call.prompt.IndexOf("W1", StringComparison.Ordinal) < call.prompt.IndexOf("W2", StringComparison.Ordinal));
+        Assert.Contains("Worker results (2): W1, W2", call.prompt);
+        Assert.Empty(_appSettings.Settings.Schedules);
+    }
+
+    [Fact]
+    public async Task Poll_ResultArrivingAfterDeliveryFired_StartsNewDelivery()
+    {
+        const string nodeId = "node-after-fire";
+        _registry.AddNode(MakeNode(nodeId));
+        var svc = BuildService();
+        svc.AddOrMergeMailboxDelivery(nodeId, "W1", "one");
+
+        svc.Poll();
+        await WaitForAsync(() => _turnService.Calls.Count >= 1);
+        await WaitForAsync(() => _appSettings.Settings.Schedules.Count == 0);
+
+        svc.AddOrMergeMailboxDelivery(nodeId, "W2", "two");
+
+        var s = Assert.Single(_appSettings.Settings.Schedules);
+        Assert.Equal("Worker 'W2' result", s.Note);
+        Assert.DoesNotContain("W1", s.Prompt);
+    }
+
+    [Fact]
+    public async Task Poll_OrdinaryDueSchedule_TargetBusy_StillFiresAndWaitsOnLock()
+    {
+        const string nodeId = "node-ordinary-busy";
+        _registry.AddNode(MakeNode(nodeId));
+        var svc = BuildService();
+        var schedule = OneShotSchedule(nodeId, DateTimeOffset.UtcNow.AddMinutes(-1));
+        _appSettings.Settings.Schedules.Add(schedule);
+
+        await _turnService.TurnLock.WaitAsync();
+        try
+        {
+            svc.Poll();
+            // FR.14.9: a non-mailbox schedule is claimed (removed) immediately even though the target is busy.
+            await WaitForAsync(() => _appSettings.Settings.Schedules.Count == 0);
+            Assert.DoesNotContain(_appSettings.Settings.Schedules, s => s.ScheduleId == schedule.ScheduleId);
+        }
+        finally
+        {
+            _turnService.TurnLock.Release();
+        }
+    }
+
+    [Fact]
+    public void ScheduleModel_IsMailboxDelivery_PersistsThroughSaveAndLoad()
+    {
+        var svc = BuildService();
+        svc.AddOrMergeMailboxDelivery("sup", "W1", "one");
+        _appSettings.Save();
+
+        var reloaded = new AppSettingsService(_tempDir);
+        reloaded.Load();
+
+        var s = Assert.Single(reloaded.Settings.Schedules);
+        Assert.True(s.IsMailboxDelivery);
+    }
+
+    [Fact]
+    public void ScheduleModel_LegacyScheduleWithoutField_LoadsAsOrdinarySchedule()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(OneShotSchedule("n", DateTimeOffset.UtcNow));
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        node.Remove(nameof(ScheduleModel.IsMailboxDelivery));
+
+        var loaded = System.Text.Json.JsonSerializer.Deserialize<ScheduleModel>(node.ToJsonString());
+
+        Assert.NotNull(loaded);
+        Assert.False(loaded!.IsMailboxDelivery);
+    }
+
+    private static int CountOccurrences(string text, string needle)
+    {
+        var count = 0;
+        var i = 0;
+        while ((i = text.IndexOf(needle, i, StringComparison.Ordinal)) >= 0) { count++; i += needle.Length; }
+        return count;
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (!condition() && DateTime.UtcNow < deadline)
+            await Task.Delay(25);
     }
 }
