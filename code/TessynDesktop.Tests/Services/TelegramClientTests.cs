@@ -59,7 +59,7 @@ public sealed class TelegramClientTests
 		_handler.Responder = _ => JsonResponse("""{"ok":true,"result":{}}""");
 		var client = MakeClient();
 
-		await client.SendMessageAsync(-100123, "hello", messageThreadId: 42);
+		await client.SendMessageAsync(-100123, "hello", messageThreadId: 42, disableNotification: true);
 
 		var body = _handler.LastRequestBody!;
 		Assert.Contains("\"chat_id\":-100123", body);
@@ -73,11 +73,30 @@ public sealed class TelegramClientTests
 		_handler.Responder = _ => JsonResponse("""{"ok":true,"result":{}}""");
 		var client = MakeClient();
 
-		await client.SendMessageAsync(-100123, "hello", messageThreadId: null);
+		await client.SendMessageAsync(-100123, "hello", messageThreadId: null, disableNotification: true);
 
 		Assert.DoesNotContain("message_thread_id", _handler.LastRequestBody!);
 	}
 
+	[Fact]
+	public async Task SendMessageAsync_DisableNotificationTrue_SendsDisableNotificationTrue()
+	{
+		_handler.Responder = _ => JsonResponse("""{"ok":true,"result":{}}""");
+
+		await MakeClient().SendMessageAsync(-100123, "hello", messageThreadId: 42, disableNotification: true);
+
+		Assert.Contains("\"disable_notification\":true", _handler.LastRequestBody!);
+	}
+
+	[Fact]
+	public async Task SendMessageAsync_DisableNotificationFalse_SendsDisableNotificationFalse()
+	{
+		_handler.Responder = _ => JsonResponse("""{"ok":true,"result":{}}""");
+
+		await MakeClient().SendMessageAsync(-100123, "hello", messageThreadId: 42, disableNotification: false);
+
+		Assert.Contains("\"disable_notification\":false", _handler.LastRequestBody!);
+	}
 	[Fact]
 	public async Task CreateForumTopicAsync_ParsesMessageThreadIdFromResponse()
 	{
@@ -164,7 +183,7 @@ public sealed class TelegramClientTests
 			Content = new StringContent("""{"ok":false,"error_code":400,"description":"Bad Request"}"""),
 		};
 
-		await Assert.ThrowsAsync<InvalidOperationException>(() => MakeClient().SendMessageAsync(-100123, "hi", null));
+		await Assert.ThrowsAsync<InvalidOperationException>(() => MakeClient().SendMessageAsync(-100123, "hi", null, disableNotification: true));
 	}
 
 	[Fact]
@@ -227,7 +246,7 @@ public sealed class TelegramClientTests
 		var client = MakeClient();
 
 		var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-			() => client.SendMessageAsync(1, "hi", null));
+			() => client.SendMessageAsync(1, "hi", null, disableNotification: true));
 		Assert.Contains("chat not found", ex.Message);
 	}
 
@@ -237,7 +256,7 @@ public sealed class TelegramClientTests
 		_tokenStore.Token = null;
 		var client = MakeClient();
 
-		await Assert.ThrowsAsync<InvalidOperationException>(() => client.SendMessageAsync(1, "hi", null));
+		await Assert.ThrowsAsync<InvalidOperationException>(() => client.SendMessageAsync(1, "hi", null, disableNotification: true));
 		Assert.Null(_handler.LastRequest);
 	}
 

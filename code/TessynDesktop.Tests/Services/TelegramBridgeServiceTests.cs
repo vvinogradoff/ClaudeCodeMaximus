@@ -15,14 +15,14 @@ namespace TessynDesktop.Tests.Services;
 
 internal sealed class FakeTelegramClientForBridge : ITelegramClient
 {
-	public List<(long chatId, string text, int? threadId)> SentMessages { get; } = new();
+	public List<(long chatId, string text, int? threadId, bool disableNotification)> SentMessages { get; } = new();
 	public List<(long chatId, string name)> CreatedTopics { get; } = new();
 	public Queue<IReadOnlyList<TelegramUpdate>> UpdateBatches { get; } = new();
 	public int NextThreadId { get; set; } = 100;
 
-	public Task SendMessageAsync(long chatId, string text, int? messageThreadId, CancellationToken ct = default)
+	public Task SendMessageAsync(long chatId, string text, int? messageThreadId, bool disableNotification, CancellationToken ct = default)
 	{
-		lock (SentMessages) SentMessages.Add((chatId, text, messageThreadId));
+		lock (SentMessages) SentMessages.Add((chatId, text, messageThreadId, disableNotification));
 		return Task.CompletedTask;
 	}
 
@@ -247,6 +247,7 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 		_appSettings.Settings.TelegramEnabled = true;
 		_appSettings.Settings.TelegramChatId = -1001;
 		_appSettings.Settings.TelegramAllowedUserIds = new List<long> { 555 };
+		_appSettings.Settings.TelegramMirrorMode = TelegramMirrorMode.Full; // the FR.21.9 mirror tests; mode-specific tests override
 
 		_client = new FakeTelegramClientForBridge();
 		_fileService = new SessionFileService(_appSettings);
@@ -760,6 +761,300 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 		await svc.ReconciliationTask;
 
 		Assert.True(_appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey("node-worker"));
+	}
+
+	// ── Silent delivery (FR.21.21) ────────────────────────────────────────────────
+
+	private SessionNodeModel StartMirror(TelegramMirrorMode mode, int orchestrationDepth = 0)
+	{
+		_appSettings.Settings.TelegramMirrorMode = mode;
+		var node = MakeNode("node-1", orchestrationDepth: orchestrationDepth);
+		_daemon.AddNode(node);
+		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-1"] = 42;
+		BuildService().Start();
+		return node;
+	}
+
+	[Fact]
+	public async Task NotifyAsync_SendsWithSound_AndMentionPrefix()
+	{
+		_appSettings.Settings.TelegramMentionHandle = "@harmlessevil";
+		var svc = BuildService();
+		_daemon.AddNode(MakeNode("node-1"));
+
+		await svc.NotifyAsync("node-1", "hello");
+
+		Assert.Single(_client.SentMessages);
+		Assert.False(_client.SentMessages[0].disableNotification);
+		Assert.Equal("@harmlessevil hello", _client.SentMessages[0].text);
+	}
+
+	[Fact]
+	public async Task Mirror_FullMode_EveryPostIsSilent()
+	{
+		var node = StartMirror(TelegramMirrorMode.Full);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleUser, "typed");
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleSystem, "note");
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, new string('a', 5000));
+
+		await WaitUntil(() => _client.SentMessages.Count >= 4);
+		Assert.All(_client.SentMessages, m =>
+		{
+			Assert.True(m.disableNotification);
+			Assert.DoesNotContain("@", m.text);
+		});
+	}
+
+	[Fact]
+	public async Task Mirror_AnswersOnlyMode_AnswerPostIsSilent()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "answer");
+		_daemon.RaiseTurnCompleted(node.FileName);
+
+		await WaitUntil(() => _client.SentMessages.Count == 1);
+		Assert.True(_client.SentMessages[0].disableNotification);
+	}
+
+	[Fact]
+	public async Task HandleUpdate_CommandReplies_AreSilent()
+	{
+		_daemon.Summaries.Add(new SessionSummaryModel("node-1", "Favorite", "Dir", @"C:\a", IsRunning: false, IsResumable: true, LastPrompt: null, IsFavorite: true));
+		_daemon.AddNode(MakeNode("node-1", "Favorite"));
+		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-1"] = 42;
+		_client.UpdateBatches.Enqueue(new[]
+		{
+			new TelegramUpdate(1, ChatId: -1001, FromUserId: 555, Text: "/sessions", MessageThreadId: null),
+			new TelegramUpdate(2, ChatId: -1001, FromUserId: 555, Text: "/open Favorite", MessageThreadId: null),
+			new TelegramUpdate(3, ChatId: -1001, FromUserId: 555, Text: "/stop", MessageThreadId: 42),
+			new TelegramUpdate(4, ChatId: -1001, FromUserId: 555, Text: "gibberish", MessageThreadId: 999),
+		});
+
+		BuildService().Start();
+		await WaitUntil(() => _client.SentMessages.Count >= 4);
+
+		Assert.All(_client.SentMessages, m => Assert.True(m.disableNotification));
+	}
+
+	// ── Mirror modes (FR.21.22) ───────────────────────────────────────────────────
+
+	[Fact]
+	public async Task AnswersOnly_TurnWithSeveralAssistantEntries_PostsOnlyTheLastOnTurnCompleted()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "one");
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "two");
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "three");
+		await Task.Delay(200);
+		Assert.Empty(_client.SentMessages);
+
+		_daemon.RaiseTurnCompleted(node.FileName);
+
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+		await Task.Delay(200);
+		Assert.Single(_client.SentMessages);
+		Assert.Equal("three", _client.SentMessages[0].text);
+	}
+
+	[Fact]
+	public async Task AnswersOnly_UserAndSystemEntries_NotPosted()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleUser, "typed");
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleSystem, "note");
+		_daemon.RaiseTurnCompleted(node.FileName);
+
+		await Task.Delay(200);
+		Assert.Empty(_client.SentMessages);
+	}
+
+	[Fact]
+	public async Task AnswersOnly_CancelledTurn_PostsNothingAndClearsPending()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "half an answer");
+		_daemon.RaiseTurnCompleted(node.FileName, cancelled: true);
+		await Task.Delay(200);
+		Assert.Empty(_client.SentMessages);
+
+		_daemon.RaiseTurnCompleted(node.FileName); // nothing left pending from the cancelled turn
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "next answer");
+		_daemon.RaiseTurnCompleted(node.FileName);
+
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+		await Task.Delay(200);
+		Assert.Single(_client.SentMessages);
+		Assert.Equal("next answer", _client.SentMessages[0].text);
+	}
+
+	[Fact]
+	public async Task AnswersOnly_TurnCompletedWithoutAssistantEntry_PostsNothing()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+
+		_daemon.RaiseTurnCompleted(node.FileName);
+
+		await Task.Delay(200);
+		Assert.Empty(_client.SentMessages);
+	}
+
+	[Fact]
+	public async Task AnswersOnly_UsageLimitTurn_PostsLimitTextOnce()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+		const string limit = "You've hit your session limit · resets 1:50pm";
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, limit);
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleSystem, limit);
+		_daemon.RaiseTurnCompleted(node.FileName, errorText: limit + " ");
+
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+		await Task.Delay(200);
+		Assert.Single(_client.SentMessages);
+		Assert.Equal(limit, _client.SentMessages[0].text);
+		Assert.True(_client.SentMessages[0].disableNotification);
+	}
+
+	[Fact]
+	public async Task AnswersOnly_ErrorTextWithoutAssistantEntry_PostsErrorTextWithGearPrefix()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+
+		_daemon.RaiseTurnCompleted(node.FileName, errorText: "boom");
+
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+		await Task.Delay(200);
+		Assert.Single(_client.SentMessages);
+		Assert.Equal("⚙️ boom", _client.SentMessages[0].text);
+	}
+
+	[Fact]
+	public async Task AnswersOnly_AnswerThenDifferentErrorText_PostsBothInOrder()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "partial answer");
+		_daemon.RaiseTurnCompleted(node.FileName, errorText: "boom");
+
+		await WaitUntil(() => _client.SentMessages.Count >= 2);
+		Assert.Equal("partial answer", _client.SentMessages[0].text);
+		Assert.Equal("⚙️ boom", _client.SentMessages[1].text);
+	}
+
+	[Fact]
+	public async Task AnswersOnly_EntryOutsideTurn_SupersededByNextTurnsAnswer()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "stray");
+		await Task.Delay(200);
+		Assert.Empty(_client.SentMessages);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "real answer");
+		_daemon.RaiseTurnCompleted(node.FileName);
+
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+		await Task.Delay(200);
+		Assert.Single(_client.SentMessages);
+		Assert.Equal("real answer", _client.SentMessages[0].text);
+	}
+
+	[Fact]
+	public async Task AnswersOnly_LongAnswer_ChunkedLikeFullMode()
+	{
+		var node = StartMirror(TelegramMirrorMode.AnswersOnly);
+		var longContent = new string('a', 5000);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, longContent);
+		_daemon.RaiseTurnCompleted(node.FileName);
+
+		await WaitUntil(() => _client.SentMessages.Count >= 2);
+		Assert.All(_client.SentMessages, m => Assert.True(m.text.Length <= Constants.Telegram.MaxMessageLength));
+		Assert.Equal(longContent, string.Concat(_client.SentMessages.Select(m => m.text)));
+	}
+
+	[Fact]
+	public void AnswersOnly_IsDefaultMode()
+	{
+		Assert.Equal(TelegramMirrorMode.AnswersOnly, new AppSettingsModel().TelegramMirrorMode);
+	}
+
+	[Fact]
+	public async Task Off_PostsNothing_ButNotifyStillSends()
+	{
+		var node = StartMirror(TelegramMirrorMode.Off);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleUser, "typed");
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "answer");
+		_daemon.RaiseTurnCompleted(node.FileName, errorText: "boom");
+		await Task.Delay(200);
+		Assert.Empty(_client.SentMessages);
+
+		var sent = await _service!.NotifyAsync("node-1", "ping");
+
+		Assert.True(sent);
+		Assert.Single(_client.SentMessages);
+	}
+
+	[Theory]
+	[InlineData(TelegramMirrorMode.Full)]
+	[InlineData(TelegramMirrorMode.AnswersOnly)]
+	[InlineData(TelegramMirrorMode.Off)]
+	public async Task TurnCompleted_WorkerSession_Ignored(TelegramMirrorMode mode)
+	{
+		var node = StartMirror(mode, orchestrationDepth: 1);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, "worker output");
+		_daemon.RaiseTurnCompleted(node.FileName, errorText: "boom");
+
+		await Task.Delay(200);
+		Assert.Empty(_client.SentMessages);
+	}
+
+	// ── Mailbox Deliveries in Full mode (FR.21.23) ────────────────────────────────
+
+	[Fact]
+	public async Task Full_MailboxDeliveryEntry_PostedAsFirstLineWithGearPrefix()
+	{
+		var node = StartMirror(TelegramMirrorMode.Full);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleUser,
+			"[Scheduled] Worker 'W2' result\n[Worker finished] W2\nlong result text");
+
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+		await Task.Delay(200);
+		Assert.Single(_client.SentMessages);
+		Assert.Equal("⚙️ [Scheduled] Worker 'W2' result", _client.SentMessages[0].text);
+	}
+
+	[Fact]
+	public async Task Full_MergedMailboxDelivery_PostedAsOneLine()
+	{
+		var node = StartMirror(TelegramMirrorMode.Full);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleUser,
+			"[Scheduled] Worker results (2): W2, W3\n[Worker finished] W2\nresult 2\n[Worker finished] W3\nresult 3");
+
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+		await Task.Delay(200);
+		Assert.Single(_client.SentMessages);
+		Assert.Equal("⚙️ [Scheduled] Worker results (2): W2, W3", _client.SentMessages[0].text);
+	}
+
+	[Fact]
+	public async Task Full_OrdinaryUserEntry_StillPostedWithUserPrefix()
+	{
+		var node = StartMirror(TelegramMirrorMode.Full);
+
+		_daemon.RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleUser, "line one\nline two");
+
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+		Assert.Equal("USER: line one\nline two", _client.SentMessages[0].text);
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────

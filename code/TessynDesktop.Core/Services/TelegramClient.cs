@@ -22,11 +22,11 @@ public sealed class TelegramClient : ITelegramClient
 		_tokenStore = tokenStore;
 	}
 
-	public async Task SendMessageAsync(long chatId, string text, int? messageThreadId, CancellationToken ct = default)
+	public async Task SendMessageAsync(long chatId, string text, int? messageThreadId, bool disableNotification, CancellationToken ct = default)
 	{
 		var payload = messageThreadId is null
-			? new { chat_id = chatId, text }
-			: (object)new { chat_id = chatId, text, message_thread_id = messageThreadId.Value };
+			? new { chat_id = chatId, text, disable_notification = disableNotification }
+			: (object)new { chat_id = chatId, text, message_thread_id = messageThreadId.Value, disable_notification = disableNotification };
 
 		using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 		using var response = await _httpClient.PostAsync(BuildUrl("sendMessage"), content, ct);

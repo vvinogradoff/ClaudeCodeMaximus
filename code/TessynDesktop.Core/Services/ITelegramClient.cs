@@ -14,8 +14,12 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public interface ITelegramClient
 {
-	/// <summary>Sends a text message. <paramref name="messageThreadId"/> null = the chat's General topic.</summary>
-	Task SendMessageAsync(long chatId, string text, int? messageThreadId, CancellationToken ct = default);
+	/// <summary>
+	/// Sends a text message. <paramref name="messageThreadId"/> null = the chat's General topic.
+	/// <paramref name="disableNotification"/> is sent as the Bot API's <c>disable_notification</c> (FR.21.21);
+	/// it has no default so every call site states whether the message may make a sound.
+	/// </summary>
+	Task SendMessageAsync(long chatId, string text, int? messageThreadId, bool disableNotification, CancellationToken ct = default);
 
 	/// <summary>Creates a forum topic in a Topics-enabled supergroup. Returns its message_thread_id.</summary>
 	Task<int> CreateForumTopicAsync(long chatId, string name, CancellationToken ct = default);

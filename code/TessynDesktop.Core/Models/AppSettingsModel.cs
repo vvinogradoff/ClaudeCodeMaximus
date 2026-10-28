@@ -158,12 +158,14 @@ public sealed class AppSettingsModel
 	public long TelegramUpdateOffset { get; set; }
 
 	/// <summary>
-	/// Telegram @handle (e.g. "@harmlessevil") prefixed onto notification pings — <c>notify_user</c>
-	/// and scheduled/orchestrated completion pings (FR.21.10). Empty means no prefix. Never applied
+	/// Telegram @handle (e.g. "@harmlessevil") prefixed onto <c>notify_user</c> pings (FR.21.10). Empty means no prefix. Never applied
 	/// to mirrored conversation text (FR.21.9), only to pings, so routine back-and-forth doesn't page
 	/// the user on every line.
 	/// </summary>
 	public string TelegramMentionHandle { get; set; } = string.Empty;
+
+	/// <summary>What the Universal I/O Mirror posts to a session's topic (FR.21.22). Defaults to the final answer of each turn only.</summary>
+	public TelegramMirrorMode TelegramMirrorMode { get; set; } = TelegramMirrorMode.AnswersOnly;
 
 	/// <summary>
 	/// Path to the .wav file played by the Session Completion Sound (FR.22.4). Default is a

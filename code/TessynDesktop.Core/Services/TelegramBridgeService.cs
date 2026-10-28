@@ -41,6 +41,11 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	// before routing a turn, consumed (and removed) by the first matching append the mirror sees.
 	private readonly ConcurrentDictionary<string, string> _suppressNextUserAppend = new();
 
+	// FR.21.22 AnswersOnly: per session, the most recent ROLE=ASSISTANT entry not yet posted. Writers
+	// (OnEntryAppended) replace via the indexer and TurnCompleted takes via TryRemove — both atomic on
+	// the ConcurrentDictionary, so an entry is posted at most once even if the two events race.
+	private readonly ConcurrentDictionary<string, SessionEntryModel> _pendingAnswerByNodeId = new();
+
 	private CancellationTokenSource? _cts;
 
 	/// <summary>Logger override (tests capture entries with a hand-written sink); defaults to the static Serilog logger.</summary>
@@ -93,6 +98,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 		_inbox.CleanupOlderThan(TimeSpan.FromDays(Constants.Telegram.InboxRetentionDays)); // FR.21.14
 
 		_daemon.EntryAppended += OnEntryAppended;
+		_daemon.TurnCompleted += OnTurnCompleted;
 
 		_cts = new CancellationTokenSource();
 		var token = _cts.Token;
@@ -113,6 +119,8 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	public void Stop()
 	{
 		_daemon.EntryAppended -= OnEntryAppended;
+		_daemon.TurnCompleted -= OnTurnCompleted;
+		_pendingAnswerByNodeId.Clear();
 		_cts?.Cancel();
 		_cts = null;
 	}
@@ -350,7 +358,8 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			var handle = _appSettings.Settings.TelegramMentionHandle;
 			var text = string.IsNullOrWhiteSpace(handle) ? message : $"{handle} {message}";
 
-			await _client.SendMessageAsync(_appSettings.Settings.TelegramChatId, text, threadId);
+			// The only audible message the bridge sends (FR.21.21).
+			await _client.SendMessageAsync(_appSettings.Settings.TelegramChatId, text, threadId, disableNotification: false);
 			return true;
 		}
 		catch (Exception ex)
@@ -380,10 +389,69 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			&& suppressedText == e.Entry.Content)
 			return; // Echo suppression — this is the Telegram-origin message the user just typed.
 
-		_ = MirrorEntryAsync(node, e.Entry);
+		switch (_appSettings.Settings.TelegramMirrorMode) // read per entry — a mode change applies from the next entry on
+		{
+			case TelegramMirrorMode.Off:
+				return;
+
+			case TelegramMirrorMode.AnswersOnly:
+				// FR.21.22 — keep only the latest assistant entry; OnTurnCompleted posts it.
+				if (e.Entry.Role == Constants.SessionFile.RoleAssistant)
+					_pendingAnswerByNodeId[node.NodeId] = e.Entry;
+				return;
+		}
+
+		_ = MirrorEntryAsync(node, FormatEntry(e.Entry));
 	}
 
-	private async Task MirrorEntryAsync(SessionNodeModel node, SessionEntryModel entry)
+	/// <summary>FR.21.9 prefixes; a Mailbox Delivery's USER entry shrinks to its first line (FR.21.23).</summary>
+	private static string FormatEntry(SessionEntryModel entry)
+	{
+		if (entry.Role == Constants.SessionFile.RoleUser && IsMailboxDelivery(entry.Content))
+			return "⚙️ " + entry.Content.Split('\n')[0].TrimEnd('\r');
+
+		var prefix = entry.Role switch
+		{
+			Constants.SessionFile.RoleUser => "USER: ",
+			Constants.SessionFile.RoleSystem => "⚙️ ",
+			_ => string.Empty, // ASSISTANT — unprefixed, reads as the bot itself is Claude
+		};
+		return prefix + entry.Content;
+	}
+
+	private static bool IsMailboxDelivery(string content) =>
+		content.Split('\n').Any(l => l.StartsWith(Constants.Agent.WorkerFinishedPrefix, StringComparison.Ordinal));
+
+	// ── Turn Completed (FR.21.22, AnswersOnly) ──────────────────────────────────
+
+	private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
+	{
+		if (!_appSettings.Settings.TelegramEnabled)
+			return;
+
+		var node = _daemon.FindSessionByFileName(e.FileName);
+		if (node == null)
+			return;
+
+		var taken = _pendingAnswerByNodeId.TryRemove(node.NodeId, out var answer);
+		if (node.OrchestrationDepth > 0) // FR.21.19 — Worker Sessions are never mirrored
+			return;
+		if (_appSettings.Settings.TelegramMirrorMode != TelegramMirrorMode.AnswersOnly || e.Cancelled)
+			return; // Full already posted everything; Off posts nothing; a cancelled turn drops its answer
+
+		var texts = new List<string>(2);
+		if (taken && answer != null)
+			texts.Add(answer.Content);
+		if (!string.IsNullOrWhiteSpace(e.ErrorText)
+			&& !(taken && answer != null && answer.Content.Trim() == e.ErrorText.Trim()))
+			texts.Add("⚙️ " + e.ErrorText);
+		if (texts.Count == 0)
+			return;
+
+		_ = MirrorEntryAsync(node, texts.ToArray());
+	}
+
+	private async Task MirrorEntryAsync(SessionNodeModel node, params string[] texts)
 	{
 		try
 		{
@@ -391,15 +459,9 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			if (!_appSettings.Settings.TelegramTopicThreadIdsByNodeId.TryGetValue(node.NodeId, out var threadId))
 				return;
 
-			var prefix = entry.Role switch
-			{
-				Constants.SessionFile.RoleUser => "USER: ",
-				Constants.SessionFile.RoleSystem => "⚙️ ",
-				_ => string.Empty, // ASSISTANT — unprefixed, reads as the bot itself is Claude
-			};
-
-			foreach (var chunk in ChunkMessage(prefix + entry.Content, Constants.Telegram.MaxMessageLength))
-				await _client.SendMessageAsync(_appSettings.Settings.TelegramChatId, chunk, threadId);
+			foreach (var text in texts)
+				foreach (var chunk in ChunkMessage(text, Constants.Telegram.MaxMessageLength))
+					await _client.SendMessageAsync(_appSettings.Settings.TelegramChatId, chunk, threadId, disableNotification: true);
 		}
 		catch (Exception ex)
 		{
@@ -549,14 +611,14 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 
 		if (isPlainText && text.Equals("/sessions", StringComparison.OrdinalIgnoreCase))
 		{
-			await _client.SendMessageAsync(update.ChatId, BuildSessionsList(), update.MessageThreadId);
+			await _client.SendMessageAsync(update.ChatId, BuildSessionsList(), update.MessageThreadId, disableNotification: true);
 			return;
 		}
 
 		if (isPlainText && text.StartsWith("/open", StringComparison.OrdinalIgnoreCase))
 		{
 			var arg = text.Length > 5 ? text[5..].Trim() : string.Empty;
-			await _client.SendMessageAsync(update.ChatId, BuildOpenReply(arg), update.MessageThreadId);
+			await _client.SendMessageAsync(update.ChatId, BuildOpenReply(arg), update.MessageThreadId, disableNotification: true);
 			return;
 		}
 
@@ -568,7 +630,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			{
 				var cancelled = _daemon.CancelTurn(nodeId);
 				await _client.SendMessageAsync(update.ChatId,
-					cancelled ? "Turn cancelled." : "No turn is currently running.", threadId);
+					cancelled ? "Turn cancelled." : "No turn is currently running.", threadId, disableNotification: true);
 				return;
 			}
 
@@ -580,7 +642,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 
 		await _client.SendMessageAsync(update.ChatId,
 			"Unrecognized command or topic. Use /sessions to list active sessions, /open <name> to read one, or reply inside a session's own topic (/stop cancels its running turn).",
-			update.MessageThreadId);
+			update.MessageThreadId, disableNotification: true);
 	}
 
 	/// <summary>
@@ -594,7 +656,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			var node = _daemon.FindSessionByNodeId(nodeId);
 			if (node == null)
 			{
-				await _client.SendMessageAsync(chatId, "This session no longer exists.", messageThreadId);
+				await _client.SendMessageAsync(chatId, "This session no longer exists.", messageThreadId, disableNotification: true);
 				return;
 			}
 
@@ -616,7 +678,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			{
 				_suppressNextUserAppend.TryRemove(nodeId, out _);
 				_log.Warning(ex, "TelegramBridgeService: turn failed for node {NodeId}", nodeId);
-				try { await _client.SendMessageAsync(chatId, $"⚠️ Turn failed: {ex.Message}", messageThreadId); }
+				try { await _client.SendMessageAsync(chatId, $"⚠️ Turn failed: {ex.Message}", messageThreadId, disableNotification: true); }
 				catch { /* best effort */ }
 			}
 		});

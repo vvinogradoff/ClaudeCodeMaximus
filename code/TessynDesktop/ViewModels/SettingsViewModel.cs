@@ -31,6 +31,7 @@ public sealed class SettingsViewModel : ViewModelBase
 	private string _telegramChatId;
 	private string _telegramAllowedUserIds;
 	private string _telegramMentionHandle;
+	private TelegramMirrorMode _telegramMirrorMode;
 	private string _telegramBotTokenInput = string.Empty;
 	private string _telegramTokenStatus;
 
@@ -100,7 +101,7 @@ public sealed class SettingsViewModel : ViewModelBase
 		}
 	}
 
-	/// <summary>Whether desktop toast notifications are enabled for completed scheduled turns (FR.16.5).</summary>
+	/// <summary>Whether a desktop toast shows the same messages that ping Telegram when a session calls notify_user (FR.21.5).</summary>
 	public bool NotificationsEnabled
 	{
 		get => _notificationsEnabled;
@@ -147,7 +148,32 @@ public sealed class SettingsViewModel : ViewModelBase
 		set => this.RaiseAndSetIfChanged(ref _telegramAllowedUserIds, value);
 	}
 
-	/// <summary>@handle prefixed onto notification pings — never onto mirrored conversation text (FR.21.10).</summary>
+	/// <summary>Dropdown labels for <see cref="TelegramMirrorMode"/>, in enum order (FR.21.7).</summary>
+	public string[] TelegramMirrorModeOptions { get; } = ["Full", "Answers only", "Off"];
+
+	/// <summary>What the Telegram mirror posts (FR.21.22); committed on the main Save button like the mention handle (FR.21.7).</summary>
+	public TelegramMirrorMode TelegramMirrorMode
+	{
+		get => _telegramMirrorMode;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _telegramMirrorMode, value);
+			this.RaisePropertyChanged(nameof(TelegramMirrorModeIndex));
+		}
+	}
+
+	/// <summary>ComboBox selection index of <see cref="TelegramMirrorMode"/> (options are in enum order).</summary>
+	public int TelegramMirrorModeIndex
+	{
+		get => (int)_telegramMirrorMode;
+		set
+		{
+			if (Enum.IsDefined(typeof(TelegramMirrorMode), value))
+				TelegramMirrorMode = (TelegramMirrorMode)value;
+		}
+	}
+
+	/// <summary>@handle prefixed onto notify_user pings — never onto mirrored conversation text (FR.21.10).</summary>
 	public string TelegramMentionHandle
 	{
 		get => _telegramMentionHandle;
@@ -286,6 +312,7 @@ public sealed class SettingsViewModel : ViewModelBase
 		_telegramChatId = appSettings.Settings.TelegramChatId == 0 ? string.Empty : appSettings.Settings.TelegramChatId.ToString();
 		_telegramAllowedUserIds = string.Join(", ", appSettings.Settings.TelegramAllowedUserIds);
 		_telegramMentionHandle = appSettings.Settings.TelegramMentionHandle;
+		_telegramMirrorMode = appSettings.Settings.TelegramMirrorMode;
 		_telegramTokenStatus = telegramTokenStore.Load() is null ? "Not set" : "Configured";
 
 		var colors = _isDarkTheme ? appSettings.Settings.DarkColors : appSettings.Settings.LightColors;
@@ -428,6 +455,7 @@ public sealed class SettingsViewModel : ViewModelBase
 			.Select(id => id!.Value)
 			.ToList();
 		_appSettings.Settings.TelegramMentionHandle = _telegramMentionHandle;
+		_appSettings.Settings.TelegramMirrorMode = _telegramMirrorMode;
 		_appSettings.Settings.Theme = _isDarkTheme ? "Dark" : "Light";
 
 		// Save colors to the appropriate theme
