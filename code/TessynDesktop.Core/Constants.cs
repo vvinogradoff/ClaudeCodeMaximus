@@ -117,7 +117,7 @@ public static class Constants
 			"`mcp__" + Agent.McpServerName + "__send_to_session` to send prompts (use `wait` mode for sequential work, `async` for parallel fan-out; supports `outputFormat` arg for a markdown shape hint), " +
 			"`mcp__" + Agent.McpServerName + "__read_session` to retrieve results, " +
 			"`mcp__" + Agent.McpServerName + "__stop_session` to cancel a running turn, " +
-			"`mcp__" + Agent.McpServerName + "__list_sessions` to inspect the session tree, " +
+			"`mcp__" + Agent.McpServerName + "__list_sessions` to find sessions (one page, newest first: your project, with your own workers under you; narrow with `query`, `running` or `scope`), " +
 			"`mcp__" + Agent.McpServerName + "__orchestrate_parallel` for concurrent fan-out over a task array (returns all results together as one markdown document), " +
 			"`mcp__" + Agent.McpServerName + "__orchestrate_pipeline` for pipelined fan-out where items flow through stages independently (no barrier; returns one markdown document), " +
 			"`mcp__" + Agent.McpServerName + "__workflow_phase` to mark a named phase for progress tracking in the UI, " +
@@ -288,6 +288,24 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// </summary>
 		public const int DefaultModelTier = 2;
 
+		/// <summary>Rows per <c>list_sessions</c> page when the caller gives no <c>limit</c> (FR.15.13).</summary>
+		public const int ListSessionsDefaultLimit = 30;
+
+		/// <summary>Upper clamp for the <c>list_sessions</c> <c>limit</c> (FR.15.13).</summary>
+		public const int ListSessionsMaxLimit = 200;
+
+		/// <summary>Session names in <c>list_sessions</c> rows are cut to this many characters (FR.15.13).</summary>
+		public const int ListSessionsNameMaxLength = 60;
+
+		/// <summary>Minimum length of a printed Short Node Id (FR.15.13).</summary>
+		public const int ShortNodeIdMinLength = 8;
+
+		/// <summary>Minimum length of a NodeId prefix accepted by tool arguments (FR.15.13).</summary>
+		public const int NodeIdPrefixMinLength = 6;
+
+		/// <summary>Maximum matches listed when a NodeId prefix is ambiguous (FR.15.13).</summary>
+		public const int AmbiguousNodeIdMaxMatches = 5;
+
 		/// <summary>MCP JSON-RPC protocol version string. Must match what the claude CLI sends in its initialize request.</summary>
 		public const string ProtocolVersion = "2025-11-25";
 
@@ -351,10 +369,13 @@ SESSION TRANSCRIPT TO COMPACT:
 			structured (data files, generated code, a big table), tell it to write a file in the working
 			directory and return the path instead of inlining the content.
 
-			Other tools: `list_sessions` to inspect the tree before deciding new-vs-resume;
-			`read_session` to pull a worker's transcript directly; `stop_session` to cancel a running
-			turn; `set_session_model` to change a child's model mid-orchestration (tier-enforced);
-			`workflow_phase`/`workflow_log` to mark progress visible in the session tree UI;
+			Other tools: `list_sessions` to find your workers before deciding new-vs-resume — with no
+			arguments it lists your project's sessions newest first, with your own workers nested under
+			your row; narrow or page with `query`, `running`, `activeWithinHours`, `scope`
+			(`children`/`subtree` of a `nodeId`, or `all` projects) and `offset`, and pass the short ids
+			it prints to any tool that takes a session id; `read_session` to pull a worker's transcript
+			directly; `stop_session` to cancel a running turn; `set_session_model` to change a child's
+			model mid-orchestration (tier-enforced); `workflow_phase`/`workflow_log` to mark progress visible in the session tree UI;
 			`budgetTokens` on the fan-out tools plus `get_budget` to track token spend. Depth
 			(`MaxOrchestrationDepth`) and concurrency (`MaxConcurrentWorkers`) limits are enforced —
 			expect an error if you nest or fan out too aggressively.
@@ -371,8 +392,9 @@ SESSION TRANSCRIPT TO COMPACT:
 
 			## As a worker
 
-			If you were spawned by another session (check `list_sessions` or just notice your prompt
-			came with a specific, scoped task), you're a worker in someone else's orchestration:
+			If your prompt is a specific, scoped task sent by another session, you're a worker in
+			someone else's orchestration (the `You:` line of `list_sessions` confirms it — no need for
+			a wider listing):
 			- Return concise markdown as your final response. Honor any `outputFormat` guidance in the
 			  prompt. If your result is large or structured, write it to a file in your working
 			  directory and return the path rather than inlining it.

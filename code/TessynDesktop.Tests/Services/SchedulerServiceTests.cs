@@ -77,6 +77,18 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
     public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) { }
     public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group, int orchestrationDepth = 0, string? supervisorNodeId = null) => null;
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => new();
+    public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId) =>
+        new() { Scope = query.Scope, Sections = Array.Empty<SessionListSectionModel>(), Rows = Array.Empty<SessionListRowModel>(), TotalRows = 0, Offset = 0, Limit = query.Limit };
+    public NodeIdResolutionModel ResolveNodeId(string idOrPrefix)
+    {
+        lock (_nodes)
+        {
+            var exact = _nodes.FirstOrDefault(n => n.NodeId == idOrPrefix);
+            return exact != null
+                ? new NodeIdResolutionModel { Status = NodeIdResolutionStatus.Resolved, NodeId = exact.NodeId }
+                : new NodeIdResolutionModel { Status = NodeIdResolutionStatus.NotFound };
+        }
+    }
     public IReadOnlySet<string> CollectAllClaudeSessionIds() => new HashSet<string>();
     public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session) => ("", "");
     public void SetSessionRunning(string nodeId, bool isRunning) { }

@@ -38,6 +38,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly ITelegramBridgeService    _telegramBridge;
 	private readonly INotificationService      _notifications;
 	private readonly IDirectoryLabelService    _labelService;
+	private readonly SessionListFormatter      _listFormatter = new();
+	private readonly SessionListText           _text          = new();
 
 	// Enforced concurrent worker cap (FR.15.5).
 	private readonly SemaphoreSlim _workerSemaphore =
@@ -369,8 +371,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"Cancel a schedule by its ID.",
 				CancelScheduleSchema()),
 			BuildToolDef("list_sessions",
-				"List all sessions in the tree with their status.",
-				EmptyObjectSchema()),
+				"Find sessions. With no arguments: your project's top-level sessions plus you and your own workers (nested under you), newest first, 30 rows per page. Each row: <id> <name> <age> [flags]; flags: running, fav, no-resume (next turn starts a fresh Claude session seeded from the transcript), N workers, worker of <id>, [other directory], (you). Narrow with query/running/activeWithinHours, widen with scope=all, see a session's workers with scope=children|subtree nodeId=<id>, page with offset. Short ids work wherever a session id is taken.",
+				ListSessionsSchema()),
 			BuildToolDef("spawn_session",
 				"Create a new persistent session node and optionally run the first turn. Model is tier-enforced (FR.16).",
 				SpawnSessionSchema()),
@@ -419,7 +421,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			"schedule_wake"        => await ScheduleWakeAsync(arguments, callerNode),
 			"list_schedules"       => ListSchedules(arguments, callerNode),
 			"cancel_schedule"      => CancelSchedule(arguments),
-			"list_sessions"        => await ListSessionsAsync(),
+			"list_sessions"        => ListSessions(arguments, callerNode),
 			"spawn_session"        => await SpawnSessionAsync(arguments, callerNode),
 			"send_to_session"      => await SendToSessionAsync(arguments, callerNode),
 			"read_session"         => await ReadSessionAsync(arguments),
@@ -444,14 +446,15 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		var note   = args?["note"]?.GetValue<string>() ?? string.Empty;
 		var target = args?["target"]?.GetValue<string>();
 
-		// Self-wake: no target → use caller's own NodeId.
-		var targetNodeId = target ?? callerNode.NodeId;
-
-		// Validate target exists.
-		var targetNode = _registry.FindModelByNodeId(targetNodeId);
+		// Self-wake: no target → use caller's own NodeId; otherwise resolve the full id or unique prefix.
+		var targetNode = string.IsNullOrWhiteSpace(target)
+			? _registry.FindModelByNodeId(callerNode.NodeId)
+			: ResolveSession(target, "Target session not found");
 
 		if (targetNode == null)
-			throw new McpToolException($"Target session not found: {targetNodeId}");
+			throw new McpToolException($"Target session not found: {callerNode.NodeId}");
+
+		var targetNodeId = targetNode.NodeId;
 
 		var scheduleId = Guid.NewGuid().ToString("N")[..8];
 
@@ -535,18 +538,127 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 	// ── Orchestration tools ───────────────────────────────────────────────────
 
-	private Task<JsonNode> ListSessionsAsync()
+	private JsonNode ListSessions(JsonNode? args, SessionNodeModel callerNode)
 	{
-		var summaries = _registry.BuildAgentSessionSummaries();
+		var scope = ParseScope(GetOptionalString(args, "scope"));
 
-		var lines = summaries.Select(s =>
-			$"[{s.NodeId}] {s.Name} | {s.DirectoryLabel} | running={s.IsRunning} resumable={s.IsResumable}" +
-			(s.LastPrompt != null ? $" | last: {s.LastPrompt[..Math.Min(60, s.LastPrompt.Length)]}" : ""));
+		var nodeIdArg         = GetOptionalString(args, "nodeId");
+		var query             = GetOptionalString(args, "query");
+		var running           = GetOptionalBool(args, "running");
+		var activeWithinHours = GetOptionalInt(args, "activeWithinHours");
+		var includeWorkers    = GetOptionalBool(args, "includeWorkers") ?? false;
+		var limit             = GetOptionalInt(args, "limit");
+		var offset            = GetOptionalInt(args, "offset");
 
-		return Task.FromResult(BuildTextContent(
-			summaries.Count == 0
-				? "No sessions in tree."
-				: string.Join("\n", lines)));
+		if (activeWithinHours is <= 0)
+			throw new McpToolException("'activeWithinHours' must be greater than 0.");
+
+		string? rootNodeId = null;
+		if (scope is SessionListScope.Children or SessionListScope.Subtree && !string.IsNullOrWhiteSpace(nodeIdArg))
+			rootNodeId = ResolveSession(nodeIdArg, "Session not found").NodeId;
+
+		var listQuery = new SessionListQueryModel
+		{
+			Scope             = scope,
+			RootNodeId        = rootNodeId,
+			Query             = string.IsNullOrWhiteSpace(query) ? null : query.Trim(),
+			Running           = running,
+			ActiveWithinHours = activeWithinHours,
+			IncludeWorkers    = includeWorkers,
+			Limit             = limit ?? Constants.Agent.ListSessionsDefaultLimit,
+			Offset            = offset ?? 0,
+		};
+
+		var page = _registry.QueryAgentSessions(listQuery, callerNode.NodeId);
+		return BuildTextContent(_listFormatter.Format(page, DateTimeOffset.UtcNow));
+	}
+
+	private static SessionListScope ParseScope(string? scopeText)
+	{
+		if (string.IsNullOrWhiteSpace(scopeText))
+			return SessionListScope.Project;
+
+		return scopeText.Trim().ToLowerInvariant() switch
+		{
+			"project"  => SessionListScope.Project,
+			"all"      => SessionListScope.All,
+			"children" => SessionListScope.Children,
+			"subtree"  => SessionListScope.Subtree,
+			_          => throw new McpToolException($"Unknown scope '{scopeText}'. Use project, all, children or subtree."),
+		};
+	}
+
+	/// <summary>
+	/// Resolves a full NodeId or a unique prefix (FR.15.13) to its session; throws a tool error for
+	/// too-short, ambiguous and unknown ids. <paramref name="notFoundText"/> is the tool's not-found wording.
+	/// </summary>
+	private SessionNodeModel ResolveSession(string idOrPrefix, string notFoundText)
+	{
+		var resolution = ResolveNodeIdOrThrow(idOrPrefix, out var id);
+		var model      = resolution.Status == NodeIdResolutionStatus.Resolved && resolution.NodeId != null
+			? _registry.FindModelByNodeId(resolution.NodeId)
+			: null;
+
+		return model ?? throw new McpToolException($"{notFoundText}: {id}");
+	}
+
+	/// <summary>
+	/// Trims <paramref name="idOrPrefix"/> and resolves it; throws for too-short and ambiguous ids and
+	/// returns Resolved or NotFound otherwise.
+	/// </summary>
+	private NodeIdResolutionModel ResolveNodeIdOrThrow(string idOrPrefix, out string id)
+	{
+		id = idOrPrefix.Trim();
+		var resolution = _registry.ResolveNodeId(id);
+
+		if (resolution.Status == NodeIdResolutionStatus.TooShort)
+			throw new McpToolException(
+				$"Session id '{id}' is too short: use at least {Constants.Agent.NodeIdPrefixMinLength} characters.");
+
+		if (resolution.Status == NodeIdResolutionStatus.Ambiguous)
+		{
+			var matches = string.Join(", ", resolution.Matches.Select(m => $"{m.NodeId} \"{_text.FormatName(m.Name)}\""));
+			var more    = resolution.MatchCount > resolution.Matches.Count ? ", ..." : string.Empty;
+			throw new McpToolException(
+				$"Session id '{id}' matches {resolution.MatchCount} sessions: {matches}{more}. Use more characters.");
+		}
+
+		return resolution;
+	}
+
+	private static string? GetOptionalString(JsonNode? args, string name)
+	{
+		var node = args?[name];
+		if (node == null)
+			return null;
+		if (node is JsonValue value && value.TryGetValue<string>(out var text))
+			return text;
+		throw new McpToolException($"'{name}' must be a string.");
+	}
+
+	private static bool? GetOptionalBool(JsonNode? args, string name)
+	{
+		var node = args?[name];
+		if (node == null)
+			return null;
+		if (node is JsonValue value && value.TryGetValue<bool>(out var flag))
+			return flag;
+		throw new McpToolException($"'{name}' must be a boolean.");
+	}
+
+	private static int? GetOptionalInt(JsonNode? args, string name)
+	{
+		var node = args?[name];
+		if (node == null)
+			return null;
+		if (node is JsonValue value)
+		{
+			if (value.TryGetValue<int>(out var number))
+				return number;
+			if (value.TryGetValue<double>(out var real) && real == Math.Floor(real) && Math.Abs(real) <= int.MaxValue)
+				return (int)real;
+		}
+		throw new McpToolException($"'{name}' must be an integer.");
 	}
 
 	private async Task<JsonNode> SpawnSessionAsync(JsonNode? args, SessionNodeModel callerNode)
@@ -578,9 +690,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			workingDir = explicitDir;
 		else if (!string.IsNullOrEmpty(parentNodeIdArg))
 		{
-			var parentModel = _registry.FindModelByNodeId(parentNodeIdArg);
-			if (parentModel == null)
-				throw new McpToolException($"Parent node not found: {parentNodeIdArg}");
+			var parentModel = ResolveSession(parentNodeIdArg, "Parent node not found");
 			workingDir = parentModel.WorkingDirectory;
 		}
 		else
@@ -621,10 +731,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		var mode         = args?["mode"]?.GetValue<string>() ?? "wait";
 		var outputFormat = args?["outputFormat"]?.GetValue<string>();
 
-		var targetModel = _registry.FindModelByNodeId(targetNodeId);
-
-		if (targetModel == null)
-			throw new McpToolException($"Session not found: {targetNodeId}");
+		var targetModel = ResolveSession(targetNodeId, "Session not found");
+		targetNodeId    = targetModel.NodeId;
 
 		var augmentedPrompt = ApplyOutputFormat(prompt, outputFormat);
 
@@ -663,10 +771,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		             ?? throw new McpToolException("'nodeId' is required");
 		var lastN  = args?["lastN"]?.GetValue<int>() ?? 20;
 
-		var model = _registry.FindModelByNodeId(nodeId);
-
-		if (model == null)
-			throw new McpToolException($"Session not found: {nodeId}");
+		var model = ResolveSession(nodeId, "Session not found");
 
 		var entries = _fileService.ReadEntries(model.FileName);
 		var relevant = entries
@@ -691,8 +796,11 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	{
 		var nodeId  = args?["nodeId"]?.GetValue<string>()
 		              ?? throw new McpToolException("'nodeId' is required");
-		var stopped = _turnService.Value.CancelTurn(nodeId);
-		return BuildTextContent(stopped ? $"Cancelled turn for {nodeId}." : $"No active turn for {nodeId}.");
+		// An id matching no session is passed on as is, so the running turn of a session that has left the tree can still be cancelled.
+		var resolution = ResolveNodeIdOrThrow(nodeId, out var id);
+		var targetId   = resolution.Status == NodeIdResolutionStatus.Resolved && resolution.NodeId != null ? resolution.NodeId : id;
+		var stopped    = _turnService.Value.CancelTurn(targetId);
+		return BuildTextContent(stopped ? $"Cancelled turn for {targetId}." : $"No active turn for {targetId}.");
 	}
 
 	// ── New orchestration tools (FR.15.6–FR.15.10, FR.16) ───────────────────
@@ -706,10 +814,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 		EnforceModelTier(callerNode, model);
 
-		var target = _registry.FindModelByNodeId(targetNodeId);
-
-		if (target == null)
-			throw new McpToolException($"Session not found: {targetNodeId}");
+		var target = ResolveSession(targetNodeId, "Session not found");
+		targetNodeId = target.NodeId;
 
 		target.ModelId = model;
 		_appSettings.Save();
@@ -1118,7 +1224,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				},
 				"prompt": { "type": "string", "description": "Prompt to send when the schedule fires." },
 				"note":   { "type": "string", "description": "Human-readable label for list_schedules." },
-				"target": { "type": "string", "description": "NodeId of target session. Omit for self-wake." }
+				"target": { "type": "string", "description": "Target session (full NodeId or a unique prefix of at least 6 characters). Omit for self-wake." }
 			},
 			"required": ["when"]
 		}
@@ -1143,6 +1249,22 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		}
 		""")!;
 
+	private static JsonNode ListSessionsSchema() => JsonNode.Parse("""
+		{
+			"type": "object",
+			"properties": {
+				"scope":             { "type": "string", "enum": ["project", "all", "children", "subtree"], "description": "project (default): sessions under your Directory Node; all: every Directory Node; children: the direct workers of nodeId; subtree: every descendant of nodeId." },
+				"nodeId":            { "type": "string", "description": "Root session for scope=children|subtree (default: you). A full NodeId or a unique prefix of at least 6 characters is accepted." },
+				"query":             { "type": "string", "description": "Case-insensitive substring of the session name or of a group name on its path, or a prefix of its NodeId." },
+				"running":           { "type": "boolean", "description": "true: only sessions with a turn in progress; false: only idle ones." },
+				"activeWithinHours": { "type": "integer", "description": "Only sessions whose last activity is within the last N hours (N > 0)." },
+				"includeWorkers":    { "type": "boolean", "description": "scope=project|all: list every worker session as a row instead of only counting it on its supervisor's row. Default false." },
+				"limit":             { "type": "integer", "description": "Rows per page, 1-200. Default 30." },
+				"offset":            { "type": "integer", "description": "Rows to skip. Default 0." }
+			}
+		}
+		""")!;
+
 	private static JsonNode EmptyObjectSchema() => JsonNode.Parse("""{ "type": "object", "properties": {} }""")!;
 
 	private static JsonNode SpawnSessionSchema() => JsonNode.Parse("""
@@ -1151,7 +1273,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			"properties": {
 				"name":         { "type": "string", "description": "Display name for the new session." },
 				"workingDir":   { "type": "string", "description": "Filesystem working directory. Mutually exclusive with parentNodeId." },
-				"parentNodeId": { "type": "string", "description": "Inherit working dir from this node. Mutually exclusive with workingDir." },
+				"parentNodeId": { "type": "string", "description": "Inherit working dir from this node (full NodeId or a unique prefix of at least 6 characters). Mutually exclusive with workingDir." },
 				"prompt":       { "type": "string", "description": "Optional first prompt to run on the new session." },
 				"group":        { "type": "string", "description": "Optional group name to place the session under." },
 				"model":        { "type": "string", "description": "Model ID for the new session (tier-enforced, FR.16)." },
@@ -1165,7 +1287,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		{
 			"type": "object",
 			"properties": {
-				"nodeId":       { "type": "string", "description": "NodeId of the session to resume." },
+				"nodeId":       { "type": "string", "description": "Session to resume. A full NodeId or a unique prefix of at least 6 characters is accepted." },
 				"prompt":       { "type": "string" },
 				"mode":         { "type": "string", "enum": ["wait", "async"], "description": "wait=block for result, async=return immediately and post the result back to you via mailbox. Async results that arrive while you are busy are delivered together in one turn once you are idle." },
 				"outputFormat": { "type": "string", "description": "Optional markdown/free-text description of the desired response shape. Advisory guidance appended to the prompt — not validated (FR.15.7)." }
@@ -1178,7 +1300,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		{
 			"type": "object",
 			"properties": {
-				"nodeId": { "type": "string" },
+				"nodeId": { "type": "string", "description": "Session to read. A full NodeId or a unique prefix of at least 6 characters is accepted." },
 				"lastN":  { "type": "integer", "description": "Max entries to return from end of file. 0=all." }
 			},
 			"required": ["nodeId"]
@@ -1189,7 +1311,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		{
 			"type": "object",
 			"properties": {
-				"nodeId": { "type": "string" }
+				"nodeId": { "type": "string", "description": "Session whose running turn to cancel. A full NodeId or a unique prefix of at least 6 characters is accepted." }
 			},
 			"required": ["nodeId"]
 		}
@@ -1199,7 +1321,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		{
 			"type": "object",
 			"properties": {
-				"nodeId": { "type": "string", "description": "NodeId of the session to update." },
+				"nodeId": { "type": "string", "description": "Session to update. A full NodeId or a unique prefix of at least 6 characters is accepted." },
 				"model":  { "type": "string", "description": "Model ID to set (e.g. 'claude-sonnet-4-6'). Tier-enforced." }
 			},
 			"required": ["nodeId", "model"]

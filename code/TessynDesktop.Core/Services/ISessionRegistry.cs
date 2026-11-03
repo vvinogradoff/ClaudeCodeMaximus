@@ -104,7 +104,17 @@ public interface ISessionRegistry
     SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group,
         int orchestrationDepth = 0, string? supervisorNodeId = null);
 
+    /// <summary>
+    /// Every session with its Last Activity (session file last-write time) and resumability (FR.21.8, FR.15.13).
+    /// The settings lock is held only while session fields are copied.
+    /// </summary>
     List<SessionSummaryModel> BuildAgentSessionSummaries();
+
+    /// <summary>One bounded page of the <c>list_sessions</c> listing for <paramref name="callerNodeId"/> (FR.15.13).</summary>
+    SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId);
+
+    /// <summary>Resolves a full NodeId or a prefix of at least <see cref="Constants.Agent.NodeIdPrefixMinLength"/> characters to one session (FR.15.13).</summary>
+    NodeIdResolutionModel ResolveNodeId(string idOrPrefix);
     IReadOnlySet<string> CollectAllClaudeSessionIds();
     (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session);
 

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace TessynDesktop.Services;
 
 /// <summary>
@@ -12,7 +14,14 @@ public interface IClaudeSessionStatusService
 	/// any known Claude CLI home — the OS-default ~/.claude plus every profile directory under
 	/// %AppData%/TessynDesktop/profiles/, active or removed via FR.12.18.
 	/// </summary>
-	bool IsSessionResumable(string workingDirectory, string claudeSessionId);
+	/// <param name="projectsDirs">
+	/// Optional pre-resolved list from <see cref="GetAllProjectsDirs"/>, so a caller checking many
+	/// sessions lists the profile directories once instead of once per check (FR.15.13).
+	/// </param>
+	bool IsSessionResumable(string workingDirectory, string claudeSessionId, IReadOnlyList<string>? projectsDirs = null);
+
+	/// <summary>Resolves every Claude CLI <c>projects</c> directory once, for reuse across many <see cref="IsSessionResumable"/> calls (FR.15.13).</summary>
+	IReadOnlyList<string> GetAllProjectsDirs();
 
 	/// <summary>
 	/// Checks whether the session's JSONL already exists under the active profile's session

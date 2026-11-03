@@ -89,6 +89,7 @@ internal sealed class FakeFileServiceForTurnService : ISessionFileService
 	public void AppendCompactionSeparator(string fileName) => throw new NotImplementedException();
 	public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName) => ReadEntriesResult;
 	public bool SessionFileExists(string fileName) => throw new NotImplementedException();
+	public DateTimeOffset? GetLastWriteTimeUtc(string fileName) => throw new NotImplementedException();
 	public void DeleteSessionFile(string fileName) => throw new NotImplementedException();
 	public string GetFullPath(string fileName) => throw new NotImplementedException();
 	public void RewriteSessionFile(string fileName, string content) => throw new NotImplementedException();
@@ -128,6 +129,8 @@ internal sealed class FakeRegistryForTurnService : ISessionRegistry
 	public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotImplementedException();
 	public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group, int orchestrationDepth = 0, string? supervisorNodeId = null) => throw new NotImplementedException();
 	public List<SessionSummaryModel> BuildAgentSessionSummaries() => throw new NotImplementedException();
+	public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId) => throw new NotImplementedException();
+	public NodeIdResolutionModel ResolveNodeId(string idOrPrefix) => throw new NotImplementedException();
 	public IReadOnlySet<string> CollectAllClaudeSessionIds() => throw new NotImplementedException();
 	public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session) => throw new NotImplementedException();
 
@@ -146,7 +149,8 @@ internal sealed class FakeProfileServiceForTurnService : IClaudeProfileService
 
 internal sealed class FakeSessionStatusServiceForTurnService : IClaudeSessionStatusService
 {
-	public bool IsSessionResumable(string workingDirectory, string claudeSessionId) => throw new NotImplementedException();
+	public bool IsSessionResumable(string workingDirectory, string claudeSessionId, IReadOnlyList<string>? projectsDirs = null) => throw new NotImplementedException();
+	public IReadOnlyList<string> GetAllProjectsDirs() => throw new NotImplementedException();
 	public bool TryAdoptSessionFromOtherProfile(string workingDirectory, string claudeSessionId, string? activeProfileConfigDir) => throw new NotImplementedException();
 }
 

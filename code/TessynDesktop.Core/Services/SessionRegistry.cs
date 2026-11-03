@@ -427,18 +427,61 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public List<SessionSummaryModel> BuildAgentSessionSummaries()
     {
-        var result = new List<SessionSummaryModel>();
+        var snapshots   = SnapshotSessions();
+        var projectsDirs = new Lazy<IReadOnlyList<string>>(_sessionStatus.GetAllProjectsDirs);
 
-        lock (_appSettings.SyncRoot)
+        return snapshots.Select(s => new SessionSummaryModel(
+            NodeId:             s.NodeId,
+            Name:               s.Name,
+            DirectoryLabel:     s.DirectoryLabel,
+            WorkingDirectory:   s.WorkingDirectory,
+            IsRunning:          s.IsRunning,
+            IsResumable:        IsResumable(s, projectsDirs),
+            IsFavorite:         s.IsFavorite,
+            LastActivityUtc:    _fileService.GetLastWriteTimeUtc(s.FileName),
+            OrchestrationDepth: s.OrchestrationDepth)).ToList();
+    }
+
+    public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId)
+    {
+        var snapshots    = SnapshotSessions();
+        var projectsDirs = new Lazy<IReadOnlyList<string>>(_sessionStatus.GetAllProjectsDirs);
+
+        return new SessionListPageBuilder().Build(
+            snapshots,
+            callerNodeId,
+            query,
+            s => _fileService.GetLastWriteTimeUtc(s.FileName),
+            s => IsResumable(s, projectsDirs),
+            DateTimeOffset.UtcNow);
+    }
+
+    public NodeIdResolutionModel ResolveNodeId(string idOrPrefix)
+    {
+        var snapshots = SnapshotSessions();
+
+        var exact = snapshots.FirstOrDefault(s => string.Equals(s.NodeId, idOrPrefix, StringComparison.OrdinalIgnoreCase));
+        if (exact != null)
+            return new NodeIdResolutionModel { Status = NodeIdResolutionStatus.Resolved, NodeId = exact.NodeId };
+
+        if (idOrPrefix.Length < Constants.Agent.NodeIdPrefixMinLength)
+            return new NodeIdResolutionModel { Status = NodeIdResolutionStatus.TooShort };
+
+        var matches = snapshots
+            .Where(s => s.NodeId.StartsWith(idOrPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return matches.Count switch
         {
-            foreach (var dir in _appSettings.Settings.Tree)
+            0 => new NodeIdResolutionModel { Status = NodeIdResolutionStatus.NotFound },
+            1 => new NodeIdResolutionModel { Status = NodeIdResolutionStatus.Resolved, NodeId = matches[0].NodeId },
+            _ => new NodeIdResolutionModel
             {
-                var label = _labelService.GetLabel(dir.Path);
-                CollectSummaries(dir.Sessions, dir.Groups, label, result);
-            }
-        }
-
-        return result;
+                Status     = NodeIdResolutionStatus.Ambiguous,
+                Matches    = matches.Take(Constants.Agent.AmbiguousNodeIdMaxMatches).ToList(),
+                MatchCount = matches.Count,
+            },
+        };
     }
 
     public IReadOnlySet<string> CollectAllClaudeSessionIds()
@@ -568,54 +611,64 @@ public sealed class SessionRegistry : ISessionRegistry
     private static bool CanDeleteGroup(GroupNodeModel group) =>
         group.Sessions.Count == 0 && group.Groups.Count == 0;
 
-    private void CollectSummaries(
+    /// <summary>
+    /// Copies the listing fields of every session under the settings lock and does nothing else
+    /// there — no file or profile-directory I/O (FR.15.13).
+    /// </summary>
+    private List<SessionSnapshotModel> SnapshotSessions()
+    {
+        var result = new List<SessionSnapshotModel>();
+
+        lock (_appSettings.SyncRoot)
+        {
+            foreach (var dir in _appSettings.Settings.Tree)
+            {
+                var label = _labelService.GetLabel(dir.Path);
+                CollectSnapshots(dir.Sessions, dir.Groups, dir.Path, label, new List<string>(), result);
+            }
+        }
+
+        return result;
+    }
+
+    private void CollectSnapshots(
         List<SessionNodeModel> sessions,
         List<GroupNodeModel> groups,
+        string directoryPath,
         string directoryLabel,
-        List<SessionSummaryModel> result)
+        List<string> groupPath,
+        List<SessionSnapshotModel> result)
     {
         foreach (var s in sessions)
         {
-            result.Add(BuildSummary(s, directoryLabel));
+            result.Add(new SessionSnapshotModel
+            {
+                NodeId             = s.NodeId,
+                Name               = s.Name,
+                FileName           = s.FileName,
+                WorkingDirectory   = s.WorkingDirectory,
+                ClaudeSessionId    = s.ClaudeSessionId,
+                IsFavorite         = s.IsFavorite,
+                OrchestrationDepth = s.OrchestrationDepth,
+                SupervisorNodeId   = s.SupervisorNodeId,
+                IsRunning          = IsSessionRunning(s.NodeId),
+                DirectoryPath      = directoryPath,
+                DirectoryLabel     = directoryLabel,
+                GroupPath          = groupPath.ToArray(),
+            });
         }
 
         foreach (var g in groups)
-            CollectSummaries(g.Sessions, g.Groups, directoryLabel, result);
-    }
-
-    private SessionSummaryModel BuildSummary(SessionNodeModel s, string directoryLabel)
-    {
-        var isResumable = s.ClaudeSessionId != null
-            && _sessionStatus.IsSessionResumable(s.WorkingDirectory, s.ClaudeSessionId);
-
-        string? lastPrompt = null;
-        DateTimeOffset? lastActivityUtc = null;
-        try
         {
-            var entries = _fileService.ReadEntries(s.FileName);
-            var lastUser = entries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
-            if (lastUser != null)
-                lastPrompt = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-
-            // Last entry of any role (FR.21.8) — used by the Telegram Bridge's /sessions command
-            // as a cheap activity signal; not the same 24h-recency rule the UI dropdown uses.
-            if (entries.Count > 0)
-                lastActivityUtc = entries[^1].Timestamp;
+            groupPath.Add(g.Name);
+            CollectSnapshots(g.Sessions, g.Groups, directoryPath, directoryLabel, groupPath, result);
+            groupPath.RemoveAt(groupPath.Count - 1);
         }
-        catch { /* session file may not exist — omit */ }
-
-        return new SessionSummaryModel(
-            NodeId:           s.NodeId,
-            Name:             s.Name,
-            DirectoryLabel:   directoryLabel,
-            WorkingDirectory: s.WorkingDirectory,
-            IsRunning:        IsSessionRunning(s.NodeId),
-            IsResumable:      isResumable,
-            LastPrompt:       lastPrompt,
-            IsFavorite:       s.IsFavorite,
-            LastActivityUtc:  lastActivityUtc,
-            OrchestrationDepth: s.OrchestrationDepth);
     }
+
+    private bool IsResumable(SessionSnapshotModel s, Lazy<IReadOnlyList<string>> projectsDirs) =>
+        s.ClaudeSessionId != null
+        && _sessionStatus.IsSessionResumable(s.WorkingDirectory, s.ClaudeSessionId, projectsDirs.Value);
 
     private static void CollectIds(
         List<SessionNodeModel> sessions, List<GroupNodeModel> groups, HashSet<string> ids)

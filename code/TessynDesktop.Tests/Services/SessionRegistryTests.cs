@@ -18,15 +18,32 @@ internal sealed class FakeSessionFileService : ISessionFileService
     /// <summary>Optional canned entries per file name, consumed by <see cref="ReadEntries"/> (FR.21.8 tests).</summary>
     public Dictionary<string, IReadOnlyList<SessionEntryModel>> Entries { get; } = new();
 
+    /// <summary>Settable per-file last-write times for <see cref="GetLastWriteTimeUtc"/> (FR.15.13); a missing key means the file is missing.</summary>
+    public Dictionary<string, DateTimeOffset> LastWriteTimes { get; } = new();
+
+    /// <summary>Number of <see cref="ReadEntries"/> calls — the listing must never read session content (FR.15.13).</summary>
+    public int ReadEntriesCalls { get; private set; }
+
+    /// <summary>Optional hook run at the start of every <see cref="GetLastWriteTimeUtc"/> call, e.g. to block it in the lock test.</summary>
+    public Action<string>? OnGetLastWriteTime { get; set; }
+
     public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
     public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
     public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText) { }
 
     public string CreateSessionFile() => $"session-{_counter++}.txt";
     public bool SessionFileExists(string fileName) => FileExists;
+    public DateTimeOffset? GetLastWriteTimeUtc(string fileName)
+    {
+        OnGetLastWriteTime?.Invoke(fileName);
+        return LastWriteTimes.TryGetValue(fileName, out var t) ? t : null;
+    }
     public void DeleteSessionFile(string fileName) { }
-    public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName) =>
-        Entries.TryGetValue(fileName, out var entries) ? entries : Array.Empty<SessionEntryModel>();
+    public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName)
+    {
+        ReadEntriesCalls++;
+        return Entries.TryGetValue(fileName, out var entries) ? entries : Array.Empty<SessionEntryModel>();
+    }
     public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null) { }
     public void AppendCompactionSeparator(string fileName) { }
     public string GetFullPath(string fileName) => fileName;
@@ -42,7 +59,34 @@ internal sealed class FakeDirectoryLabelService : IDirectoryLabelService
 
 internal sealed class FakeClaudeSessionStatusService : IClaudeSessionStatusService
 {
-    public bool IsSessionResumable(string workingDirectory, string claudeSessionId) => false;
+    /// <summary>Claude session ids reported resumable (FR.15.13); everything else is not.</summary>
+    public HashSet<string> ResumableSessionIds { get; } = new();
+
+    /// <summary>Claude session ids passed to <see cref="IsSessionResumable"/>, in call order.</summary>
+    public List<string> ResumabilityChecks { get; } = new();
+
+    /// <summary>The <c>projectsDirs</c> argument of each <see cref="IsSessionResumable"/> call, in call order.</summary>
+    public List<IReadOnlyList<string>?> ResumabilityProjectsDirs { get; } = new();
+
+    public int GetAllProjectsDirsCalls { get; private set; }
+
+    /// <summary>Optional hook run at the start of every <see cref="IsSessionResumable"/> call, e.g. to probe the settings lock.</summary>
+    public Action<string>? OnIsSessionResumable { get; set; }
+
+    public IReadOnlyList<string> GetAllProjectsDirs()
+    {
+        GetAllProjectsDirsCalls++;
+        return new[] { "projects-dir-1", "projects-dir-2" };
+    }
+
+    public bool IsSessionResumable(string workingDirectory, string claudeSessionId, IReadOnlyList<string>? projectsDirs = null)
+    {
+        OnIsSessionResumable?.Invoke(claudeSessionId);
+        ResumabilityChecks.Add(claudeSessionId);
+        ResumabilityProjectsDirs.Add(projectsDirs);
+        return ResumableSessionIds.Contains(claudeSessionId);
+    }
+
     public bool TryAdoptSessionFromOtherProfile(string workingDirectory, string claudeSessionId, string? activeProfileConfigDir) => false;
 }
 
@@ -464,25 +508,8 @@ public sealed class SessionRegistryTests : IDisposable
 
     // ── 12. BuildAgentSessionSummaries (FR.21.8) ──────────────────────────────
 
-    [Fact]
-    public void BuildAgentSessionSummaries_IncludesIsFavoriteAndLastActivityUtc()
-    {
-        var dir = _registry.AddDirectory(AnyPath("x"));
-        var session = _registry.AddSession(dir, "FavSession");
-        session.IsFavorite = true;
-
-        var lastTimestamp = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
-        _fileService.Entries[session.FileName] = new List<SessionEntryModel>
-        {
-            new() { Timestamp = lastTimestamp.AddMinutes(-5), Role = Constants.SessionFile.RoleUser, Content = "first" },
-            new() { Timestamp = lastTimestamp, Role = Constants.SessionFile.RoleAssistant, Content = "last" },
-        };
-
-        var summary = Assert.Single(_registry.BuildAgentSessionSummaries());
-
-        Assert.True(summary.IsFavorite);
-        Assert.Equal(lastTimestamp, summary.LastActivityUtc);
-    }
+    // BuildAgentSessionSummaries_IncludesIsFavoriteAndLastActivityUtc was replaced by
+    // BuildAgentSessionSummaries_LastActivityIsLastWriteTime_NoContentReads (SessionRegistryListingTests, TC.15.5).
 
     [Fact]
     public void BuildAgentSessionSummaries_NoEntries_LastActivityUtcIsNull()

@@ -90,6 +90,15 @@ public sealed class SessionFileService : ISessionFileService
 	public bool SessionFileExists(string fileName)
 		=> File.Exists(GetFullPath(fileName));
 
+	public DateTimeOffset? GetLastWriteTimeUtc(string fileName)
+	{
+		var info = new FileInfo(GetFullPath(fileName));
+		if (!info.Exists)
+			return null;
+
+		return new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero);
+	}
+
 	public void DeleteSessionFile(string fileName)
 	{
 		var fullPath = GetFullPath(fileName);

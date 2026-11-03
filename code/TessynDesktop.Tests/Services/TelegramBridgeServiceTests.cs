@@ -559,9 +559,9 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 	{
 		_daemon.Summaries.AddRange(new[]
 		{
-			new SessionSummaryModel("node-fav", "Favorite", "Dir", @"C:\a", IsRunning: false, IsResumable: true, LastPrompt: null, IsFavorite: true),
-			new SessionSummaryModel("node-topic", "Active", "Dir", @"C:\b", IsRunning: true, IsResumable: true, LastPrompt: null, IsFavorite: false),
-			new SessionSummaryModel("node-other", "Untouched", "Dir", @"C:\c", IsRunning: false, IsResumable: false, LastPrompt: null, IsFavorite: false),
+			new SessionSummaryModel("node-fav", "Favorite", "Dir", @"C:\a", IsRunning: false, IsResumable: true, IsFavorite: true),
+			new SessionSummaryModel("node-topic", "Active", "Dir", @"C:\b", IsRunning: true, IsResumable: true, IsFavorite: false),
+			new SessionSummaryModel("node-other", "Untouched", "Dir", @"C:\c", IsRunning: false, IsResumable: false, IsFavorite: false),
 		});
 		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-topic"] = 7;
 
@@ -586,7 +586,7 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 		var node = MakeNode("node-open", "OpenMe");
 		_daemon.AddNode(node);
 		_daemon.Summaries.Add(new SessionSummaryModel(
-			"node-open", "OpenMe", "Dir", @"C:\a", IsRunning: false, IsResumable: false, LastPrompt: null));
+			"node-open", "OpenMe", "Dir", @"C:\a", IsRunning: false, IsResumable: false));
 		_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, "hello there");
 		_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleAssistant, "hi back");
 
@@ -708,8 +708,8 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 	{
 		_daemon.Summaries.AddRange(new[]
 		{
-			new SessionSummaryModel("node-top", "Supervisor", "Dir", @"C:\a", IsRunning: true, IsResumable: true, LastPrompt: null, IsFavorite: true, OrchestrationDepth: 0),
-			new SessionSummaryModel("node-worker", "Worker", "Dir", @"C:\b", IsRunning: true, IsResumable: true, LastPrompt: null, IsFavorite: true, OrchestrationDepth: 1),
+			new SessionSummaryModel("node-top", "Supervisor", "Dir", @"C:\a", IsRunning: true, IsResumable: true, IsFavorite: true, OrchestrationDepth: 0),
+			new SessionSummaryModel("node-worker", "Worker", "Dir", @"C:\b", IsRunning: true, IsResumable: true, IsFavorite: true, OrchestrationDepth: 1),
 		});
 		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-worker"] = 9;
 
@@ -821,7 +821,7 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 	[Fact]
 	public async Task HandleUpdate_CommandReplies_AreSilent()
 	{
-		_daemon.Summaries.Add(new SessionSummaryModel("node-1", "Favorite", "Dir", @"C:\a", IsRunning: false, IsResumable: true, LastPrompt: null, IsFavorite: true));
+		_daemon.Summaries.Add(new SessionSummaryModel("node-1", "Favorite", "Dir", @"C:\a", IsRunning: false, IsResumable: true, IsFavorite: true));
 		_daemon.AddNode(MakeNode("node-1", "Favorite"));
 		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-1"] = 42;
 		_client.UpdateBatches.Enqueue(new[]

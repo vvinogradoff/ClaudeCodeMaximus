@@ -17,14 +17,16 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 		_profileService = profileService;
 	}
 
-	public bool IsSessionResumable(string workingDirectory, string claudeSessionId)
+	public IReadOnlyList<string> GetAllProjectsDirs() => Constants.ClaudeSessions.GetAllProjectsDirs();
+
+	public bool IsSessionResumable(string workingDirectory, string claudeSessionId, IReadOnlyList<string>? projectsDirs = null)
 	{
 		if (string.IsNullOrEmpty(workingDirectory) || string.IsNullOrEmpty(claudeSessionId))
 			return false;
 
 		try
 		{
-			var sessionPath = Constants.ClaudeSessions.FindExistingJsonlPath(workingDirectory, claudeSessionId);
+			var sessionPath = Constants.ClaudeSessions.FindExistingJsonlPath(workingDirectory, claudeSessionId, projectsDirs);
 			_log.Debug("Resumability check: {SessionId} wd={WorkingDirectory} path={Path} exists={Exists}",
 				claudeSessionId, workingDirectory, sessionPath, sessionPath != null);
 			return sessionPath != null;

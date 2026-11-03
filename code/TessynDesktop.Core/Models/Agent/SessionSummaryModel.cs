@@ -14,7 +14,6 @@ public sealed record SessionSummaryModel(
 	string WorkingDirectory,
 	bool IsRunning,
 	bool IsResumable,
-	string? LastPrompt,
 	bool IsFavorite = false,
 	DateTimeOffset? LastActivityUtc = null,
 	int OrchestrationDepth = 0);

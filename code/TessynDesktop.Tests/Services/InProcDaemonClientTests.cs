@@ -173,6 +173,9 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
 
     public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group, int orchestrationDepth = 0, string? supervisorNodeId = null) => null;
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => BuildAgentSessionSummariesResult;
+    public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId) =>
+        new() { Scope = query.Scope, Sections = Array.Empty<SessionListSectionModel>(), Rows = Array.Empty<SessionListRowModel>(), TotalRows = 0, Offset = 0, Limit = query.Limit };
+    public NodeIdResolutionModel ResolveNodeId(string idOrPrefix) => new() { Status = NodeIdResolutionStatus.NotFound };
     public IReadOnlySet<string> CollectAllClaudeSessionIds() => CollectAllClaudeSessionIdsResult;
 }
 
@@ -249,6 +252,7 @@ internal sealed class InProcFakeFileService : ISessionFileService
 
     public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName) { LastReadEntriesFile = fileName; return ReadEntriesResult; }
     public bool SessionFileExists(string fileName) { LastFileExistsFile = fileName; return SessionFileExistsResult; }
+    public DateTimeOffset? GetLastWriteTimeUtc(string fileName) => null;
     public string GetFullPath(string fileName) { LastGetFullPathFile = fileName; return GetFullPathResult; }
 
     public string CreateSessionFile() => throw new NotImplementedException();
@@ -945,7 +949,7 @@ public sealed class InProcDaemonClientTests
     {
         var expected = new List<SessionSummaryModel>
         {
-            new("node-1", "Test", "Dir", "/work", true, true, "hello"),
+            new("node-1", "Test", "Dir", "/work", true, true),
         };
         _registry.BuildAgentSessionSummariesResult = expected;
 

@@ -37,6 +37,12 @@ public interface ISessionFileService
 
 	bool SessionFileExists(string fileName);
 
+	/// <summary>
+	/// Returns the session file's last-write time in UTC (FR.15.13), or null when the file is missing.
+	/// Never reads the file's content.
+	/// </summary>
+	DateTimeOffset? GetLastWriteTimeUtc(string fileName);
+
 	/// <summary>Deletes the Tessyn session .txt file if it exists. Does NOT touch the Claude JSONL.</summary>
 	void DeleteSessionFile(string fileName);
 
