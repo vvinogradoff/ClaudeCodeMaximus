@@ -905,6 +905,42 @@ The Architect's phone rang about once a minute on 2026-10-28: 22 automatic `✅ 
 
 ---
 
+## Phase 36 — Session Listing: Scope, Filters, Paging & Cost (FR.15.13) ✓ DONE (pending manual UC.15.2/UC.15.3 after an app restart)
+
+Bounds `list_sessions` output by default to the caller's project with its own workers nested under its row, avoiding 340KB unfiltered trees and settings-lock contention. Split out of ISSUE.013 (R8); test cases: TC.15.2–TC.15.7. Use cases: UC.15.2–UC.15.3.
+
+Data layer (snapshot under the settings lock, file I/O outside it; Last Activity from last-write time; resumability only for page rows with one projects-dir list; `SessionListPageBuilder`; `QueryAgentSessions`; `ResolveNodeId`; `BuildAgentSessionSummaries` rewrite; `LastPrompt` removed — FR.15.13, FR.21.8):
+- [DONE] Data structures and builder (FR.15.13, FR.21.8)
+- [DONE] Settings lock / file I/O separation (FR.15.13)
+- [DONE] Last Activity from file timestamp (FR.15.13)
+- [DONE] Resumability check on page rows only (FR.15.13)
+
+Text formatter `SessionListFormatter` (FR.15.13):
+- [DONE] Format You line, section headers, rows, footer (FR.15.13)
+- [DONE] Age bucketing and display (FR.15.13)
+- [DONE] Row flags in specified order (FR.15.13)
+- [DONE] ASCII listing text; names printed as they are, control characters become spaces (FR.15.13)
+
+MCP layer (`list_sessions` arguments, schema and description; Short Node Id resolution in every tool argument that takes a session id; skill and start-of-session hint text — FR.15.13, FR.15.11):
+- [DONE] `list_sessions` tool arguments, schema and description (FR.15.13)
+- [DONE] Short Node Id resolution in session-id tool arguments (FR.15.13)
+- [DONE] Skill text and start-of-session hint (FR.15.11)
+- [DONE] Error cases (ambiguous prefix, too short, unknown nodeId — FR.15.13)
+
+Tests TC.15.2–TC.15.7 (integration with `SessionListPageBuilder` and `SessionListFormatter` snapshots; cost verification; tool surface check):
+- [DONE] TC.15.2 — listing scope, order and paging (FR.15.13)
+- [DONE] TC.15.3 — listing filters (FR.15.13)
+- [DONE] TC.15.4 — listing text format (FR.15.13)
+- [DONE] TC.15.5 — listing cost (FR.15.13, FR.21.8)
+- [DONE] TC.15.6 — Short Node Ids (FR.15.13)
+- [DONE] TC.15.7 — `list_sessions` tool surface (FR.15.13, FR.15.11)
+
+Manual verification UC.15.2/UC.15.3 after an app restart:
+- [ ] UC.15.2 — Supervisor finds its own workers again (FR.15.13)
+- [ ] UC.15.3 — A session finds another session by name (FR.15.13)
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/RESEARCH.01.VS-MCP-Server-Automation-Approaches.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
