@@ -123,24 +123,25 @@ public sealed class ClaudeUsageService : IClaudeUsageService
         }
     }
 
-    private static ClaudeUsageData? ParseUsage(string json)
+    /// <summary>Internal for direct unit testing (<c>InternalsVisibleTo("TessynDesktop.Tests")</c>).</summary>
+    internal static ClaudeUsageData? ParseUsage(string json)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            if (!root.TryGetProperty("five_hour", out var fiveHour) ||
-                !root.TryGetProperty("seven_day", out var sevenDay))
+            var hasFiveHour = root.TryGetProperty("five_hour", out var fiveHour);
+            var hasSevenDay = root.TryGetProperty("seven_day", out var sevenDay);
+            if (!hasFiveHour && !hasSevenDay)
                 return null;
 
-            var fiveHourUtil   = fiveHour.TryGetProperty("utilization", out var fu) ? fu.GetDouble() : 0.0;
-            var fiveHourResets = fiveHour.TryGetProperty("resets_at",   out var fr) && fr.ValueKind != JsonValueKind.Null
-                ? fr.GetDateTimeOffset() : DateTimeOffset.UtcNow.AddHours(5);
-
-            var sevenDayUtil   = sevenDay.TryGetProperty("utilization", out var su) ? su.GetDouble() : 0.0;
-            var sevenDayResets = sevenDay.TryGetProperty("resets_at",   out var sr) && sr.ValueKind != JsonValueKind.Null
-                ? sr.GetDateTimeOffset() : DateTimeOffset.UtcNow.AddDays(7);
+            // A plan without a cap on a given window (e.g. Ultra has no 5-hour session limit)
+            // reports that window as a JSON null rather than omitting the key, so it must be
+            // treated as "no usage/no limit" here instead of failing the whole parse — otherwise
+            // one capless window would discard an otherwise-valid reading for the other window.
+            var (fiveHourUtil, fiveHourResets) = ParseWindow(hasFiveHour, fiveHour, TimeSpan.FromHours(5));
+            var (sevenDayUtil, sevenDayResets) = ParseWindow(hasSevenDay, sevenDay, TimeSpan.FromDays(7));
 
             // Extract severity from limits[] (group="session" → 5h, group="weekly" → 7d)
             var fiveHourSeverity = Constants.Usage.NormalSeverity;
@@ -169,6 +170,18 @@ public sealed class ClaudeUsageService : IClaudeUsageService
             _log.Debug("ClaudeUsageService.ParseUsage: {Error}", ex.Message);
             return null;
         }
+    }
+
+    private static (double Utilization, DateTimeOffset ResetsAt) ParseWindow(bool present, JsonElement element, TimeSpan fallbackWindow)
+    {
+        if (!present || element.ValueKind != JsonValueKind.Object)
+            return (0.0, DateTimeOffset.UtcNow.Add(fallbackWindow));
+
+        var utilization = element.TryGetProperty("utilization", out var u) ? u.GetDouble() : 0.0;
+        var resetsAt = element.TryGetProperty("resets_at", out var r) && r.ValueKind != JsonValueKind.Null
+            ? r.GetDateTimeOffset() : DateTimeOffset.UtcNow.Add(fallbackWindow);
+
+        return (utilization, resetsAt);
     }
 
     private static string? ReadAccessToken(string credentialsPath)
