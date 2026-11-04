@@ -28,6 +28,7 @@ public sealed class ProfileController : ReactiveObject
 	private int _selectedProfileIndex;
 	private bool _isProfileAuthInProgress;
 	private bool _hasAuthError;
+	private bool _isRepublishing;
 	private string? _defaultProfileDisplayName;
 
 	/// <summary>Entries for the profile selector (Default, stored profiles, "New..."). Rebuilt when profiles change.</summary>
@@ -36,7 +37,7 @@ public sealed class ProfileController : ReactiveObject
 	/// <summary>Selected profile index. 0=Default, 1..N=stored profiles, last="New...". Persisted per directory (FR.12.8).</summary>
 	public int SelectedProfileIndex
 	{
-		get => _selectedProfileIndex;
+		get => _isRepublishing ? -1 : _selectedProfileIndex;
 		set
 		{
 			// The ComboBox pushes -1 when its items are replaced/cleared; never treat that as a user choice
@@ -110,6 +111,19 @@ public sealed class ProfileController : ReactiveObject
 			0, Math.Max(0, AvailableProfiles.Count - 2));
 	}
 
+	/// <summary>
+	/// Re-publishes the selected index to the view. Clearing the list or replacing the selected item
+	/// drops the ComboBox selection to -1, and a plain change notification carrying the unchanged
+	/// index is ignored by the binding — so publish -1 first, then the real index, forcing a re-select.
+	/// </summary>
+	private void RepublishSelection()
+	{
+		_isRepublishing = true;
+		this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+		_isRepublishing = false;
+		this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+	}
+
 	/// <summary>Builds the "Default" entry — the base, non-isolated claude auth identity, prefixed to distinguish it from stored profiles.</summary>
 	private ProfileListItemModel BuildDefaultEntry() =>
 		new($"[Sys] {_defaultProfileDisplayName ?? "Default"}", null, isSystem: true);
@@ -122,8 +136,7 @@ public sealed class ProfileController : ReactiveObject
 		foreach (var p in _appSettings.Settings.Profiles)
 			AvailableProfiles.Add(new ProfileListItemModel(p.DisplayName, p.ProfileId));
 		AvailableProfiles.Add(new ProfileListItemModel("New...", null));
-		// Clearing the list drops the ComboBox selection; re-publish the index so it re-selects
-		this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+		RepublishSelection();
 	}
 
 	/// <summary>
@@ -152,7 +165,7 @@ public sealed class ProfileController : ReactiveObject
 		{
 			_selectedProfileIndex = 0;
 		}
-		this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+		RepublishSelection();
 		this.RaisePropertyChanged(nameof(CanManageSelectedProfile));
 	}
 
@@ -172,8 +185,7 @@ public sealed class ProfileController : ReactiveObject
 			{
 				if (AvailableProfiles.Count > 0)
 					AvailableProfiles[0] = BuildDefaultEntry();
-				// Replacing the selected item clears the ComboBox selection; re-publish the index
-				this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+				RepublishSelection();
 			});
 		}
 	}
@@ -231,7 +243,7 @@ public sealed class ProfileController : ReactiveObject
 			{
 				RebuildProfileList();
 				_selectedProfileIndex = newIndex;
-				this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+				RepublishSelection();
 				this.RaisePropertyChanged(nameof(CanManageSelectedProfile));
 			});
 
@@ -279,7 +291,7 @@ public sealed class ProfileController : ReactiveObject
 				{
 					if (AvailableProfiles.Count > 0)
 						AvailableProfiles[0] = BuildDefaultEntry();
-					this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+					RepublishSelection();
 				});
 			}
 
@@ -355,7 +367,7 @@ public sealed class ProfileController : ReactiveObject
 		Dispatcher.UIThread.Post(() =>
 		{
 			RebuildProfileList();
-			this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+			RepublishSelection();
 			this.RaisePropertyChanged(nameof(CanManageSelectedProfile));
 		});
 
