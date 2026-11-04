@@ -189,6 +189,7 @@ public sealed class SessionTurnServiceTests : IDisposable
 	private readonly FakeStreamingManagerForTurnService _streamingManager = new();
 	private readonly FakeFileServiceForTurnService _fileService = new();
 	private readonly FakeRegistryForTurnService _registry = new();
+	private readonly AttentionTestEnv _attention = new();
 	private readonly SessionTurnService _sut;
 
 	public SessionTurnServiceTests()
@@ -209,11 +210,13 @@ public sealed class SessionTurnServiceTests : IDisposable
 			new FakeSessionStatusServiceForTurnService(),
 			new FakeModelServiceForTurnService(),
 			new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()),
-			_streamingManager);
+			_streamingManager,
+			_attention.Service);
 	}
 
 	public void Dispose()
 	{
+		_attention.Dispose();
 		if (Directory.Exists(_tempDir))
 			Directory.Delete(_tempDir, recursive: true);
 	}
@@ -592,5 +595,78 @@ public sealed class SessionTurnServiceTests : IDisposable
 		};
 		await _sut.RunTurnAsync(MakeNode("streaming"), "hello", source);
 		Assert.Equal(expectReminder, _streamingManager.SendTurnCalls[0].userMessage.Contains(Constants.Instructions.ScheduledTurnNotifyReminder));
+	}
+
+	// ── FR.23.11 — pinned list and take-once closures at both SessionTurnService call sites ──────
+
+	private void PostPinnedAndClosedItems(SessionNodeModel node)
+	{
+		_attention.Service.Post(node, [AttentionTestEnv.Req("Which plan?", AttentionKind.Ask), AttentionTestEnv.Req("Rotate key", AttentionKind.Todo)]);
+		_attention.Service.CloseByUser(node, "A2");
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_StreamingProcessAlive_ReportsPinnedItemsEveryTurnAndEachClosureOnce()   // TC.FV.15-10
+	{
+		_appSettings.Settings.AgentToolsEnabled = true;
+		_streamingManager.AliveResult = true;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			onTurnEvent(new ClaudeStreamEvent { Type = "result" });
+			return Task.CompletedTask;
+		};
+		var node = MakeNode();
+		PostPinnedAndClosedItems(node);
+
+		await _sut.RunTurnAsync(node, "first", TurnSource.Scheduled);
+		await _sut.RunTurnAsync(node, "second", TurnSource.Scheduled);
+
+		var first  = _streamingManager.SendTurnCalls[0].userMessage;
+		var second = _streamingManager.SendTurnCalls[1].userMessage;
+		Assert.Contains("  - A1 ask: Which plan?", first);
+		Assert.Contains("Closed by the user in the Focus view since your last turn: A2 todo \"Rotate key\" marked done.", first);
+		Assert.Contains("  - A1 ask: Which plan?", second);
+		Assert.DoesNotContain("Closed by the user", second);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_OneShot_ReportsPinnedItemsAndEachClosureOnce()   // TC.FV.15-10
+	{
+		_appSettings.Settings.AgentToolsEnabled = true;
+		_streamingManager.AliveResult = false;
+		_processManager.EmitEvents = onEvent =>
+		{
+			onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "sess-1" });
+			return Task.CompletedTask;
+		};
+		var node = MakeNode();
+		PostPinnedAndClosedItems(node);
+
+		await _sut.RunTurnAsync(node, "first", TurnSource.Scheduled);
+
+		Assert.Contains("  - A1 ask: Which plan?", _processManager.Calls[0].userMessage);
+		Assert.Contains("A2 todo \"Rotate key\" marked done.", _processManager.Calls[0].userMessage);
+		Assert.Empty(_attention.Service.TakeUnreportedUserClosures(node.NodeId));   // consumed by the turn
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_WorkerSession_NeverTakesTheClosures()   // FR.23.11
+	{
+		_appSettings.Settings.AgentToolsEnabled = true;
+		_streamingManager.AliveResult = true;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			onTurnEvent(new ClaudeStreamEvent { Type = "result" });
+			return Task.CompletedTask;
+		};
+		var node = MakeNode();
+		PostPinnedAndClosedItems(node);
+		node.OrchestrationDepth = 1;
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.DoesNotContain("Pinned in the user's Focus view", _streamingManager.SendTurnCalls[0].userMessage);
+		node.OrchestrationDepth = 0;
+		Assert.Single(_attention.Service.TakeUnreportedUserClosures(node.NodeId));   // still unreported
 	}
 }

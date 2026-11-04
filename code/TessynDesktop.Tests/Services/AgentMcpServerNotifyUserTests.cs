@@ -77,6 +77,7 @@ public sealed class AgentMcpServerNotifyUserTests : IDisposable
 	private readonly RecordingScheduler _scheduler = new();
 	private readonly FakeSessionRegistry _registry = new();
 	private readonly FakeTurnService _turns = new();
+	private readonly AttentionTestEnv _attention = new();
 	private readonly AgentMcpServer _server;
 
 	public AgentMcpServerNotifyUserTests()
@@ -94,11 +95,13 @@ public sealed class AgentMcpServerNotifyUserTests : IDisposable
 			configMerger: null!,
 			_telegram,
 			_toasts,
-			new FakeDirectoryLabelService());
+			new FakeDirectoryLabelService(),
+			_attention.Service);
 	}
 
 	public void Dispose()
 	{
+		_attention.Dispose();
 		if (Directory.Exists(_tempDir))
 			Directory.Delete(_tempDir, recursive: true);
 	}
@@ -116,6 +119,17 @@ public sealed class AgentMcpServerNotifyUserTests : IDisposable
 		_server.HandleToolCallAsync(new JsonObject { ["name"] = tool, ["arguments"] = arguments }, caller);
 
 	private static string TextOf(JsonNode result) => result["content"]![0]!["text"]!.GetValue<string>();
+
+	// FR.23.7 appends " Pinned as A<n>." / " Already pinned as A<n>." to the notify_user result; these
+	// tests are about the channel sentence, so they compare it without that suffix.
+	private static string ChannelTextOf(JsonNode result)
+	{
+		var text = TextOf(result);
+		var cut  = text.IndexOf(" Pinned as ", StringComparison.Ordinal);
+		if (cut < 0)
+			cut = text.IndexOf(" Already pinned as ", StringComparison.Ordinal);
+		return cut < 0 ? text : text[..cut];
+	}
 
 	private Task<JsonNode> Notify(SessionNodeModel caller, string message = "need you") =>
 		Call("notify_user", new JsonObject { ["message"] = message }, caller);
@@ -149,17 +163,17 @@ public sealed class AgentMcpServerNotifyUserTests : IDisposable
 	{
 		var caller = Node("top");
 
-		Assert.Equal("Notification sent (Telegram, desktop).", TextOf(await Notify(caller)));
+		Assert.Equal("Notification sent (Telegram, desktop).", ChannelTextOf(await Notify(caller)));
 
 		_toasts.ToastResult = false;
-		Assert.Equal("Notification sent (Telegram).", TextOf(await Notify(caller)));
+		Assert.Equal("Notification sent (Telegram).", ChannelTextOf(await Notify(caller)));
 
 		_toasts.ToastResult = true;
 		_telegram.NotifyResult = false;
-		Assert.Equal("Notification sent (desktop).", TextOf(await Notify(caller)));
+		Assert.Equal("Notification sent (desktop).", ChannelTextOf(await Notify(caller)));
 
 		_toasts.ToastResult = false;
-		Assert.StartsWith("Notification not sent", TextOf(await Notify(caller)));
+		Assert.StartsWith("Notification not sent", ChannelTextOf(await Notify(caller)));
 	}
 
 	[Fact]
@@ -170,7 +184,7 @@ public sealed class AgentMcpServerNotifyUserTests : IDisposable
 		var result = await Notify(Node("top"));
 
 		Assert.Single(_toasts.Toasts);
-		Assert.Equal("Notification sent (desktop).", TextOf(result));
+		Assert.Equal("Notification sent (desktop).", ChannelTextOf(result));
 	}
 
 	[Fact]
@@ -181,7 +195,7 @@ public sealed class AgentMcpServerNotifyUserTests : IDisposable
 		var result = await Notify(Node("top"));
 
 		Assert.Single(_telegram.Notified);
-		Assert.Equal("Notification sent (Telegram).", TextOf(result));
+		Assert.Equal("Notification sent (Telegram).", ChannelTextOf(result));
 	}
 
 	[Fact]

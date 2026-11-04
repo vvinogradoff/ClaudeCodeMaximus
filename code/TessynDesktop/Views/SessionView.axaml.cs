@@ -309,10 +309,17 @@ public partial class SessionView : UserControl
 
 		e.Handled = true;
 
-		if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
-			NavigateSearch(forward: false);
-		else
-			NavigateSearch(forward: true);
+		var forward = !e.KeyModifiers.HasFlag(KeyModifiers.Control);
+
+		// Search always searches the Session output: switch to it first, then search once the output is shown (FR.23.12).
+		if (DataContext is SessionViewModel vm && vm.FocusVm.IsFocusSelected)
+		{
+			vm.FocusVm.SelectSession();
+			Dispatcher.UIThread.Post(() => NavigateSearch(forward), DispatcherPriority.Background);
+			return;
+		}
+
+		NavigateSearch(forward);
 	}
 
 	private void NavigateSearch(bool forward)

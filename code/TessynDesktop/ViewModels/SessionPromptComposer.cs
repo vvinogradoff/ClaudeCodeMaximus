@@ -20,12 +20,14 @@ public sealed class SessionPromptComposer
 	private readonly ISessionFileService _fileService;
 	private readonly IAppSettingsService _appSettings;
 	private readonly SessionNodeViewModel _node;
+	private readonly IDaemonClient _daemonClient;
 
-	public SessionPromptComposer(ISessionFileService fileService, IAppSettingsService appSettings, SessionNodeViewModel node)
+	public SessionPromptComposer(ISessionFileService fileService, IAppSettingsService appSettings, SessionNodeViewModel node, IDaemonClient daemonClient)
 	{
-		_fileService = fileService;
-		_appSettings = appSettings;
-		_node        = node;
+		_fileService  = fileService;
+		_appSettings  = appSettings;
+		_node         = node;
+		_daemonClient = daemonClient;
 	}
 
 	/// <summary>
@@ -40,11 +42,19 @@ public sealed class SessionPromptComposer
 	/// </summary>
 	public string BuildInstructionBlock(bool? isAutoCommit, bool isNewBranch, bool isAutoDocument, bool isNewSession, bool isStreamingMode)
 	{
+		// FR.23.11 — pinned items and the user's Focus-view closures, via the daemon boundary. Taking the
+		// closures clears their flag, so it is done only when the block will actually report them.
+		var isWorker       = _node.Model.OrchestrationDepth > 0;
+		var hasAttention   = _appSettings.Settings.AgentToolsEnabled && !isWorker;
+		var nodeId         = _node.Model.NodeId;
+
 		var options = new InstructionOptionsModel(
 			isAutoCommit, isNewBranch, isAutoDocument,
 			_appSettings.Settings.AgentToolsEnabled, isNewSession, isStreamingMode,
 			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled,
-			IsWorkerSession: _node.Model.OrchestrationDepth > 0);
+			IsWorkerSession: isWorker,
+			PinnedAttentionItems: hasAttention ? _daemonClient.GetAttentionItems(nodeId) : null,
+			UserClosedAttentionItems: hasAttention ? _daemonClient.TakeUnreportedAttentionClosures(nodeId) : null);
 		return InstructionBlockBuilder.Build(options);
 	}
 

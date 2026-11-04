@@ -38,6 +38,9 @@ public interface IDaemonClient
 	/// <summary>Raised once per finished turn, after its last entry was appended (FR.21.22) — relayed from ISessionFileService.TurnCompleted so the Telegram bridge can post a turn's final answer.</summary>
 	event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 
+	/// <summary>Raised once after a session's Attention Ledger changed (FR.23.16) — relayed from IAttentionService. May fire on any thread.</summary>
+	event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
+
 	// ── Tree read ───────────────────────────────────────────────────────────────
 
 	/// <summary>The authoritative directory list (source of truth for the tree projection).</summary>
@@ -142,6 +145,23 @@ public interface IDaemonClient
 
 	List<SessionSummaryModel> BuildAgentSessionSummaries();
 	IReadOnlySet<string> CollectAllClaudeSessionIds();
+
+	// ── Attention Ledger (FR.23) ─────────────────────────────────────────────────────
+
+	/// <summary>All Attention Items of a session, any status, ordered per FR.23.2.</summary>
+	IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId);
+
+	/// <summary>Open-item count (Decided excluded) and most severe open kind — the Focus badge's inputs (FR.23.13).</summary>
+	AttentionSummaryModel GetAttentionSummary(string nodeId);
+
+	/// <summary>Marks items answered from the Focus view, Answer = the text sent (FR.23.15). Unknown or closed ids are skipped.</summary>
+	void MarkAttentionAnswered(string nodeId, IReadOnlyList<AttentionAnswerModel> answers);
+
+	/// <summary>Closes an item from the Focus view: a Todo becomes Resolved, any other kind Dismissed (FR.23.15). Sends no prompt.</summary>
+	void CloseAttentionByUser(string nodeId, string itemId);
+
+	/// <summary>Returns the items the user closed since the last turn and clears their flag, so each closure is reported once (FR.23.11).</summary>
+	IReadOnlyList<AttentionItemModel> TakeUnreportedAttentionClosures(string nodeId);
 
 	// ── Cross-project search & titles (Stage 6) ──────────────────────────────────────
 

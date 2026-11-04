@@ -96,6 +96,14 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 #pragma warning restore CS0067
 
+	/// <summary>
+	/// Not wired over TDCP — the Attention Ledger has no TDCP methods yet (FR.23, out of scope); only
+	/// <see cref="InProcDaemonClient"/> relays it, and subscribing here is a silent no-op.
+	/// </summary>
+#pragma warning disable CS0067 // Never raised until the ledger has a TDCP push — see doc comment.
+	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
+#pragma warning restore CS0067
+
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 
 	/// <summary>
@@ -382,6 +390,26 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 		throw new NotSupportedException(
 			"CollectAllClaudeSessionIds is not available over the TDCP wire yet. " +
 			"Tree CRUD is daemon-side only for now; see tdcp-spec.md §5.");
+
+	// ── Attention Ledger ──────────────────────────────────────────────────────────────
+
+	public IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId) =>
+		throw new NotSupportedException(AttentionNotWiredMessage);
+
+	public AttentionSummaryModel GetAttentionSummary(string nodeId) =>
+		throw new NotSupportedException(AttentionNotWiredMessage);
+
+	public void MarkAttentionAnswered(string nodeId, IReadOnlyList<AttentionAnswerModel> answers) =>
+		throw new NotSupportedException(AttentionNotWiredMessage);
+
+	public void CloseAttentionByUser(string nodeId, string itemId) =>
+		throw new NotSupportedException(AttentionNotWiredMessage);
+
+	public IReadOnlyList<AttentionItemModel> TakeUnreportedAttentionClosures(string nodeId) =>
+		throw new NotSupportedException(AttentionNotWiredMessage);
+
+	private const string AttentionNotWiredMessage =
+		"The Attention Ledger is not available over the TDCP wire yet (FR.23 has no TDCP methods).";
 
 	// ── Cross-project search & titles ────────────────────────────────────────────────
 

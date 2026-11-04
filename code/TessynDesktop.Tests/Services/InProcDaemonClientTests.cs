@@ -1,3 +1,4 @@
+using System.IO;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -330,11 +331,12 @@ public sealed class InProcDaemonClientTests
     private readonly InProcFakeScheduler _scheduler = new();
     private readonly InProcFakeFileService _fileService = new();
     private readonly InProcFakeIndexService _indexService = new();
+    private readonly FakeAttentionService _attention = new();
     private readonly InProcDaemonClient _client;
 
     public InProcDaemonClientTests()
     {
-        _client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService);
+        _client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService, _attention);
     }
 
     private static SessionNodeModel MakeNode(string nodeId = "node-1") =>
@@ -992,5 +994,129 @@ public sealed class InProcDaemonClientTests
         await _client.SearchMatchingSessionIdsAsync("Visual Studio");
 
         Assert.Null(_indexService.LastMatchingIdsProjectSlug);
+    }
+
+    // ── Attention Ledger (FR.23.15, FR.23.16) ─────────────────────────────────────
+
+    [Fact]
+    public void GetAttentionItems_AndSummary_DelegateToTheAttentionService()   // TC.FV.19-1
+    {
+        var items = new List<AttentionItemModel> { new() { Id = "A1" }, new() { Id = "A2" } };
+        _attention.Items = items;
+        _attention.Summary = new AttentionSummaryModel { OpenCount = 2, TopKind = AttentionKind.Ask };
+
+        Assert.Same(items, _client.GetAttentionItems("node-1"));
+        Assert.Equal("node-1", _attention.LastItemsNodeId);
+
+        var summary = _client.GetAttentionSummary("node-2");
+        Assert.Equal(2, summary.OpenCount);
+        Assert.Equal(AttentionKind.Ask, summary.TopKind);
+        Assert.Equal("node-2", _attention.LastSummaryNodeId);
+    }
+
+    [Fact]
+    public void MarkAttentionAnswered_DelegatesToTheAttentionService()   // TC.FV.19-1
+    {
+        var answers = new List<AttentionAnswerModel> { new() { ItemId = "A1", Title = "t", Answer = "a" } };
+
+        _client.MarkAttentionAnswered("node-1", answers);
+
+        Assert.Equal("node-1", _attention.LastMarkAnswered!.Value.nodeId);
+        Assert.Same(answers, _attention.LastMarkAnswered.Value.answers);
+    }
+
+    [Fact]
+    public void CloseAttentionByUser_ResolvesTheNodeThroughTheRegistryAndDelegates()   // TC.FV.19-1
+    {
+        _registry.FindByNodeIdResult = MakeNode("node-1");
+
+        _client.CloseAttentionByUser("node-1", "A3");
+
+        Assert.Equal(("node-1", "A3"), _attention.LastCloseByUser);
+    }
+
+    [Fact]
+    public void CloseAttentionByUser_UnknownNode_DoesNothing()
+    {
+        _registry.FindByNodeIdResult = null;
+
+        _client.CloseAttentionByUser("ghost", "A3");
+
+        Assert.Null(_attention.LastCloseByUser);
+    }
+
+    [Fact]
+    public void TakeUnreportedAttentionClosures_DelegatesToTheAttentionService()   // FR.23.11
+    {
+        var closures = new List<AttentionItemModel> { new() { Id = "A5" } };
+        _attention.Closures = closures;
+
+        Assert.Same(closures, _client.TakeUnreportedAttentionClosures("node-1"));
+        Assert.Equal("node-1", _attention.LastTakeNodeId);
+    }
+
+    [Fact]
+    public void AttentionChanged_RelaysTheServiceEventWithTheSameNodeId()   // TC.FV.19-2
+    {
+        AttentionChangedEventArgs? received = null;
+        _client.AttentionChanged += (_, e) => received = e;
+
+        _attention.Raise("node-9");
+
+        Assert.Equal("node-9", received!.NodeId);
+    }
+
+    [Fact]
+    public void AttentionChanged_AfterDispose_NoLongerFires()   // TC.FV.19-3
+    {
+        var count = 0;
+        _client.AttentionChanged += (_, _) => count++;
+        _attention.Raise("node-1");
+
+        _client.Dispose();
+        _attention.Raise("node-1");
+
+        Assert.Equal(1, count);
+        Assert.Equal(0, _attention.SubscriberCount);
+    }
+
+    [Fact]
+    public async Task ItemPostedThroughTheMcpServer_IsVisibleThroughTheClientOverTheSameService()   // TC.FV.19-4
+    {
+        using var env = new AttentionTestEnv();
+        var tempDir = Path.Combine(Path.GetTempPath(), $"inproc-attention-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var server = new AgentMcpServer(
+                new AppSettingsService(tempDir),
+                new Lazy<ISessionTurnService>(() => new FakeTurnService()),
+                new Lazy<ISchedulerService>(() => new RecordingScheduler()),
+                new FakeSessionRegistry(),
+                fileService: null!, modelService: null!, tdcpServer: null!, configMerger: null!,
+                new FakeTelegramBridge(), new FakeNotificationService(), new FakeDirectoryLabelService(),
+                env.Service);
+            using var client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService, env.Service);
+            var changed = new List<string>();
+            client.AttentionChanged += (_, e) => changed.Add(e.NodeId);
+
+            var item = new System.Text.Json.Nodes.JsonObject { ["kind"] = "ask", ["title"] = "Shared?" };
+            await server.HandleToolCallAsync(new System.Text.Json.Nodes.JsonObject
+            {
+                ["name"] = "post_attention",
+                ["arguments"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["items"] = new System.Text.Json.Nodes.JsonArray(item),
+                },
+            }, AttentionTestEnv.Node("top"));
+
+            Assert.Equal("Shared?", Assert.Single(client.GetAttentionItems("top")).Title);
+            Assert.Equal(1, client.GetAttentionSummary("top").OpenCount);
+            Assert.Equal(["top"], changed);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
     }
 }

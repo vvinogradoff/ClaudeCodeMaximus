@@ -115,6 +115,10 @@ public partial class App : Application
 		services.AddSingleton<IAppSettingsService, AppSettingsService>();
 		services.AddSingleton<IDirectoryLabelService, DirectoryLabelService>();
 		services.AddSingleton<ISessionFileService, SessionFileService>();
+		// FR.23 — Singletons: the service owns the ledger cache and serialises writes (one instance shared by
+		// AgentMcpServer, SessionTurnService and InProcDaemonClient); the store is stateless but shared with it.
+		services.AddSingleton<AttentionLedgerStore>();
+		services.AddSingleton<IAttentionService, AttentionService>();
 		services.AddSingleton<IDraftService, DraftService>();
 		services.AddSingleton<ClaudeProcessLauncher>();
 		services.AddSingleton<IClaudeProcessManager, ClaudeProcessManager>();

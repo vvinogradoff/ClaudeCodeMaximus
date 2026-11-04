@@ -38,6 +38,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly ITelegramBridgeService    _telegramBridge;
 	private readonly INotificationService      _notifications;
 	private readonly IDirectoryLabelService    _labelService;
+	private readonly IAttentionService         _attention;
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
 
@@ -65,7 +66,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		IMcpConfigMerger configMerger,
 		ITelegramBridgeService telegramBridge,
 		INotificationService notifications,
-		IDirectoryLabelService labelService)
+		IDirectoryLabelService labelService,
+		IAttentionService attention)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -78,6 +80,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_telegramBridge = telegramBridge;
 		_notifications  = notifications;
 		_labelService   = labelService;
+		_attention      = attention;
 	}
 
 	public void Start()
@@ -405,7 +408,16 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				EmptyObjectSchema()),
 			BuildToolDef("notify_user",
 				"Send the user a notification or plain-text question — to their Telegram (FR.21.3) and as a desktop notification (FR.21.5) — only for the top-level session the user is talking to. Never call from a worker session (its own call is dropped outright, FR.21.19) or a Task-tool subagent — report back to your supervisor instead. Use only when the user must personally act or decide; one message per need, not progress updates. Fire-and-forget — there is no blocking 'ask and wait' tool; end your turn after calling this and the user's reply will arrive as your next prompt.",
-				NotifyUserSchema()));
+				NotifyUserSchema()),
+			BuildToolDef(Constants.Attention.PostToolName,
+				Constants.Attention.PostToolDescription,
+				PostAttentionSchema()),
+			BuildToolDef(Constants.Attention.ResolveToolName,
+				Constants.Attention.ResolveToolDescription,
+				ResolveAttentionSchema()),
+			BuildToolDef(Constants.Attention.ListToolName,
+				Constants.Attention.ListToolDescription,
+				ListAttentionSchema()));
 
 		return new JsonObject { ["tools"] = tools };
 	}
@@ -433,6 +445,9 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			"workflow_log"         => WorkflowLog(arguments, callerNode),
 			"get_budget"           => GetBudget(callerNode),
 			"notify_user"          => await NotifyUserAsync(arguments, callerNode),
+			Constants.Attention.PostToolName    => await PostAttentionAsync(arguments, callerNode),
+			Constants.Attention.ResolveToolName => ResolveAttention(arguments, callerNode),
+			Constants.Attention.ListToolName    => ListAttention(arguments, callerNode),
 			_                      => throw new McpMethodNotFoundException(name),
 		};
 	}
@@ -1039,32 +1054,281 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		if (callerNode.OrchestrationDepth > 0)
 			return BuildTextContent("Notification not sent — worker sessions cannot notify the user. Report to your supervisor instead.");
 
+		// FR.23.7: the message is also pinned as an Ask. The capture never notifies a second time.
+		var pinnedSuffix = CaptureNotifyUserMessage(message, callerNode);
+
 		// FR.21.5: Telegram and the desktop toast are independent — a failure in one must not stop the other.
+		var channels = await NotifyChannelsAsync(callerNode, message);
+
+		return BuildTextContent((channels.Count > 0
+			? $"Notification sent ({string.Join(", ", channels)})."
+			: "Notification not sent — neither the Telegram Bridge nor desktop notifications are enabled or reachable (see application logs).")
+			+ pinnedSuffix);
+	}
+
+	/// <summary>
+	/// The one Telegram + desktop fan-out, shared by <c>notify_user</c> (FR.21.5) and <c>post_attention</c>
+	/// (FR.23.9). Returns the channels that delivered; each is gated as today and a failure in one never
+	/// stops the other.
+	/// </summary>
+	private async Task<List<string>> NotifyChannelsAsync(SessionNodeModel callerNode, string message)
+	{
 		var channels = new List<string>();
 		try
 		{
 			if (await _telegramBridge.NotifyAsync(callerNode.NodeId, message))
-				channels.Add("Telegram");
+				channels.Add(Constants.Attention.ChannelTelegram);
 		}
 		catch (Exception ex)
 		{
-			_log.Warning(ex, "notify_user: Telegram channel failed for node {NodeId}", callerNode.NodeId);
+			_log.Warning(ex, "User notification: Telegram channel failed for node {NodeId}", callerNode.NodeId);
 		}
 
 		try
 		{
-			var title = $"{_labelService.GetLabel(callerNode.WorkingDirectory)} / {callerNode.Name}";
+			var title = string.Format(Constants.Attention.NotifyToastTitleFormat,
+				_labelService.GetLabel(callerNode.WorkingDirectory), callerNode.Name);
 			if (_notifications.ShowUserNotification(callerNode.NodeId, title, message))
-				channels.Add("desktop");
+				channels.Add(Constants.Attention.ChannelDesktop);
 		}
 		catch (Exception ex)
 		{
-			_log.Warning(ex, "notify_user: desktop channel failed for node {NodeId}", callerNode.NodeId);
+			_log.Warning(ex, "User notification: desktop channel failed for node {NodeId}", callerNode.NodeId);
 		}
 
-		return BuildTextContent(channels.Count > 0
-			? $"Notification sent ({string.Join(", ", channels)})."
-			: "Notification not sent — neither the Telegram Bridge nor desktop notifications are enabled or reachable (see application logs).");
+		return channels;
+	}
+
+	/// <summary>
+	/// FR.23.7 — pins a <c>notify_user</c> message as an Ask (source NotifyUser; title = first non-empty
+	/// line). Returns the suffix for the tool result; a failure to pin must not stop the notification.
+	/// </summary>
+	private string CaptureNotifyUserMessage(string message, SessionNodeModel callerNode)
+	{
+		try
+		{
+			var firstLine = message.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
+			var title     = NormalizeTitle(firstLine);
+			var request = new AttentionPostRequestModel
+			{
+				Kind   = AttentionKind.Ask,
+				Title  = title.Length > 0 ? title : Constants.Attention.NotifyUserFallbackTitle,
+				Body   = Cut(message, Constants.Attention.MaxBodyLength),
+				Source = AttentionSource.NotifyUser,
+			};
+
+			var outcome = _attention.Post(callerNode, [request]).Single();
+			return string.Format(
+				outcome.IsCreated ? Constants.Attention.PinnedAsSuffixFormat : Constants.Attention.AlreadyPinnedAsSuffixFormat,
+				outcome.Item.Id);
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "notify_user: could not pin the message as an Attention Item for node {NodeId}", callerNode.NodeId);
+			return string.Empty;
+		}
+	}
+
+	// ── Attention tools (FR.23) ───────────────────────────────────────────────
+
+	private async Task<JsonNode> PostAttentionAsync(JsonNode? args, SessionNodeModel callerNode)
+	{
+		// FR.23.6: a Worker Session gets a normal text result and nothing is stored.
+		if (callerNode.OrchestrationDepth > 0)
+			return BuildTextContent(Constants.Attention.WorkerRefusalText);
+
+		var requests = ParseAttentionItems(args);
+		var notify   = GetOptionalBool(args, "notify") ?? false;
+
+		var outcomes = _attention.Post(callerNode, requests);
+
+		var lines = outcomes.Select(o => string.Format(
+			o.IsCreated ? Constants.Attention.PostedLineFormat : Constants.Attention.AlreadyPinnedLineFormat,
+			o.Item.Id, AttentionFormat.KindName(o.Item.Kind))).ToList();
+
+		// FR.23.4: at most one notification per call; only created items count, updates never notify.
+		var created = outcomes.Where(o => o.IsCreated).Select(o => o.Item).ToList();
+		if (created.Count > 0 && (notify || created.Any(i => i.Kind == AttentionKind.Critical)))
+		{
+			var channels = await NotifyChannelsAsync(callerNode, BuildNewItemsMessage(created));
+			lines.Add(channels.Count > 0
+				? string.Format(Constants.Attention.NotifiedLineFormat, string.Join(Constants.Attention.ChannelSeparator, channels))
+				: Constants.Attention.NotNotifiedLine);
+		}
+
+		lines.Add(Constants.Attention.PostClosingLine);
+		return BuildTextContent(string.Join("\n", lines));
+	}
+
+	/// <summary>FR.23.9 message: one created item is "A12 (critical): title" + blank line + body; several are listed.</summary>
+	private static string BuildNewItemsMessage(IReadOnlyList<AttentionItemModel> created)
+	{
+		if (created.Count == 1)
+		{
+			var item = created[0];
+			var head = string.Format(Constants.Attention.NotifySingleFormat, item.Id, AttentionFormat.KindName(item.Kind), item.Title);
+			return item.Body.Length == 0 ? head : head + "\n\n" + item.Body;
+		}
+
+		var sb = new StringBuilder(string.Format(Constants.Attention.NotifyManyHeaderFormat, created.Count));
+		foreach (var item in created)
+			sb.Append('\n').Append(string.Format(
+				Constants.Attention.NotifyManyLineFormat, item.Id, AttentionFormat.KindName(item.Kind), item.Title));
+		return sb.ToString();
+	}
+
+	/// <summary>Validates and normalises the whole <c>items</c> array before anything is posted (FR.23.4).</summary>
+	private static List<AttentionPostRequestModel> ParseAttentionItems(JsonNode? args)
+	{
+		if (args?["items"] is not JsonArray items || items.Count == 0)
+			throw new McpToolException("'items' is required and must contain at least one item.");
+		if (items.Count > Constants.Attention.MaxItemsPerCall)
+			throw new McpToolException($"'items' may contain at most {Constants.Attention.MaxItemsPerCall} items (got {items.Count}).");
+
+		var requests = new List<AttentionPostRequestModel>();
+		for (var n = 0; n < items.Count; n++)
+		{
+			if (items[n] is not JsonObject item)
+				throw new McpToolException($"items[{n}] must be an object.");
+
+			var kindText = GetOptionalString(item, "kind");
+			if (string.IsNullOrWhiteSpace(kindText))
+				throw new McpToolException($"items[{n}]: 'kind' is required ({AllowedKinds()}).");
+			if (!TryParseKind(kindText, out var kind))
+				throw new McpToolException($"items[{n}]: invalid kind '{kindText}' - use {AllowedKinds()}.");
+
+			var title = NormalizeTitle(GetOptionalString(item, "title"));
+			if (title.Length == 0)
+				throw new McpToolException($"items[{n}]: 'title' is required and must not be empty.");
+
+			var options = ReadStringArray(item, "options")
+				.Select(o => Cut(o.Trim(), Constants.Attention.MaxOptionLength))
+				.Where(o => o.Length > 0)
+				.Take(Constants.Attention.MaxOptions)
+				.ToList();
+
+			var recommendation = GetOptionalString(item, "recommendation")?.Trim();
+			var key            = GetOptionalString(item, "key")?.Trim();
+
+			requests.Add(new AttentionPostRequestModel
+			{
+				Kind           = kind,
+				Title          = title,
+				Body           = Cut(GetOptionalString(item, "body") ?? string.Empty, Constants.Attention.MaxBodyLength),
+				Options        = options,
+				Recommendation = string.IsNullOrEmpty(recommendation) ? null : Cut(recommendation, Constants.Attention.MaxRecommendationLength),
+				Key            = string.IsNullOrEmpty(key) ? null : Cut(key, Constants.Attention.MaxKeyLength),
+				Source         = AttentionSource.Tool,
+			});
+		}
+
+		return requests;
+	}
+
+	private static bool TryParseKind(string text, out AttentionKind kind)
+	{
+		var trimmed = text.Trim();
+		kind = default;
+		// Enum.TryParse also accepts numeric strings; only the kind names are valid here.
+		return Enum.GetNames<AttentionKind>().Any(n => string.Equals(n, trimmed, StringComparison.OrdinalIgnoreCase))
+		       && Enum.TryParse(trimmed, ignoreCase: true, out kind);
+	}
+
+	private static string AllowedKinds() =>
+		string.Join(", ", Enum.GetValues<AttentionKind>().Select(AttentionFormat.KindName));
+
+	private static List<string> ReadStringArray(JsonNode? node, string name)
+	{
+		var array = node?[name];
+		if (array == null)
+			return [];
+		if (array is not JsonArray values)
+			throw new McpToolException($"'{name}' must be an array of strings.");
+
+		var result = new List<string>();
+		foreach (var value in values)
+		{
+			if (value is JsonValue v && v.TryGetValue<string>(out var text))
+				result.Add(text);
+			else
+				throw new McpToolException($"'{name}' must be an array of strings.");
+		}
+
+		return result;
+	}
+
+	/// <summary>Title: newlines become spaces, trimmed, cut to the limit (FR.23.4).</summary>
+	private static string NormalizeTitle(string? raw) =>
+		Cut(string.Join(' ', (raw ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+			.Select(l => l.Trim()).Where(l => l.Length > 0)), Constants.Attention.MaxTitleLength);
+
+	private static string Cut(string text, int maxLength) => text.Length > maxLength ? text[..maxLength] : text;
+
+	private JsonNode ResolveAttention(JsonNode? args, SessionNodeModel callerNode)
+	{
+		if (callerNode.OrchestrationDepth > 0)
+			return BuildTextContent(Constants.Attention.WorkerRefusalText);
+
+		var id = GetOptionalString(args, "id")?.Trim();
+		if (string.IsNullOrEmpty(id))
+			throw new McpToolException("'id' is required");
+
+		var statusText = GetOptionalString(args, "status")?.Trim().ToLowerInvariant();
+		var status = statusText switch
+		{
+			Constants.Attention.ResolveStatusAnswered => AttentionStatus.Answered,
+			Constants.Attention.ResolveStatusResolved => AttentionStatus.Resolved,
+			_ => throw new McpToolException(
+				$"Invalid status '{statusText}' - use {Constants.Attention.ResolveStatusAnswered} or {Constants.Attention.ResolveStatusResolved}."),
+		};
+
+		var result = _attention.ResolveBySession(callerNode, id, status, GetOptionalString(args, "note"));
+		return BuildTextContent(result.Outcome switch
+		{
+			AttentionResolveOutcome.Unknown => throw new McpToolException(
+				string.Format(Constants.Attention.UnknownItemFormat, id.ToUpperInvariant())),
+			AttentionResolveOutcome.AlreadyClosed => string.Format(
+				Constants.Attention.AlreadyClosedFormat, result.Item!.Id, AttentionFormat.StatusName(result.Item.Status)),
+			_ => string.Format(
+				status == AttentionStatus.Answered ? Constants.Attention.ResolvedAnsweredFormat : Constants.Attention.ResolvedFormat,
+				result.Item!.Id),
+		});
+	}
+
+	private JsonNode ListAttention(JsonNode? args, SessionNodeModel callerNode)
+	{
+		var statusText = GetOptionalString(args, "status")?.Trim().ToLowerInvariant() ?? Constants.Attention.ListStatusOpen;
+		var all        = statusText switch
+		{
+			Constants.Attention.ListStatusOpen => false,
+			Constants.Attention.ListStatusAll  => true,
+			_ => throw new McpToolException(
+				$"Invalid status '{statusText}' - use {Constants.Attention.ListStatusOpen} or {Constants.Attention.ListStatusAll}."),
+		};
+
+		// FR.23.6: a Worker Session has no Focus view.
+		if (callerNode.OrchestrationDepth > 0)
+			return BuildTextContent(Constants.Attention.NoItemsText);
+
+		var items = _attention.GetItems(callerNode.NodeId)
+			.Where(i => all || i.Status == AttentionStatus.Open)
+			.ToList();
+		if (items.Count == 0)
+			return BuildTextContent(all ? Constants.Attention.NoItemsText : Constants.Attention.NoOpenItemsText);
+
+		return BuildTextContent(string.Join("\n", items.Select(FormatAttentionListLine)));
+	}
+
+	/// <summary>FR.23.5 line: <c>A12 [critical, open] title</c>; closed items add their answer or note.</summary>
+	private static string FormatAttentionListLine(AttentionItemModel item)
+	{
+		var line = $"{item.Id} [{AttentionFormat.KindName(item.Kind)}, {AttentionFormat.StatusName(item.Status)}] {item.Title}";
+		return item.Status switch
+		{
+			AttentionStatus.Answered when !string.IsNullOrEmpty(item.Answer)         => $"{line} - answer: {item.Answer}",
+			AttentionStatus.Resolved when !string.IsNullOrEmpty(item.ResolutionNote) => $"{line} - {item.ResolutionNote}",
+			_ => line,
+		};
 	}
 
 	// ── Helpers: tier enforcement + output shaping ────────────────────────────
@@ -1399,6 +1663,55 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"message": { "type": "string", "description": "Notification or question text to send to the user (Telegram and desktop)." }
 			},
 			"required": ["message"]
+		}
+		""")!;
+
+	private static JsonNode PostAttentionSchema() => JsonNode.Parse("""
+		{
+			"type": "object",
+			"properties": {
+				"items": {
+					"type": "array",
+					"minItems": 1,
+					"maxItems": 30,
+					"description": "Items to pin, 1-30. An open item with the same key (or, without a key, the same title) is updated instead of duplicated.",
+					"items": {
+						"type": "object",
+						"properties": {
+							"kind":           { "type": "string", "enum": ["critical", "ask", "todo", "alert", "decided"], "description": "critical: the user must know immediately (always notifies). ask: you need their answer, decision or approval. todo: something only they can do. alert: worth knowing, no reply needed. decided: a call you made that they may override." },
+							"title":          { "type": "string", "description": "One line, up to 200 characters." },
+							"body":           { "type": "string", "description": "Markdown, self-contained, up to 20,000 characters." },
+							"options":        { "type": "array", "maxItems": 10, "items": { "type": "string" }, "description": "Answer options the user can pick (each up to 200 characters)." },
+							"recommendation": { "type": "string", "description": "Your recommended answer, up to 1,000 characters." },
+							"key":            { "type": "string", "description": "Stable dedupe key of your choosing, up to 100 characters." }
+						},
+						"required": ["kind", "title"]
+					}
+				},
+				"notify": { "type": "boolean", "description": "Also ping the user's Telegram and desktop. Default false; critical items always notify." }
+			},
+			"required": ["items"]
+		}
+		""")!;
+
+	private static JsonNode ResolveAttentionSchema() => JsonNode.Parse("""
+		{
+			"type": "object",
+			"properties": {
+				"id":     { "type": "string", "description": "Item id, e.g. A12 (case-insensitive)." },
+				"status": { "type": "string", "enum": ["answered", "resolved"], "description": "answered: the user answered it in conversation. resolved: done, withdrawn or no longer applies." },
+				"note":   { "type": "string", "description": "answered: the user's answer. resolved: why. Up to 2,000 characters." }
+			},
+			"required": ["id", "status"]
+		}
+		""")!;
+
+	private static JsonNode ListAttentionSchema() => JsonNode.Parse("""
+		{
+			"type": "object",
+			"properties": {
+				"status": { "type": "string", "enum": ["open", "all"], "description": "open (default) or all." }
+			}
 		}
 		""")!;
 

@@ -25,6 +25,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly IClaudeModelService             _modelService;
 	private readonly Lazy<ITelegramBridgeService>    _telegramBridge;
 	private readonly IClaudeStreamingSessionManager  _streamingManager;
+	private readonly IAttentionService               _attention;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
 	private readonly ConcurrentDictionary<string, SemaphoreSlim> _turnLocks = new();
@@ -42,7 +43,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		IClaudeSessionStatusService sessionStatus,
 		IClaudeModelService modelService,
 		Lazy<ITelegramBridgeService> telegramBridge,
-		IClaudeStreamingSessionManager streamingManager)
+		IClaudeStreamingSessionManager streamingManager,
+		IAttentionService attention)
 	{
 		_processManager   = processManager;
 		_fileService      = fileService;
@@ -54,7 +56,25 @@ public sealed class SessionTurnService : ISessionTurnService
 		_modelService     = modelService;
 		_telegramBridge   = telegramBridge;
 		_streamingManager = streamingManager;
+		_attention        = attention;
 	}
+
+	/// <summary>
+	/// FR.23.11 — the session's items for the Pinned list. Only a top-level session with agent tools
+	/// enabled gets them (the same gate the builder applies), so nothing is read for a worker.
+	/// </summary>
+	private IReadOnlyList<AttentionItemModel>? PinnedItemsFor(SessionNodeModel node) =>
+		HasAttentionTools(node) ? _attention.GetItems(node.NodeId) : null;
+
+	/// <summary>
+	/// FR.23.11 — the user's Focus-view closures since the last turn. Taking clears their flag, so it is
+	/// done only when the block will actually report them.
+	/// </summary>
+	private IReadOnlyList<AttentionItemModel>? TakeUserClosuresFor(SessionNodeModel node) =>
+		HasAttentionTools(node) ? _attention.TakeUnreportedUserClosures(node.NodeId) : null;
+
+	private bool HasAttentionTools(SessionNodeModel node) =>
+		_appSettings.Settings.AgentToolsEnabled && node.OrchestrationDepth == 0;
 
 	public SemaphoreSlim GetTurnLock(string nodeId) =>
 		_turnLocks.GetOrAdd(nodeId, _ => new SemaphoreSlim(1, 1));
@@ -181,7 +201,8 @@ public sealed class SessionTurnService : ISessionTurnService
 				node.IsAutoCommit, false, node.IsAutoDocument,
 				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: false,
 				IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0,
-				IsScheduledTurn: source == TurnSource.Scheduled);
+				IsScheduledTurn: source == TurnSource.Scheduled,
+				PinnedAttentionItems: PinnedItemsFor(node), UserClosedAttentionItems: TakeUserClosuresFor(node));
 			var instructionBlock = InstructionBlockBuilder.Build(options);
 			var augmentedPrompt  = prompt + instructionBlock;
 
@@ -309,7 +330,8 @@ public sealed class SessionTurnService : ISessionTurnService
 			node.IsAutoCommit, false, node.IsAutoDocument,
 			_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: true,
 			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0,
-			IsScheduledTurn: source == TurnSource.Scheduled);
+			IsScheduledTurn: source == TurnSource.Scheduled,
+			PinnedAttentionItems: PinnedItemsFor(node), UserClosedAttentionItems: TakeUserClosuresFor(node));
 		var augmentedPrompt = prompt + InstructionBlockBuilder.Build(options);
 
 		var resultText         = new StringBuilder();

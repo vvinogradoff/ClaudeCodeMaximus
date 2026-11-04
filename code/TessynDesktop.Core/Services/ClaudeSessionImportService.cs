@@ -593,7 +593,8 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 			return fp.GetString();
 
 		// Generic fallback for other tools (WebSearch, WebFetch, Grep, etc.)
-		foreach (var fieldName in new[] { "query", "prompt", "pattern", "url", "text", "skill" })
+		// "message" covers notify_user and workflow_log (FR.23.8).
+		foreach (var fieldName in new[] { "query", "prompt", "pattern", "url", "text", "skill", "message" })
 		{
 			if (input.TryGetProperty(fieldName, out var val) &&
 			    val.ValueKind == JsonValueKind.String)
@@ -603,6 +604,27 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 					return Truncate(str, 120);
 			}
 		}
+
+		// post_attention (FR.23.8): "<n> item(s): <title1>; <title2>"; items without a title are ignored.
+		if (input.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+		{
+			var titles = new List<string>();
+			foreach (var item in items.EnumerateArray())
+			{
+				if (item.ValueKind == JsonValueKind.Object &&
+				    item.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String &&
+				    !string.IsNullOrWhiteSpace(title.GetString()))
+					titles.Add(title.GetString()!);
+			}
+
+			if (titles.Count > 0)
+				return Truncate($"{titles.Count} item(s): {string.Join("; ", titles)}", 120);
+		}
+
+		// resolve_attention (FR.23.8): "<id> <status>".
+		if (input.TryGetProperty("id", out var idVal) && idVal.ValueKind == JsonValueKind.String &&
+		    input.TryGetProperty("status", out var statusVal) && statusVal.ValueKind == JsonValueKind.String)
+			return $"{idVal.GetString()} {statusVal.GetString()}";
 
 		return null;
 	}

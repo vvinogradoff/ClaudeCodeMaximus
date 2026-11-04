@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.IO;
 using System.Text;
@@ -298,5 +299,68 @@ public sealed class ClaudeSessionImportServiceTests : IDisposable
 	private static string JsonLine(string type, string messageJson, string timestamp)
 	{
 		return $$"""{"type":"{{type}}","message":{{messageJson}},"timestamp":"{{timestamp}}","uuid":"test","sessionId":"test-session"}""";
+	}
+
+	// --- FR.23.8 tool lines (TC.FV.17) ---
+
+	private string ToolLine(string name, string inputJson)
+	{
+		var path = WriteJsonlFile("tool-line-" + Guid.NewGuid().ToString("N"),
+			JsonLine("assistant", $$"""{"content":[{"type":"tool_use","name":"{{name}}","input":{{inputJson}}}]}""", "2026-03-10T10:00:00Z"));
+		var entries = _sut.ParseJsonlSession(path);
+		return Assert.Single(entries).Content;
+	}
+
+	[Fact]
+	public void ToolLine_NotifyUserMessage_ShowsTheMessage()   // TC.FV.17-1
+	{
+		Assert.Equal("[Tool: mcp__cmx__notify_user] Need a decision",
+			ToolLine("mcp__cmx__notify_user", """{"message":"Need a decision"}"""));
+	}
+
+	[Fact]
+	public void ToolLine_LongMessage_IsCutTo120LikeTheOtherFallbackFields()   // TC.FV.17-1
+	{
+		var line = ToolLine("mcp__cmx__notify_user", $$"""{"message":"{{new string('m', 200)}}"}""");
+
+		Assert.Equal("[Tool: mcp__cmx__notify_user] " + new string('m', 120) + "...", line);
+	}
+
+	[Fact]
+	public void ToolLine_ItemsArray_ShowsCountAndTitles()   // TC.FV.17-2
+	{
+		Assert.Equal("[Tool: mcp__cmx__post_attention] 2 item(s): A; B",
+			ToolLine("mcp__cmx__post_attention", """{"items":[{"title":"A","kind":"ask"},{"title":"B","kind":"todo"}]}"""));
+		Assert.Equal("[Tool: mcp__cmx__post_attention] 1 item(s): A",
+			ToolLine("mcp__cmx__post_attention", """{"items":[{"title":"A"}]}"""));
+	}
+
+	[Fact]
+	public void ToolLine_ItemsArray_IgnoresItemsWithoutTitleAndCutsLongLists()   // TC.FV.17-2
+	{
+		Assert.Equal("[Tool: mcp__cmx__post_attention] 1 item(s): A",
+			ToolLine("mcp__cmx__post_attention", """{"items":[{"kind":"ask"},{"title":"A"}]}"""));
+
+		var titles = string.Join(",", Enumerable.Range(1, 30).Select(n => $$"""{"title":"Title number {{n}}"}"""));
+		var line = ToolLine("mcp__cmx__post_attention", $$"""{"items":[{{titles}}]}""");
+		Assert.Equal("[Tool: mcp__cmx__post_attention] ".Length + 120 + 3, line.Length);
+		Assert.EndsWith("...", line);
+	}
+
+	[Fact]
+	public void ToolLine_IdAndStatus_ShowsBoth()   // TC.FV.17-3
+	{
+		Assert.Equal("[Tool: mcp__cmx__resolve_attention] a12 answered",
+			ToolLine("mcp__cmx__resolve_attention", """{"id":"a12","status":"answered","note":"yes"}"""));
+	}
+
+	[Fact]
+	public void ToolLine_ExistingShapes_AreUnchanged()   // TC.FV.17-4
+	{
+		Assert.Equal("[Tool: Bash] ls -la", ToolLine("Bash", """{"command":"ls -la"}"""));
+		Assert.Equal("[Tool: Read] /a/b.cs", ToolLine("Read", """{"file_path":"/a/b.cs"}"""));
+		Assert.Equal("[Tool: Grep] foo", ToolLine("Grep", """{"pattern":"foo"}"""));
+		Assert.Equal("[Tool: Task] Do it", ToolLine("Task", """{"description":"Do it"}"""));
+		Assert.Equal("[Tool: mcp__cmx__list_attention]", ToolLine("mcp__cmx__list_attention", """{"status":"all"}"""));
 	}
 }

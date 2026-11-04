@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace TessynDesktop.Models;
 
 /// <summary>
@@ -34,6 +36,15 @@ namespace TessynDesktop.Models;
 /// <see cref="Constants.Instructions.ScheduledTurnNotifyReminder"/> on every such turn, since
 /// it describes this turn rather than session policy.
 /// </param>
+/// <param name="PinnedAttentionItems">
+/// The session's Attention Items (FR.23.11); the builder lists the open ones in the Pinned list, so
+/// the session does not restate them. Null or no open item emits nothing. Only filled for a
+/// top-level session with agent tools enabled.
+/// </param>
+/// <param name="UserClosedAttentionItems">
+/// Items the user closed in the Focus view since the previous turn (FR.23.11), taken once through
+/// <c>IAttentionService.TakeUnreportedUserClosures</c> so each closure is reported a single time.
+/// </param>
 public sealed record InstructionOptionsModel(
 	bool? IsAutoCommit,
 	bool IsNewBranch,
@@ -43,4 +54,6 @@ public sealed record InstructionOptionsModel(
 	bool IsStreamingMode,
 	bool IsTelegramEnabled = false,
 	bool IsWorkerSession = false,
-	bool IsScheduledTurn = false);
+	bool IsScheduledTurn = false,
+	IReadOnlyList<AttentionItemModel>? PinnedAttentionItems = null,
+	IReadOnlyList<AttentionItemModel>? UserClosedAttentionItems = null);

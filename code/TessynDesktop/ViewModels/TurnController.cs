@@ -317,13 +317,17 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		}
 	}
 
-	public async Task SendAsync(string inputText)
+	/// <param name="preserveInput">
+	/// When true the input box is not cleared and its draft is not deleted — for callers that send a
+	/// prompt which did not come from the input box (the Focus view's "Send answers", FR.23.15).
+	/// </param>
+	public async Task SendAsync(string inputText, bool preserveInput = false)
 	{
 		var message = inputText.Trim();
 		if (string.IsNullOrEmpty(message) && !_isAutoCompact)
 			return;
 
-		await SendAsyncCore(message);
+		await SendAsyncCore(message, preserveInput);
 	}
 
 	/// <summary>Raised after InputText should be cleared (the send has captured the message and started).</summary>
@@ -361,10 +365,13 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_log.Information("Delayed send scheduled for session {FileName}: fires at {FireAt}", _node.FileName, fireAtUtc);
 	}
 
-	private async Task SendAsyncCore(string message)
+	private async Task SendAsyncCore(string message, bool preserveInput)
 	{
-		InputCleared?.Invoke();
-		_draftService.DeleteDraft(_node.FileName);
+		if (!preserveInput)
+		{
+			InputCleared?.Invoke();
+			_draftService.DeleteDraft(_node.FileName);
+		}
 
 		// Auto-Compact can be triggered with an empty prompt: skip straight to compaction (no turn sent).
 		if (string.IsNullOrEmpty(message) && _isAutoCompact)

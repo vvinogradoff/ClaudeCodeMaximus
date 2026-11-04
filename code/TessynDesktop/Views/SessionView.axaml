@@ -80,6 +80,12 @@
         <Style Selector="ComboBox.cmxCompact /template/ TextBox#PART_EditableTextBox">
             <Setter Property="(Grid.ColumnSpan)" Value="2"/>
         </Style>
+        <!-- Focus selected (FR.23.12): the output area stays laid out underneath (keeps its scroll offset and lets
+             a search triggered from Focus scroll to its match) but is invisible and inert; FocusView covers it. -->
+        <Style Selector="Grid.hiddenByFocus">
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,5,120">
@@ -88,20 +94,44 @@
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,0,0,1">
             <DockPanel>
-                <ToggleButton DockPanel.Dock="Right"
-                              IsChecked="{Binding IsClaudeSessionView}"
-                              IsVisible="{Binding HasClaudeSession}"
-                              Content="JSONL"
-                              ToolTip.Tip="Switch between TessynDesktop session and Claude CLI session"
-                              Padding="8,3" FontSize="11"
-                              Margin="4,0,0,0"
-                              VerticalAlignment="Center"/>
-                <ToggleButton DockPanel.Dock="Right"
-                              IsChecked="{Binding IsMarkdownMode}"
-                              Content="MD"
-                              ToolTip.Tip="Toggle markdown rendering"
-                              Padding="8,3" FontSize="11"
-                              VerticalAlignment="Center"/>
+                <!-- MD and JSONL are hidden while Focus is selected (FR.23.12). Declared first = docked rightmost. -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            IsVisible="{Binding FocusVm.IsSessionSelected}"
+                            VerticalAlignment="Center">
+                    <ToggleButton IsChecked="{Binding IsMarkdownMode}"
+                                  Content="MD"
+                                  ToolTip.Tip="Toggle markdown rendering"
+                                  Padding="8,3" FontSize="11"
+                                  VerticalAlignment="Center"/>
+                    <ToggleButton IsChecked="{Binding IsClaudeSessionView}"
+                                  IsVisible="{Binding HasClaudeSession}"
+                                  Content="JSONL"
+                                  ToolTip.Tip="Switch between TessynDesktop session and Claude CLI session"
+                                  Padding="8,3" FontSize="11"
+                                  Margin="4,0,0,0"
+                                  VerticalAlignment="Center"/>
+                </StackPanel>
+                <!-- Session/Focus segmented switch + Focus badge (FR.23.12, FR.23.13) -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2"
+                            Margin="0,0,8,0" VerticalAlignment="Center">
+                    <ToggleButton IsChecked="{Binding FocusVm.IsSessionSelected}"
+                                  Content="Session"
+                                  ToolTip.Tip="Show the session output"
+                                  Padding="8,3" FontSize="11"
+                                  VerticalAlignment="Center"/>
+                    <ToggleButton IsChecked="{Binding FocusVm.IsFocusSelected}"
+                                  ToolTip.Tip="Show the items this session pinned for you"
+                                  Padding="8,3" FontSize="11"
+                                  VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="Focus" VerticalAlignment="Center"/>
+                            <views:AttentionKindPill Kind="{Binding FocusVm.BadgeKind}"
+                                                     Text="{Binding FocusVm.BadgeText}"
+                                                     IsVisible="{Binding FocusVm.IsBadgeVisible}"
+                                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ToggleButton>
+                </StackPanel>
                 <views:NativeTextBox DockPanel.Dock="Right"
                          x:Name="OutputSearchBox"
                          Watermark="Search output..."
@@ -120,7 +150,7 @@
         </Border>
 
         <Grid Grid.Row="1" RowDefinitions="*,Auto">
-            <Grid Grid.Row="0">
+            <Grid Grid.Row="0" Classes.hiddenByFocus="{Binding FocusVm.IsFocusSelected}">
             <ScrollViewer x:Name="MessageScroller"
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto">
@@ -261,6 +291,12 @@
                 </StackPanel>
             </Border>
         </Grid>
+
+            <!-- Focus view (FR.23.12, FR.23.14): covers the output area while Focus is selected -->
+            <!-- The Panel carries IsVisible: a binding on FocusView itself would resolve against its own DataContext. -->
+            <Panel Grid.Row="0" IsVisible="{Binding FocusVm.IsFocusSelected}">
+                <views:FocusView DataContext="{Binding FocusVm}"/>
+            </Panel>
 
             <!-- Thinking indicator (inside Row 1, below messages) -->
             <StackPanel Grid.Row="1"

@@ -141,6 +141,7 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	public event EventHandler? ScheduleChanged { add { } remove { } }
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged { add { } remove { } }
 
 	public void RaiseTurnCompleted(string fileName, bool cancelled = false, string? errorText = null) =>
 		TurnCompleted?.Invoke(this, new SessionTurnCompletedEventArgs { FileName = fileName, Cancelled = cancelled, ErrorText = errorText });
@@ -210,6 +211,13 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotImplementedException();
 
 	public List<SessionSummaryModel> BuildAgentSessionSummaries() => Summaries;
+
+	// Attention Ledger (FR.23) — not used by the Telegram bridge.
+	public IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId) => throw new NotImplementedException();
+	public AttentionSummaryModel GetAttentionSummary(string nodeId) => throw new NotImplementedException();
+	public void MarkAttentionAnswered(string nodeId, IReadOnlyList<AttentionAnswerModel> answers) => throw new NotImplementedException();
+	public void CloseAttentionByUser(string nodeId, string itemId) => throw new NotImplementedException();
+	public IReadOnlyList<AttentionItemModel> TakeUnreportedAttentionClosures(string nodeId) => throw new NotImplementedException();
 	public IReadOnlySet<string> CollectAllClaudeSessionIds() => throw new NotImplementedException();
 
 	public Task<int> ReindexSessionsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();

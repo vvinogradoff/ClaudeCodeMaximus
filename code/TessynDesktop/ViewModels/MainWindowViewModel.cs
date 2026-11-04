@@ -33,6 +33,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ITelegramBridgeService _telegramBridge;
 	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly ISessionSoundService _soundService;
+	private readonly IUiDispatcher _uiDispatcher;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
@@ -231,7 +232,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IDaemonClient daemonClient,
 		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
-		ISessionSoundService soundService)
+		ISessionSoundService soundService,
+		IUiDispatcher uiDispatcher)
 	{
 		_appSettings      = appSettings;
 		_fileService      = fileService;
@@ -249,6 +251,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_telegramBridge   = telegramBridge;
 		_sessionStatus    = sessionStatus;
 		_soundService     = soundService;
+		_uiDispatcher     = uiDispatcher;
 		SessionTree       = sessionTree;
 		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
@@ -342,7 +345,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _telegramBridge, _sessionStatus, _soundService);
+				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _telegramBridge, _sessionStatus, _soundService, _uiDispatcher);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache[cacheKey] = vm;

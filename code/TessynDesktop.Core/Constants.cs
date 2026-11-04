@@ -137,7 +137,7 @@ public static class Constants
 		/// user is away from their phone or Telegram is unreachable (see FR.21.3 rationale).
 		/// </summary>
 		public const string TelegramNotifyGuidance =
-			"A Telegram bridge is available: call `mcp__" + Agent.McpServerName + "__notify_user` to send the user a notification or ask them a plain-text question — but only from this top-level session, never from a worker or Task-tool subagent (report back to your supervisor instead), and only when the user must personally act or decide, one message per need, not progress updates. There is no blocking \"ask and wait\" tool — after calling notify_user, end your turn normally instead of waiting idle for a reply. The user's Telegram reply arrives later as an ordinary new prompt in this same session.";
+			"A Telegram bridge is available: `critical` items, and items you post with `notify: true`, also ping the user's Telegram and desktop. Use `notify: true` only when the user must act soon — never for progress updates — and only from this top-level session, never from a worker or Task-tool subagent (report back to your supervisor instead). `mcp__" + Agent.McpServerName + "__notify_user` still sends a plain message and is also pinned as an ask, but prefer `post_attention`. There is no blocking \"ask and wait\" tool — after posting an ask, end your turn normally instead of waiting idle for a reply. The user's reply arrives later as an ordinary new prompt in this same session.";
 
 		/// <summary>
 		/// FR.21.24 — Emitted on every turn the scheduler started (not once per session), when agent
@@ -145,7 +145,14 @@ public static class Constants
 		/// tells the user such a turn finished, so it must ask for them explicitly, and only when needed.
 		/// </summary>
 		public const string ScheduledTurnNotifyReminder =
-			"The scheduler started this turn, so the user may not be watching and is not told when it finishes. If — and only if — your reply needs the user to decide or act, call `mcp__" + Agent.McpServerName + "__notify_user` once with that ask. Otherwise do not call it.";
+			"The scheduler started this turn, so the user may not be watching and is not told when it finishes. If — and only if — your reply needs the user to decide or act and it isn't pinned yet, post it with `mcp__" + Agent.McpServerName + "__post_attention` (`notify: true` if they must act soon). Don't restate items that are already pinned.";
+
+		/// <summary>
+		/// FR.23.10 — Emitted once per fresh session, with the same gate as <see cref="NoWorkflowTool"/> plus
+		/// "not a Worker Session". Session policy: how and when to pin items in the user's Focus view.
+		/// </summary>
+		public const string AttentionGuidance =
+			"The user has a Focus view beside this session's output. Pin anything they need there with `mcp__" + Agent.McpServerName + "__post_attention`: `critical` — they must know immediately (it notifies them at once); `ask` — you need their answer, decision or approval; `todo` — something only they can do; `alert` — worth knowing, no reply needed; `decided` — a call you made for them so work isn't blocked, which they may want to override. Write each item so it stands on its own: the user may read it days later without this conversation. Post each item once — it stays pinned until resolved, so don't restate pinned items in later replies; refer to them by id. When the user answers an item in conversation, or it no longer applies, call `mcp__" + Agent.McpServerName + "__resolve_attention`.";
 
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
 		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
@@ -258,6 +265,154 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string OpenSettings = "OpenSettings";
 		public const string CloseDialog = "CloseDialog";
 		public const string Send = "Send";
+	}
+
+	/// <summary>Constants for the Attention Ledger and the Focus view (FR.23).</summary>
+	public static class Attention
+	{
+		/// <summary>Folder under the data root that holds one ledger JSON per NodeId (FR.23.3).</summary>
+		public const string FolderName = "attention";
+		public const string LedgerFileExtension = ".json";
+		public const string LedgerTempExtension = ".tmp";
+		public const string CorruptFileInfix = ".bad-";
+		public const string CorruptTimestampFormat = "yyyyMMddHHmmss";
+
+		/// <summary>Prefix of an item id: <c>A{n}</c> (FR.23.2).</summary>
+		public const string IdPrefix = "A";
+
+		// ── post_attention limits (FR.23.4) ──
+		public const int MaxItemsPerCall = 30;
+		public const int MaxTitleLength = 200;
+		public const int MaxBodyLength = 20_000;
+		public const int MaxOptions = 10;
+		public const int MaxOptionLength = 200;
+		public const int MaxRecommendationLength = 1_000;
+		public const int MaxKeyLength = 100;
+
+		/// <summary>Maximum length of a <c>resolve_attention</c> note (FR.23.5).</summary>
+		public const int MaxNoteLength = 2_000;
+
+		// ── Pinned list (FR.23.11) ──
+		public const int MaxPinnedLines = 20;
+		public const int MaxPinnedTitleLength = 120;
+		public const string TitleEllipsis = "...";
+
+		/// <summary>Focus badge background for a Critical top kind (FR.23.1).</summary>
+		public const string BadgeCriticalBackground = "#8B0000";
+
+		/// <summary>Focus badge background for an Ask top kind (FR.23.1).</summary>
+		public const string BadgeAskBackground = "#DAA520";
+
+		public const string BadgeCriticalForeground = "#FFFFFF";
+		public const string BadgeAskForeground = "#000000";
+
+		/// <summary>Resolution note of a Todo the user marked done in the Focus view (FR.23.15).</summary>
+		public const string MarkedDoneNote = "Marked done by the user";
+
+		/// <summary>Title given to a captured <c>notify_user</c> message that has no non-empty line (FR.23.7).</summary>
+		public const string NotifyUserFallbackTitle = "Message from the session";
+
+		// ── Tool names and descriptions (FR.23.4, FR.23.5) ──
+		public const string PostToolName = "post_attention";
+		public const string ResolveToolName = "resolve_attention";
+		public const string ListToolName = "list_attention";
+
+		public const string PostToolDescription =
+			"Pin items in the user's Focus view, next to this session's output, where they stay visible until resolved. Kinds: critical (the user must know immediately — always notifies them), ask (you need their answer or approval), todo (something only they can do), alert (worth knowing, no reply needed), decided (a call you made for them that they may override). Write each body so it stands on its own. Post an item once: re-posting an open item with the same key or title updates it instead of adding a copy. Don't restate pinned items in later replies — refer to them by id (A1, A2, …). Set notify=true to also ping the user's Telegram and desktop, only when they must act soon. Top-level sessions only — a worker's call is refused; report to your supervisor instead.";
+
+		public const string ResolveToolDescription =
+			"Close a pinned Focus item: status=answered when the user answered it in conversation (note = their answer), status=resolved when it is done or no longer applies (note = why).";
+
+		public const string ListToolDescription =
+			"List this session's Focus items — open (default) or all — with ids, kinds, statuses and answers.";
+
+		// ── Tool result texts (FR.23.4–FR.23.7, FR.23.9) ──
+		public const string WorkerRefusalText = "Not posted - worker sessions can't post to the user's Focus view. Report to your supervisor instead.";
+		public const string PostedLineFormat = "{0} posted ({1}).";
+		public const string AlreadyPinnedLineFormat = "{0} already pinned ({1}) - updated, not re-posted.";
+		public const string NotifiedLineFormat = "Notified: {0}.";
+		public const string NotNotifiedLine = "Notification not sent - neither Telegram nor desktop notifications are enabled.";
+		public const string PostClosingLine = "Pinned items stay in the user's Focus view until resolved - don't restate them; refer to them by id.";
+		public const string ResolvedAnsweredFormat = "{0} marked answered.";
+		public const string ResolvedFormat = "{0} resolved.";
+		public const string AlreadyClosedFormat = "{0} is already {1}.";
+		public const string UnknownItemFormat = "Unknown attention item '{0}'.";
+		public const string NoOpenItemsText = "No open items.";
+		public const string NoItemsText = "No items.";
+		public const string PinnedAsSuffixFormat = " Pinned as {0}.";
+		public const string AlreadyPinnedAsSuffixFormat = " Already pinned as {0}.";
+		public const string ChannelTelegram = "Telegram";
+		public const string ChannelDesktop = "desktop";
+		public const string ChannelSeparator = ", ";
+		public const string ListStatusOpen = "open";
+		public const string ListStatusAll = "all";
+		public const string ResolveStatusAnswered = "answered";
+		public const string ResolveStatusResolved = "resolved";
+
+		// ── Notification message (FR.23.9) ──
+		public const string NotifySingleFormat = "{0} ({1}): {2}";
+		public const string NotifyManyHeaderFormat = "{0} new items in the Focus view:";
+		public const string NotifyManyLineFormat = "- {0} ({1}): {2}";
+		public const string NotifyToastTitleFormat = "{0} / {1}";
+
+		// ── Session-file SYSTEM entries (FR.23.8) ──
+		public const string SystemCreatedFormat = "[Attention {0} ({1})] {2}";
+		public const string SystemUpdatedFormat = "[Attention {0} ({1}) updated] {2}";
+		public const string SystemClosedFormat = "[Attention {0} {1}]";
+		public const string SystemDismissedByUserFormat = "[Attention {0} dismissed by the user]";
+		public const string SystemMarkedDoneByUserFormat = "[Attention {0} marked done by the user]";
+		public const string SystemOptionsPrefix = "Options: ";
+		public const string SystemOptionsSeparator = " | ";
+		public const string SystemRecommendationPrefix = "Recommendation: ";
+
+		// ── Pinned list lines (FR.23.11) ──
+		public const string PinnedHeaderLine =
+			"Pinned in the user's Focus view - they can see these, so don't restate them; refer to them by id, and call `mcp__" + Agent.McpServerName + "__resolve_attention` when one is answered in conversation or no longer applies:";
+		public const string PinnedItemLineFormat = "  - {0} {1}: {2}";
+		public const string PinnedMoreLineFormat = "  - ...and {0} more (call mcp__" + Agent.McpServerName + "__list_attention)";
+		public const string ClosuresLinePrefix = "Closed by the user in the Focus view since your last turn: ";
+		public const string ClosureFormat = "{0} {1} \"{2}\" {3}";
+		public const string ClosureMarkedDone = "marked done";
+		public const string ClosureDismissed = "dismissed without an answer";
+		public const string ClosureSeparator = "; ";
+
+		// ── Answers prompt (FR.23.15) ──
+		public const string AnswersPromptHeader = "Answers from the Focus view:";
+		public const string AnswersPromptLineFormat = "- {0} ({1}): {2}";
+		public const string AnswersContinuationIndent = "  ";
+	}
+
+	/// <summary>UI literals of the Focus view (FR.23.12–FR.23.15): labels, formats, chip colour and pill sizes.</summary>
+	public static class Focus
+	{
+		public const string EmptyStateText = "Nothing needs your attention in this session.";
+
+		public const string SendAnswersFormat = "Send answers ({0})";
+		public const string DecisionsHeaderFormat = "Decisions ({0})";
+		public const string ClosedHeaderFormat = "Closed ({0})";
+		public const string RecommendationButtonFormat = "Use recommendation: {0}";
+		public const string AcceptedRecommendationFormat = "Accepted your recommendation: {0}";
+
+		public const string CloseLabelDismiss = "Dismiss";
+		public const string CloseLabelDone = "Done";
+		public const string CloseLabelGotIt = "Got it";
+
+		public const string OutcomeAnswered = "Answered";
+		public const string OutcomeResolved = "Resolved";
+		public const string OutcomeDismissed = "Dismissed";
+		public const string OutcomeFormat = "{0}: {1}";
+
+		public const string PostedTodayFormat = "HH:mm";
+		public const string PostedOtherDayFormat = "yyyy-MM-dd HH:mm";
+
+		/// <summary>Muted grey of the Decided kind chip (FR.23.14).</summary>
+		public const string ChipDecidedBackground = "#707070";
+
+		/// <summary>Minimum width of the badge / chip pill, in device-independent pixels (FR.23.13).</summary>
+		public const double PillMinWidth = 16;
+
+		public const double BadgeFontSize = 10;
+		public const double ChipFontSize = 11;
 	}
 
 	/// <summary>Constants for the agent MCP server and orchestration guardrails (FR.14, FR.15).</summary>
@@ -386,8 +541,10 @@ SESSION TRANSCRIPT TO COMPACT:
 			Notifying the user: worker results (async `send_to_session`) and wake-ups arrive as
 			scheduled turns the user is not watching, and nothing tells the user that such a turn
 			finished.
-			- Call `notify_user` once, and only when the user must decide or act — never to narrate
-			  progress or each worker's arrival. Keep delivery turns short.
+			- Post the ask once with `post_attention` (`notify: true` when the user must act soon), and
+			  only when the user must decide or act — never to narrate progress or each worker's
+			  arrival. It stays pinned in the user's Focus view, so don't restate it in later delivery
+			  turns. Keep delivery turns short.
 			- Don't arm polling or "fallback" self-wakes to collect async results: they arrive on
 			  their own, and several results that arrive while you're busy are delivered together in
 			  one turn. Use a self-wake only for a real deadline, or as a long-interval check on a
@@ -406,9 +563,10 @@ SESSION TRANSCRIPT TO COMPACT:
 			- You are headless and the CLI process is terminated between turns. Never use the CLI's
 			  native `ScheduleWakeup`/`CronCreate`/`CronList`/`CronDelete` — those schedules won't
 			  survive. Use `mcp__cmx__schedule_wake` if you need to poll or resume later.
-			- Do not call `notify_user` — a worker session's message is dropped before it ever reaches
-			  Telegram (it's reserved for the top-level session the user is actually talking to); put
-			  anything the user needs to see in your final response to your supervisor instead.
+			- Do not call `notify_user` or `post_attention` — a worker session's call is dropped or
+			  refused before it ever reaches the user (both are reserved for the top-level session the
+			  user is actually talking to); put anything the user needs to see in your final response
+			  to your supervisor instead.
 			""";
 	}
 

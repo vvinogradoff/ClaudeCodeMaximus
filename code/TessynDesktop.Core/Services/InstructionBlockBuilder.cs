@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using TessynDesktop.Models;
 
@@ -49,6 +50,11 @@ public static class InstructionBlockBuilder
 		if (options.IsAgentToolsEnabled && options.IsNewSession)
 			lines.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
 
+		// FR.23.10 — same gate as NoWorkflowTool, plus never for a Worker Session (its post_attention
+		// call is refused, FR.23.6): session policy on how to pin items in the user's Focus view.
+		if (options.IsAgentToolsEnabled && options.IsNewSession && !options.IsWorkerSession)
+			lines.AppendLine($"- {Constants.Instructions.AttentionGuidance}");
+
 		// FR.21.3 — same once-per-fresh-session gating as NoWorkflowTool: this is session-level
 		// policy (a tool exists), not per-turn state. FR.21.20 — never emitted for a Worker Session:
 		// its own notify_user call is dropped outright by the bridge (FR.21.19), so the guidance
@@ -60,6 +66,11 @@ public static class InstructionBlockBuilder
 		if (options.IsAgentToolsEnabled && options.IsTelegramEnabled && options.IsScheduledTurn && !options.IsWorkerSession)
 			lines.AppendLine($"- {Constants.Instructions.ScheduledTurnNotifyReminder}");
 
+		// FR.23.11 — describes this turn's state (pinned items, closures since the last turn), so no
+		// IsNewSession gate; appended last, after the existing lines.
+		if (options.IsAgentToolsEnabled && !options.IsWorkerSession)
+			AppendAttentionLines(lines, options);
+
 		// FR.11.2 — omit the block entirely when there is nothing to say (Auto-Commit silent and
 		// no other toggle active), instead of appending a dangling preamble with no instructions.
 		if (lines.Length == 0)
@@ -70,6 +81,41 @@ public static class InstructionBlockBuilder
 		sb.Append(lines);
 		return sb.ToString();
 	}
+
+	/// <summary>
+	/// FR.23.11 — the Pinned list (open items, severity then number, capped) and the "closed by the user"
+	/// line. Each is emitted only when it has content.
+	/// </summary>
+	private static void AppendAttentionLines(StringBuilder lines, InstructionOptionsModel options)
+	{
+		var open = AttentionOrdering.Sort(
+			(options.PinnedAttentionItems ?? []).Where(i => i.Status == AttentionStatus.Open)).ToList();
+
+		if (open.Count > 0)
+		{
+			lines.AppendLine($"- {Constants.Attention.PinnedHeaderLine}");
+			foreach (var item in open.Take(Constants.Attention.MaxPinnedLines))
+				lines.AppendLine(string.Format(
+					Constants.Attention.PinnedItemLineFormat, item.Id, AttentionFormat.KindName(item.Kind), CutTitle(item.Title)));
+
+			if (open.Count > Constants.Attention.MaxPinnedLines)
+				lines.AppendLine(string.Format(Constants.Attention.PinnedMoreLineFormat, open.Count - Constants.Attention.MaxPinnedLines));
+		}
+
+		var closed = options.UserClosedAttentionItems ?? [];
+		if (closed.Count > 0)
+		{
+			var parts = closed.Select(i => string.Format(
+				Constants.Attention.ClosureFormat, i.Id, AttentionFormat.KindName(i.Kind), CutTitle(i.Title),
+				i.Kind == AttentionKind.Todo ? Constants.Attention.ClosureMarkedDone : Constants.Attention.ClosureDismissed));
+			lines.AppendLine($"- {Constants.Attention.ClosuresLinePrefix}{string.Join(Constants.Attention.ClosureSeparator, parts)}.");
+		}
+	}
+
+	private static string CutTitle(string title) =>
+		title.Length > Constants.Attention.MaxPinnedTitleLength
+			? title[..Constants.Attention.MaxPinnedTitleLength] + Constants.Attention.TitleEllipsis
+			: title;
 
 	/// <summary>
 	/// Builds context preamble: wraps the current message with prior conversation history

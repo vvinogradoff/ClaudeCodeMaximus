@@ -14,26 +14,29 @@ namespace TessynDesktop.Services;
 /// implementing the same interface over TDCP replaces this one, with no ViewModel changes.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class InProcDaemonClient : IDaemonClient
+public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 {
 	private readonly ISessionRegistry _registry;
 	private readonly ISessionTurnService _turnService;
 	private readonly ISchedulerService _scheduler;
 	private readonly ISessionFileService _fileService;
 	private readonly IClaudeSessionIndexService _indexService;
+	private readonly IAttentionService _attention;
 
 	public InProcDaemonClient(
 		ISessionRegistry registry,
 		ISessionTurnService turnService,
 		ISchedulerService scheduler,
 		ISessionFileService fileService,
-		IClaudeSessionIndexService indexService)
+		IClaudeSessionIndexService indexService,
+		IAttentionService attention)
 	{
 		_registry = registry;
 		_turnService = turnService;
 		_scheduler = scheduler;
 		_fileService = fileService;
 		_indexService = indexService;
+		_attention = attention;
 
 		// Forward the underlying domain events through the boundary. Over TDCP these become
 		// push notifications on the change channel; in-process they are a direct relay.
@@ -41,7 +44,13 @@ public sealed class InProcDaemonClient : IDaemonClient
 		_scheduler.ScheduleChanged += (s, e) => ScheduleChanged?.Invoke(this, e);
 		_fileService.EntryAppended += (s, e) => EntryAppended?.Invoke(this, e);
 		_fileService.TurnCompleted += (s, e) => TurnCompleted?.Invoke(this, e);
+		_attention.AttentionChanged += OnAttentionChanged;
 	}
+
+	/// <summary>Stops relaying <see cref="IAttentionService.AttentionChanged"/> (FR.23.16).</summary>
+	public void Dispose() => _attention.AttentionChanged -= OnAttentionChanged;
+
+	private void OnAttentionChanged(object? sender, AttentionChangedEventArgs e) => AttentionChanged?.Invoke(this, e);
 
 	// ── Change notification ─────────────────────────────────────────────────────
 
@@ -49,6 +58,7 @@ public sealed class InProcDaemonClient : IDaemonClient
 	public event EventHandler? ScheduleChanged;
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 
@@ -163,6 +173,28 @@ public sealed class InProcDaemonClient : IDaemonClient
 	public List<SessionSummaryModel> BuildAgentSessionSummaries() => _registry.BuildAgentSessionSummaries();
 
 	public IReadOnlySet<string> CollectAllClaudeSessionIds() => _registry.CollectAllClaudeSessionIds();
+
+	// ── Attention Ledger ─────────────────────────────────────────────────────────
+
+	public IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId) => _attention.GetItems(nodeId);
+
+	public AttentionSummaryModel GetAttentionSummary(string nodeId) => _attention.GetSummary(nodeId);
+
+	public void MarkAttentionAnswered(string nodeId, IReadOnlyList<AttentionAnswerModel> answers)
+		=> _attention.MarkAnsweredByUser(nodeId, answers);
+
+	public void CloseAttentionByUser(string nodeId, string itemId)
+	{
+		// The SYSTEM entry needs the session file, so the node is resolved through the registry.
+		var node = _registry.FindModelByNodeId(nodeId);
+		if (node == null)
+			return;
+
+		_attention.CloseByUser(node, itemId);
+	}
+
+	public IReadOnlyList<AttentionItemModel> TakeUnreportedAttentionClosures(string nodeId)
+		=> _attention.TakeUnreportedUserClosures(nodeId);
 
 	// ── Cross-project search & titles ────────────────────────────────────────────────
 

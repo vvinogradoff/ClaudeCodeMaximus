@@ -77,7 +77,8 @@ public sealed class AgentMcpServerListSessionsTests : IDisposable
 			configMerger: null!,
 			new FakeTelegramBridge(),
 			new FakeNotificationService(),
-			new FakeDirectoryLabelService());
+			new FakeDirectoryLabelService(),
+			new AttentionService(new AttentionLedgerStore(Path.Combine(_tempDir, "attention")), _fileService));
 		_dir = _registry.AddDirectory(Path.Combine(_tempDir, "dir"));
 	}
 

@@ -384,6 +384,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public ReactiveCommand<Unit, Unit> RemoveProfileCommand { get; }
 	public AutocompleteViewModel AutocompleteVm { get; }
 	public OutputSearchViewModel OutputSearchVm { get; }
+
+	/// <summary>The Session/Focus selection, the Focus badge and the Focus view cards (FR.23.12-FR.23.16).</summary>
+	public FocusViewModel FocusVm { get; }
 	public string WorkingDirectory => _node.Model.WorkingDirectory;
 
 	/// <summary>Raised when the user clicks the schedule button, requesting a cancel confirmation dialog from the View.</summary>
@@ -404,7 +407,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IDaemonClient daemonClient,
 		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
-		ISessionSoundService soundService)
+		ISessionSoundService soundService,
+		IUiDispatcher uiDispatcher)
 	{
 		_node         = node;
 		_fileService  = fileService;
@@ -425,7 +429,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			() => daemonClient.IsSessionRunning(node.Model.NodeId));
 		_models = new ModelSelectionController(modelService, appSettings, _directoryModel);
 		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
-		var composer = new SessionPromptComposer(fileService, appSettings, node);
+		var composer = new SessionPromptComposer(fileService, appSettings, node, daemonClient);
 		_turn = new TurnController(node, fileService, draftService, processManager, streamingManager, appSettings, mcpServer, daemonClient,
 			telegramBridge, sessionStatus, soundService, _content, _models, _profiles, composer);
 		turn = _turn;
@@ -439,6 +443,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_isCommandBarVisible = _directoryModel?.IsCommandBarVisible ?? false;
 		AutocompleteVm = new AutocompleteViewModel(codeIndexService);
 		OutputSearchVm = new OutputSearchViewModel(_content.Messages);
+
+		// "Send answers" reuses the interactive send path (same model, effort, profile, instruction block) but must
+		// leave the input box and its draft alone (FR.23.15). The main Send button has no enable rule, so Send
+		// answers only needs a non-empty reply box (FR.23.14).
+		FocusVm = new FocusViewModel(node.Model.NodeId, daemonClient, uiDispatcher,
+			prompt => _turn.SendAsync(prompt, preserveInput: true));
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
@@ -527,6 +537,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public void Dispose()
 	{
 		_daemonClient.ScheduleChanged -= OnScheduleChanged;
+		FocusVm.Dispose();
 		_models.Dispose();
 		_content.Dispose();
 		_turn.Dispose();

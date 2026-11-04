@@ -63,6 +63,7 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public event EventHandler?                       ScheduleChanged;
     public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
     public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
+    public event EventHandler<AttentionChangedEventArgs>? AttentionChanged { add { } remove { } }
 
     public void RaiseTreeChanged(TreeChangedEventArgs e) => TreeChanged?.Invoke(this, e);
     public void RaiseScheduleChanged()                   => ScheduleChanged?.Invoke(this, EventArgs.Empty);
@@ -200,6 +201,13 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index) => throw new NotSupportedException("Fake does not implement InsertSessionIntoDirectory.");
     public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotSupportedException("Fake does not implement InsertSessionIntoGroup.");
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => throw new NotSupportedException("Fake does not implement BuildAgentSessionSummaries.");
+
+    // Attention Ledger (FR.23) has no TDCP methods; the wire client throws before reaching the server.
+    public IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId) => throw new NotSupportedException("Fake does not implement GetAttentionItems.");
+    public AttentionSummaryModel GetAttentionSummary(string nodeId) => throw new NotSupportedException("Fake does not implement GetAttentionSummary.");
+    public void MarkAttentionAnswered(string nodeId, IReadOnlyList<AttentionAnswerModel> answers) => throw new NotSupportedException("Fake does not implement MarkAttentionAnswered.");
+    public void CloseAttentionByUser(string nodeId, string itemId) => throw new NotSupportedException("Fake does not implement CloseAttentionByUser.");
+    public IReadOnlyList<AttentionItemModel> TakeUnreportedAttentionClosures(string nodeId) => throw new NotSupportedException("Fake does not implement TakeUnreportedAttentionClosures.");
     public IReadOnlySet<string> CollectAllClaudeSessionIds() => throw new NotSupportedException("Fake does not implement CollectAllClaudeSessionIds.");
     public Task<int> ReindexSessionsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement ReindexSessionsAsync.");
     public Task<IReadOnlyList<SessionSearchResultModel>> SearchSessionsAsync(string query, string? projectSlug = null, string? role = null, int? limit = null, int? offset = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement SearchSessionsAsync.");
