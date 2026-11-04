@@ -142,6 +142,7 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged { add { } remove { } }
+	public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged { add { } remove { } }
 
 	public void RaiseTurnCompleted(string fileName, bool cancelled = false, string? errorText = null) =>
 		TurnCompleted?.Invoke(this, new SessionTurnCompletedEventArgs { FileName = fileName, Cancelled = cancelled, ErrorText = errorText });
@@ -211,6 +212,10 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotImplementedException();
 
 	public List<SessionSummaryModel> BuildAgentSessionSummaries() => Summaries;
+
+	// Session Tags (FR.24) — not used by the Telegram bridge.
+	public IReadOnlyList<SessionTagModel> GetSessionTags(string nodeId) => throw new NotImplementedException();
+	public bool TakeTagGuidanceDue(string nodeId) => throw new NotImplementedException();
 
 	// Attention Ledger (FR.23) — not used by the Telegram bridge.
 	public IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId) => throw new NotImplementedException();

@@ -190,6 +190,7 @@ public sealed class SessionTurnServiceTests : IDisposable
 	private readonly FakeFileServiceForTurnService _fileService = new();
 	private readonly FakeRegistryForTurnService _registry = new();
 	private readonly AttentionTestEnv _attention = new();
+	private readonly TagTestEnv _tagEnv = new();
 	private readonly SessionTurnService _sut;
 
 	public SessionTurnServiceTests()
@@ -211,12 +212,14 @@ public sealed class SessionTurnServiceTests : IDisposable
 			new FakeModelServiceForTurnService(),
 			new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()),
 			_streamingManager,
-			_attention.Service);
+			_attention.Service,
+			_tagEnv.Service);
 	}
 
 	public void Dispose()
 	{
 		_attention.Dispose();
+		_tagEnv.Dispose();
 		if (Directory.Exists(_tempDir))
 			Directory.Delete(_tempDir, recursive: true);
 	}
@@ -668,5 +671,66 @@ public sealed class SessionTurnServiceTests : IDisposable
 		Assert.DoesNotContain("Pinned in the user's Focus view", _streamingManager.SendTurnCalls[0].userMessage);
 		node.OrchestrationDepth = 0;
 		Assert.Single(_attention.Service.TakeUnreportedUserClosures(node.NodeId));   // still unreported
+	}
+
+	// ── FR.24.6 — tag guidance at both SessionTurnService call sites ──────────────────────
+
+	[Fact]
+	public async Task RunTurnAsync_StreamingProcessAlive_TagGuidanceOnTheFirstTurnOfTheRunOnly()   // TC.TG.15 / TC.TG.14
+	{
+		_appSettings.Settings.AgentToolsEnabled = true;
+		_streamingManager.AliveResult = true;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			onTurnEvent(new ClaudeStreamEvent { Type = "result" });
+			return Task.CompletedTask;
+		};
+		var node = MakeNode();
+		node.ClaudeSessionId = "existing";   // a long-running session, not a fresh one
+		_tagEnv.Service.Edit(node, ["o/r#7"], []);
+
+		await _sut.RunTurnAsync(node, "first", TurnSource.Scheduled);
+		await _sut.RunTurnAsync(node, "second", TurnSource.Scheduled);
+
+		Assert.Contains(Constants.Instructions.SessionTagGuidance + " Current tags: r PR #7.", _streamingManager.SendTurnCalls[0].userMessage);
+		Assert.DoesNotContain("tag_session", _streamingManager.SendTurnCalls[1].userMessage);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_OneShot_TagGuidanceOnTheFirstTurn()   // TC.TG.14
+	{
+		_appSettings.Settings.AgentToolsEnabled = true;
+		_streamingManager.AliveResult = false;
+		_processManager.EmitEvents = onEvent =>
+		{
+			onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "sess-1" });
+			return Task.CompletedTask;
+		};
+
+		await _sut.RunTurnAsync(MakeNode(), "first", TurnSource.Scheduled);
+
+		Assert.Contains(Constants.Instructions.SessionTagGuidance, _processManager.Calls[0].userMessage);
+		Assert.DoesNotContain("Current tags:", _processManager.Calls[0].userMessage);
+	}
+
+	[Theory]
+	[InlineData(false, false)]   // agent tools off
+	[InlineData(true, true)]     // worker session
+	public async Task RunTurnAsync_WhenTheGuidanceCannotBeShown_ItStaysDue(bool agentTools, bool worker)   // TC.TG.14-5
+	{
+		_appSettings.Settings.AgentToolsEnabled = agentTools;
+		_streamingManager.AliveResult = true;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			onTurnEvent(new ClaudeStreamEvent { Type = "result" });
+			return Task.CompletedTask;
+		};
+		var node = MakeNode();
+		node.OrchestrationDepth = worker ? 1 : 0;
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.DoesNotContain("tag_session", _streamingManager.SendTurnCalls[0].userMessage);
+		Assert.True(_tagEnv.Service.TakeTagGuidanceDue(node.NodeId));   // not consumed by the turn
 	}
 }

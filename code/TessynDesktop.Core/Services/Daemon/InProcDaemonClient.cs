@@ -22,6 +22,7 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 	private readonly ISessionFileService _fileService;
 	private readonly IClaudeSessionIndexService _indexService;
 	private readonly IAttentionService _attention;
+	private readonly ISessionTagService _tags;
 
 	public InProcDaemonClient(
 		ISessionRegistry registry,
@@ -29,7 +30,8 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 		ISchedulerService scheduler,
 		ISessionFileService fileService,
 		IClaudeSessionIndexService indexService,
-		IAttentionService attention)
+		IAttentionService attention,
+		ISessionTagService tags)
 	{
 		_registry = registry;
 		_turnService = turnService;
@@ -37,6 +39,7 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 		_fileService = fileService;
 		_indexService = indexService;
 		_attention = attention;
+		_tags = tags;
 
 		// Forward the underlying domain events through the boundary. Over TDCP these become
 		// push notifications on the change channel; in-process they are a direct relay.
@@ -45,12 +48,19 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 		_fileService.EntryAppended += (s, e) => EntryAppended?.Invoke(this, e);
 		_fileService.TurnCompleted += (s, e) => TurnCompleted?.Invoke(this, e);
 		_attention.AttentionChanged += OnAttentionChanged;
+		_tags.SessionTagsChanged += OnSessionTagsChanged;
 	}
 
 	/// <summary>Stops relaying <see cref="IAttentionService.AttentionChanged"/> (FR.23.16).</summary>
-	public void Dispose() => _attention.AttentionChanged -= OnAttentionChanged;
+	public void Dispose()
+	{
+		_attention.AttentionChanged -= OnAttentionChanged;
+		_tags.SessionTagsChanged -= OnSessionTagsChanged;
+	}
 
 	private void OnAttentionChanged(object? sender, AttentionChangedEventArgs e) => AttentionChanged?.Invoke(this, e);
+
+	private void OnSessionTagsChanged(object? sender, SessionTagsChangedEventArgs e) => SessionTagsChanged?.Invoke(this, e);
 
 	// ── Change notification ─────────────────────────────────────────────────────
 
@@ -59,6 +69,7 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
+	public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged;
 
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 
@@ -195,6 +206,17 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 
 	public IReadOnlyList<AttentionItemModel> TakeUnreportedAttentionClosures(string nodeId)
 		=> _attention.TakeUnreportedUserClosures(nodeId);
+
+	// ── Session Tags ─────────────────────────────────────────────────────────────
+
+	/// <summary>The node (and so its current name, for name-derived tags) is resolved through the registry.</summary>
+	public IReadOnlyList<SessionTagModel> GetSessionTags(string nodeId)
+	{
+		var node = _registry.FindModelByNodeId(nodeId);
+		return node == null ? [] : _tags.GetTags(nodeId, node.Name);
+	}
+
+	public bool TakeTagGuidanceDue(string nodeId) => _tags.TakeTagGuidanceDue(nodeId);
 
 	// ── Cross-project search & titles ────────────────────────────────────────────────
 

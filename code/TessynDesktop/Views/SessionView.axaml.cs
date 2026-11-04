@@ -141,6 +141,19 @@ public partial class SessionView : UserControl
 			vm.ConfirmStreamingModeOff();
 	}
 
+	/// <summary>A tag chip opens its URL in the default browser (FR.24.7); the launcher enforces the URL policy.</summary>
+	private void OnTagChipPressed(object? sender, PointerPressedEventArgs e)
+	{
+		if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+			return;
+
+		if (sender is Control { DataContext: SessionTagChipViewModel chip })
+		{
+			chip.Open();
+			e.Handled = true;
+		}
+	}
+
 	private void OnInputKeyDown(object? sender, KeyEventArgs e)
 	{
 		if (DataContext is not SessionViewModel vm) return;

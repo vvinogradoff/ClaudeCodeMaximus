@@ -39,6 +39,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly INotificationService      _notifications;
 	private readonly IDirectoryLabelService    _labelService;
 	private readonly IAttentionService         _attention;
+	private readonly ISessionTagService        _tags;
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
 
@@ -67,7 +68,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		ITelegramBridgeService telegramBridge,
 		INotificationService notifications,
 		IDirectoryLabelService labelService,
-		IAttentionService attention)
+		IAttentionService attention,
+		ISessionTagService tags)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -81,6 +83,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_notifications  = notifications;
 		_labelService   = labelService;
 		_attention      = attention;
+		_tags           = tags;
 	}
 
 	public void Start()
@@ -417,7 +420,10 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				ResolveAttentionSchema()),
 			BuildToolDef(Constants.Attention.ListToolName,
 				Constants.Attention.ListToolDescription,
-				ListAttentionSchema()));
+				ListAttentionSchema()),
+			BuildToolDef(Constants.SessionTags.ToolName,
+				Constants.SessionTags.ToolDescription,
+				TagSessionSchema()));
 
 		return new JsonObject { ["tools"] = tools };
 	}
@@ -448,6 +454,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			Constants.Attention.PostToolName    => await PostAttentionAsync(arguments, callerNode),
 			Constants.Attention.ResolveToolName => ResolveAttention(arguments, callerNode),
 			Constants.Attention.ListToolName    => ListAttention(arguments, callerNode),
+			Constants.SessionTags.ToolName      => TagSession(arguments, callerNode),
 			_                      => throw new McpMethodNotFoundException(name),
 		};
 	}
@@ -1331,6 +1338,67 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		};
 	}
 
+	// ── Session Tags (FR.24) ──────────────────────────────────────────────────
+
+	/// <summary>
+	/// <c>tag_session</c> (FR.24.4): add and remove tags, or list them when given nothing. Worker Sessions may
+	/// tag too (FR.24.6). One result line per entry (adds first), then the final Tags line; one SYSTEM entry
+	/// when something changed.
+	/// </summary>
+	private JsonNode TagSession(JsonNode? args, SessionNodeModel callerNode)
+	{
+		var add    = ReadStringArray(args, "add");
+		var remove = ReadStringArray(args, "remove");
+		if (add.Count > Constants.SessionTags.MaxEntriesPerArray || remove.Count > Constants.SessionTags.MaxEntriesPerArray)
+			throw new McpToolException(
+				$"'add' and 'remove' may each contain at most {Constants.SessionTags.MaxEntriesPerArray} entries.");
+
+		var lines = new List<string>();
+		IReadOnlyList<SessionTagModel> tags;
+
+		if (add.All(string.IsNullOrWhiteSpace) && remove.All(string.IsNullOrWhiteSpace))
+			tags = _tags.GetTags(callerNode.NodeId, callerNode.Name);
+		else
+		{
+			var result = _tags.Edit(callerNode, add, remove);
+			lines.AddRange(result.Outcomes.Select(FormatTagOutcome));
+			tags = result.Tags;
+
+			if (result.HasChanges)
+				_fileService.AppendMessage(callerNode.FileName, Constants.SessionFile.RoleSystem, BuildTagsSystemEntry(result));
+		}
+
+		lines.Add(string.Format(
+			Constants.SessionTags.TagsLineFormat,
+			tags.Count == 0 ? Constants.SessionTags.TagsNone : string.Join(Constants.SessionTags.LabelSeparator, tags.Select(t => t.Label))));
+		return BuildTextContent(string.Join("\n", lines));
+	}
+
+	private static string FormatTagOutcome(SessionTagEntryOutcomeModel o) => o.Kind switch
+	{
+		SessionTagEntryOutcomeKind.Tagged               => string.Format(Constants.SessionTags.TaggedLineFormat, o.Tag!.Label, o.Tag.Url),
+		SessionTagEntryOutcomeKind.AlreadyTagged        => string.Format(Constants.SessionTags.AlreadyTaggedLineFormat, o.Tag!.Label),
+		SessionTagEntryOutcomeKind.Removed              => string.Format(Constants.SessionTags.RemovedLineFormat, o.Tag!.Label),
+		SessionTagEntryOutcomeKind.NotTaggedInvalid     => string.Format(Constants.SessionTags.NotTaggedInvalidLineFormat, o.Entry),
+		SessionTagEntryOutcomeKind.NotTaggedUnknownTeam => string.Format(
+			Constants.SessionTags.NotTaggedUnknownTeamLineFormat, o.Entry, o.UnknownTeam, o.UnknownIssueKey),
+		SessionTagEntryOutcomeKind.NotRemovedNotTagged  => string.Format(Constants.SessionTags.NotRemovedNotTaggedLineFormat, o.Entry),
+		SessionTagEntryOutcomeKind.NotRemovedFromName   => string.Format(Constants.SessionTags.NotRemovedFromNameLineFormat, o.Entry),
+		_                                               => string.Format(Constants.SessionTags.NotRemovedInvalidLineFormat, o.Entry),
+	};
+
+	/// <summary>FR.24.4: <c>[Tags] added HSE-230, windows-app PR #215; removed windows-app</c>; only the applied parts, by label.</summary>
+	private static string BuildTagsSystemEntry(SessionTagEditResultModel result)
+	{
+		var parts = new List<string>();
+		if (result.AddedLabels.Count > 0)
+			parts.Add(string.Format(Constants.SessionTags.SystemAddedFormat, string.Join(Constants.SessionTags.LabelSeparator, result.AddedLabels)));
+		if (result.RemovedLabels.Count > 0)
+			parts.Add(string.Format(Constants.SessionTags.SystemRemovedFormat, string.Join(Constants.SessionTags.LabelSeparator, result.RemovedLabels)));
+
+		return Constants.SessionTags.SystemEntryPrefix + " " + string.Join(Constants.SessionTags.SystemPartSeparator, parts);
+	}
+
 	// ── Helpers: tier enforcement + output shaping ────────────────────────────
 
 	/// <summary>Resolves the caller's effective model for tier comparison (FR.16.4).</summary>
@@ -1711,6 +1779,16 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			"type": "object",
 			"properties": {
 				"status": { "type": "string", "enum": ["open", "all"], "description": "open (default) or all." }
+			}
+		}
+		""")!;
+
+	private static JsonNode TagSessionSchema() => JsonNode.Parse("""
+		{
+			"type": "object",
+			"properties": {
+				"add":    { "type": "array", "maxItems": 30, "items": { "type": "string" }, "description": "Tags to add: a Linear issue URL or key (HSE-230), a GitHub pull request URL or owner/repo#215, a GitHub repository URL or owner/repo." },
+				"remove": { "type": "array", "maxItems": 30, "items": { "type": "string" }, "description": "Tags to remove, in the same forms. Tags that come from the session name cannot be removed." }
 			}
 		}
 		""")!;

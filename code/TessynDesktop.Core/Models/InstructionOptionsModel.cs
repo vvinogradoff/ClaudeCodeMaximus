@@ -45,6 +45,13 @@ namespace TessynDesktop.Models;
 /// Items the user closed in the Focus view since the previous turn (FR.23.11), taken once through
 /// <c>IAttentionService.TakeUnreportedUserClosures</c> so each closure is reported a single time.
 /// </param>
+/// <param name="IsTagGuidanceDue">
+/// True on a top-level session's first turn in this app run (FR.24.6, <c>ISessionTagService.TakeTagGuidanceDue</c>) — adds
+/// <see cref="Constants.Instructions.SessionTagGuidance"/>. Not gated on <see cref="IsNewSession"/>.
+/// </param>
+/// <param name="SessionTags">
+/// The session's tags in Tag-row order (FR.24.7); when the guidance is emitted they are appended to it as the current tags.
+/// </param>
 public sealed record InstructionOptionsModel(
 	bool? IsAutoCommit,
 	bool IsNewBranch,
@@ -56,4 +63,6 @@ public sealed record InstructionOptionsModel(
 	bool IsWorkerSession = false,
 	bool IsScheduledTurn = false,
 	IReadOnlyList<AttentionItemModel>? PinnedAttentionItems = null,
-	IReadOnlyList<AttentionItemModel>? UserClosedAttentionItems = null);
+	IReadOnlyList<AttentionItemModel>? UserClosedAttentionItems = null,
+	bool IsTagGuidanceDue = false,
+	IReadOnlyList<SessionTagModel>? SessionTags = null);

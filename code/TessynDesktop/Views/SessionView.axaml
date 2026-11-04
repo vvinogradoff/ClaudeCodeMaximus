@@ -86,6 +86,19 @@
             <Setter Property="Opacity" Value="0"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
+        <!-- Tag chips (FR.24.7) -->
+        <Style Selector="Border.tagChip">
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+            <Setter Property="Padding" Value="8,1"/>
+            <Setter Property="Margin" Value="0,0,6,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Border.tagChip:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListLowBrush}"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,5,120">
@@ -93,6 +106,7 @@
         <Border Grid.Row="0" Padding="12,6"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,0,0,1">
+            <StackPanel>
             <DockPanel>
                 <!-- MD and JSONL are hidden while Focus is selected (FR.23.12). Declared first = docked rightmost. -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
@@ -147,6 +161,26 @@
                                FontSize="16" FontWeight="SemiBold"/>
                 </StackPanel>
             </DockPanel>
+            <!-- Tag row (FR.24.7): below the header row, same bordered header; hidden without tags; shown in Session and Focus -->
+            <ItemsControl ItemsSource="{Binding TagsVm.Chips}"
+                          IsVisible="{Binding TagsVm.HasTags}"
+                          Margin="0,6,0,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SessionTagChipViewModel">
+                        <Border Classes="tagChip"
+                                ToolTip.Tip="{Binding Tooltip}"
+                                PointerPressed="OnTagChipPressed">
+                            <TextBlock Text="{Binding Label}" FontSize="11"/>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            </StackPanel>
         </Border>
 
         <Grid Grid.Row="1" RowDefinitions="*,Auto">

@@ -64,6 +64,7 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
     public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
     public event EventHandler<AttentionChangedEventArgs>? AttentionChanged { add { } remove { } }
+    public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged { add { } remove { } }
 
     public void RaiseTreeChanged(TreeChangedEventArgs e) => TreeChanged?.Invoke(this, e);
     public void RaiseScheduleChanged()                   => ScheduleChanged?.Invoke(this, EventArgs.Empty);
@@ -201,6 +202,10 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index) => throw new NotSupportedException("Fake does not implement InsertSessionIntoDirectory.");
     public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotSupportedException("Fake does not implement InsertSessionIntoGroup.");
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => throw new NotSupportedException("Fake does not implement BuildAgentSessionSummaries.");
+
+    // Session Tags (FR.24) have no TDCP methods either.
+    public IReadOnlyList<SessionTagModel> GetSessionTags(string nodeId) => throw new NotSupportedException("Fake does not implement GetSessionTags.");
+    public bool TakeTagGuidanceDue(string nodeId) => throw new NotSupportedException("Fake does not implement TakeTagGuidanceDue.");
 
     // Attention Ledger (FR.23) has no TDCP methods; the wire client throws before reaching the server.
     public IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId) => throw new NotSupportedException("Fake does not implement GetAttentionItems.");
@@ -837,5 +842,18 @@ public sealed class WireDaemonClientTests : IDisposable
     public void CollectAllClaudeSessionIds_ThrowsNotSupportedException()
     {
         Assert.Throws<NotSupportedException>(() => _client.CollectAllClaudeSessionIds());
+    }
+
+    // ── Session Tags (FR.24.8) — not wired over TDCP ───────────────────────────────────
+
+    [Fact]
+    public void SessionTags_AreNotAvailableOverTheWire_AndTheEventNeverFires()   // TC.TG.18-6
+    {
+        var fired = false;
+        _client.SessionTagsChanged += (_, _) => fired = true;
+
+        Assert.Throws<NotSupportedException>(() => _client.GetSessionTags("node-1"));
+        Assert.Throws<NotSupportedException>(() => _client.TakeTagGuidanceDue("node-1"));
+        Assert.False(fired);
     }
 }

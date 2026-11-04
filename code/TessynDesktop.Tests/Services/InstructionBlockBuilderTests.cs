@@ -482,4 +482,95 @@ public sealed class InstructionBlockBuilderTests
         Assert.DoesNotContain("Call `notify_user` once", supervisor);
         Assert.Contains("Do not call `notify_user` or `post_attention`", worker);
     }
+
+    // ── FR.24.6 — Session Tag guidance (TC.TG.14, TC.TG.16) ─────────────────────────────────
+
+    private static SessionTagModel TagOf(string label) => new() { Key = label, Label = label };
+
+    private static InstructionOptionsModel TagOptions(
+        bool due = true, bool isAgentToolsEnabled = true, bool isWorkerSession = false, bool isNewSession = false,
+        bool telegram = false, IReadOnlyList<SessionTagModel>? tags = null) =>
+        new(IsAutoCommit: null, IsNewBranch: false, IsAutoDocument: false,
+            IsAgentToolsEnabled: isAgentToolsEnabled, IsNewSession: isNewSession, IsStreamingMode: false,
+            IsTelegramEnabled: telegram, IsWorkerSession: isWorkerSession,
+            IsTagGuidanceDue: due, SessionTags: tags);
+
+    [Fact]
+    public void Build_TagGuidance_IsEmittedWhenAgentToolsOnTopLevelAndDue()   // TC.TG.14-1
+    {
+        var block = InstructionBlockBuilder.Build(TagOptions());
+
+        Assert.Contains(Constants.Instructions.SessionTagGuidance, block);
+        Assert.Contains("`mcp__cmx__tag_session`", Constants.Instructions.SessionTagGuidance);
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    public void Build_TagGuidance_AbsentWhenAnyGateFails(bool agentTools, bool worker, bool due)   // TC.TG.14-2
+    {
+        var block = InstructionBlockBuilder.Build(TagOptions(due: due, isAgentToolsEnabled: agentTools, isWorkerSession: worker));
+
+        Assert.DoesNotContain(Constants.Instructions.SessionTagGuidance, block);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_TagGuidance_IsNotGatedOnNewSession(bool isNewSession)   // TC.TG.14-3
+    {
+        Assert.Contains(Constants.Instructions.SessionTagGuidance, InstructionBlockBuilder.Build(TagOptions(isNewSession: isNewSession)));
+    }
+
+    [Fact]
+    public void InstructionOptionsModel_TagMembersAreOptionalAndLeaveTheBlockUnchanged()   // TC.TG.14-4
+    {
+        var options = Options(isAgentToolsEnabled: true, isNewSession: false, isStreamingMode: false);
+
+        Assert.False(options.IsTagGuidanceDue);
+        Assert.Null(options.SessionTags);
+        Assert.Equal(string.Empty, InstructionBlockBuilder.Build(options));
+        Assert.Equal(string.Empty, InstructionBlockBuilder.Build(options with { SessionTags = [TagOf("HSE-1")] }));
+    }
+
+    [Fact]
+    public void SessionTagGuidance_TextMatchesFr246_WithoutSuffixWhenNoTags()   // TC.TG.16-1, 16-2
+    {
+        Assert.Equal(
+            "This session shows tags under its name in Tessyn: the Linear issues, GitHub pull requests and GitHub repositories it works on, which the user opens from there. Keep them current with `mcp__cmx__tag_session`: tag an issue, PR or repository when this session starts working on it (pass the full URL), and don't tag things it only mentions. Finished work stays tagged; remove a tag only if it was added by mistake.",
+            Constants.Instructions.SessionTagGuidance);
+
+        var block = InstructionBlockBuilder.Build(TagOptions(tags: []));
+        Assert.DoesNotContain("Current tags:", block);
+        Assert.Contains(Constants.Instructions.SessionTagGuidance + Environment.NewLine, block);
+    }
+
+    [Fact]
+    public void Build_TagGuidance_AppendsCurrentTagsInTheGivenOrder()   // TC.TG.16-3
+    {
+        var block = InstructionBlockBuilder.Build(TagOptions(tags: [TagOf("HSE-150"), TagOf("HSE-230"), TagOf("windows-app PR #215")]));
+
+        Assert.Contains("remove a tag only if it was added by mistake. Current tags: HSE-150, HSE-230, windows-app PR #215.", block);
+    }
+
+    [Fact]
+    public void Build_TagGuidance_SitsAfterAttentionGuidanceAndBeforeTelegramGuidance()   // TC.TG.16-4
+    {
+        var block = InstructionBlockBuilder.Build(TagOptions(isNewSession: true, telegram: true));
+
+        var attention = block.IndexOf(Constants.Instructions.AttentionGuidance, StringComparison.Ordinal);
+        var tags      = block.IndexOf(Constants.Instructions.SessionTagGuidance, StringComparison.Ordinal);
+        var telegram  = block.IndexOf(Constants.Instructions.TelegramNotifyGuidance, StringComparison.Ordinal);
+        Assert.True(attention >= 0 && tags > attention && telegram > tags);
+    }
+
+    [Fact]
+    public void Build_WorkerBlock_HasNoTagGuidance()   // TC.TG.16-5
+    {
+        var block = InstructionBlockBuilder.Build(TagOptions(isWorkerSession: true, isNewSession: true, telegram: true, tags: [TagOf("HSE-1")]));
+
+        Assert.DoesNotContain("tag_session", block);
+        Assert.DoesNotContain("Current tags", block);
+    }
 }

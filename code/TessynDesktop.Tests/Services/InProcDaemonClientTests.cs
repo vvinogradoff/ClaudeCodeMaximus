@@ -332,11 +332,12 @@ public sealed class InProcDaemonClientTests
     private readonly InProcFakeFileService _fileService = new();
     private readonly InProcFakeIndexService _indexService = new();
     private readonly FakeAttentionService _attention = new();
+    private readonly FakeSessionTagService _tags = new();
     private readonly InProcDaemonClient _client;
 
     public InProcDaemonClientTests()
     {
-        _client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService, _attention);
+        _client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService, _attention, _tags);
     }
 
     private static SessionNodeModel MakeNode(string nodeId = "node-1") =>
@@ -1095,8 +1096,8 @@ public sealed class InProcDaemonClientTests
                 new FakeSessionRegistry(),
                 fileService: null!, modelService: null!, tdcpServer: null!, configMerger: null!,
                 new FakeTelegramBridge(), new FakeNotificationService(), new FakeDirectoryLabelService(),
-                env.Service);
-            using var client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService, env.Service);
+                env.Service, TagTestEnv.Unused());
+            using var client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService, env.Service, _tags);
             var changed = new List<string>();
             client.AttentionChanged += (_, e) => changed.Add(e.NodeId);
 
@@ -1118,5 +1119,94 @@ public sealed class InProcDaemonClientTests
         {
             Directory.Delete(tempDir, recursive: true);
         }
+    }
+
+    // ── Session Tags (FR.24.8) ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void GetSessionTags_ResolvesTheNodeNameThroughTheRegistryAndReturnsTheServiceTags()   // TC.TG.18-1
+    {
+        var node = MakeNode("node-1");
+        node.Name = "HSE-150 spike";
+        _registry.FindByNodeIdResult = node;
+        var tags = new List<SessionTagModel> { new() { Key = "HSE-150", Label = "HSE-150" } };
+        _tags.Tags = tags;
+
+        Assert.Same(tags, _client.GetSessionTags("node-1"));
+        Assert.Equal(("node-1", "HSE-150 spike"), _tags.LastGetTags);
+    }
+
+    [Fact]
+    public void GetSessionTags_UnknownNode_ReturnsAnEmptyList()   // TC.TG.18-1
+    {
+        _registry.FindByNodeIdResult = null;
+        _tags.Tags = new List<SessionTagModel> { new() { Key = "x" } };
+
+        Assert.Empty(_client.GetSessionTags("ghost"));
+        Assert.Null(_tags.LastGetTags);
+    }
+
+    [Fact]
+    public void GetSessionTags_AfterARename_UsesTheNewName()   // TC.TG.18-2
+    {
+        var node = MakeNode("node-1");
+        _registry.FindByNodeIdResult = node;
+        _client.GetSessionTags("node-1");
+        Assert.Equal("Test", _tags.LastGetTags!.Value.name);
+
+        node.Name = "HSE-165 W14 rebase";
+        _client.GetSessionTags("node-1");
+
+        Assert.Equal("HSE-165 W14 rebase", _tags.LastGetTags!.Value.name);
+    }
+
+    [Fact]
+    public void GetSessionTags_WithTheRealService_ReflectsTheRenamedNameDerivedTags()   // TC.TG.18-2
+    {
+        using var env = new TagTestEnv();
+        env.Store.SaveWorkspaces(new Dictionary<string, string> { ["HSE"] = "hardstop" });
+        var node = MakeNode("node-1");
+        node.Name = "HSE-150 spike";
+        _registry.FindByNodeIdResult = node;
+        using var client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService, _attention, env.Service);
+
+        Assert.Equal(["HSE-150"], client.GetSessionTags("node-1").Select(t => t.Key).ToArray());
+        node.Name = "HSE-165 W14 rebase";
+        Assert.Equal(["HSE-165"], client.GetSessionTags("node-1").Select(t => t.Key).ToArray());
+    }
+
+    [Fact]
+    public void TakeTagGuidanceDue_DelegatesAndIsTrueOncePerNode()   // TC.TG.18-3
+    {
+        Assert.True(_client.TakeTagGuidanceDue("node-1"));
+        Assert.False(_client.TakeTagGuidanceDue("node-1"));
+        Assert.True(_client.TakeTagGuidanceDue("node-2"));
+        Assert.Equal(3, _tags.TakeCalls);
+    }
+
+    [Fact]
+    public void SessionTagsChanged_RelaysTheServiceEventWithAndWithoutANodeId()   // TC.TG.18-4
+    {
+        var received = new List<string?>();
+        _client.SessionTagsChanged += (_, e) => received.Add(e.NodeId);
+
+        _tags.Raise("node-9");
+        _tags.Raise(null);
+
+        Assert.Equal(["node-9", null], received);
+    }
+
+    [Fact]
+    public void SessionTagsChanged_AfterDispose_NoLongerFires()   // TC.TG.18-5
+    {
+        var count = 0;
+        _client.SessionTagsChanged += (_, _) => count++;
+        _tags.Raise("node-1");
+
+        _client.Dispose();
+        _tags.Raise("node-1");
+
+        Assert.Equal(1, count);
+        Assert.Equal(0, _tags.SubscriberCount);
     }
 }

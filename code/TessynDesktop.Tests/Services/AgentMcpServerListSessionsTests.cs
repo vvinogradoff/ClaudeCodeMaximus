@@ -78,7 +78,8 @@ public sealed class AgentMcpServerListSessionsTests : IDisposable
 			new FakeTelegramBridge(),
 			new FakeNotificationService(),
 			new FakeDirectoryLabelService(),
-			new AttentionService(new AttentionLedgerStore(Path.Combine(_tempDir, "attention")), _fileService));
+			new AttentionService(new AttentionLedgerStore(Path.Combine(_tempDir, "attention")), _fileService),
+			TagTestEnv.Unused());
 		_dir = _registry.AddDirectory(Path.Combine(_tempDir, "dir"));
 	}
 

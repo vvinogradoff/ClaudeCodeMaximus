@@ -96,7 +96,8 @@ public sealed class AgentMcpServerNotifyUserTests : IDisposable
 			_telegram,
 			_toasts,
 			new FakeDirectoryLabelService(),
-			_attention.Service);
+			_attention.Service,
+			TagTestEnv.Unused());
 	}
 
 	public void Dispose()

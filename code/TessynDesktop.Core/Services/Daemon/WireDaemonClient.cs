@@ -104,6 +104,14 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 #pragma warning restore CS0067
 
+	/// <summary>
+	/// Not wired over TDCP — Session Tags have no TDCP methods yet (FR.24.10); only <see cref="InProcDaemonClient"/>
+	/// relays it, and subscribing here is a silent no-op.
+	/// </summary>
+#pragma warning disable CS0067 // Never raised until tags have a TDCP push — see doc comment.
+	public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged;
+#pragma warning restore CS0067
+
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 
 	/// <summary>
@@ -410,6 +418,17 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 
 	private const string AttentionNotWiredMessage =
 		"The Attention Ledger is not available over the TDCP wire yet (FR.23 has no TDCP methods).";
+
+	// ── Session Tags ──────────────────────────────────────────────────────────────────
+
+	public IReadOnlyList<SessionTagModel> GetSessionTags(string nodeId) =>
+		throw new NotSupportedException(TagsNotWiredMessage);
+
+	public bool TakeTagGuidanceDue(string nodeId) =>
+		throw new NotSupportedException(TagsNotWiredMessage);
+
+	private const string TagsNotWiredMessage =
+		"Session Tags are not available over the TDCP wire yet (FR.24 has no TDCP methods).";
 
 	// ── Cross-project search & titles ────────────────────────────────────────────────
 

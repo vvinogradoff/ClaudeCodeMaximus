@@ -41,6 +41,9 @@ public interface IDaemonClient
 	/// <summary>Raised once after a session's Attention Ledger changed (FR.23.16) — relayed from IAttentionService. May fire on any thread.</summary>
 	event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 
+	/// <summary>Raised once after a session's tags changed (FR.24.7); a null NodeId means every session may be affected. Relayed from ISessionTagService. May fire on any thread.</summary>
+	event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged;
+
 	// ── Tree read ───────────────────────────────────────────────────────────────
 
 	/// <summary>The authoritative directory list (source of truth for the tree projection).</summary>
@@ -162,6 +165,14 @@ public interface IDaemonClient
 
 	/// <summary>Returns the items the user closed since the last turn and clears their flag, so each closure is reported once (FR.23.11).</summary>
 	IReadOnlyList<AttentionItemModel> TakeUnreportedAttentionClosures(string nodeId);
+
+	// ── Session Tags (FR.24) ───────────────────────────────────────────────────────────
+
+	/// <summary>Name-derived plus declared tags of a session in FR.24.7 order; empty for an unknown node.</summary>
+	IReadOnlyList<SessionTagModel> GetSessionTags(string nodeId);
+
+	/// <summary>True once per node per app run — the tag guidance is due on this turn (FR.24.6).</summary>
+	bool TakeTagGuidanceDue(string nodeId);
 
 	// ── Cross-project search & titles (Stage 6) ──────────────────────────────────────
 

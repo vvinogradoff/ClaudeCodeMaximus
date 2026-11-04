@@ -154,6 +154,17 @@ public static class Constants
 		public const string AttentionGuidance =
 			"The user has a Focus view beside this session's output. Pin anything they need there with `mcp__" + Agent.McpServerName + "__post_attention`: `critical` — they must know immediately (it notifies them at once); `ask` — you need their answer, decision or approval; `todo` — something only they can do; `alert` — worth knowing, no reply needed; `decided` — a call you made for them so work isn't blocked, which they may want to override. Write each item so it stands on its own: the user may read it days later without this conversation. Post each item once — it stays pinned until resolved, so don't restate pinned items in later replies; refer to them by id. When the user answers an item in conversation, or it no longer applies, call `mcp__" + Agent.McpServerName + "__resolve_attention`.";
 
+		/// <summary>
+		/// FR.24.6 — Emitted on a top-level session's first turn in each app run (not only fresh sessions, so
+		/// long-running ones learn the tool too). The current tags are appended with
+		/// <see cref="SessionTagCurrentTagsFormat"/> when the session already has some.
+		/// </summary>
+		public const string SessionTagGuidance =
+			"This session shows tags under its name in Tessyn: the Linear issues, GitHub pull requests and GitHub repositories it works on, which the user opens from there. Keep them current with `mcp__" + Agent.McpServerName + "__tag_session`: tag an issue, PR or repository when this session starts working on it (pass the full URL), and don't tag things it only mentions. Finished work stays tagged; remove a tag only if it was added by mistake.";
+
+		/// <summary>FR.24.6 — Suffix of <see cref="SessionTagGuidance"/>; arg 0 = the labels joined with ", ".</summary>
+		public const string SessionTagCurrentTagsFormat = " Current tags: {0}.";
+
 		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
 		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
 		public const string MidRunAutoCommitOff = "Correction: Ignore previous instructions about committing to git. Do not commit any changes.";
@@ -267,15 +278,82 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string Send = "Send";
 	}
 
+	/// <summary>Naming shared by the JSON sidecar files Tessyn keeps under its data root (FR.23.3, FR.24.5).</summary>
+	public static class Sidecar
+	{
+		public const string TempExtension = ".tmp";
+		public const string CorruptFileInfix = ".bad-";
+		public const string CorruptTimestampFormat = "yyyyMMddHHmmss";
+		public const string FileExtension = ".json";
+	}
+
+	/// <summary>Constants for Session Tags (FR.24).</summary>
+	public static class SessionTags
+	{
+		/// <summary>Folder under the data root that holds one tag JSON per NodeId plus the workspace map (FR.24.5).</summary>
+		public const string FolderName = "tags";
+		public const string LinearWorkspacesFileName = "linear-workspaces.json";
+
+		/// <summary>Linear key token inside a session name (FR.24.2).</summary>
+		public const string NameTokenPattern = @"(?<![A-Za-z0-9])([A-Z][A-Z0-9]{0,9})-(\d{1,6})(?![A-Za-z0-9])";
+
+		/// <summary>A short Linear key given to the tool (FR.24.4); the team is case-insensitive.</summary>
+		public const string LinearKeyPattern = @"^([A-Za-z][A-Za-z0-9]{0,9})-(\d{1,6})$";
+
+		/// <summary><c>owner/repo#n</c> (FR.24.4).</summary>
+		public const string ShortPullRequestPattern = @"^([A-Za-z0-9][A-Za-z0-9-]*)/([A-Za-z0-9._-]+)#(\d+)$";
+
+		/// <summary><c>owner/repo</c> (FR.24.4).</summary>
+		public const string ShortRepositoryPattern = @"^([A-Za-z0-9][A-Za-z0-9-]*)/([A-Za-z0-9._-]+)$";
+
+		public const string LinearHost = "linear.app";
+		public const string GitHubHost = "github.com";
+		public const string LinearIssueSegment = "issue";
+		public const string GitHubPullSegment = "pull";
+		public const string GitDirectorySuffix = ".git";
+
+		// URLs and labels (FR.24.1)
+		public const string LinearIssueUrlFormat = "https://linear.app/{0}/issue/{1}";
+		public const string GitHubPullRequestUrlFormat = "https://github.com/{0}/{1}/pull/{2}";
+		public const string GitHubRepositoryUrlFormat = "https://github.com/{0}/{1}";
+		public const string PullRequestKeyFormat = "{0}/{1}#{2}";
+		public const string RepositoryKeyFormat = "{0}/{1}";
+		public const string PullRequestLabelFormat = "{1} PR #{2}";
+
+		// Limits (FR.24.4)
+		public const int MaxEntriesPerArray = 30;
+
+		// Tool (FR.24.4)
+		public const string ToolName = "tag_session";
+		public const string ToolDescription =
+			"Tag this session with the Linear issues, GitHub pull requests and GitHub repositories it works on. The user sees the tags under the session name and opens them in the browser from there. add/remove take full URLs (best) or short forms: HSE-230, owner/repo#215, owner/repo. Tag what this session is working on, not everything it mentions. Finished work stays tagged; remove only tags added by mistake. Call with no arguments to list the current tags.";
+
+		// Result lines (FR.24.4); arg 0 = label, arg 1 = URL, or the echoed entry / team where noted
+		public const string TaggedLineFormat = "Tagged {0} - {1}";
+		public const string AlreadyTaggedLineFormat = "Already tagged {0}.";
+		public const string RemovedLineFormat = "Removed {0}.";
+		public const string NotTaggedInvalidLineFormat = "Not tagged: '{0}' - not a Linear issue, GitHub pull request or repository.";
+		public const string NotTaggedUnknownTeamLineFormat = "Not tagged: '{0}' - unknown Linear team '{1}'; pass the full https://linear.app/<workspace>/issue/{2} URL once.";
+		public const string NotRemovedNotTaggedLineFormat = "Not removed: '{0}' - not tagged.";
+		public const string NotRemovedFromNameLineFormat = "Not removed: '{0}' - it comes from the session name; rename the session to drop it.";
+		public const string NotRemovedInvalidLineFormat = "Not removed: '{0}' - not a Linear issue, GitHub pull request or repository.";
+		public const string TagsLineFormat = "Tags: {0}.";
+		public const string TagsNone = "none";
+		public const string LabelSeparator = ", ";
+
+		// SYSTEM entry (FR.24.4)
+		public const string SystemEntryPrefix = "[Tags]";
+		public const string SystemAddedFormat = "added {0}";
+		public const string SystemRemovedFormat = "removed {0}";
+		public const string SystemPartSeparator = "; ";
+	}
+
 	/// <summary>Constants for the Attention Ledger and the Focus view (FR.23).</summary>
 	public static class Attention
 	{
 		/// <summary>Folder under the data root that holds one ledger JSON per NodeId (FR.23.3).</summary>
 		public const string FolderName = "attention";
 		public const string LedgerFileExtension = ".json";
-		public const string LedgerTempExtension = ".tmp";
-		public const string CorruptFileInfix = ".bad-";
-		public const string CorruptTimestampFormat = "yyyyMMddHHmmss";
 
 		/// <summary>Prefix of an item id: <c>A{n}</c> (FR.23.2).</summary>
 		public const string IdPrefix = "A";
@@ -410,6 +488,15 @@ SESSION TRANSCRIPT TO COMPACT:
 
 		public const double BadgeFontSize = 10;
 		public const double ChipFontSize = 11;
+	}
+
+	/// <summary>UI literals of the Tag row (FR.24.7).</summary>
+	public static class Tags
+	{
+		public const string TooltipFromName = "From the session name";
+		public const string TooltipTaggedFormat = "Tagged by the session {0}";
+		public const string TimeTodayFormat = "HH:mm";
+		public const string TimeOtherDayFormat = "yyyy-MM-dd HH:mm";
 	}
 
 	/// <summary>Constants for the agent MCP server and orchestration guardrails (FR.14, FR.15).</summary>

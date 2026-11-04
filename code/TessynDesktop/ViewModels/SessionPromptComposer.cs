@@ -48,13 +48,18 @@ public sealed class SessionPromptComposer
 		var hasAttention   = _appSettings.Settings.AgentToolsEnabled && !isWorker;
 		var nodeId         = _node.Model.NodeId;
 
+		// FR.24.6 — same gate as the attention lines; taking it consumes the once-per-run flag, so only when it can be shown.
+		var tagGuidanceDue = hasAttention && _daemonClient.TakeTagGuidanceDue(nodeId);
+
 		var options = new InstructionOptionsModel(
 			isAutoCommit, isNewBranch, isAutoDocument,
 			_appSettings.Settings.AgentToolsEnabled, isNewSession, isStreamingMode,
 			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled,
 			IsWorkerSession: isWorker,
 			PinnedAttentionItems: hasAttention ? _daemonClient.GetAttentionItems(nodeId) : null,
-			UserClosedAttentionItems: hasAttention ? _daemonClient.TakeUnreportedAttentionClosures(nodeId) : null);
+			UserClosedAttentionItems: hasAttention ? _daemonClient.TakeUnreportedAttentionClosures(nodeId) : null,
+			IsTagGuidanceDue: tagGuidanceDue,
+			SessionTags: tagGuidanceDue ? _daemonClient.GetSessionTags(nodeId) : null);
 		return InstructionBlockBuilder.Build(options);
 	}
 

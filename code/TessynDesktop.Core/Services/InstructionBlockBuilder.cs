@@ -55,6 +55,11 @@ public static class InstructionBlockBuilder
 		if (options.IsAgentToolsEnabled && options.IsNewSession && !options.IsWorkerSession)
 			lines.AppendLine($"- {Constants.Instructions.AttentionGuidance}");
 
+		// FR.24.6 — the first turn of a top-level session in each app run (so long-running sessions learn the
+		// tool too), hence no IsNewSession gate; after the attention guidance, before the Telegram guidance.
+		if (options.IsAgentToolsEnabled && !options.IsWorkerSession && options.IsTagGuidanceDue)
+			lines.AppendLine($"- {Constants.Instructions.SessionTagGuidance}{BuildCurrentTagsSuffix(options.SessionTags)}");
+
 		// FR.21.3 — same once-per-fresh-session gating as NoWorkflowTool: this is session-level
 		// policy (a tool exists), not per-turn state. FR.21.20 — never emitted for a Worker Session:
 		// its own notify_user call is dropped outright by the bridge (FR.21.19), so the guidance
@@ -111,6 +116,11 @@ public static class InstructionBlockBuilder
 			lines.AppendLine($"- {Constants.Attention.ClosuresLinePrefix}{string.Join(Constants.Attention.ClosureSeparator, parts)}.");
 		}
 	}
+
+	private static string BuildCurrentTagsSuffix(IReadOnlyList<SessionTagModel>? tags) =>
+		tags is { Count: > 0 }
+			? string.Format(Constants.Instructions.SessionTagCurrentTagsFormat, string.Join(Constants.SessionTags.LabelSeparator, tags.Select(t => t.Label)))
+			: string.Empty;
 
 	private static string CutTitle(string title) =>
 		title.Length > Constants.Attention.MaxPinnedTitleLength

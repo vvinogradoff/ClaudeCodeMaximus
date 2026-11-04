@@ -26,6 +26,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly Lazy<ITelegramBridgeService>    _telegramBridge;
 	private readonly IClaudeStreamingSessionManager  _streamingManager;
 	private readonly IAttentionService               _attention;
+	private readonly ISessionTagService              _tags;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
 	private readonly ConcurrentDictionary<string, SemaphoreSlim> _turnLocks = new();
@@ -44,7 +45,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		IClaudeModelService modelService,
 		Lazy<ITelegramBridgeService> telegramBridge,
 		IClaudeStreamingSessionManager streamingManager,
-		IAttentionService attention)
+		IAttentionService attention,
+		ISessionTagService tags)
 	{
 		_processManager   = processManager;
 		_fileService      = fileService;
@@ -57,6 +59,7 @@ public sealed class SessionTurnService : ISessionTurnService
 		_telegramBridge   = telegramBridge;
 		_streamingManager = streamingManager;
 		_attention        = attention;
+		_tags             = tags;
 	}
 
 	/// <summary>
@@ -72,6 +75,13 @@ public sealed class SessionTurnService : ISessionTurnService
 	/// </summary>
 	private IReadOnlyList<AttentionItemModel>? TakeUserClosuresFor(SessionNodeModel node) =>
 		HasAttentionTools(node) ? _attention.TakeUnreportedUserClosures(node.NodeId) : null;
+
+	/// <summary>
+	/// FR.24.6 — true on the first turn of this top-level session in this app run. Consumed only when the
+	/// builder can emit the line (agent tools on, not a Worker Session), so a turn that cannot show it keeps it due.
+	/// </summary>
+	private bool TakeTagGuidanceDueFor(SessionNodeModel node) =>
+		HasAttentionTools(node) && _tags.TakeTagGuidanceDue(node.NodeId);
 
 	private bool HasAttentionTools(SessionNodeModel node) =>
 		_appSettings.Settings.AgentToolsEnabled && node.OrchestrationDepth == 0;
@@ -197,12 +207,14 @@ public sealed class SessionTurnService : ISessionTurnService
 			// IsStreamingMode is false here — this is the one-shot --resume branch, reached only when
 			// no Streaming Session Mode process is alive for this node (FR.19.11/19.13); when one is
 			// alive, RunTurnViaStreamingAsync (above) handles the turn instead, with IsStreamingMode true.
+			var tagGuidanceDue   = TakeTagGuidanceDueFor(node);
 			var options          = new InstructionOptionsModel(
 				node.IsAutoCommit, false, node.IsAutoDocument,
 				_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: false,
 				IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0,
 				IsScheduledTurn: source == TurnSource.Scheduled,
-				PinnedAttentionItems: PinnedItemsFor(node), UserClosedAttentionItems: TakeUserClosuresFor(node));
+				PinnedAttentionItems: PinnedItemsFor(node), UserClosedAttentionItems: TakeUserClosuresFor(node),
+				IsTagGuidanceDue: tagGuidanceDue, SessionTags: tagGuidanceDue ? _tags.GetTags(node.NodeId, node.Name) : null);
 			var instructionBlock = InstructionBlockBuilder.Build(options);
 			var augmentedPrompt  = prompt + instructionBlock;
 
@@ -326,12 +338,14 @@ public sealed class SessionTurnService : ISessionTurnService
 	/// </summary>
 	private async Task<TurnResultModel> RunTurnViaStreamingAsync(SessionNodeModel node, string prompt, TurnSource source, CancellationToken ct)
 	{
+		var tagGuidanceDue = TakeTagGuidanceDueFor(node);
 		var options = new InstructionOptionsModel(
 			node.IsAutoCommit, false, node.IsAutoDocument,
 			_appSettings.Settings.AgentToolsEnabled, node.ClaudeSessionId == null, IsStreamingMode: true,
 			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0,
 			IsScheduledTurn: source == TurnSource.Scheduled,
-			PinnedAttentionItems: PinnedItemsFor(node), UserClosedAttentionItems: TakeUserClosuresFor(node));
+			PinnedAttentionItems: PinnedItemsFor(node), UserClosedAttentionItems: TakeUserClosuresFor(node),
+			IsTagGuidanceDue: tagGuidanceDue, SessionTags: tagGuidanceDue ? _tags.GetTags(node.NodeId, node.Name) : null);
 		var augmentedPrompt = prompt + InstructionBlockBuilder.Build(options);
 
 		var resultText         = new StringBuilder();

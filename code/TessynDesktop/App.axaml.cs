@@ -119,6 +119,9 @@ public partial class App : Application
 		// AgentMcpServer, SessionTurnService and InProcDaemonClient); the store is stateless but shared with it.
 		services.AddSingleton<AttentionLedgerStore>();
 		services.AddSingleton<IAttentionService, AttentionService>();
+		// FR.24 — Singletons for the same reason: the service owns the tag cache, the workspace map and the write lock.
+		services.AddSingleton<SessionTagStore>();
+		services.AddSingleton<ISessionTagService, SessionTagService>();
 		services.AddSingleton<IDraftService, DraftService>();
 		services.AddSingleton<ClaudeProcessLauncher>();
 		services.AddSingleton<IClaudeProcessManager, ClaudeProcessManager>();

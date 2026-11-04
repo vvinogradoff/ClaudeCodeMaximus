@@ -387,6 +387,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	/// <summary>The Session/Focus selection, the Focus badge and the Focus view cards (FR.23.12-FR.23.16).</summary>
 	public FocusViewModel FocusVm { get; }
+
+	/// <summary>The Tag row: Linear issues, pull requests and repositories this session is about (FR.24.7).</summary>
+	public SessionTagsViewModel TagsVm { get; }
 	public string WorkingDirectory => _node.Model.WorkingDirectory;
 
 	/// <summary>Raised when the user clicks the schedule button, requesting a cancel confirmation dialog from the View.</summary>
@@ -449,6 +452,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// answers only needs a non-empty reply box (FR.23.14).
 		FocusVm = new FocusViewModel(node.Model.NodeId, daemonClient, uiDispatcher,
 			prompt => _turn.SendAsync(prompt, preserveInput: true));
+
+		TagsVm = new SessionTagsViewModel(node.Model.NodeId, daemonClient, uiDispatcher, new SessionTagLauncher(),
+			node.WhenAnyValue(x => x.Name));
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
@@ -538,6 +544,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	{
 		_daemonClient.ScheduleChanged -= OnScheduleChanged;
 		FocusVm.Dispose();
+		TagsVm.Dispose();
 		_models.Dispose();
 		_content.Dispose();
 		_turn.Dispose();
