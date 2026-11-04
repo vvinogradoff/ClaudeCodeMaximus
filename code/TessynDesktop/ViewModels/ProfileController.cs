@@ -39,6 +39,10 @@ public sealed class ProfileController : ReactiveObject
 		get => _selectedProfileIndex;
 		set
 		{
+			// The ComboBox pushes -1 when its items are replaced/cleared; never treat that as a user choice
+			if (value < 0)
+				return;
+
 			// "New..." is always the last item
 			if (value == AvailableProfiles.Count - 1)
 			{
@@ -118,6 +122,8 @@ public sealed class ProfileController : ReactiveObject
 		foreach (var p in _appSettings.Settings.Profiles)
 			AvailableProfiles.Add(new ProfileListItemModel(p.DisplayName, p.ProfileId));
 		AvailableProfiles.Add(new ProfileListItemModel("New...", null));
+		// Clearing the list drops the ComboBox selection; re-publish the index so it re-selects
+		this.RaisePropertyChanged(nameof(SelectedProfileIndex));
 	}
 
 	/// <summary>
@@ -166,6 +172,8 @@ public sealed class ProfileController : ReactiveObject
 			{
 				if (AvailableProfiles.Count > 0)
 					AvailableProfiles[0] = BuildDefaultEntry();
+				// Replacing the selected item clears the ComboBox selection; re-publish the index
+				this.RaisePropertyChanged(nameof(SelectedProfileIndex));
 			});
 		}
 	}
@@ -271,6 +279,7 @@ public sealed class ProfileController : ReactiveObject
 				{
 					if (AvailableProfiles.Count > 0)
 						AvailableProfiles[0] = BuildDefaultEntry();
+					this.RaisePropertyChanged(nameof(SelectedProfileIndex));
 				});
 			}
 
