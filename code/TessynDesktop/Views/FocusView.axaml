@@ -32,7 +32,7 @@
 
             <Expander Header="{Binding DecisionsHeader}"
                       IsVisible="{Binding HasDecisions}"
-                      IsExpanded="False"
+                      IsExpanded="{Binding IsDecisionsExpanded, Mode=TwoWay}"
                       HorizontalAlignment="Stretch">
                 <ItemsControl ItemsSource="{Binding DecidedItems}">
                     <ItemsControl.ItemTemplate>
@@ -45,7 +45,7 @@
 
             <Expander Header="{Binding ClosedHeader}"
                       IsVisible="{Binding HasClosed}"
-                      IsExpanded="False"
+                      IsExpanded="{Binding IsClosedExpanded, Mode=TwoWay}"
                       HorizontalAlignment="Stretch">
                 <ItemsControl ItemsSource="{Binding ClosedItems}">
                     <ItemsControl.ItemTemplate>

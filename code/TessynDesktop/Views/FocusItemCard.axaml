@@ -14,7 +14,8 @@
             Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
         <StackPanel Spacing="6">
 
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto" Background="Transparent"
+                  PointerPressed="OnHeaderPressed">
                 <views:AttentionKindPill Grid.Column="0" IsChip="True"
                                          Kind="{Binding Kind}" Text="{Binding KindLabel}"
                                          VerticalAlignment="Center"/>
@@ -29,7 +30,7 @@
                            VerticalAlignment="Center"/>
             </Grid>
 
-            <views:MarkdownView Markdown="{Binding Body}" IsVisible="{Binding HasBody}" FontSize="13"/>
+            <views:MarkdownView Markdown="{Binding Body}" IsVisible="{Binding IsBodyVisible}" FontSize="13"/>
 
             <TextBlock Text="{Binding OutcomeText}" IsVisible="{Binding IsClosed}"
                        FontSize="12" FontStyle="Italic" Opacity="0.75" TextWrapping="Wrap"/>
@@ -60,9 +61,17 @@
                                      MinHeight="56" MaxHeight="200"
                                      FontSize="13"/>
 
-                <Button Content="{Binding CloseLabel}"
-                        Command="{Binding CloseCommand}"
-                        HorizontalAlignment="Left" Padding="10,3" FontSize="12"/>
+                <DockPanel LastChildFill="False">
+                    <Button DockPanel.Dock="Left"
+                            Content="{Binding ReplyButtonLabel}"
+                            Command="{Binding ReplyCommand}"
+                            Padding="12,3" FontSize="12"/>
+                    <Button DockPanel.Dock="Right"
+                            Content="{Binding CloseLabel}"
+                            Command="{Binding CloseCommand}"
+                            ToolTip.Tip="{Binding CloseTooltip}"
+                            Padding="10,3" FontSize="12"/>
+                </DockPanel>
             </StackPanel>
 
         </StackPanel>

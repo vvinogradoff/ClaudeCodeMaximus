@@ -29,6 +29,8 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 	private readonly Dictionary<string, FocusItemViewModel> _cards = new(StringComparer.OrdinalIgnoreCase);
 
 	private bool _isFocusSelected;
+	private bool _isClosedExpanded;
+	private bool _isDecisionsExpanded;
 	private int _replyCount;
 	private int _badgeCount;
 	private AttentionKind? _badgeKind;
@@ -136,6 +138,20 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 	public bool HasClosed => ClosedItems.Count > 0;
 	public string ClosedHeader => string.Format(Constants.Focus.ClosedHeaderFormat, ClosedItems.Count);
 
+	/// <summary>Closed expander state: per session, collapsed whenever Focus gets selected, untouched by refreshes (FR.23.14).</summary>
+	public bool IsClosedExpanded
+	{
+		get => _isClosedExpanded;
+		set => this.RaiseAndSetIfChanged(ref _isClosedExpanded, value);
+	}
+
+	/// <summary>Decisions expander state: per session, collapsed by default (FR.23.14).</summary>
+	public bool IsDecisionsExpanded
+	{
+		get => _isDecisionsExpanded;
+		set => this.RaiseAndSetIfChanged(ref _isDecisionsExpanded, value);
+	}
+
 	/// <summary>Switches to the Session view (used by Enter in the output search box, FR.23.12).</summary>
 	public void SelectSession() => SetSelection(false);
 
@@ -147,6 +163,8 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 			return;
 
 		_isFocusSelected = focus;
+		if (focus)
+			IsClosedExpanded = false;
 		this.RaisePropertyChanged(nameof(IsFocusSelected));
 		this.RaisePropertyChanged(nameof(IsSessionSelected));
 		this.RaisePropertyChanged(nameof(IsBadgeVisible));
@@ -215,7 +233,7 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 			return existing;
 		}
 
-		var card = new FocusItemViewModel(item, UpdateReplyCount, CloseItem);
+		var card = new FocusItemViewModel(item, UpdateReplyCount, CloseItem, card => SendCards([card]));
 		_cards[item.Id] = card;
 		return card;
 	}
@@ -252,9 +270,12 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 	/// instruction block (with the Pinned list) synchronously, and the turn that carries the answers must
 	/// no longer list those items as pinned. If the send then fails, the items stay answered (logged).
 	/// </summary>
-	private void SendAnswers()
+	private void SendAnswers() => SendCards(ReplyCards().Where(c => c.HasReply).ToList());
+
+	/// <summary>Sends the replies of the given cards as one prompt (the Reply button passes a single card, FR.23.15); other cards keep their text.</summary>
+	private void SendCards(List<FocusItemViewModel> cards)
 	{
-		var cards = ReplyCards().Where(c => c.HasReply).ToList();
+		cards = cards.Where(c => c.HasReply).ToList();
 		var answers = cards
 			.Select(c => new AttentionAnswerModel { ItemId = c.Id, Title = c.Title, Answer = c.ReplyText.Trim() })
 			.ToList();

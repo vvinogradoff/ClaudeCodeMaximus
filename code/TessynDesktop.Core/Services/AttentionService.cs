@@ -189,18 +189,14 @@ public sealed class AttentionService : IAttentionService
 			if (item is not { Status: AttentionStatus.Open })
 				return false;
 
-			var now    = _time.GetUtcNow();
-			var isDone = item.Kind == AttentionKind.Todo;
-			item.Status                = isDone ? AttentionStatus.Resolved : AttentionStatus.Dismissed;
-			item.ResolutionNote        = isDone ? Constants.Attention.MarkedDoneNote : item.ResolutionNote;
+			var now = _time.GetUtcNow();
+			item.Status                = AttentionStatus.Dismissed;
 			item.IsUserCloseUnreported = true;
 			item.UpdatedUtc            = now;
 			item.ClosedUtc             = now;
 
 			SaveLocked(ledger);
-			entry = string.Format(
-				isDone ? Constants.Attention.SystemMarkedDoneByUserFormat : Constants.Attention.SystemDismissedByUserFormat,
-				item.Id);
+			entry = string.Format(Constants.Attention.SystemDismissedByUserFormat, item.Id);
 		}
 
 		AppendEntries(node, [entry]);

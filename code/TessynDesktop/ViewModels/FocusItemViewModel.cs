@@ -16,21 +16,49 @@ public sealed class FocusItemViewModel : ViewModelBase
 {
 	private readonly Action _replyChanged;
 	private readonly Action<FocusItemViewModel> _close;
+	private readonly Action<FocusItemViewModel> _reply;
 	private AttentionItemModel _model;
 	private string _replyText = string.Empty;
+	private bool _isBodyExpanded;
 
-	public FocusItemViewModel(AttentionItemModel model, Action replyChanged, Action<FocusItemViewModel> close)
+	public FocusItemViewModel(AttentionItemModel model, Action replyChanged, Action<FocusItemViewModel> close, Action<FocusItemViewModel> reply)
 	{
 		_model = model;
 		_replyChanged = replyChanged;
 		_close = close;
+		_reply = reply;
 
 		UseRecommendationCommand = ReactiveCommand.Create(UseRecommendation);
 		CloseCommand = ReactiveCommand.Create(() => _close(this));
+		ReplyCommand = ReactiveCommand.Create(() => _reply(this), this.WhenAnyValue(x => x.HasReply));
+		ToggleBodyCommand = ReactiveCommand.Create(() => { IsBodyExpanded = !IsBodyExpanded; });
 	}
 
 	public ReactiveCommand<Unit, Unit> UseRecommendationCommand { get; }
 	public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+
+	/// <summary>Sends only this card's reply (FR.23.15).</summary>
+	public ReactiveCommand<Unit, Unit> ReplyCommand { get; }
+
+	/// <summary>Toggles the body of a closed card (FR.23.14).</summary>
+	public ReactiveCommand<Unit, Unit> ToggleBodyCommand { get; }
+
+	/// <summary>Body of a closed card is shown only after its header was clicked; kept across refreshes.</summary>
+	public bool IsBodyExpanded
+	{
+		get => _isBodyExpanded;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _isBodyExpanded, value);
+			this.RaisePropertyChanged(nameof(IsBodyVisible));
+		}
+	}
+
+	/// <summary>Open cards always show their body; closed cards are compact unless expanded.</summary>
+	public bool IsBodyVisible => HasBody && (IsOpen || _isBodyExpanded);
+
+	public string ReplyButtonLabel => Constants.Focus.ReplyButtonLabel;
+	public string CloseTooltip => Constants.Focus.CloseTooltip;
 
 	public string Id => _model.Id;
 	public AttentionKind Kind => _model.Kind;
@@ -67,11 +95,10 @@ public sealed class FocusItemViewModel : ViewModelBase
 		_ => string.Empty,
 	};
 
-	/// <summary>Close-button label by kind: Dismiss (Ask), Done (Todo), Got it (everything else) (FR.23.14).</summary>
+	/// <summary>Close-button label by kind: Dismiss (Ask, Todo), Got it (everything else) (FR.23.14).</summary>
 	public string CloseLabel => _model.Kind switch
 	{
-		AttentionKind.Ask => Constants.Focus.CloseLabelDismiss,
-		AttentionKind.Todo => Constants.Focus.CloseLabelDone,
+		AttentionKind.Ask or AttentionKind.Todo => Constants.Focus.CloseLabelDismiss,
 		_ => Constants.Focus.CloseLabelGotIt,
 	};
 
@@ -103,6 +130,7 @@ public sealed class FocusItemViewModel : ViewModelBase
 		this.RaisePropertyChanged(nameof(Title));
 		this.RaisePropertyChanged(nameof(Body));
 		this.RaisePropertyChanged(nameof(HasBody));
+		this.RaisePropertyChanged(nameof(IsBodyVisible));
 		this.RaisePropertyChanged(nameof(Options));
 		this.RaisePropertyChanged(nameof(HasOptions));
 		this.RaisePropertyChanged(nameof(HasRecommendation));

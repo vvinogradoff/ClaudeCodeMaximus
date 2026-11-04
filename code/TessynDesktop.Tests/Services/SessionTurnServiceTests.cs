@@ -624,7 +624,7 @@ public sealed class SessionTurnServiceTests : IDisposable
 		var first  = _streamingManager.SendTurnCalls[0].userMessage;
 		var second = _streamingManager.SendTurnCalls[1].userMessage;
 		Assert.Contains("  - A1 ask: Which plan?", first);
-		Assert.Contains("Closed by the user in the Focus view since your last turn: A2 todo \"Rotate key\" marked done.", first);
+		Assert.Contains("Closed by the user in the Focus view since your last turn: A2 todo \"Rotate key\" dismissed without an answer.", first);
 		Assert.Contains("  - A1 ask: Which plan?", second);
 		Assert.DoesNotContain("Closed by the user", second);
 	}
@@ -645,7 +645,7 @@ public sealed class SessionTurnServiceTests : IDisposable
 		await _sut.RunTurnAsync(node, "first", TurnSource.Scheduled);
 
 		Assert.Contains("  - A1 ask: Which plan?", _processManager.Calls[0].userMessage);
-		Assert.Contains("A2 todo \"Rotate key\" marked done.", _processManager.Calls[0].userMessage);
+		Assert.Contains("A2 todo \"Rotate key\" dismissed without an answer.", _processManager.Calls[0].userMessage);
 		Assert.Empty(_attention.Service.TakeUnreportedUserClosures(node.NodeId));   // consumed by the turn
 	}
 

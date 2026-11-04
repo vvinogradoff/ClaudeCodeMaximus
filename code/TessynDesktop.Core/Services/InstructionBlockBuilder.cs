@@ -107,7 +107,7 @@ public static class InstructionBlockBuilder
 		{
 			var parts = closed.Select(i => string.Format(
 				Constants.Attention.ClosureFormat, i.Id, AttentionFormat.KindName(i.Kind), CutTitle(i.Title),
-				i.Kind == AttentionKind.Todo ? Constants.Attention.ClosureMarkedDone : Constants.Attention.ClosureDismissed));
+				Constants.Attention.ClosureDismissed));
 			lines.AppendLine($"- {Constants.Attention.ClosuresLinePrefix}{string.Join(Constants.Attention.ClosureSeparator, parts)}.");
 		}
 	}

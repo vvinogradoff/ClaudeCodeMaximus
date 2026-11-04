@@ -306,8 +306,6 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string BadgeCriticalForeground = "#FFFFFF";
 		public const string BadgeAskForeground = "#000000";
 
-		/// <summary>Resolution note of a Todo the user marked done in the Focus view (FR.23.15).</summary>
-		public const string MarkedDoneNote = "Marked done by the user";
 
 		/// <summary>Title given to a captured <c>notify_user</c> message that has no non-empty line (FR.23.7).</summary>
 		public const string NotifyUserFallbackTitle = "Message from the session";
@@ -360,7 +358,6 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string SystemUpdatedFormat = "[Attention {0} ({1}) updated] {2}";
 		public const string SystemClosedFormat = "[Attention {0} {1}]";
 		public const string SystemDismissedByUserFormat = "[Attention {0} dismissed by the user]";
-		public const string SystemMarkedDoneByUserFormat = "[Attention {0} marked done by the user]";
 		public const string SystemOptionsPrefix = "Options: ";
 		public const string SystemOptionsSeparator = " | ";
 		public const string SystemRecommendationPrefix = "Recommendation: ";
@@ -372,7 +369,6 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string PinnedMoreLineFormat = "  - ...and {0} more (call mcp__" + Agent.McpServerName + "__list_attention)";
 		public const string ClosuresLinePrefix = "Closed by the user in the Focus view since your last turn: ";
 		public const string ClosureFormat = "{0} {1} \"{2}\" {3}";
-		public const string ClosureMarkedDone = "marked done";
 		public const string ClosureDismissed = "dismissed without an answer";
 		public const string ClosureSeparator = "; ";
 
@@ -394,7 +390,8 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string AcceptedRecommendationFormat = "Accepted your recommendation: {0}";
 
 		public const string CloseLabelDismiss = "Dismiss";
-		public const string CloseLabelDone = "Done";
+		public const string CloseTooltip = "Closes this item without sending anything to the session.";
+		public const string ReplyButtonLabel = "Reply";
 		public const string CloseLabelGotIt = "Got it";
 
 		public const string OutcomeAnswered = "Answered";

@@ -273,7 +273,7 @@ public sealed class AttentionServiceTests : IDisposable
 	// ── TC.FV.11 user close ─────────────────────────────────────────────────────
 
 	[Fact]
-	public void CloseByUser_Todo_ResolvesWithDoneNoteAndWritesEntry()   // TC.FV.11-1
+	public void CloseByUser_Todo_DismissesAndWritesEntry()   // TC.FV.11-1
 	{
 		for (var n = 1; n < 5; n++)
 			Post($"filler {n}");
@@ -282,21 +282,22 @@ public sealed class AttentionServiceTests : IDisposable
 		Assert.True(Svc.CloseByUser(_node, "A5"));
 
 		var item = Get("A5");
-		Assert.Equal(AttentionStatus.Resolved, item.Status);
-		Assert.Equal("Marked done by the user", item.ResolutionNote);
+		Assert.Equal(AttentionStatus.Dismissed, item.Status);
+		Assert.Null(item.ResolutionNote);
 		Assert.True(item.IsUserCloseUnreported);
 		Assert.NotNull(item.ClosedUtc);
-		Assert.Equal("[Attention A5 marked done by the user]", _env.Files.Appended.Last().content);
+		Assert.Equal("[Attention A5 dismissed by the user]", _env.Files.Appended.Last().content);
 		Assert.Equal(Constants.SessionFile.RoleSystem, _env.Files.Appended.Last().role);
 		Assert.Equal(_node.FileName, _env.Files.Appended.Last().fileName);
 	}
 
 	[Theory]
 	[InlineData(AttentionKind.Ask)]
+	[InlineData(AttentionKind.Todo)]
 	[InlineData(AttentionKind.Critical)]
 	[InlineData(AttentionKind.Alert)]
 	[InlineData(AttentionKind.Decided)]
-	public void CloseByUser_OtherKinds_Dismiss(AttentionKind kind)   // TC.FV.11-2
+	public void CloseByUser_EveryKind_Dismisses(AttentionKind kind)   // TC.FV.11-2
 	{
 		Post("something", kind);
 

@@ -327,15 +327,16 @@ public sealed class InstructionBlockBuilderTests
         ]));
 
         Assert.Contains(
-            "- Closed by the user in the Focus view since your last turn: A5 todo \"t5\" marked done; A4 ask \"t4\" dismissed without an answer.",
+            "- Closed by the user in the Focus view since your last turn: A5 todo \"t5\" dismissed without an answer; A4 ask \"t4\" dismissed without an answer.",
             block);
     }
 
     [Theory]
+    [InlineData(AttentionKind.Todo)]
     [InlineData(AttentionKind.Critical)]
     [InlineData(AttentionKind.Alert)]
     [InlineData(AttentionKind.Decided)]
-    public void Build_UserClosedNonTodo_ReadsDismissedWithoutAnAnswer(AttentionKind kind)   // TC.FV.15-5
+    public void Build_UserClosedAnyKind_ReadsDismissedWithoutAnAnswer(AttentionKind kind)   // TC.FV.15-5
     {
         var block = InstructionBlockBuilder.Build(AttentionOptions(closed: [Pinned(7, kind, "x", AttentionStatus.Dismissed)]));
 
