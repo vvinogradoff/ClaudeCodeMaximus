@@ -33,6 +33,9 @@ public static class Constants
 		/// </summary>
 		public const string RoleToolResult = "TOOL_RESULT";
 		public const string TimestampFormat = "yyyy-MM-ddTHH:mm:ssZ";
+
+		/// <summary>How many trailing .txt entries the JSONL write-back compares candidates against (ISSUE.014).</summary>
+		public const int WriteBackTailWindow = 20;
 	}
 
 	public static class ContextRestore

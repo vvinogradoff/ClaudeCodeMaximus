@@ -27,6 +27,8 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 	private readonly IClaudeSessionImportService _importService;
 	private readonly SessionNodeViewModel _node;
 	private readonly Func<bool> _isBusyProvider;
+	private readonly Func<bool> _isHeadlessRunningProvider;
+	private readonly JsonlWriteBackPlanner _writeBackPlanner = new();
 	private bool _isMarkdownMode = true;
 	private bool _isClaudeSessionView;
 	private List<MessageEntryViewModel>? _tessynMessagesSnapshot;
@@ -73,12 +75,14 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 		ISessionFileService fileService,
 		IClaudeSessionImportService importService,
 		SessionNodeViewModel node,
-		Func<bool> isBusyProvider)
+		Func<bool> isBusyProvider,
+		Func<bool> isHeadlessRunningProvider)
 	{
 		_fileService     = fileService;
 		_importService   = importService;
 		_node            = node;
 		_isBusyProvider  = isBusyProvider;
+		_isHeadlessRunningProvider = isHeadlessRunningProvider;
 	}
 
 	/// <summary>Appends a system-role message with the current timestamp.</summary>
@@ -225,6 +229,9 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 		}
 	}
 
+	/// <summary>True while the Core runs a headless turn (scheduler, orchestration, Telegram) for the node and this session's own TurnController is not sending (ISSUE.014).</summary>
+	private bool IsHeadlessTurnActive() => _isHeadlessRunningProvider() && !_isBusyProvider();
+
 	private void OnSessionFileChanged(object sender, FileSystemEventArgs e)
 	{
 		// Ignore changes caused by our own writes (IsBusy covers all write paths)
@@ -241,7 +248,8 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 
 	private void OnJsonlFileChanged(object sender, FileSystemEventArgs e)
 	{
-		// Ignore changes when we're actively sending (our own process writes to the JSONL too)
+		// Ignore changes while this session is sending interactively (our own process writes to the JSONL too).
+		// Headless turns are NOT suppressed: their JSONL-only tool lines are written back in near real time.
 		if (_isBusyProvider())
 			return;
 
@@ -409,56 +417,23 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 				displayable.Add(entry);
 			}
 
-			if (displayable.Count <= _lastKnownEntryCount)
+			// ISSUE.014: the Core already persists the USER/ASSISTANT entries of every Tessyn-run turn
+			// to the .txt file. The planner therefore writes back only what the Core does not hold:
+			// entries of turns run outside Tessyn, and the JSONL-only tool lines of headless turns.
+			var txtTail = _fileService.ReadEntries(_node.FileName)
+				.TakeLast(Constants.SessionFile.WriteBackTailWindow).ToList();
+			var plan = _writeBackPlanner.Plan(displayable, _lastKnownEntryCount, txtTail, IsHeadlessTurnActive());
+			_lastKnownEntryCount = plan.NewBaselineCount;
+			if (plan.EntriesToWrite.Count == 0)
 				return;
 
-			var newEntries = displayable.Skip(_lastKnownEntryCount).ToList();
-			_log.Information("JSONL watcher: {Count} new entries detected from JSONL", newEntries.Count);
+			_log.Information("JSONL watcher: {Count} new entries detected from JSONL", plan.EntriesToWrite.Count);
 
-			_lastKnownEntryCount = displayable.Count;
-
-			Dispatcher.UIThread.Post(() =>
-			{
-				// Defensive dedup (ISSUE.009 follow-up): _lastKnownEntryCount is captured by
-				// re-reading the JSONL file, which can race a persistent (Streaming Session Mode)
-				// process's own disk flush of the entry TurnController's HandleStreamEvent just
-				// wrote via the primary path. If that flush lands after this method's snapshot but
-				// before the count is next refreshed, the same entry is treated as "new" here and
-				// would otherwise be appended a second time (with none of HandleStreamEvent's
-				// model/effort metadata) both on screen and in the persisted .txt file. Skip any
-				// entry whose role/content exactly matches the current tail of Messages.
-				var addedEntries = new List<SessionEntryModel>();
-				foreach (var entry in newEntries)
-				{
-					var last = Messages.Count > 0 ? Messages[^1] : null;
-					if (last != null && last.Role == entry.Role && last.Content == entry.Content)
-						continue;
-
-					Messages.Add(EntryToViewModel(entry));
-					addedEntries.Add(entry);
-				}
-
-				// Append to the Tessyn .txt file only now that Messages already reflects these
-				// entries. Writing before Messages.Add let the .txt FileSystemWatcher's own
-				// debounced RefreshFromFile race this Dispatcher.Post — if the UI thread was busy
-				// (e.g. right after an app/machine restart) RefreshFromFile could see the same
-				// entries as "new" (Messages.Count not yet incremented) and re-add them, duplicating
-				// both the user message and the assistant reply in the pane.
-				foreach (var entry in addedEntries)
-					_fileService.AppendMessage(_node.FileName, entry.Role, entry.Content);
-
-				var lastUser = addedEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
-				if (lastUser != null)
-				{
-					_node.LastPromptTimestamp = lastUser.Timestamp;
-					_node.LastPromptTime = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-					_node.ProfileName = lastUser.ProfileName;
-				}
-
-				var lastAssistant = addedEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleAssistant);
-				if (lastAssistant != null)
-					_node.LastResponseTimestamp = lastAssistant.Timestamp;
-			});
+			// Write to the .txt file ONLY. RefreshFromFile (triggered by this very write) is the single
+			// path from the file into Messages, so the two watchers can never show an entry twice or miss
+			// one, and the ISSUE.009 race (Messages.Add vs. the .txt watcher) cannot occur.
+			foreach (var entry in plan.EntriesToWrite)
+				_fileService.AppendMessage(_node.FileName, entry.Role, entry.Content);
 		}
 		catch (Exception ex)
 		{

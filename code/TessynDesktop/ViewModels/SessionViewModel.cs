@@ -421,7 +421,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// content log to append to), but the content log needs to ask "is a turn in flight" to
 		// gate its file watchers. The lambda closes over this local, assigned once _turn exists.
 		TurnController? turn = null;
-		_content = new SessionContentViewModel(fileService, importService, node, () => turn?.IsBusy ?? false);
+		_content = new SessionContentViewModel(fileService, importService, node, () => turn?.IsBusy ?? false,
+			() => daemonClient.IsSessionRunning(node.Model.NodeId));
 		_models = new ModelSelectionController(modelService, appSettings, _directoryModel);
 		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
 		var composer = new SessionPromptComposer(fileService, appSettings, node);
