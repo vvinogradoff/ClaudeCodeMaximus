@@ -341,6 +341,18 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
         Assert.Empty(ids);
     }
 
+    [Fact]
+    public async Task SearchMatchingSessionIdsAsync_ScopesToProjectSlug_WhenProvided()
+    {
+        WriteSession("-Users-x-project-a", "session-a", ("user", "keyword in project a"));
+        WriteSession("-Users-x-project-b", "session-b", ("user", "keyword in project b"));
+        await _service.ReindexAsync();
+
+        var ids = await _service.SearchMatchingSessionIdsAsync("keyword", "-Users-x-project-a");
+
+        Assert.Equal(["session-a"], ids);
+    }
+
     // ── Titles ────────────────────────────────────────────────────────────────────
 
     [Fact]

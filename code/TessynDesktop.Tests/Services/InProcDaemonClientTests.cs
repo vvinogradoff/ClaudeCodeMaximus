@@ -278,6 +278,7 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
     public int? LastSearchLimit { get; private set; }
     public int? LastSearchOffset { get; private set; }
     public string? LastMatchingIdsQuery { get; private set; }
+    public string? LastMatchingIdsProjectSlug { get; private set; }
     public IReadOnlyList<ClaudeSessionSummaryModel>? LastEnsureTitlesSummaries { get; private set; }
     public IReadOnlyList<string>? LastGetSummariesExternalIds { get; private set; }
 
@@ -295,9 +296,10 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
         return Task.FromResult(SearchResult);
     }
 
-    public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, CancellationToken cancellationToken = default)
+    public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default)
     {
         LastMatchingIdsQuery = query;
+        LastMatchingIdsProjectSlug = projectSlug;
         return Task.FromResult(MatchingSessionIdsResult);
     }
 
@@ -967,5 +969,28 @@ public sealed class InProcDaemonClientTests
         var result = _client.CollectAllClaudeSessionIds();
 
         Assert.Same(expected, result);
+    }
+
+    // ── Cross-project search ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SearchMatchingSessionIdsAsync_DelegatesToIndexService_WithProjectSlug()
+    {
+        var expected = new HashSet<string> { "ext-1" };
+        _indexService.MatchingSessionIdsResult = expected;
+
+        var result = await _client.SearchMatchingSessionIdsAsync("Visual Studio", "-Users-x-project-a");
+
+        Assert.Same(expected, result);
+        Assert.Equal("Visual Studio", _indexService.LastMatchingIdsQuery);
+        Assert.Equal("-Users-x-project-a", _indexService.LastMatchingIdsProjectSlug);
+    }
+
+    [Fact]
+    public async Task SearchMatchingSessionIdsAsync_DelegatesToIndexService_WithoutProjectSlug()
+    {
+        await _client.SearchMatchingSessionIdsAsync("Visual Studio");
+
+        Assert.Null(_indexService.LastMatchingIdsProjectSlug);
     }
 }

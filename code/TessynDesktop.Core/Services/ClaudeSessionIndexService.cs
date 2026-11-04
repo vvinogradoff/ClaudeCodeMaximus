@@ -272,13 +272,13 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	/// uncapped. For membership tests (e.g. "which tree nodes should stay visible for this query")
 	/// rather than a ranked top-N results list: applying <see cref="SearchAsync"/>'s default rank
 	/// cutoff here would silently drop genuine matches in the caller's project whenever unrelated
-	/// projects happen to score higher on the same terms.
+	/// projects happen to score higher on the same terms. Optionally scoped to a single project slug.
 	/// </summary>
 	public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(
-		string query, CancellationToken cancellationToken = default) =>
-		Task.Run(() => SearchMatchingSessionIdsCore(query), cancellationToken);
+		string query, string? projectSlug = null, CancellationToken cancellationToken = default) =>
+		Task.Run(() => SearchMatchingSessionIdsCore(query, projectSlug), cancellationToken);
 
-	private IReadOnlySet<string> SearchMatchingSessionIdsCore(string query)
+	private IReadOnlySet<string> SearchMatchingSessionIdsCore(string query, string? projectSlug)
 	{
 		if (string.IsNullOrWhiteSpace(query))
 			return new HashSet<string>();
@@ -287,8 +287,13 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		conn.Open();
 
 		using var cmd = conn.CreateCommand();
-		cmd.CommandText = "SELECT DISTINCT external_id FROM messages WHERE messages MATCH @query;";
+		cmd.CommandText = """
+			SELECT DISTINCT external_id FROM messages
+			WHERE messages MATCH @query
+			  AND (@projectSlug IS NULL OR project_slug = @projectSlug);
+			""";
 		cmd.Parameters.AddWithValue("@query", EscapeFtsQuery(query));
+		cmd.Parameters.AddWithValue("@projectSlug", (object?)projectSlug ?? DBNull.Value);
 
 		var ids = new HashSet<string>();
 		using var reader = cmd.ExecuteReader();

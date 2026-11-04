@@ -10,9 +10,9 @@
 
     <DockPanel>
 
-        <!-- Search box + refresh button -->
+        <!-- Search box + refresh button + project-scope toggle -->
         <Border DockPanel.Dock="Top" Padding="4,4,4,2">
-            <Grid ColumnDefinitions="Auto,*">
+            <Grid ColumnDefinitions="Auto,*,Auto">
                 <Button Grid.Column="0"
                         Content="&#x21BB;"
                         ToolTip.Tip="Refresh git origins"
@@ -25,7 +25,46 @@
                         Click="OnRefreshGitOriginsClicked"/>
                 <views:NativeTextBox Grid.Column="1"
                          Text="{Binding SearchText}"
-                         Watermark="Search sessions…"/>
+                         Watermark="Search sessions…">
+                    <TextBox.InnerRightContent>
+                        <TextBlock Text="&#x21BB;"
+                                   FontSize="13"
+                                   Margin="0,0,6,0"
+                                   VerticalAlignment="Center"
+                                   IsVisible="{Binding IsSearching}"
+                                   RenderTransformOrigin="0.5,0.5"
+                                   ToolTip.Tip="Searching…">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform/>
+                            </TextBlock.RenderTransform>
+                            <TextBlock.Styles>
+                                <Style Selector="TextBlock">
+                                    <Style.Animations>
+                                        <Animation Duration="0:0:1" IterationCount="INFINITE">
+                                            <KeyFrame Cue="0%">
+                                                <Setter Property="RotateTransform.Angle" Value="0"/>
+                                            </KeyFrame>
+                                            <KeyFrame Cue="100%">
+                                                <Setter Property="RotateTransform.Angle" Value="360"/>
+                                            </KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                            </TextBlock.Styles>
+                        </TextBlock>
+                    </TextBox.InnerRightContent>
+                </views:NativeTextBox>
+                <ToggleButton Grid.Column="2"
+                              IsChecked="{Binding IsScopedToProject, Mode=TwoWay}"
+                              IsEnabled="{Binding IsProjectScopeEnabled}"
+                              Content="&#128193;"
+                              ToolTip.Tip="Limit search to the selected session's project"
+                              Width="28" Height="28"
+                              Padding="0"
+                              Margin="4,0,0,0"
+                              FontSize="14"
+                              HorizontalContentAlignment="Center"
+                              VerticalContentAlignment="Center"/>
             </Grid>
         </Border>
 

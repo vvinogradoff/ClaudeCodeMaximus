@@ -64,6 +64,13 @@
 - [DONE] Date shown above time on user and assistant message bubbles (`FormattedDate` property)
 - [DONE] Last user prompt date/time shown on session tree nodes (small grey text, bottom-right)
 
+### P2.5 Tree search: project scope + searching indicator (FR.1.9, FR.1.10, FR.1.11)
+- [DONE] `IClaudeSessionIndexService.SearchMatchingSessionIdsAsync` / `IDaemonClient` / `InProcDaemonClient` / `WireDaemonClient` take an optional `projectSlug` to scope the membership query to one project
+- [DONE] `SessionTreeViewModel.IsScopedToProject` (default ON when a session is selected) + `IsProjectScopeEnabled` (off/disabled with no session selected); toggling, or switching the selected session while enabled, re-runs the active search
+- [DONE] `SessionTreeViewModel.IsSearching` set while a query runs against the index; cleared on completion, cancellation (superseded by a newer search), or when the query is cleared
+- [DONE] `SessionTreeView.axaml` — folder-icon `ToggleButton` next to the search box; animated spinner glyph inside the search box's `InnerRightContent`, bound to `IsSearching`
+- [DONE] Core/Tests: `ClaudeSessionIndexServiceTests` project-scoped matching-ids test; `InProcDaemonClientTests` passthrough tests for the new `projectSlug` parameter
+
 ---
 
 ## Phase 3 — Claude Code Process Integration ✓ DONE

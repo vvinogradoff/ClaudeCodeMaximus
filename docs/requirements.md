@@ -74,7 +74,11 @@ Different directories may therefore share a label (e.g. `HardStop` and `HardStop
 
 **FR.1.8 — Running indicator:** Session nodes with an active `claude` process shall be visually distinguished in the tree (e.g., animated spinner or distinct icon).
 
-**FR.1.9 — Search:** A search box positioned above the tree performs a full-text search across all session files in the configured Session Files Root. The tree filters to show only Session nodes whose file content matches; ancestor nodes (Group, Directory) of matching sessions are expanded. Non-matching sessions are hidden. Search is a linear file scan for v1; indexing is out of scope.
+**FR.1.9 — Search:** A search box positioned above the tree performs a full-text search using the Cross-Project Search Index (FR.13.15), with a 300ms debounce after each keystroke and the query run on a background thread. The tree filters to show only Session nodes whose indexed content matches; ancestor nodes (Group, Directory) of matching sessions stay visible, all others are hidden. If the index is unavailable, search falls back to a linear substring scan of session files in the configured Session Files Root.
+
+**FR.1.10 — Project-scope toggle:** A toggle button next to the search box limits search results to the currently selected session's project (matched by Claude CLI project slug) when enabled. It defaults to enabled whenever a session is selected, and is forced off and disabled whenever no session is selected. Changing the toggle, or selecting a different session while it is enabled, re-runs the active search immediately.
+
+**FR.1.11 — Searching indicator:** While a search query is running against the index, an animated spinner glyph is shown inside the search box to indicate that a search is in progress, since index lookups are not always instantaneous.
 
 ---
 

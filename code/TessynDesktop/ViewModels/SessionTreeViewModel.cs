@@ -30,6 +30,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private SessionNodeViewModel? _selectedSession;
 	private ViewModelBase? _selectedTreeItem;
 	private CancellationTokenSource? _searchCts;
+	private bool _isScopedToProject = true;
+	private bool _isProjectScopeEnabled;
+	private bool _isSearching;
 
 	// ── Sub-session expand/collapse state ───────────────────────────────────
 	private SessionNodeViewModel? _expandedSupervisor;
@@ -58,6 +61,35 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	{
 		get => _searchText;
 		set => this.RaiseAndSetIfChanged(ref _searchText, value);
+	}
+
+	/// <summary>
+	/// When true (the default whenever a session is selected), the search box's content search
+	/// is limited to the selected session's project. Forced to false and disabled (see
+	/// <see cref="IsProjectScopeEnabled"/>) when no session is selected.
+	/// </summary>
+	public bool IsScopedToProject
+	{
+		get => _isScopedToProject;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _isScopedToProject, value);
+			ApplySearchFilterIfActive();
+		}
+	}
+
+	/// <summary>Whether the project-scope toggle is interactive — only when a session is selected.</summary>
+	public bool IsProjectScopeEnabled
+	{
+		get => _isProjectScopeEnabled;
+		private set => this.RaiseAndSetIfChanged(ref _isProjectScopeEnabled, value);
+	}
+
+	/// <summary>Whether a content search is currently running against the index, for the search box's busy indicator.</summary>
+	public bool IsSearching
+	{
+		get => _isSearching;
+		private set => this.RaiseAndSetIfChanged(ref _isSearching, value);
 	}
 
 	public SessionNodeViewModel? SelectedSession
@@ -132,6 +164,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			{
 				_daemon.SelectedNodeId = session?.Model.NodeId;
 				UpdateSubSessionExpansion(session);
+				UpdateProjectScopeAvailability(session);
 			});
 
 		var timer = new DispatcherTimer
@@ -965,6 +998,30 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	// --- Search ---
 
+	private void ApplySearchFilterIfActive()
+	{
+		if (!string.IsNullOrWhiteSpace(SearchText))
+			ApplySearchFilter();
+	}
+
+	/// <summary>
+	/// Updates whether the project-scope toggle is interactive, and its default value, when the
+	/// selected session changes. Defaults to ON whenever a session becomes selected (per request),
+	/// and is forced off/disabled while no session is selected.
+	/// </summary>
+	private void UpdateProjectScopeAvailability(SessionNodeViewModel? session)
+	{
+		var wasEnabled = IsProjectScopeEnabled;
+		IsProjectScopeEnabled = session != null;
+
+		if (session == null)
+			IsScopedToProject = false;
+		else if (!wasEnabled)
+			IsScopedToProject = true;
+		else
+			ApplySearchFilterIfActive(); // scope stays enabled, but the selected project may have changed
+	}
+
 	private void ApplySearchFilter()
 	{
 		_searchCts?.Cancel();
@@ -973,12 +1030,18 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 		if (string.IsNullOrEmpty(query))
 		{
+			IsSearching = false;
 			ShowAllNodes();
 			return;
 		}
 
+		var projectSlug = IsScopedToProject && SelectedSession != null
+			? Constants.ClaudeSessions.BuildProjectSlug(SelectedSession.Model.WorkingDirectory)
+			: null;
+
 		var cts = new CancellationTokenSource();
 		_searchCts = cts;
+		IsSearching = true;
 
 		_ = Task.Run(async () =>
 		{
@@ -987,7 +1050,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 				// Unranked, uncapped membership test — not SearchSessionsAsync's ranked top-N, which
 				// would silently drop genuine matches in this tree whenever other projects on the
 				// machine happen to score higher on the same terms (see ISSUE.007).
-				var matchingExternalIds = await _daemon.SearchMatchingSessionIdsAsync(query, cts.Token);
+				var matchingExternalIds = await _daemon.SearchMatchingSessionIdsAsync(query, projectSlug, cts.Token);
 				if (cts.Token.IsCancellationRequested) return;
 
 				Dispatcher.UIThread.Post(() =>
@@ -999,9 +1062,10 @@ public sealed class SessionTreeViewModel : ViewModelBase
 						var dirHasMatch = ApplyFilterToChildrenByExternalId(dir.Children, matchingExternalIds);
 						dir.IsVisible = dirHasMatch;
 					}
+					IsSearching = false;
 				});
 			}
-			catch (OperationCanceledException) { /* expected */ }
+			catch (OperationCanceledException) { /* expected; a newer search superseded this one */ }
 			catch (Exception ex)
 			{
 				if (cts.Token.IsCancellationRequested) return;
@@ -1016,6 +1080,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 						var dirHasMatch = ApplyFilterToChildren(dir.Children, matches);
 						dir.IsVisible = dirHasMatch;
 					}
+					IsSearching = false;
 				});
 			}
 		}, cts.Token);

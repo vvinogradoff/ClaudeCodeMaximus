@@ -203,7 +203,7 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public IReadOnlySet<string> CollectAllClaudeSessionIds() => throw new NotSupportedException("Fake does not implement CollectAllClaudeSessionIds.");
     public Task<int> ReindexSessionsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement ReindexSessionsAsync.");
     public Task<IReadOnlyList<SessionSearchResultModel>> SearchSessionsAsync(string query, string? projectSlug = null, string? role = null, int? limit = null, int? offset = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement SearchSessionsAsync.");
-    public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement SearchMatchingSessionIdsAsync.");
+    public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement SearchMatchingSessionIdsAsync.");
     public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(IReadOnlyList<ClaudeSessionSummaryModel> summaries, Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement EnsureTitlesAsync.");
     public Task<IReadOnlyList<ClaudeSessionSummaryModel>> GetSessionSummariesAsync(IReadOnlyList<string> externalIds, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement GetSessionSummariesAsync.");
 }

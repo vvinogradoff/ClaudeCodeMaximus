@@ -42,9 +42,11 @@ public interface IClaudeSessionIndexService
 	/// Returns the distinct set of external IDs with at least one matching message — unranked and
 	/// uncapped, unlike <see cref="SearchAsync"/>. Use this to filter/hide already-known tree nodes
 	/// by content match, where a hard result-count limit would silently drop genuine matches.
+	/// Optionally scoped to a single project slug (e.g. to limit the session tree's search box to
+	/// the currently selected session's project).
 	/// </summary>
 	Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(
-		string query, CancellationToken cancellationToken = default);
+		string query, string? projectSlug = null, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Returns a title for each summary — from the persisted cache when one already exists,

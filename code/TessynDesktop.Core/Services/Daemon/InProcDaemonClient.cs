@@ -174,8 +174,8 @@ public sealed class InProcDaemonClient : IDaemonClient
 		int? limit = null, int? offset = null, CancellationToken cancellationToken = default)
 		=> _indexService.SearchAsync(query, projectSlug, role, limit, offset, cancellationToken);
 
-	public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, CancellationToken cancellationToken = default)
-		=> _indexService.SearchMatchingSessionIdsAsync(query, cancellationToken);
+	public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default)
+		=> _indexService.SearchMatchingSessionIdsAsync(query, projectSlug, cancellationToken);
 
 	public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
 		IReadOnlyList<ClaudeSessionSummaryModel> summaries,
