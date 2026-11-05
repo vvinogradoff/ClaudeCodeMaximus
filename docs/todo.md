@@ -948,6 +948,28 @@ Manual verification UC.15.2/UC.15.3 after an app restart:
 
 ---
 
+## Phase 37 — Usage Parsing: Capless Window Returned as JSON Null (FR.18.4) ✓ DONE
+
+Bug: on a plan with no 5-hour session cap (e.g. Ultra), the Anthropic usage endpoint reports
+`"five_hour": null` rather than omitting the key. `ClaudeUsageService.ParseUsage` called
+`JsonElement.TryGetProperty` directly on that null element, which throws — caught by the
+method's outer `catch`, discarding the *entire* parse including an otherwise-valid `seven_day`
+reading. Net effect: usage polling for such profiles never produced an update after the first
+poll, so the weekly bar froze (at 0%, if nothing had ever been cached) instead of tracking the
+real percentage.
+
+- [DONE] `ClaudeUsageService.ParseUsage` — presence of `five_hour`/`seven_day` now checked
+  independently via `ParseWindow`, which treats a missing key or a JSON `null` value as
+  "0%, no limit" for that window alone, instead of failing the whole parse. Only returns `null`
+  if *neither* key is present at all (malformed/error response).
+- [DONE] `ParseUsage` changed from `private` to `internal` (mirrors the existing
+  `ClaudeProcessManager.BuildArguments` pattern) so it's directly unit-testable via the
+  `TessynDesktop.Core` → `TessynDesktop.Tests` `InternalsVisibleTo`.
+- [DONE] `ClaudeUsageServiceParseUsageTests.cs` — 5 tests: both windows present; `five_hour: null`;
+  `five_hour` key missing entirely; `seven_day: null`; neither key present (→ `null`).
+
+---
+
 ## Backlog / Future
 
 - [ ] **Visual Studio / Roslyn MCP server (planned after Phase 26)** — standalone Roslyn (`MSBuildWorkspace` or the published `roslyn-language-server`) core for rename/find-references/go-to-def/call-hierarchy/symbol-search, no running VS required; optional thin VSIX bridge (named-pipe) only for unsaved editor buffers + Build/Error List when VS happens to be running. Registered as a `Stdio` entry in the FR.20 registry once built. Research written to `docs/business-analysis/RESEARCH.01.VS-MCP-Server-Automation-Approaches.md`. Requirements not yet drafted — needs Architect sign-off before an FR group is added.
@@ -959,3 +981,49 @@ Manual verification UC.15.2/UC.15.3 after an app restart:
 - [ ] Session file watcher (detect disk deletion so tree delete button becomes available)
 - [ ] Integration tests for `ClaudeProcessManager` with a mock process
 - [ ] **Touchscreen UX review** — Review all UI interactions for touchscreen compatibility, plan touch-friendly gestures (long-press for context menu, swipe for move, tap-and-hold for drag), review hit target sizes, consider touch-specific affordances
+
+---
+
+## FR.23 — Focus View
+
+Requirements: FR.23 in `docs/requirements.md` (design approved by the Architect 2026-11-04). Code: commit b83d0bc, 823 tests green. Use cases / test cases: `docs/usecases/`, `docs/testcases/`.
+
+- [DONE] Docs: FR.23 requirements, amendments to FR.15.11 / FR.21.3 / FR.21.5 / FR.21.24, glossary terms (FR.23.1–FR.23.16)
+- [DONE] Core model, ledger store and `IAttentionService` (Singleton): models, ordering, summary, atomic sidecar storage, dedupe, ids (FR.23.1, FR.23.2, FR.23.3)
+- [DONE] MCP tools `post_attention`, `resolve_attention`, `list_attention`, worker refusal, notification fan-out helper shared with `notify_user` (FR.23.4, FR.23.5, FR.23.6, FR.23.9)
+- [DONE] `notify_user` capture as an Ask item with result suffix (FR.23.7)
+- [DONE] Tool-line text in `ExtractToolDescription` and SYSTEM entries in the session file (FR.23.8)
+- [DONE] Instruction block changes: `AttentionGuidance`, amended `TelegramNotifyGuidance` / `ScheduledTurnNotifyReminder` / `cmx-orchestration` skill, Pinned list, `InstructionOptionsModel` plumbing (FR.23.10, FR.23.11)
+- [DONE] Daemon client: `IDaemonClient` additions, `InProcDaemonClient` delegation and `AttentionChanged` relay (FR.23.16)
+- [DONE] Core tests: ledger store, service, MCP tools, `InstructionBlockBuilder`, `ExtractToolDescription`, `AttentionPromptBuilder`, `InProcDaemonClient`
+- [DONE] UI: Session/Focus switch and Focus badge (FR.23.12, FR.23.13)
+- [DONE] UI: Focus view cards, expanders, empty state (FR.23.14)
+- [DONE] UI: answering and closing, `TurnController` skip-clear option, `AttentionPromptBuilder.BuildAnswersPrompt` (FR.23.15)
+- [DONE] Follow-up from first use: per-card Reply button, Dismiss (was Done) on the far right, every user close is Dismissed, Closed history collapsed by default with compact cards (FR.23.14, FR.23.15; commit 41b8959, 825 tests green)
+- [ ] Manual UI pass TC.FV.20–TC.FV.35 in the running app (needs an app restart to load 41b8959). Watch for: toggle re-pull, badge re-colour on theme switch, option button clicks, Focus view background seam, Enter-in-search scroll.
+- [DONE] Session-row badge in the tree and the Recent dropdown: every open item, Decided included, coloured by the most severe kind (`AttentionSummaryModel.AllOpenCount` / `AllOpenTopKind`, live via `AttentionChanged`); every count badge, the Focus switch's included, is now a rounded rectangle — kind chips keep the pill (FR.23.13 follow-up; 997 tests green)
+- [DONE] Recent dropdown also lists sessions with open Focus items or schedules; like favorites they ignore Hide and their row has no ⦸ (`RecentSessionVisibilityService.IsPinnedInRecentDropdown`) (FR.9.6, FR.9.7 follow-up)
+- [DONE] Docs for the two items above: FR.9.8 and FR.23.17 added; FR.9.6, FR.9.7, FR.23.1, FR.23.13, FR.23.16 and the FR.23 out-of-scope list amended; glossary (Pinned Session, Session-row badge); UC.FV.18; TC.FV.36–TC.FV.40
+- [ ] Manual UI pass TC.FV.38–TC.FV.40 after an app restart: badge on tree and dropdown rows, live update on post/dismiss, pinned rows without ⦸ keep the columns aligned, badge shape
+
+---
+
+## Issues
+
+- [DONE] ISSUE.014 — duplicate entries from JSONL write-back vs headless turns: fixed in commit 311fc76 (JsonlWriteBackPlanner). Historical duplicates in existing session files are left as they are.
+
+---
+
+## FR.24 — Session Tags
+
+Requirements: FR.24 in `docs/requirements.md` (Architect request 2026-11-04). Phase 1 = show and open tags (commit 6e4b927, 983 tests green); Phase 2 = status colours.
+
+- [DONE] Docs: FR.24 requirements, glossary terms, use cases and test cases (FR.24.1–FR.24.10)
+- [DONE] Core: models, `SessionTagParser`, Linear workspace map, `SessionTagStore`, `ISessionTagService` (Singleton), `SessionTagUrlPolicy` (FR.24.1, FR.24.2, FR.24.3, FR.24.5, FR.24.7)
+- [DONE] `tag_session` MCP tool with exact result lines and `[Tags]` SYSTEM entry (FR.24.4)
+- [DONE] Guidance line `SessionTagGuidance`, `IsTagGuidanceDue` / `SessionTags` plumbing at the three call sites (FR.24.6)
+- [DONE] Daemon client: `IDaemonClient` additions, `InProcDaemonClient` delegation and `SessionTagsChanged` relay, `WireDaemonClient` stubs (FR.24.8)
+- [DONE] Core tests: parser, workspace map, service, `tag_session`, `InstructionBlockBuilder`, `SessionTagUrlPolicy`, `InProcDaemonClient`
+- [DONE] UI: Tag row in the session header, chips, tooltip, click-to-open, live refresh (FR.24.7)
+- [ ] Manual UI pass TC.TG.19–TC.TG.27 in the running app (needs an app restart to load 6e4b927): chip look/hover in both themes, wrapping, tooltip, browser opening, rename refresh (FR.24.7)
+- [ ] FR.24.9 Phase 2: status colours — decide the Linear access route (options a/b/c in FR.24.9) — NOT STARTED

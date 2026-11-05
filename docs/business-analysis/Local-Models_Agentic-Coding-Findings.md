@@ -21,6 +21,26 @@ Because the CLI process itself is unchanged, every native tool (Read/Write/Edit/
 
 5. **Some community/abliterated GGUF builds fail to run through Claude Code entirely — a chat-template incompatibility, not a reasoning limit.** A local `qwen3.8-27b-abliterated` build (which advertises `tools` capability) returned an Ollama **HTTP 500 on every turn**: `Jinja Exception: System message must be at the beginning.` Claude Code sends a system prompt plus tool schemas; after Ollama's Anthropic→template translation the message order violated this build's baked-in chat template, which hard-raises instead of coping. Result across two repeated agentic tasks: **zero tool calls, zero edits, `num_turns=1`** — the harness cannot even finish a turn (contrast with `ornith:9b`, whose template accepts the same request shape and which did drive tools, if imperfectly). Lesson: a model appearing in the Ollama list — even a large, newer-generation one — is unusable for agentic coding if its chat template rejects Claude Code's system+tools layout. This is orthogonal to `SupportsTools` (which only checks the Ollama capability flag, not template compatibility).
 
+6. **Root cause pinned down (2026-10-13, claude CLI 2.1.289, Ollama 0.32.14): a mid-conversation `system` message plus the absence of a `RENDERER`.** The same 500 came back on `hf.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive:Q8_0`. A logging proxy between the CLI and Ollama captured the real request:
+   - Top-level `system` is an array of 3 text blocks: billing header, identity, main prompt.
+   - `messages[0]` is the `user` turn: system-reminder plus the prompt.
+   - **`messages[1]` has `role: "system"`** and holds the `# Environment` block.
+
+   Ollama hands that second system message to the GGUF-embedded Jinja template. The stock Qwen 3.x template, at `{%- if message.role == "system" %}{%- if not loop.first %}{{ raise_exception(...) }}`, rejects it.
+   - **The multi-block top-level `system` is *not* the cause.** A direct probe with a 1-block and a 2-block `system` both returned 200.
+   - **Why library models work:** `ollama show --modelfile` for `qwen3.6:35b-a3b`, `gemma4:26b`, `gemma4-31b-abliterated` and `ornith:*` shows `TEMPLATE {{ .Prompt }}` + `RENDERER <name>` + `PARSER <name>`. That is Ollama's built-in Go renderer, which tolerates the mid-conversation system message. The failing models (`hf.co/...` pulls and `qwen3.8-27b-abliterated`) have the passthrough `TEMPLATE {{ .Prompt }}` and **no** `RENDERER`, so Ollama falls back to the embedded Jinja.
+   - **Patching the Jinja via Modelfile doesn't work.** A Modelfile `TEMPLATE` is parsed as a Go template, so Jinja is rejected (`function "content" not defined`).
+   - **Fix that works:** re-wrap the model with the built-in renderer that matches its architecture (`general.architecture = qwen35` → `qwen3.5`):
+     ```
+     FROM hf.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive:Q8_0
+     RENDERER qwen3.5
+     PARSER qwen3.5
+     ```
+     Equivalent over HTTP: `POST /api/create {"model":"<alias>","from":"<orig>","renderer":"qwen3.5","parser":"qwen3.5"}`. Blobs are shared, so no extra disk is used. Replaying the captured Claude Code request against the wrapped alias returned **200** instead of 500.
+   - **Template-compatible is not the same as agent-capable.** On the "fix the bug in m.py" task, the repaired 9B uncensored model completed the turn but wrote a PowerShell `Get-Content` snippet as prose instead of calling `Read` (0 tool calls, file unchanged). Official `qwen3.6:35b-a3b` on the same task: `Read` → `Edit` → fixed, 3 turns.
+   - **`qwen3.8-27b-abliterated` repaired the same way.** Its strict guard sits at template line 110 (Qwen 3.x with a `developer` role check). It was re-wrapped in place with `RENDERER/PARSER qwen3.5`. On the same "fix the bug in m.py" task it then did `Read` → `Edit` → fixed in 3 turns, so it is fully agent-capable once the template is fixed. That reverses finding 5's "don't use it" verdict, which was caused by the template, not by the model's ability.
+   - This motivates FR.12.25 (static template check plus an on-demand agent probe) and FR.12.26 (one-click renderer repair).
+
 This is the basis for FR.12.21's Local Tool Profile: rather than trying to make local models smarter about tool selection, shrink the menu.
 
 ## Recommended local models for agentic coding

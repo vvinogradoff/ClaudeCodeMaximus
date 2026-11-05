@@ -307,15 +307,22 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 
 **FR.9.4 — Sensible defaults:** Both themes ship with sensible default color values. Dark defaults use VS Code-inspired dark palette; Light defaults use standard light-background colors. Users can customize any color via hex input in the Settings window.
 
-**FR.9.6 — Recent-dropdown hide:** The top-bar recent-sessions dropdown lists sessions active within the last 24 hours. Each row has a hide button that sets `RecentIgnoredAt` (`SessionNodeModel`) to the current time, removing the session from the dropdown until its next real activity (prompt, response, or draft edit) — tracked via `IsHiddenFromRecent` on `SessionNodeViewModel`, which auto-clears once newer activity is recorded.
+**FR.9.6 — Recent-dropdown hide:** The top-bar recent-sessions dropdown lists sessions active within the last 24 hours, plus Pinned Sessions (FR.9.8). Each row of a session that is not pinned has a hide button that sets `RecentIgnoredAt` (`SessionNodeModel`) to the current time, removing the session from the dropdown until its next real activity (prompt, response, or draft edit) — tracked via `IsHiddenFromRecent` on `SessionNodeViewModel`, which auto-clears once newer activity is recorded.
 
 **FR.9.7 — Favorite sessions:** A session can be marked as a favorite, independent of the FR.9.6 hide/recency mechanism.
 - **Persistence:** `IsFavorite` (bool) on `SessionNodeModel`, persisted in `appsettings.json`.
 - **Command-bar toggle:** A star toggle button in the session command bar (FR.12.2), immediately left of the Model selector. Unchecked: grey-stroked, transparent fill. Checked: black-stroked, gold/yellow fill. Clicking toggles favorite state for the active session.
-- **Recent dropdown inclusion:** Favorited sessions always remain in the top-bar recent-sessions dropdown regardless of the 24-hour recency window (FR.9.6) and regardless of hidden state. Sort order is unchanged — most-recently-active first — so a favorite with no recent activity sinks to the bottom of the list rather than being dropped.
-- **Recent-dropdown row affordance:** Each dropdown row shows exactly one of two icons on its right side: a gold/black star if the session is favorited (clicking un-favorites it, after which the hide icon from FR.9.6 takes its place), or the hide icon (⦸) if not favorited (clicking hides it per FR.9.6).
+- **Recent dropdown inclusion:** A favorite is a Pinned Session (FR.9.8): it always remains in the top-bar recent-sessions dropdown regardless of the 24-hour recency window (FR.9.6) and regardless of hidden state. Sort order is unchanged — most-recently-active first — so a favorite with no recent activity sinks to the bottom of the list rather than being dropped.
+- **Recent-dropdown row affordance:** Each dropdown row shows at most one icon on its right side: a gold/black star if the session is favorited (clicking un-favorites it, after which the hide icon from FR.9.6 takes its place unless the session is still pinned by FR.9.8), or the hide icon (⦸) if the session is not pinned (clicking hides it per FR.9.6). A non-favorite session pinned by open Focus items or schedules shows neither icon; the icon slot keeps its width so the row's columns stay aligned.
 - **Tree and Recent-tab display:** The session tree and the Recent-tab flat list each show a display-only gold/black star at the far right of the session row's top line, above the last-activity date/time, when the session is favorited. The existing draft indicator (✏, FR — "has unsent text") remains immediately right of the session name and is unaffected.
 - **Hide icon replacement:** The recent-dropdown hide icon (FR.9.6) is changed from the eye pictogram (👁) to a monochrome bold-slashed-circle glyph (⦸, U+29B8), for visual consistency with the rest of the flat, non-emoji iconography used elsewhere in the command bar.
+
+**FR.9.8 — Recent-dropdown Pinned Sessions and order:**
+- **Pinned:** a session is pinned in the top-bar recent-sessions dropdown when it is a favorite (FR.9.7), has at least one open Focus item of any kind, `Decided` included (FR.23.17), or has at least one schedule (FR.14).
+- **Membership:** the dropdown lists every Pinned Session regardless of the 24-hour recency window and of hidden state (`RecentIgnoredAt`, FR.9.6), plus every session active within the last 24 hours that is not hidden. A pinned row offers no hide button, since hiding it would have no visible effect. Worker Sessions, shown nested under their supervisor in the tree, are not listed. The rule lives in `RecentSessionVisibilityService` (`ShouldShowInRecentDropdown`, `IsPinnedInRecentDropdown`).
+- **Order:** most recently active first, by the latest of the last prompt sent, the last response received and the last non-empty draft edit (`SessionNodeViewModel.LastActivityTimestamp`). Sessions with no activity come last.
+- **Refresh:** the list, and each session's schedules flag, are rebuilt at startup, every time the dropdown opens and after a hide. Row badges (FR.23.17) update live, also while the list is open.
+- **Row badge:** each row shows the session-row badge (FR.23.17) between the status dots and the session name. The closed dropdown box shows the session name only.
 
 ---
 
@@ -762,7 +769,7 @@ Creates one session per item. Within each session the stages are sent as sequent
 **FR.15.10 — Per-Session Model Control:**
 - `set_session_model(nodeId, model)` — changes the persisted `ModelId` on an existing session node (tier-enforced per FR.16.2; the caller's tier must be ≥ the requested model's tier). Takes effect on the next turn for that session. The supervisor can use this to switch models on running worker sessions mid-orchestration.
 
-**FR.15.11 — CMX Orchestration Skill:** A skill named `cmx-orchestration` documents how to act as a supervisor (choosing between the orchestration tools, `outputFormat` shaping, the file-artifact convention) and how to behave when spawned as a worker (return markdown, honor `outputFormat`, don't over-nest, never use CLI-native scheduling). `SkillProvisioningService.ProvisionAll()` writes its `SKILL.md` (content: `Constants.Agent.OrchestrationSkillMarkdown`) into every registered profile's `skills/cmx-orchestration/` folder at startup — idempotent, rewriting only when content changes, mirroring `AgentMcpServer.EnsureConfigFileAsync`'s write pattern. Gated on `AgentToolsEnabled`; the Default profile (no dedicated config dir) is skipped. Only the skill's one-line frontmatter `description` is always visible to a session; the body loads on demand. A one-line pointer to the skill is folded into `Constants.Instructions.NoWorkflowTool`, so it is surfaced at session start under the same `IsAgentToolsEnabled && IsNewSession` gate as the rest of that instruction (FR.14.11) — not repeated on every turn. Its supervisor section also states (ISSUE.012): worker results and wake-ups arrive as scheduled turns the user is not watching, and nothing tells the user that such a turn finished — call `notify_user` once, and only when the user must decide or act (FR.21.24); keep delivery turns short and don't narrate each worker's arrival; don't arm polling or "fallback" self-wakes to collect async results — they arrive by themselves, merged when they queue up (FR.15.12) — and use a self-wake only for a real deadline or a long-interval check on a worker that may be stuck. Its worker section tells a session it is a worker when its prompt is a scoped task sent by another session, and that `list_sessions` confirms this on its `You:` line (FR.15.13); it no longer suggests a full listing for that check.
+**FR.15.11 — CMX Orchestration Skill:** A skill named `cmx-orchestration` documents how to act as a supervisor (choosing between the orchestration tools, `outputFormat` shaping, the file-artifact convention) and how to behave when spawned as a worker (return markdown, honor `outputFormat`, don't over-nest, never use CLI-native scheduling). `SkillProvisioningService.ProvisionAll()` writes its `SKILL.md` (content: `Constants.Agent.OrchestrationSkillMarkdown`) into every registered profile's `skills/cmx-orchestration/` folder at startup — idempotent, rewriting only when content changes, mirroring `AgentMcpServer.EnsureConfigFileAsync`'s write pattern. Gated on `AgentToolsEnabled`; the Default profile (no dedicated config dir) is skipped. Only the skill's one-line frontmatter `description` is always visible to a session; the body loads on demand. A one-line pointer to the skill is folded into `Constants.Instructions.NoWorkflowTool`, so it is surfaced at session start under the same `IsAgentToolsEnabled && IsNewSession` gate as the rest of that instruction (FR.14.11) — not repeated on every turn. Its supervisor section also states (ISSUE.012): worker results and wake-ups arrive as scheduled turns the user is not watching, and nothing tells the user that such a turn finished — call `notify_user` once, and only when the user must decide or act (FR.21.24) [**amended by FR.23.10:** the supervisor posts the ask once with `post_attention` (`notify: true` when the user must act soon) and does not restate it in later delivery turns, and workers call neither `notify_user` nor `post_attention`]; keep delivery turns short and don't narrate each worker's arrival; don't arm polling or "fallback" self-wakes to collect async results — they arrive by themselves, merged when they queue up (FR.15.12) — and use a self-wake only for a real deadline or a long-interval check on a worker that may be stuck. Its worker section tells a session it is a worker when its prompt is a scoped task sent by another session, and that `list_sessions` confirms this on its `You:` line (FR.15.13); it no longer suggests a full listing for that check.
 
 **FR.15.12 — Mailbox coalescing:** A supervisor whose workers finish close together gets one delivery turn, not one turn per worker (ISSUE.012).
 - **Merge:** the async path of `send_to_session` hands each result to `SchedulerService.AddOrMergeMailboxDelivery(supervisorNodeId, workerName, resultText)`. Under the scheduler's lock it appends the result to the supervisor's pending Mailbox Delivery if there is one (a blank line, then `[Worker finished] <name>` and the result text), otherwise it adds a new delivery (FR.15.3). A merged delivery's note becomes `Worker results (<n>): <name1>, <name2>, …`, in arrival order.
@@ -871,6 +878,8 @@ Authorization: Bearer <access_token>
 anthropic-beta: oauth-2025-04-20
 ```
 The access token is read from the active profile's `.credentials.json` file (`claudeAiOauth.accessToken`). For the default profile the file is at `~/.claude/.credentials.json`; for named profiles it is at `%APPDATA%\TessynDesktop\profiles\<profileId>\.credentials.json`.
+
+A plan without a cap on a given window (e.g. an Ultra-tier plan has no 5-hour session limit) reports that window as `"five_hour": null` (a JSON null, not an omitted key). `ClaudeUsageService.ParseUsage` treats a missing or null `five_hour`/`seven_day` as "0%, no limit" for that window alone — it never lets one capless window discard an otherwise-valid reading for the other window. The parse only fails (returns no usage data) if *neither* `five_hour` nor `seven_day` is present at all.
 
 **FR.18.5 — Failure behaviour (token rejection):** If the endpoint returns HTTP 401 (token expired or invalid), the usage fetch stops and is not retried for the remainder of the app session. Any previously cached usage data remains visible. If no cached data is available the bars are hidden entirely (`HasUsageData = false`).
 
@@ -997,7 +1006,7 @@ The bot token itself is **not** in `AppSettingsModel` — see FR.21.6.
 
 **FR.21.2 — Topic-per-session, created lazily on first activity:** The first time a session runs a turn — interactive (`TurnController.SendAsyncCore`) or headless (`SessionTurnService.RunTurnAsync`, which also covers scheduled, orchestrated, and Telegram-triggered turns) — while `TelegramEnabled` is true, `ITelegramBridgeService.EnsureTopicForSessionAsync` fire-and-forget-creates a Telegram forum topic named `"{directory label} / {session name}"` via `createForumTopic` and persists the NodeId → thread mapping. The directory label follows FR.1.3, derived from the session's working directory (e.g. `HardStop / Fix login`); the name actually applied is recorded as the last-applied topic name (`TelegramTopicNamesByNodeId`, FR.21.1). Names are truncated to 128 characters (`Constants.Telegram.MaxTopicNameLength`) when sent. Sessions never touched while the bridge is enabled never get a topic — there is no bulk backfill over session history. Errors (offline, bot misconfigured) are logged and swallowed; a topic-creation failure never fails or delays the turn it was piggybacked on.
 
-**FR.21.3 — Outbound: notifications and questions:** A new `mcp__cmx__notify_user` tool (`AgentMcpServer`) lets a running session send an arbitrary message to the user's Telegram, ensuring its topic exists first. There is deliberately **no blocking "ask and wait" tool** — a `TaskCompletionSource`-style block risks getting stuck indefinitely on Telegram connectivity issues or the user simply being away from their phone, with no clean way to time out a mid-turn CLI process. Instead, `Constants.Instructions.TelegramNotifyGuidance` (emitted once per fresh session, alongside `NoWorkflowTool`, when `AgentToolsEnabled && TelegramEnabled`) instructs Claude to call `notify_user` with the question in plain text and then end its turn normally — the user's reply becomes the next ordinary prompt via FR.21.4, resuming the same session. The message is posted with the configured `TelegramMentionHandle` prefix (FR.21.10) so it stands out among the mirrored conversation text (FR.21.9) sharing the same topic. It is the only message the bridge sends with notification sound (FR.21.21), and — together with its desktop toast (FR.21.5) — the only way a session reaches the user as a notification at all.
+**FR.21.3 — Outbound: notifications and questions:** A new `mcp__cmx__notify_user` tool (`AgentMcpServer`) lets a running session send an arbitrary message to the user's Telegram, ensuring its topic exists first. There is deliberately **no blocking "ask and wait" tool** — a `TaskCompletionSource`-style block risks getting stuck indefinitely on Telegram connectivity issues or the user simply being away from their phone, with no clean way to time out a mid-turn CLI process. Instead, `Constants.Instructions.TelegramNotifyGuidance` (emitted once per fresh session, alongside `NoWorkflowTool`, when `AgentToolsEnabled && TelegramEnabled`) instructs Claude to call `notify_user` with the question in plain text and then end its turn normally — the user's reply becomes the next ordinary prompt via FR.21.4, resuming the same session. The message is posted with the configured `TelegramMentionHandle` prefix (FR.21.10) so it stands out among the mirrored conversation text (FR.21.9) sharing the same topic. It is the only message the bridge sends with notification sound (FR.21.21), and — together with its desktop toast (FR.21.5) — the only way a session reaches the user as a notification at all. **Amended by FR.23:** the guidance text now also mentions `post_attention` (`critical` items and `notify: true` ping the same channels) and recommends it over `notify_user`; every top-level `notify_user` call is additionally captured as an `Ask` Attention Item (FR.23.7, text in FR.23.10).
 
 **FR.21.4 — Inbound routing:** `ITelegramBridgeService` long-polls `getUpdates` (30s timeout, offset persisted per FR.21.1) while started. For each accepted update (chat ID + user ID both allow-listed):
 - A message whose `message_thread_id` matches an entry in the topic map runs a turn on that NodeId via `IDaemonClient.RunTurnAsync(node, text, TurnSource.Telegram)`. The routed message itself is not re-echoed back into its own topic (FR.21.9's echo suppression), and the turn's output reaches the topic via the same universal mirror every other turn source uses — there is no separate "post the reply" step.
@@ -1014,6 +1023,7 @@ The bot token itself is **not** in `AppSettingsModel` — see FR.21.6.
 - **Code shape:** `INotificationService.ShowResult` is replaced by `ShowUserNotification(nodeId, title, message)`, which returns whether a toast was shown. `CompositeNotificationService` is deleted — `WindowsNotificationService` is registered as `INotificationService` directly — and `SchedulerService` no longer depends on `INotificationService` at all, so it reports nothing when a scheduled turn finishes (its selected-session suppression goes with it).
 - **Setting:** `NotificationsEnabled` keeps its Settings checkbox, relabelled "Show a desktop notification when a session asks for you", with a hint that it shows the same messages that ping Telegram.
 - Sessions are told about `notify_user` only when the Telegram Bridge is enabled (FR.21.3, unchanged).
+- **Shared by FR.23:** `post_attention` notifications (FR.23.4) go through this same fan-out, via one private helper shared with `notify_user` (FR.23.9).
 
 **FR.21.6 — Bot token storage:** The bot token is never written to `appsettings.json`. It is DPAPI-protected (`CurrentUser` scope) at `%AppData%\TessynDesktop\telegram-token.dat` via a dedicated `ITelegramTokenStore`, mirroring the MCP Token Store (FR.20.5) but as a single file, since there is exactly one bot. Settings UI writes it immediately on a dedicated Save action, independent of the main Settings Save button, for the same reason FR.20.7's registry actions persist immediately.
 
@@ -1090,7 +1100,7 @@ FR.21.9's prefixes, chunking and echo suppression apply to whatever is posted, W
 
 **FR.21.23 — Mailbox Deliveries in Full mode:** In `Full` mode, a `ROLE=USER` entry that is a Mailbox Delivery (FR.15.3, FR.15.12 — it contains one or more `[Worker finished] <name>` lines) is mirrored as its first line only, with the `⚙️ ` prefix (e.g. `⚙️ [Scheduled] Worker results (2): W2, W3`), instead of `USER:` plus the workers' full results. Those results are input for the Supervisor Session, whose own reply summarises them; on 2026-10-28 they made up 34 of 209 mirrored messages (ISSUE.012). In `AnswersOnly` mode `ROLE=USER` entries are never posted.
 
-**FR.21.24 — Scheduled-turn notify reminder:** `InstructionOptionsModel` gains `IsScheduledTurn`, set by `SessionTurnService.RunTurnAsync` at both instruction-block call sites (one-shot and the FR.19.13 streaming redirect, like `IsWorkerSession`, FR.21.20) when the turn source is `TurnSource.Scheduled` — Delayed Sends, Self-Wakes, other `schedule_wake` targets and Mailbox Deliveries. When `IsAgentToolsEnabled && IsTelegramEnabled && IsScheduledTurn && !IsWorkerSession`, `InstructionBlockBuilder.Build` adds `Constants.Instructions.ScheduledTurnNotifyReminder` to the hidden instruction block (FR.11.2 — never written to the session file) on **every** such turn: unlike `TelegramNotifyGuidance` it describes this turn, not session policy, so the once-per-fresh-session gate does not apply. The reminder says the scheduler started this turn, the user may not be watching and is not told when it finishes, so if — and only if — the reply needs the user to decide or act, call `notify_user` once with that ask, and otherwise don't. Rationale: on 2026-10-28, 2 of the 4 moments the user was needed reached them only through the completion ping FR.21.5 used to send (ISSUE.012).
+**FR.21.24 — Scheduled-turn notify reminder:** `InstructionOptionsModel` gains `IsScheduledTurn`, set by `SessionTurnService.RunTurnAsync` at both instruction-block call sites (one-shot and the FR.19.13 streaming redirect, like `IsWorkerSession`, FR.21.20) when the turn source is `TurnSource.Scheduled` — Delayed Sends, Self-Wakes, other `schedule_wake` targets and Mailbox Deliveries. When `IsAgentToolsEnabled && IsTelegramEnabled && IsScheduledTurn && !IsWorkerSession`, `InstructionBlockBuilder.Build` adds `Constants.Instructions.ScheduledTurnNotifyReminder` to the hidden instruction block (FR.11.2 — never written to the session file) on **every** such turn: unlike `TelegramNotifyGuidance` it describes this turn, not session policy, so the once-per-fresh-session gate does not apply. The reminder says the scheduler started this turn, the user may not be watching and is not told when it finishes, so if — and only if — the reply needs the user to decide or act, call `notify_user` once with that ask, and otherwise don't. **Amended by FR.23.10:** the reminder now points at `post_attention` (with `notify: true` if the user must act soon) and tells the session not to restate items that are already pinned. Rationale: on 2026-10-28, 2 of the 4 moments the user was needed reached them only through the completion ping FR.21.5 used to send (ISSUE.012).
 
 **Setup (manual, one-time, outside the app):**
 1. Message `@BotFather` on Telegram → `/newbot` → record the bot token.
@@ -1120,6 +1130,328 @@ A per-session, opt-in audible cue for the interactive command bar — the only t
 
 ---
 
+### FR.23 — Focus View (Attention Items)
+
+Sessions have no record that the user has seen an ask, so they re-raise it: in the "HSE-150 Android backend" session one ask (the production app's open release switch) was restated 6 times in 50 minutes of scheduled turns, and the Architect finally had to ask "tell me about the urgent issue"; on 2026-11-02 a question went to Telegram only (`notify_user` writes nothing to the session file) and the Architect had to ask "what's the question, can you post here too?". The fix: sessions *post* items to a per-session list that Tessyn keeps (the Attention Ledger), a new **Focus** view shows it beside the unchanged raw output (the **Session** view), and every turn is told which items are already pinned. No extra LLM calls.
+
+**FR.23.1 — Attention Items and kinds:** `AttentionKind`, from most to least severe. Any kind may carry answer options and a recommendation.
+
+| Kind | Meaning | Badge colour (FR.23.13) |
+|---|---|---|
+| `Critical` | Something the user must know immediately. Posting one always notifies the user (FR.23.9). | DarkRed `#8B0000`, white number |
+| `Ask` | The session needs the user's answer, decision or approval. | Goldenrod `#DAA520`, black number |
+| `Todo` | Something only the user can do: rotate a password, add a DNS record, merge a PR. | Background = the theme's foreground colour; number in the theme's background colour |
+| `Alert` | Worth knowing; no reply needed. | Transparent background; number in the normal foreground colour |
+| `Decided` | A call the session made for the user so work isn't blocked; the user may override it. | Not counted in the Focus badge. Counted in the session-row badge (FR.23.17): grey `#707070`, white number, when it is the only open kind |
+
+**FR.23.2 — Item fields, ids and statuses:**
+- **Fields:** id, kind, title (one line), body (markdown, self-contained), options, recommendation, key, status, source, answer, resolution note, user-close-unreported flag, created/updated/closed timestamps (`AttentionItemModel`).
+- **Ids:** `A{n}` per session. `n` comes from the ledger's `NextNumber`: it starts at 1, increments on every new item and is never reused.
+- **`AttentionStatus`:** `Open` — active. `Answered` — the user answered it, either from the Focus view or in conversation, recorded by the session through `resolve_attention`. `Resolved` — done or no longer applies; the session closed it. `Dismissed` — the user closed it from the Focus view without an answer (Dismiss or Got it, FR.23.15), whatever its kind.
+- **`AttentionSource`:** `Tool` (`post_attention`) or `NotifyUser` (captured `notify_user`, FR.23.7).
+- **Ordering**, used everywhere a list is shown: open items first, by kind severity (Critical, Ask, Todo, Alert, Decided — the enum order), then number ascending; then closed items, newest `ClosedUtc` first. The ordering helper and the summary computation (open count excluding Decided, most severe open kind) live in Core so the UI does not reimplement them.
+
+**FR.23.3 — Attention Ledger storage:**
+- **Location:** `%AppData%\TessynDesktop\attention\<NodeId>.json`. Folder name `Constants.Attention.FolderName = "attention"`, built the same way as `McpTokenStore`'s path (`Path.Combine(appData, Constants.AppDataFolderName, …)`). Not in `appsettings.json` (already about 2.6 MB and saved synchronously) and not in any database.
+- **Keyed by NodeId**, so it survives compaction, detach and Cross-Profile Session Adoption.
+- **Writes:** temp file then rename (atomic, like FR.4.3), serialised per service instance.
+- **Loading:** lazily on first use, then cached in memory. A missing file is an empty ledger. An unreadable or corrupt file is logged as a warning, moved aside to `<NodeId>.json.bad-<yyyyMMddHHmmss>`, and the ledger starts empty — never overwritten silently.
+- **Never deleted by Tessyn**, the same no-cascade policy as FR.1.7.
+- The store takes its root directory in the constructor, so tests use a temp dir. `IAttentionService` is a Singleton (it owns the cache and serialises writes).
+
+**FR.23.4 — `post_attention` tool (cmx MCP server):** Input schema:
+
+```
+items   (array, required, 1–30) of objects:
+   kind            string, required: critical | ask | todo | alert | decided   (case-insensitive)
+   title           string, required: one line (newlines → spaces), trimmed, cut to 200 chars; empty after trim = error
+   body            string, optional (default ""): markdown, cut to 20,000 chars
+   options         array of string, optional: ≤ 10, each trimmed, empty ones dropped, each cut to 200
+   recommendation  string, optional: cut to 1,000
+   key             string, optional: stable dedupe key chosen by the session, trimmed, cut to 100
+notify  boolean, optional (default false)
+```
+
+Behaviour per item:
+- **Dedupe:** among **Open** items, an item with the same `key` (case-insensitive, both non-empty) is the match. Failing that, an item with the same normalised title (trimmed, inner whitespace collapsed, case-insensitive) is the match. **Match:** the existing item is updated (kind, title, body, options, recommendation, plus the key if one is given; `UpdatedUtc`); its id doesn't change, and the update is reported as "already pinned". **No match:** a new item `A{NextNumber}` is created.
+- **Validation:** an invalid kind, an empty title or an empty `items` array is a tool error (`McpToolException`) naming the problem. Nothing is posted if any item is invalid.
+- **Session file:** each created or updated item gets a SYSTEM entry (FR.23.8).
+- **Notification:** at most one per call. It is sent when at least one item was **created** and either a created item is `Critical` or `notify` is true. Updates never notify (delivery: FR.23.9).
+
+Tool description (this wording):
+
+> Pin items in the user's Focus view, next to this session's output, where they stay visible until resolved. Kinds: critical (the user must know immediately — always notifies them), ask (you need their answer or approval), todo (something only they can do), alert (worth knowing, no reply needed), decided (a call you made for them that they may override). Write each body so it stands on its own. Post an item once: re-posting an open item with the same key or title updates it instead of adding a copy. Don't restate pinned items in later replies — refer to them by id (A1, A2, …). Set notify=true to also ping the user's Telegram and desktop, only when they must act soon. Top-level sessions only — a worker's call is refused; report to your supervisor instead.
+
+Result text, one line per item, in order:
+- `A12 posted (critical).`
+- `A7 already pinned (ask) - updated, not re-posted.`
+
+Then, only if a notification was attempted: `Notified: Telegram, desktop.` (the channels that delivered) or `Notification not sent - neither Telegram nor desktop notifications are enabled.`
+Then always: `Pinned items stay in the user's Focus view until resolved - don't restate them; refer to them by id.`
+
+**FR.23.5 — `resolve_attention` and `list_attention` tools:**
+
+`resolve_attention` — input: `id` (string, required, case-insensitive, e.g. `a12`); `status` (string, required: `answered` | `resolved`); `note` (string, optional, cut to 2,000). `answered`: the user answered it in conversation; sets `Answer` = note. `resolved`: done, withdrawn or no longer applies; sets `ResolutionNote` = note. Writes a SYSTEM entry (FR.23.8). Results:
+- `A12 marked answered.` or `A12 resolved.`
+- If already closed: `A12 is already <status lower-case>.` (no change, no SYSTEM entry).
+- Unknown id: tool error `Unknown attention item 'A99'.`
+
+Description:
+
+> Close a pinned Focus item: status=answered when the user answered it in conversation (note = their answer), status=resolved when it is done or no longer applies (note = why).
+
+`list_attention` — input: `status` (string, optional: `open` (default) | `all`). Output is plain text, one line per item, ordered as in FR.23.2:
+- open item: `A12 [critical, open] <title>`
+- closed item: `A3 [ask, answered] <title> - answer: <answer>`, `A4 [todo, resolved] <title> - <note>`, or `A5 [alert, dismissed] <title>`
+- empty: `No open items.` (open) or `No items.` (all)
+
+Description:
+
+> List this session's Focus items — open (default) or all — with ids, kinds, statuses and answers.
+
+**FR.23.6 — Worker Sessions refused:** A Worker Session (`OrchestrationDepth > 0`) calling `post_attention` or `resolve_attention` gets a normal text result (not an error), and nothing is stored or written:
+
+`Not posted - worker sessions can't post to the user's Focus view. Report to your supervisor instead.`
+
+This matches the `notify_user` policy (FR.21.19). `list_attention` returns `No items.` for a worker.
+
+**FR.23.7 — `notify_user` capture:**
+- Every `notify_user` call from a top-level session also posts an item: kind `Ask`, source `NotifyUser`. Its title is the message's first non-empty line (trimmed, cut to 200); its body is the full message. The same dedupe and SYSTEM entry as `post_attention` apply.
+- The capture never sends a second notification: `notify_user` keeps its own Telegram and desktop fan-out unchanged (FR.21.3, FR.21.5).
+- Its result text gets ` Pinned as A12.` appended, or ` Already pinned as A12.` on a dedupe update.
+- Worker calls stay dropped exactly as today (FR.21.19): no item.
+
+**FR.23.8 — Session-file records:**
+- **SYSTEM entries.** The service appends these through `ISessionFileService.AppendMessage` with `Constants.SessionFile.RoleSystem`, the way `workflow_phase` does. ASCII only.
+  - Created: first line `[Attention A12 (critical)] <title>`, then the body (if any) on the following lines, then `Options: <o1> | <o2>` (if any), then `Recommendation: <text>` (if any).
+  - Updated: the same layout, with first line `[Attention A12 (ask) updated] <title>`.
+  - Session close: `[Attention A12 answered] <note>` or `[Attention A12 resolved] <note>`. With an empty note, there is no trailing space.
+  - User close from the Focus view, any kind: `[Attention A12 dismissed by the user]`.
+  - User answers from the Focus view write **no** SYSTEM entry: the USER prompt (FR.23.15) is the record.
+- **Tool lines.** `ClaudeSessionImportService.ExtractToolDescription` (the JSONL → `[Tool: …]` line) learns three new input shapes: `message` is added to the generic string fallback list, so the `notify_user` line shows its text, cut to 120 like the others; an `items` array of objects with `title` → `<n> item(s): <title1>; <title2>`, cut to 120; `id` + `status` strings → `<id> <status>`.
+
+**FR.23.9 — Notifications:**
+- When FR.23.4 calls for a notification, it goes through exactly the fan-out `notify_user` uses (FR.21.5): Telegram `NotifyAsync` (mention and sound) plus the desktop toast, each gated as today (`TelegramEnabled`, `NotificationsEnabled`). That fan-out is extracted into one private helper shared by both tools; it is not duplicated.
+- Message text: one created item: `A12 (critical): <title>` + blank line + body; several created items: `<n> new items in the Focus view:` then one `- A12 (critical): <title>` line each.
+- Worker Sessions never notify (FR.23.6).
+
+**FR.23.10 — Guidance (hidden instruction block, once per fresh session):**
+- New `Constants.Instructions.AttentionGuidance`, emitted when `IsAgentToolsEnabled && IsNewSession && !IsWorkerSession`. It is session policy, so it uses the same gate as `NoWorkflowTool`. The `mcp__cmx__` prefix is built from `Agent.McpServerName`, as the existing constants do. Text:
+
+  > The user has a Focus view beside this session's output. Pin anything they need there with `mcp__cmx__post_attention`: `critical` — they must know immediately (it notifies them at once); `ask` — you need their answer, decision or approval; `todo` — something only they can do; `alert` — worth knowing, no reply needed; `decided` — a call you made for them so work isn't blocked, which they may want to override. Write each item so it stands on its own: the user may read it days later without this conversation. Post each item once — it stays pinned until resolved, so don't restate pinned items in later replies; refer to them by id. When the user answers an item in conversation, or it no longer applies, call `mcp__cmx__resolve_attention`.
+
+- **Amends `TelegramNotifyGuidance` (FR.21.3).** Gate unchanged. New text:
+
+  > A Telegram bridge is available: `critical` items, and items you post with `notify: true`, also ping the user's Telegram and desktop. Use `notify: true` only when the user must act soon — never for progress updates — and only from this top-level session, never from a worker or Task-tool subagent (report back to your supervisor instead). `mcp__cmx__notify_user` still sends a plain message and is also pinned as an ask, but prefer `post_attention`. There is no blocking "ask and wait" tool — after posting an ask, end your turn normally instead of waiting idle for a reply. The user's reply arrives later as an ordinary new prompt in this same session.
+
+- **Amends `ScheduledTurnNotifyReminder` (FR.21.24).** Gate unchanged. New text:
+
+  > The scheduler started this turn, so the user may not be watching and is not told when it finishes. If — and only if — your reply needs the user to decide or act and it isn't pinned yet, post it with `mcp__cmx__post_attention` (`notify: true` if they must act soon). Don't restate items that are already pinned.
+
+- **Amends the `cmx-orchestration` skill (`Constants.Agent.OrchestrationSkillMarkdown`, FR.15.11).** Supervisor section: where it says to call `notify_user` once when the user must decide or act, it says instead to post the ask once with `post_attention` (`notify: true` when they must act soon); it stays pinned, so don't restate it in later delivery turns. Worker section: don't call `notify_user` **or** `post_attention`; report to the supervisor.
+
+**FR.23.11 — Pinned list (hidden instruction block, every turn):**
+- **Gate:** emitted when `IsAgentToolsEnabled && !IsWorkerSession` and the session has open items **or** unreported user closures. It describes this turn's state, so it is **not** gated on `IsNewSession`, like FR.21.24.
+- Exact lines appended to the block, after the existing lines. `<…>` are placeholders. The two-space indent on the item lines is part of the format.
+
+```
+- Pinned in the user's Focus view - they can see these, so don't restate them; refer to them by id, and call `mcp__cmx__resolve_attention` when one is answered in conversation or no longer applies:
+  - A12 critical: <title>
+  - A3 ask: <title>
+- Closed by the user in the Focus view since your last turn: A5 todo "<title>" dismissed without an answer; A4 ask "<title>" dismissed without an answer.
+```
+
+- **Ordering and caps:** severity (Critical, Ask, Todo, Alert, Decided), then number ascending. Decided items are included: the session must not re-announce them either. At most 20 item lines; when more are open, add `  - ...and <n> more (call mcp__cmx__list_attention)`. Titles are cut to 120 chars plus `...`. The first line appears only when there are open items; the "Closed by the user" line only when there are unreported closures.
+- **Closure wording:** every user-closed item, whatever its kind, is `dismissed without an answer`. Items the user answered from the Focus view (Reply or Send answers) are not listed: their answers arrive in the prompt itself.
+- **Plumbing:** `InstructionOptionsModel` gains two optional parameters, `IReadOnlyList<AttentionItemModel>? PinnedAttentionItems = null` and `IReadOnlyList<AttentionItemModel>? UserClosedAttentionItems = null`, filled by all three call sites: `SessionTurnService.RunTurnAsync` ×2 and `SessionPromptComposer`. `IAttentionService.TakeUnreportedUserClosures(nodeId)` returns those items and clears their flag, so each closure is reported once.
+
+**FR.23.12 — Session/Focus switch:**
+- **Placement.** In the session view header (`SessionView.axaml` Row 0, the right-docked `DockPanel` group), immediately **right of the "Search output..." box**. Two toggle buttons labelled **Session** and **Focus** act as one segmented switch: exactly one is checked. Left to right: `[Search box] [Session][Focus <badge>] [MD] [JSONL]`. In the DockPanel, declare JSONL, MD, the switch, then the search box. Style them like the MD/JSONL toggles (`Padding="8,3"`, `FontSize="11"`).
+- **Session** (default) shows today's output, unchanged.
+- **Focus** replaces the output area (the message `ScrollViewer` and its search overlay) with the Focus view. The thinking/busy indicator stays visible. The **MD and JSONL toggles are hidden**.
+- **Search.** Pressing Enter in the search box while Focus is selected switches to Session and then runs the search. Search always searches the Session output.
+- **Selection** is kept per session in memory (on the session's view model) and is **not persisted**. A newly opened session starts on Session.
+
+**FR.23.13 — Focus badge:**
+- **Visible** only while **Session** is selected and the count is > 0.
+- **Count:** open items whose kind is not `Decided`.
+- **Colour:** the background is set by the most severe open kind among the counted items (Critical > Ask > Todo > Alert), using the colours in FR.23.1. Todo uses the theme's foreground colour as background, with the number in the theme's background colour, so it adapts to dark and light themes. Hex colours live in `Constants` (no magic strings).
+- **Shape:** a small rounded rectangle (corner radius 3, `Constants.Focus.BadgeCornerRadius`), not a circle, next to the "Focus" text (font about 10–11, minimum width about 16). The kind chips on cards (FR.23.14) keep their pill shape.
+- **Updates** live as items change (FR.23.16).
+
+**FR.23.14 — Focus view layout:** Top to bottom:
+1. A **"Send answers (n)"** button, enabled when n ≥ 1 reply boxes hold text and the session can send (the same rule as the main Send button, which stays enabled during a turn because concurrent sends are allowed).
+2. **Open items** (Critical, Ask, Todo, Alert), as cards ordered as in FR.23.2.
+3. A collapsed **"Decisions (n)"** expander with open Decided cards. Shown only when n > 0.
+4. A **"Closed (n)"** expander with closed items, newest closed first, **collapsed by default** so that what is open is what the user sees when scrolling. It starts collapsed for every session, and collapses again each time Focus is selected; expanding it shows the history and it stays expanded while the user stays on Focus (refreshes don't collapse it). Closed cards are **compact**: only the header row and the outcome line (`Answered: <answer>` / `Resolved: <note>` / `Dismissed`). Clicking a closed card's header row shows or hides its body; closed cards start with the body hidden.
+5. **Empty state**, when no item other than Decided is open: `Nothing needs your attention in this session.` The Decisions and Closed expanders still show if they have items.
+
+Card contents:
+- Header row: a kind chip coloured as in FR.23.1 (Decided muted grey), the id, the title (SemiBold) and the posted time (local; `HH:mm` today, otherwise `yyyy-MM-dd HH:mm`).
+- The body, rendered as markdown with the existing `MarkdownView` and selectable.
+- The options as small buttons.
+- "Use recommendation: <text>" (when a recommendation exists).
+- A multi-line reply box.
+- An action row under the reply box: **Reply** on the left, enabled when the card's reply box holds text, and the close button on the **far right**, away from Reply: **Dismiss** for Ask and Todo, **Got it** for Critical, Alert and Decided. The close button's tooltip says it closes the item without sending anything. (An earlier build labelled the Todo close button **Done**, which read as "send my reply"; it never sent the reply.)
+
+Behaviour: clicking an option puts the option text in the card's reply box (replacing it); the user can edit it before sending. Clicking the recommendation puts `Accepted your recommendation: <recommendation>` there.
+
+**FR.23.15 — Answering and closing from the Focus view:**
+- **"Send answers"** builds **one** prompt from every non-empty reply box, ordered as the cards are, with `AttentionPromptBuilder.BuildAnswersPrompt`. Exact format:
+
+  ```
+  Answers from the Focus view:
+  - A3 (<title>): <answer>
+  - A5 (<title>): <answer>
+  ```
+
+  Answers keep their line breaks. A multi-line answer's continuation lines are indented by two spaces.
+- It is sent through the **same interactive send path as the main input box** (`TurnController`), so it uses the same model, effort, profile and instruction block. It must **not** clear the input box or delete the draft: `SendAsyncCore` currently invokes `InputCleared` and `_draftService.DeleteDraft` unconditionally, so an option is added to skip both for this caller.
+- It first marks those items `Answered`, with `Answer` = the text being sent (`IDaemonClient.MarkAttentionAnswered`), clears the sent reply boxes, and then sends. Marking first matters: the send builds the hidden instruction block synchronously, and items still open at that moment would be listed as pinned in the very turn that carries their answers.
+- **Reply** (per card) does the same for that card alone: the same prompt format with a single line, the same send path, the same mark-first order. Other cards' unsent text is untouched.
+- **Close button** (Dismiss / Got it): `IDaemonClient.CloseAttentionByUser(nodeId, itemId)`. The item becomes `Dismissed`, whatever its kind. Sets `IsUserCloseUnreported = true` and writes the SYSTEM entry (FR.23.8). Sends no prompt; text typed in that card's reply box is discarded, which is why the close button sits apart from Reply.
+
+**FR.23.16 — Live updates and daemon boundary:**
+- `IAttentionService` raises `AttentionChanged(nodeId)` after every change. `InProcDaemonClient` relays it as `IDaemonClient.AttentionChanged`, the same way it relays `EntryAppended`.
+- The session view model subscribes and refreshes the Focus view and badge for its own node on the UI thread (`IUiDispatcher`). Unsent reply-box text survives refreshes (kept by item id).
+- The session tree view model subscribes too and refreshes the session-row badge (FR.23.17) of the changed node on the UI thread.
+- The UI reaches the ledger only through `IDaemonClient` (`GetAttentionItems`, `GetAttentionSummary`, `MarkAttentionAnswered`, `CloseAttentionByUser`, `AttentionChanged`), never through `IAttentionService` directly. This keeps the UI a daemon client, as in FR.21.10.
+
+**FR.23.17 — Session-row badge:**
+- **Where:** on session rows in the session tree (FR.1), immediately left of the session name, after the status dots and the sub-session bar; and on rows of the top-bar recent-sessions dropdown (FR.9.8), between the status dots and the name. Not on Recent-tab rows, and not in the dropdown's closed box.
+- **Count:** every open item, `Decided` included. The Focus badge (FR.23.13) leaves Decided out, so the two numbers can differ.
+- **Visible** whenever the count is > 0, whether Session or Focus is selected.
+- **Colour:** set by the most severe open kind (Critical > Ask > Todo > Alert > Decided), using the FR.23.1 colours. With only Decided items open: grey `#707070` (`Constants.Focus.ChipDecidedBackground`) with a white number.
+- **Shape:** the same rounded rectangle as the Focus badge (FR.23.13).
+- **Data:** `AttentionSummaryModel.AllOpenCount` and `AllOpenTopKind`, from `IDaemonClient.GetAttentionSummary`. Loaded for every session at startup and refreshed for the changed node on `AttentionChanged` (FR.23.16).
+- **Recent dropdown:** a session with open items is a Pinned Session there (FR.9.8).
+
+**Out of scope for FR.23:**
+- A cross-session Attention list in the left panel, and a badge on Recent-tab rows (tree and recent-dropdown rows have one, FR.23.17).
+- Answering by replying to a Telegram ping, and a Telegram `/attention` command.
+- Local-LLM extraction of items from sessions that don't post.
+- Capturing Claude's native `AskUserQuestion` as items.
+- TDCP methods for the ledger.
+
+---
+
+### FR.24 — Session Tags
+
+The Architect asked for each session to show "tags" in a dedicated row under the session header — the Linear tickets, GitHub pull requests and GitHub repositories it works on — each opening its page in the default browser (`HSE-230` opens https://linear.app/hardstop/issue/HSE-230; `windows-app PR #215` opens https://github.com/tryhardstop/windows-app/pull/215). Phase 1 (this FR, except FR.24.9) shows and opens tags; Phase 2 (FR.24.9) colours them by status. Detecting tags from the conversation text was measured on 2026-11-04 and rejected as too noisy: "Postgres DB for backend" mentions 50 distinct PR URLs, "HSE-150 Android backend" mentions 16 PR URLs and 18 key-like strings, and bare keys also catch non-tickets such as `KVM-1`, `DNS-01`, `CORE-01` and `ACC-16` (one session has 115 of them). Session names, however, carry the main ticket ("HSE-150 Android backend"), so tags come from exactly two places: the session itself (declared with `tag_session`) and its name. No LLM calls. This also lays the ground for the WPF client's search and filter by project + tags.
+
+**FR.24.1 — Tags and kinds:** `SessionTagKind`, in display order: `LinearIssue`, `GitHubPullRequest`, `GitHubRepository`.
+
+| Kind | Canonical key (dedupe, case-insensitive) | Label | URL |
+|---|---|---|---|
+| LinearIssue | `HSE-230` (upper-cased) | `HSE-230` | `https://linear.app/<workspace>/issue/HSE-230` |
+| GitHubPullRequest | `tryhardstop/windows-app#215` | `windows-app PR #215` | `https://github.com/tryhardstop/windows-app/pull/215` |
+| GitHubRepository | `tryhardstop/windows-app` | `windows-app` | `https://github.com/tryhardstop/windows-app` |
+
+- GitHub owner and repo keep the case they were first given in, for the label and URL. The key compares case-insensitively.
+- Each tag also has a source and an added time: `Session` (declared, FR.24.4, with time) or `Name` (derived, FR.24.2, no time).
+
+**FR.24.2 — Sources:**
+- **Declared:** added or removed by the session with `tag_session` (FR.24.4), and stored (FR.24.5).
+- **Name-derived:** every token in the session's name matching `(?<![A-Za-z0-9])([A-Z][A-Z0-9]{0,9})-(\d{1,6})(?![A-Za-z0-9])` whose team key (group 1) is in the Linear workspace map (FR.24.3) becomes a LinearIssue tag with source `Name`. These tags are computed whenever tags are read, never stored (like the Auto-derived label, FR.1.3). Renaming the session changes them.
+- **Not a source:** nothing is detected from the conversation text, which is too noisy (see the intro).
+- **One chip per key.** If a declared tag and a name-derived tag share a key, the name-derived one is shown, because it can't be removed anyway.
+
+**FR.24.3 — Linear workspace map:**
+- **Learning.** Every full Linear issue URL given to `tag_session` (`https://linear.app/<workspace>/issue/<KEY>-<n>`, with any trailing `/slug` or query ignored) teaches `team key → workspace`, e.g. `HSE → hardstop`. The last one learned wins.
+- **Storage:** `%AppData%\TessynDesktop\tags\linear-workspaces.json`.
+- **Use.** Short Linear keys given to the tool, and name-derived tags, resolve their URL through this map.
+- **Unknown team key:** the tool rejects the short key with a message asking for the full URL once (FR.24.4), and a name token gives no tag.
+- **Learning a new team key** raises `SessionTagsChanged` for every session (`NodeId = null`), because name-derived tags may now appear anywhere.
+
+**FR.24.4 — `tag_session` tool (cmx MCP server):** Input:
+
+```
+add     array of strings, optional, ≤ 30
+remove  array of strings, optional, ≤ 30
+```
+
+Each entry is one of:
+- a Linear issue URL;
+- a Linear key `HSE-230` (team key known);
+- a GitHub PR URL `https://github.com/<owner>/<repo>/pull/<n>` (trailing path, query or fragment ignored);
+- `<owner>/<repo>#<n>`;
+- a GitHub repository URL `https://github.com/<owner>/<repo>` (optional `.git` or trailing `/`);
+- `<owner>/<repo>`.
+
+Entries are trimmed and empty ones ignored. More than 30 entries in an array is a tool error. With neither array (or both empty), the tool lists the current tags.
+
+Behaviour. Entries are processed in order (`add` first, then `remove`), and each one is reported on its own line. An invalid entry doesn't stop the valid ones.
+- Adding a new key stores it with source `Session` and `AddedUtc`.
+- Adding a key that is already declared, or already name-derived, reports "Already tagged" and changes nothing.
+- Removing a declared key deletes it.
+- A name-derived key can't be removed.
+- Removing a key that isn't tagged reports so.
+
+Result lines (exact):
+- `Tagged HSE-230 - https://linear.app/hardstop/issue/HSE-230`
+- `Already tagged HSE-230.`
+- `Removed windows-app PR #215.`
+- `Not tagged: '<entry>' - not a Linear issue, GitHub pull request or repository.`
+- `Not tagged: '<entry>' - unknown Linear team 'ABC'; pass the full https://linear.app/<workspace>/issue/ABC-123 URL once.`
+- `Not removed: '<entry>' - not tagged.`
+- `Not removed: 'HSE-150' - it comes from the session name; rename the session to drop it.`
+- `Not removed: '<entry>' - not a Linear issue, GitHub pull request or repository.`
+- The last line, always: `Tags: <label1>, <label2>.` in FR.24.7 order, or `Tags: none.`
+
+Session file. When something was added or removed, one SYSTEM entry is appended the way `workflow_phase` does: `[Tags] added HSE-230, windows-app PR #215; removed windows-app`. Only the parts that apply appear, and labels are used. Nothing is written for a listing or a no-op.
+
+Worker Sessions may tag too, without guidance (FR.24.6). Tags help future filtering and are harmless.
+
+Tool description (this wording):
+
+> Tag this session with the Linear issues, GitHub pull requests and GitHub repositories it works on. The user sees the tags under the session name and opens them in the browser from there. add/remove take full URLs (best) or short forms: HSE-230, owner/repo#215, owner/repo. Tag what this session is working on, not everything it mentions. Finished work stays tagged; remove only tags added by mistake. Call with no arguments to list the current tags.
+
+**FR.24.5 — Storage:**
+- Declared tags live in `%AppData%\TessynDesktop\tags\<NodeId>.json`. They are owned by one Singleton `ISessionTagService`.
+- The same rules as the Attention Ledger (FR.23.3) apply: atomic write (temp file, then rename); load lazily, then cache; a missing file means no tags; a corrupt file is moved aside to `<NodeId>.json.bad-<yyyyMMddHHmmss>` with a warning; Tessyn never deletes these files; the root directory comes in through the constructor (tests use a temp dir).
+- `linear-workspaces.json` lives in the same folder and follows the same rules.
+
+**FR.24.6 — Guidance (hidden instruction block):**
+- **When.** New `Constants.Instructions.SessionTagGuidance`, emitted on a **top-level session's first turn in each app run**: `IsAgentToolsEnabled && !IsWorkerSession && IsTagGuidanceDue`. The tag service tracks in memory which sessions have had it this run (`TakeTagGuidanceDue(nodeId)` returns true once per node per run), so long-running sessions learn the tool too, not only fresh ones.
+- Text:
+
+  > This session shows tags under its name in Tessyn: the Linear issues, GitHub pull requests and GitHub repositories it works on, which the user opens from there. Keep them current with `mcp__cmx__tag_session`: tag an issue, PR or repository when this session starts working on it (pass the full URL), and don't tag things it only mentions. Finished work stays tagged; remove a tag only if it was added by mistake.
+
+  When the session already has tags, append ` Current tags: <label1>, <label2>.`, in FR.24.7 order.
+- **Plumbing.** `InstructionOptionsModel` gains `bool IsTagGuidanceDue = false` and `IReadOnlyList<SessionTagModel>? SessionTags = null`. All three call sites fill them: `SessionTurnService.RunTurnAsync` ×2, and `SessionPromptComposer` through `IDaemonClient`. `TakeTagGuidanceDue` is called only when the line can be emitted (agent tools on, not a worker), so a turn that can't show it doesn't consume it.
+- **Placement:** after the FR.23.10 attention guidance and before the Telegram guidance.
+
+**FR.24.7 — Tag row (UI):**
+- **Placement and visibility.** In the session header (`SessionView.axaml` Row 0 Border), **below** the existing DockPanel (name and location, search box, Session/Focus switch, MD, JSONL), inside the same Border, so the header's bottom rule stays under the tags. A WrapPanel of chips, shown only when the session has at least one tag; no empty space otherwise. It appears in both the Session and the Focus view (FR.23.12). The header grows taller when tags show, which is accepted.
+- **Order:** by kind (Linear issues, then pull requests, then repositories); within a kind, name-derived tags first, then declared tags, newest first.
+- **Chip:** rounded (CornerRadius ≈ 9); 1 px border in `SystemControlForegroundBaseLowBrush`; padding about 8,1; FontSize 11; hand cursor and a subtle hover highlight; neutral colours in Phase 1.
+- **Tooltip:** line 1: the URL; line 2: `From the session name`, or `Tagged by the session <local time: HH:mm today, else yyyy-MM-dd HH:mm>`.
+- **Click** opens the URL in the default OS browser (`Process.Start` with `UseShellExecute = true`), but only if `SessionTagUrlPolicy.IsOpenable(url)` is true: absolute `https` URL, host exactly `linear.app` or `github.com`. Anything else is logged and ignored: never shell-execute an arbitrary string.
+- **Live updates:** the row refreshes on `SessionTagsChanged` for its node or for all (`NodeId == null`), and when the session is renamed. Refreshes are marshalled with `IUiDispatcher`.
+
+**FR.24.8 — Daemon boundary:**
+- The UI reaches tags only through `IDaemonClient` (`SessionTagsChanged`, `GetSessionTags(nodeId)`, `TakeTagGuidanceDue(nodeId)`), never through `ISessionTagService` directly (FR.21.10).
+- `InProcDaemonClient` delegates to `ISessionTagService`, resolving the node (and its name) through the registry, and relays `SessionTagsChanged`.
+- `WireDaemonClient`: a silent event, and the methods throw `NotSupportedException`, as for FR.23.
+
+**FR.24.9 — Phase 2 (NOT built in Phase 1): status colours:** Each chip is coloured by its item's status: a Linear issue by its workflow state type (backlog, unstarted, started, completed, canceled); a pull request by its state (open, draft, merged, closed), possibly with review and check status. Statuses come from a scheduled pull — for example every 10 minutes for tags of sessions active in the last N days, plus once when a session is opened. They are cached with the tags, and the tooltip shows the status name and when it was last checked.
+
+**Open decision for Phase 2 — how to read statuses.** Linear is reachable only through the Architect's account or through MCP from Claude Code. Options:
+- **(a)** A Linear personal API key, created by the Architect in Linear settings, stored DPAPI-protected like the Telegram token (FR.21.6), with Tessyn polling Linear's GraphQL API.
+- **(b)** Linear's own MCP server, registered in the External MCP Server Registry with its OAuth client (FR.20), once Tessyn has an in-process MCP client (FR.20.9).
+- **(c)** Sessions report the status through `tag_session` when they check an issue or PR. This is cheap, but only as fresh as their last check.
+- **GitHub:** the `gh` CLI already authenticated on this machine (`gh pr view <n> -R <owner>/<repo> --json state,isDraft,mergedAt,reviewDecision`), or a token.
+
+**FR.24.10 — Out of scope (Phase 1):**
+- Detecting tags from conversation text.
+- Adding or removing tags by hand in the UI.
+- Status colours (FR.24.9).
+- Searching or filtering sessions by tags, and multiple focus panels (WPF programme).
+- TDCP methods.
+- PR references without an owner (`#215`, `windows-app#215`).
+
+---
+
 ## Out of Scope (Initial Version)
 
 - Session sharing or sync across machines
@@ -1131,6 +1463,8 @@ A per-session, opt-in audible cue for the interactive command bar — the only t
 - Closing/archiving Telegram topics when a session is deleted or hidden, multiple bots/chats, and Telegram-side message editing/deletion sync — not needed for the initial bridge and may be revisited later
 - A public webhook receiver / daemon↔web relay for Telegram (the S3 topology sketched in `docs/refactoring/tdcp-spec.md` §3) — long polling (FR.21.4) already meets the latency need with zero fleet infrastructure; explicitly parked as a later phase, not built alongside FR.21.9–FR.21.11
 - Rate limits or cooldowns on `notify_user`, quiet hours, presence-aware suppression (no phone ping while the user is active at the desktop), and redaction of secrets in mirrored Telegram text — considered and declined in ISSUE.012: quiet hours are handled in the phone's notification settings, and anything agents touch is treated as exposed
+- The Focus view's cross-session Attention list, Telegram answering and `/attention` command, local-LLM item extraction, native `AskUserQuestion` capture and TDCP ledger methods — see the out-of-scope list at the end of FR.23
+- Detecting Session Tags from conversation text, adding/removing tags by hand in the UI, Phase 2 status colours (FR.24.9), tag search/filter and multiple focus panels, TDCP methods and owner-less PR references — see FR.24.10
 
 ---
 
