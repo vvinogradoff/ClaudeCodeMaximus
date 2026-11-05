@@ -33,6 +33,8 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private bool _isScopedToProject = true;
 	private bool _isProjectScopeEnabled;
 	private bool _isSearching;
+	private bool _isSearchViewApplied;
+	private readonly Dictionary<object, Action> _orderRestorers = new(ReferenceEqualityComparer.Instance);
 
 	// ── Sub-session expand/collapse state ───────────────────────────────────
 	private SessionNodeViewModel? _expandedSupervisor;
@@ -60,8 +62,18 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	public string SearchText
 	{
 		get => _searchText;
-		set => this.RaiseAndSetIfChanged(ref _searchText, value);
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _searchText, value);
+			this.RaisePropertyChanged(nameof(IsSearchActive));
+		}
 	}
+
+	/// <summary>
+	/// True while the trimmed search query is non-empty. The tree is then reordered by relevance
+	/// (view-only, FR.1.12), so drag, drop and move mode are disabled.
+	/// </summary>
+	public bool IsSearchActive => !string.IsNullOrWhiteSpace(SearchText);
 
 	/// <summary>
 	/// When true (the default whenever a session is selected), the search box's content search
@@ -155,6 +167,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		// IsRunning changes) are reflected in the VM tree without the VM touching the model directly.
 		_daemon.TreeChanged += OnRegistryTreeChanged;
 		_daemon.AttentionChanged += OnAttentionChanged;
+		_daemon.SessionIndexed += (_, _) => Dispatcher.UIThread.Post(ApplySearchFilterIfActive);
 
 		this.WhenAnyValue(x => x.SearchText)
 			.Throttle(TimeSpan.FromMilliseconds(300))
@@ -674,6 +687,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// </summary>
 	public bool MoveSessionTo(SessionNodeViewModel session, ViewModelBase target)
 	{
+		if (IsSearchActive)
+			return false;
+
 		var sourceOrigin = GetGitOriginForNode(session);
 
 		ViewModelBase container;
@@ -754,6 +770,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public void StartMoveMode(SessionNodeViewModel session)
 	{
+		if (IsSearchActive)
+			return;
+
 		if (IsMoveModeActive)
 			CancelMoveMode();
 
@@ -802,6 +821,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// </summary>
 	public void UpdateMovePosition(ViewModelBase? selectedItem)
 	{
+		if (IsSearchActive)
+			return;
+
 		if (!IsMoveModeActive || MovingSession is null || selectedItem is null)
 			return;
 
@@ -1066,10 +1088,14 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 		if (string.IsNullOrEmpty(query))
 		{
+			_searchCts = null;
 			IsSearching = false;
 			ShowAllNodes();
+			EndSearchView();
 			return;
 		}
+
+		BeginSearchView();
 
 		var projectSlug = IsScopedToProject && SelectedSession != null
 			? Constants.ClaudeSessions.BuildProjectSlug(SelectedSession.Model.WorkingDirectory)
@@ -1079,95 +1105,242 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		_searchCts = cts;
 		IsSearching = true;
 
-		_ = Task.Run(async () =>
-		{
-			try
-			{
-				// Unranked, uncapped membership test — not SearchSessionsAsync's ranked top-N, which
-				// would silently drop genuine matches in this tree whenever other projects on the
-				// machine happen to score higher on the same terms (see ISSUE.007).
-				var matchingExternalIds = await _daemon.SearchMatchingSessionIdsAsync(query, projectSlug, cts.Token);
-				if (cts.Token.IsCancellationRequested) return;
-
-				Dispatcher.UIThread.Post(() =>
-				{
-					if (cts.Token.IsCancellationRequested) return;
-
-					foreach (var dir in Directories)
-					{
-						var dirHasMatch = ApplyFilterToChildrenByExternalId(dir.Children, matchingExternalIds);
-						dir.IsVisible = dirHasMatch;
-					}
-					IsSearching = false;
-				});
-			}
-			catch (OperationCanceledException) { /* expected; a newer search superseded this one */ }
-			catch (Exception ex)
-			{
-				if (cts.Token.IsCancellationRequested) return;
-				Serilog.Log.Warning(ex, "Session search failed, falling back to local substring match");
-				var matches = _searchService.FindMatchingSessionFiles(query);
-				if (cts.Token.IsCancellationRequested) return;
-				Dispatcher.UIThread.Post(() =>
-				{
-					if (cts.Token.IsCancellationRequested) return;
-					foreach (var dir in Directories)
-					{
-						var dirHasMatch = ApplyFilterToChildren(dir.Children, matches);
-						dir.IsVisible = dirHasMatch;
-					}
-					IsSearching = false;
-				});
-			}
-		}, cts.Token);
+		_ = Task.Run(() => RunSearchAsync(query, projectSlug, cts), cts.Token);
 	}
 
-	private static bool ApplyFilterToChildren(ObservableCollection<ViewModelBase> children, IReadOnlySet<string> matches)
+	/// <summary>
+	/// Resolves the matching sessions (index first, local file fallback second) and posts the result to the UI
+	/// thread. Never throws: every outcome other than cancellation ends in <see cref="FinishSearch"/>, so
+	/// the busy indicator cannot get stuck (ISSUE.015).
+	/// </summary>
+	private async Task RunSearchAsync(string query, string? projectSlug, CancellationTokenSource cts)
 	{
-		var anyVisible = false;
+		Func<SessionNodeViewModel, SessionSearchScoreModel?>? scoreOf;
+		try
+		{
+			scoreOf = await QueryIndexAsync(query, projectSlug, cts.Token);
+		}
+		catch (OperationCanceledException)
+		{
+			return; // a newer search supersedes this one and owns the busy indicator
+		}
+		catch (Exception ex)
+		{
+			if (cts.IsCancellationRequested) return;
+			Serilog.Log.Warning(ex, "Session search failed, falling back to local substring match");
+			scoreOf = TryFallbackSearch(query);
+		}
 
+		if (cts.IsCancellationRequested) return;
+		Dispatcher.UIThread.Post(() => FinishSearch(cts, scoreOf));
+	}
+
+	private async Task<Func<SessionNodeViewModel, SessionSearchScoreModel?>> QueryIndexAsync(
+		string query, string? projectSlug, CancellationToken ct)
+	{
+		// Unranked, uncapped membership test with per-session match counts — not SearchSessionsAsync's
+		// ranked top-N, which would silently drop genuine matches in this tree whenever other projects on
+		// the machine happen to score higher on the same terms (see ISSUE.007).
+		var scores = await _daemon.SearchSessionScoresAsync(query, projectSlug, ct);
+		var byExternalId = new Dictionary<string, SessionSearchScoreModel>(scores.Count);
+		foreach (var score in scores)
+			byExternalId[score.ExternalId] = score;
+
+		return session =>
+		{
+			var key = session.ExternalId ?? session.Model.ClaudeSessionId;
+			return key != null && byExternalId.TryGetValue(key, out var score) ? score : null;
+		};
+	}
+
+	/// <summary>File-name match without scores (counts as a loose match). Returns null — show everything — on failure.</summary>
+	private Func<SessionNodeViewModel, SessionSearchScoreModel?>? TryFallbackSearch(string query)
+	{
+		try
+		{
+			var matches = _searchService.FindMatchingSessionFiles(query);
+			return session => matches.Contains(session.FileName)
+				? new SessionSearchScoreModel { ExternalId = session.FileName, StrictMatchCount = 0, LooseMatchCount = 1 }
+				: null;
+		}
+		catch (Exception ex)
+		{
+			Serilog.Log.Warning(ex, "Session search fallback failed; showing all sessions");
+			return null;
+		}
+	}
+
+	/// <summary>UI-thread completion of a search; only the latest search applies its result or clears the busy indicator.</summary>
+	private void FinishSearch(CancellationTokenSource cts, Func<SessionNodeViewModel, SessionSearchScoreModel?>? scoreOf)
+	{
+		if (!ReferenceEquals(_searchCts, cts)) return;
+
+		try
+		{
+			if (scoreOf == null)
+				ShowAllNodes();
+			else
+				ApplyScores(scoreOf);
+		}
+		catch (Exception ex)
+		{
+			Serilog.Log.Warning(ex, "Applying session search results failed; showing all sessions");
+			ShowAllNodes();
+		}
+		finally
+		{
+			IsSearching = false;
+		}
+	}
+
+	private void ApplyScores(Func<SessionNodeViewModel, SessionSearchScoreModel?> scoreOf)
+	{
+		var keys = new Dictionary<DirectoryNodeViewModel, SearchRelevanceKeyModel?>();
+		foreach (var dir in Directories)
+		{
+			var key = ApplyToChildren(dir.Children, scoreOf);
+			dir.IsVisible = key != null;
+			keys[dir] = key;
+		}
+		ReorderByKey(Directories, d => keys.GetValueOrDefault(d));
+	}
+
+	/// <summary>Applies visibility and relevance order to a Directory's/Group's children; returns the best key among them.</summary>
+	private SearchRelevanceKeyModel? ApplyToChildren(
+		ObservableCollection<ViewModelBase> children, Func<SessionNodeViewModel, SessionSearchScoreModel?> scoreOf)
+	{
+		var keys = new Dictionary<ViewModelBase, SearchRelevanceKeyModel?>();
+		foreach (var child in children.ToList())
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session:
+					keys[child] = ApplyToSession(session, scoreOf);
+					break;
+				case GroupNodeViewModel group:
+					var groupKey = ApplyToChildren(group.Children, scoreOf);
+					group.IsVisible = groupKey != null;
+					keys[child] = groupKey;
+					break;
+			}
+		}
+		ReorderByKey(children, c => keys.GetValueOrDefault(c));
+		return BestKey(keys.Values);
+	}
+
+	/// <summary>A session's effective key is the best of its own and its sub-sessions' keys (FR.1.9).</summary>
+	private SearchRelevanceKeyModel? ApplyToSession(
+		SessionNodeViewModel session, Func<SessionNodeViewModel, SessionSearchScoreModel?> scoreOf)
+	{
+		var subKeys = new Dictionary<SessionNodeViewModel, SearchRelevanceKeyModel?>();
+		foreach (var sub in session.SubSessions.ToList())
+			subKeys[sub] = ApplyToSession(sub, scoreOf);
+		ReorderByKey(session.SubSessions, s => subKeys.GetValueOrDefault(s));
+
+		var best = BestKey(subKeys.Values.Append(KeyFor(session, scoreOf)));
+		session.IsVisible = best != null;
+		return best;
+	}
+
+	private static SearchRelevanceKeyModel? KeyFor(
+		SessionNodeViewModel session, Func<SessionNodeViewModel, SessionSearchScoreModel?> scoreOf)
+	{
+		var score = scoreOf(session);
+		return score == null
+			? null
+			: new SearchRelevanceKeyModel(score.StrictMatchCount, score.LooseMatchCount, session.LastPromptTimestamp);
+	}
+
+	private static readonly SearchRelevanceComparer RelevanceComparer = new();
+
+	private static SearchRelevanceKeyModel? BestKey(IEnumerable<SearchRelevanceKeyModel?> keys)
+		=> keys.Order(RelevanceComparer).FirstOrDefault();
+
+	/// <summary>
+	/// Reorders a collection most-relevant first with <see cref="ObservableCollection{T}.Move"/> (keeps
+	/// TreeViewItem state); non-matching items follow in their current relative order. View-only.
+	/// </summary>
+	private void ReorderByKey<T>(ObservableCollection<T> collection, Func<T, SearchRelevanceKeyModel?> keyOf)
+	{
+		EnsureOrderSnapshot(collection);
+		ApplyOrder(collection, collection.OrderBy(keyOf, RelevanceComparer).ToList());
+	}
+
+	private static void ApplyOrder<T>(ObservableCollection<T> collection, IReadOnlyList<T> target)
+	{
+		for (var i = 0; i < target.Count; i++)
+		{
+			var current = collection.IndexOf(target[i]);
+			if (current != i)
+				collection.Move(current, i);
+		}
+	}
+
+	// ── View-only order snapshot (FR.1.12): restored when the search is cleared ──
+
+	private void BeginSearchView()
+	{
+		if (_isSearchViewApplied)
+			return;
+
+		CancelMoveMode(); // before snapshotting, so the original position is already restored
+		_isSearchViewApplied = true;
+
+		EnsureOrderSnapshot(Directories);
+		foreach (var dir in Directories)
+			SnapshotChildren(dir.Children);
+	}
+
+	private void SnapshotChildren(ObservableCollection<ViewModelBase> children)
+	{
+		EnsureOrderSnapshot(children);
 		foreach (var child in children)
 		{
 			switch (child)
 			{
 				case SessionNodeViewModel session:
-					var visible = matches.Contains(session.FileName);
-					session.IsVisible = visible;
-					if (visible) anyVisible = true;
+					SnapshotSubSessions(session);
 					break;
 				case GroupNodeViewModel group:
-					var groupHasMatch = ApplyFilterToChildren(group.Children, matches);
-					group.IsVisible = groupHasMatch;
-					if (groupHasMatch) anyVisible = true;
+					SnapshotChildren(group.Children);
 					break;
 			}
 		}
-
-		return anyVisible;
 	}
 
-	private static bool ApplyFilterToChildrenByExternalId(ObservableCollection<ViewModelBase> children, IReadOnlySet<string> matchingExternalIds)
+	private void SnapshotSubSessions(SessionNodeViewModel session)
 	{
-		var anyVisible = false;
+		EnsureOrderSnapshot(session.SubSessions);
+		foreach (var sub in session.SubSessions)
+			SnapshotSubSessions(sub);
+	}
 
-		foreach (var child in children)
-		{
-			switch (child)
-			{
-				case SessionNodeViewModel session:
-					var visible = session.ExternalId != null && matchingExternalIds.Contains(session.ExternalId);
-					session.IsVisible = visible;
-					if (visible) anyVisible = true;
-					break;
-				case GroupNodeViewModel group:
-					var groupHasMatch = ApplyFilterToChildrenByExternalId(group.Children, matchingExternalIds);
-					group.IsVisible = groupHasMatch;
-					if (groupHasMatch) anyVisible = true;
-					break;
-			}
-		}
+	private void EnsureOrderSnapshot<T>(ObservableCollection<T> collection) where T : notnull
+	{
+		if (!_isSearchViewApplied || _orderRestorers.ContainsKey(collection))
+			return;
 
-		return anyVisible;
+		var order = collection.ToList();
+		_orderRestorers[collection] = () => RestoreOrder(collection, order);
+	}
+
+	/// <summary>Snapshot order first; items added during the search follow in their current order; removed items are ignored.</summary>
+	private static void RestoreOrder<T>(ObservableCollection<T> collection, List<T> snapshot) where T : notnull
+	{
+		var inSnapshot = new HashSet<T>(snapshot);
+		var target = snapshot.Where(collection.Contains).Concat(collection.Where(x => !inSnapshot.Contains(x))).ToList();
+		ApplyOrder(collection, target);
+	}
+
+	private void EndSearchView()
+	{
+		if (!_isSearchViewApplied)
+			return;
+
+		foreach (var restore in _orderRestorers.Values)
+			restore();
+		_orderRestorers.Clear();
+		_isSearchViewApplied = false;
 	}
 
 	private void ShowAllNodes()

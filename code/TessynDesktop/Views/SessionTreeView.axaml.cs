@@ -452,6 +452,9 @@ public partial class SessionTreeView : UserControl
 		if (sender is not Border border || border.DataContext is not SessionNodeViewModel)
 			return;
 
+		if (DataContext is SessionTreeViewModel { IsSearchActive: true })
+			return;
+
 		if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
 			return;
 
@@ -466,6 +469,12 @@ public partial class SessionTreeView : UserControl
 	{
 		if (!_isDragPending || sender is not Border border)
 			return;
+
+		if (DataContext is SessionTreeViewModel { IsSearchActive: true })
+		{
+			DetachDragHandlers(sender);
+			return;
+		}
 
 		var currentPos = e.GetPosition(this);
 		var diff = currentPos - _dragStartPoint;
@@ -493,14 +502,15 @@ public partial class SessionTreeView : UserControl
 		session.IsBeingMoved = false;
 	}
 
-	private void OnSessionPointerReleased(object? sender, PointerReleasedEventArgs e)
+	private void OnSessionPointerReleased(object? sender, PointerReleasedEventArgs e) => DetachDragHandlers(sender);
+
+	private void DetachDragHandlers(object? sender)
 	{
 		_isDragPending = false;
-		if (sender is Border border)
-		{
-			border.PointerMoved -= OnSessionPointerMoved;
-			border.PointerReleased -= OnSessionPointerReleased;
-		}
+		if (sender is not Border border)
+			return;
+		border.PointerMoved -= OnSessionPointerMoved;
+		border.PointerReleased -= OnSessionPointerReleased;
 	}
 
 	private void OnDragOver(object? sender, DragEventArgs e)
@@ -509,6 +519,8 @@ public partial class SessionTreeView : UserControl
 			return;
 
 		e.DragEffects = DragDropEffects.None;
+		if (vm.IsSearchActive)
+			return;
 
 #pragma warning disable CS0618
 		var transfer = e.Data;
@@ -547,7 +559,7 @@ public partial class SessionTreeView : UserControl
 
 	private void OnDrop(object? sender, DragEventArgs e)
 	{
-		if (DataContext is not SessionTreeViewModel vm)
+		if (DataContext is not SessionTreeViewModel { IsSearchActive: false } vm)
 			return;
 
 #pragma warning disable CS0618

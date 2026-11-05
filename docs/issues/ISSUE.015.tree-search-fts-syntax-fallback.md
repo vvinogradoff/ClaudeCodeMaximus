@@ -1,6 +1,6 @@
 # ISSUE.015 — Tree search: FTS5 syntax errors, slow fallback, account-email false hits, stuck spinner
 
-**Status:** In progress 2026-11-05.
+**Status:** Resolved 2026-11-05 (built, 1035/1035 tests pass; manual UI pass pending after app restart).
 **Affects:** Session tree search box (FR.1.9–FR.1.13), Cross-Project Search Index (FR.13.15).
 **Related:** [[ISSUE.007]] (earlier tree-search fixes: rank cutoff, tool_result content).
 
@@ -27,9 +27,11 @@
 3. **Stuck spinner.** `File.ReadAllText` opens with `FileShare.Read`, which fails with a sharing violation while a running session has the file open for writing. The exception was thrown inside the `catch` block of `SessionTreeViewModel.ApplySearchFilter`'s background task, so nothing caught it. `IsSearching` was never reset and the tree never filtered. Selecting another session re-ran the search, which usually succeeded on the retry (symptom 3).
 4. **No live indexing.** `ReindexSessionsAsync` ran only once at app startup (symptom 4).
 
-## Resolution (planned, being implemented)
+## Resolution
 
 - Safe query building: split on whitespace and quote each word as an FTS5 string. Strict = whole-query phrase, loose = all words (FR.13.15).
 - `SearchSessionScoresAsync` gives strict and loose match counts per session; the tree is ordered by relevance, view-only (FR.1.12).
 - `IndexSessionAsync` plus a `TurnCompleted`-driven updater for live indexing; index writes serialized (FR.1.13).
 - Fallback only when the index cannot be opened. It matches message bodies only, opens files with `FileShare.ReadWrite` and skips unreadable files. `IsSearching` is reset on every path (FR.1.9, FR.1.11).
+
+Commits: `6ef72bf` (Core query building, scores, `IndexSessionAsync`, fallback), `2372ce0` (`SessionIndexUpdater`, `SessionIndexed`), and the tree UI commit after it (`SearchRelevanceComparer`, view-only reorder with restore, `IsSearchActive` move guard, spinner reset in `SessionTreeViewModel.FinishSearch`).
