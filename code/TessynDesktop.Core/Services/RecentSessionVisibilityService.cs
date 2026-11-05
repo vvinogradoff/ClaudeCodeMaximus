@@ -7,9 +7,17 @@ namespace TessynDesktop.Services;
 public static class RecentSessionVisibilityService
 {
 	/// <summary>
-	/// True when a session belongs in the dropdown: either it's a favorite (always included,
-	/// regardless of recency or hidden state), or it's active within the last 24 hours and not hidden.
+	/// True when a session belongs in the dropdown: it's pinned (see <see cref="IsPinnedInRecentDropdown"/>),
+	/// or it's active within the last 24 hours and not hidden.
 	/// </summary>
-	public static bool ShouldShowInRecentDropdown(bool isFavorite, bool isRecentlyActive, bool isHiddenFromRecent) =>
-		isFavorite || (isRecentlyActive && !isHiddenFromRecent);
+	public static bool ShouldShowInRecentDropdown(bool isFavorite, bool hasOpenAttention, bool hasSchedules,
+		bool isRecentlyActive, bool isHiddenFromRecent) =>
+		IsPinnedInRecentDropdown(isFavorite, hasOpenAttention, hasSchedules) || (isRecentlyActive && !isHiddenFromRecent);
+
+	/// <summary>
+	/// True when a session stays in the dropdown regardless of recency or hidden state: a favorite, or a session
+	/// with open Focus items or schedules. Hiding it would have no visible effect, so its row offers no hide button.
+	/// </summary>
+	public static bool IsPinnedInRecentDropdown(bool isFavorite, bool hasOpenAttention, bool hasSchedules) =>
+		isFavorite || hasOpenAttention || hasSchedules;
 }

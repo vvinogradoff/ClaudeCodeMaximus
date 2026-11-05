@@ -445,7 +445,93 @@ public sealed class AttentionServiceTests : IDisposable
 		Svc.ResolveBySession(_node, "A2", AttentionStatus.Resolved, "y");
 		Svc.CloseByUser(_node, "A3");
 
-		Assert.Equal(0, Svc.GetSummary(_node.NodeId).OpenCount);
+		var s = Svc.GetSummary(_node.NodeId);
+		Assert.Equal(0, s.OpenCount);
+		Assert.Equal(0, s.AllOpenCount);
+		Assert.Null(s.AllOpenTopKind);
+	}
+
+	// ── all-open pair (session row badges: Decided included) ────────────────────
+
+	[Fact]
+	public void GetSummary_EmptyLedger_AllOpenPairIsZeroWithNoTopKind()
+	{
+		var s = Svc.GetSummary(_node.NodeId);
+
+		Assert.Equal((0, 0), (s.OpenCount, s.AllOpenCount));
+		Assert.Null(s.TopKind);
+		Assert.Null(s.AllOpenTopKind);
+	}
+
+	[Fact]
+	public void GetSummary_AllOpenCountIncludesDecided()
+	{
+		Post("decided", AttentionKind.Decided);
+		Post("alert", AttentionKind.Alert);
+
+		var s = Svc.GetSummary(_node.NodeId);
+
+		Assert.Equal(2, s.AllOpenCount);
+		Assert.Equal(1, s.OpenCount);
+	}
+
+	[Fact]
+	public void GetSummary_OnlyDecidedOpen_AllOpenTopKindIsDecidedWhileFocusPairIsEmpty()
+	{
+		Post("d1", AttentionKind.Decided);
+		Post("d2", AttentionKind.Decided);
+
+		var s = Svc.GetSummary(_node.NodeId);
+
+		Assert.Equal(2, s.AllOpenCount);
+		Assert.Equal(AttentionKind.Decided, s.AllOpenTopKind);
+		Assert.Equal(0, s.OpenCount);
+		Assert.Null(s.TopKind);
+	}
+
+	[Fact]
+	public void GetSummary_MixedKinds_AllOpenTopKindIsMostSevereAndMatchesTopKind()
+	{
+		Post("decided", AttentionKind.Decided);
+		Post("alert", AttentionKind.Alert);
+		Post("todo", AttentionKind.Todo);
+
+		var s = Svc.GetSummary(_node.NodeId);
+
+		Assert.Equal(AttentionKind.Todo, s.AllOpenTopKind);
+		Assert.Equal(s.TopKind, s.AllOpenTopKind);
+	}
+
+	[Fact]
+	public void GetSummary_AllOpenTopKind_FollowsSeverityAsItemsClose()
+	{
+		Post("decided", AttentionKind.Decided);
+		Post("alert", AttentionKind.Alert);
+		Post("critical", AttentionKind.Critical);
+
+		var s = Svc.GetSummary(_node.NodeId);
+		Assert.Equal((3, AttentionKind.Critical), (s.AllOpenCount, s.AllOpenTopKind!.Value));
+
+		Svc.CloseByUser(_node, "A3");
+		s = Svc.GetSummary(_node.NodeId);
+		Assert.Equal((2, AttentionKind.Alert), (s.AllOpenCount, s.AllOpenTopKind!.Value));
+
+		Svc.CloseByUser(_node, "A2");
+		s = Svc.GetSummary(_node.NodeId);
+		Assert.Equal((1, AttentionKind.Decided), (s.AllOpenCount, s.AllOpenTopKind!.Value));
+	}
+
+	[Fact]
+	public void GetSummary_ClosedDecidedIsNotInAllOpenCount()
+	{
+		Post("decided", AttentionKind.Decided);
+		Post("ask", AttentionKind.Ask);
+		Svc.CloseByUser(_node, "A1");
+
+		var s = Svc.GetSummary(_node.NodeId);
+
+		Assert.Equal((1, 1), (s.OpenCount, s.AllOpenCount));
+		Assert.Equal(AttentionKind.Ask, s.AllOpenTopKind);
 	}
 
 	// ── TC.FV.13 AttentionChanged ───────────────────────────────────────────────

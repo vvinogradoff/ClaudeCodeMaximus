@@ -55,7 +55,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 	public SessionTreeViewModel SessionTree { get; }
 	public RecentSessionsViewModel RecentSessions { get; }
 
-	/// <summary>Flat list of recently-active sessions (last 24 h), newest first, for the top-bar dropdown.</summary>
+	/// <summary>
+	/// Flat list for the top-bar dropdown: favorites, sessions with open Focus items, sessions with schedules,
+	/// or active in the last 24 h and not hidden; most recently active first.
+	/// </summary>
 	public ObservableCollection<SessionNodeViewModel> RecentDropdownSessions { get; } = [];
 
 	/// <summary>Currently selected session in the top-bar recent-sessions dropdown.</summary>
@@ -543,21 +546,31 @@ public sealed class MainWindowViewModel : ViewModelBase
 			SessionTree.SelectedSession = node;
 	}
 
-	/// <summary>Rebuilds the top-bar recent-sessions dropdown from favorites plus sessions active in the last 24 h.</summary>
+	/// <summary>
+	/// Rebuilds the top-bar recent-sessions dropdown: favorites, sessions with open Focus items, sessions with
+	/// schedules, and sessions active in the last 24 h that are not hidden; most recently active first.
+	/// </summary>
 	public void RefreshRecentDropdown()
 	{
 		var all = new List<SessionNodeViewModel>();
 		foreach (var dir in SessionTree.Directories)
 			CollectRecentSessions(dir.Children, all);
 
+		// Schedules decide membership, so resolve them for every session before filtering.
+		var scheduledNodeIds = _daemonClient.GetSchedules()
+			.Select(sch => sch.TargetNodeId)
+			.ToHashSet(StringComparer.Ordinal);
+		foreach (var s in all)
+			s.HasSchedules = scheduledNodeIds.Contains(s.Model.NodeId);
+
 		all = all
-			.Where(s => RecentSessionVisibilityService.ShouldShowInRecentDropdown(s.IsFavorite, s.IsRecentlyActive, s.IsHiddenFromRecent))
+			.Where(s => RecentSessionVisibilityService.ShouldShowInRecentDropdown(
+				s.IsFavorite, s.HasOpenAttention, s.HasSchedules, s.IsRecentlyActive, s.IsHiddenFromRecent))
 			.OrderByDescending(s => s.LastActivityTimestamp)
 			.ToList();
 
 		foreach (var s in all)
 		{
-			s.HasSchedules = _daemonClient.GetSchedules(s.Model.NodeId).Count > 0;
 			s.DirectoryLabel = SessionTree.GetSessionLocation(s).directoryLabel;
 		}
 

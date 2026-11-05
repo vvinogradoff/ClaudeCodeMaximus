@@ -27,6 +27,8 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private DateTimeOffset? _recentIgnoredAt;
 	private bool _isFavorite;
 	private bool _hasSchedules;
+	private int _attentionCount;
+	private AttentionKind? _attentionTopKind;
 	private string _directoryLabel = string.Empty;
 	private IBrush? _recencyBrush;
 	private bool _isRecentlyActive;
@@ -214,6 +216,7 @@ public sealed class SessionNodeViewModel : ViewModelBase
 		{
 			this.RaiseAndSetIfChanged(ref _isFavorite, value);
 			Model.IsFavorite = value;
+			this.RaisePropertyChanged(nameof(CanHideFromRecent));
 		}
 	}
 
@@ -221,7 +224,49 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	public bool HasSchedules
 	{
 		get => _hasSchedules;
-		set => this.RaiseAndSetIfChanged(ref _hasSchedules, value);
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _hasSchedules, value);
+			this.RaisePropertyChanged(nameof(CanHideFromRecent));
+		}
+	}
+
+	/// <summary>Number of all open Focus ledger items for this session, decisions included.</summary>
+	public int AttentionCount
+	{
+		get => _attentionCount;
+		private set
+		{
+			if (_attentionCount == value) return;
+			this.RaiseAndSetIfChanged(ref _attentionCount, value);
+			this.RaisePropertyChanged(nameof(AttentionBadgeText));
+			this.RaisePropertyChanged(nameof(HasOpenAttention));
+			this.RaisePropertyChanged(nameof(CanHideFromRecent));
+		}
+	}
+
+	/// <summary>Most severe kind among the open items; null when there are none. Colours the count badge.</summary>
+	public AttentionKind? AttentionTopKind
+	{
+		get => _attentionTopKind;
+		private set => this.RaiseAndSetIfChanged(ref _attentionTopKind, value);
+	}
+
+	/// <summary>The open-item count as badge text.</summary>
+	public string AttentionBadgeText => _attentionCount.ToString();
+
+	/// <summary>True when the session has at least one open Focus item; shows the badge and pins the session in the Recent dropdown.</summary>
+	public bool HasOpenAttention => _attentionCount > 0;
+
+	/// <summary>True when the Recent dropdown's hide button applies, i.e. nothing pins the session there.</summary>
+	public bool CanHideFromRecent =>
+		!RecentSessionVisibilityService.IsPinnedInRecentDropdown(IsFavorite, HasOpenAttention, HasSchedules);
+
+	/// <summary>Applies the open-item count and top kind (decisions included) from an attention summary.</summary>
+	public void ApplyAttentionSummary(AttentionSummaryModel summary)
+	{
+		AttentionTopKind = summary.AllOpenTopKind;
+		AttentionCount = summary.AllOpenCount;
 	}
 
 	/// <summary>Directory label for this session, shown in the recent-dropdown row. Refreshed by the recent-dropdown rebuild.</summary>

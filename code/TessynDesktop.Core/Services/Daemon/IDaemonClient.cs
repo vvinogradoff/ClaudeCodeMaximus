@@ -154,7 +154,7 @@ public interface IDaemonClient
 	/// <summary>All Attention Items of a session, any status, ordered per FR.23.2.</summary>
 	IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId);
 
-	/// <summary>Open-item count (Decided excluded) and most severe open kind — the Focus badge's inputs (FR.23.13).</summary>
+	/// <summary>Open-item count (Decided excluded) and most severe open kind — the Focus badge's inputs (FR.23.13) — plus both over every open item (Decided included) for the session-row badge in the tree and the Recent dropdown.</summary>
 	AttentionSummaryModel GetAttentionSummary(string nodeId);
 
 	/// <summary>Marks items answered from the Focus view, Answer = the text sent (FR.23.15). Unknown or closed ids are skipped.</summary>

@@ -136,14 +136,17 @@ public sealed class AttentionService : IAttentionService
 	{
 		lock (_lock)
 		{
-			var counted = LoadLocked(nodeId).Items
-				.Where(i => i.Status == AttentionStatus.Open && i.Kind != AttentionKind.Decided)
+			var open = LoadLocked(nodeId).Items
+				.Where(i => i.Status == AttentionStatus.Open)
 				.ToList();
+			var counted = open.Where(i => i.Kind != AttentionKind.Decided).ToList();
 
 			return new AttentionSummaryModel
 			{
-				OpenCount = counted.Count,
-				TopKind   = counted.Count == 0 ? null : counted.Min(i => i.Kind),
+				OpenCount      = counted.Count,
+				TopKind        = counted.Count == 0 ? null : counted.Min(i => i.Kind),
+				AllOpenCount   = open.Count,
+				AllOpenTopKind = open.Count == 0 ? null : open.Min(i => i.Kind),
 			};
 		}
 	}

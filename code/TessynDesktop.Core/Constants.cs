@@ -486,6 +486,12 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// <summary>Minimum width of the badge / chip pill, in device-independent pixels (FR.23.13).</summary>
 		public const double PillMinWidth = 16;
 
+		/// <summary>Corner radius of the count badge (Focus switch, tree and Recent-dropdown rows): a rounded rectangle, not a circle.</summary>
+		public const double BadgeCornerRadius = 3;
+
+		/// <summary>Corner radius of the kind chip on a card (FR.23.14).</summary>
+		public const double ChipCornerRadius = 8;
+
 		public const double BadgeFontSize = 10;
 		public const double ChipFontSize = 11;
 	}

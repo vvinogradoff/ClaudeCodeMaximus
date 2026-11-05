@@ -187,6 +187,11 @@
                                                VerticalAlignment="Center"
                                                Margin="-2,0"
                                                IsVisible="{Binding IsSubSession}"/>
+                                    <!-- Open Focus items (decisions included), coloured by the most severe kind -->
+                                    <views:AttentionKindPill Kind="{Binding AttentionTopKind}"
+                                                             Text="{Binding AttentionBadgeText}"
+                                                             IsVisible="{Binding HasOpenAttention}"
+                                                             VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
                                                Foreground="{Binding MoveForeground}"/>
                                     <TextBlock Text="&#x270F;" FontSize="10" VerticalAlignment="Center"

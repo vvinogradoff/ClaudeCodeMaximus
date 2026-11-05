@@ -9,8 +9,9 @@ using TessynDesktop.ViewModels;
 namespace TessynDesktop.Views;
 
 /// <summary>
-/// Small rounded pill coloured by an <see cref="AttentionKind"/> (FR.23.1): the Focus badge next to the
-/// "Focus" switch (FR.23.13) and, with <see cref="IsChip"/>, the kind chip on a card (FR.23.14).
+/// Small label coloured by an <see cref="AttentionKind"/> (FR.23.1): the count badge next to the
+/// "Focus" switch (FR.23.13), on session rows in the tree and the Recent dropdown (a rounded rectangle),
+/// and, with <see cref="IsChip"/>, the pill-shaped kind chip on a card (FR.23.14).
 /// Todo and Alert take their colours from the theme resources, so they follow theme switches.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -46,7 +47,6 @@ public sealed class AttentionKindPill : Border
 
 	public AttentionKindPill()
 	{
-		CornerRadius = new CornerRadius(8);
 		MinWidth = Constants.Focus.PillMinWidth;
 		Padding = new Thickness(5, 0);
 		Child = _label;
@@ -99,6 +99,7 @@ public sealed class AttentionKindPill : Border
 		ClearResourceSubscriptions();
 
 		_label.FontSize = IsChip ? Constants.Focus.ChipFontSize : Constants.Focus.BadgeFontSize;
+		CornerRadius = new CornerRadius(IsChip ? Constants.Focus.ChipCornerRadius : Constants.Focus.BadgeCornerRadius);
 		BorderThickness = new Thickness(0);
 		BorderBrush = null;
 

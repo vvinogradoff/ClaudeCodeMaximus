@@ -148,10 +148,13 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		RefreshGitOrigins();
 		RefreshSessionResumability();
 		RefreshLastPromptTimes();
+		foreach (var dir in Directories)
+			ApplyAttentionSummaries(dir.Children);
 
 		// Subscribe to registry changes so service-initiated mutations (orchestration spawn,
 		// IsRunning changes) are reflected in the VM tree without the VM touching the model directly.
 		_daemon.TreeChanged += OnRegistryTreeChanged;
+		_daemon.AttentionChanged += OnAttentionChanged;
 
 		this.WhenAnyValue(x => x.SearchText)
 			.Throttle(TimeSpan.FromMilliseconds(300))
@@ -190,6 +193,39 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			// SettingsModified: VM was already updated surgically by SessionTreeViewModel methods.
 			// Reloaded: handled by the constructor's LoadFromSettings() call.
 		}
+	}
+
+	private void OnAttentionChanged(object? sender, AttentionChangedEventArgs e)
+	{
+		Dispatcher.UIThread.Post(() =>
+		{
+			var node = FindNodeVmByNodeId(e.NodeId);
+			if (node != null)
+				node.ApplyAttentionSummary(_daemon.GetAttentionSummary(e.NodeId));
+		});
+	}
+
+	private void ApplyAttentionSummaries(IEnumerable<ViewModelBase> children)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session:
+					ApplyAttentionSummary(session);
+					break;
+				case GroupNodeViewModel group:
+					ApplyAttentionSummaries(group.Children);
+					break;
+			}
+		}
+	}
+
+	private void ApplyAttentionSummary(SessionNodeViewModel session)
+	{
+		session.ApplyAttentionSummary(_daemon.GetAttentionSummary(session.Model.NodeId));
+		foreach (var sub in session.SubSessions)
+			ApplyAttentionSummary(sub);
 	}
 
 	private void HandleRegistrySessionAdded(

@@ -33,7 +33,7 @@ public interface IAttentionService
 	/// <summary>All items of the node, any status, in FR.23.2 order. Returns copies.</summary>
 	IReadOnlyList<AttentionItemModel> GetItems(string nodeId);
 
-	/// <summary>Open-item count (Decided excluded) and most severe open kind (FR.23.13).</summary>
+	/// <summary>Open-item count (Decided excluded) and most severe open kind (FR.23.13), plus both over every open item (Decided included) for session-row badges.</summary>
 	AttentionSummaryModel GetSummary(string nodeId);
 
 	/// <summary>
