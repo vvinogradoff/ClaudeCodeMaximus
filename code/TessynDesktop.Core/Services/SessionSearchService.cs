@@ -1,17 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Serilog;
 
 namespace TessynDesktop.Services;
 
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionSearchService : ISessionSearchService
 {
-	private readonly IAppSettingsService _appSettings;
+	private static readonly ILogger _log = Log.ForContext<SessionSearchService>();
 
-	public SessionSearchService(IAppSettingsService appSettings)
+	private readonly IAppSettingsService _appSettings;
+	private readonly ISessionFileService _sessionFiles;
+
+	public SessionSearchService(IAppSettingsService appSettings, ISessionFileService sessionFiles)
 	{
 		_appSettings = appSettings;
+		_sessionFiles = sessionFiles;
 	}
 
 	public IReadOnlySet<string> FindMatchingSessionFiles(string query)
@@ -27,9 +32,22 @@ public sealed class SessionSearchService : ISessionSearchService
 
 		foreach (var filePath in Directory.EnumerateFiles(root, "*" + Constants.SessionFileExtension))
 		{
-			var content = File.ReadAllText(filePath);
-			if (content.Contains(query, StringComparison.OrdinalIgnoreCase))
-				matches.Add(Path.GetFileName(filePath));
+			var fileName = Path.GetFileName(filePath);
+			try
+			{
+				// Entries carry message bodies only — header lines (profile="email" etc.) never match.
+				foreach (var entry in _sessionFiles.ReadEntries(fileName))
+				{
+					if (!entry.Content.Contains(query, StringComparison.OrdinalIgnoreCase))
+						continue;
+					matches.Add(fileName);
+					break;
+				}
+			}
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+			{
+				_log.Debug("FindMatchingSessionFiles: skipping unreadable {File}: {Error}", fileName, ex.Message);
+			}
 		}
 
 		return matches;

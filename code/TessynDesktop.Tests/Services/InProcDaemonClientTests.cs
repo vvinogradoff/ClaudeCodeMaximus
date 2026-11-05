@@ -280,6 +280,12 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
     public int? LastSearchOffset { get; private set; }
     public string? LastMatchingIdsQuery { get; private set; }
     public string? LastMatchingIdsProjectSlug { get; private set; }
+    public string? LastScoresQuery { get; private set; }
+    public string? LastScoresProjectSlug { get; private set; }
+    public string? LastIndexSessionExternalId { get; private set; }
+    public string? LastIndexSessionWorkingDirectory { get; private set; }
+    public IReadOnlyList<SessionSearchScoreModel> ScoresResult { get; set; } = Array.Empty<SessionSearchScoreModel>();
+    public bool IndexSessionResult { get; set; }
     public IReadOnlyList<ClaudeSessionSummaryModel>? LastEnsureTitlesSummaries { get; private set; }
     public IReadOnlyList<string>? LastGetSummariesExternalIds { get; private set; }
 
@@ -302,6 +308,20 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
         LastMatchingIdsQuery = query;
         LastMatchingIdsProjectSlug = projectSlug;
         return Task.FromResult(MatchingSessionIdsResult);
+    }
+
+    public Task<IReadOnlyList<SessionSearchScoreModel>> SearchSessionScoresAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default)
+    {
+        LastScoresQuery = query;
+        LastScoresProjectSlug = projectSlug;
+        return Task.FromResult(ScoresResult);
+    }
+
+    public Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default)
+    {
+        LastIndexSessionExternalId = externalId;
+        LastIndexSessionWorkingDirectory = workingDirectory;
+        return Task.FromResult(IndexSessionResult);
     }
 
     public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
@@ -995,6 +1015,31 @@ public sealed class InProcDaemonClientTests
         await _client.SearchMatchingSessionIdsAsync("Visual Studio");
 
         Assert.Null(_indexService.LastMatchingIdsProjectSlug);
+    }
+
+    [Fact]
+    public async Task SearchSessionScoresAsync_DelegatesToIndexService()
+    {
+        IReadOnlyList<SessionSearchScoreModel> expected = [new SessionSearchScoreModel { ExternalId = "ext-1", StrictMatchCount = 1, LooseMatchCount = 2 }];
+        _indexService.ScoresResult = expected;
+
+        var result = await _client.SearchSessionScoresAsync("Visual Studio", "-Users-x-project-a");
+
+        Assert.Same(expected, result);
+        Assert.Equal("Visual Studio", _indexService.LastScoresQuery);
+        Assert.Equal("-Users-x-project-a", _indexService.LastScoresProjectSlug);
+    }
+
+    [Fact]
+    public async Task IndexSessionAsync_DelegatesToIndexService()
+    {
+        _indexService.IndexSessionResult = true;
+
+        var result = await _client.IndexSessionAsync("ext-1", "/Users/x/project-a");
+
+        Assert.True(result);
+        Assert.Equal("ext-1", _indexService.LastIndexSessionExternalId);
+        Assert.Equal("/Users/x/project-a", _indexService.LastIndexSessionWorkingDirectory);
     }
 
     // ── Attention Ledger (FR.23.15, FR.23.16) ─────────────────────────────────────

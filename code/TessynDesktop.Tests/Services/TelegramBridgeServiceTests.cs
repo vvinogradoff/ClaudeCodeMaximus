@@ -230,6 +230,8 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 		string query, string? projectSlug = null, string? role = null,
 		int? limit = null, int? offset = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 	public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Task<IReadOnlyList<SessionSearchScoreModel>> SearchSessionScoresAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 	public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
 		IReadOnlyList<ClaudeSessionSummaryModel> summaries,
 		Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null,

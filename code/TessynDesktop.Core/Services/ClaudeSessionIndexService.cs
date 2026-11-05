@@ -19,6 +19,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	private readonly IClaudeAssistService _assistService;
 	private readonly string _dbPath;
 	private readonly IReadOnlyList<string> _claudeProjectsDirs;
+	private readonly SemaphoreSlim _writeGate = new(1, 1);
 
 	public ClaudeSessionIndexService(
 		IClaudeSessionImportService importService,
@@ -125,6 +126,13 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 	private int ReindexCore(CancellationToken cancellationToken)
 	{
+		_writeGate.Wait(cancellationToken);
+		try { return ReindexLocked(cancellationToken); }
+		finally { _writeGate.Release(); }
+	}
+
+	private int ReindexLocked(CancellationToken cancellationToken)
+	{
 		using var conn = new SqliteConnection(ConnectionString);
 		conn.Open();
 
@@ -165,6 +173,49 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 		_log.Information("ReindexAsync: (re)indexed {Count} sessions", indexed);
 		return indexed;
+	}
+
+	/// <summary>
+	/// Re-indexes a single session from its JSONL file, if the file changed since it was last indexed.
+	/// Returns false when the file is missing, unchanged, or could not be indexed.
+	/// </summary>
+	public Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default) =>
+		Task.Run(() => IndexSessionCore(externalId, workingDirectory, cancellationToken), cancellationToken);
+
+	private bool IndexSessionCore(string externalId, string workingDirectory, CancellationToken cancellationToken)
+	{
+		var slug = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
+		var jsonlPath = FindSessionJsonl(slug, externalId);
+		if (jsonlPath == null)
+			return false;
+
+		long mtimeTicks;
+		try { mtimeTicks = File.GetLastWriteTimeUtc(jsonlPath).Ticks; }
+		catch (IOException) { return false; }
+
+		_writeGate.Wait(cancellationToken);
+		try
+		{
+			using var conn = new SqliteConnection(ConnectionString);
+			conn.Open();
+			if (GetStoredMtime(conn, externalId) == mtimeTicks)
+				return false;
+
+			return IndexSession(conn, externalId, slug, jsonlPath, mtimeTicks);
+		}
+		finally { _writeGate.Release(); }
+	}
+
+	private string? FindSessionJsonl(string slug, string externalId)
+	{
+		var fileName = externalId + Constants.ClaudeSessions.SessionFileExtension;
+		foreach (var dir in _claudeProjectsDirs)
+		{
+			var candidate = Path.Combine(dir, slug, fileName);
+			if (File.Exists(candidate))
+				return candidate;
+		}
+		return null;
 	}
 
 	private bool IndexSession(SqliteConnection conn, string externalId, string projectSlug, string jsonlPath, long mtimeTicks)
@@ -280,8 +331,10 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 	private IReadOnlySet<string> SearchMatchingSessionIdsCore(string query, string? projectSlug)
 	{
-		if (string.IsNullOrWhiteSpace(query))
-			return new HashSet<string>();
+		var ids = new HashSet<string>();
+		var words = SplitQueryWords(query);
+		if (words.Count == 0)
+			return ids;
 
 		using var conn = new SqliteConnection(ConnectionString);
 		conn.Open();
@@ -292,20 +345,85 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			WHERE messages MATCH @query
 			  AND (@projectSlug IS NULL OR project_slug = @projectSlug);
 			""";
-		cmd.Parameters.AddWithValue("@query", EscapeFtsQuery(query));
+		cmd.Parameters.AddWithValue("@query", BuildLooseQuery(words));
 		cmd.Parameters.AddWithValue("@projectSlug", (object?)projectSlug ?? DBNull.Value);
 
-		var ids = new HashSet<string>();
-		using var reader = cmd.ExecuteReader();
-		while (reader.Read())
-			ids.Add(reader.GetString(0));
+		try
+		{
+			using var reader = cmd.ExecuteReader();
+			while (reader.Read())
+				ids.Add(reader.GetString(0));
+		}
+		catch (SqliteException)
+		{
+			// A degenerate query is rejected by FTS5 — treat it as "no matches", never throw.
+		}
 		return ids;
+	}
+
+	/// <summary>
+	/// Per-session match counts for a query — strict (exact phrase) and loose (all words anywhere) —
+	/// unranked and uncapped. Used to order the tree by relevance.
+	/// </summary>
+	public Task<IReadOnlyList<SessionSearchScoreModel>> SearchSessionScoresAsync(
+		string query, string? projectSlug = null, CancellationToken cancellationToken = default) =>
+		Task.Run(() => SearchSessionScoresCore(query, projectSlug), cancellationToken);
+
+	private IReadOnlyList<SessionSearchScoreModel> SearchSessionScoresCore(string query, string? projectSlug)
+	{
+		var words = SplitQueryWords(query);
+		if (words.Count == 0)
+			return [];
+
+		using var conn = new SqliteConnection(ConnectionString);
+		conn.Open();
+
+		var loose = CountMatchesBySession(conn, BuildLooseQuery(words), projectSlug);
+		if (loose.Count == 0)
+			return [];
+
+		var strict = CountMatchesBySession(conn, BuildStrictQuery(words), projectSlug);
+		return loose
+			.Select(kv => new SessionSearchScoreModel
+			{
+				ExternalId       = kv.Key,
+				LooseMatchCount  = kv.Value,
+				StrictMatchCount = strict.TryGetValue(kv.Key, out var count) ? count : 0,
+			})
+			.ToList();
+	}
+
+	private static Dictionary<string, int> CountMatchesBySession(SqliteConnection conn, string ftsQuery, string? projectSlug)
+	{
+		var counts = new Dictionary<string, int>();
+		using var cmd = conn.CreateCommand();
+		cmd.CommandText = """
+			SELECT external_id, COUNT(*) FROM messages
+			WHERE messages MATCH @query
+			  AND (@projectSlug IS NULL OR project_slug = @projectSlug)
+			GROUP BY external_id;
+			""";
+		cmd.Parameters.AddWithValue("@query", ftsQuery);
+		cmd.Parameters.AddWithValue("@projectSlug", (object?)projectSlug ?? DBNull.Value);
+
+		try
+		{
+			using var reader = cmd.ExecuteReader();
+			while (reader.Read())
+				counts[reader.GetString(0)] = reader.GetInt32(1);
+		}
+		catch (SqliteException)
+		{
+			// A degenerate query is rejected by FTS5 — treat it as "no matches", never throw.
+		}
+		return counts;
 	}
 
 	private IReadOnlyList<SessionSearchResultModel> SearchCore(
 		string query, string? projectSlug, string? role, int? limit, int? offset)
 	{
-		if (string.IsNullOrWhiteSpace(query))
+		var words = SplitQueryWords(query);
+		if (words.Count == 0)
 			return [];
 
 		using var conn = new SqliteConnection(ConnectionString);
@@ -315,11 +433,11 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		// bm25 over an implicit AND-of-terms ranks a document where the terms merely co-occur
 		// anywhere the same as a genuine phrase hit, which is a major source of irrelevant results.
 		// Only fall back to the looser AND-of-terms match when the phrase finds nothing.
-		var phraseResults = RunSearchQuery(conn, BuildPhraseQuery(query), projectSlug, role, limit, offset);
+		var phraseResults = RunSearchQuery(conn, BuildStrictQuery(words), projectSlug, role, limit, offset);
 		if (phraseResults.Count > 0)
 			return phraseResults;
 
-		return RunSearchQuery(conn, EscapeFtsQuery(query), projectSlug, role, limit, offset);
+		return RunSearchQuery(conn, BuildLooseQuery(words), projectSlug, role, limit, offset);
 	}
 
 	private static List<SessionSearchResultModel> RunSearchQuery(
@@ -371,11 +489,24 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		return results;
 	}
 
-	/// <summary>Escapes double quotes so unbalanced quotes in free-typed queries don't break FTS5 syntax.</summary>
-	private static string EscapeFtsQuery(string query) => query.Replace("\"", "\"\"");
+	/// <summary>
+	/// Splits free-typed text into words and drops those with no letter or digit (they tokenize to
+	/// nothing). Words are never passed to FTS5 as syntax — see <see cref="QuoteFtsString"/>.
+	/// </summary>
+	private static List<string> SplitQueryWords(string query) =>
+		query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+			.Where(word => word.Any(char.IsLetterOrDigit))
+			.ToList();
 
-	/// <summary>Wraps the query as a single FTS5 phrase so adjacent-token matches rank first.</summary>
-	private static string BuildPhraseQuery(string query) => "\"" + EscapeFtsQuery(query) + "\"";
+	/// <summary>Implicit AND: every word as its own quoted FTS5 string.</summary>
+	private static string BuildLooseQuery(IReadOnlyList<string> words) =>
+		string.Join(' ', words.Select(QuoteFtsString));
+
+	/// <summary>Exact phrase: all words as ONE quoted FTS5 string.</summary>
+	private static string BuildStrictQuery(IReadOnlyList<string> words) =>
+		QuoteFtsString(string.Join(' ', words));
+
+	private static string QuoteFtsString(string text) => "\"" + text.Replace("\"", "\"\"") + "\"";
 
 	// ── Titles ────────────────────────────────────────────────────────────────────
 

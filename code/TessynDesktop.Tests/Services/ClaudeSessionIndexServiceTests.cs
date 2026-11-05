@@ -427,4 +427,107 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
         var summaries = await _service.GetSessionSummariesAsync(["never-indexed"]);
         Assert.Empty(summaries);
     }
+
+    // ── Safe query building (ISSUE.015) ───────────────────────────────────────────
+
+    [Theory]
+    [InlineData("vitaly@example.com")]
+    [InlineData("foo.bar")]
+    [InlineData("C:\\Projects")]
+    [InlineData("some-hyphenated-word")]
+    [InlineData("say \"hello")]
+    [InlineData("a AND OR NOT (b")]
+    public async Task Searches_WithPunctuationInQuery_NeverThrow(string query)
+    {
+        WriteSession("-Users-x-project-a", "session-1", ("user", "contact vitaly@example.com about foo.bar"));
+        await _service.ReindexAsync();
+
+        await _service.SearchAsync(query);
+        await _service.SearchMatchingSessionIdsAsync(query);
+        await _service.SearchSessionScoresAsync(query);
+    }
+
+    [Fact]
+    public async Task Searches_WithEmailQuery_FindSessionContainingEmail()
+    {
+        WriteSession("-Users-x-project-a", "session-1", ("user", "contact vitaly@example.com please"));
+        WriteSession("-Users-x-project-a", "session-2", ("user", "nothing relevant"));
+        await _service.ReindexAsync();
+
+        var results = await _service.SearchAsync("vitaly@example.com");
+        var ids = await _service.SearchMatchingSessionIdsAsync("vitaly@example.com");
+        var scores = await _service.SearchSessionScoresAsync("vitaly@example.com");
+
+        Assert.Equal("session-1", Assert.Single(results).ExternalId);
+        Assert.Equal(["session-1"], ids);
+        Assert.Equal("session-1", Assert.Single(scores).ExternalId);
+    }
+
+    [Fact]
+    public async Task Searches_WithPunctuationOnlyQuery_ReturnEmpty()
+    {
+        WriteSession("-Users-x-project-a", "session-1", ("user", "some text here"));
+        await _service.ReindexAsync();
+
+        Assert.Empty(await _service.SearchAsync("-- ."));
+        Assert.Empty(await _service.SearchMatchingSessionIdsAsync("-- ."));
+        Assert.Empty(await _service.SearchSessionScoresAsync("-- ."));
+    }
+
+    // ── Session scores ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SearchSessionScoresAsync_DistinguishesPhraseFromWordsApart()
+    {
+        WriteSession("-Users-x-project-a", "phrase", ("user", "open visual studio now"), ("assistant", "visual studio opened"), ("user", "unrelated"));
+        WriteSession("-Users-x-project-a", "apart", ("user", "studio was visual earlier"));
+        WriteSession("-Users-x-project-a", "none", ("user", "only visual here"));
+        await _service.ReindexAsync();
+
+        var scores = (await _service.SearchSessionScoresAsync("visual studio")).ToDictionary(s => s.ExternalId);
+
+        Assert.Equal(2, scores.Count);
+        Assert.Equal(2, scores["phrase"].StrictMatchCount);
+        Assert.Equal(2, scores["phrase"].LooseMatchCount);
+        Assert.Equal(0, scores["apart"].StrictMatchCount);
+        Assert.Equal(1, scores["apart"].LooseMatchCount);
+    }
+
+    [Fact]
+    public async Task SearchSessionScoresAsync_ScopesToProjectSlug()
+    {
+        WriteSession("-Users-x-project-a", "session-1", ("user", "shared keyword"));
+        WriteSession("-Users-x-project-b", "session-2", ("user", "shared keyword"));
+        await _service.ReindexAsync();
+
+        var scores = await _service.SearchSessionScoresAsync("shared keyword", "-Users-x-project-b");
+
+        Assert.Equal("session-2", Assert.Single(scores).ExternalId);
+    }
+
+    // ── IndexSessionAsync ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task IndexSessionAsync_PicksUpAppendedMessage_ThenReportsUnchanged()
+    {
+        const string workingDirectory = "/Users/x/project-a";
+        var slug = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
+        var path = WriteSession(slug, "session-1", ("user", "original text"));
+        await _service.ReindexAsync();
+        Assert.Empty(await _service.SearchMatchingSessionIdsAsync("freshly"));
+
+        var line = "{\"type\":\"user\",\"timestamp\":\"2026-01-01T00:05:00Z\",\"message\":{\"role\":\"user\",\"content\":\"freshly appended\"}}";
+        File.AppendAllLines(path, [line]);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(5));
+
+        Assert.True(await _service.IndexSessionAsync("session-1", workingDirectory));
+        Assert.Contains("session-1", await _service.SearchMatchingSessionIdsAsync("freshly"));
+        Assert.False(await _service.IndexSessionAsync("session-1", workingDirectory));
+    }
+
+    [Fact]
+    public async Task IndexSessionAsync_ReturnsFalse_ForUnknownSession()
+    {
+        Assert.False(await _service.IndexSessionAsync("no-such-session", "/Users/x/project-a"));
+    }
 }

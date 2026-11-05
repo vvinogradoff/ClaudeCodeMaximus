@@ -187,6 +187,12 @@ public interface IDaemonClient
 	/// <summary>Distinct external IDs with at least one matching message — unranked and uncapped, for content-filtering the tree. Optionally scoped to a single project slug.</summary>
 	Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default);
 
+	/// <summary>Per-session strict (exact phrase) and loose (all words) matching-message counts, unranked and uncapped. Optionally scoped to a single project slug.</summary>
+	Task<IReadOnlyList<SessionSearchScoreModel>> SearchSessionScoresAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default);
+
+	/// <summary>Re-indexes one session from its JSONL file if it changed since last indexed; false when not found or unchanged.</summary>
+	Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default);
+
 	/// <summary>Returns a title per summary — cached if already generated, otherwise generates and persists it.</summary>
 	Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
 		IReadOnlyList<ClaudeSessionSummaryModel> summaries,

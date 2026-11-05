@@ -446,6 +446,14 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 		throw new NotSupportedException(
 			"SearchMatchingSessionIdsAsync is not available over the TDCP wire yet; see tdcp-spec.md §5.");
 
+	public Task<IReadOnlyList<SessionSearchScoreModel>> SearchSessionScoresAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default) =>
+		throw new NotSupportedException(
+			"SearchSessionScoresAsync is not available over the TDCP wire yet; see tdcp-spec.md §5.");
+
+	public Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default) =>
+		throw new NotSupportedException(
+			"IndexSessionAsync is not available over the TDCP wire yet; see tdcp-spec.md §5.");
+
 	public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
 		IReadOnlyList<ClaudeSessionSummaryModel> summaries,
 		Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null,

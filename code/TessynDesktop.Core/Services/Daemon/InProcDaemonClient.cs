@@ -231,6 +231,12 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 	public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default)
 		=> _indexService.SearchMatchingSessionIdsAsync(query, projectSlug, cancellationToken);
 
+	public Task<IReadOnlyList<SessionSearchScoreModel>> SearchSessionScoresAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default)
+		=> _indexService.SearchSessionScoresAsync(query, projectSlug, cancellationToken);
+
+	public Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default)
+		=> _indexService.IndexSessionAsync(externalId, workingDirectory, cancellationToken);
+
 	public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(
 		IReadOnlyList<ClaudeSessionSummaryModel> summaries,
 		Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null,

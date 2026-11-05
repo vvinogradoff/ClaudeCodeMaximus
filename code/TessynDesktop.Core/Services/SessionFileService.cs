@@ -83,8 +83,15 @@ public sealed class SessionFileService : ISessionFileService
 		if (!File.Exists(fullPath))
 			return [];
 
-		var lines = File.ReadAllLines(fullPath, Encoding.UTF8);
-		return ParseEntries(lines);
+		// A running session holds its file open for writing; FileShare.ReadWrite lets us read alongside it.
+		var lines = new List<string>();
+		using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+		using (var reader = new StreamReader(stream, Encoding.UTF8))
+		{
+			while (reader.ReadLine() is { } line)
+				lines.Add(line);
+		}
+		return ParseEntries(lines.ToArray());
 	}
 
 	public bool SessionFileExists(string fileName)

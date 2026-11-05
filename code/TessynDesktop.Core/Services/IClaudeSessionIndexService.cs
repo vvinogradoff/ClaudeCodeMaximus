@@ -49,6 +49,20 @@ public interface IClaudeSessionIndexService
 		string query, string? projectSlug = null, CancellationToken cancellationToken = default);
 
 	/// <summary>
+	/// Per-session match counts: <see cref="SessionSearchScoreModel.StrictMatchCount"/> (messages containing the
+	/// query as an exact phrase) and <see cref="SessionSearchScoreModel.LooseMatchCount"/> (messages containing
+	/// all query words anywhere). One entry per session with a loose match; unranked and uncapped.
+	/// </summary>
+	Task<IReadOnlyList<SessionSearchScoreModel>> SearchSessionScoresAsync(
+		string query, string? projectSlug = null, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Re-indexes one session from its JSONL file when it changed since last indexed. Returns false when
+	/// the file is not found or unchanged.
+	/// </summary>
+	Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default);
+
+	/// <summary>
 	/// Returns a title for each summary — from the persisted cache when one already exists,
 	/// otherwise generates it (via <see cref="IClaudeAssistService"/>) and persists it. Never
 	/// regenerates an already-cached title. Keyed by <see cref="ClaudeSessionSummaryModel.SessionId"/>.

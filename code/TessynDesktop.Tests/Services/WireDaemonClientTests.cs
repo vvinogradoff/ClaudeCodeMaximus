@@ -217,6 +217,8 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public Task<int> ReindexSessionsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement ReindexSessionsAsync.");
     public Task<IReadOnlyList<SessionSearchResultModel>> SearchSessionsAsync(string query, string? projectSlug = null, string? role = null, int? limit = null, int? offset = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement SearchSessionsAsync.");
     public Task<IReadOnlySet<string>> SearchMatchingSessionIdsAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement SearchMatchingSessionIdsAsync.");
+    public Task<IReadOnlyList<SessionSearchScoreModel>> SearchSessionScoresAsync(string query, string? projectSlug = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement SearchSessionScoresAsync.");
+    public Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement IndexSessionAsync.");
     public Task<IReadOnlyDictionary<string, string>> EnsureTitlesAsync(IReadOnlyList<ClaudeSessionSummaryModel> summaries, Action<IReadOnlyDictionary<string, string>>? onBatchComplete = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement EnsureTitlesAsync.");
     public Task<IReadOnlyList<ClaudeSessionSummaryModel>> GetSessionSummariesAsync(IReadOnlyList<string> externalIds, CancellationToken cancellationToken = default) => throw new NotSupportedException("Fake does not implement GetSessionSummariesAsync.");
 }
@@ -824,6 +826,18 @@ public sealed class WireDaemonClientTests : IDisposable
     public async Task SearchMatchingSessionIdsAsync_ThrowsNotSupportedException()
     {
         await Assert.ThrowsAsync<NotSupportedException>(() => _client.SearchMatchingSessionIdsAsync("query"));
+    }
+
+    [Fact]
+    public async Task SearchSessionScoresAsync_ThrowsNotSupportedException()
+    {
+        await Assert.ThrowsAsync<NotSupportedException>(() => _client.SearchSessionScoresAsync("query"));
+    }
+
+    [Fact]
+    public async Task IndexSessionAsync_ThrowsNotSupportedException()
+    {
+        await Assert.ThrowsAsync<NotSupportedException>(() => _client.IndexSessionAsync("ext-1", "/Users/x/project-a"));
     }
 
     [Fact]
