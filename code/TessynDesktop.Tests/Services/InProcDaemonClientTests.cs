@@ -84,7 +84,9 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
 
     public SessionNodeModel? FindModelByNodeId(string nodeId) => FindByNodeIdResult;
     public SessionNodeModel? FindModelByAgentToken(string token) => FindByAgentTokenResult;
-    public SessionNodeModel? FindModelByFileName(string fileName) => FindByFileNameResult;
+    public Dictionary<string, SessionNodeModel> ModelsByFileName { get; } = new();
+    public SessionNodeModel? FindModelByFileName(string fileName) =>
+        ModelsByFileName.TryGetValue(fileName, out var model) ? model : FindByFileNameResult;
     public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session) => LocationResult;
     public bool IsSessionRunning(string nodeId) => IsRunningResult;
     public void SetSessionRunning(string nodeId, bool isRunning) { SetRunningNodeId = nodeId; SetRunningValue = isRunning; }
@@ -268,6 +270,12 @@ internal sealed class InProcFakeFileService : ISessionFileService
 internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
 {
     public int ReindexResult { get; set; }
+    public Exception? IndexSessionException { get; set; }
+    public List<(string ExternalId, string WorkingDirectory)> IndexSessionCalls { get; } = new();
+
+    public event EventHandler<SessionIndexedEventArgs>? SessionIndexed;
+    public void RaiseSessionIndexed(string? externalId) =>
+        SessionIndexed?.Invoke(this, new SessionIndexedEventArgs { ExternalId = externalId });
     public IReadOnlyList<SessionSearchResultModel> SearchResult { get; set; } = Array.Empty<SessionSearchResultModel>();
     public IReadOnlySet<string> MatchingSessionIdsResult { get; set; } = new HashSet<string>();
     public IReadOnlyDictionary<string, string> EnsureTitlesResult { get; set; } = new Dictionary<string, string>();
@@ -321,6 +329,10 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
     {
         LastIndexSessionExternalId = externalId;
         LastIndexSessionWorkingDirectory = workingDirectory;
+        lock (IndexSessionCalls)
+            IndexSessionCalls.Add((externalId, workingDirectory));
+        if (IndexSessionException != null)
+            throw IndexSessionException;
         return Task.FromResult(IndexSessionResult);
     }
 
@@ -698,6 +710,18 @@ public sealed class InProcDaemonClientTests
         Assert.NotNull(received);
         Assert.Equal("f.txt", received!.FileName);
         Assert.Equal("hi", received.Entry.Content);
+    }
+
+    [Fact]
+    public void SessionIndexed_FiresWhenIndexServiceRaisesEvent()
+    {
+        SessionIndexedEventArgs? received = null;
+        _client.SessionIndexed += (_, e) => received = e;
+
+        _indexService.RaiseSessionIndexed("session-1");
+
+        Assert.NotNull(received);
+        Assert.Equal("session-1", received!.ExternalId);
     }
 
     [Fact]

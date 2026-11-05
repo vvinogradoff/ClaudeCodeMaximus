@@ -38,6 +38,9 @@ public interface IDaemonClient
 	/// <summary>Raised once per finished turn, after its last entry was appended (FR.21.22) — relayed from ISessionFileService.TurnCompleted so the Telegram bridge can post a turn's final answer.</summary>
 	event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 
+	/// <summary>Raised after the search index (re)indexed a session (ExternalId set) or a bulk reindex changed sessions (ExternalId null) — relayed from IClaudeSessionIndexService. May fire on any thread.</summary>
+	event EventHandler<SessionIndexedEventArgs>? SessionIndexed;
+
 	/// <summary>Raised once after a session's Attention Ledger changed (FR.23.16) — relayed from IAttentionService. May fire on any thread.</summary>
 	event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 

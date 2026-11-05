@@ -17,6 +17,12 @@ namespace TessynDesktop.Services;
 public interface IClaudeSessionIndexService
 {
 	/// <summary>
+	/// Raised after <see cref="IndexSessionAsync"/> re-indexed a session (<see cref="SessionIndexedEventArgs.ExternalId"/> set)
+	/// and after <see cref="ReindexAsync"/> (re)indexed at least one session (ExternalId null). Raised outside the write gate; may fire on any thread.
+	/// </summary>
+	event EventHandler<SessionIndexedEventArgs>? SessionIndexed;
+
+	/// <summary>
 	/// Scans all Claude CLI project directories and (re)indexes any session whose JSONL file is
 	/// new or has changed since the last index (tracked by file mtime). Returns the number of
 	/// sessions (re)indexed.

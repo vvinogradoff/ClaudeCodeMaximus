@@ -47,6 +47,7 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 		_scheduler.ScheduleChanged += (s, e) => ScheduleChanged?.Invoke(this, e);
 		_fileService.EntryAppended += (s, e) => EntryAppended?.Invoke(this, e);
 		_fileService.TurnCompleted += (s, e) => TurnCompleted?.Invoke(this, e);
+		_indexService.SessionIndexed += (s, e) => SessionIndexed?.Invoke(this, e);
 		_attention.AttentionChanged += OnAttentionChanged;
 		_tags.SessionTagsChanged += OnSessionTagsChanged;
 	}
@@ -68,6 +69,7 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 	public event EventHandler? ScheduleChanged;
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+	public event EventHandler<SessionIndexedEventArgs>? SessionIndexed;
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 	public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged;
 

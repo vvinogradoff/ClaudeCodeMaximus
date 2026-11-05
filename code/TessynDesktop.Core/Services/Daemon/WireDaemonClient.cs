@@ -97,6 +97,13 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 #pragma warning restore CS0067
 
 	/// <summary>
+	/// Not wired over TDCP — only <see cref="InProcDaemonClient"/> relays it today, and subscribing here is a silent no-op.
+	/// </summary>
+#pragma warning disable CS0067 // Never raised until a TDCP push for index updates exists — see doc comment.
+	public event EventHandler<SessionIndexedEventArgs>? SessionIndexed;
+#pragma warning restore CS0067
+
+	/// <summary>
 	/// Not wired over TDCP — the Attention Ledger has no TDCP methods yet (FR.23, out of scope); only
 	/// <see cref="InProcDaemonClient"/> relays it, and subscribing here is a silent no-op.
 	/// </summary>

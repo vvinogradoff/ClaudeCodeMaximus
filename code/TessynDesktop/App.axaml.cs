@@ -72,6 +72,7 @@ public partial class App : Application
 			desktop.Exit += (_, _) =>
 			{
 				selfUpdate.CheckAndTriggerUpdate();
+				Services.GetRequiredService<ISessionIndexUpdater>().Stop();
 				if (appSettings.Settings.AgentToolsEnabled)
 				{
 					Services.GetRequiredService<IAgentMcpServer>().Stop();
@@ -83,6 +84,7 @@ public partial class App : Application
 
 			// Build/refresh the cross-project session search index in the background (Stage 6).
 			_ = Task.Run(() => Services.GetRequiredService<IDaemonClient>().ReindexSessionsAsync());
+			Services.GetRequiredService<ISessionIndexUpdater>().Start();
 		}
 
 		base.OnFrameworkInitializationCompleted();
@@ -139,6 +141,7 @@ public partial class App : Application
 		services.AddSingleton<IClaudeModelService, ClaudeModelService>();
 		services.AddSingleton<IClaudeUsageService, ClaudeUsageService>();
 		services.AddSingleton<IClaudeSessionIndexService, ClaudeSessionIndexService>();
+		services.AddSingleton<ISessionIndexUpdater, SessionIndexUpdater>();
 		services.AddSingleton<ISessionRegistry, SessionRegistry>();
 		services.AddSingleton<SessionTreeViewModel>();
 

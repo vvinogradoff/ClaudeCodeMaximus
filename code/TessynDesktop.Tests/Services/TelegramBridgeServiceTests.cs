@@ -141,6 +141,7 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	public event EventHandler? ScheduleChanged { add { } remove { } }
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
+	public event EventHandler<SessionIndexedEventArgs>? SessionIndexed { add { } remove { } }
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged { add { } remove { } }
 	public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged { add { } remove { } }
 

@@ -526,6 +526,43 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task IndexSessionAsync_RaisesSessionIndexed_OnlyWhenReindexed()
+    {
+        const string workingDirectory = "/Users/x/project-a";
+        var slug = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
+        var path = WriteSession(slug, "session-1", ("user", "original text"));
+        await _service.ReindexAsync();
+        var raised = new List<SessionIndexedEventArgs>();
+        _service.SessionIndexed += (_, e) => raised.Add(e);
+
+        Assert.False(await _service.IndexSessionAsync("session-1", workingDirectory));
+        Assert.Empty(raised);
+
+        File.AppendAllLines(path, ["{\"type\":\"user\",\"timestamp\":\"2026-01-01T00:05:00Z\",\"message\":{\"role\":\"user\",\"content\":\"more\"}}"]);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(5));
+        Assert.True(await _service.IndexSessionAsync("session-1", workingDirectory));
+
+        Assert.Equal("session-1", Assert.Single(raised).ExternalId);
+    }
+
+    [Fact]
+    public async Task ReindexAsync_RaisesSessionIndexedWithNullExternalId_OnlyWhenSomethingIndexed()
+    {
+        var raised = new List<SessionIndexedEventArgs>();
+        _service.SessionIndexed += (_, e) => raised.Add(e);
+
+        await _service.ReindexAsync();
+        Assert.Empty(raised);
+
+        WriteSession("-Users-x-project-a", "session-1", ("user", "hello"));
+        await _service.ReindexAsync();
+        Assert.Null(Assert.Single(raised).ExternalId);
+
+        await _service.ReindexAsync();
+        Assert.Single(raised);
+    }
+
+    [Fact]
     public async Task IndexSessionAsync_ReturnsFalse_ForUnknownSession()
     {
         Assert.False(await _service.IndexSessionAsync("no-such-session", "/Users/x/project-a"));

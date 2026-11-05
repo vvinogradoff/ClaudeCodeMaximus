@@ -63,6 +63,7 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public event EventHandler?                       ScheduleChanged;
     public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
     public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
+    public event EventHandler<SessionIndexedEventArgs>? SessionIndexed { add { } remove { } }
     public event EventHandler<AttentionChangedEventArgs>? AttentionChanged { add { } remove { } }
     public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged { add { } remove { } }
 

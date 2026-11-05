@@ -837,6 +837,9 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string ProjectsFolderName = "projects";
 		public const string SessionFileExtension = ".jsonl";
 		public const int StatusCheckIntervalSeconds = 60;
+
+		/// <summary>Quiet period after a session's last completed turn before it is re-indexed for search (FR.1.13).</summary>
+		public const int LiveIndexDebounceSeconds = 2;
 		public const int FirstPromptMaxLength = 500;
 		public const int PromptSamplesCount = 3;
 

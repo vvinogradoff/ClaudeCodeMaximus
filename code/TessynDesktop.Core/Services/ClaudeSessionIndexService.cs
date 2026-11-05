@@ -121,14 +121,21 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 	// ── Reindex ───────────────────────────────────────────────────────────────────
 
+	public event EventHandler<SessionIndexedEventArgs>? SessionIndexed;
+
 	public Task<int> ReindexAsync(CancellationToken cancellationToken = default) =>
 		Task.Run(() => ReindexCore(cancellationToken), cancellationToken);
 
 	private int ReindexCore(CancellationToken cancellationToken)
 	{
+		int indexed;
 		_writeGate.Wait(cancellationToken);
-		try { return ReindexLocked(cancellationToken); }
+		try { indexed = ReindexLocked(cancellationToken); }
 		finally { _writeGate.Release(); }
+
+		if (indexed > 0)
+			SessionIndexed?.Invoke(this, new SessionIndexedEventArgs());
+		return indexed;
 	}
 
 	private int ReindexLocked(CancellationToken cancellationToken)
@@ -193,6 +200,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		try { mtimeTicks = File.GetLastWriteTimeUtc(jsonlPath).Ticks; }
 		catch (IOException) { return false; }
 
+		bool indexed;
 		_writeGate.Wait(cancellationToken);
 		try
 		{
@@ -201,9 +209,13 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			if (GetStoredMtime(conn, externalId) == mtimeTicks)
 				return false;
 
-			return IndexSession(conn, externalId, slug, jsonlPath, mtimeTicks);
+			indexed = IndexSession(conn, externalId, slug, jsonlPath, mtimeTicks);
 		}
 		finally { _writeGate.Release(); }
+
+		if (indexed)
+			SessionIndexed?.Invoke(this, new SessionIndexedEventArgs { ExternalId = externalId });
+		return indexed;
 	}
 
 	private string? FindSessionJsonl(string slug, string externalId)
