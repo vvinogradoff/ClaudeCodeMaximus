@@ -831,6 +831,14 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const int TopicRenameSaveBatchSize = 20;
 	}
 
+	public static class TreeSearch
+	{
+		/// <summary>Queries starting with this prefix switch Exact Search on automatically (FR.1.14).</summary>
+		public const string AutoExactPrefix = "https://";
+		/// <summary>Queries shorter than this many characters switch Exact Search on automatically (FR.1.14).</summary>
+		public const int AutoExactBelowLength = 8;
+	}
+
 	public static class ClaudeSessions
 	{
 		public const string ClaudeHomeFolderName = ".claude";

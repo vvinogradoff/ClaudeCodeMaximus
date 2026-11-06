@@ -31,6 +31,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private ViewModelBase? _selectedTreeItem;
 	private CancellationTokenSource? _searchCts;
 	private bool _isScopedToProject = true;
+	private bool _manualExactSearch;
+	private string? _autoExactSuppressedFor;
+	private string _exactEvaluatedFor = string.Empty;
 	private bool _isProjectScopeEnabled;
 	private bool _isSearching;
 	private bool _isSearchViewApplied;
@@ -86,6 +89,27 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		set
 		{
 			this.RaiseAndSetIfChanged(ref _isScopedToProject, value);
+			ApplySearchFilterIfActive();
+		}
+	}
+
+	/// <summary>
+	/// When true, only sessions containing the query as an exact phrase match (FR.1.14). Switched on
+	/// automatically for links and short queries (see <see cref="IsAutoExactQuery"/>) when the search runs;
+	/// unchecking it then holds until the search text changes. A manual choice for other queries persists.
+	/// </summary>
+	public bool IsExactSearch
+	{
+		get => IsAutoExactQuery(_exactEvaluatedFor)
+			? !string.Equals(_autoExactSuppressedFor, _exactEvaluatedFor, StringComparison.Ordinal)
+			: _manualExactSearch;
+		set
+		{
+			if (IsAutoExactQuery(_exactEvaluatedFor))
+				_autoExactSuppressedFor = value ? null : _exactEvaluatedFor;
+			else
+				_manualExactSearch = value;
+			this.RaisePropertyChanged();
 			ApplySearchFilterIfActive();
 		}
 	}
@@ -1056,6 +1080,21 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	// --- Search ---
 
+	private static bool IsAutoExactQuery(string query) =>
+		query.Length > 0
+		&& (query.Length < Constants.TreeSearch.AutoExactBelowLength
+			|| query.StartsWith(Constants.TreeSearch.AutoExactPrefix, StringComparison.OrdinalIgnoreCase));
+
+	/// <summary>On a changed query, drops any "unchecked for this text" override so the auto rule applies afresh.</summary>
+	private void EvaluateAutoExact(string query)
+	{
+		if (string.Equals(query, _exactEvaluatedFor, StringComparison.Ordinal))
+			return;
+		_exactEvaluatedFor = query;
+		_autoExactSuppressedFor = null;
+		this.RaisePropertyChanged(nameof(IsExactSearch));
+	}
+
 	private void ApplySearchFilterIfActive()
 	{
 		if (!string.IsNullOrWhiteSpace(SearchText))
@@ -1090,12 +1129,15 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		{
 			_searchCts = null;
 			IsSearching = false;
+			EvaluateAutoExact(query);
 			ShowAllNodes();
 			EndSearchView();
 			return;
 		}
 
 		BeginSearchView();
+		EvaluateAutoExact(query);
+		var exact = IsExactSearch;
 
 		var projectSlug = IsScopedToProject && SelectedSession != null
 			? Constants.ClaudeSessions.BuildProjectSlug(SelectedSession.Model.WorkingDirectory)
@@ -1105,7 +1147,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		_searchCts = cts;
 		IsSearching = true;
 
-		_ = Task.Run(() => RunSearchAsync(query, projectSlug, cts), cts.Token);
+		_ = Task.Run(() => RunSearchAsync(query, projectSlug, exact, cts), cts.Token);
 	}
 
 	/// <summary>
@@ -1113,12 +1155,12 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// thread. Never throws: every outcome other than cancellation ends in <see cref="FinishSearch"/>, so
 	/// the busy indicator cannot get stuck (ISSUE.015).
 	/// </summary>
-	private async Task RunSearchAsync(string query, string? projectSlug, CancellationTokenSource cts)
+	private async Task RunSearchAsync(string query, string? projectSlug, bool exact, CancellationTokenSource cts)
 	{
 		Func<SessionNodeViewModel, SessionSearchScoreModel?>? scoreOf;
 		try
 		{
-			scoreOf = await QueryIndexAsync(query, projectSlug, cts.Token);
+			scoreOf = await QueryIndexAsync(query, projectSlug, exact, cts.Token);
 		}
 		catch (OperationCanceledException)
 		{
@@ -1136,14 +1178,14 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	}
 
 	private async Task<Func<SessionNodeViewModel, SessionSearchScoreModel?>> QueryIndexAsync(
-		string query, string? projectSlug, CancellationToken ct)
+		string query, string? projectSlug, bool exact, CancellationToken ct)
 	{
 		// Unranked, uncapped membership test with per-session match counts — not SearchSessionsAsync's
 		// ranked top-N, which would silently drop genuine matches in this tree whenever other projects on
 		// the machine happen to score higher on the same terms (see ISSUE.007).
 		var scores = await _daemon.SearchSessionScoresAsync(query, projectSlug, ct);
 		var byExternalId = new Dictionary<string, SessionSearchScoreModel>(scores.Count);
-		foreach (var score in scores)
+		foreach (var score in scores.Where(score => !exact || score.StrictMatchCount > 0))
 			byExternalId[score.ExternalId] = score;
 
 		return session =>

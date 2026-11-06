@@ -76,6 +76,7 @@
 - [DONE] Package A (Core): safe FTS5 query building; `SearchSessionScoresAsync`; `IndexSessionAsync` + serialized index writes; fallback matches message bodies only, `FileShare.ReadWrite`, skips unreadable files; tests
 - [DONE] Package B (Core): `SessionIndexUpdater` — `TurnCompleted` → debounced single-session reindex; `SessionIndexed` event; tests
 - [DONE] Package C (UI): relevance ordering (view-only, restore on clear); sub-session matching; move/drag disabled while searching; `IsSearching` always reset; re-run search on `SessionIndexed`
+- [DONE] Exact Search toggle (FR.1.14): `IsExactSearch` hides loose-only matches; auto-on for `https://` and queries under 8 chars (`Constants.TreeSearch`); unchecking holds until the text changes
 - [ ] Manual UI pass of the ISSUE.015 checklist after the next app restart (email/path queries, ordering, restore on clear, sub-session match, moves blocked, spinner clears, live refresh)
 ---
 

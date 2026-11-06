@@ -84,6 +84,8 @@ Different directories may therefore share a label (e.g. `HardStop` and `HardStop
 
 **FR.1.13 — Live indexing:** Sessions become searchable as they post output, without an app restart. After each completed turn (`TurnCompleted`), that session's Claude CLI JSONL log is re-indexed (debounced ~2s per session, so a burst of turns indexes once). If a search is active when a session is re-indexed, the search re-runs so the tree reflects the new content.
 
+**FR.1.14 — Exact search toggle:** A toggle next to the search box limits results to sessions containing the query as an exact phrase (strict match, FR.1.12); loose-only matches are hidden. It switches on automatically when a search runs for a query that starts with `https://` or is shorter than 8 characters. Unchecking it for such a query holds until the search text changes; the automatic rule then applies to the new text. For other queries the toggle keeps whatever the user last chose. In a single-word query strict and loose match the same sessions, because the index matches whole words, so the toggle only changes results for multi-word queries and links.
+
 ---
 
 ### FR.2 — Session View (Right Panel)
