@@ -30,6 +30,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly ISessionSearchService _searchService;
 	private readonly IGitOriginService _gitOriginService;
 	private readonly IDraftService _draftService;
+	private readonly IOperationTimer _timer;
 	private int _resumabilitySweepInFlight;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
@@ -170,8 +171,10 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		IClaudeSessionStatusService claudeSessionStatus,
 		ISessionSearchService searchService,
 		IGitOriginService gitOriginService,
-		IDraftService draftService)
+		IDraftService draftService,
+		IOperationTimer? opTimer = null)
 	{
+		_timer = opTimer ?? new OperationTimer(new UiThreadTracker());
 		_daemon = daemon;
 		_appSettings = appSettings;
 		_labelService = labelService;
@@ -186,11 +189,16 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		// Registry backfills NodeId/AgentToken, then we project models → VMs.
 		_daemon.LoadFromSettings();
 		LoadFromSettings();
-		RefreshGitOrigins();
+		using (_timer.Measure(Constants.Diagnostics.Operation.RefreshGitOrigins, Constants.Diagnostics.WarnThresholds.UiLoadMs))
+			RefreshGitOrigins();
 		_ = RefreshSessionResumabilityAsync();
-		RefreshLastPromptTimes();
-		foreach (var dir in Directories)
-			ApplyAttentionSummaries(dir.Children);
+		using (_timer.Measure(Constants.Diagnostics.Operation.RefreshLastPromptTimes, Constants.Diagnostics.WarnThresholds.UiLoadMs))
+			RefreshLastPromptTimes();
+		using (_timer.Measure(Constants.Diagnostics.Operation.ApplyAttentionSummaries, Constants.Diagnostics.WarnThresholds.UiLoadMs))
+		{
+			foreach (var dir in Directories)
+				ApplyAttentionSummaries(dir.Children);
+		}
 
 		// Subscribe to registry changes so service-initiated mutations (orchestration spawn,
 		// IsRunning changes) are reflected in the VM tree without the VM touching the model directly.
@@ -1071,6 +1079,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			var changed = 0;
 			await Dispatcher.UIThread.InvokeAsync(() =>
 			{
+				using var applyScope = _timer.Measure(Constants.Diagnostics.Operation.ResumabilityApply, Constants.Diagnostics.WarnThresholds.UiOperationMs);
 				for (var i = 0; i < sessions.Count; i++)
 				{
 					if (sessions[i].IsResumable == results[i])
@@ -1276,6 +1285,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	private void ApplyScores(Func<SessionNodeViewModel, SessionSearchScoreModel?> scoreOf)
 	{
+		using var scope = _timer.Measure(Constants.Diagnostics.Operation.TreeSearchApply, Constants.Diagnostics.WarnThresholds.UiLoadMs);
 		var keys = new Dictionary<DirectoryNodeViewModel, SearchRelevanceKeyModel?>();
 		foreach (var dir in Directories)
 		{
@@ -1418,6 +1428,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		if (!_isSearchViewApplied)
 			return;
 
+		using var scope = _timer.Measure(Constants.Diagnostics.Operation.TreeSearchRestore, Constants.Diagnostics.WarnThresholds.UiLoadMs);
 		foreach (var restore in _orderRestorers.Values)
 			restore();
 		_orderRestorers.Clear();

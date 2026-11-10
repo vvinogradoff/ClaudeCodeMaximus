@@ -560,7 +560,30 @@ SESSION TRANSCRIPT TO COMPACT:
 			public const string TreeSearchApply = "tree-search-apply";
 			public const string TranscriptLoad = "transcript-load";
 			public const string StartupScans = "startup-scans";
+			public const string SessionSwitchUntilIdle = "session-switch-until-idle";
+			public const string RestoreLastUsedSettings = "restore-last-used-settings";
+			public const string RepairCompactions = "startup-repair-compactions";
+			public const string RefreshLastPromptTimes = "startup-refresh-last-prompt-times";
+			public const string ApplyAttentionSummaries = "startup-apply-attention-summaries";
+			public const string RefreshGitOrigins = "startup-refresh-git-origins";
+			public const string ResumabilityApply = "resumability-apply";
+			public const string TreeSearchRestore = "tree-search-restore";
+			public const string SwapMessageSource = "swap-message-source";
+			public const string FontSizeChange = "font-size-change";
 		}
+
+		/// <summary>Warn thresholds (ms) for <c>IOperationTimer.Measure</c> call sites.</summary>
+		public static class WarnThresholds
+		{
+			public const int UiOperationMs = 100;
+			public const int UiLoadMs = 150;
+			public const int InputHandlerMs = 50;
+			public const int SettingsSaveMs = 100;
+		}
+
+		public const string SlowSettingsSaveLogTemplate =
+			"SLOW-SAVE total {TotalMs}ms: lock-wait {LockWaitMs}ms, serialize {SerializeMs}ms, write {WriteMs}ms, {Bytes} bytes, thread {Thread}";
+		public const string SlowSessionSwitchIdleLogTemplate = "SLOW-UI {Op:l} {Ms}ms";
 
 		// ── MCP tools ──
 		public const string SnapshotToolName = "diag_snapshot";

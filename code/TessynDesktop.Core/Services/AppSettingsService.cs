@@ -1,7 +1,9 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Serilog;
 using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
@@ -26,17 +28,21 @@ public sealed class AppSettingsService : IAppSettingsService
 	/// </summary>
 	private readonly object _gate = new();
 
+	private readonly IUiThreadTracker? _uiThread;
+	private readonly ILogger _log = Log.ForContext<AppSettingsService>();
+
 	public object SyncRoot => _gate;
 
 	public AppSettingsModel Settings { get; private set; } = new();
 
-	public AppSettingsService() : this(GetDefaultAppDataDir())
+	public AppSettingsService(IUiThreadTracker? uiThread = null) : this(GetDefaultAppDataDir(), uiThread)
 	{
 	}
 
 	/// <summary>Constructor for testing — allows injecting a custom base directory.</summary>
-	public AppSettingsService(string baseDirectory)
+	public AppSettingsService(string baseDirectory, IUiThreadTracker? uiThread = null)
 	{
+		_uiThread = uiThread;
 		Directory.CreateDirectory(baseDirectory);
 		_settingsFilePath = Path.Combine(baseDirectory, Constants.SettingsFileName);
 
@@ -68,12 +74,27 @@ public sealed class AppSettingsService : IAppSettingsService
 
 	public void Save()
 	{
+		var waitStart = Stopwatch.GetTimestamp();
 		lock (_gate)
 		{
+			var lockWait = Stopwatch.GetElapsedTime(waitStart);
+
+			var serializeStart = Stopwatch.GetTimestamp();
 			var json = JsonSerializer.Serialize(Settings, SerializerOptions);
+			var serialize = Stopwatch.GetElapsedTime(serializeStart);
+
+			var writeStart = Stopwatch.GetTimestamp();
 			var tempPath = _settingsFilePath + ".tmp";
 			File.WriteAllText(tempPath, json);
 			File.Move(tempPath, _settingsFilePath, overwrite: true);
+			var write = Stopwatch.GetElapsedTime(writeStart);
+
+			var total = lockWait + serialize + write;
+			if (total.TotalMilliseconds >= Constants.Diagnostics.WarnThresholds.SettingsSaveMs)
+				_log.Warning(Constants.Diagnostics.SlowSettingsSaveLogTemplate,
+					(long)total.TotalMilliseconds, (long)lockWait.TotalMilliseconds,
+					(long)serialize.TotalMilliseconds, (long)write.TotalMilliseconds,
+					json.Length, _uiThread?.IsUiThread() == true ? "UI" : "background");
 		}
 	}
 

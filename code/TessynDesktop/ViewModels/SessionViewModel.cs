@@ -395,6 +395,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// <summary>Raised when the user clicks the schedule button, requesting a cancel confirmation dialog from the View.</summary>
 	public event Action? CancelScheduleRequested;
 
+	private readonly IOperationTimer _timer;
+
 	public SessionViewModel(
 		SessionNodeViewModel node,
 		ISessionFileService fileService,
@@ -411,8 +413,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
 		ISessionSoundService soundService,
-		IUiDispatcher uiDispatcher)
+		IUiDispatcher uiDispatcher,
+		IOperationTimer? timer = null)
 	{
+		_timer        = timer ?? new OperationTimer(new UiThreadTracker());
 		_node         = node;
 		_fileService  = fileService;
 		_draftService = draftService;
@@ -429,7 +433,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// gate its file watchers. The lambda closes over this local, assigned once _turn exists.
 		TurnController? turn = null;
 		_content = new SessionContentViewModel(fileService, importService, node, () => turn?.IsBusy ?? false,
-			() => daemonClient.IsSessionRunning(node.Model.NodeId));
+			() => daemonClient.IsSessionRunning(node.Model.NodeId), _timer);
 		_models = new ModelSelectionController(modelService, appSettings, _directoryModel);
 		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
 		var composer = new SessionPromptComposer(fileService, appSettings, node, daemonClient);
@@ -577,6 +581,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	/// </summary>
 	public void RestoreLastUsedSettings()
 	{
+		using var scope = _timer.Measure(Constants.Diagnostics.Operation.RestoreLastUsedSettings, Constants.Diagnostics.WarnThresholds.UiOperationMs);
 		try
 		{
 			var entries = _fileService.ReadEntries(_node.FileName).ToList();

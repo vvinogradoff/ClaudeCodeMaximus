@@ -39,6 +39,7 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 	private Timer? _jsonlChangeDebounceTimer;
 	private Timer? _externalActivityTimeoutTimer;
 	private readonly JsonlEntryCounter _entryCounter;
+	private readonly IOperationTimer _timer;
 
 	/// <summary>
 	/// JSONL baseline for the write-back (ISSUE.009/014). Written on the UI thread (load, end of send)
@@ -87,8 +88,10 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 		IClaudeSessionImportService importService,
 		SessionNodeViewModel node,
 		Func<bool> isBusyProvider,
-		Func<bool> isHeadlessRunningProvider)
+		Func<bool> isHeadlessRunningProvider,
+		IOperationTimer? timer = null)
 	{
+		_timer           = timer ?? new OperationTimer(new UiThreadTracker());
 		_fileService     = fileService;
 		_importService   = importService;
 		_node            = node;
@@ -111,6 +114,8 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 
 	public void LoadMessagesFromFile()
 	{
+		// Synchronous slice only; the background baseline computation is started (not awaited) inside it.
+		using var scope = _timer.Measure(Constants.Diagnostics.Operation.TranscriptLoad, Constants.Diagnostics.WarnThresholds.UiLoadMs);
 		var entries = _fileService.ReadEntries(_node.FileName);
 		foreach (var entry in entries)
 		{
@@ -454,6 +459,7 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 	/// <summary>Switches the Messages collection between TessynDesktop .txt and Claude CLI JSONL sources.</summary>
 	private void SwapMessageSource(bool showClaude)
 	{
+		using var scope = _timer.Measure(Constants.Diagnostics.Operation.SwapMessageSource, Constants.Diagnostics.WarnThresholds.UiLoadMs);
 		if (showClaude)
 		{
 			// Snapshot current Tessyn messages so we can restore them

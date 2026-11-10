@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reactive;
@@ -34,6 +35,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly ISessionSoundService _soundService;
 	private readonly IUiDispatcher _uiDispatcher;
+	private readonly IOperationTimer _timer;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
@@ -236,8 +238,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
 		ISessionSoundService soundService,
-		IUiDispatcher uiDispatcher)
+		IUiDispatcher uiDispatcher,
+		IOperationTimer? timer = null)
 	{
+		_timer            = timer ?? new OperationTimer(new UiThreadTracker());
 		_appSettings      = appSettings;
 		_fileService      = fileService;
 		_processManager   = processManager;
@@ -275,7 +279,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 			Dispatcher.UIThread.Post(() => UpdateStatusBarUsage(_usageService.CachedUsage));
 
 		// Repair session files corrupted by the auto-compaction bug (one-time on startup)
-		var repaired = fileService.RepairCorruptedCompactions();
+		int repaired;
+		using (_timer.Measure(Constants.Diagnostics.Operation.RepairCompactions, Constants.Diagnostics.WarnThresholds.UiLoadMs))
+			repaired = fileService.RepairCorruptedCompactions();
 		if (repaired > 0)
 			Serilog.Log.Information("Repaired {Count} session file(s) with corrupted compaction format", repaired);
 
@@ -317,6 +323,22 @@ public sealed class MainWindowViewModel : ViewModelBase
 	}
 
 	private void OnSelectedSessionChanged(SessionNodeViewModel? node)
+	{
+		var switchStart = Stopwatch.GetTimestamp();
+		using (_timer.Measure(Constants.Diagnostics.Operation.SessionSwitch, Constants.Diagnostics.WarnThresholds.UiLoadMs))
+			OnSelectedSessionChangedCore(node);
+
+		// Click-to-layout-done proxy: runs once the dispatcher has drained everything queued by the switch
+		// (including the transcript visual-tree build).
+		Dispatcher.UIThread.Post(() =>
+		{
+			var elapsed = Stopwatch.GetElapsedTime(switchStart);
+			if (elapsed.TotalMilliseconds >= Constants.Diagnostics.WarnThresholds.UiLoadMs)
+				Serilog.Log.Information(Constants.Diagnostics.SlowSessionSwitchIdleLogTemplate, Constants.Diagnostics.Operation.SessionSwitchUntilIdle, (long)elapsed.TotalMilliseconds);
+		}, DispatcherPriority.Background);
+	}
+
+	private void OnSelectedSessionChangedCore(SessionNodeViewModel? node)
 	{
 		if (node == null)
 		{
