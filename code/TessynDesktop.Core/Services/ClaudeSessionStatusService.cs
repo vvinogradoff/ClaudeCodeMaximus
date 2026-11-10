@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using Serilog;
+using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
 
@@ -26,16 +28,69 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 
 		try
 		{
-			var sessionPath = Constants.ClaudeSessions.FindExistingJsonlPath(workingDirectory, claudeSessionId, projectsDirs);
-			_log.Debug("Resumability check: {SessionId} wd={WorkingDirectory} path={Path} exists={Exists}",
-				claudeSessionId, workingDirectory, sessionPath, sessionPath != null);
-			return sessionPath != null;
+			return Constants.ClaudeSessions.FindExistingJsonlPath(workingDirectory, claudeSessionId, projectsDirs) != null;
 		}
 		catch (Exception ex)
 		{
 			_log.Warning(ex, "Error checking session resumability for {SessionId}", claudeSessionId);
 			return false;
 		}
+	}
+
+	public IReadOnlyList<bool> AreSessionsResumable(IReadOnlyList<SessionResumabilityRequest> requests, IReadOnlyList<string>? projectsDirs = null)
+	{
+		var results = new bool[requests.Count];
+
+		// File.Exists is case-insensitive on Windows only; the name sets must compare the same way.
+		var comparer = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+			? StringComparer.OrdinalIgnoreCase
+			: StringComparer.Ordinal;
+
+		// Slugs that some request actually asks about, each with the file names found for it.
+		var namesBySlug = new Dictionary<string, HashSet<string>>(comparer);
+		foreach (var request in requests)
+		{
+			if (!string.IsNullOrEmpty(request.WorkingDirectory) && !string.IsNullOrEmpty(request.ClaudeSessionId))
+				namesBySlug.TryAdd(Constants.ClaudeSessions.BuildProjectSlug(request.WorkingDirectory), new HashSet<string>(comparer));
+		}
+
+		if (namesBySlug.Count == 0)
+			return results;
+
+		// One listing per projects dir: its slug directories, then only the wanted ones are listed for files.
+		foreach (var projectsDir in projectsDirs ?? GetAllProjectsDirs())
+		{
+			try
+			{
+				if (!Directory.Exists(projectsDir))
+					continue;
+
+				foreach (var slugDir in Directory.EnumerateDirectories(projectsDir))
+				{
+					if (!namesBySlug.TryGetValue(Path.GetFileName(slugDir), out var names))
+						continue;
+
+					foreach (var file in Directory.EnumerateFiles(slugDir))
+						names.Add(Path.GetFileName(file));
+				}
+			}
+			catch (Exception ex)
+			{
+				_log.Warning(ex, "Error listing Claude projects directory {ProjectsDir} for resumability", projectsDir);
+			}
+		}
+
+		for (var i = 0; i < requests.Count; i++)
+		{
+			var request = requests[i];
+			if (string.IsNullOrEmpty(request.WorkingDirectory) || string.IsNullOrEmpty(request.ClaudeSessionId))
+				continue;
+
+			var slug = Constants.ClaudeSessions.BuildProjectSlug(request.WorkingDirectory);
+			results[i] = namesBySlug[slug].Contains(request.ClaudeSessionId + Constants.ClaudeSessions.SessionFileExtension);
+		}
+
+		return results;
 	}
 
 	public bool TryAdoptSessionFromOtherProfile(string workingDirectory, string claudeSessionId, string? activeProfileConfigDir)

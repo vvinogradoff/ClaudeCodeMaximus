@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using TessynDesktop.Models;
 using TessynDesktop.Services;
@@ -37,7 +38,17 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 	private Timer? _fileChangeDebounceTimer;
 	private Timer? _jsonlChangeDebounceTimer;
 	private Timer? _externalActivityTimeoutTimer;
-	private int _lastKnownEntryCount;
+	private readonly JsonlEntryCounter _entryCounter;
+
+	/// <summary>
+	/// JSONL baseline for the write-back (ISSUE.009/014). Written on the UI thread (load, end of send)
+	/// and by <see cref="RefreshFromJsonl"/> on a timer thread, hence volatile.
+	/// </summary>
+	private volatile int _lastKnownEntryCount;
+
+	/// <summary>Bumped on the UI thread each time a baseline computation starts; a stale computation must not overwrite a newer baseline.</summary>
+	private int _baselineVersion;
+	private bool _disposed;
 
 	/// <summary>
 	/// Safety-net window for <see cref="SessionNodeViewModel.IsExternallyActive"/>: if the external
@@ -83,6 +94,7 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 		_node            = node;
 		_isBusyProvider  = isBusyProvider;
 		_isHeadlessRunningProvider = isHeadlessRunningProvider;
+		_entryCounter    = new JsonlEntryCounter(importService);
 	}
 
 	/// <summary>Appends a system-role message with the current timestamp.</summary>
@@ -109,47 +121,47 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 			Messages.Add(EntryToViewModel(entry));
 		}
 
-		// Initialize JSONL entry count for the watcher. Must reflect the JSONL's current
-		// state, not the .txt file's, because the JSONL typically has more entries (tool_use, etc.)
-		// and RefreshFromJsonl compares against this to find only truly new entries.
-		_lastKnownEntryCount = InitializeJsonlEntryCount();
+		// The .txt watcher needs no baseline. The JSONL watcher starts only once the JSONL baseline is
+		// known (computed off the UI thread): RefreshFromJsonl compares against it to find only truly
+		// new entries, so it must never run against an uninitialised baseline (ISSUE.009/014).
 		StartFileWatcher();
+		_ = InitializeBaselineAndStartJsonlWatcherAsync();
 	}
 
-	/// <summary>
-	/// Counts the current displayable entries in the JSONL file so the watcher
-	/// can detect only truly new entries. Falls back to Messages.Count if no JSONL exists.
-	/// </summary>
-	public int InitializeJsonlEntryCount()
+	private async Task InitializeBaselineAndStartJsonlWatcherAsync()
 	{
-		var sessionId = _node.Model.ClaudeSessionId;
-		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(_node.Model.WorkingDirectory))
-			return Messages.Count;
-
 		try
 		{
-			var jsonlPath = BuildJsonlPathForSessionId(sessionId);
-			if (jsonlPath == null || !File.Exists(jsonlPath))
-				return Messages.Count;
-
-			var entries = _importService.ParseJsonlSession(jsonlPath);
-			var count = 0;
-			foreach (var entry in entries)
-			{
-				if (entry.Role != Constants.SessionFile.RoleCompaction
-				    && !string.IsNullOrWhiteSpace(entry.Content))
-					count++;
-			}
-
-			_log.Debug("InitializeJsonlEntryCount: {Count} displayable entries in JSONL for session {SessionId}",
-				count, sessionId);
-			return count;
+			await RefreshJsonlEntryCountAsync();
 		}
 		catch (Exception ex)
 		{
-			_log.Debug("InitializeJsonlEntryCount: error reading JSONL: {Error}", ex.Message);
-			return Messages.Count;
+			_log.Warning(ex, "JSONL baseline initialisation failed for session {FileName}", _node.FileName);
+			_lastKnownEntryCount = Messages.Count;
 		}
+
+		if (!_disposed)
+			StartJsonlWatcher();
+	}
+
+	/// <summary>
+	/// Recounts the displayable entries in the JSONL on a background thread, then assigns the baseline on the
+	/// calling (UI) context. Falls back to Messages.Count if no JSONL exists. Must be awaited from the UI
+	/// thread: the session facts are read before, and Messages / the baseline are touched after, the await.
+	/// </summary>
+	public async Task RefreshJsonlEntryCountAsync()
+	{
+		var version = ++_baselineVersion;
+		var workingDirectory = _node.Model.WorkingDirectory;
+		var sessionId = _node.Model.ClaudeSessionId;
+
+		var count = await Task.Run(() => _entryCounter.CountDisplayableEntries(workingDirectory, sessionId));
+
+		// A newer computation (e.g. the end of a send that began meanwhile) already set a fresher baseline.
+		if (version != _baselineVersion)
+			return;
+
+		_lastKnownEntryCount = count ?? Messages.Count;
 	}
 
 	private void StartFileWatcher()
@@ -176,8 +188,6 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 			_log.Warning(ex, "Failed to start .txt file watcher for session {FileName}", _node.FileName);
 		}
 
-		// Watch the Claude Code JSONL file (for sessions running externally)
-		StartJsonlWatcher();
 	}
 
 	private void StartJsonlWatcher()
@@ -441,9 +451,6 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 		}
 	}
 
-	/// <summary>Updates the JSONL entry count baseline. Called after a send completes so the watcher doesn't re-detect entries already processed during that send.</summary>
-	public void RefreshJsonlEntryCount() => _lastKnownEntryCount = InitializeJsonlEntryCount();
-
 	/// <summary>Switches the Messages collection between TessynDesktop .txt and Claude CLI JSONL sources.</summary>
 	private void SwapMessageSource(bool showClaude)
 	{
@@ -561,6 +568,7 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 
 	public void Dispose()
 	{
+		_disposed = true;
 		_fileWatcher?.Dispose();
 		_jsonlWatcher?.Dispose();
 		_fileChangeDebounceTimer?.Dispose();
