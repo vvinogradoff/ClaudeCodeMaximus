@@ -151,6 +151,7 @@ internal sealed class FakeSessionStatusServiceForTurnService : IClaudeSessionSta
 {
 	public bool IsSessionResumable(string workingDirectory, string claudeSessionId, IReadOnlyList<string>? projectsDirs = null) => throw new NotImplementedException();
 	public IReadOnlyList<string> GetAllProjectsDirs() => throw new NotImplementedException();
+	public IReadOnlyList<bool> AreSessionsResumable(IReadOnlyList<SessionResumabilityRequest> requests, IReadOnlyList<string>? projectsDirs = null) => throw new NotImplementedException();
 	public bool TryAdoptSessionFromOtherProfile(string workingDirectory, string claudeSessionId, string? activeProfileConfigDir) => throw new NotImplementedException();
 }
 

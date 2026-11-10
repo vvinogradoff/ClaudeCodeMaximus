@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
 
@@ -22,6 +23,14 @@ public interface IClaudeSessionStatusService
 
 	/// <summary>Resolves every Claude CLI <c>projects</c> directory once, for reuse across many <see cref="IsSessionResumable"/> calls (FR.15.13).</summary>
 	IReadOnlyList<string> GetAllProjectsDirs();
+
+	/// <summary>
+	/// Batch form of <see cref="IsSessionResumable"/> with identical per-session results, but the file
+	/// system is listed once per project directory instead of probed once per session and directory.
+	/// Safe to call from a background thread.
+	/// </summary>
+	/// <returns>One flag per request, in request order.</returns>
+	IReadOnlyList<bool> AreSessionsResumable(IReadOnlyList<SessionResumabilityRequest> requests, IReadOnlyList<string>? projectsDirs = null);
 
 	/// <summary>
 	/// Checks whether the session's JSONL already exists under the active profile's session

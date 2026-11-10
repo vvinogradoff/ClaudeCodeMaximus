@@ -653,8 +653,13 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			{
 				// Update JSONL entry count before IsBusy goes false, so the watcher
 				// doesn't re-detect entries we already processed during this send cycle.
-				_content.RefreshJsonlEntryCount();
+				// The parse runs off the UI thread; IsBusy stays true (watcher suppressed) while we await it.
+				await _content.RefreshJsonlEntryCountAsync();
+			}
 
+			// A send that started during the await owns the idle transition now (its own finally runs it).
+			if (_busyCount == 0)
+			{
 				var t = _thinkingTimer;
 				_thinkingTimer = null;
 				t?.Stop();

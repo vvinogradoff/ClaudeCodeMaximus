@@ -87,6 +87,9 @@ internal sealed class FakeClaudeSessionStatusService : IClaudeSessionStatusServi
         return ResumableSessionIds.Contains(claudeSessionId);
     }
 
+    public IReadOnlyList<bool> AreSessionsResumable(IReadOnlyList<SessionResumabilityRequest> requests, IReadOnlyList<string>? projectsDirs = null) =>
+        requests.Select(r => r.ClaudeSessionId is not null && ResumableSessionIds.Contains(r.ClaudeSessionId)).ToList();
+
     public bool TryAdoptSessionFromOtherProfile(string workingDirectory, string claudeSessionId, string? activeProfileConfigDir) => false;
 }
 

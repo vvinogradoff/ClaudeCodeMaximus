@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reactive;
@@ -12,12 +13,15 @@ using TessynDesktop.Models;
 using TessynDesktop.Models.Agent;
 using TessynDesktop.Services;
 using ReactiveUI;
+using Serilog;
 
 namespace TessynDesktop.ViewModels;
 
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionTreeViewModel : ViewModelBase
 {
+	private static readonly ILogger _log = Log.ForContext<SessionTreeViewModel>();
+
 	private readonly IDaemonClient _daemon;
 	private readonly IAppSettingsService _appSettings;
 	private readonly IDirectoryLabelService _labelService;
@@ -26,6 +30,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly ISessionSearchService _searchService;
 	private readonly IGitOriginService _gitOriginService;
 	private readonly IDraftService _draftService;
+	private int _resumabilitySweepInFlight;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
 	private ViewModelBase? _selectedTreeItem;
@@ -182,7 +187,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		_daemon.LoadFromSettings();
 		LoadFromSettings();
 		RefreshGitOrigins();
-		RefreshSessionResumability();
+		_ = RefreshSessionResumabilityAsync();
 		RefreshLastPromptTimes();
 		foreach (var dir in Directories)
 			ApplyAttentionSummaries(dir.Children);
@@ -211,7 +216,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		{
 			Interval = TimeSpan.FromSeconds(Constants.ClaudeSessions.StatusCheckIntervalSeconds),
 		};
-		timer.Tick += (_, _) => RefreshSessionResumability();
+		timer.Tick += (_, _) => _ = RefreshSessionResumabilityAsync();
 		timer.Start();
 	}
 
@@ -1040,42 +1045,76 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		// This command signals intent; the view handles the dialog.
 	}
 
-	private void RefreshSessionResumability()
+	/// <summary>
+	/// Re-checks every session's resumability. Only the snapshot of what the check needs is taken on the UI
+	/// thread; the file system work runs as one batch on a background thread and only changed flags are
+	/// applied back in a single UI pass. A sweep still in flight makes the next tick a no-op.
+	/// </summary>
+	private async Task RefreshSessionResumabilityAsync()
 	{
-		foreach (var dir in Directories)
-			RefreshChildren(dir.Children);
+		if (Interlocked.CompareExchange(ref _resumabilitySweepInFlight, 1, 0) != 0)
+			return;
+
+		try
+		{
+			var stopwatch = Stopwatch.StartNew();
+			var sessions = new List<SessionNodeViewModel>();
+			foreach (var dir in Directories)
+				CollectSessions(dir.Children, sessions);
+
+			var requests = sessions
+				.Select(s => new SessionResumabilityRequest(s.Model.WorkingDirectory, s.Model.ClaudeSessionId))
+				.ToList();
+
+			var results = await Task.Run(() => _claudeSessionStatus.AreSessionsResumable(requests)).ConfigureAwait(false);
+
+			var changed = 0;
+			await Dispatcher.UIThread.InvokeAsync(() =>
+			{
+				for (var i = 0; i < sessions.Count; i++)
+				{
+					if (sessions[i].IsResumable == results[i])
+						continue;
+
+					sessions[i].IsResumable = results[i];
+					changed++;
+				}
+			});
+
+			_log.Information("Resumability sweep: {Checked} sessions checked, {Changed} changed, {ElapsedMs} ms",
+				sessions.Count, changed, stopwatch.ElapsedMilliseconds);
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Resumability sweep failed");
+		}
+		finally
+		{
+			Volatile.Write(ref _resumabilitySweepInFlight, 0);
+		}
 	}
 
-	private void RefreshChildren(ObservableCollection<ViewModelBase> children)
+	private static void CollectSessions(IEnumerable<ViewModelBase> children, List<SessionNodeViewModel> sessions)
 	{
 		foreach (var child in children)
 		{
 			switch (child)
 			{
 				case SessionNodeViewModel session:
-					session.IsResumable = session.Model.ClaudeSessionId is not null
-						&& _claudeSessionStatus.IsSessionResumable(
-							session.Model.WorkingDirectory,
-							session.Model.ClaudeSessionId);
-					RefreshSubSessions(session.SubSessions);
+					CollectSession(session, sessions);
 					break;
 				case GroupNodeViewModel group:
-					RefreshChildren(group.Children);
+					CollectSessions(group.Children, sessions);
 					break;
 			}
 		}
 	}
 
-	private void RefreshSubSessions(IEnumerable<SessionNodeViewModel> sessions)
+	private static void CollectSession(SessionNodeViewModel session, List<SessionNodeViewModel> sessions)
 	{
-		foreach (var session in sessions)
-		{
-			session.IsResumable = session.Model.ClaudeSessionId is not null
-				&& _claudeSessionStatus.IsSessionResumable(
-					session.Model.WorkingDirectory,
-					session.Model.ClaudeSessionId);
-			RefreshSubSessions(session.SubSessions);
-		}
+		sessions.Add(session);
+		foreach (var sub in session.SubSessions)
+			CollectSession(sub, sessions);
 	}
 
 	// --- Search ---
