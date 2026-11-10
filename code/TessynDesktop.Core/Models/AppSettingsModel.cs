@@ -23,6 +23,9 @@ public sealed class AppSettingsModel
 	public string SessionFilesRoot { get; set; } = string.Empty;
 	public string ClaudePath { get; set; } = "claude";
 	public WindowStateModel Window { get; set; } = new();
+
+	/// <summary>Always-on runtime diagnostics (logging verbosity, hang watchdog, metrics, heap capture).</summary>
+	public DiagnosticsSettingsModel Diagnostics { get; set; } = new();
 	public List<DirectoryNodeModel> Tree { get; set; } = [];
 
 	public double AssistantFontSize { get; set; } = 13.0;

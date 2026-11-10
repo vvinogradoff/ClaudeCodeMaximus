@@ -40,6 +40,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly IDirectoryLabelService    _labelService;
 	private readonly IAttentionService         _attention;
 	private readonly ISessionTagService        _tags;
+	private readonly DiagnosticsToolHandler?   _diagnostics;
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
 
@@ -69,7 +70,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		INotificationService notifications,
 		IDirectoryLabelService labelService,
 		IAttentionService attention,
-		ISessionTagService tags)
+		ISessionTagService tags,
+		DiagnosticsToolHandler? diagnostics = null)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -84,6 +86,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_labelService   = labelService;
 		_attention      = attention;
 		_tags           = tags;
+		_diagnostics    = diagnostics;
 	}
 
 	public void Start()
@@ -423,7 +426,16 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				ListAttentionSchema()),
 			BuildToolDef(Constants.SessionTags.ToolName,
 				Constants.SessionTags.ToolDescription,
-				TagSessionSchema()));
+				TagSessionSchema()),
+			BuildToolDef(Constants.Diagnostics.SnapshotToolName,
+				Constants.Diagnostics.SnapshotToolDescription,
+				EmptyObjectSchema()),
+			BuildToolDef(Constants.Diagnostics.HeapToolName,
+				Constants.Diagnostics.HeapToolDescription,
+				EmptyObjectSchema()),
+			BuildToolDef(Constants.Diagnostics.DumpToolName,
+				Constants.Diagnostics.DumpToolDescription,
+				EmptyObjectSchema()));
 
 		return new JsonObject { ["tools"] = tools };
 	}
@@ -455,8 +467,22 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			Constants.Attention.ResolveToolName => ResolveAttention(arguments, callerNode),
 			Constants.Attention.ListToolName    => ListAttention(arguments, callerNode),
 			Constants.SessionTags.ToolName      => TagSession(arguments, callerNode),
+			Constants.Diagnostics.SnapshotToolName => RunDiagnosticsTool(h => h.Snapshot()),
+			Constants.Diagnostics.HeapToolName     => RunDiagnosticsTool(h => h.Heap()),
+			Constants.Diagnostics.DumpToolName     => RunDiagnosticsTool(h => h.Dump()),
 			_                      => throw new McpMethodNotFoundException(name),
 		};
+	}
+
+	// ── Diagnostics tools (D1.7) ──────────────────────────────────────────────
+
+	/// <summary>Runs on the HttpListener thread; must never marshal to the UI thread, so it answers while the UI is frozen.</summary>
+	private JsonNode RunDiagnosticsTool(Func<DiagnosticsToolHandler, DiagnosticToolResultModel> run)
+	{
+		if (_diagnostics == null)
+			throw new McpToolException("Diagnostics are not available in this host");
+		var result = run(_diagnostics);
+		return result.IsError ? throw new McpToolException(result.Text) : BuildTextContent(result.Text);
 	}
 
 	// ── Scheduling tools ──────────────────────────────────────────────────────
