@@ -6,6 +6,9 @@ using TessynDesktop.ViewModels;
 using TessynDesktop.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
+using TessynDesktop.Models;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -23,14 +26,30 @@ public partial class App : Application
 
 	public override void OnFrameworkInitializationCompleted()
 	{
-		ConfigureLogging();
+		// OnFrameworkInitializationCompleted runs on the UI thread; remember it for the log enricher, watchdog and inspector.
+		var uiThread = new UiThreadTracker();
+		uiThread.CaptureCurrentThread();
+
+		var logLevel = new LoggingLevelSwitch(LogEventLevel.Information);
+		ConfigureLogging(uiThread, logLevel);
+		ConfigureGlobalExceptionHandlers();
 
 		var services = new ServiceCollection();
-		ConfigureServices(services);
+		ConfigureServices(services, uiThread);
 		Services = services.BuildServiceProvider();
 
 		var appSettings = Services.GetRequiredService<IAppSettingsService>();
 		appSettings.Load();
+
+		// Verbose logging is read once, after settings load.
+		var diagnosticsSettings = appSettings.Settings.Diagnostics;
+		if (diagnosticsSettings.VerboseLogging)
+			logLevel.MinimumLevel = LogEventLevel.Debug;
+		if (diagnosticsSettings.Enabled)
+		{
+			Services.GetRequiredService<IProcessMetricsSampler>().Start();
+			Services.GetRequiredService<IUiHangWatchdog>().Start();
+		}
 
 		var keyBindings = Services.GetRequiredService<IKeyBindingService>();
 		keyBindings.EnsureDefaults();
@@ -71,6 +90,11 @@ public partial class App : Application
 
 			desktop.Exit += (_, _) =>
 			{
+				if (diagnosticsSettings.Enabled)
+				{
+					Services.GetRequiredService<IUiHangWatchdog>().Dispose();
+					Services.GetRequiredService<IProcessMetricsSampler>().Dispose();
+				}
 				selfUpdate.CheckAndTriggerUpdate();
 				Services.GetRequiredService<ISessionIndexUpdater>().Stop();
 				if (appSettings.Settings.AgentToolsEnabled)
@@ -90,30 +114,55 @@ public partial class App : Application
 		base.OnFrameworkInitializationCompleted();
 	}
 
-	private static void ConfigureLogging()
+	private static void ConfigureGlobalExceptionHandlers()
+	{
+		var exceptions = new GlobalExceptionLogger();
+		AppDomain.CurrentDomain.UnhandledException += exceptions.OnAppDomainUnhandled;
+		TaskScheduler.UnobservedTaskException += exceptions.OnUnobservedTaskException;
+		// Log only: the exception is deliberately not marked Handled, so behaviour is unchanged.
+		Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, e) => exceptions.OnUiThreadException(e.Exception);
+	}
+
+	private static void ConfigureLogging(IUiThreadTracker uiThread, LoggingLevelSwitch logLevel)
 	{
 		var logDir = Path.Combine(
 			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
 			Constants.AppDataFolderName,
-			"logs");
+			Constants.Diagnostics.LogsFolderName);
 
 		Directory.CreateDirectory(logDir);
 
 		Log.Logger = new LoggerConfiguration()
-			.MinimumLevel.Debug()
+			.MinimumLevel.ControlledBy(logLevel)
+			.Enrich.With(new UiThreadLogEventEnricher(uiThread))
 			.WriteTo.File(
-				Path.Combine(logDir, "log-.txt"),
+				Path.Combine(logDir, Constants.Diagnostics.LogFileName),
 				rollingInterval: RollingInterval.Day,
-				retainedFileCountLimit: 7,
-				outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+				fileSizeLimitBytes: Constants.Diagnostics.LogFileSizeLimitBytes,
+				rollOnFileSizeLimit: true,
+				retainedFileCountLimit: Constants.Diagnostics.LogRetainedFileCount,
+				outputTemplate: Constants.Diagnostics.LogOutputTemplate)
 			.CreateLogger();
 
 		Log.Information("TessynDesktop starting up. Logs: {LogDir}", logDir);
 	}
 
-	private static void ConfigureServices(IServiceCollection services)
+	private static void ConfigureServices(IServiceCollection services, IUiThreadTracker uiThread)
 	{
 		services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
+
+		// D1 diagnostics. Singletons because each owns shared state or a background thread/timer: the UI-thread id holder
+		// (read by the log enricher, watchdog, timer and inspector), the operation timer (the current UI operation), the
+		// inspector (its one-capture-at-a-time guard), the sampler (timer + CPU baseline) and the watchdog (its thread).
+		// Appsettings are already loaded when these are first resolved, so the settings section is the loaded instance.
+		services.AddSingleton(uiThread);
+		services.AddSingleton(sp => sp.GetRequiredService<IAppSettingsService>().Settings.Diagnostics ?? new DiagnosticsSettingsModel());
+		services.AddSingleton<IOperationTimer, OperationTimer>();
+		services.AddSingleton<IRuntimeInspector, ClrMdRuntimeInspector>();
+		services.AddSingleton<IProcessMetricsSampler, ProcessMetricsSampler>();
+		services.AddSingleton<IUiHangWatchdog, UiHangWatchdog>();
+		services.AddTransient<IDiagnosticsArtifactStore, DiagnosticsArtifactStore>();
+		services.AddTransient<DiagnosticsToolHandler>();
 		services.AddSingleton<IAppSettingsService, AppSettingsService>();
 		services.AddSingleton<IDirectoryLabelService, DirectoryLabelService>();
 		services.AddSingleton<ISessionFileService, SessionFileService>();

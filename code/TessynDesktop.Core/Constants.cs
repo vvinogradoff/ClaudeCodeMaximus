@@ -505,6 +505,72 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string TimeOtherDayFormat = "yyyy-MM-dd HH:mm";
 	}
 
+	/// <summary>Always-on runtime diagnostics: logging, hang watchdog, process metrics, heap capture and the diag_* MCP tools.</summary>
+	public static class Diagnostics
+	{
+		public const string DiagFolderName = "diag";
+		public const string LogsFolderName = "logs";
+		public const string LogFileName = "log-.txt";
+
+		// ── Logging ──
+		public const long LogFileSizeLimitBytes = 50L * 1024 * 1024;
+		public const int LogRetainedFileCount = 20;
+		public const string ThreadIdPropertyName = "ThreadId";
+		public const string UiMarkerPropertyName = "UiMarker";
+		public const string UiMarkerText = "|UI";
+		public const string LogOutputTemplate =
+			"{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] [{ThreadId}{UiMarker}] {SourceContext}: {Message:lj}{NewLine}{Exception}";
+
+		// ── Watchdog ──
+		public const string WatchdogThreadName = "UiHangWatchdog";
+		public const int HeartbeatIntervalMilliseconds = 250;
+		public const int HangStackMaxOtherFrames = 12;
+		public const int HangStackLogFrames = 15;
+		public const int WatchdogStopJoinMilliseconds = 2000;
+
+		// ── Capture ──
+		public const int StackCaptureTimeoutSeconds = 30;
+		public const int HeapCaptureTimeoutSeconds = 300;
+		public const int DumpCaptureTimeoutSeconds = 600;
+		public const int HeapHistogramTopCount = 60;
+		public const int HeapToolPreviewLines = 20;
+		public const string HangFilePrefix = "hang-";
+		public const string HeapFilePrefix = "heap-";
+		public const string DumpFilePrefix = "dump-";
+		public const string TextArtifactExtension = ".txt";
+		public const string DumpArtifactExtension = ".dmp";
+		public const string ArtifactTimestampFormat = "yyyyMMdd-HHmmss";
+
+		// ── Metrics and spike capture ──
+		public const string MetricsLinePrefix = "MEM ";
+		public const double SpikeRearmRiseMb = 2048;
+		public const int SpikeMinIntervalMinutes = 60;
+		public const double BytesPerMb = 1024.0 * 1024.0;
+
+		// ── Operation timer ──
+		public const string SlowUiLogTemplate = "SLOW-UI {Op:l} {Ms}ms (gen2 +{Gen2}, gc pause +{PauseMs}ms)";
+
+		/// <summary>Operation names passed to <c>IOperationTimer.Measure</c> (call sites are added separately).</summary>
+		public static class Operation
+		{
+			public const string SessionSwitch = "session-switch";
+			public const string ResumabilitySweep = "resumability-sweep";
+			public const string JsonlCount = "jsonl-count";
+			public const string SettingsSave = "settings-save";
+			public const string TreeSearchApply = "tree-search-apply";
+			public const string TranscriptLoad = "transcript-load";
+			public const string StartupScans = "startup-scans";
+		}
+
+		// ── MCP tools ──
+		public const string SnapshotToolName = "diag_snapshot";
+		public const string SnapshotToolDescription = "Process diagnostics: memory (private, working set, GC heap, native estimate), GC counts and pause, handles, threads, thread pool, CPU, plus UI-hang watchdog state (stalled now, current stall ms, last stall, current UI operation, UI thread id). Answers even while the UI thread is frozen.";
+		public const string HeapToolName = "diag_heap";
+		public const string HeapToolDescription = "Writes a managed heap histogram (top types by bytes and by count, totals per GC segment kind) to the diag folder and returns its path and top lines. Can take a minute on a large heap; works while the UI is frozen.";
+		public const string DumpToolName = "diag_dump";
+		public const string DumpToolDescription = "Writes a full process dump (with heap) to the diag folder and returns its path. Refused unless Diagnostics.DumpsEnabled is true in settings. The dump contains session content.";
+	}
+
 	/// <summary>Constants for the agent MCP server and orchestration guardrails (FR.14, FR.15).</summary>
 	public static class Agent
 	{
