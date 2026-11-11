@@ -86,19 +86,7 @@
             <Setter Property="Opacity" Value="0"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
-        <!-- Tag chips (FR.24.7) -->
-        <Style Selector="Border.tagChip">
-            <Setter Property="CornerRadius" Value="9"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
-            <Setter Property="Padding" Value="8,1"/>
-            <Setter Property="Margin" Value="0,0,6,4"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="Transparent"/>
-        </Style>
-        <Style Selector="Border.tagChip:pointerover">
-            <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListLowBrush}"/>
-        </Style>
+        <!-- Tag chip styles (FR.24.7) now live in App.axaml, shared with the Tags tab (FR.24.11) -->
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,5,120">

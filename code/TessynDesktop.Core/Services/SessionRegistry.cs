@@ -442,6 +442,29 @@ public sealed class SessionRegistry : ISessionRegistry
             OrchestrationDepth: s.OrchestrationDepth)).ToList();
     }
 
+    public List<SessionTagIndexSessionModel> SnapshotSessionsForTagIndex()
+    {
+        var result = new List<SessionTagIndexSessionModel>();
+
+        lock (_appSettings.SyncRoot)
+        {
+            foreach (var dir in _appSettings.Settings.Tree)
+                CollectTagIndexSessions(dir.Sessions, dir.Groups, dir.Path, result);
+        }
+
+        return result;
+    }
+
+    private static void CollectTagIndexSessions(
+        List<SessionNodeModel> sessions, List<GroupNodeModel> groups, string directoryPath, List<SessionTagIndexSessionModel> result)
+    {
+        foreach (var s in sessions)
+            result.Add(new SessionTagIndexSessionModel(s.NodeId, s.Name, s.SupervisorNodeId, directoryPath));
+
+        foreach (var g in groups)
+            CollectTagIndexSessions(g.Sessions, g.Groups, directoryPath, result);
+    }
+
     public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId)
     {
         var snapshots    = SnapshotSessions();

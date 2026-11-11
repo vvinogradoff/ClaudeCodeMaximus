@@ -52,6 +52,8 @@ internal sealed class FakeSessionTagService : ISessionTagService
 	public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged;
 
 	public List<SessionTagModel> Tags { get; set; } = new();
+	/// <summary>Per-node tags; a node with an entry here wins over <see cref="Tags"/> (index tests, TC.TG.35).</summary>
+	public Dictionary<string, List<SessionTagModel>> TagsByNode { get; } = new();
 	public (string nodeId, string? name)? LastGetTags { get; private set; }
 	public int TakeCalls { get; private set; }
 	public HashSet<string> Taken { get; } = new();
@@ -66,7 +68,7 @@ internal sealed class FakeSessionTagService : ISessionTagService
 	public IReadOnlyList<SessionTagModel> GetTags(string nodeId, string? sessionName)
 	{
 		LastGetTags = (nodeId, sessionName);
-		return Tags;
+		return TagsByNode.TryGetValue(nodeId, out var own) ? own : Tags;
 	}
 
 	public bool TakeTagGuidanceDue(string nodeId)

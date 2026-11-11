@@ -177,6 +177,13 @@ public interface IDaemonClient
 	/// <summary>True once per node per app run — the tag guidance is due on this turn (FR.24.6).</summary>
 	bool TakeTagGuidanceDue(string nodeId);
 
+	/// <summary>
+	/// FR.24.13 — every distinct tag of the top-level sessions under the Directory node with this path
+	/// (null = every directory; paths compare case-insensitively), each with the top-level sessions carrying it.
+	/// Order unspecified. May read tag files: call it off the UI thread.
+	/// </summary>
+	IReadOnlyList<SessionTagUsageModel> GetSessionTagIndex(string? directoryPath);
+
 	// ── Cross-project search & titles (Stage 6) ──────────────────────────────────────
 
 	/// <summary>Re-scans ~/.claude/projects/*/*.jsonl and updates the search index (incremental). Returns the count (re)indexed.</summary>

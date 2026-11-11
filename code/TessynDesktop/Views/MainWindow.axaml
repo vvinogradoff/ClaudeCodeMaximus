@@ -395,6 +395,9 @@
                         <TabItem Header="Recent">
                             <views:RecentSessionsView DataContext="{Binding RecentSessions}"/>
                         </TabItem>
+                        <TabItem Header="Tags">
+                            <views:TagSearchView DataContext="{Binding TagSearch}"/>
+                        </TabItem>
                     </TabControl>
                 </Border>
 

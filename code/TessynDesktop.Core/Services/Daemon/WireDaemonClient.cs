@@ -434,6 +434,9 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 	public bool TakeTagGuidanceDue(string nodeId) =>
 		throw new NotSupportedException(TagsNotWiredMessage);
 
+	public IReadOnlyList<SessionTagUsageModel> GetSessionTagIndex(string? directoryPath) =>
+		throw new NotSupportedException(TagsNotWiredMessage);
+
 	private const string TagsNotWiredMessage =
 		"Session Tags are not available over the TDCP wire yet (FR.24 has no TDCP methods).";
 

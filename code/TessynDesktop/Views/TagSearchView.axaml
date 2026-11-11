@@ -1,0 +1,118 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TessynDesktop.ViewModels"
+             xmlns:views="using:TessynDesktop.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="TessynDesktop.Views.TagSearchView"
+             x:DataType="vm:TagSearchViewModel">
+
+    <!-- Tags tab (FR.24.11–FR.24.13): search bar, tag results, splitter, session list -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="1*" MinHeight="60"/>
+            <RowDefinition Height="5"/>
+            <RowDefinition Height="2*" MinHeight="80"/>
+        </Grid.RowDefinitions>
+
+        <!-- Search box + project-scope toggle (same look as the Tree tab; no exact-phrase or refresh buttons) -->
+        <Border Grid.Row="0" Padding="4,4,4,2">
+            <Grid ColumnDefinitions="*,Auto">
+                <views:NativeTextBox Grid.Column="0"
+                         Text="{Binding SearchText}"
+                         Watermark="Search tags…">
+                    <TextBox.InnerRightContent>
+                        <TextBlock Text="&#x21BB;"
+                                   FontSize="13"
+                                   Margin="0,0,6,0"
+                                   VerticalAlignment="Center"
+                                   IsVisible="{Binding IsLoading}"
+                                   RenderTransformOrigin="0.5,0.5"
+                                   ToolTip.Tip="Loading…">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform/>
+                            </TextBlock.RenderTransform>
+                            <TextBlock.Styles>
+                                <Style Selector="TextBlock">
+                                    <Style.Animations>
+                                        <Animation Duration="0:0:1" IterationCount="INFINITE">
+                                            <KeyFrame Cue="0%">
+                                                <Setter Property="RotateTransform.Angle" Value="0"/>
+                                            </KeyFrame>
+                                            <KeyFrame Cue="100%">
+                                                <Setter Property="RotateTransform.Angle" Value="360"/>
+                                            </KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                            </TextBlock.Styles>
+                        </TextBlock>
+                    </TextBox.InnerRightContent>
+                </views:NativeTextBox>
+                <ToggleButton Grid.Column="1"
+                              IsChecked="{Binding IsScopedToProject, Mode=TwoWay}"
+                              IsEnabled="{Binding IsProjectScopeEnabled}"
+                              Content="&#128193;"
+                              ToolTip.Tip="Limit tags and sessions to the selected session's directory"
+                              Width="28" Height="28"
+                              Padding="0"
+                              Margin="4,0,0,0"
+                              FontSize="14"
+                              HorizontalContentAlignment="Center"
+                              VerticalContentAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- Tag results -->
+        <Panel Grid.Row="1">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Chips}" Margin="6,4,6,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:TagSearchChipViewModel">
+                            <Border Classes="tagChip"
+                                    Classes.selected="{Binding IsSelected}"
+                                    ToolTip.Tip="{Binding Tooltip}"
+                                    PointerPressed="OnTagChipPressed">
+                                <Border.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Open in browser" Click="OnOpenInBrowserClicked"/>
+                                    </ContextMenu>
+                                </Border.ContextMenu>
+                                <TextBlock Text="{Binding Label}" FontSize="11"/>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <TextBlock Text="{Binding TagsEmptyText}"
+                       IsVisible="{Binding IsTagsEmptyVisible}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Opacity="0.6" FontSize="12"
+                       IsHitTestVisible="False"/>
+        </Panel>
+
+        <GridSplitter Grid.Row="2" ResizeDirection="Rows"
+                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+        <!-- Session list (FR.24.12): the Recent tab's collapsible groups -->
+        <Panel Grid.Row="3">
+            <views:SessionGroupListView DataContext="{Binding}"/>
+            <TextBlock Text="{Binding SessionsEmptyText}"
+                       IsVisible="{Binding IsSessionsEmptyVisible}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextWrapping="Wrap" TextAlignment="Center" Margin="8"
+                       Opacity="0.6" FontSize="12"
+                       IsHitTestVisible="False"/>
+        </Panel>
+
+    </Grid>
+
+</UserControl>

@@ -56,6 +56,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 	public SessionTreeViewModel SessionTree { get; }
 	public RecentSessionsViewModel RecentSessions { get; }
+	public TagSearchViewModel TagSearch { get; }
 
 	/// <summary>
 	/// Flat list for the top-bar dropdown: favorites, sessions with open Focus items, sessions with schedules,
@@ -106,15 +107,31 @@ public sealed class MainWindowViewModel : ViewModelBase
 		}
 	}
 
-	/// <summary>Selected tab in the left panel (0=Tree, 1=Recent).</summary>
+	/// <summary>Selected tab in the left panel (0=Tree, 1=Recent, 2=Tags; FR.1.15).</summary>
 	public int SelectedLeftTabIndex
 	{
 		get => _selectedLeftTabIndex;
 		set
 		{
+			var previous = _selectedLeftTabIndex;
 			this.RaiseAndSetIfChanged(ref _selectedLeftTabIndex, value);
+			if (previous == value)
+				return;
+
+			// FR.24.13 — the Tags tab only reloads/refreshes while it is selected.
+			if (previous == 2)
+				TagSearch.Deactivate();
+
 			if (value == 1)
-				RecentSessions.Refresh();
+			{
+				// FR.1.16 — collapse every group except the selected session's Directory node.
+				var selected = SessionTree.SelectedSession;
+				RecentSessions.Refresh(selected == null ? null : SessionTree.FindDirectoryPathOf(selected));
+			}
+			else if (value == 2)
+			{
+				TagSearch.Activate();
+			}
 		}
 	}
 
@@ -261,6 +278,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_uiDispatcher     = uiDispatcher;
 		SessionTree       = sessionTree;
 		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
+		TagSearch         = new TagSearchViewModel(sessionTree, daemonClient, labelService, uiDispatcher, new SessionTagLauncher());
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
 		_isTreePanelVisible = !appSettings.Settings.IsTreePanelCollapsed;
 		_isDarkTheme = appSettings.Settings.Theme == "Dark";
@@ -310,13 +328,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 			.Switch()
 			.Subscribe(_ => UpdateStatusBarModel());
 
-		// When a session is selected from the Recent tab, sync it to the tree
-		this.WhenAnyValue(x => x.RecentSessions.SelectedSession)
-			.Subscribe(node =>
-			{
-				if (node != null)
-					SessionTree.SelectedSession = node;
-			});
+		// When a session row is clicked in the Recent tab (FR.1.16) or the Tags tab (FR.24.12), select it in the tree.
+		// Event-based (not property-based) so a repeat click on the same row still selects it.
+		RecentSessions.SessionChosen += node => SessionTree.SelectedSession = node;
+		TagSearch.SessionChosen += node => SessionTree.SelectedSession = node;
 
 		// Populate the top-bar recent-sessions dropdown on startup
 		RefreshRecentDropdown();

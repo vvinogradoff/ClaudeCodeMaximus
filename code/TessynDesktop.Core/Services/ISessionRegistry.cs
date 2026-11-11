@@ -110,6 +110,12 @@ public interface ISessionRegistry
     /// </summary>
     List<SessionSummaryModel> BuildAgentSessionSummaries();
 
+    /// <summary>
+    /// Every session (Worker Sessions included) as a flat snapshot for the Session Tag Index (FR.24.13).
+    /// The settings lock is held only while fields are copied.
+    /// </summary>
+    List<SessionTagIndexSessionModel> SnapshotSessionsForTagIndex();
+
     /// <summary>One bounded page of the <c>list_sessions</c> listing for <paramref name="callerNodeId"/> (FR.15.13).</summary>
     SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId);
 

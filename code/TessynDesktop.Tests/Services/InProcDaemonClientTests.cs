@@ -176,6 +176,8 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
 
     public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group, int orchestrationDepth = 0, string? supervisorNodeId = null) => null;
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => BuildAgentSessionSummariesResult;
+    public List<SessionTagIndexSessionModel> TagIndexSnapshot { get; set; } = new();
+    public List<SessionTagIndexSessionModel> SnapshotSessionsForTagIndex() => TagIndexSnapshot;
     public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId) =>
         new() { Scope = query.Scope, Sections = Array.Empty<SessionListSectionModel>(), Rows = Array.Empty<SessionListRowModel>(), TotalRows = 0, Offset = 0, Limit = query.Limit };
     public NodeIdResolutionModel ResolveNodeId(string idOrPrefix) => new() { Status = NodeIdResolutionStatus.NotFound };
@@ -1277,5 +1279,54 @@ public sealed class InProcDaemonClientTests
 
         Assert.Equal(1, count);
         Assert.Equal(0, _tags.SubscriberCount);
+    }
+
+    // ── Session Tag Index (FR.24.13) ─────────────────────────────────────────────────
+
+    [Fact]
+    public void GetSessionTagIndex_SnapshotsTheRegistry_NameDerivedTagsUseTheCurrentName_WorkersRollUp()   // TC.TG.35
+    {
+        using var env = new TagTestEnv();
+        env.Store.SaveWorkspaces(new Dictionary<string, string> { ["HSE"] = "hardstop" });
+        _registry.TagIndexSnapshot =
+        [
+            new("top", "HSE-150 spike", null, @"C:\Proj"),
+            new("worker", "HSE-150 child", "top", @"C:\Other"),
+        ];
+        using var client = new InProcDaemonClient(_registry, _turnService, _scheduler, _fileService, _indexService, _attention, env.Service);
+
+        var usage = Assert.Single(client.GetSessionTagIndex(null));
+        Assert.Equal("HSE-150", usage.Tag.Key);
+        Assert.Equal(["top"], usage.NodeIds);
+
+        _registry.TagIndexSnapshot = [new("top", "HSE-165 renamed", null, @"C:\Proj")];
+        Assert.Equal(["HSE-165"], client.GetSessionTagIndex(null).Select(u => u.Tag.Key).ToArray());
+    }
+
+    [Fact]
+    public void GetSessionTagIndex_ReadsTagsPerSessionThroughTheTagService_AndAggregatesByKey()   // TC.TG.35
+    {
+        _registry.TagIndexSnapshot = [new("a", "A", null, @"C:\Proj"), new("b", "B", null, @"C:\Proj")];
+        _tags.TagsByNode["a"] = [new() { Key = "k1", Label = "k1" }];
+        _tags.TagsByNode["b"] = [new() { Key = "K1", Label = "k1" }, new() { Key = "k2", Label = "k2" }];
+
+        var index = _client.GetSessionTagIndex(null).OrderBy(u => u.Tag.Key, StringComparer.OrdinalIgnoreCase).ToList();
+
+        Assert.Equal(2, index.Count);
+        Assert.Equal(["a", "b"], index[0].NodeIds);
+        Assert.Equal(["b"], index[1].NodeIds);
+        Assert.Equal(("b", "B"), _tags.LastGetTags);
+    }
+
+    [Fact]
+    public void GetSessionTagIndex_ScopesByDirectoryPath_CaseInsensitively()   // TC.TG.35
+    {
+        _registry.TagIndexSnapshot = [new("a", "A", null, @"C:\Proj"), new("b", "B", null, @"C:\Other")];
+        _tags.TagsByNode["a"] = [new() { Key = "ka", Label = "ka" }];
+        _tags.TagsByNode["b"] = [new() { Key = "kb", Label = "kb" }];
+
+        var index = _client.GetSessionTagIndex(@"c:\proj");
+
+        Assert.Equal("ka", Assert.Single(index).Tag.Key);
     }
 }

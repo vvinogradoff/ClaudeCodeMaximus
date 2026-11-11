@@ -77,6 +77,7 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
     public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) { }
     public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group, int orchestrationDepth = 0, string? supervisorNodeId = null) => null;
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => new();
+    public List<SessionTagIndexSessionModel> SnapshotSessionsForTagIndex() => new();
     public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId) =>
         new() { Scope = query.Scope, Sections = Array.Empty<SessionListSectionModel>(), Rows = Array.Empty<SessionListRowModel>(), TotalRows = 0, Offset = 0, Limit = query.Limit };
     public NodeIdResolutionModel ResolveNodeId(string idOrPrefix)

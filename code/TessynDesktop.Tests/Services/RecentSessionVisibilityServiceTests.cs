@@ -77,4 +77,38 @@ public sealed class RecentSessionVisibilityServiceTests
         Assert.False(RecentSessionVisibilityService.IsPinnedInRecentDropdown(
             isFavorite: false, hasOpenAttention: false, hasSchedules: false));
     }
+
+    // ── FR.1.16 collapse on switch (TC.RT.01) ────────────────────────────────────────
+
+    [Fact]
+    public void IsGroupExpandedOnRecentTabSwitch_NoSelectedSession_ExpandsEveryGroup()   // TC.RT.01
+    {
+        Assert.True(RecentSessionVisibilityService.IsGroupExpandedOnRecentTabSwitch(@"C:\Proj\A", null));
+        Assert.True(RecentSessionVisibilityService.IsGroupExpandedOnRecentTabSwitch(@"C:\Proj\B", null));
+    }
+
+    [Fact]
+    public void IsGroupExpandedOnRecentTabSwitch_SamePathInOtherCase_IsExpanded()   // TC.RT.01
+    {
+        Assert.True(RecentSessionVisibilityService.IsGroupExpandedOnRecentTabSwitch(@"C:\PROJ\a", @"c:\proj\A"));
+    }
+
+    [Fact]
+    public void IsGroupExpandedOnRecentTabSwitch_AnotherPath_IsCollapsed()   // TC.RT.01
+    {
+        Assert.False(RecentSessionVisibilityService.IsGroupExpandedOnRecentTabSwitch(@"C:\Proj\B", @"C:\Proj\A"));
+    }
+
+    [Fact]
+    public void IsGroupExpandedOnRecentTabSwitch_ExactPathMatch_IsExpanded()   // TC.RT.01-2
+    {
+        Assert.True(RecentSessionVisibilityService.IsGroupExpandedOnRecentTabSwitch(@"C:\Proj\X", @"C:\Proj\X"));
+    }
+
+    [Fact]
+    public void IsGroupExpandedOnRecentTabSwitch_PrefixIsNotEquality_IsCollapsed()   // TC.RT.01-5
+    {
+        Assert.False(RecentSessionVisibilityService.IsGroupExpandedOnRecentTabSwitch(@"C:\Proj\X2", @"C:\Proj\X"));
+        Assert.False(RecentSessionVisibilityService.IsGroupExpandedOnRecentTabSwitch(@"C:\Proj\X\Sub", @"C:\Proj\X"));
+    }
 }

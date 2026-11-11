@@ -217,6 +217,7 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	// Session Tags (FR.24) — not used by the Telegram bridge.
 	public IReadOnlyList<SessionTagModel> GetSessionTags(string nodeId) => throw new NotImplementedException();
 	public bool TakeTagGuidanceDue(string nodeId) => throw new NotImplementedException();
+	public IReadOnlyList<SessionTagUsageModel> GetSessionTagIndex(string? directoryPath) => throw new NotImplementedException();
 
 	// Attention Ledger (FR.23) — not used by the Telegram bridge.
 	public IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId) => throw new NotImplementedException();

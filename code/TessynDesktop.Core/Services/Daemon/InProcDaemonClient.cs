@@ -220,6 +220,13 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 
 	public bool TakeTagGuidanceDue(string nodeId) => _tags.TakeTagGuidanceDue(nodeId);
 
+	/// <summary>FR.24.13 — the tree is snapshotted briefly under the registry lock; tags (which may read files) are read outside it.</summary>
+	public IReadOnlyList<SessionTagUsageModel> GetSessionTagIndex(string? directoryPath)
+	{
+		var snapshot = _registry.SnapshotSessionsForTagIndex();
+		return SessionTagIndexBuilder.Build(snapshot, s => _tags.GetTags(s.NodeId, s.Name), directoryPath);
+	}
+
 	// ── Cross-project search & titles ────────────────────────────────────────────────
 
 	public Task<int> ReindexSessionsAsync(CancellationToken cancellationToken = default)

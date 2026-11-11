@@ -20,4 +20,12 @@ public static class RecentSessionVisibilityService
 	/// </summary>
 	public static bool IsPinnedInRecentDropdown(bool isFavorite, bool hasOpenAttention, bool hasSchedules) =>
 		isFavorite || hasOpenAttention || hasSchedules;
+
+	/// <summary>
+	/// FR.1.16 — on switching to the Recent tab a directory group is expanded iff no session is selected
+	/// (<paramref name="selectedSessionDirectoryPath"/> == null) or it is the selected session's directory (OrdinalIgnoreCase).
+	/// </summary>
+	public static bool IsGroupExpandedOnRecentTabSwitch(string groupDirectoryPath, string? selectedSessionDirectoryPath) =>
+		selectedSessionDirectoryPath == null
+		|| string.Equals(groupDirectoryPath, selectedSessionDirectoryPath, System.StringComparison.OrdinalIgnoreCase);
 }

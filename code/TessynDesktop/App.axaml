@@ -17,6 +17,31 @@
 
    <Application.Styles>
        <FluentTheme />
+
+       <!-- Tag chips (FR.24.7), shared by the session Tag row and the Tags tab (FR.24.11) -->
+       <Style Selector="Border.tagChip">
+           <Setter Property="CornerRadius" Value="9"/>
+           <Setter Property="BorderThickness" Value="1"/>
+           <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+           <Setter Property="Padding" Value="8,1"/>
+           <Setter Property="Margin" Value="0,0,6,4"/>
+           <Setter Property="Cursor" Value="Hand"/>
+           <Setter Property="Background" Value="Transparent"/>
+       </Style>
+       <Style Selector="Border.tagChip:pointerover">
+           <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListLowBrush}"/>
+       </Style>
+       <!-- Selected chip (FR.24.12): accent fill with the theme's on-accent text colour; stays visible on hover -->
+       <Style Selector="Border.tagChip.selected">
+           <Setter Property="Background" Value="{DynamicResource AccentButtonBackground}"/>
+           <Setter Property="BorderBrush" Value="{DynamicResource AccentButtonBackground}"/>
+       </Style>
+       <Style Selector="Border.tagChip.selected:pointerover">
+           <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundPointerOver}"/>
+       </Style>
+       <Style Selector="Border.tagChip.selected TextBlock">
+           <Setter Property="Foreground" Value="{DynamicResource AccentButtonForeground}"/>
+       </Style>
    </Application.Styles>
 
 </Application>

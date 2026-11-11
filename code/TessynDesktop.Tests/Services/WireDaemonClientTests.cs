@@ -207,6 +207,7 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     // Session Tags (FR.24) have no TDCP methods either.
     public IReadOnlyList<SessionTagModel> GetSessionTags(string nodeId) => throw new NotSupportedException("Fake does not implement GetSessionTags.");
     public bool TakeTagGuidanceDue(string nodeId) => throw new NotSupportedException("Fake does not implement TakeTagGuidanceDue.");
+    public IReadOnlyList<SessionTagUsageModel> GetSessionTagIndex(string? directoryPath) => throw new NotSupportedException("Fake does not implement GetSessionTagIndex.");
 
     // Attention Ledger (FR.23) has no TDCP methods; the wire client throws before reaching the server.
     public IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId) => throw new NotSupportedException("Fake does not implement GetAttentionItems.");
@@ -870,5 +871,12 @@ public sealed class WireDaemonClientTests : IDisposable
         Assert.Throws<NotSupportedException>(() => _client.GetSessionTags("node-1"));
         Assert.Throws<NotSupportedException>(() => _client.TakeTagGuidanceDue("node-1"));
         Assert.False(fired);
+    }
+
+    [Fact]
+    public void GetSessionTagIndex_ThrowsNotSupportedException()   // TC.TG.36
+    {
+        Assert.Throws<NotSupportedException>(() => _client.GetSessionTagIndex(null));
+        Assert.Throws<NotSupportedException>(() => _client.GetSessionTagIndex(@"C:\Proj"));
     }
 }

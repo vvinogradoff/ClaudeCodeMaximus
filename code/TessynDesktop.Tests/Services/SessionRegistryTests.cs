@@ -525,4 +525,65 @@ public sealed class SessionRegistryTests : IDisposable
         Assert.False(summary.IsFavorite);
         Assert.Null(summary.LastActivityUtc);
     }
+
+    // ── 13. SnapshotSessionsForTagIndex (FR.24.13) ────────────────────────────
+
+    [Fact]
+    public void SnapshotSessionsForTagIndex_EmptyTree_ReturnsEmptyList()   // TC.TG.32
+    {
+        Assert.Empty(_registry.SnapshotSessionsForTagIndex());
+    }
+
+    [Fact]
+    public void SnapshotSessionsForTagIndex_IncludesDirectAndNestedGroupSessions_WithTheirDirectoryPath()   // TC.TG.32
+    {
+        var dir    = _registry.AddDirectory(AnyPath("tag1"));
+        var direct = _registry.AddSession(dir, "Direct");
+        var g1     = _registry.AddGroup(dir, "G1");
+        var inG1   = _registry.AddSessionToGroup(g1, "InG1");
+        var g2     = _registry.AddGroupToGroup(g1, "G2");
+        var inG2   = _registry.AddSessionToGroup(g2, "InG2");
+        var g3     = _registry.AddGroupToGroup(g2, "G3");
+        var inG3   = _registry.AddSessionToGroup(g3, "InG3");
+
+        var snapshot = _registry.SnapshotSessionsForTagIndex();
+
+        Assert.Equal(4, snapshot.Count);
+        foreach (var s in new[] { direct, inG1, inG2, inG3 })
+        {
+            var entry = Assert.Single(snapshot, e => e.NodeId == s.NodeId);
+            Assert.Equal(s.Name, entry.Name);
+            Assert.Equal(dir.Path, entry.DirectoryPath);
+        }
+    }
+
+    [Fact]
+    public void SnapshotSessionsForTagIndex_CopiesSupervisorNodeId_ForAWorkerStoredNextToItsSupervisor()   // TC.TG.33
+    {
+        var dir        = _registry.AddDirectory(AnyPath("tag2"));
+        var supervisor = _registry.AddSession(dir, "Supervisor");
+        var worker     = _registry.AddSession(dir, "Worker");
+        worker.SupervisorNodeId = supervisor.NodeId;
+
+        var snapshot = _registry.SnapshotSessionsForTagIndex();
+
+        Assert.Null(Assert.Single(snapshot, e => e.NodeId == supervisor.NodeId).SupervisorNodeId);
+        Assert.Equal(supervisor.NodeId, Assert.Single(snapshot, e => e.NodeId == worker.NodeId).SupervisorNodeId);
+    }
+
+    [Fact]
+    public void SnapshotSessionsForTagIndex_SeveralDirectories_EachSessionMapsToItsOwnPath()   // TC.TG.34
+    {
+        var dirA = _registry.AddDirectory(AnyPath("tagA"));
+        var dirB = _registry.AddDirectory(AnyPath("tagB"));
+        var a    = _registry.AddSession(dirA, "A");
+        var gB   = _registry.AddGroup(dirB, "GB");
+        var b    = _registry.AddSessionToGroup(gB, "B");
+
+        var snapshot = _registry.SnapshotSessionsForTagIndex();
+
+        Assert.Equal(2, snapshot.Count);
+        Assert.Equal(dirA.Path, Assert.Single(snapshot, e => e.NodeId == a.NodeId).DirectoryPath);
+        Assert.Equal(dirB.Path, Assert.Single(snapshot, e => e.NodeId == b.NodeId).DirectoryPath);
+    }
 }

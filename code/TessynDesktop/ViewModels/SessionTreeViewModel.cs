@@ -1478,6 +1478,72 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		return null;
 	}
 
+	/// <summary>
+	/// FR.1.16, FR.24.11 — the path of the Directory node containing <paramref name="session"/>, searching Groups and
+	/// the sub-sessions nested under supervisors; null when the session is not in the tree. UI thread only.
+	/// </summary>
+	public string? FindDirectoryPathOf(SessionNodeViewModel session)
+	{
+		foreach (var dir in Directories)
+		{
+			if (ChildrenContain(dir.Children, session))
+				return dir.Path;
+		}
+		return null;
+	}
+
+	private static bool ChildrenContain(ObservableCollection<ViewModelBase> children, SessionNodeViewModel target)
+	{
+		foreach (var child in children)
+		{
+			if (child is SessionNodeViewModel s && (ReferenceEquals(s, target) || SubSessionsContain(s.SubSessions, target)))
+				return true;
+			if (child is GroupNodeViewModel g && ChildrenContain(g.Children, target))
+				return true;
+		}
+		return false;
+	}
+
+	private static bool SubSessionsContain(IEnumerable<SessionNodeViewModel> sessions, SessionNodeViewModel target)
+	{
+		foreach (var s in sessions)
+		{
+			if (ReferenceEquals(s, target) || SubSessionsContain(s.SubSessions, target))
+				return true;
+		}
+		return false;
+	}
+
+	/// <summary>
+	/// FR.24.11 — NodeId → view-model map of every session in the tree, sub-sessions included, built in one pass
+	/// (avoids a tree walk per lookup). UI thread only.
+	/// </summary>
+	public Dictionary<string, SessionNodeViewModel> BuildNodeIdMap()
+	{
+		var map = new Dictionary<string, SessionNodeViewModel>(StringComparer.Ordinal);
+		foreach (var dir in Directories)
+			AddToMap(dir.Children, map);
+		return map;
+	}
+
+	private static void AddToMap(ObservableCollection<ViewModelBase> children, Dictionary<string, SessionNodeViewModel> map)
+	{
+		foreach (var child in children)
+		{
+			if (child is SessionNodeViewModel s)
+				AddSessionToMap(s, map);
+			else if (child is GroupNodeViewModel g)
+				AddToMap(g.Children, map);
+		}
+	}
+
+	private static void AddSessionToMap(SessionNodeViewModel session, Dictionary<string, SessionNodeViewModel> map)
+	{
+		map[session.Model.NodeId] = session;
+		foreach (var sub in session.SubSessions)
+			AddSessionToMap(sub, map);
+	}
+
 	private static SessionNodeViewModel? FindNodeVmInChildren(ObservableCollection<ViewModelBase> children, string nodeId)
 	{
 		foreach (var child in children)
