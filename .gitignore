@@ -424,3 +424,5 @@ FodyWeavers.xsd
 /code/Tessyn.Web/ClientApp/screenshots/
 /code/Tessyn.Web/ClientApp/test-results/
 /code/Tessyn.Web/ClientApp/playwright-report/
+code/Tessyn.Web/ClientApp/dist-mock/
+code/Tessyn.Web/ClientApp/*.tsbuildinfo
