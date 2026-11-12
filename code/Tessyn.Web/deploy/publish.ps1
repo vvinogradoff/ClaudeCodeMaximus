@@ -41,7 +41,10 @@ dotnet publish $project -c Release -r linux-x64 --self-contained true -o $publis
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed' }
 
 if (Test-Path $archive) { Remove-Item -Force $archive }
-tar -czf $archive -C $publishDir .
+# Use Windows' own bsdtar: when this script is started from Git Bash, GNU tar comes first on PATH and reads "C:\..." as a remote host.
+$tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+if (-not (Test-Path $tar)) { $tar = 'tar' }
+& $tar -czf $archive -C $publishDir .
 if ($LASTEXITCODE -ne 0) { throw 'tar failed' }
 
 Write-Host "Packed $archive"
