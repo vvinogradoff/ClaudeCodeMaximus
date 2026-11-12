@@ -264,6 +264,43 @@ public sealed class RemoteNotificationPublisherTests : IDisposable
 		Assert.Equal("limit reached", notification.Params["error"]!.GetValue<string>());
 	}
 
+	private List<string> ReceivedMethods()
+	{
+		lock (_received)
+			return _received.Select(n => n.Method).ToList();
+	}
+
+	[Fact]
+	public void TurnCompleted_DoesNotOvertakeTheSessionsPendingAppendedAndChanged()
+	{
+		// Both are still inside their 250 ms windows when the turn completes.
+		_fake.Raise(nameof(IDaemonClient.EntryAppended), Appended(_node.FileName));
+		_fake.Raise(nameof(IDaemonClient.TurnCompleted), new SessionTurnCompletedEventArgs { FileName = _node.FileName });
+
+		Assert.Single(WaitFor(Constants.Remote.Events.TurnCompleted, 1));
+		var methods = ReceivedMethods();
+		var completed = methods.IndexOf(Constants.Remote.Events.TurnCompleted);
+		Assert.True(methods.IndexOf(Constants.Remote.Events.SessionAppended) is >= 0 && methods.IndexOf(Constants.Remote.Events.SessionAppended) < completed, string.Join(",", methods));
+		Assert.True(methods.IndexOf(Constants.Remote.Events.SessionChanged) is >= 0 && methods.IndexOf(Constants.Remote.Events.SessionChanged) < completed, string.Join(",", methods));
+
+		// The flushed windows are consumed: nothing follows the completion.
+		Thread.Sleep(Constants.Remote.Timings.SessionAppendedWindow * 2);
+		Assert.Equal(Constants.Remote.Events.TurnCompleted, ReceivedMethods()[^1]);
+		Assert.Single(Received(Constants.Remote.Events.SessionAppended));
+		Assert.Single(Received(Constants.Remote.Events.SessionChanged));
+	}
+
+	[Fact]
+	public void TurnCompleted_AlsoFlushesAPendingSessionChangedRaisedByANodeLevelEvent()
+	{
+		_fake.Raise(nameof(IDaemonClient.AttentionChanged), new AttentionChangedEventArgs(_node.NodeId));
+		_fake.Raise(nameof(IDaemonClient.TurnCompleted), new SessionTurnCompletedEventArgs { FileName = _node.FileName });
+
+		WaitFor(Constants.Remote.Events.TurnCompleted, 1);
+		var methods = ReceivedMethods();
+		Assert.True(methods.IndexOf(Constants.Remote.Events.SessionChanged) is >= 0 && methods.IndexOf(Constants.Remote.Events.SessionChanged) < methods.IndexOf(Constants.Remote.Events.TurnCompleted), string.Join(",", methods));
+	}
+
 	[Fact]
 	public void TurnCompleted_WithoutAnError_OmitsIt_AndEveryCompletionIsItsOwnNotification()
 	{
@@ -410,5 +447,6 @@ public sealed class RemoteNotificationPublisherTests : IDisposable
 		public event Action<RemoteNotification>? Published { add { } remove { } }
 		public void Publish(string method, object payload) => throw new InvalidOperationException("boom");
 		public void PublishCoalesced(string method, string key, Func<object?> payloadFactory, TimeSpan window) => throw new InvalidOperationException("boom");
+		public void FlushPending(string method, string key) => throw new InvalidOperationException("boom");
 	}
 }

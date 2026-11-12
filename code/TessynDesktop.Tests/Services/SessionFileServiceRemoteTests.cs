@@ -186,6 +186,43 @@ public sealed class SessionFileServiceRemoteTests : IDisposable
 	}
 
 	[Fact]
+	public void ReadEntriesFrom_ReturnsExactlyTheEntriesAppendedAfterTheOffset()
+	{
+		var fileName = WriteManyEntries(5);
+		var path = _sut.GetFullPath(fileName);
+		var before = _sut.ReadEntries(fileName);
+		var offset = new FileInfo(path).Length;
+
+		File.AppendAllText(path, Header(30, "USER") + Nl + "appended é prompt" + Nl + Nl + Header(31, "ASSISTANT") + Nl + "appended answer" + Nl + Nl);
+		var appended = _sut.ReadEntriesFrom(fileName, offset);
+
+		Assert.Equal(2, appended.Count);
+		Assert.Equal("USER", appended[0].Role);
+		Assert.Equal("appended é prompt", appended[0].Content.Trim());
+		Assert.Equal("appended answer", appended[1].Content.Trim());
+		Assert.Equal(before.Count + 2, _sut.ReadEntries(fileName).Count);
+	}
+
+	[Fact]
+	public void ReadEntriesFrom_OffsetAtOrBeyondTheLength_OrMissingFile_ReturnsEmpty()
+	{
+		var fileName = WriteManyEntries(3);
+		var length = new FileInfo(_sut.GetFullPath(fileName)).Length;
+
+		Assert.Empty(_sut.ReadEntriesFrom(fileName, length));
+		Assert.Empty(_sut.ReadEntriesFrom(fileName, length + 100));
+		Assert.Empty(_sut.ReadEntriesFrom("missing.txt", 0));
+	}
+
+	[Fact]
+	public void ReadEntriesFrom_ZeroOffset_EqualsTheFullParse()
+	{
+		var fileName = WriteManyEntries(10);
+
+		Assert.Equal(_sut.ReadEntries(fileName).Count, _sut.ReadEntriesFrom(fileName, 0).Count);
+	}
+
+	[Fact]
 	public void ReadTailEntries_MissingFile_ReturnsEmpty()
 	{
 		Assert.Empty(_sut.ReadTailEntries("missing.txt", 100));

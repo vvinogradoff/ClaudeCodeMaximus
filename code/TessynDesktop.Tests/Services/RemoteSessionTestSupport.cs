@@ -50,6 +50,7 @@ internal sealed class StubFileService : ISessionFileService
 	}
 
 	public IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes) => [];
+	public IReadOnlyList<SessionEntryModel> ReadEntriesFrom(string fileName, long startOffset) => [];
 	public string CreateSessionFile() => $"stub-{++_created}.txt";
 	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText) { }
 	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null) { }

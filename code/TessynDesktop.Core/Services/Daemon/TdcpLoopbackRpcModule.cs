@@ -110,8 +110,18 @@ public sealed class TdcpLoopbackRpcModule : IRemoteRpcModule
 	private object? ScheduleAdd(JsonNode? @params)
 	{
 		var json     = @params?.ToJsonString() ?? throw new TdcpInvalidParamsException("'params' is required for schedule.add");
-		var schedule = JsonSerializer.Deserialize<ScheduleModel>(json, TdcpJsonOptions.Default)
-		               ?? throw new TdcpInvalidParamsException("Could not parse ScheduleModel from params");
+		ScheduleModel? schedule;
+		try
+		{
+			schedule = JsonSerializer.Deserialize<ScheduleModel>(json, TdcpJsonOptions.Default);
+		}
+		catch (JsonException)
+		{
+			throw new TdcpInvalidParamsException("Could not parse ScheduleModel from params");
+		}
+
+		if (schedule == null)
+			throw new TdcpInvalidParamsException("Could not parse ScheduleModel from params");
 		_client.AddSchedule(schedule);
 		return new TdcpEmptyResult();
 	}

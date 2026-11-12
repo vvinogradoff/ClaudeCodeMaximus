@@ -430,7 +430,6 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_busyCount++;
 		IsBusy = true;
 		_node.IsRunning = true;
-		OpenDaemonRunning();
 
 		// FR.21.2 — lazily ensure a Telegram topic exists for this session on its first interactive
 		// activity since the bridge was enabled. Fire-and-forget: never throws, never delays the turn.
@@ -540,6 +539,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		var sendCancelled = false;
 		string? sendErrorText = null;
 
+		// Opened right before the try whose finally closes it, so nothing that throws in between can leak the share.
+		OpenDaemonRunning();
 		try
 		{
 			if (turnLock != null)

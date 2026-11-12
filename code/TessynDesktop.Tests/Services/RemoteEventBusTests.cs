@@ -121,6 +121,44 @@ public sealed class RemoteEventBusTests : IDisposable
 	}
 
 	[Fact]
+	public void FlushPending_PublishesNowOnTheCallingThread_AndTheWindowDoesNotPublishAgain()
+	{
+		var factoryCalls = 0;
+		_bus.PublishCoalesced("m", "k", () => { factoryCalls++; return new SamplePayload("n", null, 1); }, Window);
+
+		_bus.FlushPending("m", "k");
+
+		Assert.Single(Snapshot());
+		Thread.Sleep(Window * 3);
+		Assert.Single(Snapshot());
+		Assert.Equal(1, factoryCalls);
+	}
+
+	[Fact]
+	public void FlushPending_WithNothingPending_DoesNothing_AndOnlyMatchesItsOwnMethodAndKey()
+	{
+		_bus.FlushPending("m", "k");
+		_bus.PublishCoalesced("m", "other", () => new SamplePayload("n", null, 1), TimeSpan.FromSeconds(30));
+		_bus.PublishCoalesced("x", "k", () => new SamplePayload("n", null, 1), TimeSpan.FromSeconds(30));
+
+		_bus.FlushPending("m", "k");
+
+		Assert.Empty(Snapshot());
+	}
+
+	[Fact]
+	public void FlushPending_AFactoryReturningNull_PublishesNothing_AndALaterCallOpensANewWindow()
+	{
+		_bus.PublishCoalesced("m", "k", () => null, TimeSpan.FromSeconds(30));
+		_bus.FlushPending("m", "k");
+		Assert.Empty(Snapshot());
+
+		_bus.PublishCoalesced("m", "k", () => new SamplePayload("again", null, 2), Window);
+		Assert.True(_signal.Wait(Wait));
+		Assert.Single(Snapshot());
+	}
+
+	[Fact]
 	public void PublishCoalesced_AfterTheWindowEnded_StartsANewWindow()
 	{
 		_bus.PublishCoalesced("m", "k", () => new SamplePayload("first", null, 1), Window);

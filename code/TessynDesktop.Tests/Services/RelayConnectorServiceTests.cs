@@ -271,13 +271,15 @@ public sealed class RelayConnectorServiceTests : IDisposable
 	[Fact]
 	public async Task Pings_KeepTheLinkAlive()
 	{
-		var service = await StartConnectedAsync(FastTimings(deadLink: TimeSpan.FromMilliseconds(500)));
+		var service = await StartConnectedAsync(FastTimings(deadLink: TimeSpan.FromMilliseconds(1500)));
 		try
 		{
-			for (var i = 0; i < 8; i++)
+			// Pings for longer than the dead-link timeout, at a tenth of it: a stall of the test thread on a loaded machine
+			// would have to last over a second to look like a dead link.
+			for (var i = 0; i < 20; i++)
 			{
 				_server.Send(": ping\n\n");
-				await Task.Delay(150);
+				await Task.Delay(100);
 			}
 
 			Assert.Equal(1, _server.Connections);

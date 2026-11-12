@@ -124,6 +124,32 @@ public sealed class SessionFileService : ISessionFileService
 		return ParseEntries(lines.ToArray());
 	}
 
+	public IReadOnlyList<SessionEntryModel> ReadEntriesFrom(string fileName, long startOffset)
+	{
+		var fullPath = GetFullPath(fileName);
+		if (!File.Exists(fullPath))
+			return [];
+
+		var lines = new List<string>();
+		using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+		{
+			if (stream.Length <= startOffset)
+				return [];
+
+			// Same trick as ReadTailEntries: start one byte early so a line break there leaves the window at a line start.
+			var cut = startOffset > 0;
+			stream.Seek(cut ? startOffset - 1 : 0, SeekOrigin.Begin);
+
+			using var reader = new StreamReader(stream, Encoding.UTF8);
+			if (cut)
+				reader.ReadLine();
+
+			while (reader.ReadLine() is { } line)
+				lines.Add(line);
+		}
+		return ParseEntries(lines.ToArray());
+	}
+
 	public SessionFileStampModel? GetFileStamp(string fileName)
 	{
 		var info = new FileInfo(GetFullPath(fileName));

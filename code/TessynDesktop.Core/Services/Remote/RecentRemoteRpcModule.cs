@@ -113,6 +113,8 @@ public sealed class RecentRemoteRpcModule : IRemoteRpcModule
 			_appSettings.Save();
 		}
 
+		// The desktop row keeps its own copy of RecentIgnoredAt: tell it (and web clients) to re-read the model.
+		_registry.RaiseSessionSettingsChanged(nodeId);
 		return new RecentHideResult(true);
 	}
 

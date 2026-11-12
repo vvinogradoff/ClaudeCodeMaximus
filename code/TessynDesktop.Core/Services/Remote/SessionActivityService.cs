@@ -8,10 +8,11 @@ namespace TessynDesktop.Services;
 
 /// <inheritdoc cref="ISessionActivityService" />
 /// <remarks>
-/// Prompt and response times come from the entries of the session file: the last
-/// <see cref="Constants.Remote.ActivityTailBytes"/> bytes are parsed, and the whole file only when that tail holds no USER
-/// entry and the file is larger. A response older than the tail's last prompt may therefore read as missing, which never
-/// changes <see cref="SessionActivityModel.LastActivityUtc"/>. Created by Claude.
+/// Prompt and response times come from the entries of the session file. A cold entry parses the last
+/// <see cref="Constants.Remote.ActivityTailBytes"/> bytes, widened once to <see cref="Constants.Remote.ActivityColdParseMaxBytes"/>
+/// when that tail holds no USER entry (beyond it the last prompt reads as unknown). A file that only grew since the cached read
+/// parses just the appended bytes and merges them into the cached values; a shorter or same-length rewrite resets the entry.
+/// Draft presence is cached by the draft file's stamp, so a draft is read only when it changed. Created by Claude.
 /// </remarks>
 public sealed class SessionActivityService : ISessionActivityService
 {
@@ -20,6 +21,7 @@ public sealed class SessionActivityService : ISessionActivityService
 	private readonly ISessionFileService _files;
 	private readonly IDraftService _drafts;
 	private readonly ConcurrentDictionary<string, CachedActivity> _cache = new(StringComparer.OrdinalIgnoreCase);
+	private readonly ConcurrentDictionary<string, CachedDraft> _draftCache = new(StringComparer.OrdinalIgnoreCase);
 
 	public SessionActivityService(ISessionFileService files, IDraftService drafts)
 	{
@@ -48,10 +50,13 @@ public sealed class SessionActivityService : ISessionActivityService
 				return CachedActivity.None;
 			}
 
-			if (_cache.TryGetValue(fileName, out var cached) && cached.Stamp == stamp)
+			_cache.TryGetValue(fileName, out var cached);
+			if (cached != null && cached.Stamp == stamp)
 				return cached;
 
-			var computed = Compute(fileName, stamp);
+			var computed = cached?.Stamp != null && stamp.Length > cached.Stamp.Length
+				? Append(fileName, stamp, cached)
+				: Compute(fileName, stamp);
 			_cache[fileName] = computed;
 			return computed;
 		}
@@ -66,8 +71,17 @@ public sealed class SessionActivityService : ISessionActivityService
 	{
 		var entries = _files.ReadTailEntries(fileName, Constants.Remote.ActivityTailBytes);
 		if (stamp.Length > Constants.Remote.ActivityTailBytes && !ContainsRole(entries, Constants.SessionFile.RoleUser))
-			entries = _files.ReadEntries(fileName);
+			entries = _files.ReadTailEntries(fileName, Constants.Remote.ActivityColdParseMaxBytes);
 
+		return Scan(entries, stamp, previous: null);
+	}
+
+	/// <summary>The file only grew: parse the bytes after the cached length and let the newer values win.</summary>
+	private CachedActivity Append(string fileName, SessionFileStampModel stamp, CachedActivity previous) =>
+		Scan(_files.ReadEntriesFrom(fileName, previous.Stamp!.Length), stamp, previous);
+
+	private static CachedActivity Scan(IReadOnlyList<SessionEntryModel> entries, SessionFileStampModel stamp, CachedActivity? previous)
+	{
 		SessionEntryModel? lastUser = null;
 		DateTimeOffset? lastResponse = null;
 		for (var i = entries.Count - 1; i >= 0 && (lastUser == null || lastResponse == null); i--)
@@ -78,18 +92,31 @@ public sealed class SessionActivityService : ISessionActivityService
 				lastResponse = entries[i].Timestamp;
 		}
 
-		return new CachedActivity(stamp, lastUser?.Timestamp, lastResponse, lastUser?.ProfileName);
+		if (lastUser != null)
+			return new CachedActivity(stamp, lastUser.Timestamp, lastResponse ?? previous?.LastResponse, lastUser.ProfileName);
+
+		return new CachedActivity(stamp, previous?.LastPrompt, lastResponse ?? previous?.LastResponse, previous?.PromptProfileName);
 	}
 
 	private (bool HasDraft, DateTimeOffset? Time) ReadDraft(string fileName)
 	{
 		try
 		{
-			var draft = _drafts.LoadDraft(fileName);
-			if (string.IsNullOrWhiteSpace(draft))
+			var stamp = _drafts.GetDraftStamp(fileName);
+			if (stamp == null)
+			{
+				_draftCache.TryRemove(fileName, out _);
 				return (false, null);
+			}
 
-			return (true, _drafts.GetDraftTimestamp(fileName));
+			if (_draftCache.TryGetValue(fileName, out var cached) && cached.Stamp == stamp)
+				return (cached.HasDraft, cached.Time);
+
+			var draft = _drafts.LoadDraft(fileName);
+			var hasDraft = !string.IsNullOrWhiteSpace(draft);
+			var time = hasDraft ? _drafts.GetDraftTimestamp(fileName) : null;
+			_draftCache[fileName] = new CachedDraft(stamp, hasDraft, time);
+			return (hasDraft, time);
 		}
 		catch (Exception ex)
 		{
@@ -110,6 +137,8 @@ public sealed class SessionActivityService : ISessionActivityService
 
 	private static DateTimeOffset? Max(DateTimeOffset? a, DateTimeOffset? b) =>
 		a.HasValue && b.HasValue ? (a > b ? a : b) : a ?? b;
+
+	private sealed record CachedDraft(SessionFileStampModel Stamp, bool HasDraft, DateTimeOffset? Time);
 
 	private sealed record CachedActivity(SessionFileStampModel? Stamp, DateTimeOffset? LastPrompt, DateTimeOffset? LastResponse, string? PromptProfileName)
 	{

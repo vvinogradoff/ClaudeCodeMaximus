@@ -23,6 +23,7 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 	private readonly IAppSettingsService       _appSettings;
 	private readonly IClaudeModelService       _models;
 	private readonly IClaudeProfileService     _profiles;
+	private readonly ITurnOptionsResolver      _optionsResolver;
 
 	public SessionCompactRpcModule(
 		ISessionRegistry registry,
@@ -31,59 +32,59 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		ISessionFileService fileService,
 		IAppSettingsService appSettings,
 		IClaudeModelService models,
-		IClaudeProfileService profiles)
+		IClaudeProfileService profiles,
+		ITurnOptionsResolver optionsResolver)
 	{
-		_registry    = registry;
-		_compaction  = compaction;
-		_turnService = turnService;
-		_fileService = fileService;
-		_appSettings = appSettings;
-		_models      = models;
-		_profiles    = profiles;
+		_registry        = registry;
+		_compaction      = compaction;
+		_turnService     = turnService;
+		_fileService     = fileService;
+		_appSettings     = appSettings;
+		_models          = models;
+		_profiles        = profiles;
+		_optionsResolver = optionsResolver;
 	}
 
 	/// <inheritdoc />
 	public void Register(TdcpMethodRegistry registry) =>
-		registry.AddSync(Constants.Remote.Methods.SessionCompact, Compact, remoteCallable: true);
+		registry.Add(Constants.Remote.Methods.SessionCompact, (p, _) => CompactAsync(p), remoteCallable: true);
 
-	private object? Compact(JsonNode? @params)
+	private async Task<object?> CompactAsync(JsonNode? @params)
 	{
-		var nodeId    = TdcpParams.RequireString(@params, "nodeId");
-		var modelId   = TdcpParams.OptionalString(@params, "modelId");
-		var effort    = TdcpParams.OptionalString(@params, "effort");
-		var profileId = TdcpParams.OptionalString(@params, "profileId");
+		var nodeId = TdcpParams.RequireString(@params, "nodeId");
 
-		if (effort != null && !Constants.Remote.Efforts.Contains(effort))
-			throw new TdcpInvalidParamsException($"'effort' must be one of: {string.Join(", ", Constants.Remote.Efforts)}");
+		// The same validation as session.send: unknown model, effort or profile is -32602.
+		var requested = await _optionsResolver.ResolveAsync(@params);
 
 		var node = _registry.FindModelByNodeId(nodeId) ?? throw new TdcpException("Session not found");
-		var options = ResolveOptions(node, modelId, effort, profileId);
+		var options = ResolveOptions(node, requested);
 
 		var queued = _registry.IsSessionRunning(nodeId);
 		_ = Task.Run(() => RunAsync(node, options));
 		return new SessionCompactResult(true, queued);
 	}
 
-	/// <summary>Resolves the run options like a headless turn: absent model = node, directory, app setting; "default" = no flag; absent profile = the session's own.</summary>
-	private SessionCompactionOptionsModel ResolveOptions(SessionNodeModel node, string? modelId, string? effort, string? profileId)
+	/// <summary>Turns the validated per-turn options into run options like a headless turn: absent model = node, directory, app setting; "default" = no flag; absent profile = the session's own.</summary>
+	private SessionCompactionOptionsModel ResolveOptions(SessionNodeModel node, TurnOptionsModel? requested)
 	{
 		// May read the session file, so it is resolved before the settings lock is taken.
-		var ownProfileName = profileId == null ? _turnService.ResolveProfileName(node) : null;
+		var profileName = requested?.ProfileName ?? _turnService.ResolveProfileName(node);
 
 		string? effectiveModelId;
 		string? profileConfigDir;
 		lock (_appSettings.SyncRoot)
 		{
-			effectiveModelId = modelId == null ? ResolveEffectiveModel(node)
-				: modelId == Constants.Remote.DefaultOptionId ? null : modelId;
+			effectiveModelId = requested?.ModelId == null ? ResolveEffectiveModel(node)
+				: requested.ModelId == Constants.Remote.DefaultOptionId ? null : requested.ModelId;
 
-			profileConfigDir = ResolveProfileConfigDir(ownProfileName, profileId);
+			profileConfigDir = ResolveProfileConfigDir(profileName);
 		}
 
 		var modelInfo = string.IsNullOrEmpty(effectiveModelId)
 			? null
 			: _models.GetCachedModels().FirstOrDefault(m => m.Id == effectiveModelId);
 
+		var effort = requested?.Effort;
 		var effectiveEffort = string.IsNullOrEmpty(effort) || effort == Constants.Remote.DefaultOptionId ? null : effort;
 		return new SessionCompactionOptionsModel(effectiveModelId, effectiveEffort, profileConfigDir, modelInfo);
 	}
@@ -101,36 +102,20 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		return string.IsNullOrEmpty(_appSettings.Settings.SelectedModelId) ? null : _appSettings.Settings.SelectedModelId;
 	}
 
-	/// <summary>Caller holds the settings lock. "default" = the Default profile; an unknown id is an invalid parameter.</summary>
-	private string? ResolveProfileConfigDir(string? ownProfileName, string? profileId)
+	/// <summary>Caller holds the settings lock. A name that matches no stored profile (the Default label, a deleted profile) means the Default profile.</summary>
+	private string? ResolveProfileConfigDir(string? profileName)
 	{
-		IReadOnlyList<ClaudeProfileModel> profiles = _appSettings.Settings.Profiles;
-
-		if (profileId == null)
-		{
-			var name = ownProfileName;
-			if (string.IsNullOrEmpty(name))
-				return null;
-
-			for (var i = 0; i < profiles.Count; i++)
-			{
-				if (string.Equals(profiles[i].DisplayName, name, StringComparison.OrdinalIgnoreCase))
-					return _profiles.GetConfigDirForProfile(i + 1, profiles);
-			}
-
-			return null; // The profile was deleted or renamed: fall back to Default like a headless turn.
-		}
-
-		if (profileId == Constants.Remote.DefaultOptionId)
+		if (string.IsNullOrEmpty(profileName))
 			return null;
 
+		IReadOnlyList<ClaudeProfileModel> profiles = _appSettings.Settings.Profiles;
 		for (var i = 0; i < profiles.Count; i++)
 		{
-			if (string.Equals(profiles[i].ProfileId, profileId, StringComparison.Ordinal))
+			if (string.Equals(profiles[i].DisplayName, profileName, StringComparison.OrdinalIgnoreCase))
 				return _profiles.GetConfigDirForProfile(i + 1, profiles);
 		}
 
-		throw new TdcpInvalidParamsException("'profileId' is unknown");
+		return null;
 	}
 
 	private async Task RunAsync(SessionNodeModel node, SessionCompactionOptionsModel options)

@@ -33,6 +33,12 @@ public sealed class RemoteTreePerformanceTests : IDisposable
 	private readonly FakeSessionTagService _tags = new();
 	private readonly InProcFakeIndexService _index = new();
 	private readonly string _firstTopLevelId;
+	private readonly RecordingProxy<ISessionFileService> _fileCalls;
+
+	// Wall-clock figures are printed for the record but only guard against a catastrophe (a machine under full load took
+	// 4 s for a cold list that normally takes 0.2 s); the real regression guard is the deterministic file-read count.
+	private static readonly TimeSpan ColdCeiling = TimeSpan.FromSeconds(30);
+	private static readonly TimeSpan WarmCeiling = TimeSpan.FromSeconds(5);
 
 	public RemoteTreePerformanceTests(ITestOutputHelper output)
 	{
@@ -47,7 +53,7 @@ public sealed class RemoteTreePerformanceTests : IDisposable
 		_firstTopLevelId = BuildTree();
 
 		var registry = new SessionRegistry(_settings, _files, new FakeDirectoryLabelService(), new FakeClaudeSessionStatusService());
-		var activity = new SessionActivityService(_files, new FakeDraftService());
+		var activity = new SessionActivityService(RecordingProxy<ISessionFileService>.Wrap(_files, out _fileCalls), new FakeDraftService());
 		var attention = new FakeAttentionService();
 		var states = new SessionStateBuilder(registry, new FakeStreamingManagerForTurnService(), attention, activity);
 		var reader = new RemoteTreeReader(_settings);
@@ -153,8 +159,10 @@ public sealed class RemoteTreePerformanceTests : IDisposable
 		var (warm, _) = await TimeAsync("tree.snapshot");
 
 		_output.WriteLine($"tree.snapshot: cold {cold:F0} ms (reads {TopLevelSessions} session-file tails), warm {warm:F0} ms, {json.Length / 1024} KB");
-		Assert.True(cold < 3000, $"cold {cold} ms");
-		Assert.True(warm < 500, $"warm {warm} ms");
+		Assert.Equal(TopLevelSessions, _fileCalls.CountOf(nameof(ISessionFileService.ReadTailEntries)));
+		Assert.Equal(0, _fileCalls.CountOf(nameof(ISessionFileService.ReadEntries)));
+		Assert.True(cold < ColdCeiling.TotalMilliseconds, $"cold {cold} ms");
+		Assert.True(warm < WarmCeiling.TotalMilliseconds, $"warm {warm} ms");
 	}
 
 	[Fact]
@@ -164,8 +172,9 @@ public sealed class RemoteTreePerformanceTests : IDisposable
 		var (warm, json) = await TimeAsync("recent.list");
 
 		_output.WriteLine($"recent.list: cold {cold:F0} ms, warm {warm:F0} ms, {json.Length / 1024} KB");
-		Assert.True(cold < 3000, $"cold {cold} ms");
-		Assert.True(warm < 500, $"warm {warm} ms");
+		Assert.Equal(0, _fileCalls.CountOf(nameof(ISessionFileService.ReadEntries)));
+		Assert.True(cold < ColdCeiling.TotalMilliseconds, $"cold {cold} ms");
+		Assert.True(warm < WarmCeiling.TotalMilliseconds, $"warm {warm} ms");
 	}
 
 	[Fact]
@@ -182,7 +191,7 @@ public sealed class RemoteTreePerformanceTests : IDisposable
 		var (ms, json) = await TimeAsync("tree.search", """{"query":"a long enough query"}""");
 
 		_output.WriteLine($"tree.search (all {all.Count} sessions match): {ms:F0} ms, {json.Length / 1024} KB");
-		Assert.True(ms < 1000, $"{ms} ms");
+		Assert.True(ms < WarmCeiling.TotalMilliseconds, $"{ms} ms");
 	}
 
 	private static void CollectScores(System.Collections.Generic.List<SessionNodeModel> sessions, System.Collections.Generic.List<GroupNodeModel> groups, System.Collections.Generic.List<SessionSearchScoreModel> into)
@@ -202,7 +211,7 @@ public sealed class RemoteTreePerformanceTests : IDisposable
 		var (ms, json) = await TimeAsync("tags.search", """{"text":"","selected":[{"key":"HSE-1","label":"HSE-1","url":"https://linear.app/x/HSE-1","kind":"linearIssue"}]}""");
 
 		_output.WriteLine($"tags.search (one tag on every session, selected): {ms:F0} ms, {json.Length / 1024} KB");
-		Assert.True(ms < 1000, $"{ms} ms");
+		Assert.True(ms < WarmCeiling.TotalMilliseconds, $"{ms} ms");
 	}
 
 	[Fact]

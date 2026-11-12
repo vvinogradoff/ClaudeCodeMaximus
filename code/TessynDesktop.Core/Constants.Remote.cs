@@ -167,5 +167,8 @@ public static partial class Constants
 
 		/// <summary>How much of a session file's end the activity service parses (contract section 3, SessionActivityService).</summary>
 		public const int ActivityTailBytes = 64 * 1024;
+
+		/// <summary>Largest tail a cold activity read may parse when the first tail holds no USER entry; beyond it the last prompt is reported as unknown.</summary>
+		public const int ActivityColdParseMaxBytes = 4 * 1024 * 1024;
 	}
 }

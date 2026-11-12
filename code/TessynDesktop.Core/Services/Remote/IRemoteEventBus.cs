@@ -25,4 +25,11 @@ public interface IRemoteEventBus
 	/// ends, on a timer thread, so the payload reflects the latest state; a factory that returns null publishes nothing.
 	/// </summary>
 	void PublishCoalesced(string method, string key, Func<object?> payloadFactory, TimeSpan window);
+
+	/// <summary>
+	/// Publishes the pending coalesced notification of <paramref name="method"/> and <paramref name="key"/> now, on the calling
+	/// thread, instead of waiting for its window. Does nothing when none is pending. Lets a later notification (such as
+	/// <c>turn.completed</c>) go out after the ones it must not overtake.
+	/// </summary>
+	void FlushPending(string method, string key);
 }

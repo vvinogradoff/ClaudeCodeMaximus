@@ -113,8 +113,21 @@ internal sealed class DiagnosticsTestEnv : IDisposable
 
 	public void Dispose()
 	{
-		if (Directory.Exists(Folder))
-			Directory.Delete(Folder, recursive: true);
+		// A background capture may still be writing its artifact when the test body is done: wait for it to let go.
+		var deadline = Environment.TickCount64 + 10_000;
+		while (Directory.Exists(Folder))
+		{
+			try
+			{
+				Directory.Delete(Folder, recursive: true);
+			}
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+			{
+				if (Environment.TickCount64 > deadline)
+					throw;
+				System.Threading.Thread.Sleep(25);
+			}
+		}
 	}
 
 	public static bool WaitFor(Func<bool> condition, int timeoutMs = 5000)

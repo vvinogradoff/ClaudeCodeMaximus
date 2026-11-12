@@ -58,6 +58,12 @@ internal sealed class CompactionProfileServiceFake : IClaudeProfileService
 	public void MarkProfileDirectoryRemoved(string profileId) { }
 }
 
+internal sealed class CompactionLabelServiceFake : IProfileLabelService
+{
+	public Task<string> GetDefaultLabelAsync() => Task.FromResult("[Sys] Default");
+	public string GetDefaultLabelCached() => "[Sys] Default";
+}
+
 /// <summary>The <c>session.compact</c> remote method: validation, option resolution, background run and outcome reporting.</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionCompactRpcModuleTests : IDisposable
@@ -92,7 +98,8 @@ public sealed class SessionCompactRpcModuleTests : IDisposable
 		_registry.LoadFromSettings();
 
 		_files.TurnCompleted += (_, e) => { lock (_completed) _completed.Add(e); };
-		var module = new SessionCompactRpcModule(_registry, _compaction, _turns, _files, _settings, _models, new CompactionProfileServiceFake());
+		var module = new SessionCompactRpcModule(_registry, _compaction, _turns, _files, _settings, _models, new CompactionProfileServiceFake(),
+			new TurnOptionsResolver(_models, _settings, new CompactionLabelServiceFake()));
 		_dispatcher = new TdcpDispatcher([module]);
 	}
 
@@ -172,6 +179,15 @@ public sealed class SessionCompactRpcModuleTests : IDisposable
 	{
 		var response = await Call(_node.NodeId, ("modelId", 7));
 		Assert.Equal(-32602, ErrorCode(response));
+	}
+
+	[Fact]
+	public async Task UnknownModelId_IsInvalidParams_LikeSessionSend()
+	{
+		var response = await Call(_node.NodeId, ("modelId", "no-such-model"));
+
+		Assert.Equal(-32602, ErrorCode(response));
+		Assert.Null(_compaction.Options);
 	}
 
 	[Fact]

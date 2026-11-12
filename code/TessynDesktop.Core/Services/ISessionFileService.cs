@@ -44,6 +44,12 @@ public interface ISessionFileService
 	/// </summary>
 	IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes);
 
+	/// <summary>
+	/// Parses only the bytes from <paramref name="startOffset"/> (the length of an earlier read, i.e. a line boundary) to the end
+	/// of the file. A partial line at the offset is skipped. Empty when the file is missing or not longer than the offset.
+	/// </summary>
+	IReadOnlyList<SessionEntryModel> ReadEntriesFrom(string fileName, long startOffset);
+
 	/// <summary>The file's current (length, last write time) stamp, or null when the file is missing. Never reads content.</summary>
 	SessionFileStampModel? GetFileStamp(string fileName);
 

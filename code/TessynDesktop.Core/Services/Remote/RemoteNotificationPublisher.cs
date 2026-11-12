@@ -132,13 +132,21 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		var cancelled = e.Cancelled;
 		var error     = e.ErrorText;
 
-		// Every completion is its own notification (a unique key), but the node lookup is still deferred off this thread.
+		// Every completion is its own notification (a unique key), but the work is deferred off this thread. The factory first
+		// publishes the session's pending appended/changed notifications, so turn.completed never overtakes the last of them.
 		_bus.PublishCoalesced(
 			Constants.Remote.Events.TurnCompleted, Guid.NewGuid().ToString("N"),
 			() =>
 			{
+				_bus.FlushPending(Constants.Remote.Events.SessionAppended, FileKeyPrefix + fileName);
+				_bus.FlushPending(Constants.Remote.Events.SessionChanged, FileKeyPrefix + fileName);
+
 				var node = _daemon.FindSessionByFileName(fileName);
-				return node == null ? null : new TurnCompletedPayload(node.NodeId, cancelled, error);
+				if (node == null)
+					return null;
+
+				_bus.FlushPending(Constants.Remote.Events.SessionChanged, NodeKeyPrefix + node.NodeId);
+				return new TurnCompletedPayload(node.NodeId, cancelled, error);
 			},
 			Constants.Remote.Timings.Immediate);
 	});

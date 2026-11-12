@@ -120,10 +120,6 @@ public sealed class TdcpDispatcher
 		{
 			return Error(id, DaemonError, ex.Message);
 		}
-		catch (Exception ex) when (ex is FormatException or JsonException or InvalidCastException)
-		{
-			return Error(id, InvalidParams, InvalidParamsMessage);
-		}
 		catch (Exception ex)
 		{
 			_log.Error(ex, "TdcpDispatcher: unhandled error in a method handler");

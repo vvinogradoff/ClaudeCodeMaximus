@@ -24,6 +24,8 @@ internal sealed class SampleRpcModule : IRemoteRpcModule
 		registry.AddSync("sample.number", p => TdcpParams.OptionalInt(p, "n") ?? 0, remoteCallable: true);
 		registry.AddSync("sample.daemonError", _ => throw new TdcpException("Session not found"), remoteCallable: true);
 		registry.AddSync("sample.format", _ => throw new FormatException("bad value"), remoteCallable: true);
+		registry.AddSync("sample.json", _ => throw new System.Text.Json.JsonException("bad json"), remoteCallable: true);
+		registry.AddSync("sample.cast", _ => throw new InvalidCastException("bad cast"), remoteCallable: true);
 		registry.AddSync("sample.boom", _ => throw new InvalidOperationException("secret internal detail"), remoteCallable: true);
 		registry.Add("sample.async", async (_, ct) =>
 		{
@@ -175,9 +177,30 @@ public sealed class TdcpDispatcherTests
 	}
 
 	[Fact]
-	public async Task FormatException_ReturnsInvalidParams()
+	public async Task FormatException_FromAHandlerBug_IsInternalErrorNotInvalidParams()
 	{
 		var response = await Send(Create(), """{"id":1,"method":"sample.format"}""");
+
+		Assert.Equal(-32603, ErrorCode(response));
+		Assert.DoesNotContain("bad value", ErrorMessage(response));
+	}
+
+	[Theory]
+	[InlineData("sample.json")]
+	[InlineData("sample.cast")]
+	public async Task JsonAndCastExceptions_FromAHandlerBug_AreInternalErrors(string method)
+	{
+		var response = await Send(Create(), $$"""{"id":1,"method":"{{method}}"}""");
+
+		Assert.Equal(-32603, ErrorCode(response));
+	}
+
+	[Fact]
+	public async Task ScheduleAddWithMalformedSchedule_ReturnsInvalidParams()
+	{
+		var sut = new TdcpDispatcher([new TdcpLoopbackRpcModule(new WireFakeDaemonClient())]);
+
+		var response = await Send(sut, """{"id":1,"method":"schedule.add","params":{"id":123,"cron":{"x":1}}}""");
 
 		Assert.Equal(-32602, ErrorCode(response));
 	}

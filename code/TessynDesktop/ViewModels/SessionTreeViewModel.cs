@@ -246,14 +246,14 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		}
 	}
 
-	/// <summary>A daemon method (the web client) changed a session's favourite flag: refresh its row.</summary>
+	/// <summary>A daemon method (the web client) changed a session's favourite flag or hidden-from-Recent time: refresh its row.</summary>
 	private void OnSessionSettingsChanged(object? sender, SessionSettingsChangedEventArgs e)
 	{
 		Dispatcher.UIThread.Post(() =>
 		{
 			var node = FindNodeVmByNodeId(e.NodeId);
 			if (node != null)
-				node.IsFavorite = node.Model.IsFavorite;
+				node.RefreshSettingsFromModel();
 		});
 	}
 

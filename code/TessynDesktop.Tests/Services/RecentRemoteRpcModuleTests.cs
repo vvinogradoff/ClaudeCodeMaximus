@@ -181,6 +181,21 @@ public sealed class RecentRemoteRpcModuleTests : IDisposable
 	}
 
 	[Fact]
+	public async Task Hide_RaisesSessionSettingsChanged_SoTheDesktopRowRefreshes_AndAPinnedRefusalDoesNot()
+	{
+		var raised = new List<string>();
+		_env.Registry.SessionSettingsChanged += (_, e) => raised.Add(e.NodeId);
+		var s = Session("S", TimeSpan.FromHours(1));
+		var fav = Session("Fav", TimeSpan.FromHours(1));
+		fav.IsFavorite = true;
+
+		await _env.CallAsync("recent.hide", $$"""{"nodeId":"{{s.NodeId}}"}""");
+		await _env.CallAsync("recent.hide", $$"""{"nodeId":"{{fav.NodeId}}"}""");
+
+		Assert.Equal([s.NodeId], raised);
+	}
+
+	[Fact]
 	public async Task Hide_RefusesAPinnedSession_AndChangesNothing()
 	{
 		var fav = Session("Fav", TimeSpan.FromHours(1));

@@ -183,6 +183,13 @@ public sealed class SessionNodeViewModel : ViewModelBase
 		this.RaisePropertyChanged(nameof(IsHiddenFromRecent));
 	}
 
+	/// <summary>Re-reads the settings a daemon method (the web client) may have changed on the model; call on the UI thread.</summary>
+	public void RefreshSettingsFromModel()
+	{
+		IsFavorite       = Model.IsFavorite;
+		RecentIgnoredAt  = Model.RecentIgnoredAt;
+	}
+
 	/// <summary>
 	/// Timestamp when the user hid this session from the recent-sessions dropdown, or null if never hidden
 	/// (or if hidden but activity has since occurred, in which case it's cleared back to null — see setter).

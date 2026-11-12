@@ -60,6 +60,19 @@ public sealed class RemoteEventBus : IRemoteEventBus, IDisposable
 		}
 	}
 
+	/// <inheritdoc />
+	public void FlushPending(string method, string key)
+	{
+		try
+		{
+			Fire(method + "\n" + key);
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "RemoteEventBus: could not flush {Method}", method);
+		}
+	}
+
 	/// <summary>Cancels every pending publication; later calls do nothing.</summary>
 	public void Dispose()
 	{
@@ -74,11 +87,16 @@ public sealed class RemoteEventBus : IRemoteEventBus, IDisposable
 
 	private void OnTimer(object? state)
 	{
-		var pending = (PendingPublish)state!;
+		Fire(((PendingPublish)state!).Key);
+	}
+
+	private void Fire(string pendingKey)
+	{
+		PendingPublish? pending;
 		lock (_gate)
 		{
 			// Removed before the factory runs: a call arriving while it runs opens the next window.
-			if (!_pending.Remove(pending.Key))
+			if (!_pending.Remove(pendingKey, out pending))
 				return;
 		}
 
