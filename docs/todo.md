@@ -1032,5 +1032,22 @@ Requirements: FR.24 in `docs/requirements.md` (Architect request 2026-11-04). Ph
 - [DONE] Daemon client: `IDaemonClient` additions, `InProcDaemonClient` delegation and `SessionTagsChanged` relay, `WireDaemonClient` stubs (FR.24.8)
 - [DONE] Core tests: parser, workspace map, service, `tag_session`, `InstructionBlockBuilder`, `SessionTagUrlPolicy`, `InProcDaemonClient`
 - [DONE] UI: Tag row in the session header, chips, tooltip, click-to-open, live refresh (FR.24.7)
-- [ ] Manual UI pass TC.TG.19–TC.TG.27 in the running app (needs an app restart to load 6e4b927): chip look/hover in both themes, wrapping, tooltip, browser opening, rename refresh (FR.24.7)
+- [DONE] Manual UI pass TC.TG.19–TC.TG.27 — the Architect confirmed in the running app on 2026-11-06 that tags show and open correctly (originally: needs an app restart to load 6e4b927): chip look/hover in both themes, wrapping, tooltip, browser opening, rename refresh (FR.24.7)
 - [ ] FR.24.9 Phase 2: status colours — decide the Linear access route (options a/b/c in FR.24.9) — NOT STARTED
+
+## Phase 38 — Runtime diagnostics for memory growth and UI freezes (perf D1/D2; plan in `.perf-diag/00-plan.md`)
+- [DONE] D1.1 Global exception handlers (AppDomain, TaskScheduler, Avalonia dispatcher)
+- [DONE] D1.2 Logging: Information by default (`Diagnostics.VerboseLogging` for Debug), 50 MB roll on size, ThreadId and `|UI` marker
+- [DONE] D1.3 `MEM` metrics line every 60 s (`ProcessMetricsSampler`)
+- [DONE] D1.4 UI hang watchdog: WRN at 1 s or more, ClrMD stack capture to `%AppData%\TessynDesktop\diag\hang-*.txt` at 5 s or more
+- [DONE] D1.5 `IOperationTimer` scopes on known UI hotspots; `SLOW-SAVE` breakdown in `AppSettingsService.Save`
+- [DONE] D1.6 Heap histogram captured automatically above 4 GB private bytes
+- [DONE] D1.7 MCP tools `diag_snapshot`, `diag_heap`, `diag_dump` (dumps off by default)
+- [DONE] D2.1 Resumability sweep off the UI thread, one directory listing per sweep
+- [DONE] D2.2 JSONL entry-count baseline computed off the UI thread (ISSUE.009/014 ordering preserved)
+- D1.x `diag_*` tools still authenticate through `SessionRegistry.FindModelByAgentToken`, which takes `SyncRoot`, so they block during a SyncRoot convoy; needs a lock-free token check
+- Collect 1–2 days of `MEM` / `SLOW-UI` / hang data, then file ISSUE.016 with the measured causes
+- D2.3 `SessionView` unsubscribes from VM events when detached (suspected transcript visual-tree leak per switch); confirm with `diag_heap` first
+- D2.4 Bounded session VM cache (LRU 5) with Dispose (WPF plan 0.4)
+- D2.5 Avalonia 11.3.9 → latest 11.3.x (ItemsControl leak fixes in 11.3.13); csproj change, needs the Architect's approval
+- Docs: FR section for diagnostics + settings keys (docs-first waived; document after the fact on request)
