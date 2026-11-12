@@ -1,0 +1,165 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
+using TessynDesktop.Models;
+using TessynDesktop.Models.Remote;
+using Serilog;
+
+namespace TessynDesktop.Services;
+
+/// <summary>Remote-callable <c>session.compact</c> (contract section 3.14): starts <see cref="ISessionCompactionService"/> in the background.</summary>
+/// <remarks>Created by Claude</remarks>
+public sealed class SessionCompactRpcModule : IRemoteRpcModule
+{
+	private static readonly ILogger _log = Log.ForContext<SessionCompactRpcModule>();
+
+	private readonly ISessionRegistry          _registry;
+	private readonly ISessionCompactionService _compaction;
+	private readonly ISessionTurnService       _turnService;
+	private readonly ISessionFileService       _fileService;
+	private readonly IAppSettingsService       _appSettings;
+	private readonly IClaudeModelService       _models;
+	private readonly IClaudeProfileService     _profiles;
+
+	public SessionCompactRpcModule(
+		ISessionRegistry registry,
+		ISessionCompactionService compaction,
+		ISessionTurnService turnService,
+		ISessionFileService fileService,
+		IAppSettingsService appSettings,
+		IClaudeModelService models,
+		IClaudeProfileService profiles)
+	{
+		_registry    = registry;
+		_compaction  = compaction;
+		_turnService = turnService;
+		_fileService = fileService;
+		_appSettings = appSettings;
+		_models      = models;
+		_profiles    = profiles;
+	}
+
+	/// <inheritdoc />
+	public void Register(TdcpMethodRegistry registry) =>
+		registry.AddSync(Constants.Remote.Methods.SessionCompact, Compact, remoteCallable: true);
+
+	private object? Compact(JsonNode? @params)
+	{
+		var nodeId    = TdcpParams.RequireString(@params, "nodeId");
+		var modelId   = TdcpParams.OptionalString(@params, "modelId");
+		var effort    = TdcpParams.OptionalString(@params, "effort");
+		var profileId = TdcpParams.OptionalString(@params, "profileId");
+
+		if (effort != null && !Constants.Remote.Efforts.Contains(effort))
+			throw new TdcpInvalidParamsException($"'effort' must be one of: {string.Join(", ", Constants.Remote.Efforts)}");
+
+		var node = _registry.FindModelByNodeId(nodeId) ?? throw new TdcpException("Session not found");
+		var options = ResolveOptions(node, modelId, effort, profileId);
+
+		var queued = _registry.IsSessionRunning(nodeId);
+		_ = Task.Run(() => RunAsync(node, options));
+		return new SessionCompactResult(true, queued);
+	}
+
+	/// <summary>Resolves the run options like a headless turn: absent model = node, directory, app setting; "default" = no flag; absent profile = the session's own.</summary>
+	private SessionCompactionOptionsModel ResolveOptions(SessionNodeModel node, string? modelId, string? effort, string? profileId)
+	{
+		// May read the session file, so it is resolved before the settings lock is taken.
+		var ownProfileName = profileId == null ? _turnService.ResolveProfileName(node) : null;
+
+		string? effectiveModelId;
+		string? profileConfigDir;
+		lock (_appSettings.SyncRoot)
+		{
+			effectiveModelId = modelId == null ? ResolveEffectiveModel(node)
+				: modelId == Constants.Remote.DefaultOptionId ? null : modelId;
+
+			profileConfigDir = ResolveProfileConfigDir(ownProfileName, profileId);
+		}
+
+		var modelInfo = string.IsNullOrEmpty(effectiveModelId)
+			? null
+			: _models.GetCachedModels().FirstOrDefault(m => m.Id == effectiveModelId);
+
+		var effectiveEffort = string.IsNullOrEmpty(effort) || effort == Constants.Remote.DefaultOptionId ? null : effort;
+		return new SessionCompactionOptionsModel(effectiveModelId, effectiveEffort, profileConfigDir, modelInfo);
+	}
+
+	private string? ResolveEffectiveModel(SessionNodeModel node)
+	{
+		if (!string.IsNullOrEmpty(node.ModelId))
+			return node.ModelId;
+
+		var directory = _appSettings.Settings.Tree.FirstOrDefault(d =>
+			string.Equals(d.Path, node.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
+		if (!string.IsNullOrEmpty(directory?.SelectedModelId))
+			return directory.SelectedModelId;
+
+		return string.IsNullOrEmpty(_appSettings.Settings.SelectedModelId) ? null : _appSettings.Settings.SelectedModelId;
+	}
+
+	/// <summary>Caller holds the settings lock. "default" = the Default profile; an unknown id is an invalid parameter.</summary>
+	private string? ResolveProfileConfigDir(string? ownProfileName, string? profileId)
+	{
+		IReadOnlyList<ClaudeProfileModel> profiles = _appSettings.Settings.Profiles;
+
+		if (profileId == null)
+		{
+			var name = ownProfileName;
+			if (string.IsNullOrEmpty(name))
+				return null;
+
+			for (var i = 0; i < profiles.Count; i++)
+			{
+				if (string.Equals(profiles[i].DisplayName, name, StringComparison.OrdinalIgnoreCase))
+					return _profiles.GetConfigDirForProfile(i + 1, profiles);
+			}
+
+			return null; // The profile was deleted or renamed: fall back to Default like a headless turn.
+		}
+
+		if (profileId == Constants.Remote.DefaultOptionId)
+			return null;
+
+		for (var i = 0; i < profiles.Count; i++)
+		{
+			if (string.Equals(profiles[i].ProfileId, profileId, StringComparison.Ordinal))
+				return _profiles.GetConfigDirForProfile(i + 1, profiles);
+		}
+
+		throw new TdcpInvalidParamsException("'profileId' is unknown");
+	}
+
+	private async Task RunAsync(SessionNodeModel node, SessionCompactionOptionsModel options)
+	{
+		string? error = null;
+		try
+		{
+			var result = await _compaction.CompactAsync(node, options, CancellationToken.None);
+			if (result.Outcome != SessionCompactionOutcome.Compacted)
+			{
+				error = result.Outcome == SessionCompactionOutcome.Failed ? result.Error ?? result.SystemMessage : null;
+
+				// An append never touches the existing history; it tells the web client why nothing changed.
+				_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, result.SystemMessage);
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Remote compaction failed for session {FileName}", node.FileName);
+			error = ex.Message;
+		}
+
+		try
+		{
+			_fileService.NotifyTurnCompleted(node.FileName, cancelled: false, error);
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "TurnCompleted handler failed after remote compaction of {FileName}", node.FileName);
+		}
+	}
+}

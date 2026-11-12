@@ -231,6 +231,7 @@ public partial class App : Application
 		// Agent orchestration singletons (FR.14, FR.15).
 		// Lazy<T> registrations break the circular dependency between ISessionTurnService ↔ IAgentMcpServer.
 		services.AddSingleton<ISessionTurnService, SessionTurnService>();
+		services.AddSingleton<ISessionCompactionService, SessionCompactionService>();
 		services.AddSingleton<IAgentMcpServer, AgentMcpServer>();
 		services.AddSingleton<ISchedulerService, SchedulerService>();
 		services.AddSingleton<ISkillProvisioningService, SkillProvisioningService>();
@@ -273,6 +274,7 @@ public partial class App : Application
 		services.AddTransient<IRemoteRpcModule, TdcpLoopbackRpcModule>();
 		services.AddSingleton<IRemoteRpcModule, ClientRpcModule>();
 		services.AddSingleton<TdcpDispatcher>();
+		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
 		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
 		services.AddSingleton<ITreeVersionTracker, TreeVersionTracker>();
 		services.AddSingleton<ISessionEpochTracker, SessionEpochTracker>();
