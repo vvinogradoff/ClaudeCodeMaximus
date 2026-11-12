@@ -1,3 +1,4 @@
+import { safeHttpsUrl } from '../lib/url';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { rpc } from '../api/rpc';
 import type { TagChipDto, TagRefDto, TagSearchResult } from '../api/types';
@@ -25,7 +26,8 @@ const KIND_ICON: Record<TagChipDto['kind'], string> = { linearIssue: '◆', gitH
 function Chip({ chip, onToggle }: { chip: TagChipDto; onToggle: () => void }) {
 	const timer = useRef<number | undefined>(undefined);
 	const fired = useRef(false);
-	const open = () => window.open(chip.url, '_blank', 'noopener,noreferrer');
+	const href = safeHttpsUrl(chip.url);
+	const open = () => { if (href) window.open(href, '_blank', 'noopener,noreferrer'); };
 	return (
 		<span className={`chip ${chip.selected ? 'sel' : ''}`}>
 			<button type="button" className="chip-main" aria-pressed={chip.selected}
@@ -35,7 +37,7 @@ function Chip({ chip, onToggle }: { chip: TagChipDto; onToggle: () => void }) {
 				onClick={() => { if (!fired.current) onToggle(); }}>
 				<span className="kind-ico">{KIND_ICON[chip.kind]}</span>{chip.label}<span className="count">{chip.sessionCount}</span>
 			</button>
-			<a className="chip-link" href={chip.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${chip.label}`}>↗</a>
+			{href && <a className="chip-link" href={href} target="_blank" rel="noopener noreferrer" aria-label={`Open ${chip.label}`}>↗</a>}
 		</span>
 	);
 }

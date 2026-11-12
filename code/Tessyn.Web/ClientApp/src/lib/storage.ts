@@ -42,3 +42,17 @@ export function usePersistedState<T>(key: string, initial: T): [T, (v: T | ((pre
 	}, [key]);
 	return [value, set];
 }
+
+const DRAFT_PREFIXES = [PREFIX + 'draft.', PREFIX + 'reply.'];
+
+/** Removes persisted composer drafts and attention replies (called on logout so they do not outlive the session). */
+export function clearDrafts(): void {
+	try {
+		const doomed: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key && DRAFT_PREFIXES.some((p) => key.startsWith(p))) doomed.push(key);
+		}
+		doomed.forEach((k) => localStorage.removeItem(k));
+	} catch { /* ignore */ }
+}

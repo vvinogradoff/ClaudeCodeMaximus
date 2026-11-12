@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
@@ -38,6 +39,9 @@ public static class TessynWebExtensions
 		services.AddSingleton<SseWriter>();
 		services.AddSingleton<PasswordHasher>();
 		services.AddSingleton<LoginThrottle>();
+		services.AddSingleton<AuthEpochStore>();
+		services.AddSingleton<AuthSessionService>();
+		services.AddSingleton<TrustedDevice>();
 		services.AddSingleton<LinkTokenValidator>();
 		services.AddSingleton<TessynWebOptionsValidator>();
 		services.AddSingleton(sp => new SpaFiles(sp.GetRequiredService<IWebHostEnvironment>().WebRootFileProvider));
@@ -61,7 +65,17 @@ public static class TessynWebExtensions
 				cookie.Cookie.HttpOnly = true;
 				cookie.Cookie.SecurePolicy = CookieSecurePolicy.Always;
 				cookie.Cookie.SameSite = SameSiteMode.Strict;
+				cookie.Cookie.Path = "/";
 				cookie.SlidingExpiration = true;
+				cookie.Events.OnValidatePrincipal = async validate =>
+				{
+					var session = validate.HttpContext.RequestServices.GetRequiredService<AuthSessionService>();
+					if (!session.IsValid(validate.Principal))
+					{
+						validate.RejectPrincipal();
+						await validate.HttpContext.SignOutAsync(Constants.Auth.CookieScheme);
+					}
+				};
 				cookie.Events.OnRedirectToLogin = context =>
 				{
 					context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -74,8 +88,9 @@ public static class TessynWebExtensions
 				};
 			});
 		services.AddOptions<CookieAuthenticationOptions>(Constants.Auth.CookieScheme)
-			.Configure<IOptions<TessynWebOptions>>((cookie, options) =>
+			.Configure<IOptions<TessynWebOptions>, TimeProvider>((cookie, options, time) =>
 			{
+				cookie.TimeProvider = time;
 				cookie.ExpireTimeSpan = TimeSpan.FromDays(options.Value.Auth.CookieDays);
 			});
 		services.AddAuthorization();
@@ -89,6 +104,7 @@ public static class TessynWebExtensions
 		services.Configure<ForwardedHeadersOptions>(forwarded =>
 		{
 			forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+			forwarded.ForwardLimit = 1;
 			forwarded.KnownProxies.Add(IPAddress.Loopback);
 			forwarded.KnownProxies.Add(IPAddress.IPv6Loopback);
 		});
@@ -99,6 +115,7 @@ public static class TessynWebExtensions
 	public static WebApplication UseTessynWeb(this WebApplication app)
 	{
 		app.UseForwardedHeaders();
+		app.UseMiddleware<RequestBodyLimitMiddleware>();
 		app.UseResponseCompression();
 		app.UseMiddleware<SecurityHeadersMiddleware>();
 

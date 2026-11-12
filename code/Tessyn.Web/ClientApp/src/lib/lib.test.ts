@@ -184,3 +184,16 @@ describe('pending bubble reconciliation', () => {
 		expect(reconcilePending([p('1', 'a\r\nb ')], [entry(4, 'user', ' a\nb')])).toEqual([]);
 	});
 });
+
+import { safeHttpsUrl } from './url';
+
+describe('safeHttpsUrl', () => {
+	it('accepts only https URLs', () => {
+		expect(safeHttpsUrl('https://linear.app/x/issue/ABC-1')).toBe('https://linear.app/x/issue/ABC-1');
+		expect(safeHttpsUrl('http://example.com')).toBeUndefined();
+		expect(safeHttpsUrl('javascript:alert(1)')).toBeUndefined();
+		expect(safeHttpsUrl('data:text/html,hi')).toBeUndefined();
+		expect(safeHttpsUrl('not a url')).toBeUndefined();
+		expect(safeHttpsUrl('')).toBeUndefined();
+	});
+});

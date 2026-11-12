@@ -4,8 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=www-data
-Group=www-data
+# Dedicated system user (no login, no home): useradd --system --no-create-home --shell /usr/sbin/nologin tessyn-web
+User=tessyn-web
+Group=tessyn-web
 WorkingDirectory=/var/www/tessyn
 ExecStart=/var/www/tessyn/Tessyn.Web
 Environment=ASPNETCORE_ENVIRONMENT=Production
@@ -16,9 +17,27 @@ Restart=always
 RestartSec=5
 KillSignal=SIGINT
 SyslogIdentifier=tessyn-web
+UMask=0077
+
+# Hardening (MemoryDenyWriteExecute is deliberately NOT set: the .NET JIT needs writable+executable memory).
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
 ReadWritePaths=/var/lib/tessyn-web
 
 [Install]

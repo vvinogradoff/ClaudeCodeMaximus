@@ -54,7 +54,7 @@ public static class Constants
 
 	public static class HeaderValues
 	{
-		public const string ContentSecurityPolicy = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'";
+		public const string ContentSecurityPolicy = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'; object-src 'none'";
 		public const string NoSniff = "nosniff";
 		public const string NoReferrer = "no-referrer";
 		public const string FrameDeny = "DENY";
@@ -74,13 +74,23 @@ public static class Constants
 
 	public static class Auth
 	{
-		public const string CookieName = ".Tessyn.Auth";
+		public const string CookieName = "__Host-Tessyn.Auth";
+		public const string DeviceCookieName = "__Host-Tessyn.Device";
+		public const string DeviceProtectorPurpose = "Tessyn.Web.TrustedDevice.v1";
+		public const string DevicePayloadVersion = "v1";
+		public const char DevicePayloadSeparator = '|';
+		public const int DeviceCookieDays = 180;
+		public const string StampClaim = "tessyn:stamp";
+		public const string AbsoluteExpiryClaim = "tessyn:abs-exp";
+		public const string EpochFileName = "auth-epoch";
+		public const int EpochBytes = 16;
 		public const string CookieScheme = "TessynCookie";
 		public const string InvalidCredentialsMessage = "Invalid email or password";
 		public const string ThrottledMessage = "Too many failed attempts";
 		public const string RetryAfterHeader = "Retry-After";
 		public const string MissingClientHeaderMessage = "Missing X-Tessyn-Client header";
 		public const string UnknownClientIp = "unknown";
+		public const string PayloadTooLargeMessage = "Request body too large";
 	}
 
 	public static class Pbkdf2
@@ -97,7 +107,8 @@ public static class Constants
 
 	public static class Defaults
 	{
-		public const int CookieDays = 30;
+		public const int CookieDays = 14;
+		public const int AbsoluteDays = 30;
 		public const double RequestTimeoutSeconds = 30;
 		public const double LongRequestTimeoutSeconds = 60;
 		public const double PingSeconds = 15;
@@ -112,7 +123,12 @@ public static class Constants
 	public static class Limits
 	{
 		public const int SubscriberQueue = 2000;
-		public const int MaxBodyBytes = 10 * 1024 * 1024;
+		public const int MaxBodyBytes = 4 * 1024 * 1024;
+		public const int LoginBodyBytes = 4 * 1024;
+		public const int RpcBodyBytes = 1024 * 1024;
+		public const int LinkBodyBytes = 4 * 1024 * 1024;
+		public const int IpV6PrefixBytes = 8;
+		public const double ThrottleSweepMinutes = 1;
 		public const int TokenBytes = 32;
 		public const int Sha256HexLength = 64;
 		public const int DaemonNameMaxLength = 64;

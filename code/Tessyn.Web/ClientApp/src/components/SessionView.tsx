@@ -1,3 +1,4 @@
+import { safeHttpsUrl } from '../lib/url';
 import { useApp } from '../state/AppContext';
 import { Composer } from './Composer';
 import { FocusView } from './FocusView';
@@ -26,7 +27,13 @@ export function SessionView() {
 				<div className="sv-name">{d?.name ?? (open.error ? 'Session unavailable' : 'Loading…')}</div>
 				{d && d.tags.length > 0 && (
 					<div className="sv-tags">
-						{d.tags.map((t) => <a key={`${t.kind}:${t.label}`} className="chip static" href={t.url} target="_blank" rel="noopener noreferrer">{t.label}</a>)}
+						{d.tags.map((t) => {
+							const href = safeHttpsUrl(t.url);
+							const key = `${t.kind}:${t.label}`;
+							return href
+								? <a key={key} className="chip static" href={href} target="_blank" rel="noopener noreferrer">{t.label}</a>
+								: <span key={key} className="chip static">{t.label}</span>;
+						})}
 					</div>
 				)}
 				<div className="seg" role="tablist">

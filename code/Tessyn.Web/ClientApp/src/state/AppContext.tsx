@@ -8,7 +8,7 @@ import type {
 	SessionEntriesResult, SessionEntryDto, SessionSendResult, TreeSnapshotResult, TreeWorkersResult, TurnCompletedParams, TurnOptions,
 } from '../api/types';
 import { planAppended } from '../lib/transcript';
-import { readJson, removeKey, writeJson } from '../lib/storage';
+import { clearDrafts, readJson, removeKey, writeJson } from '../lib/storage';
 import { initialState, reduce } from './appState';
 import type { AppState, PanelTab, SessionTab, TurnSettings } from './appState';
 import { publishEvent, requestComposerFocus } from './bus';
@@ -297,7 +297,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 			await startSession();
 		},
 		async logout() {
-			try { await getTransport().logout(); } catch { /* ignore */ }
+			try {
+				await getTransport().logout();
+			} catch (err) {
+				// The server still considers us logged in: stay signed in so the user knows.
+				toast(err instanceof Error ? err.message : 'Log out failed', 'error');
+				return;
+			}
+			clearDrafts();
 			stopSession();
 			dispatch({ type: 'close' });
 			dispatch({ type: 'auth', auth: 'out' });

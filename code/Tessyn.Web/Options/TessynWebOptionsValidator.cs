@@ -34,6 +34,9 @@ public sealed class TessynWebOptionsValidator
 		if (options.Auth.CookieDays < 1)
 			errors.Add($"{section}:Auth:CookieDays must be at least 1.");
 
+		if (options.Auth.AbsoluteDays < 1)
+			errors.Add($"{section}:Auth:AbsoluteDays must be at least 1.");
+
 		return errors;
 	}
 

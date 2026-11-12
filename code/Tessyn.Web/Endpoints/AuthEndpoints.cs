@@ -26,6 +26,8 @@ public static class AuthEndpoints
 		IOptions<TessynWebOptions> options,
 		PasswordHasher hasher,
 		LoginThrottle throttle,
+		AuthSessionService session,
+		TrustedDevice device,
 		TimeProvider time,
 		ILoggerFactory loggerFactory)
 	{
@@ -33,11 +35,12 @@ public static class AuthEndpoints
 		var auth = options.Value.Auth;
 		var ip = context.Connection.RemoteIpAddress?.ToString() ?? Constants.Auth.UnknownClientIp;
 
-		var retryAfter = throttle.GetRetryAfter(ip);
-		if (retryAfter is not null)
+		// The attempt is recorded BEFORE the (slow) password check so parallel guesses all count; success removes it again.
+		var decision = throttle.Begin(ip, device.IsTrusted(context.Request));
+		if (decision.RetryAfter is { } retryAfter)
 		{
 			logger.LogWarning("Login throttled for {Ip}", ip);
-			context.Response.Headers[Constants.Auth.RetryAfterHeader] = ((int)Math.Ceiling(retryAfter.Value.TotalSeconds)).ToString();
+			context.Response.Headers[Constants.Auth.RetryAfterHeader] = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
 			return Results.Json(new ErrorResponse(Constants.Auth.ThrottledMessage), statusCode: StatusCodes.Status429TooManyRequests);
 		}
 
@@ -50,27 +53,28 @@ public static class AuthEndpoints
 		var emailOk = string.Equals(email, auth.Email, StringComparison.OrdinalIgnoreCase);
 		if (!(passwordOk && emailOk && withinLimits))
 		{
-			throttle.RecordFailure(ip);
 			logger.LogWarning("Failed login from {Ip}", ip);
 			return Results.Json(new ErrorResponse(Constants.Auth.InvalidCredentialsMessage), statusCode: StatusCodes.Status401Unauthorized);
 		}
 
-		throttle.RecordSuccess(ip);
-		var identity = new ClaimsIdentity(
-			[new Claim(ClaimTypes.Name, auth.Email), new Claim(ClaimTypes.Email, auth.Email)],
-			Constants.Auth.CookieScheme);
+		throttle.Succeed(decision.Attempt!);
 		var properties = new AuthenticationProperties
 		{
 			IsPersistent = true,
 			AllowRefresh = true,
 			ExpiresUtc = time.GetUtcNow().AddDays(auth.CookieDays),
 		};
-		await context.SignInAsync(Constants.Auth.CookieScheme, new ClaimsPrincipal(identity), properties);
+		await context.SignInAsync(Constants.Auth.CookieScheme, session.CreatePrincipal(auth.Email), properties);
+		device.Issue(context.Response);
 		return Results.Json(new EmailResponse(auth.Email));
 	}
 
-	private static async Task<IResult> LogoutAsync(HttpContext context)
+	private static async Task<IResult> LogoutAsync(HttpContext context, AuthSessionService session)
 	{
+		// Only an authenticated caller may revoke: bumping the epoch logs out every device (fine for a single user).
+		if (context.User.Identity?.IsAuthenticated == true)
+			session.RevokeAll();
+
 		await context.SignOutAsync(Constants.Auth.CookieScheme);
 		return Results.NoContent();
 	}

@@ -1,5 +1,5 @@
-import { memo, useMemo } from 'react';
-import type { MouseEvent } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { renderMarkdown } from '../lib/markdown';
 
 async function copyText(text: string): Promise<void> {
@@ -17,16 +17,29 @@ async function copyText(text: string): Promise<void> {
 	}
 }
 
-export const Markdown = memo(function Markdown({ text, className }: { text: string; className?: string }) {
-	const html = useMemo(() => renderMarkdown(text), [text]);
-	const onClick = (e: MouseEvent<HTMLDivElement>) => {
-		const btn = (e.target as HTMLElement).closest('button[data-copy]');
-		if (!btn) return;
-		const code = btn.parentElement?.querySelector('pre')?.textContent ?? '';
-		void copyText(code).then(() => {
-			btn.textContent = 'Copied';
-			window.setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+/** Added by React (never part of the sanitised HTML) into every code block wrapper. */
+function CopyButton({ block }: { block: HTMLElement }) {
+	const [copied, setCopied] = useState(false);
+	const onClick = () => {
+		void copyText(block.querySelector('pre')?.textContent ?? '').then(() => {
+			setCopied(true);
+			window.setTimeout(() => setCopied(false), 1200);
 		});
 	};
-	return <div className={`md ${className ?? ''}`} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
+	return <button type="button" className="copy" onClick={onClick}>{copied ? 'Copied' : 'Copy'}</button>;
+}
+
+export const Markdown = memo(function Markdown({ text, className }: { text: string; className?: string }) {
+	const html = useMemo(() => renderMarkdown(text), [text]);
+	const host = useRef<HTMLDivElement>(null);
+	const [blocks, setBlocks] = useState<HTMLElement[]>([]);
+	useLayoutEffect(() => {
+		setBlocks(Array.from(host.current?.querySelectorAll<HTMLElement>('div.code') ?? []));
+	}, [html]);
+	return (
+		<>
+			<div ref={host} className={`md ${className ?? ''}`} dangerouslySetInnerHTML={{ __html: html }} />
+			{blocks.map((b, i) => createPortal(<CopyButton block={b} />, b, `${i}`))}
+		</>
+	);
 });

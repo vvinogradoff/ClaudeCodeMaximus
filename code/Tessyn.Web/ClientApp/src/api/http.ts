@@ -7,6 +7,9 @@ interface RpcEnvelope { result?: unknown; error?: { code: number; message: strin
 const CODE_HTTP = -32603;
 const CODE_OFFLINE = -32001;
 
+/** CSRF defence: the server rejects every state-changing /api request without this header. Use it for ALL mutating fetches. */
+export const CLIENT_HEADERS = { 'X-Tessyn-Client': 'web' } as const;
+
 export const httpTransport: Transport = {
 	async rpc(method, params) {
 		let res: Response;
@@ -14,7 +17,7 @@ export const httpTransport: Transport = {
 			res = await fetch('/api/rpc', {
 				method: 'POST',
 				credentials: 'same-origin',
-				headers: { 'Content-Type': 'application/json', 'X-Tessyn-Client': 'web' },
+				headers: { 'Content-Type': 'application/json', ...CLIENT_HEADERS },
 				body: JSON.stringify({ jsonrpc: '2.0', id: newRequestId(), method, params }),
 			});
 		} catch {
@@ -35,7 +38,7 @@ export const httpTransport: Transport = {
 		const res = await fetch('/api/auth/login', {
 			method: 'POST',
 			credentials: 'same-origin',
-			headers: { 'Content-Type': 'application/json' },
+			headers: { 'Content-Type': 'application/json', ...CLIENT_HEADERS },
 			body: JSON.stringify({ email, password }),
 		});
 		if (res.ok) return (await res.json()) as LoginResult;
@@ -49,7 +52,13 @@ export const httpTransport: Transport = {
 	},
 
 	async logout() {
-		await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+		let res: Response;
+		try {
+			res = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', headers: { ...CLIENT_HEADERS } });
+		} catch {
+			throw new Error('Network error - could not log out');
+		}
+		if (!res.ok) throw new Error(`Log out failed (${res.status})`);
 	},
 
 	async me() {
