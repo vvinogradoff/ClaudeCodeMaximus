@@ -62,7 +62,7 @@ test.describe('mobile flows', () => {
 		await shot(page, '07-create-dialog');
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await expect(page.getByTestId('session-view')).toBeVisible();
-		await expect(page.locator('.sv-name')).toHaveText('Phone test session');
+		await expect(page.locator('.topbar .title-btn')).toHaveText('Phone test session');
 		await expect(page.getByPlaceholder('Message…')).toBeFocused();
 		await shot(page, '08-new-session');
 
@@ -86,7 +86,7 @@ test.describe('mobile flows', () => {
 		await expect(page.locator('.tab.active .hide-btn').first()).toBeVisible();
 		await shot(page, '12-recent');
 		await row(page, 'Web client - SPA design').click();
-		await expect(page.locator('.sv-name')).toHaveText('Web client - SPA design');
+		await expect(page.locator('.topbar .title-btn')).toHaveText('Web client - SPA design');
 		await expect(page.locator('.msg.assistant').first()).toBeVisible();
 		await expect(page.locator('.compaction').first()).toBeVisible();
 		await expect(page.getByTestId('usage-strip')).toBeVisible();
@@ -100,7 +100,7 @@ test.describe('mobile flows', () => {
 		await openPanel(page);
 		await page.getByRole('tab', { name: 'Tree' }).click();
 		await row(page, 'Needs your decision').click();
-		await expect(page.locator('.sv-name')).toHaveText('Needs your decision');
+		await expect(page.locator('.topbar .title-btn')).toHaveText('Needs your decision');
 		await expect(page.locator('.seg .pill')).toBeVisible();
 		await shot(page, '15-session-with-focus-badge');
 		await page.getByRole('tab', { name: /^Focus/ }).click();
@@ -143,7 +143,7 @@ test.describe('mobile flows', () => {
 		await login(page);
 		await openPanel(page);
 		await row(page, 'Web client - SPA design').click();
-		await expect(page.locator('.sv-name')).toHaveText('Web client - SPA design');
+		await expect(page.locator('.topbar .title-btn')).toHaveText('Web client - SPA design');
 		await page.evaluate(() => (window as unknown as { __mock: { setOnline(v: boolean): void } }).__mock.setOnline(false));
 		await expect(page.getByText('Desktop offline')).toBeVisible();
 		await expect(page.locator('.link-dot.off')).toBeVisible();

@@ -166,13 +166,12 @@ input, textarea, select { font: inherit; font-size: 16px; color: var(--fg); }
 /* ---------- session view ---------- */
 .session-view { height: 100%; display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
 .session-view:has(.focus) { grid-template-rows: auto 1fr; }
-.sv-header { padding: 6px 12px 0; background: var(--surface); border-bottom: 1px solid var(--border); }
+.sv-header { padding: 4px 12px 0; background: var(--surface); border-bottom: 1px solid var(--border); }
 .sv-loc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sv-name { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sv-tags { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0; }
+.sv-tags { display: flex; gap: 6px; overflow-x: auto; padding: 3px 0 0; }
 .sv-tags .chip { flex: none; }
-.seg { display: flex; margin: 6px 0 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 2px; }
-.seg button { flex: 1; border: 0; background: none; padding: 6px 0; border-radius: 8px; font-weight: 600; color: var(--muted); display: inline-flex; justify-content: center; align-items: center; gap: 4px; }
+.seg { display: flex; margin: 4px 0 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 2px; }
+.seg button { flex: 1; border: 0; background: none; padding: 4px 0; border-radius: 8px; font-weight: 600; color: var(--muted); display: inline-flex; justify-content: center; align-items: center; gap: 4px; }
 .seg button.on { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
 
 .transcript-wrap { position: relative; min-height: 0; display: grid; }

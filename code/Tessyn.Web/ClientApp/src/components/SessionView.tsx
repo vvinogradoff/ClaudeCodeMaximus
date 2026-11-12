@@ -23,8 +23,8 @@ export function SessionView() {
 	return (
 		<div className="session-view" data-testid="session-view">
 			<div className="sv-header">
-				{d && <div className="sv-loc">{d.location.directoryLabel} / {d.location.treePath}</div>}
-				<div className="sv-name">{d?.name ?? (open.error ? 'Session unavailable' : 'Loading…')}</div>
+				{d && <div className="sv-loc">{[d.location.directoryLabel, d.location.treePath].filter((x) => x).join(' / ')}</div>}
+				{!d && open.error && <div className="sv-loc">Session unavailable</div>}
 				{d && d.tags.length > 0 && (
 					<div className="sv-tags">
 						{d.tags.map((t) => {
