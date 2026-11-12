@@ -122,6 +122,29 @@
                             <TextBlock Text="What is posted to a session's topic: Full (every message), Answers only (each turn's final answer, plus any error), or Off. Only notify_user pings make a sound."
                                        FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
                         </StackPanel>
+
+                        <Separator Margin="0,4"/>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Web access" FontWeight="SemiBold"/>
+                            <CheckBox Content="Enable web access"
+                                      IsChecked="{Binding RelayEnabled}"/>
+                            <TextBlock Text="Lets the Tessyn web client reach this desktop. The desktop connects out to the web server; nothing listens for incoming connections. Saved immediately, no restart needed."
+                                       FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Web server URL" Margin="0,8,0,0"/>
+                            <TextBox Text="{Binding RelayUrl}" Watermark="https://tessyn.vvinogradoff.com"/>
+
+                            <TextBlock Text="Link token" Margin="0,8,0,0"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding RelayTokenInput}"
+                                         PasswordChar="•" Watermark="Paste the link token (leave empty to keep the current one)"/>
+                                <Button Grid.Column="1" Content="Save" Margin="4,0,0,0"
+                                        Command="{Binding SaveRelayCommand}"/>
+                            </Grid>
+                            <TextBlock Text="{Binding RelayTokenStatus}" FontSize="11" Opacity="0.6"/>
+                            <TextBlock Text="{Binding RelayStatusText}" FontSize="11" Opacity="0.6"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

@@ -85,6 +85,16 @@ public partial class App : Application
 			Log.Error(ex, "Could not start the remote notification publisher");
 		}
 
+		// Web relay link: independent of AgentToolsEnabled; a no-op unless web-relay.dat is present and enabled.
+		try
+		{
+			Services.GetRequiredService<IRelayConnectorService>().Start();
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Could not start the relay connector");
+		}
+
 		// Wire toast click-to-activate before the window opens so early clicks are not missed (FR.16).
 		var mainVm = Services.GetRequiredService<MainWindowViewModel>();
 		var notifications = Services.GetRequiredService<INotificationService>();
@@ -114,6 +124,14 @@ public partial class App : Application
 				}
 				if (appSettings.Settings.TelegramEnabled)
 					Services.GetRequiredService<ITelegramBridgeService>().Stop();
+				try
+				{
+					Services.GetRequiredService<IRelayConnectorService>().Stop();
+				}
+				catch (Exception ex)
+				{
+					Log.Error(ex, "Could not stop the relay connector");
+				}
 			};
 
 			// Build/refresh the cross-project session search index in the background (Stage 6).
@@ -261,6 +279,12 @@ public partial class App : Application
 		services.AddSingleton<ISessionActivityService, SessionActivityService>();
 		services.AddTransient<ISessionStateBuilder, SessionStateBuilder>();
 		services.AddSingleton<IRemoteNotificationPublisher, RemoteNotificationPublisher>();
+
+		// Web relay link. Singletons: the connector owns the connect loop, its status and its bus subscription;
+		// the config store and HTTP factory are stateless but shared with the Settings window.
+		services.AddSingleton<IRelayConfigStore, RelayConfigStore>();
+		services.AddSingleton<IRelayHttpClientFactory, RelayHttpClientFactory>();
+		services.AddSingleton<IRelayConnectorService, RelayConnectorService>();
 
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();
