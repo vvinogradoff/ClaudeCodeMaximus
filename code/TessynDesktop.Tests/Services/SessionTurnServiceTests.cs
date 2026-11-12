@@ -124,6 +124,7 @@ internal sealed class FakeRegistryForTurnService : ISessionRegistry
 	public bool TryDeleteGroup(DirectoryNodeModel parent, GroupNodeModel group) => throw new NotImplementedException();
 	public bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group) => throw new NotImplementedException();
 	public void RenameGroup(GroupNodeModel group, string newName) => throw new NotImplementedException();
+	public SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name) => throw new NotImplementedException();
 	public SessionNodeModel AddSession(DirectoryNodeModel parent, string name) => throw new NotImplementedException();
 	public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name) => throw new NotImplementedException();
 	public SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId) => throw new NotImplementedException();

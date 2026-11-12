@@ -6,6 +6,23 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public static class RecentSessionVisibilityService
 {
+	/// <summary>A session is "recently active" (FR.9.6) when its Last Activity is at most this many hours old.</summary>
+	public const int RecentWindowHours = 24;
+
+	/// <summary>
+	/// FR.9.6 — Last Activity within <see cref="RecentWindowHours"/> of <paramref name="now"/>. The same one-line rule as
+	/// <c>SessionNodeViewModel.RefreshRecencyBrush</c> (kept there unchanged: the desktop view-model is not refactored for this).
+	/// </summary>
+	public static bool IsRecentlyActive(System.DateTimeOffset? lastActivity, System.DateTimeOffset now) =>
+		lastActivity.HasValue && (now - lastActivity.Value).TotalHours <= RecentWindowHours;
+
+	/// <summary>
+	/// FR.9.6 — hidden by the user and no activity since: <paramref name="recentIgnoredAt"/> is set and not older than the Last Activity
+	/// (or there is none). The same rule as <c>SessionNodeViewModel.IsHiddenFromRecent</c>.
+	/// </summary>
+	public static bool IsHiddenFromRecent(System.DateTimeOffset? recentIgnoredAt, System.DateTimeOffset? lastActivity) =>
+		recentIgnoredAt.HasValue && (!lastActivity.HasValue || recentIgnoredAt.Value >= lastActivity.Value);
+
 	/// <summary>
 	/// True when a session belongs in the dropdown: it's pinned (see <see cref="IsPinnedInRecentDropdown"/>),
 	/// or it's active within the last 24 hours and not hidden.

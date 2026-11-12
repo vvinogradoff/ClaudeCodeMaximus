@@ -31,6 +31,12 @@ public sealed class TreeChangedEventArgs : EventArgs
 
     /// <summary>The parent group of the new session (for <see cref="TreeChangeKind.SessionAdded"/>), or null when under a directory.</summary>
     public GroupNodeModel? ParentGroup { get; init; }
+
+    /// <summary>Index of the new session within the parent's <c>Sessions</c> list (for <see cref="TreeChangeKind.SessionAdded"/> raised by <see cref="ISessionRegistry.CreateSessionAfter"/>); null when the session was appended (agent spawns).</summary>
+    public int? Index { get; init; }
+
+    /// <summary>The session immediately before the new one in the parent's <c>Sessions</c> list, or null when it is first (only set together with <see cref="Index"/>).</summary>
+    public SessionNodeModel? PrecedingSession { get; init; }
 }
 
 /// <summary>
@@ -91,6 +97,14 @@ public interface ISessionRegistry
     void RenameGroup(GroupNodeModel group, string newName);
 
     // ── CRUD – Session ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a session positioned relative to <paramref name="anchorNodeId"/> in ONE step (one lock, one <c>Save()</c>):
+    /// a session anchor (a worker resolves to its top-level supervisor) puts the new session right after it in the same
+    /// container's <c>Sessions</c>; a group or directory anchor puts it at index 0 of that container. Raises
+    /// <see cref="TreeChangeKind.SessionAdded"/> carrying the parent and the index. Returns null when the anchor is not found.
+    /// </summary>
+    SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name);
 
     SessionNodeModel AddSession(DirectoryNodeModel parent, string name);
     SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name);
