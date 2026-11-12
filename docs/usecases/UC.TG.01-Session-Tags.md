@@ -1,6 +1,6 @@
 # UC.TG.01 — Session Tags
 
-Related requirements: FR.24.1–FR.24.10 in [requirements.md](/docs/requirements.md). Related: [UC.FV.01](/docs/usecases/UC.FV.01-Focus-View.md) (Focus view, FR.23), FR.1.3 (Auto-derived label), FR.15 (Worker Sessions). Test cases: [TC.TG.01](/docs/testcases/TC.TG.01-Session-Tags.md).
+Related requirements: FR.24.1–FR.24.14 in [requirements.md](/docs/requirements.md). Related: [UC.FV.01](/docs/usecases/UC.FV.01-Focus-View.md) (Focus view, FR.23), FR.1.3 (Auto-derived label), FR.15 (Worker Sessions). Test cases: [TC.TG.01](/docs/testcases/TC.TG.01-Session-Tags.md).
 
 ## Actors
 
@@ -272,11 +272,190 @@ Related requirements: FR.24.1–FR.24.10 in [requirements.md](/docs/requirements
 
 ---
 
+## UC.TG.14 — The User searches for a tag and lists its sessions
+
+**Actors:** User, Tessyn.
+**Preconditions:** a session is selected in the tree; sessions in its Directory node carry `HSE-254` and `tryhardstop/backend#303` (label `backend PR #303`).
+
+**Main flow:**
+1. The User opens the **Tags** tab (third tab after Tree and Recent). The scope toggle (📁) is on. The tag results show a chip for every tag in the directory; the session list shows `Select tags to list their sessions`. The search box has the watermark `Search tags…`.
+2. The User types `HSE-254`. The results narrow to the `HSE-254` chip as the User types (in memory, no reload).
+3. The User clicks the chip. It turns accent-coloured (selected), and the session list shows the top-level sessions carrying `HSE-254`, grouped under their Directory header, like the Recent tab.
+4. The User clears the text and types `#303`: the `backend PR #303` chip appears (the key `tryhardstop/backend#303` contains `#303`). `backend 303` finds the same chip.
+5. The User clicks a session row; the session is selected in the tree and opens.
+
+**Alternative flows:**
+- **A1 — Deselect:** clicking a selected chip deselects it. With nothing selected the list is empty again and shows `Select tags to list their sessions`.
+- **A2 — Empty text:** every tag in scope is shown.
+- **A3 — Several parts:** `backend 303` matches only when both parts occur in the label or key, case-insensitively; the URL is not searched.
+- **A4 — Re-click:** clicking the same row again after another session was selected elsewhere selects it again.
+
+**Postconditions:** the selection is kept for the app run; nothing is persisted.
+**Covers:** FR.24.11, FR.24.12.
+
+---
+
+## UC.TG.15 — The User combines tags from several searches (OR)
+
+**Actors:** User.
+**Preconditions:** as UC.TG.14; `HSE-254` is carried by session A, `backend PR #303` by session B.
+
+**Main flow:**
+1. The User searches `HSE-254` and selects the chip: session A is listed.
+2. The User searches `#303`. The selected `HSE-254` chip stays visible, first, even though it does not match the text; `backend PR #303` follows it.
+3. The User selects `backend PR #303`. The list shows sessions A and B (OR).
+
+**Alternative flows:**
+- **A1 — Selected tag no longer in scope:** a selected tag with no sessions in the current scope stays selected and visible, so it can be deselected; it adds no sessions.
+- **A2 — Tab switch:** switching to Tree and back keeps the selection.
+- **A3 — Order:** selected chips first, then the other matches; within each part by kind (Linear issues, pull requests, repositories), newest Last Activity, then label.
+
+**Covers:** FR.24.11, FR.24.12.
+
+---
+
+## UC.TG.16 — The scope toggle limits the Tags tab to the selected session's directory
+
+**Actors:** User.
+**Preconditions:** directory X holds `HSE-254`; directory Y holds `HSE-300`.
+
+**Main flow:**
+1. A session in X is selected. The 📁 toggle is on and enabled; only X's tags and sessions show.
+2. The User selects a session in Y while the toggle is on. The tab reloads and shows Y's tags and sessions.
+3. The User turns the toggle off. The tab reloads and shows every directory's tags.
+
+**Alternative flows:**
+- **A1 — No session selected:** the toggle is forced off and disabled; every directory counts.
+- **A2 — Worker Session selected:** the scope is the Directory node it is nested under.
+- **A3 — Independent:** the toggle is separate from the Tree tab's: changing one does not change the other.
+- **A4 — Selection kept:** selected tags survive a scope change (UC.TG.21).
+
+**Covers:** FR.24.11, FR.1.10.
+
+---
+
+## UC.TG.17 — A Worker Session's tags count for its supervisor
+
+**Actors:** User, Worker Session.
+**Preconditions:** top-level session S has Worker Session W (nested under it, possibly several levels deep); W is tagged `tryhardstop/backend#303` and S is not.
+
+**Main flow:**
+1. The Tags tab shows the `backend PR #303` chip. Its tooltip says `In 1 session` (S).
+2. The User selects the chip. The session list shows S, not W (Worker Sessions are not listed on their own).
+3. Clicking S's row selects S in the tree.
+
+**Alternative flows:**
+- **A1 — Deep chain:** W2 under W1 under S: W2's tags roll up to S.
+- **A2 — Missing supervisor:** if a supervisor in the chain no longer exists, the walk stops at the last session found.
+- **A3 — Supervisor cycle:** a cycle in `SupervisorNodeId` does not hang or crash.
+- **A4 — Other directory:** W lives in another Directory node than S: its tags count under S's directory (the top-level session's directory).
+- **A5 — Same tag on S and W:** one chip, one session (distinct NodeIds).
+- **A6 — Sessions in Groups** are included like any top-level session.
+
+**Covers:** FR.24.12, FR.24.13.
+
+---
+
+## UC.TG.18 — The User opens a tag in the browser from the Tags tab
+
+**Actors:** User, Tessyn.
+
+**Main flow:**
+1. The User hovers a chip: the tooltip line 1 is the URL, line 2 is `In 1 session` or `In N sessions` (counted within scope).
+2. The User right-clicks the chip: a context menu with **Open in browser** opens.
+3. The User picks it. Tessyn checks `SessionTagUrlPolicy.IsOpenable` (UC.TG.06) and the URL opens in the default browser.
+
+**Alternative flows:**
+- **A1 — Left click** only toggles the selection; it never opens a browser.
+- **A2 — Policy rejects the URL:** nothing opens; the attempt is logged and ignored.
+
+**Covers:** FR.24.12, FR.24.7.
+
+---
+
+## UC.TG.19 — Empty states
+
+**Actors:** User.
+
+**Main flow:**
+1. Scope on, directory has no tags: the tag area shows `No tags in this directory`.
+2. Scope off, no tags anywhere: `No tags yet`.
+3. A search text matches nothing (and no selected tag is pinned): `No matching tags`.
+4. No tag selected: the session list shows `Select tags to list their sessions`.
+5. Tags selected but no top-level session in scope carries them: `No sessions with the selected tags`.
+
+**Covers:** FR.24.11, FR.24.12.
+
+---
+
+## UC.TG.20 — Live refresh and loading
+
+**Actors:** Session, User.
+
+**Main flow:**
+1. The Tags tab is selected. A session calls `tag_session` with a new tag. `SessionTagsChanged` reaches the tab (through `IDaemonClient`), and after a short throttle the index reloads: the chip appears and counts update, without leaving the tab.
+2. The tag index loads off the UI thread; the spinner shows in the search bar meanwhile. A reload superseded by a newer one is dropped.
+3. Selecting the tab reloads the index; so do the scope toggle and a scope change to another Directory node.
+
+**Alternative flows:**
+- **A1 — Tab not selected:** events are not processed; the next selection reloads.
+- **A2 — Rename:** name-derived tags are picked up at the next reload, not live.
+- **A3 — Wire client:** `WireDaemonClient` does not support the index (`NotSupportedException`), as for `GetSessionTags` (FR.24.8).
+
+**Covers:** FR.24.13.
+
+---
+
+## UC.TG.21 — Selected tags survive a scope change
+
+**Actors:** User.
+**Preconditions:** `HSE-254` in directory X only.
+
+**Main flow:**
+1. With scope on in X, the User selects `HSE-254`; its sessions are listed.
+2. The User selects a session in directory Y (scope on, so the tab reloads for Y). `HSE-254` has no sessions in Y but stays selected and shown first; the session list adds none from it.
+3. The User returns to X: the sessions are listed again.
+
+**Alternative flows:**
+- **A1 — Toggle off:** `HSE-254` is listed with sessions from X.
+- **A2 — Deselect while out of scope:** clicking the pinned chip deselects it.
+
+**Covers:** FR.24.12.
+
+---
+
+## UC.TG.22 — The Tags tab session list: grouping, collapse, click
+
+**Actors:** User.
+
+**Main flow:**
+1. The list looks like the Recent tab (UC.RT.01): groups per Directory node, drafts first, then newest first, the same rows.
+2. Groups start expanded. The User clicks a directory header (chevron ▾/▸) to collapse it.
+3. After a rebuild (new selection, reload) the groups the User collapsed (by directory path) stay collapsed for the app run.
+4. There is no collapse-on-switch rule here (contrast UC.RT.03).
+
+**Covers:** FR.24.12, FR.1.16.
+
+---
+
+## UC.TG.23 — DEFERRED (not built): related tags between tickets and PRs
+
+**Status:** not built; described so FR.24.14 is traceable. No test is runnable.
+
+**Main flow (future):** with a Linear issue selected, the Tags tab also suggests the pull requests that are or were for it, and for a pull request its Linear issue, as extra chips.
+
+**Open decision:** (a) co-occurrence in the index, (b) GitHub search for the key, (c) Linear's GitHub integration (shares the access decision of FR.24.9).
+
+**Covers:** FR.24.14.
+
+---
+
 ## Out of scope (Phase 1)
 
 - Detecting tags from conversation text.
 - Adding or removing tags by hand in the UI.
 - Status colours (UC.TG.13).
-- Searching or filtering sessions by tags; multiple focus panels.
+- Multiple focus panels. (Searching and filtering sessions by tags was added as the Tags tab, UC.TG.14–UC.TG.22.)
+- Related tags between Linear issues and pull requests (UC.TG.23).
 - TDCP methods.
 - PR references without an owner (`#215`, `windows-app#215`).

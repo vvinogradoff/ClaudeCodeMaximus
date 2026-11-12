@@ -86,6 +86,23 @@ Different directories may therefore share a label (e.g. `HardStop` and `HardStop
 
 **FR.1.14 — Exact search toggle:** A toggle next to the search box limits results to sessions containing the query as an exact phrase (strict match, FR.1.12); loose-only matches are hidden. It switches on automatically when a search runs for a query that starts with `https://` or is shorter than 8 characters. Unchecking it for such a query holds until the search text changes; the automatic rule then applies to the new text. For other queries the toggle keeps whatever the user last chose. In a single-word query strict and loose match the same sessions, because the index matches whole words, so the toggle only changes results for multi-word queries and links.
 
+**FR.1.15 — Left panel tabs:** The left panel has three tabs, in this order:
+- **Tree**: the session tree (FR.1.1–FR.1.14).
+- **Recent** (FR.1.16).
+- **Tags** (FR.24.11).
+
+The selected tab isn't persisted: the app starts on Tree. Picking a session in the top-bar recent-sessions dropdown switches to the Tree tab, as it does today.
+
+**FR.1.16 — Recent tab:** Documents today's behaviour plus the new collapse rule:
+- **Content.** Every top-level session; Worker Sessions stay nested in the tree and aren't listed.
+- **Grouping.** Sessions are grouped under a header per Directory node: a 📂 icon and the Auto-derived label (FR.1.3), with directories in tree order.
+- **Order within a group.** Sessions with unsent draft text come first, then the rest, each newest first by Last Activity (`SessionNodeViewModel.LastActivityTimestamp`, FR.9.8).
+- **Rows.** Status dots, name, the draft ✏ indicator, the favorite star (FR.9.7), profile name, last prompt time, the recency background (FR.9.5) and the dotted border for recently active sessions.
+- **Click.** Clicking a row selects that session in the tree too. This also works when the same row is clicked again after another session was selected elsewhere.
+- **Rebuild.** The list is rebuilt each time the tab is selected.
+- **NEW: collapsible groups.** Each directory header shows a chevron (▾ expanded, ▸ collapsed); clicking the header toggles its group.
+- **NEW: collapse on switch.** Each time the user switches to the Recent tab, every group is collapsed except the one for the Directory node containing the selected session. With no session selected, every group is expanded. Expanding or collapsing a group by hand holds until the next switch to the tab.
+
 ---
 
 ### FR.2 — Session View (Right Panel)
@@ -1345,7 +1362,7 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 
 ### FR.24 — Session Tags
 
-The Architect asked for each session to show "tags" in a dedicated row under the session header — the Linear tickets, GitHub pull requests and GitHub repositories it works on — each opening its page in the default browser (`HSE-230` opens https://linear.app/hardstop/issue/HSE-230; `windows-app PR #215` opens https://github.com/tryhardstop/windows-app/pull/215). Phase 1 (this FR, except FR.24.9) shows and opens tags; Phase 2 (FR.24.9) colours them by status. Detecting tags from the conversation text was measured on 2026-11-04 and rejected as too noisy: "Postgres DB for backend" mentions 50 distinct PR URLs, "HSE-150 Android backend" mentions 16 PR URLs and 18 key-like strings, and bare keys also catch non-tickets such as `KVM-1`, `DNS-01`, `CORE-01` and `ACC-16` (one session has 115 of them). Session names, however, carry the main ticket ("HSE-150 Android backend"), so tags come from exactly two places: the session itself (declared with `tag_session`) and its name. No LLM calls. This also lays the ground for the WPF client's search and filter by project + tags.
+The Architect asked for each session to show "tags" in a dedicated row under the session header — the Linear tickets, GitHub pull requests and GitHub repositories it works on — each opening its page in the default browser (`HSE-230` opens https://linear.app/hardstop/issue/HSE-230; `windows-app PR #215` opens https://github.com/tryhardstop/windows-app/pull/215). Phase 1 (this FR, except FR.24.9) shows and opens tags; Phase 2 (FR.24.9) colours them by status. Detecting tags from the conversation text was measured on 2026-11-04 and rejected as too noisy: "Postgres DB for backend" mentions 50 distinct PR URLs, "HSE-150 Android backend" mentions 16 PR URLs and 18 key-like strings, and bare keys also catch non-tickets such as `KVM-1`, `DNS-01`, `CORE-01` and `ACC-16` (one session has 115 of them). Session names, however, carry the main ticket ("HSE-150 Android backend"), so tags come from exactly two places: the session itself (declared with `tag_session`) and its name. No LLM calls. This also lays the ground for the WPF client's search and filter by project + tags. The Tags tab (FR.24.11–FR.24.13, Architect 2026-11-11) brings tag search and filtering to the desktop client.
 
 **FR.24.1 — Tags and kinds:** `SessionTagKind`, in display order: `LinearIssue`, `GitHubPullRequest`, `GitHubRepository`.
 
@@ -1454,9 +1471,88 @@ Tool description (this wording):
 - Detecting tags from conversation text.
 - Adding or removing tags by hand in the UI.
 - Status colours (FR.24.9).
-- Searching or filtering sessions by tags, and multiple focus panels (WPF programme).
+- Multiple focus panels (WPF programme). (Searching and filtering sessions by tags was out of Phase 1 and was added on 2026-11-11 as the Tags tab, FR.24.11–FR.24.13.)
+- Related tags between Linear issues and pull requests (FR.24.14).
 - TDCP methods.
 - PR references without an owner (`#215`, `windows-app#215`).
+
+**FR.24.11 — Tags tab: search:** The left panel's third tab (FR.1.15) searches Session Tags.
+
+**Layout,** top to bottom:
+- a search bar;
+- the tag results, scrollable;
+- a horizontal splitter;
+- the session list (FR.24.12), scrollable.
+
+By default the tag results take about a third of the height and the session list the rest. Both parts have a minimum height, and the splitter position isn't persisted.
+
+**Search bar.** It has the same look as the Tree tab's:
+- a text box with the watermark `Search tags…`, showing the FR.1.11 spinner while the tag index loads;
+- the project-scope toggle (📁).
+
+There is no exact-phrase toggle and no refresh button.
+
+**Scope toggle.** It follows the FR.1.10 rules but is independent of the Tree tab's toggle:
+- It is on by default whenever a session is selected, and forced off and disabled when none is.
+- When on, tags and sessions are limited to the Directory node containing the selected session (for a selected Worker Session, the Directory node it is nested under). When off, every directory counts.
+- Toggling it, or selecting a session in another Directory node while it is on, reloads the tab.
+
+**Matching.**
+- The text is split on whitespace. A tag matches when every part occurs, case-insensitively, in its label or its canonical key (FR.24.1); the URL isn't searched.
+- Examples:
+  - `HSE-254` matches `HSE-254`.
+  - `#303` matches `backend PR #303` (key `tryhardstop/backend#303`).
+  - `backend 303` matches `backend PR #303`.
+  - `windows-app` matches the `windows-app` repository and every `windows-app` PR.
+- Empty text matches every tag in scope.
+- Filtering runs in memory and applies as the user types.
+
+**Results.**
+- **Chips.** One chip per distinct tag (by canonical key) carried by at least one top-level session in scope, drawn like the Tag row chips (FR.24.7).
+- **Order.** Selected tags come first (FR.24.12), then the other matches. Within each part, chips sort by kind (Linear issues, pull requests, repositories), then by the most recent Last Activity among the sessions carrying the tag (newest first; sessions without activity last), then by label.
+- **Tooltip.** Line 1 is the URL. Line 2 is `In 1 session` or `In N sessions`, counted within scope.
+- **Empty states.** With nothing to show, the area shows:
+  - `No tags in this directory` when the scope is on and has no tags;
+  - `No tags yet` when the scope is off and there are no tags;
+  - `No matching tags` otherwise.
+
+**FR.24.12 — Tags tab: selection and session list:**
+
+**Selecting tags.**
+- Left-clicking a tag chip toggles its selection, and a selected chip is visibly highlighted (accent background) in both themes.
+- Right-clicking a chip opens a context menu with **Open in browser**. It opens the URL under the FR.24.7 rule (`SessionTagUrlPolicy`); anything else is logged and ignored.
+- The selection survives changes to the search text, so tags from several searches combine. For example, select `HSE-254`, then search `#303` and select `backend PR #303`.
+- Selected tags always show, first, even when they don't match the text.
+- The selection lasts for the app run (across tab switches and scope changes) and isn't persisted.
+- A selected tag with no sessions in the current scope stays selected and shown, so it can be deselected, and adds no sessions.
+
+**Session list.**
+- **Content.** The top-level sessions in scope that carry at least one selected tag (OR). A Worker Session's tags count for its top-level supervisor (follow `SupervisorNodeId`), because Worker Sessions aren't listed on their own.
+- **Look.** It is shown exactly like the Recent tab (FR.1.16): the same grouping, order and rows, and clicking a row selects the session. Groups are collapsible but start expanded, and a rebuild keeps the groups the user collapsed (by directory path) collapsed for the app run. There is no collapse-on-switch rule here.
+- **No tag selected.** The list is empty and shows `Select tags to list their sessions`.
+- **No session matches.** The list shows `No sessions with the selected tags`.
+
+**FR.24.13 — Tags tab: tag index and refresh:**
+
+**The index.**
+- The tab reads an index of every distinct tag in scope, each with the top-level sessions carrying it, through `IDaemonClient.GetSessionTagIndex(directoryPath)` (null means every directory).
+- It counts name-derived and declared tags exactly as the Tag row shows them (FR.24.2, FR.24.7), so a session's chips and its index entries agree.
+- **Representative copy.** For a tag carried by several sessions, the label and URL come from a name-derived copy if any session has one, otherwise from the most recently added declared copy.
+
+**Loading and reloading.**
+- The index is built off the UI thread, since it may read tag files, and results from a superseded load are dropped.
+- It reloads when the tab is selected, when the scope toggle changes, when the scope's Directory node changes, and on `SessionTagsChanged` while the tab is selected (throttled). Other changes, such as renames, are picked up at the next reload.
+
+**Daemon boundary.**
+- `InProcDaemonClient` builds the index from a snapshot of the tree, taken briefly under the registry lock, and from `ISessionTagService.GetTags`.
+- `WireDaemonClient` throws `NotSupportedException`, as in FR.24.8.
+
+**FR.24.14 — Related tags (later phase, NOT built):** For a selected Linear issue, the Tags tab would also suggest the pull requests that are or were for it, and for a pull request its Linear issue, as extra chips.
+
+**Open decision: how to relate them.**
+- **(a)** Co-occurrence: tags carried by the same sessions. This is cheap and available from the index today.
+- **(b)** GitHub: pull requests whose branch, title or body mention the Linear key, e.g. `gh pr list -R <owner>/<repo> --search "HSE-254" --state all`.
+- **(c)** Linear's GitHub integration (the issue's PR attachments), read through the Linear API. This shares the access decision of FR.24.9.
 
 ---
 
@@ -1472,7 +1568,7 @@ Tool description (this wording):
 - A public webhook receiver / daemon↔web relay for Telegram (the S3 topology sketched in `docs/refactoring/tdcp-spec.md` §3) — long polling (FR.21.4) already meets the latency need with zero fleet infrastructure; explicitly parked as a later phase, not built alongside FR.21.9–FR.21.11
 - Rate limits or cooldowns on `notify_user`, quiet hours, presence-aware suppression (no phone ping while the user is active at the desktop), and redaction of secrets in mirrored Telegram text — considered and declined in ISSUE.012: quiet hours are handled in the phone's notification settings, and anything agents touch is treated as exposed
 - The Focus view's cross-session Attention list, Telegram answering and `/attention` command, local-LLM item extraction, native `AskUserQuestion` capture and TDCP ledger methods — see the out-of-scope list at the end of FR.23
-- Detecting Session Tags from conversation text, adding/removing tags by hand in the UI, Phase 2 status colours (FR.24.9), tag search/filter and multiple focus panels, TDCP methods and owner-less PR references — see FR.24.10
+- Detecting Session Tags from conversation text, adding/removing tags by hand in the UI, Phase 2 status colours (FR.24.9), multiple focus panels, related tags between Linear issues and pull requests (FR.24.14), TDCP methods and owner-less PR references — see FR.24.10
 
 ---
 

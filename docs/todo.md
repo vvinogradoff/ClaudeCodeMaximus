@@ -1051,3 +1051,22 @@ Requirements: FR.24 in `docs/requirements.md` (Architect request 2026-11-04). Ph
 - D2.4 Bounded session VM cache (LRU 5) with Dispose (WPF plan 0.4)
 - D2.5 Avalonia 11.3.9 → latest 11.3.x (ItemsControl leak fixes in 11.3.13); csproj change, needs the Architect's approval
 - Docs: FR section for diagnostics + settings keys (docs-first waived; document after the fact on request)
+
+## Phase 39 — Tags tab and Recent-tab collapse (FR.1.15–FR.1.16, FR.24.11–FR.24.14)
+
+Brief: `.tagsearch-work/00-brief.md` (Architect request 2026-11-11).
+
+- [DONE] Docs: requirements (FR.1.15–FR.1.16, FR.24.11–FR.24.14), glossary, use cases and test cases (UC.TG.14–23, TC.TG.29–48, UC.RT.01–07, TC.RT.01–10); reviewed by the Architect on 2026-11-12
+- [DONE] Core: `SessionTagUsageModel` (FR.24.13)
+- [DONE] Core: pure index builder with Worker Session roll-up and scope by Directory path (FR.24.13)
+- [DONE] Core: `SessionTagSearch` — `Matches`, `SessionsWithAnyTag`, `Order` (FR.24.11, FR.24.12)
+- [DONE] Core: `IDaemonClient.GetSessionTagIndex`, `InProcDaemonClient` implementation, `WireDaemonClient` throws `NotSupportedException` (FR.24.13)
+- [DONE] Core: `RecentSessionVisibilityService.IsGroupExpandedOnRecentTabSwitch` (FR.1.16)
+- [DONE] Core tests: search, index builder, registry snapshot, daemon clients, visibility service (TC.TG.29–36, TC.RT.01; 1130 tests green)
+- [DONE] UI: Tags tab view and `TagSearchViewModel` / `TagSearchChipViewModel` (FR.24.11, FR.24.12)
+- [DONE] UI: shared tag chip styles in `App.axaml`, plus the selected-chip style (FR.24.7, FR.24.12)
+- [DONE] UI: shared session-group list control and group builder, used by Recent and Tags (FR.1.16, FR.24.12)
+- [DONE] UI: Recent collapsible groups and collapse on tab switch (FR.1.16)
+- [DONE] UI: fix the re-click on a Recent row that doesn't select the session (FR.1.16)
+- [DONE] Manual UI pass TC.TG.37–47 and TC.RT.02–10 — the Architect confirmed in the running app on 2026-11-12 that the Tags tab and the Recent collapse work as expected (FR.1.16, FR.24.11–FR.24.13)
+- [ ] FR.24.14 Related tags (ticket ↔ PR): decide the route (a/b/c in FR.24.14) — NOT STARTED

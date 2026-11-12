@@ -1,6 +1,6 @@
 # TC.TG.01 — Session Tags
 
-Related requirements: FR.24.1–FR.24.10 in [requirements.md](/docs/requirements.md). Related use cases: [UC.TG.01](/docs/usecases/UC.TG.01-Session-Tags.md).
+Related requirements: FR.24.1–FR.24.14 in [requirements.md](/docs/requirements.md). Related use cases: [UC.TG.01](/docs/usecases/UC.TG.01-Session-Tags.md).
 
 **Legend.** AUTOMATED = a Core integration test in `code/TessynDesktop.Tests` (xUnit); the intended test class is named in each case. MANUAL = a UI test in Avalonia. File-based tests use a temp-dir root passed through the constructor. The server is built the way `AgentMcpServerNotifyUserTests` builds it, with a fake session-file service that records `AppendMessage(…, Constants.SessionFile.RoleSystem)` calls. Exact strings below are the expected results; assert them verbatim.
 
@@ -302,3 +302,213 @@ Common set-up: a top-level session with agent tools enabled. Create tags by aski
 ### TC.TG.28 — Phase 2 status colours — DEFERRED, not built in Phase 1 — FR.24.9 (UC.TG.13)
 
 No test is runnable in Phase 1. When Phase 2 is approved, cases are to cover: chip colour per Linear state type (backlog, unstarted, started, completed, canceled) and PR state (open, draft, merged, closed); scheduled pull cadence and the once-on-open pull; the cached status shown in the tooltip with the last-checked time; and the chosen status source (Linear API key, Linear MCP, or session-reported; GitHub `gh` or token). Chips must stay neutral in Phase 1: **Expected now:** all chips have the same neutral colours whatever the ticket or PR status.
+
+---
+
+# Tags tab (FR.24.11–FR.24.14)
+
+Related use cases: UC.TG.14–UC.TG.23. TC.TG.29–TC.TG.36 are AUTOMATED Core xUnit tests in `code/TessynDesktop.Tests`; TC.TG.37–TC.TG.47 are MANUAL UI tests; TC.TG.48 is NOT BUILT. The related Recent-tab cases are in [TC.RT.01](/docs/testcases/TC.RT.01-Recent-Tab.md).
+
+## Summary (Tags tab)
+
+| TC | Title | Kind | UC | FR |
+|---|---|---|---|---|
+| TC.TG.29 | `SessionTagSearch.Matches` | AUTOMATED | UC.TG.14 | FR.24.11 |
+| TC.TG.30 | `SessionTagSearch.SessionsWithAnyTag` | AUTOMATED | UC.TG.14, UC.TG.15 | FR.24.12 |
+| TC.TG.31 | `SessionTagSearch.Order` | AUTOMATED | UC.TG.15 | FR.24.11 |
+| TC.TG.32 | Index builder: aggregation, dedupe, representative copy | AUTOMATED | UC.TG.14, UC.TG.17 | FR.24.13 |
+| TC.TG.33 | Index builder: Worker Session roll-up | AUTOMATED | UC.TG.17 | FR.24.12, FR.24.13 |
+| TC.TG.34 | Index builder: scope | AUTOMATED | UC.TG.16, UC.TG.17 | FR.24.11, FR.24.13 |
+| TC.TG.35 | `InProcDaemonClient.GetSessionTagIndex` | AUTOMATED | UC.TG.20 | FR.24.13 |
+| TC.TG.36 | `WireDaemonClient.GetSessionTagIndex` | AUTOMATED | UC.TG.20 | FR.24.13 |
+| TC.TG.37 | Tab, layout and search bar | MANUAL | UC.TG.14 | FR.1.15, FR.24.11 |
+| TC.TG.38 | Search and select one tag | MANUAL | UC.TG.14 | FR.24.11, FR.24.12 |
+| TC.TG.39 | Combine tags from several searches (OR) | MANUAL | UC.TG.15 | FR.24.12 |
+| TC.TG.40 | Scope toggle | MANUAL | UC.TG.16 | FR.24.11 |
+| TC.TG.41 | Worker Session roll-up in the UI | MANUAL | UC.TG.17 | FR.24.12, FR.24.13 |
+| TC.TG.42 | Open in browser, tooltip | MANUAL | UC.TG.18 | FR.24.12, FR.24.7 |
+| TC.TG.43 | Empty states | MANUAL | UC.TG.19 | FR.24.11, FR.24.12 |
+| TC.TG.44 | Live refresh after `tag_session`, loading | MANUAL | UC.TG.20 | FR.24.13 |
+| TC.TG.45 | Selection survives scope change and tab switch | MANUAL | UC.TG.21 | FR.24.12 |
+| TC.TG.46 | Session list: look, click, collapsible groups | MANUAL | UC.TG.22 | FR.24.12, FR.1.16 |
+| TC.TG.47 | Chip look, selected state, order | MANUAL | UC.TG.14, UC.TG.15 | FR.24.11, FR.24.12 |
+| TC.TG.48 | Related tags (DEFERRED) | NOT BUILT | UC.TG.23 | FR.24.14 |
+
+## FR → TC coverage (Tags tab)
+
+| FR | Test cases |
+|---|---|
+| FR.24.11 | TC.TG.29, 31, 34, 37, 38, 40, 43, 47 |
+| FR.24.12 | TC.TG.30, 33, 38, 39, 41, 42, 43, 45, 46, 47 |
+| FR.24.13 | TC.TG.32, 33, 34, 35, 36, 41, 44 |
+| FR.24.14 | TC.TG.48 (deferred) |
+
+---
+
+## Automated tests (Tags tab)
+
+Helper data: a usage entry is `SessionTagUsageModel { Tag, NodeIds }`. Tags: `HSE-254` (LinearIssue, label `HSE-254`), `tryhardstop/backend#303` (GitHubPullRequest, label `backend PR #303`), `tryhardstop/windows-app` (GitHubRepository, label `windows-app`).
+
+### TC.TG.29 — `SessionTagSearchTests.Matches` — FR.24.11 (UC.TG.14)
+
+- **TC.TG.29-1 Single part:** `HSE-254` matches the `HSE-254` tag; `254` matches it too (label substring).
+- **TC.TG.29-2 Key, not only label:** `#303` matches `backend PR #303` (key `tryhardstop/backend#303`); `tryhardstop` matches it through the key.
+- **TC.TG.29-3 Several parts:** `backend 303` matches `backend PR #303`; `backend 999` does not; part order does not matter (`303 backend`).
+- **TC.TG.29-4 Case:** `hse-254`, `BACKEND` match.
+- **TC.TG.29-5 Repository and PRs:** `windows-app` matches the repository and every `windows-app` PR.
+- **TC.TG.29-6 URL not searched:** `linear.app` and `github.com` do not match tags whose label and key lack them.
+- **TC.TG.29-7 Blank:** `null`, `""` and `"   "` match every tag.
+- **TC.TG.29-8 Whitespace:** leading, trailing and repeated spaces or tabs between parts are ignored.
+- **TC.TG.29-9 No match:** `zzz` matches nothing.
+
+### TC.TG.30 — `SessionTagSearchTests.SessionsWithAnyTag` — FR.24.12 (UC.TG.14, UC.TG.15)
+
+- **TC.TG.30-1 One tag:** returns exactly the NodeIds of that tag.
+- **TC.TG.30-2 OR:** two keys return the union; a NodeId carrying both appears once.
+- **TC.TG.30-3 Key case:** `hse-254` selects the `HSE-254` usage; NodeIds stay ordinal (`a1` ≠ `A1`).
+- **TC.TG.30-4 Unknown key:** returns an empty set.
+- **TC.TG.30-5 Empty selection:** returns an empty set, even when the index is non-empty.
+
+### TC.TG.31 — `SessionTagSearchTests.Order` — FR.24.11 (UC.TG.15)
+
+- **TC.TG.31-1 Kind:** Linear issue, then pull request, then repository, whatever the activity or label.
+- **TC.TG.31-2 Recency:** within a kind, the tag whose sessions have the newest Last Activity first (the maximum over `NodeIds`).
+- **TC.TG.31-3 No activity last:** a tag whose sessions all return `null` sorts after tags with activity, within its kind.
+- **TC.TG.31-4 Label tie-break:** equal recency (or both `null`) → label, case-insensitive (`alpha` before `Beta`).
+- **TC.TG.31-5 Input not mutated; stable:** the same input twice gives the same order.
+
+### TC.TG.32 — `SessionTagIndexBuilderTests` (aggregation, dedupe, representative copy) — FR.24.13 (UC.TG.14, UC.TG.17)
+
+- **TC.TG.32-1 Dedupe:** the same key on two sessions gives one usage with two NodeIds; keys compare case-insensitively (`HSE-254` vs `hse-254`).
+- **TC.TG.32-2 NodeIds distinct:** a tag carried by a session and its worker lists the supervisor once.
+- **TC.TG.32-3 Representative copy, name-derived wins:** if any session's copy has source `Name`, its label and URL are used.
+- **TC.TG.32-4 Representative copy, newest declared:** with only declared copies, the one with the latest `AddedUtc`.
+- **TC.TG.32-5 Groups:** sessions inside Groups are included.
+- **TC.TG.32-6 No tags:** an empty tree or sessions without tags give an empty index.
+
+### TC.TG.33 — `SessionTagIndexBuilderTests` (Worker Session roll-up) — FR.24.12, FR.24.13 (UC.TG.17)
+
+- **TC.TG.33-1 One level:** W's tag is attributed to its supervisor S; W's NodeId is not listed.
+- **TC.TG.33-2 Several levels:** W2 → W1 → S attributes to S.
+- **TC.TG.33-3 Missing supervisor:** `SupervisorNodeId` names a node not in the snapshot; the walk stops at the last session found, which is then used.
+- **TC.TG.33-4 Cycle:** A → B → A terminates (no hang, no exception); the result is deterministic.
+- **TC.TG.33-5 Worker in another directory:** the tag counts under the supervisor's directory (see TC.TG.34-4).
+- **TC.TG.33-6 Worker not listed on its own:** no usage lists a worker NodeId.
+
+### TC.TG.34 — `SessionTagIndexBuilderTests` (scope) — FR.24.11, FR.24.13 (UC.TG.16, UC.TG.17)
+
+- **TC.TG.34-1 Path scope:** a directory path returns only tags of top-level sessions under that Directory node.
+- **TC.TG.34-2 Case-insensitive:** `c:\proj\x` matches `C:\Proj\X`.
+- **TC.TG.34-3 Null is all:** `null` includes every directory.
+- **TC.TG.34-4 Roll-up across directories:** worker in directory Y under supervisor in X: the tag appears for scope X, not for scope Y.
+- **TC.TG.34-5 Unknown path:** an empty index.
+
+### TC.TG.35 — `InProcDaemonClientTests.GetSessionTagIndex` — FR.24.13 (UC.TG.20)
+
+- **TC.TG.35-1 Delegation:** builds the index from the registry snapshot and `ISessionTagService.GetTags` (fake service records the calls); the result matches the builder's.
+- **TC.TG.35-2 Current name:** name-derived tags use the session's current name; after a rename the index reflects it.
+- **TC.TG.35-3 Scope:** a directory path scopes the result; `null` returns every directory.
+- **TC.TG.35-4 Declared and name-derived agree** with `GetSessionTags` for the same node.
+
+### TC.TG.36 — `WireDaemonClientTests.GetSessionTagIndex` — FR.24.13 (UC.TG.20)
+
+- **TC.TG.36-1:** `GetSessionTagIndex(null)` and `GetSessionTagIndex("C:\\x")` throw `NotSupportedException` (as `GetSessionTags`, TC.TG.18-6).
+
+---
+
+## Manual UI tests (Tags tab)
+
+Common set-up: directory X with top-level sessions A (tagged `HSE-254`), B (tagged `tryhardstop/backend#303`) and C (tagged `HSE-254` and `tryhardstop/windows-app`); directory Y with session D (tagged `HSE-300`). Worker Session W under A, tagged `tryhardstop/backend#304`. `HSE → hardstop` learned.
+
+### TC.TG.37 — Tab, layout and search bar — FR.1.15, FR.24.11 (UC.TG.14)
+
+1. Start the app. **Expected:** the left panel has three tabs in the order Tree, Recent, Tags; the app starts on Tree.
+2. Open Tags. **Expected, top to bottom:** search bar (text box with watermark `Search tags…`, the 📁 toggle; no exact-phrase toggle, no refresh button), scrollable tag results, a horizontal splitter, the scrollable session list. Tag results take about a third of the height.
+3. Drag the splitter to both extremes. **Expected:** neither part collapses below its minimum height.
+4. Switch away and back. **Expected:** the splitter position is not kept (back to the default).
+5. Restart. **Expected:** the app starts on Tree again.
+
+### TC.TG.38 — Search and select one tag — FR.24.11, FR.24.12 (UC.TG.14)
+
+1. Select session A; open Tags. **Expected:** 📁 on; chips for `HSE-254`, `backend PR #303`, `backend PR #304`, `windows-app`, not `HSE-300`; session list shows `Select tags to list their sessions`.
+2. Type `HSE-254`. **Expected:** only the `HSE-254` chip, applied while typing.
+3. Click it. **Expected:** the chip is highlighted; the list shows A and C under the X header, not B, W or D.
+4. Type `#303`. **Expected:** `HSE-254` stays first, then `backend PR #303`; `backend 303` also finds it.
+5. Click the `HSE-254` chip again. **Expected:** deselected; the list shows `Select tags to list their sessions`.
+6. Select a tag, then click a session row. **Expected:** the session opens and is selected in the tree.
+
+### TC.TG.39 — Combine tags from several searches (OR) — FR.24.12 (UC.TG.15)
+
+1. Search `HSE-254`, select the chip. Search `#303`, select `backend PR #303`. **Expected:** the list shows A, B and C (OR); selected chips are first in the tag area.
+2. Search `zzz`. **Expected:** both selected chips still show and the list is unchanged; no `No matching tags` text while selected chips are pinned.
+3. Clear the text. **Expected:** both stay selected, listed first.
+4. Deselect one. **Expected:** the list shrinks accordingly.
+
+### TC.TG.40 — Scope toggle — FR.24.11 (UC.TG.16)
+
+1. Select A; open Tags. **Expected:** 📁 on and enabled; only X's tags and sessions.
+2. Select D (in Y). **Expected:** the tab reloads; only `HSE-300` and D.
+3. Turn 📁 off. **Expected:** reload; every directory's tags.
+4. Toggle the Tree tab's 📁. **Expected:** the Tags toggle does not change, and the other way round.
+5. Deselect all sessions in the tree (or restart with none selected). **Expected:** 📁 off and disabled; tags of every directory.
+6. Select W (a Worker Session). **Expected:** 📁 on; scope is the Directory node it is nested under (X).
+
+### TC.TG.41 — Worker Session roll-up in the UI — FR.24.12, FR.24.13 (UC.TG.17)
+
+1. In Tags, select `backend PR #304` (carried only by W). **Expected:** the list shows A (W's top-level supervisor), not W.
+2. Hover the chip. **Expected:** `In 1 session`.
+3. Click A's row. **Expected:** A is selected in the tree; W stays nested under A.
+4. Tag W with a tag A also carries. **Expected:** one chip, A listed once.
+
+### TC.TG.42 — Open in browser, tooltip — FR.24.12, FR.24.7 (UC.TG.18)
+
+1. Hover `HSE-254` (carried by A and C). **Expected:** line 1 `https://linear.app/hardstop/issue/HSE-254`; line 2 `In 2 sessions`.
+2. Hover a tag carried by one session. **Expected:** line 2 `In 1 session`.
+3. Left click a chip. **Expected:** selection toggles; no browser opens.
+4. Right click a chip. **Expected:** a context menu with **Open in browser**.
+5. Pick it. **Expected:** the default browser opens the URL.
+6. With the app closed, change a URL in a tag file to `http://github.com/o/r`; restart, right-click that chip, **Open in browser**. **Expected:** nothing opens, the app stays responsive and the log records the ignored URL. Restore the file.
+7. Turn 📁 on/off. **Expected:** the counts follow the scope.
+
+### TC.TG.43 — Empty states — FR.24.11, FR.24.12 (UC.TG.19)
+
+1. Select a session in a directory with no tagged sessions, 📁 on. **Expected:** `No tags in this directory`.
+2. Turn 📁 off in an install with no tags at all. **Expected:** `No tags yet`.
+3. With tags present, type `zzz` with nothing selected. **Expected:** `No matching tags`.
+4. Nothing selected. **Expected:** the session list shows `Select tags to list their sessions`.
+5. Select `HSE-300`, then select a session in X (📁 on). **Expected:** `HSE-300` stays selected and shown; the list shows `No sessions with the selected tags`.
+
+### TC.TG.44 — Live refresh after `tag_session`, loading — FR.24.13 (UC.TG.20)
+
+1. Keep Tags selected. Have session B call `tag_session` with a new PR. **Expected:** within about a second the chip appears; counts update; the tab keeps its text and selection.
+2. Remove it with `remove`. **Expected:** the chip disappears (unless it is selected, then it stays pinned).
+3. Switch to Tree, have a session tag something, switch back. **Expected:** the new tag is there (reload on selection).
+4. Tag a new Linear team by full URL. **Expected:** after the reload, a session named with that key shows the name-derived chip.
+5. Open Tags with many sessions. **Expected:** the UI stays responsive; the spinner shows while loading.
+
+### TC.TG.45 — Selection survives scope change and tab switch — FR.24.12 (UC.TG.21)
+
+1. Scope on in X; select `HSE-254`. Select D in Y. **Expected:** `HSE-254` stays selected, shown first; no sessions come from it.
+2. Select A again. **Expected:** A and C listed again.
+3. Turn 📁 off. **Expected:** unchanged selection; same sessions.
+4. Switch to Tree and back. **Expected:** the selection is kept.
+5. Restart the app. **Expected:** nothing is selected (not persisted).
+
+### TC.TG.46 — Session list: look, click, collapsible groups — FR.24.12, FR.1.16 (UC.TG.22)
+
+1. With `HSE-254` and `HSE-300` selected (📁 off). **Expected:** the list looks like the Recent tab: a header per Directory node (📂, label, chevron ▾), drafts first then newest first, rows with status dots, name, ✏, star, profile name, last prompt time, recency background.
+2. Click header X. **Expected:** it collapses (chevron ▸); click again expands.
+3. Collapse X, then change the selection. **Expected:** X stays collapsed.
+4. Switch to Tree and back. **Expected:** the groups are not collapsed because of the switch; the manual state stays for the app run.
+5. Click row A, select another session in the tree, click row A again. **Expected:** A is selected each time.
+
+### TC.TG.47 — Chip look, selected state, order — FR.24.11, FR.24.12 (UC.TG.14, UC.TG.15)
+
+1. Compare a chip in the Tags tab with one in a session's Tag row. **Expected:** the same look (shared style), in both themes; the Tag row is unchanged.
+2. Select a chip. **Expected:** accent background with readable text in dark and light themes; hovering it keeps the selected state visible.
+3. Order: select `windows-app` (repo) and `HSE-254`. **Expected:** selected first (`HSE-254`, `windows-app`), then the others by kind, newest activity, label.
+4. Make a session newer than the others. **Expected:** after the next reload its tags move up within their kind.
+
+### TC.TG.48 — Related tags (DEFERRED) — NOT BUILT — FR.24.14 (UC.TG.23)
+
+No test is runnable. When the phase is approved, cases are to cover: selecting a Linear issue also suggests its pull requests (and a PR its issue) as extra chips, per the chosen source (co-occurrence, GitHub search, or Linear's GitHub integration). **Expected now:** selecting a chip adds no extra chips.
