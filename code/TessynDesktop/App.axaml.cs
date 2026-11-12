@@ -280,6 +280,10 @@ public partial class App : Application
 		services.AddSingleton<ISessionEpochTracker, SessionEpochTracker>();
 		services.AddSingleton<ISessionActivityService, SessionActivityService>();
 		services.AddTransient<ISessionStateBuilder, SessionStateBuilder>();
+		services.AddTransient<IRemoteTreeReader, RemoteTreeReader>();
+		services.AddTransient<IRemoteRpcModule, TreeRemoteRpcModule>();
+		services.AddTransient<IRemoteRpcModule, RecentRemoteRpcModule>();
+		services.AddTransient<IRemoteRpcModule, TagsRemoteRpcModule>();
 		services.AddSingleton<IRemoteNotificationPublisher, RemoteNotificationPublisher>();
 
 		// Web relay link. Singletons: the connector owns the connect loop, its status and its bus subscription;

@@ -133,10 +133,13 @@ internal sealed class FakeAttentionService : IAttentionService
 		return Items;
 	}
 
+	/// <summary>Per-node summaries; a node with an entry here wins over <see cref="Summary"/> (remote list tests).</summary>
+	public Dictionary<string, AttentionSummaryModel> SummaryByNode { get; } = new();
+
 	public AttentionSummaryModel GetSummary(string nodeId)
 	{
 		LastSummaryNodeId = nodeId;
-		return Summary;
+		return SummaryByNode.TryGetValue(nodeId, out var own) ? own : Summary;
 	}
 
 	public void MarkAnsweredByUser(string nodeId, IReadOnlyList<AttentionAnswerModel> answers) =>

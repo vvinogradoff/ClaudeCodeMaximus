@@ -235,7 +235,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		switch (e.Kind)
 		{
 			case TreeChangeKind.SessionAdded when e.Session != null:
-				Dispatcher.UIThread.Post(() => HandleRegistrySessionAdded(e.Session, e.ParentDirectory, e.ParentGroup));
+				Dispatcher.UIThread.Post(() => HandleRegistrySessionAdded(e.Session, e.ParentDirectory, e.ParentGroup, e.Index, e.PrecedingSession));
 				break;
 			case TreeChangeKind.SessionIsRunningChanged when e.Session != null:
 				Dispatcher.UIThread.Post(() => HandleRegistryIsRunningChanged(e.Session));
@@ -279,7 +279,8 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	}
 
 	private void HandleRegistrySessionAdded(
-		SessionNodeModel model, DirectoryNodeModel? parentDirectory, GroupNodeModel? parentGroup)
+		SessionNodeModel model, DirectoryNodeModel? parentDirectory, GroupNodeModel? parentGroup,
+		int? index = null, SessionNodeModel? precedingSession = null)
 	{
 		var dirVm = Directories.FirstOrDefault(d =>
 			parentDirectory != null
@@ -307,12 +308,42 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			var grpVm = FindGroupVmInDir(dirVm, parentGroup);
 			if (grpVm != null)
 			{
-				grpVm.Children.Add(sessionVm);
+				AddOrInsertChild(grpVm.Children, sessionVm, index, precedingSession);
 				return;
 			}
 		}
 
-		dirVm.Children.Add(sessionVm);
+		AddOrInsertChild(dirVm.Children, sessionVm, index, precedingSession);
+	}
+
+	/// <summary>
+	/// Appends the new session VM (agent-spawned sessions carry no index), or places it where the registry put it in the
+	/// container's <c>Sessions</c> list: right after the VM of the session that precedes it in the model (workers have no VM
+	/// of their own here, so a bare "groupCount + index" would drift past them), else first among the sessions, i.e. after the groups.
+	/// </summary>
+	private static void AddOrInsertChild(
+		ObservableCollection<ViewModelBase> children, SessionNodeViewModel sessionVm, int? index, SessionNodeModel? precedingSession)
+	{
+		if (index == null)
+		{
+			children.Add(sessionVm);
+			return;
+		}
+
+		var position = children.TakeWhile(c => c is GroupNodeViewModel).Count();
+		if (precedingSession != null)
+		{
+			for (var i = 0; i < children.Count; i++)
+			{
+				if (children[i] is SessionNodeViewModel s && ReferenceEquals(s.Model, precedingSession))
+				{
+					position = i + 1;
+					break;
+				}
+			}
+		}
+
+		children.Insert(position, sessionVm);
 	}
 
 	private static GroupNodeViewModel? FindGroupVmInDir(DirectoryNodeViewModel dir, GroupNodeModel groupModel)

@@ -133,6 +133,7 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
 
     public void RenameGroup(GroupNodeModel group, string newName) => LastRenameGroupArgs = (group, newName);
 
+    public SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name) => throw new NotImplementedException();
     public SessionNodeModel AddSession(DirectoryNodeModel parent, string name)
     {
         LastAddSessionArgs = (parent, name);
@@ -307,6 +308,7 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
     public string? LastIndexSessionExternalId { get; private set; }
     public string? LastIndexSessionWorkingDirectory { get; private set; }
     public IReadOnlyList<SessionSearchScoreModel> ScoresResult { get; set; } = Array.Empty<SessionSearchScoreModel>();
+    public Exception? ScoresException { get; set; }
     public bool IndexSessionResult { get; set; }
     public IReadOnlyList<ClaudeSessionSummaryModel>? LastEnsureTitlesSummaries { get; private set; }
     public IReadOnlyList<string>? LastGetSummariesExternalIds { get; private set; }
@@ -336,6 +338,7 @@ internal sealed class InProcFakeIndexService : IClaudeSessionIndexService
     {
         LastScoresQuery = query;
         LastScoresProjectSlug = projectSlug;
+        if (ScoresException != null) throw ScoresException;
         return Task.FromResult(ScoresResult);
     }
 
