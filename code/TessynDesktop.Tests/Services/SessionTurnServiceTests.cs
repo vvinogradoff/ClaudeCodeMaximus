@@ -69,6 +69,9 @@ internal sealed class FakeStreamingManagerForTurnService : IClaudeStreamingSessi
 
 internal sealed class FakeFileServiceForTurnService : ISessionFileService
 {
+    public event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten { add { } remove { } }
+    public IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes) => Array.Empty<SessionEntryModel>();
+    public SessionFileStampModel? GetFileStamp(string fileName) => null;
 	public List<(string fileName, string role, string content)> AppendCalls { get; } = new();
 	public IReadOnlyList<SessionEntryModel> ReadEntriesResult { get; set; } = Array.Empty<SessionEntryModel>();
 
@@ -99,6 +102,10 @@ internal sealed class FakeFileServiceForTurnService : ISessionFileService
 
 internal sealed class FakeRegistryForTurnService : ISessionRegistry
 {
+    public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged { add { } remove { } }
+    public void RaiseSessionSettingsChanged(string nodeId) { }
+    public DirectoryNodeModel? FindDirectoryByNodeId(string nodeId) => null;
+    public GroupNodeModel? FindGroupByNodeId(string nodeId) => null;
 	public List<(string nodeId, bool isRunning)> SetRunningCalls { get; } = new();
 
 	public event EventHandler<TreeChangedEventArgs> TreeChanged { add { } remove { } }

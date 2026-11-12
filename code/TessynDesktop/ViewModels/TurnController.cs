@@ -49,6 +49,10 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private DispatcherTimer? _thinkingTimer;
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
+
+	// True while this controller holds one running activity in the daemon's reference-counted running flag
+	// (so a desktop-interactive turn shows as running to remote clients). Opened at the first queued send, closed at idle.
+	private bool _daemonRunningOpen;
 	private bool _needsContextRetry;
 	private bool _needsAuthRaceRetry;
 
@@ -282,6 +286,10 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	{
 		_streamingManager.ProcessExited -= OnStreamingProcessExited;
 		lock (_ctsLock) { foreach (var c in _activeCts) c.Dispose(); _activeCts.Clear(); }
+
+		// Release this controller's share of the daemon's reference-counted running flag, so a view disposed
+		// mid-turn cannot leave the session marked as running for remote clients.
+		CloseDaemonRunning();
 	}
 
 	/// <summary>
@@ -365,6 +373,26 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_log.Information("Delayed send scheduled for session {FileName}: fires at {FireAt}", _node.FileName, fireAtUtc);
 	}
 
+	private void OpenDaemonRunning()
+	{
+		var nodeId = _node.Model.NodeId;
+		if (_daemonRunningOpen || string.IsNullOrEmpty(nodeId))
+			return;
+
+		_daemonRunningOpen = true;
+		_daemonClient.SetSessionRunning(nodeId, true);
+	}
+
+	private void CloseDaemonRunning()
+	{
+		var nodeId = _node.Model.NodeId;
+		if (!_daemonRunningOpen || string.IsNullOrEmpty(nodeId))
+			return;
+
+		_daemonRunningOpen = false;
+		_daemonClient.SetSessionRunning(nodeId, false);
+	}
+
 	private async Task SendAsyncCore(string message, bool preserveInput)
 	{
 		if (!preserveInput)
@@ -395,6 +423,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_busyCount++;
 		IsBusy = true;
 		_node.IsRunning = true;
+		OpenDaemonRunning();
 
 		// FR.21.2 — lazily ensure a Telegram topic exists for this session on its first interactive
 		// activity since the bridge was enabled. Fire-and-forget: never throws, never delays the turn.
@@ -666,6 +695,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				ThinkingDuration = string.Empty;
 				IsBusy = false;
 				_node.IsRunning = false;
+				CloseDaemonRunning();
 
 				// FR.22.1: only on natural completion of the whole batch, never after user Stop.
 				if (!_anyCancelledInBatch && _node.Model.PlayCompletionSound)

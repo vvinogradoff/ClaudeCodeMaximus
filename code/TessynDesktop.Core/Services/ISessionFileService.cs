@@ -14,6 +14,9 @@ public interface ISessionFileService
 	/// <summary>Raised after a single entry is appended (FR.21.9) — see <see cref="SessionEntryAppendedEventArgs"/>.</summary>
 	event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
 
+	/// <summary>Raised after the whole file was replaced (<see cref="RewriteSessionFile"/>, <see cref="WriteSessionFile"/>, compaction repair) — see <see cref="SessionFileRewrittenEventArgs"/>. May fire on any thread.</summary>
+	event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten;
+
 	/// <summary>Raised once per turn after its last entry is appended (FR.21.22) — see <see cref="SessionTurnCompletedEventArgs"/>.</summary>
 	event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 
@@ -34,6 +37,15 @@ public interface ISessionFileService
 	void AppendCompactionSeparator(string fileName);
 
 	IReadOnlyList<SessionEntryModel> ReadEntries(string fileName);
+
+	/// <summary>
+	/// Parses only the last <paramref name="maxBytes"/> bytes of the file: a partial first entry is skipped, so the result
+	/// holds the entries whose header lies inside that window. Whole file when it is smaller.
+	/// </summary>
+	IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes);
+
+	/// <summary>The file's current (length, last write time) stamp, or null when the file is missing. Never reads content.</summary>
+	SessionFileStampModel? GetFileStamp(string fileName);
 
 	bool SessionFileExists(string fileName);
 

@@ -20,6 +20,11 @@ public sealed class SessionFileService : ISessionFileService
 
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 
+	public event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten;
+
+	private void NotifyRewritten(string fileName) =>
+		SessionFileRewritten?.Invoke(this, new SessionFileRewrittenEventArgs { FileName = fileName });
+
 	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText) =>
 		TurnCompleted?.Invoke(this, new SessionTurnCompletedEventArgs
 		{
@@ -94,6 +99,40 @@ public sealed class SessionFileService : ISessionFileService
 		return ParseEntries(lines.ToArray());
 	}
 
+	public IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes)
+	{
+		var fullPath = GetFullPath(fileName);
+		if (!File.Exists(fullPath))
+			return [];
+
+		var lines = new List<string>();
+		using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+		{
+			// Start one byte early: if that byte is a line break the window begins exactly at a line start, otherwise the
+			// first (partial) line is dropped below. Bytes of a split multi-byte character fall inside that dropped line.
+			var cut = stream.Length > maxBytes;
+			if (cut)
+				stream.Seek(stream.Length - maxBytes - 1, SeekOrigin.Begin);
+
+			using var reader = new StreamReader(stream, Encoding.UTF8);
+			if (cut)
+				reader.ReadLine();
+
+			while (reader.ReadLine() is { } line)
+				lines.Add(line);
+		}
+		return ParseEntries(lines.ToArray());
+	}
+
+	public SessionFileStampModel? GetFileStamp(string fileName)
+	{
+		var info = new FileInfo(GetFullPath(fileName));
+		if (!info.Exists)
+			return null;
+
+		return new SessionFileStampModel(info.Length, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero));
+	}
+
 	public bool SessionFileExists(string fileName)
 		=> File.Exists(GetFullPath(fileName));
 
@@ -119,6 +158,7 @@ public sealed class SessionFileService : ISessionFileService
 		var tmpPath = fullPath + ".tmp";
 		File.WriteAllText(tmpPath, content, Encoding.UTF8);
 		File.Move(tmpPath, fullPath, overwrite: true);
+		NotifyRewritten(fileName);
 	}
 
 	public void WriteSessionFile(string fileName, IReadOnlyList<SessionEntryModel> entries)
@@ -142,6 +182,7 @@ public sealed class SessionFileService : ISessionFileService
 		var tmpPath = fullPath + ".tmp";
 		File.WriteAllText(tmpPath, sb.ToString(), Encoding.UTF8);
 		File.Move(tmpPath, fullPath, overwrite: true);
+		NotifyRewritten(fileName);
 	}
 
 	public int RepairCorruptedCompactions()
@@ -178,6 +219,7 @@ public sealed class SessionFileService : ISessionFileService
 				File.WriteAllText(tmpPath, sb.ToString(), Encoding.UTF8);
 				File.Move(tmpPath, filePath, overwrite: true);
 				repaired++;
+				NotifyRewritten(Path.GetFileName(filePath));
 			}
 			catch
 			{
@@ -256,7 +298,7 @@ public sealed class SessionFileService : ISessionFileService
 			meta.TryGetValue("effort", out var effort);
 
 			var contentLines = new List<string>();
-			while (i < lines.Length && !IsHeaderLine(lines[i]))
+			while (i < lines.Length && !TryParseHeader(lines[i], out _, out _, out _))
 			{
 				contentLines.Add(lines[i]);
 				i++;
@@ -291,6 +333,10 @@ public sealed class SessionFileService : ISessionFileService
 
 		var closeBracket = line.IndexOf(']');
 		if (closeBracket < 0)
+			return false;
+
+		// "[timestamp] ROLE ..." — a header is never just "[timestamp]" and always has a space after the bracket.
+		if (closeBracket + 2 > line.Length || line[closeBracket + 1] != ' ')
 			return false;
 
 		var timestampPart = line[1..closeBracket];
@@ -344,9 +390,6 @@ public sealed class SessionFileService : ISessionFileService
 		}
 		return result;
 	}
-
-	private static bool IsHeaderLine(string line)
-		=> line.StartsWith('[') && line.Contains(']');
 
 	private static string GenerateRandomSuffix()
 	{

@@ -10,6 +10,9 @@ namespace TessynDesktop.Models;
 /// <remarks>Created by Claude</remarks>
 public sealed class DirectoryNodeModel
 {
+	/// <summary>Stable id ("N"-format GUID) used by the remote API; assigned on creation or, for older trees, on load.</summary>
+	public string NodeId { get; set; } = string.Empty;
+
 	public required string Path { get; init; }
 	public bool IsExpanded { get; set; }
 	public List<GroupNodeModel> Groups { get; init; } = [];

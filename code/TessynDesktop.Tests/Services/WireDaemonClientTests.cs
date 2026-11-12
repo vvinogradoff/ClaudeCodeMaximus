@@ -16,6 +16,7 @@ namespace TessynDesktop.Tests.Services;
 
 internal sealed class WireFakeDaemonClient : IDaemonClient
 {
+    public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged { add { } remove { } }
     // ── Configurable results ───────────────────────────────────────────────────
 
     public IReadOnlyList<DirectoryNodeModel> DirectoriesValue { get; set; } = Array.Empty<DirectoryNodeModel>();
@@ -248,7 +249,7 @@ public sealed class WireDaemonClientTests : IDisposable
         var port = FindFreePort();
         _serverBaseUrl = $"http://127.0.0.1:{port}";
 
-        _server = new TdcpServer(_fake, TestToken);
+        _server = new TdcpServer(_fake, new TdcpDispatcher([new TdcpLoopbackRpcModule(_fake)]), TestToken);
         _server.Start(port);
 
         _client = new WireDaemonClient(_serverBaseUrl, TestToken);

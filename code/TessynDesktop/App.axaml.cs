@@ -75,6 +75,16 @@ public partial class App : Application
 		if (appSettings.Settings.TelegramEnabled)
 			Services.GetRequiredService<ITelegramBridgeService>().Start();
 
+		// Remote API (web client): publish the daemon's events as remote notifications. Never allowed to break start-up.
+		try
+		{
+			Services.GetRequiredService<IRemoteNotificationPublisher>().Start();
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Could not start the remote notification publisher");
+		}
+
 		// Wire toast click-to-activate before the window opens so early clicks are not missed (FR.16).
 		var mainVm = Services.GetRequiredService<MainWindowViewModel>();
 		var notifications = Services.GetRequiredService<INotificationService>();
@@ -234,8 +244,23 @@ public partial class App : Application
 				appSettings.Save();
 			}
 
-			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), appSettings.Settings.TdcpToken);
+			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), sp.GetRequiredService<TdcpDispatcher>(), appSettings.Settings.TdcpToken);
 		});
+
+		// Remote API foundation (web client). Singletons, each because it owns state that must be shared and survive the call:
+		// the dispatcher (the method table built once from every IRemoteRpcModule), ClientRpcModule (the per-run id client.hello
+		// reports), the event bus (subscribers and pending coalescing timers), the tree-version and epoch trackers (counters shared
+		// by notifications and queries), the activity service (its per-file cache) and the publisher (its event subscriptions).
+		// The loopback module and the state builder hold no state, so they are transient.
+		services.AddTransient<IRemoteRpcModule, TdcpLoopbackRpcModule>();
+		services.AddSingleton<IRemoteRpcModule, ClientRpcModule>();
+		services.AddSingleton<TdcpDispatcher>();
+		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
+		services.AddSingleton<ITreeVersionTracker, TreeVersionTracker>();
+		services.AddSingleton<ISessionEpochTracker, SessionEpochTracker>();
+		services.AddSingleton<ISessionActivityService, SessionActivityService>();
+		services.AddTransient<ISessionStateBuilder, SessionStateBuilder>();
+		services.AddSingleton<IRemoteNotificationPublisher, RemoteNotificationPublisher>();
 
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();

@@ -45,6 +45,9 @@ public interface ISessionRegistry
 
     event EventHandler<TreeChangedEventArgs> TreeChanged;
 
+    /// <summary>Raised by <see cref="RaiseSessionSettingsChanged"/> after a daemon method changed a session's settings (favourite, streaming mode).</summary>
+    event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged;
+
     // ── Tree read ─────────────────────────────────────────────────────────────
 
     /// <summary>The authoritative directory list (same as AppSettings.Settings.Tree).</summary>
@@ -67,6 +70,12 @@ public interface ISessionRegistry
 
     /// <summary>Finds the session owning a given session file name (FR.21.9 — resolves an appended entry's session).</summary>
     SessionNodeModel? FindModelByFileName(string fileName);
+
+    /// <summary>Finds a directory node by its stable <see cref="DirectoryNodeModel.NodeId"/>; the search runs under the settings lock. Callers that then read the node must hold <see cref="IAppSettingsService.SyncRoot"/>.</summary>
+    DirectoryNodeModel? FindDirectoryByNodeId(string nodeId);
+
+    /// <summary>Finds a group node (at any depth) by its stable <see cref="GroupNodeModel.NodeId"/>; the search runs under the settings lock. Callers that then read the node must hold <see cref="IAppSettingsService.SyncRoot"/>.</summary>
+    GroupNodeModel? FindGroupByNodeId(string nodeId);
 
     // ── CRUD – Directory ──────────────────────────────────────────────────────
 
@@ -126,8 +135,15 @@ public interface ISessionRegistry
 
     // ── Running state ─────────────────────────────────────────────────────────
 
-    /// <summary>Marks the session as running or not. Thread-safe. Raises <see cref="TreeChangeKind.SessionIsRunningChanged"/>.</summary>
+    /// <summary>
+    /// Reference-counted: <c>true</c> adds one running activity, <c>false</c> removes one (never below zero). The session
+    /// counts as running while any activity is open, and <see cref="TreeChangeKind.SessionIsRunningChanged"/> is raised
+    /// only when the count moves between 0 and 1. Thread-safe.
+    /// </summary>
     void SetSessionRunning(string nodeId, bool isRunning);
+
+    /// <summary>Raises <see cref="SessionSettingsChanged"/> for <paramref name="nodeId"/>. Thread-safe.</summary>
+    void RaiseSessionSettingsChanged(string nodeId);
 
     /// <summary>Returns true while a claude process is running for the given node.</summary>
     bool IsSessionRunning(string nodeId);

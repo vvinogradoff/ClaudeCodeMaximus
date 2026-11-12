@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Tessyn.Web</RootNamespace>
+    <AssemblyName>Tessyn.Web</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DefaultItemExcludes>$(DefaultItemExcludes);ClientApp\**;artifacts\**;deploy\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tessyn.Web.Tests" />
+  </ItemGroup>
+
+</Project>

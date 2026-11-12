@@ -14,6 +14,15 @@ namespace TessynDesktop.Tests.Services;
 
 internal sealed class InProcFakeRegistry : ISessionRegistry
 {
+    public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged;
+    public string? LastSettingsChangedNodeId { get; private set; }
+    public void RaiseSessionSettingsChanged(string nodeId)
+    {
+        LastSettingsChangedNodeId = nodeId;
+        SessionSettingsChanged?.Invoke(this, new SessionSettingsChangedEventArgs { NodeId = nodeId });
+    }
+    public DirectoryNodeModel? FindDirectoryByNodeId(string nodeId) => null;
+    public GroupNodeModel? FindGroupByNodeId(string nodeId) => null;
     public event EventHandler<TreeChangedEventArgs> TreeChanged = delegate { };
 
     public string? SelectedNodeId { get; set; }
@@ -240,6 +249,9 @@ internal sealed class InProcFakeScheduler : ISchedulerService
 
 internal sealed class InProcFakeFileService : ISessionFileService
 {
+    public event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten { add { } remove { } }
+    public IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes) => Array.Empty<SessionEntryModel>();
+    public SessionFileStampModel? GetFileStamp(string fileName) => null;
     public IReadOnlyList<SessionEntryModel> ReadEntriesResult { get; set; } = Array.Empty<SessionEntryModel>();
     public bool SessionFileExistsResult { get; set; }
     public string GetFullPathResult { get; set; } = "/path/to/file.txt";
@@ -673,6 +685,17 @@ public sealed class InProcDaemonClientTests
         Assert.NotNull(received);
         Assert.Equal(TreeChangeKind.SessionAdded, received!.Kind);
         Assert.Same(session, received.Session);
+    }
+
+    [Fact]
+    public void SessionSettingsChanged_FiresWhenRegistryRaisesEvent()
+    {
+        SessionSettingsChangedEventArgs? received = null;
+        _client.SessionSettingsChanged += (_, e) => received = e;
+
+        _registry.RaiseSessionSettingsChanged("node-9");
+
+        Assert.Equal("node-9", received?.NodeId);
     }
 
     [Fact]

@@ -417,3 +417,10 @@ FodyWeavers.xsd
 *.msm
 *.msp
 /code/TessynDesktop-publish
+
+# Tessyn Web
+/code/Tessyn.Web/wwwroot/
+/code/Tessyn.Web/artifacts/
+/code/Tessyn.Web/ClientApp/screenshots/
+/code/Tessyn.Web/ClientApp/test-results/
+/code/Tessyn.Web/ClientApp/playwright-report/

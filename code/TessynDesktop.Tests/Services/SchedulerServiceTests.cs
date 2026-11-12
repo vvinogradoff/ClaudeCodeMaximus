@@ -36,6 +36,10 @@ internal sealed class FakeTurnService : ISessionTurnService
 
 internal sealed class FakeSessionRegistry : ISessionRegistry
 {
+    public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged { add { } remove { } }
+    public void RaiseSessionSettingsChanged(string nodeId) { }
+    public DirectoryNodeModel? FindDirectoryByNodeId(string nodeId) => null;
+    public GroupNodeModel? FindGroupByNodeId(string nodeId) => null;
     private readonly List<SessionNodeModel> _nodes = new();
     public string? SelectedNodeId { get; set; }
 

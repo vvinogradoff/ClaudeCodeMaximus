@@ -1,0 +1,25 @@
+[Unit]
+Description=Tessyn Web (relay + SPA host)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/tessyn
+ExecStart=/var/www/tessyn/Tessyn.Web
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5320
+Environment=TESSYN_WEB_CONFIG=/etc/tessyn-web/appsettings.Production.json
+Environment=DOTNET_gcServer=0
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=tessyn-web
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/tessyn-web
+
+[Install]
+WantedBy=multi-user.target
