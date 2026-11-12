@@ -74,6 +74,24 @@ public static partial class Constants
 			public const string DaemonHeader = "X-Tessyn-Daemon";
 			public const string ProtocolHeader = "X-Tessyn-Protocol";
 			public const int DispatchConcurrency = 8;
+
+			/// <summary>File name of the DPAPI-protected relay config under %AppData%\TessynDesktop (contract section 6).</summary>
+			public const string ConfigFileName = "web-relay.dat";
+
+			/// <summary>Protocol version sent in <see cref="ProtocolHeader"/>.</summary>
+			public const string ProtocolHeaderValue = "1";
+
+			/// <summary>Shown as the connector's error when the server answers 401.</summary>
+			public const string TokenRejectedMessage = "Link token rejected";
+
+			/// <summary>How long Stop() waits for the connector loop to finish.</summary>
+			public static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
+
+			/// <summary>Per-request timeout of the reply and event POSTs.</summary>
+			public static readonly TimeSpan PostTimeout = TimeSpan.FromSeconds(30);
+
+			/// <summary>Capacity of the outbound event queue; the oldest events are dropped beyond it.</summary>
+			public const int EventQueueCapacity = 5000;
 			public static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(15);
 			public static readonly TimeSpan DeadLinkTimeout = TimeSpan.FromSeconds(45);
 			public static readonly TimeSpan EventBatchWindow = TimeSpan.FromMilliseconds(250);

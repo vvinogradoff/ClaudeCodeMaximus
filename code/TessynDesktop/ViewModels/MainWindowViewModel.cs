@@ -522,10 +522,13 @@ public sealed class MainWindowViewModel : ViewModelBase
 	{
 		var mcpTokenStore = App.Services.GetRequiredService<IMcpTokenStore>();
 		var telegramTokenStore = App.Services.GetRequiredService<ITelegramTokenStore>();
-		var vm     = new SettingsViewModel(_appSettings, mcpTokenStore, telegramTokenStore, _soundService);
+		var relayConfigStore = App.Services.GetRequiredService<IRelayConfigStore>();
+		var relayConnector = App.Services.GetRequiredService<IRelayConnectorService>();
+		var vm     = new SettingsViewModel(_appSettings, mcpTokenStore, telegramTokenStore, _soundService, relayConfigStore, relayConnector);
 		var window = new Views.SettingsWindow { DataContext = vm };
 		window.Closed += (_, _) =>
 		{
+			vm.Dispose();
 			// Sync title bar theme toggle with settings change (no re-apply needed)
 			_isDarkTheme = _appSettings.Settings.Theme == "Dark";
 			this.RaisePropertyChanged(nameof(IsDarkTheme));
