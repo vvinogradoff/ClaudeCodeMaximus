@@ -27,6 +27,8 @@ public sealed class ClaudeUsageService : IClaudeUsageService
 
     public ClaudeUsageData? CachedUsage { get; private set; }
 
+    public string? ActiveCredentialsPath => _activeCredentialsPath;
+
     public event EventHandler? UsageUpdated;
 
     public ClaudeUsageService(IUiDispatcher uiDispatcher)
@@ -184,7 +186,7 @@ public sealed class ClaudeUsageService : IClaudeUsageService
         return (utilization, resetsAt);
     }
 
-    private static string? ReadAccessToken(string credentialsPath)
+    internal static string? ReadAccessToken(string credentialsPath)
     {
         try
         {

@@ -488,14 +488,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	/// Returns the path to the .credentials.json file for the given profile config directory.
 	/// Falls back to ~/.claude/.credentials.json for the system-wide default profile.
 	/// </summary>
-	private static string ResolveCredentialsPath(string? profileConfigDir)
-	{
-		if (!string.IsNullOrEmpty(profileConfigDir))
-			return Path.Combine(profileConfigDir, Constants.Usage.CredentialsFileName);
-
-		var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		return Path.Combine(home, Constants.Usage.DefaultClaudeRelativePath, Constants.Usage.CredentialsFileName);
-	}
+	private static string ResolveCredentialsPath(string? profileConfigDir) =>
+		ClaudeCredentialsPaths.Resolve(profileConfigDir);
 
 	private void RaiseInstructionToolbarChanged()
 	{

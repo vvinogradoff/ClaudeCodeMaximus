@@ -262,6 +262,21 @@ public partial class App : Application
 		services.AddTransient<ISessionStateBuilder, SessionStateBuilder>();
 		services.AddSingleton<IRemoteNotificationPublisher, RemoteNotificationPublisher>();
 
+		// Remote session, attention, catalog and usage methods (web client). Singletons only where state must be shared: the
+		// Default profile label (its cached resolution), the parsed-entry cache, the pending-send counters and the per-profile
+		// usage cache with its desktop-poller subscription. The fetcher owns one HttpClient. Everything else is stateless.
+		services.AddSingleton<IProfileLabelService, ProfileLabelService>();
+		services.AddSingleton<ISessionEntryReader, SessionEntryReader>();
+		services.AddSingleton<ISessionSendService, SessionSendService>();
+		services.AddSingleton<IClaudeUsageFetcher, ClaudeUsageFetcher>();
+		services.AddSingleton<IRemoteUsageService, RemoteUsageService>();
+		services.AddTransient<ITurnOptionsResolver, TurnOptionsResolver>();
+		services.AddTransient<IAttentionReplyService, AttentionReplyService>();
+		services.AddTransient<IRemoteRpcModule, SessionRpcModule>();
+		services.AddTransient<IRemoteRpcModule, AttentionRpcModule>();
+		services.AddTransient<IRemoteRpcModule, CatalogRpcModule>();
+		services.AddTransient<IRemoteRpcModule, UsageRpcModule>();
+
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();
 	}

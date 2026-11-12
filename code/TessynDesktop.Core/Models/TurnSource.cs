@@ -15,4 +15,7 @@ public enum TurnSource
 
 	/// <summary>Turn was triggered by a user reply inside a session's Telegram topic (FR.21.4).</summary>
 	Telegram,
+
+	/// <summary>Turn was submitted by the web client through the remote API (session.send, attention.reply).</summary>
+	Web,
 }

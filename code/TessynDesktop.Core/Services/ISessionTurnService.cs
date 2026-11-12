@@ -31,6 +31,18 @@ public interface ISessionTurnService
 		CancellationToken cancellationToken = default);
 
 	/// <summary>
+	/// Same as <see cref="RunTurnAsync(SessionNodeModel, string, TurnSource, CancellationToken)"/> with per-turn
+	/// <paramref name="options"/> (model, effort, profile) that override the session's resolution for this turn only.
+	/// A null <paramref name="options"/> behaves exactly like the overload above.
+	/// </summary>
+	Task<TurnResultModel> RunTurnAsync(
+		SessionNodeModel node,
+		string prompt,
+		TurnSource source,
+		TurnOptionsModel? options,
+		CancellationToken cancellationToken = default);
+
+	/// <summary>
 	/// Cancels any running turn for the given node by cancelling its CancellationTokenSource.
 	/// Returns true if a running turn was found and cancelled.
 	/// </summary>

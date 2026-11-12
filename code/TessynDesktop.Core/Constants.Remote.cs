@@ -102,6 +102,51 @@ public static partial class Constants
 		/// <summary>Id of the "no explicit choice" model and profile entries of the catalog.</summary>
 		public const string DefaultOptionId = "default";
 
+		/// <summary>Usage fetch (contract section 3.21).</summary>
+		public static class Usage
+		{
+			/// <summary>How long a per-profile fetch result is served without asking the API again.</summary>
+			public static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
+
+			/// <summary>How long after a failed fetch (no token, network or API error) the next one may be made.</summary>
+			public static readonly TimeSpan FailureRetry = TimeSpan.FromMinutes(1);
+
+			/// <summary>How long a usage.get waits for a fetch before answering "pending" (the fetch keeps running).</summary>
+			public static readonly TimeSpan FetchWait = TimeSpan.FromSeconds(8);
+
+			/// <summary>Upper bound of one fetch of the usage endpoint.</summary>
+			public static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(20);
+
+			/// <summary>Window in which usage.changed notifications of one profile are merged.</summary>
+			public static readonly TimeSpan ChangedWindow = TimeSpan.FromMilliseconds(250);
+		}
+
+		/// <summary>Profile labels (contract sections 3.12 and 3.20).</summary>
+		public static class Profiles
+		{
+			/// <summary>Prefix of the Default profile's label; the desktop stamps "[Sys] &lt;email&gt;" on USER entries.</summary>
+			public const string SystemPrefix = "[Sys] ";
+
+			/// <summary>Shown for the Default profile while its account e-mail is unknown.</summary>
+			public const string FallbackName = "Default";
+
+			/// <summary>How long a resolved Default label is reused.</summary>
+			public static readonly TimeSpan LabelCacheDuration = TimeSpan.FromMinutes(10);
+
+			/// <summary>How long a failed resolution is not retried.</summary>
+			public static readonly TimeSpan LabelFailureCacheDuration = TimeSpan.FromMinutes(1);
+
+			/// <summary>A headless turn never waits longer than this for the account e-mail.</summary>
+			public static readonly TimeSpan LabelResolveTimeout = TimeSpan.FromSeconds(5);
+		}
+
+		/// <summary>Parsed-entry cache of session.entries.</summary>
+		public static class EntryCache
+		{
+			/// <summary>Most session files whose parsed entries are kept in memory.</summary>
+			public const int MaxFiles = 16;
+		}
+
 		/// <summary>How much of a session file's end the activity service parses (contract section 3, SessionActivityService).</summary>
 		public const int ActivityTailBytes = 64 * 1024;
 	}
