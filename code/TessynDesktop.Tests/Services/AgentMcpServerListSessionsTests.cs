@@ -30,6 +30,10 @@ internal sealed class RecordingTurnService : ISessionTurnService
 		return Task.FromResult(new TurnResultModel(AssistantText: "ok", SessionId: null));
 	}
 
+	public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt,
+		TurnSource source, TurnOptionsModel? options, CancellationToken cancellationToken = default) =>
+		RunTurnAsync(node, prompt, source, cancellationToken);
+
 	/// <summary>What <see cref="CancelTurn"/> reports: whether a turn was running.</summary>
 	public bool CancelResult { get; set; } = true;
 

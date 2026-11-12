@@ -156,6 +156,9 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		NotifyStreamingStateChanged();
 	}
 
+	/// <summary>Re-reads the streaming flag and the process state after a daemon method (the web client) changed them.</summary>
+	public void RefreshStreamingState() => NotifyStreamingStateChanged();
+
 	private void NotifyStreamingStateChanged()
 	{
 		this.RaisePropertyChanged(nameof(IsStreamingMode));

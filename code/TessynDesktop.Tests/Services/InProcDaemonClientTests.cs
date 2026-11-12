@@ -217,6 +217,10 @@ internal sealed class InProcFakeTurnService : ISessionTurnService
         return Task.FromResult(RunResult);
     }
 
+    public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt,
+        TurnSource source, TurnOptionsModel? options, CancellationToken cancellationToken = default) =>
+        RunTurnAsync(node, prompt, source, cancellationToken);
+
     public bool CancelTurn(string nodeId) { LastCancelNodeId = nodeId; return CancelResult; }
     public string? ResolveProfileName(SessionNodeModel node) { LastResolveNode = node; return ResolveProfileResult; }
 }

@@ -54,6 +54,8 @@ internal sealed class CompactionTurnServiceFake : ISessionTurnService
 	public string? ResolveProfileName(SessionNodeModel node) => ProfileName;
 	public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt, TurnSource source, CancellationToken cancellationToken = default) =>
 		throw new NotSupportedException();
+	public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt, TurnSource source, TurnOptionsModel? options, CancellationToken cancellationToken = default) =>
+		throw new NotSupportedException();
 }
 
 /// <summary>Prompt building and the compaction flow; the failure paths must leave the session file byte-for-byte unchanged.</summary>

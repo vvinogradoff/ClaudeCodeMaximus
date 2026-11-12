@@ -16,6 +16,9 @@ public interface IClaudeUsageService
     /// </summary>
     ClaudeUsageData? CachedUsage { get; }
 
+    /// <summary>The credentials file of the profile currently being polled; null when polling is stopped.</summary>
+    string? ActiveCredentialsPath { get; }
+
     /// <summary>
     /// Raised on the UI thread when <see cref="CachedUsage"/> has been updated with
     /// a fresh fetch from the API.

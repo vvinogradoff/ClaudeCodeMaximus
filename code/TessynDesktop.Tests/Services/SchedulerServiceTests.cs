@@ -30,6 +30,10 @@ internal sealed class FakeTurnService : ISessionTurnService
         return Task.FromResult(new TurnResultModel(AssistantText: "ok", SessionId: null));
     }
 
+    public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt,
+        TurnSource source, TurnOptionsModel? options, CancellationToken cancellationToken = default) =>
+        RunTurnAsync(node, prompt, source, cancellationToken);
+
     public bool CancelTurn(string nodeId) => false;
     public string? ResolveProfileName(SessionNodeModel node) => null;
 }

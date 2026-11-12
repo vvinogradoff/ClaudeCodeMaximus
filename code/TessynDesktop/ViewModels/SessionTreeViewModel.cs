@@ -204,6 +204,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		// IsRunning changes) are reflected in the VM tree without the VM touching the model directly.
 		_daemon.TreeChanged += OnRegistryTreeChanged;
 		_daemon.AttentionChanged += OnAttentionChanged;
+		_daemon.SessionSettingsChanged += OnSessionSettingsChanged;
 		_daemon.SessionIndexed += (_, _) => Dispatcher.UIThread.Post(ApplySearchFilterIfActive);
 
 		this.WhenAnyValue(x => x.SearchText)
@@ -243,6 +244,17 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			// SettingsModified: VM was already updated surgically by SessionTreeViewModel methods.
 			// Reloaded: handled by the constructor's LoadFromSettings() call.
 		}
+	}
+
+	/// <summary>A daemon method (the web client) changed a session's favourite flag: refresh its row.</summary>
+	private void OnSessionSettingsChanged(object? sender, SessionSettingsChangedEventArgs e)
+	{
+		Dispatcher.UIThread.Post(() =>
+		{
+			var node = FindNodeVmByNodeId(e.NodeId);
+			if (node != null)
+				node.IsFavorite = node.Model.IsFavorite;
+		});
 	}
 
 	private void OnAttentionChanged(object? sender, AttentionChangedEventArgs e)

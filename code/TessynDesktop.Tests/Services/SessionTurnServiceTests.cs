@@ -17,6 +17,9 @@ internal sealed class FakeProcessManagerForTurnService : IClaudeProcessManager
 {
 	public int ActiveProcessCount => 0;
 	public List<(string workingDirectory, string? sessionId, string userMessage)> Calls { get; } = new();
+
+	/// <summary>The model, effort and profile config dir of every spawn, parallel to <see cref="Calls"/>.</summary>
+	public List<(string? model, string? effort, string? profileConfigDir)> Spawns { get; } = new();
 	public Func<Action<ClaudeStreamEvent>, Task>? EmitEvents { get; set; }
 
 	public async Task SendMessageAsync(
@@ -28,6 +31,7 @@ internal sealed class FakeProcessManagerForTurnService : IClaudeProcessManager
 		CancellationToken cancellationToken = default)
 	{
 		Calls.Add((workingDirectory, sessionId, userMessage));
+		Spawns.Add((model, effort, profileConfigDir));
 		if (EmitEvents != null)
 			await EmitEvents(onEvent);
 	}
@@ -73,6 +77,9 @@ internal sealed class FakeFileServiceForTurnService : ISessionFileService
     public IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes) => Array.Empty<SessionEntryModel>();
     public SessionFileStampModel? GetFileStamp(string fileName) => null;
 	public List<(string fileName, string role, string content)> AppendCalls { get; } = new();
+
+	/// <summary>Every appended message with its header attributes, parallel to <see cref="AppendCalls"/>.</summary>
+	public List<(string role, string content, string? profileName, string? modelId, string? effort)> AppendDetails { get; } = new();
 	public IReadOnlyList<SessionEntryModel> ReadEntriesResult { get; set; } = Array.Empty<SessionEntryModel>();
 
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
@@ -87,7 +94,10 @@ internal sealed class FakeFileServiceForTurnService : ISessionFileService
 	public string CreateSessionFile() => throw new NotImplementedException();
 
 	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null)
-		=> AppendCalls.Add((fileName, role, content));
+	{
+		AppendCalls.Add((fileName, role, content));
+		AppendDetails.Add((role, content, profileName, modelId, effort));
+	}
 
 	public void AppendCompactionSeparator(string fileName) => throw new NotImplementedException();
 	public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName) => ReadEntriesResult;
@@ -149,10 +159,15 @@ internal sealed class FakeRegistryForTurnService : ISessionRegistry
 
 internal sealed class FakeProfileServiceForTurnService : IClaudeProfileService
 {
-	public string ProfilesRootDirectory => throw new NotImplementedException();
-	public Task<string?> GetAccountEmailAsync(string claudePath, string? configDir) => throw new NotImplementedException();
+	public string ProfilesRootDirectory => @"C:\profiles";
+
+	/// <summary>The account e-mail of the Default profile.</summary>
+	public string? Email { get; set; } = "me@example.com";
+
+	public Task<string?> GetAccountEmailAsync(string claudePath, string? configDir) => Task.FromResult(Email);
 	public Task LaunchAuthLoginAsync(string claudePath, string? configDir) => throw new NotImplementedException();
-	public string? GetConfigDirForProfile(int profileIndex, IReadOnlyList<ClaudeProfileModel> profiles) => throw new NotImplementedException();
+	public string? GetConfigDirForProfile(int profileIndex, IReadOnlyList<ClaudeProfileModel> profiles) =>
+		profileIndex >= 1 && profileIndex <= profiles.Count ? @"C:\profiles\" + profiles[profileIndex - 1].ProfileId : null;
 	public void MarkProfileDirectoryRemoved(string profileId) => throw new NotImplementedException();
 }
 
@@ -166,7 +181,8 @@ internal sealed class FakeSessionStatusServiceForTurnService : IClaudeSessionSta
 
 internal sealed class FakeModelServiceForTurnService : IClaudeModelService
 {
-	public IReadOnlyList<ClaudeModelInfo> GetCachedModels() => Array.Empty<ClaudeModelInfo>();
+	public IReadOnlyList<ClaudeModelInfo> Models { get; set; } = Array.Empty<ClaudeModelInfo>();
+	public IReadOnlyList<ClaudeModelInfo> GetCachedModels() => Models;
 	public Task EnsureModelsLoadedAsync() => throw new NotImplementedException();
 	public event EventHandler? ModelsUpdated { add { } remove { } }
 }
@@ -196,6 +212,7 @@ public sealed class SessionTurnServiceTests : IDisposable
 	private readonly string _tempDir;
 	private readonly AppSettingsService _appSettings;
 	private readonly FakeProcessManagerForTurnService _processManager = new();
+	private readonly FakeProfileServiceForTurnService _profileService = new();
 	private readonly FakeStreamingManagerForTurnService _streamingManager = new();
 	private readonly FakeFileServiceForTurnService _fileService = new();
 	private readonly FakeRegistryForTurnService _registry = new();
@@ -215,7 +232,7 @@ public sealed class SessionTurnServiceTests : IDisposable
 			_processManager,
 			_fileService,
 			_appSettings,
-			new FakeProfileServiceForTurnService(),
+			_profileService,
 			new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService()),
 			_registry,
 			new FakeSessionStatusServiceForTurnService(),
@@ -223,7 +240,8 @@ public sealed class SessionTurnServiceTests : IDisposable
 			new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()),
 			_streamingManager,
 			_attention.Service,
-			_tagEnv.Service);
+			_tagEnv.Service,
+			new ProfileLabelService(_profileService, _appSettings));
 	}
 
 	public void Dispose()
@@ -742,5 +760,221 @@ public sealed class SessionTurnServiceTests : IDisposable
 
 		Assert.DoesNotContain("tag_session", _streamingManager.SendTurnCalls[0].userMessage);
 		Assert.True(_tagEnv.Service.TakeTagGuidanceDue(node.NodeId));   // not consumed by the turn
+	}
+
+	// ── Per-turn options (TurnSource.Web) ─────────────────────────────────────────
+
+	private void EmitOneAnswer()
+	{
+		_streamingManager.AliveResult = false;
+		_processManager.EmitEvents = onEvent =>
+		{
+			onEvent(new ClaudeStreamEvent { Type = "assistant", Content = "answer" });
+			onEvent(new ClaudeStreamEvent { Type = "assistant", Content = "second part" });
+			onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "sess-1" });
+			return Task.CompletedTask;
+		};
+	}
+
+	private (string role, string content, string? profileName, string? modelId, string? effort) FirstAssistant() =>
+		_fileService.AppendDetails.First(d => d.role == Constants.SessionFile.RoleAssistant);
+
+	[Fact]
+	public async Task RunTurnAsync_WithoutOptions_PassesNoEffortAndStampsDefault()
+	{
+		EmitOneAnswer();
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Telegram);
+
+		Assert.Null(_processManager.Spawns[0].effort);
+		Assert.Null(_processManager.Spawns[0].model);
+		Assert.Equal(("default", "default"), (FirstAssistant().modelId, FirstAssistant().effort));
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_OptionsNull_BehavesLikeTheOldOverload()
+	{
+		EmitOneAnswer();
+		var node = MakeNode();
+		node.ModelId = "claude-sonnet-5-5";
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Web, turnOptions: null);
+
+		Assert.Equal("claude-sonnet-5-5", _processManager.Spawns[0].model);
+		Assert.Null(_processManager.Spawns[0].effort);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_ModelOption_IsPassedAndStampedOnTheFirstAssistantEntryOnly()
+	{
+		EmitOneAnswer();
+		var node = MakeNode();
+		node.ModelId = "claude-sonnet-5-5";
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Web, new TurnOptionsModel(ModelId: "claude-opus-5-5"));
+
+		Assert.Equal("claude-opus-5-5", _processManager.Spawns[0].model);
+		var assistants = _fileService.AppendDetails.Where(d => d.role == Constants.SessionFile.RoleAssistant).ToList();
+		Assert.Equal("claude-opus-5-5", assistants[0].modelId);
+		Assert.Null(assistants[1].modelId);
+		Assert.Null(assistants[1].effort);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_DefaultModelOption_MeansNoModelFlagEvenWhenTheNodeHasOne()
+	{
+		EmitOneAnswer();
+		var node = MakeNode();
+		node.ModelId = "claude-sonnet-5-5";
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Web, new TurnOptionsModel(ModelId: "default"));
+
+		Assert.Null(_processManager.Spawns[0].model);
+		Assert.Equal("default", FirstAssistant().modelId);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_EffortOption_IsPassedAsTheEffortFlagAndStamped()
+	{
+		EmitOneAnswer();
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Web, new TurnOptionsModel(Effort: "high"));
+
+		Assert.Equal("high", _processManager.Spawns[0].effort);
+		Assert.Equal("high", FirstAssistant().effort);
+	}
+
+	[Theory]
+	[InlineData("default")]
+	[InlineData("")]
+	public async Task RunTurnAsync_DefaultEffortOption_PassesNoFlagAndStampsDefault(string effort)
+	{
+		EmitOneAnswer();
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Web, new TurnOptionsModel(Effort: effort));
+
+		Assert.Null(_processManager.Spawns[0].effort);
+		Assert.Equal("default", FirstAssistant().effort);
+	}
+
+	// ── Profile stamping on the USER entry ────────────────────────────────────────
+
+	private (string role, string content, string? profileName, string? modelId, string? effort) UserEntry() =>
+		_fileService.AppendDetails.First(d => d.role == Constants.SessionFile.RoleUser);
+
+	[Theory]
+	[InlineData(TurnSource.User)]
+	[InlineData(TurnSource.Scheduled)]
+	[InlineData(TurnSource.Orchestrated)]
+	[InlineData(TurnSource.Telegram)]
+	[InlineData(TurnSource.Web)]
+	public async Task RunTurnAsync_NoProfileRecorded_StampsTheDefaultLabelOnTheUserEntry(TurnSource source)
+	{
+		EmitOneAnswer();
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", source);
+
+		Assert.Equal("[Sys] me@example.com", UserEntry().profileName);
+		Assert.Null(_processManager.Spawns[0].profileConfigDir);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_DefaultLabelFallsBackWhenTheEmailIsUnknown()
+	{
+		EmitOneAnswer();
+		_profileService.Email = null;
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.User);
+
+		Assert.Equal("[Sys] Default", UserEntry().profileName);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_PinnedStoredProfile_IsStampedWithItsDisplayNameAndUsed()
+	{
+		EmitOneAnswer();
+		_appSettings.Settings.Profiles.Add(new ClaudeProfileModel { ProfileId = "p1", DisplayName = "Work" });
+		var node = MakeNode();
+		node.ProfileName = "work";   // matched case-insensitively
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.Equal("Work", UserEntry().profileName);
+		Assert.Equal(@"C:\profiles\p1", _processManager.Spawns[0].profileConfigDir);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_ProfileOption_OverridesThePinnedProfile()
+	{
+		EmitOneAnswer();
+		_appSettings.Settings.Profiles.Add(new ClaudeProfileModel { ProfileId = "p1", DisplayName = "Work" });
+		_appSettings.Settings.Profiles.Add(new ClaudeProfileModel { ProfileId = "p2", DisplayName = "Home" });
+		var node = MakeNode();
+		node.ProfileName = "Work";
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Web, new TurnOptionsModel(ProfileName: "Home"));
+
+		Assert.Equal("Home", UserEntry().profileName);
+		Assert.Equal(@"C:\profiles\p2", _processManager.Spawns[0].profileConfigDir);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_DefaultLabelOption_UsesTheDefaultProfileEvenWhenOneIsPinned()
+	{
+		EmitOneAnswer();
+		_appSettings.Settings.Profiles.Add(new ClaudeProfileModel { ProfileId = "p1", DisplayName = "Work" });
+		var node = MakeNode();
+		node.ProfileName = "Work";
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Web, new TurnOptionsModel(ProfileName: "[Sys] me@example.com"));
+
+		Assert.Equal("[Sys] me@example.com", UserEntry().profileName);
+		Assert.Null(_processManager.Spawns[0].profileConfigDir);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_DeletedProfile_FallsBackToDefaultAndStampsTheDefaultLabel()
+	{
+		EmitOneAnswer();
+		var node = MakeNode();
+		node.ProfileName = "Gone";
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.Equal("[Sys] me@example.com", UserEntry().profileName);
+		Assert.Null(_processManager.Spawns[0].profileConfigDir);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_ProfileFromTheLastUserEntry_IsStillHonoured()
+	{
+		EmitOneAnswer();
+		_appSettings.Settings.Profiles.Add(new ClaudeProfileModel { ProfileId = "p1", DisplayName = "Work" });
+		_fileService.ReadEntriesResult =
+		[
+			new SessionEntryModel { Timestamp = DateTimeOffset.UtcNow, Role = Constants.SessionFile.RoleUser, Content = "old", ProfileName = "Work" },
+		];
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Telegram);
+
+		Assert.Equal("Work", UserEntry().profileName);
+		Assert.Equal(@"C:\profiles\p1", _processManager.Spawns[0].profileConfigDir);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_StreamingRedirect_IgnoresOptionsButStillStampsTheUserEntry()
+	{
+		_streamingManager.AliveResult = true;
+		_streamingManager.EmitTurnEvents = onTurnEvent =>
+		{
+			onTurnEvent(new ClaudeStreamEvent { Type = "result" });
+			return Task.CompletedTask;
+		};
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Web, new TurnOptionsModel("claude-opus-5-5", "high", "Home"));
+
+		Assert.Empty(_processManager.Calls);
+		Assert.Single(_streamingManager.SendTurnCalls);
+		Assert.Equal("[Sys] me@example.com", UserEntry().profileName);
 	}
 }
