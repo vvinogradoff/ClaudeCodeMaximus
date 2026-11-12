@@ -34,6 +34,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ITelegramBridgeService _telegramBridge;
 	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly ISessionSoundService _soundService;
+	private readonly ISessionCompactionService _compaction;
 	private readonly IUiDispatcher _uiDispatcher;
 	private readonly IOperationTimer _timer;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
@@ -255,6 +256,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
 		ISessionSoundService soundService,
+		ISessionCompactionService compaction,
 		IUiDispatcher uiDispatcher,
 		IOperationTimer? timer = null)
 	{
@@ -275,6 +277,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_telegramBridge   = telegramBridge;
 		_sessionStatus    = sessionStatus;
 		_soundService     = soundService;
+		_compaction       = compaction;
 		_uiDispatcher     = uiDispatcher;
 		SessionTree       = sessionTree;
 		RecentSessions    = new RecentSessionsViewModel(sessionTree, labelService);
@@ -385,7 +388,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _telegramBridge, _sessionStatus, _soundService, _uiDispatcher);
+				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _telegramBridge, _sessionStatus, _soundService, _compaction, _uiDispatcher);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache[cacheKey] = vm;
@@ -488,14 +491,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	/// Returns the path to the .credentials.json file for the given profile config directory.
 	/// Falls back to ~/.claude/.credentials.json for the system-wide default profile.
 	/// </summary>
-	private static string ResolveCredentialsPath(string? profileConfigDir)
-	{
-		if (!string.IsNullOrEmpty(profileConfigDir))
-			return Path.Combine(profileConfigDir, Constants.Usage.CredentialsFileName);
-
-		var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		return Path.Combine(home, Constants.Usage.DefaultClaudeRelativePath, Constants.Usage.CredentialsFileName);
-	}
+	private static string ResolveCredentialsPath(string? profileConfigDir) =>
+		ClaudeCredentialsPaths.Resolve(profileConfigDir);
 
 	private void RaiseInstructionToolbarChanged()
 	{
@@ -522,10 +519,13 @@ public sealed class MainWindowViewModel : ViewModelBase
 	{
 		var mcpTokenStore = App.Services.GetRequiredService<IMcpTokenStore>();
 		var telegramTokenStore = App.Services.GetRequiredService<ITelegramTokenStore>();
-		var vm     = new SettingsViewModel(_appSettings, mcpTokenStore, telegramTokenStore, _soundService);
+		var relayConfigStore = App.Services.GetRequiredService<IRelayConfigStore>();
+		var relayConnector = App.Services.GetRequiredService<IRelayConnectorService>();
+		var vm     = new SettingsViewModel(_appSettings, mcpTokenStore, telegramTokenStore, _soundService, relayConfigStore, relayConnector);
 		var window = new Views.SettingsWindow { DataContext = vm };
 		window.Closed += (_, _) =>
 		{
+			vm.Dispose();
 			// Sync title bar theme toggle with settings change (no re-apply needed)
 			_isDarkTheme = _appSettings.Settings.Theme == "Dark";
 			this.RaisePropertyChanged(nameof(IsDarkTheme));

@@ -9,12 +9,19 @@ using ReactiveUI;
 namespace TessynDesktop.ViewModels;
 
 /// <remarks>Created by Claude</remarks>
-public sealed class SettingsViewModel : ViewModelBase
+public sealed class SettingsViewModel : ViewModelBase, IDisposable
 {
 	private readonly IAppSettingsService _appSettings;
 	private readonly IMcpTokenStore _mcpTokenStore;
 	private readonly ITelegramTokenStore _telegramTokenStore;
 	private readonly ISessionSoundService _soundService;
+	private readonly IRelayConfigStore _relayConfigStore;
+	private readonly IRelayConnectorService _relayConnector;
+	private bool _relayEnabled;
+	private string _relayUrl;
+	private string _relayTokenInput = string.Empty;
+	private string _relayTokenStatus;
+	private string _relayStatusText;
 	private McpServerRowViewModel? _selectedMcpServer;
 	private string _sessionFilesRoot;
 	private string _claudePath;
@@ -200,6 +207,44 @@ public sealed class SettingsViewModel : ViewModelBase
 
 	public ReactiveCommand<Unit, Unit> SaveTelegramTokenCommand { get; }
 
+	/// <summary>Whether the desktop dials out to the web server (web access). Committed by <see cref="SaveRelayCommand"/>.</summary>
+	public bool RelayEnabled
+	{
+		get => _relayEnabled;
+		set => this.RaiseAndSetIfChanged(ref _relayEnabled, value);
+	}
+
+	/// <summary>Base URL of the web server, e.g. https://tessyn.vvinogradoff.com.</summary>
+	public string RelayUrl
+	{
+		get => _relayUrl;
+		set => this.RaiseAndSetIfChanged(ref _relayUrl, value);
+	}
+
+	/// <summary>Write-only entry box for the link token; the stored token never round-trips into the view-model.</summary>
+	public string RelayTokenInput
+	{
+		get => _relayTokenInput;
+		set => this.RaiseAndSetIfChanged(ref _relayTokenInput, value);
+	}
+
+	/// <summary>"Not set" or "Configured".</summary>
+	public string RelayTokenStatus
+	{
+		get => _relayTokenStatus;
+		private set => this.RaiseAndSetIfChanged(ref _relayTokenStatus, value);
+	}
+
+	/// <summary>Live connector state, e.g. "Connected since 14:02".</summary>
+	public string RelayStatusText
+	{
+		get => _relayStatusText;
+		private set => this.RaiseAndSetIfChanged(ref _relayStatusText, value);
+	}
+
+	/// <summary>Saves the web-access settings immediately (DPAPI file, not appsettings) and restarts the connector.</summary>
+	public ReactiveCommand<Unit, Unit> SaveRelayCommand { get; }
+
 	public string InputBoxBackground
 	{
 		get => _inputBoxBackground;
@@ -291,12 +336,21 @@ public sealed class SettingsViewModel : ViewModelBase
 		set => this.RaiseAndSetIfChanged(ref _selectedMcpServer, value);
 	}
 
-	public SettingsViewModel(IAppSettingsService appSettings, IMcpTokenStore mcpTokenStore, ITelegramTokenStore telegramTokenStore, ISessionSoundService soundService)
+	public SettingsViewModel(IAppSettingsService appSettings, IMcpTokenStore mcpTokenStore, ITelegramTokenStore telegramTokenStore, ISessionSoundService soundService,
+		IRelayConfigStore relayConfigStore, IRelayConnectorService relayConnector)
 	{
 		_appSettings   = appSettings;
 		_mcpTokenStore = mcpTokenStore;
 		_telegramTokenStore = telegramTokenStore;
 		_soundService  = soundService;
+		_relayConfigStore = relayConfigStore;
+		_relayConnector = relayConnector;
+		var relayConfig = relayConfigStore.Load();
+		_relayEnabled = relayConfig?.Enabled ?? false;
+		_relayUrl = relayConfig?.Url ?? string.Empty;
+		_relayTokenStatus = string.IsNullOrEmpty(relayConfig?.Token) ? "Not set" : "Configured";
+		_relayStatusText = DescribeRelayStatus(relayConnector.Status);
+		relayConnector.StatusChanged += OnRelayStatusChanged;
 		_sessionFilesRoot = appSettings.Settings.SessionFilesRoot;
 		_claudePath = appSettings.Settings.ClaudePath;
 		_sourceCodesLocation = appSettings.Settings.SourceCodesLocation;
@@ -331,6 +385,7 @@ public sealed class SettingsViewModel : ViewModelBase
 
 		SaveCommand = ReactiveCommand.Create(Save);
 		SaveTelegramTokenCommand = ReactiveCommand.Create(SaveTelegramToken);
+		SaveRelayCommand = ReactiveCommand.Create(SaveRelay);
 		TestCompletionSoundCommand = ReactiveCommand.Create(TestCompletionSound);
 
 		LoadKeyBindings();
@@ -364,6 +419,33 @@ public sealed class SettingsViewModel : ViewModelBase
 		TelegramBotTokenInput = string.Empty;
 		TelegramTokenStatus = "Configured";
 	}
+
+	/// <summary>Persists the web-access config (keeping the stored token when the input box is empty) and restarts the connector off the UI thread.</summary>
+	private void SaveRelay()
+	{
+		var existing = _relayConfigStore.Load();
+		var token = string.IsNullOrWhiteSpace(RelayTokenInput) ? existing?.Token ?? string.Empty : RelayTokenInput.Trim();
+
+		_relayConfigStore.Save(new RelayConfigModel { Enabled = RelayEnabled, Url = RelayUrl.Trim(), Token = token });
+		RelayTokenInput = string.Empty;
+		RelayTokenStatus = token.Length == 0 ? "Not set" : "Configured";
+
+		_ = System.Threading.Tasks.Task.Run(_relayConnector.Restart);
+	}
+
+	private void OnRelayStatusChanged(RelayStatusModel status) =>
+		Avalonia.Threading.Dispatcher.UIThread.Post(() => RelayStatusText = DescribeRelayStatus(status));
+
+	private static string DescribeRelayStatus(RelayStatusModel status) => status.State switch
+	{
+		RelayState.Connected  => $"Connected since {status.Since.ToLocalTime():HH:mm}",
+		RelayState.Connecting => "Connecting…",
+		RelayState.Error      => $"Error: {status.LastError}",
+		_                     => "Disabled",
+	};
+
+	/// <summary>Detaches from the connector's status event when the window closes.</summary>
+	public void Dispose() => _relayConnector.StatusChanged -= OnRelayStatusChanged;
 
 	private void LoadKeyBindings()
 	{

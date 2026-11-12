@@ -1,4 +1,5 @@
 using System;
+using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
 
@@ -17,6 +18,9 @@ public interface IDraftService
 
 	/// <summary>Deletes the draft for a session (e.g. after the message is sent).</summary>
 	void DeleteDraft(string sessionFileName);
+
+	/// <summary>The draft file's current (length, last write time) stamp, or null when there is no draft file. Never reads content.</summary>
+	SessionFileStampModel? GetDraftStamp(string sessionFileName);
 
 	/// <summary>Returns when the draft for a session was last written, or null if none exists.</summary>
 	DateTimeOffset? GetDraftTimestamp(string sessionFileName);

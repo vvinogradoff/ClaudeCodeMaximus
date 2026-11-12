@@ -117,15 +117,24 @@ public sealed class SessionIndexUpdaterTests
 	{
 		AddSession("a.txt", "ext-a", null, "/work/a");
 
-		for (var i = 0; i < 5; i++)
+		// A debounce far longer than any scheduling stall on a loaded machine, so the five notifications always fall into
+		// one window; the fixture's short-debounce updater is replaced for this test.
+		_updater.Stop();
+		var burstUpdater = new SessionIndexUpdater(_fileService, _registry, _indexService, TimeSpan.FromSeconds(1));
+		burstUpdater.Start();
+		try
 		{
-			_fileService.NotifyTurnCompleted("a.txt", false, null);
-			await Task.Delay(5);
-		}
-		await WaitForCallsAsync(1);
-		await SettleAsync();
+			for (var i = 0; i < 5; i++)
+				_fileService.NotifyTurnCompleted("a.txt", false, null);
+			await WaitForCallsAsync(1);
+			await SettleAsync();
 
-		Assert.Equal(1, CallCount());
+			Assert.Equal(1, CallCount());
+		}
+		finally
+		{
+			burstUpdater.Stop();
+		}
 	}
 
 	[Fact]

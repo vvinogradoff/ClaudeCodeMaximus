@@ -16,6 +16,7 @@ namespace TessynDesktop.Tests.Services;
 
 internal sealed class WireFakeDaemonClient : IDaemonClient
 {
+    public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged { add { } remove { } }
     // ── Configurable results ───────────────────────────────────────────────────
 
     public IReadOnlyList<DirectoryNodeModel> DirectoriesValue { get; set; } = Array.Empty<DirectoryNodeModel>();
@@ -59,16 +60,34 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
 
     // ── Event raising ──────────────────────────────────────────────────────────
 
-    public event EventHandler<TreeChangedEventArgs>? TreeChanged;
-    public event EventHandler?                       ScheduleChanged;
+    private EventHandler<TreeChangedEventArgs>? _treeChanged;
+    private EventHandler?                       _scheduleChanged;
+
+    /// <summary>Number of server-side SSE streams subscribed (a stream subscribes to ScheduleChanged last, before it starts writing).</summary>
+    public int SseSubscribers
+    {
+        get { lock (this) return _scheduleChanged?.GetInvocationList().Length ?? 0; }
+    }
+
+    public event EventHandler<TreeChangedEventArgs>? TreeChanged
+    {
+        add { lock (this) _treeChanged += value; }
+        remove { lock (this) _treeChanged -= value; }
+    }
+
+    public event EventHandler? ScheduleChanged
+    {
+        add { lock (this) _scheduleChanged += value; }
+        remove { lock (this) _scheduleChanged -= value; }
+    }
     public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended;
     public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
     public event EventHandler<SessionIndexedEventArgs>? SessionIndexed { add { } remove { } }
     public event EventHandler<AttentionChangedEventArgs>? AttentionChanged { add { } remove { } }
     public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged { add { } remove { } }
 
-    public void RaiseTreeChanged(TreeChangedEventArgs e) => TreeChanged?.Invoke(this, e);
-    public void RaiseScheduleChanged()                   => ScheduleChanged?.Invoke(this, EventArgs.Empty);
+    public void RaiseTreeChanged(TreeChangedEventArgs e) => _treeChanged?.Invoke(this, e);
+    public void RaiseScheduleChanged()                   => _scheduleChanged?.Invoke(this, EventArgs.Empty);
     public void RaiseEntryAppended(SessionEntryAppendedEventArgs e) => EntryAppended?.Invoke(this, e);
 
     // ── IDaemonClient ──────────────────────────────────────────────────────────
@@ -248,14 +267,20 @@ public sealed class WireDaemonClientTests : IDisposable
         var port = FindFreePort();
         _serverBaseUrl = $"http://127.0.0.1:{port}";
 
-        _server = new TdcpServer(_fake, TestToken);
+        _server = new TdcpServer(_fake, new TdcpDispatcher([new TdcpLoopbackRpcModule(_fake)]), TestToken);
         _server.Start(port);
 
         _client = new WireDaemonClient(_serverBaseUrl, TestToken);
         _client.StartAsync().GetAwaiter().GetResult();
 
-        // Allow the SSE loop to establish before event-propagation tests run.
-        Task.Delay(150).GetAwaiter().GetResult();
+        // Wait until the server holds the SSE stream (it buffers events from then on) instead of sleeping and hoping.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (_fake.SseSubscribers < 1)
+        {
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException("The SSE stream was not established");
+            Thread.Sleep(10);
+        }
     }
 
     public void Dispose()

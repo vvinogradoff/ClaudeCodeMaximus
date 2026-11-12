@@ -35,6 +35,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private readonly ITelegramBridgeService _telegramBridge;
 	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly ISessionSoundService _soundService;
+	private readonly ISessionCompactionService _compaction;
 	private readonly SessionContentViewModel _content;
 	private readonly ModelSelectionController _models;
 	private readonly ProfileController _profiles;
@@ -49,6 +50,10 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private DispatcherTimer? _thinkingTimer;
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
+
+	// True while this controller holds one running activity in the daemon's reference-counted running flag
+	// (so a desktop-interactive turn shows as running to remote clients). Opened at the first queued send, closed at idle.
+	private bool _daemonRunningOpen;
 	private bool _needsContextRetry;
 	private bool _needsAuthRaceRetry;
 
@@ -151,6 +156,9 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		NotifyStreamingStateChanged();
 	}
 
+	/// <summary>Re-reads the streaming flag and the process state after a daemon method (the web client) changed them.</summary>
+	public void RefreshStreamingState() => NotifyStreamingStateChanged();
+
 	private void NotifyStreamingStateChanged()
 	{
 		this.RaisePropertyChanged(nameof(IsStreamingMode));
@@ -247,6 +255,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
 		ISessionSoundService soundService,
+		ISessionCompactionService compaction,
 		SessionContentViewModel content,
 		ModelSelectionController models,
 		ProfileController profiles,
@@ -263,6 +272,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_telegramBridge   = telegramBridge;
 		_sessionStatus    = sessionStatus;
 		_soundService     = soundService;
+		_compaction       = compaction;
 		_content          = content;
 		_models           = models;
 		_profiles         = profiles;
@@ -282,6 +292,10 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	{
 		_streamingManager.ProcessExited -= OnStreamingProcessExited;
 		lock (_ctsLock) { foreach (var c in _activeCts) c.Dispose(); _activeCts.Clear(); }
+
+		// Release this controller's share of the daemon's reference-counted running flag, so a view disposed
+		// mid-turn cannot leave the session marked as running for remote clients.
+		CloseDaemonRunning();
 	}
 
 	/// <summary>
@@ -365,6 +379,26 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_log.Information("Delayed send scheduled for session {FileName}: fires at {FireAt}", _node.FileName, fireAtUtc);
 	}
 
+	private void OpenDaemonRunning()
+	{
+		var nodeId = _node.Model.NodeId;
+		if (_daemonRunningOpen || string.IsNullOrEmpty(nodeId))
+			return;
+
+		_daemonRunningOpen = true;
+		_daemonClient.SetSessionRunning(nodeId, true);
+	}
+
+	private void CloseDaemonRunning()
+	{
+		var nodeId = _node.Model.NodeId;
+		if (!_daemonRunningOpen || string.IsNullOrEmpty(nodeId))
+			return;
+
+		_daemonRunningOpen = false;
+		_daemonClient.SetSessionRunning(nodeId, false);
+	}
+
 	private async Task SendAsyncCore(string message, bool preserveInput)
 	{
 		if (!preserveInput)
@@ -376,7 +410,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		// Auto-Compact can be triggered with an empty prompt: skip straight to compaction (no turn sent).
 		if (string.IsNullOrEmpty(message) && _isAutoCompact)
 		{
-			await SendCompactionPromptAsync();
+			// No turn is running here, so the lock is taken by the service.
+			await SendCompactionPromptAsync(turnLockHeld: false);
 			IsAutoCompact = false;
 			return;
 		}
@@ -504,6 +539,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		var sendCancelled = false;
 		string? sendErrorText = null;
 
+		// Opened right before the try whose finally closes it, so nothing that throws in between can leak the share.
+		OpenDaemonRunning();
 		try
 		{
 			if (turnLock != null)
@@ -608,7 +645,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			// Use _midRunAutoCompactState which reflects any mid-run toggle changes
 			if (_midRunAutoCompactState)
 			{
-				await SendCompactionPromptAsync();
+				// Runs inside the send flow, which still holds the node's turn lock until its finally block.
+				await SendCompactionPromptAsync(turnLockHeld: true);
 				IsAutoCompact = false;
 			}
 		}
@@ -666,6 +704,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 				ThinkingDuration = string.Empty;
 				IsBusy = false;
 				_node.IsRunning = false;
+				CloseDaemonRunning();
 
 				// FR.22.1: only on natural completion of the whole batch, never after user Stop.
 				if (!_anyCancelledInBatch && _node.Model.PlayCompletionSound)
@@ -898,129 +937,82 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		});
 	}
 
-	/// <summary>Sends a follow-up compaction prompt and rewrites the session file (FR.11.6).</summary>
-	private async Task SendCompactionPromptAsync()
+	/// <summary>
+	/// Compacts the session through the shared Core service (FR.11.6) and does the UI-only parts: the progress row, the
+	/// reload of Messages, the in-memory outcome lines and the auth-error flag. <paramref name="turnLockHeld"/> is true when
+	/// the caller (the send flow) still holds the node's turn lock, so the service must not take it again.
+	/// </summary>
+	private async Task SendCompactionPromptAsync(bool turnLockHeld)
 	{
-		_log.Information("Starting auto-compaction for session {FileName}", _node.FileName);
-
-		// The compaction prompt embeds the full session transcript directly (FR.11.6), sourced
-		// from the always-complete text Session File rather than relying on --resume — so this
-		// call is intentionally stateless (sessionId: null) and needs no cross-profile lookup.
-		var compactionPrompt = _composer.BuildCompactionPrompt();
-		if (compactionPrompt == null)
-		{
-			_log.Information("Nothing to compact for session {FileName}", _node.FileName);
-			Dispatcher.UIThread.Post(() => _content.AddSystemMessage("[Nothing to compact]"));
-			return;
-		}
-
-		Dispatcher.UIThread.Post(() => _content.Messages.Add(new MessageEntryViewModel
+		var progressRow = new MessageEntryViewModel
 		{
 			Role       = Constants.SessionFile.RoleSystem,
 			Content    = "Compacting session...",
 			Timestamp  = DateTimeOffset.UtcNow,
 			IsProgress = true,
-		}));
+		};
+		Dispatcher.UIThread.Post(() => _content.Messages.Add(progressRow));
 
-		var compactedContent = new StringBuilder();
-		var hadError = false;
-		string? compactionErrorContent = null;
+		var options = new SessionCompactionOptionsModel(
+			_models.SelectedModelId, _models.SelectedEffort, _profiles.SelectedProfileConfigDir, _models.SelectedModelInfo);
 
-		// Local Tool Profile (FR.12.21): restrict native tools the same way an ordinary turn would —
-		// a weak local model is just as prone to mis-calling tools on a compaction turn as on any
-		// other. No --mcp-config is built for compaction either way (unchanged from before this
-		// feature), so only the --tools/--strict-mcp-config pair applies here.
-		var compactionLocalProfile = LocalToolProfileResolver.Resolve(_models.SelectedModelInfo, _models.DirectoryModel);
+		var result = turnLockHeld
+			? await _compaction.CompactWhileHoldingTurnLockAsync(_node.Model, options)
+			: await _compaction.CompactAsync(_node.Model, options);
 
-		await _processManager.SendMessageAsync(
-			workingDirectory: _node.Model.WorkingDirectory,
-			claudePath:       _appSettings.Settings.ClaudePath,
-			sessionId:        null,
-			userMessage:      compactionPrompt,
-			model:            _models.SelectedModelId,
-			profileConfigDir: _profiles.SelectedProfileConfigDir,
-			effort:           _models.SelectedEffort,
-			ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
-			disableTools:     _models.SelectedModelDisablesTools,
-			disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
-			localToolSpec:    compactionLocalProfile?.ToolSpec,
-			strictMcpConfig:  compactionLocalProfile != null,
-			onEvent:          evt =>
-			{
-				// Any error event (auth failure, exit-code failure, etc.) marks the whole
-				// compaction turn as failed (FR.11.6) — even if some assistant text was
-				// also captured, it must not be treated as a valid compacted result.
-				if (evt.IsError)
-				{
-					hadError = true;
-					compactionErrorContent ??= evt.Content;
-					return;
-				}
-				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
-					compactedContent.AppendLine(evt.Content);
-				// Session ID from the compaction response is intentionally NOT stored:
-				// after compaction the JSONL is detached (FR.11.8).
-			});
-
-		var compacted = compactedContent.ToString().Trim();
-		if (!hadError && !string.IsNullOrEmpty(compacted))
+		switch (result.Outcome)
 		{
-			// Write COMPACTION separator followed by the compacted conversation
-			// (Claude outputs entries in session file format: [timestamp] ROLE\ncontent\n)
-			var now = DateTimeOffset.UtcNow;
-			var fileContent = new StringBuilder();
-			fileContent.AppendLine($"[{now.ToString(Constants.SessionFile.TimestampFormat)}] {Constants.SessionFile.RoleCompaction}");
-			fileContent.AppendLine(compacted);
-			if (!compacted.EndsWith(Environment.NewLine))
-				fileContent.AppendLine();
-
-			_fileService.RewriteSessionFile(_node.FileName, fileContent.ToString());
-
-			Dispatcher.UIThread.Post(() =>
-			{
-				_content.Messages.Clear();
-				var entries = _fileService.ReadEntries(_node.FileName);
-				foreach (var entry in entries)
+			case SessionCompactionOutcome.NothingToCompact:
+				// Only this run's own row: nothing was sent, so other progress rows (a queued send) stay.
+				Dispatcher.UIThread.Post(() =>
 				{
-					if (entry.Role != Constants.SessionFile.RoleCompaction
-					    && string.IsNullOrWhiteSpace(entry.Content))
-						continue;
-					_content.Messages.Add(SessionContentViewModel.EntryToViewModel(entry));
-				}
-			});
+					_content.Messages.Remove(progressRow);
+					_content.AddSystemMessage(result.SystemMessage);
+				});
+				break;
 
-			// Detach the JSONL session after compaction (FR.11.8):
-			// next prompt will use the compacted text session as context via BuildContextPreamble.
-			DetachSession("[Session compacted and JSONL detached — next prompt will use the compacted text session as context]");
+			case SessionCompactionOutcome.Compacted:
+				Dispatcher.UIThread.Post(() =>
+				{
+					_content.Messages.Clear();
+					var entries = _fileService.ReadEntries(_node.FileName);
+					foreach (var entry in entries)
+					{
+						if (entry.Role != Constants.SessionFile.RoleCompaction
+						    && string.IsNullOrWhiteSpace(entry.Content))
+							continue;
+						_content.Messages.Add(SessionContentViewModel.EntryToViewModel(entry));
+					}
 
-			_log.Information("Session {FileName} compacted and JSONL detached", _node.FileName);
-		}
-		else
-		{
-			var statusMessage = hadError
-				? $"[Compaction failed — session left unchanged: {compactionErrorContent}]"
-				: "[Compaction returned no content — session left unchanged]";
+					// The service detached the JSONL (FR.11.8); only when it had a live session is there anything to announce.
+					if (result.SessionDetached)
+					{
+						_content.AddSystemMessage(result.SystemMessage);
+						this.RaisePropertyChanged(nameof(CanClear));
+						_content.NotifyClaudeSessionChanged();
+					}
+				});
+				break;
 
-			if (hadError)
-			{
-				_log.Warning("Compaction failed for session {FileName}; keeping original. Error: {Error}", _node.FileName, compactionErrorContent);
-				if (!string.IsNullOrEmpty(compactionErrorContent)
-					&& compactionErrorContent.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
+			default:
+				if (!string.IsNullOrEmpty(result.Error)
+				    && result.Error.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
 					Dispatcher.UIThread.Post(() => _profiles.HasAuthError = true);
-			}
-			else
-			{
-				_log.Warning("Compaction returned empty content for session {FileName}; keeping original", _node.FileName);
-			}
 
-			Dispatcher.UIThread.Post(() =>
-			{
-				for (var i = _content.Messages.Count - 1; i >= 0; i--)
+				Dispatcher.UIThread.Post(() =>
 				{
-					if (_content.Messages[i].IsProgress) _content.Messages.RemoveAt(i);
-				}
-				_content.AddSystemMessage(statusMessage);
-			});
+					RemoveProgressRows();
+					_content.AddSystemMessage(result.SystemMessage);
+				});
+				break;
+		}
+	}
+
+	private void RemoveProgressRows()
+	{
+		for (var i = _content.Messages.Count - 1; i >= 0; i--)
+		{
+			if (_content.Messages[i].IsProgress) _content.Messages.RemoveAt(i);
 		}
 	}
 

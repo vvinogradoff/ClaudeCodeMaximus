@@ -10,6 +10,10 @@ namespace TessynDesktop.Tests.Services;
 /// <remarks>Created by Claude</remarks>
 internal sealed class RecordingSessionFileService : ISessionFileService
 {
+    public event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten { add { } remove { } }
+    public IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes) => Array.Empty<SessionEntryModel>();
+    public IReadOnlyList<SessionEntryModel> ReadEntriesFrom(string fileName, long startOffset) => Array.Empty<SessionEntryModel>();
+    public SessionFileStampModel? GetFileStamp(string fileName) => null;
 	public List<(string fileName, string role, string content)> Appended { get; } = new();
 
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
@@ -130,10 +134,13 @@ internal sealed class FakeAttentionService : IAttentionService
 		return Items;
 	}
 
+	/// <summary>Per-node summaries; a node with an entry here wins over <see cref="Summary"/> (remote list tests).</summary>
+	public Dictionary<string, AttentionSummaryModel> SummaryByNode { get; } = new();
+
 	public AttentionSummaryModel GetSummary(string nodeId)
 	{
 		LastSummaryNodeId = nodeId;
-		return Summary;
+		return SummaryByNode.TryGetValue(nodeId, out var own) ? own : Summary;
 	}
 
 	public void MarkAnsweredByUser(string nodeId, IReadOnlyList<AttentionAnswerModel> answers) =>

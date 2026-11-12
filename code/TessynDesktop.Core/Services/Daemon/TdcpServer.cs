@@ -1,22 +1,20 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using TessynDesktop.Models;
 using Serilog;
 
 namespace TessynDesktop.Services;
 
 /// <summary>
 /// Hosts the Tessyn Daemon Control Protocol (TDCP) over Streamable HTTP (JSON-RPC 2.0).
-/// Delegates every method to an injected <see cref="IDaemonClient"/>.
+/// Handles HTTP and token auth only; every JSON-RPC request is handed to the shared <see cref="TdcpDispatcher"/>
+/// (loopback transport). The SSE stream is fed from the injected <see cref="IDaemonClient"/> events.
 /// Suitable for in-process hosting behind AgentMcpServer's existing HttpListener and for
 /// standalone self-hosting in tests via <see cref="Start"/>/<see cref="Stop"/>.
 /// POST → single JSON-RPC response; GET → SSE push stream for tree.changed/schedule.changed.
@@ -26,24 +24,18 @@ public sealed class TdcpServer : IDisposable
 {
 	private static readonly ILogger _log = Log.ForContext<TdcpServer>();
 
-	internal static readonly JsonSerializerOptions JsonOpts = new()
-	{
-		PropertyNamingPolicy        = JsonNamingPolicy.CamelCase,
-		PropertyNameCaseInsensitive = true,
-		DefaultIgnoreCondition      = JsonIgnoreCondition.WhenWritingNull,
-		Converters                  = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
-	};
-
 	private readonly IDaemonClient           _client;
+	private readonly TdcpDispatcher          _dispatcher;
 	private readonly string                  _token;
 	private readonly CancellationTokenSource _cts = new();
 
 	private HttpListener? _listener;
 
-	public TdcpServer(IDaemonClient client, string token)
+	public TdcpServer(IDaemonClient client, TdcpDispatcher dispatcher, string token)
 	{
-		_client = client;
-		_token  = token;
+		_client     = client;
+		_dispatcher = dispatcher;
+		_token      = token;
 	}
 
 	/// <summary>Starts a self-hosted HttpListener for standalone use (tests, future daemon host).</summary>
@@ -129,203 +121,24 @@ public sealed class TdcpServer : IDisposable
 		var token = ctx.Request.Headers[Constants.Agent.TokenHeader];
 		if (string.IsNullOrEmpty(token) || token != _token)
 		{
-			await SendJsonRpcErrorAsync(ctx, null, -32600, "Invalid or missing X-CMX-Token");
+			await WriteJsonResponseAsync(ctx, InvalidTokenResponse().ToJsonString(), 200);
 			return;
 		}
 
 		using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
 		var body = await reader.ReadToEndAsync();
-		JsonNode? request;
-		try { request = JsonNode.Parse(body); }
-		catch
-		{
-			await SendJsonRpcErrorAsync(ctx, null, -32700, "Parse error");
-			return;
-		}
 
-		var id      = request?["id"];
-		var method  = request?["method"]?.GetValue<string>();
-		var @params = request?["params"];
-
-		JsonNode result;
-		try
-		{
-			result = await DispatchAsync(method ?? string.Empty, @params);
-		}
-		catch (TdcpMethodNotFoundException ex)
-		{
-			await SendJsonRpcErrorAsync(ctx, id, -32601, $"Method not found: {ex.Message}");
-			return;
-		}
-		catch (TdcpException ex)
-		{
-			await SendJsonRpcErrorAsync(ctx, id, -32000, ex.Message);
-			return;
-		}
-
-		await SendJsonRpcResultAsync(ctx, id, result);
+		var response = await _dispatcher.HandleTextAsync(body, TdcpTransport.Loopback, CancellationToken.None);
+		await WriteJsonResponseAsync(ctx, response.ToJsonString(), 200);
 	}
 
-	// ── Dispatch ──────────────────────────────────────────────────────────────────
-
-	private async Task<JsonNode> DispatchAsync(string method, JsonNode? @params) =>
-		method switch
+	private static JsonNode InvalidTokenResponse() =>
+		new JsonObject
 		{
-			"tree.list"            => TreeList(),
-			"tree.getSelected"     => TreeGetSelected(),
-			"tree.setSelected"     => TreeSetSelected(@params),
-			"tree.findByNodeId"    => TreeFindByNodeId(@params),
-			"tree.findByToken"     => TreeFindByToken(@params),
-			"tree.location"        => TreeLocation(@params),
-			"turn.isRunning"       => TurnIsRunning(@params),
-			"turn.setRunning"      => TurnSetRunning(@params),
-			"turn.run"             => await TurnRunAsync(@params),
-			"turn.cancel"          => TurnCancel(@params),
-			"turn.resolveProfile"  => TurnResolveProfile(@params),
-			"schedule.list"        => ScheduleList(@params),
-			"schedule.add"         => ScheduleAdd(@params),
-			"schedule.remove"      => ScheduleRemove(@params),
-			"content.read"         => ContentRead(@params),
-			"content.exists"       => ContentExists(@params),
-			"content.path"         => ContentPath(@params),
-			_                      => throw new TdcpMethodNotFoundException(method),
+			["jsonrpc"] = "2.0",
+			["id"]      = null,
+			["error"]   = new JsonObject { ["code"] = -32600, ["message"] = "Invalid or missing X-CMX-Token" },
 		};
-
-	// ── Tree methods ──────────────────────────────────────────────────────────────
-
-	private JsonNode TreeList() =>
-		Serialize<IReadOnlyList<DirectoryNodeModel>>(_client.Directories);
-
-	private JsonNode TreeGetSelected() =>
-		Serialize(new SelectedNodeIdResult(_client.SelectedNodeId));
-
-	private JsonNode TreeSetSelected(JsonNode? @params)
-	{
-		_client.SelectedNodeId = @params?["nodeId"]?.GetValue<string>();
-		return EmptyResult();
-	}
-
-	private JsonNode TreeFindByNodeId(JsonNode? @params)
-	{
-		var nodeId = RequireString(@params, "nodeId");
-		var node   = _client.FindSessionByNodeId(nodeId);
-		return node != null ? Serialize(node) : JsonValue.Create<object?>(null)!;
-	}
-
-	private JsonNode TreeFindByToken(JsonNode? @params)
-	{
-		var token = RequireString(@params, "token");
-		var node  = _client.FindSessionByAgentToken(token);
-		return node != null ? Serialize(node) : JsonValue.Create<object?>(null)!;
-	}
-
-	private JsonNode TreeLocation(JsonNode? @params)
-	{
-		var nodeId = RequireString(@params, "nodeId");
-		var node   = _client.FindSessionByNodeId(nodeId)
-		             ?? throw new TdcpException($"Session not found: {nodeId}");
-		var (label, path) = _client.GetSessionLocation(node);
-		return Serialize(new LocationResult(label, path));
-	}
-
-	// ── Running state methods ─────────────────────────────────────────────────────
-
-	private JsonNode TurnIsRunning(JsonNode? @params)
-	{
-		var nodeId  = RequireString(@params, "nodeId");
-		var running = _client.IsSessionRunning(nodeId);
-		return Serialize(new IsRunningResult(running));
-	}
-
-	private JsonNode TurnSetRunning(JsonNode? @params)
-	{
-		var nodeId  = RequireString(@params, "nodeId");
-		var running = @params?["running"]?.GetValue<bool>()
-		              ?? throw new TdcpException("'running' is required");
-		_client.SetSessionRunning(nodeId, running);
-		return EmptyResult();
-	}
-
-	// ── Turn methods ──────────────────────────────────────────────────────────────
-
-	private async Task<JsonNode> TurnRunAsync(JsonNode? @params)
-	{
-		var nodeId    = RequireString(@params, "nodeId");
-		var prompt    = RequireString(@params, "prompt");
-		var sourceStr = @params?["source"]?.GetValue<string>() ?? "user";
-		if (!Enum.TryParse<TurnSource>(sourceStr, ignoreCase: true, out var source))
-			source = TurnSource.User;
-
-		var node = _client.FindSessionByNodeId(nodeId)
-		           ?? throw new TdcpException($"Session not found: {nodeId}");
-
-		var result = await _client.RunTurnAsync(node, prompt, source);
-		return Serialize(result);
-	}
-
-	private JsonNode TurnCancel(JsonNode? @params)
-	{
-		var nodeId    = RequireString(@params, "nodeId");
-		var cancelled = _client.CancelTurn(nodeId);
-		return Serialize(new CancelledResult(cancelled));
-	}
-
-	private JsonNode TurnResolveProfile(JsonNode? @params)
-	{
-		var nodeId = RequireString(@params, "nodeId");
-		var node   = _client.FindSessionByNodeId(nodeId)
-		             ?? throw new TdcpException($"Session not found: {nodeId}");
-		var name = _client.ResolveProfileName(node);
-		return Serialize(new ProfileNameResult(name));
-	}
-
-	// ── Schedule methods ──────────────────────────────────────────────────────────
-
-	private JsonNode ScheduleList(JsonNode? @params)
-	{
-		var targetNodeId = @params?["targetNodeId"]?.GetValue<string>();
-		var schedules    = _client.GetSchedules(targetNodeId);
-		return Serialize<IReadOnlyList<ScheduleModel>>(schedules);
-	}
-
-	private JsonNode ScheduleAdd(JsonNode? @params)
-	{
-		var json     = @params?.ToJsonString() ?? throw new TdcpException("'params' is required for schedule.add");
-		var schedule = JsonSerializer.Deserialize<ScheduleModel>(json, JsonOpts)
-		               ?? throw new TdcpException("Could not parse ScheduleModel from params");
-		_client.AddSchedule(schedule);
-		return EmptyResult();
-	}
-
-	private JsonNode ScheduleRemove(JsonNode? @params)
-	{
-		var scheduleId = RequireString(@params, "scheduleId");
-		var removed    = _client.RemoveSchedule(scheduleId);
-		return Serialize(new RemovedResult(removed));
-	}
-
-	// ── Content methods ───────────────────────────────────────────────────────────
-
-	private JsonNode ContentRead(JsonNode? @params)
-	{
-		var fileName = RequireString(@params, "fileName");
-		var entries  = _client.ReadEntries(fileName);
-		return Serialize<IReadOnlyList<SessionEntryModel>>(entries);
-	}
-
-	private JsonNode ContentExists(JsonNode? @params)
-	{
-		var fileName = RequireString(@params, "fileName");
-		var exists   = _client.SessionFileExists(fileName);
-		return Serialize(new ExistsResult(exists));
-	}
-
-	private JsonNode ContentPath(JsonNode? @params)
-	{
-		var fileName = RequireString(@params, "fileName");
-		var path     = _client.GetSessionFilePath(fileName);
-		return Serialize(new FilePathResult(path));
-	}
 
 	// ── GET SSE handler ───────────────────────────────────────────────────────────
 
@@ -362,7 +175,7 @@ public sealed class TdcpServer : IDisposable
 			{
 				["jsonrpc"] = "2.0",
 				["method"]  = "tree.changed",
-				["params"]  = JsonNode.Parse(JsonSerializer.Serialize(e, JsonOpts)),
+				["params"]  = JsonNode.Parse(JsonSerializer.Serialize(e, TdcpJsonOptions.Default)),
 			};
 			channel.Writer.TryWrite(notification.ToJsonString());
 		}
@@ -417,28 +230,6 @@ public sealed class TdcpServer : IDisposable
 
 	// ── JSON-RPC wire helpers ─────────────────────────────────────────────────────
 
-	private static async Task SendJsonRpcResultAsync(HttpListenerContext ctx, JsonNode? id, JsonNode result)
-	{
-		var response = new JsonObject
-		{
-			["jsonrpc"] = "2.0",
-			["id"]      = id?.DeepClone(),
-			["result"]  = result,
-		};
-		await WriteJsonResponseAsync(ctx, response.ToJsonString(), 200);
-	}
-
-	private static async Task SendJsonRpcErrorAsync(HttpListenerContext ctx, JsonNode? id, int code, string message)
-	{
-		var response = new JsonObject
-		{
-			["jsonrpc"] = "2.0",
-			["id"]      = id?.DeepClone(),
-			["error"]   = new JsonObject { ["code"] = code, ["message"] = message },
-		};
-		await WriteJsonResponseAsync(ctx, response.ToJsonString(), 200);
-	}
-
 	private static async Task WriteJsonResponseAsync(HttpListenerContext ctx, string json, int statusCode)
 	{
 		var bytes                    = Encoding.UTF8.GetBytes(json);
@@ -448,28 +239,4 @@ public sealed class TdcpServer : IDisposable
 		await ctx.Response.OutputStream.WriteAsync(bytes);
 		ctx.Response.Close();
 	}
-
-	private static JsonNode Serialize<T>(T value) =>
-		JsonNode.Parse(JsonSerializer.Serialize(value, JsonOpts))!;
-
-	private static JsonNode EmptyResult() => new JsonObject();
-
-	private static string RequireString(JsonNode? @params, string key) =>
-		@params?[key]?.GetValue<string>()
-		?? throw new TdcpException($"'{key}' is required");
-
-	// ── Private result records ────────────────────────────────────────────────────
-	// These are private nested types only used within TdcpServer.
-
-	private sealed record SelectedNodeIdResult(string? NodeId);
-	private sealed record LocationResult(string DirectoryLabel, string TreePath);
-	private sealed record IsRunningResult(bool Running);
-	private sealed record CancelledResult(bool Cancelled);
-	private sealed record ProfileNameResult(string? ProfileName);
-	private sealed record RemovedResult(bool Removed);
-	private sealed record ExistsResult(bool Exists);
-	private sealed record FilePathResult(string Path);
 }
-
-file sealed class TdcpMethodNotFoundException(string method) : Exception(method);
-file sealed class TdcpException(string message) : Exception(message);

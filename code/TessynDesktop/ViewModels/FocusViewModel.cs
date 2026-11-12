@@ -280,11 +280,10 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 			.Select(c => new AttentionAnswerModel { ItemId = c.Id, Title = c.Title, Answer = c.ReplyText.Trim() })
 			.ToList();
 
-		var prompt = AttentionPromptBuilder.BuildAnswersPrompt(answers);
+		var prompt = AttentionReplyComposer.Compose(answers, marked => _daemonClient.MarkAttentionAnswered(_nodeId, marked));
 		if (string.IsNullOrEmpty(prompt))
 			return;
 
-		_daemonClient.MarkAttentionAnswered(_nodeId, answers);
 		foreach (var card in cards)
 			card.ReplyText = string.Empty;
 

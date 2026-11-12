@@ -44,6 +44,7 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 		// Forward the underlying domain events through the boundary. Over TDCP these become
 		// push notifications on the change channel; in-process they are a direct relay.
 		_registry.TreeChanged += (s, e) => TreeChanged?.Invoke(this, e);
+		_registry.SessionSettingsChanged += (s, e) => SessionSettingsChanged?.Invoke(this, e);
 		_scheduler.ScheduleChanged += (s, e) => ScheduleChanged?.Invoke(this, e);
 		_fileService.EntryAppended += (s, e) => EntryAppended?.Invoke(this, e);
 		_fileService.TurnCompleted += (s, e) => TurnCompleted?.Invoke(this, e);
@@ -72,6 +73,7 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 	public event EventHandler<SessionIndexedEventArgs>? SessionIndexed;
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 	public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged;
+	public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged;
 
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 

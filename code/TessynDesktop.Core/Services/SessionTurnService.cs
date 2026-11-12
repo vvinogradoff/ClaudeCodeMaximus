@@ -27,6 +27,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly IClaudeStreamingSessionManager  _streamingManager;
 	private readonly IAttentionService               _attention;
 	private readonly ISessionTagService              _tags;
+	private readonly IProfileLabelService            _profileLabels;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
 	private readonly ConcurrentDictionary<string, SemaphoreSlim> _turnLocks = new();
@@ -46,7 +47,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		Lazy<ITelegramBridgeService> telegramBridge,
 		IClaudeStreamingSessionManager streamingManager,
 		IAttentionService attention,
-		ISessionTagService tags)
+		ISessionTagService tags,
+		IProfileLabelService profileLabels)
 	{
 		_processManager   = processManager;
 		_fileService      = fileService;
@@ -60,6 +62,7 @@ public sealed class SessionTurnService : ISessionTurnService
 		_streamingManager = streamingManager;
 		_attention        = attention;
 		_tags             = tags;
+		_profileLabels    = profileLabels;
 	}
 
 	/// <summary>
@@ -97,10 +100,18 @@ public sealed class SessionTurnService : ISessionTurnService
 		return true;
 	}
 
+	public Task<TurnResultModel> RunTurnAsync(
+		SessionNodeModel node,
+		string prompt,
+		TurnSource source,
+		CancellationToken cancellationToken = default) =>
+		RunTurnAsync(node, prompt, source, turnOptions: null, cancellationToken);
+
 	public async Task<TurnResultModel> RunTurnAsync(
 		SessionNodeModel node,
 		string prompt,
 		TurnSource source,
+		TurnOptionsModel? turnOptions,
 		CancellationToken cancellationToken = default)
 	{
 		var turnLock = GetTurnLock(node.NodeId);
@@ -125,10 +136,16 @@ public sealed class SessionTurnService : ISessionTurnService
 
 		try
 		{
+			// The profile this turn uses: the per-turn choice, else the pinned/last-recorded one, else Default.
+			var requestedProfileName = turnOptions?.ProfileName ?? ResolveProfileName(node);
+
 			// Write clean prompt (without instruction block) to the session file. Common to both
 			// branches below — the streaming branch needs it recorded here too, since (unlike the
 			// interactive desktop path) nothing else writes the user's own message for a headless turn.
-			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt);
+			// Stamped with the profile display name actually used, as the desktop does, so that
+			// "last used profile" restores correctly afterwards.
+			var stampedProfileName = await ResolveStampedProfileNameAsync(requestedProfileName);
+			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt, profileName: stampedProfileName);
 
 			// FR.19.13 — if a Streaming Session Mode process is already alive for this node (started
 			// by the interactive desktop path), route this headless turn into it instead of spawning
@@ -139,16 +156,20 @@ public sealed class SessionTurnService : ISessionTurnService
 			// it "forgot" the headless-sourced exchange. See docs/issues/Streaming-Headless-Context-Divergence.md.
 			if (_streamingManager.IsAlive(node.NodeId))
 			{
+				if (turnOptions != null && (turnOptions.ModelId != null || turnOptions.Effort != null || turnOptions.ProfileName != null))
+					_log.Information("Turn for node {NodeId} is redirected into the live streaming process: per-turn model/effort/profile options are ignored", node.NodeId);
+
 				var streamed  = await RunTurnViaStreamingAsync(node, prompt, source, ct);
 				turnErrorText = streamed.IsError ? streamed.ErrorMessage : null;
 				return streamed;
 			}
 
-			var profileConfigDir = ResolveProfileConfigDir(node);
+			var profileConfigDir = ResolveProfileConfigDir(requestedProfileName);
 
 			// Resolve effective model for this session (FR.16.5 bug fix):
-			// node.ModelId → per-directory setting → app-level setting.
-			var effectiveModelId = ResolveEffectiveModel(node);
+			// per-turn choice → node.ModelId → per-directory setting → app-level setting.
+			var effectiveModelId = ResolveTurnModel(node, turnOptions);
+			var effort           = NormalizeEffort(turnOptions?.Effort);
 			var modelInfo        = string.IsNullOrEmpty(effectiveModelId)
 				? null
 				: _modelService.GetCachedModels().FirstOrDefault(m => m.Id == effectiveModelId);
@@ -237,7 +258,8 @@ public sealed class SessionTurnService : ISessionTurnService
 			int inputTokens         = 0, outputTokens = 0;
 			double costUsd          = 0;
 			var firstAssistant      = true;
-			var pendingModelId      = effectiveModelId ?? "default";
+			var pendingModelId      = effectiveModelId ?? Constants.Remote.DefaultOptionId;
+			var pendingEffort       = effort ?? Constants.Remote.DefaultOptionId;
 			var needsAuthRaceRetry  = false;
 
 			await _processManager.SendMessageAsync(
@@ -247,9 +269,10 @@ public sealed class SessionTurnService : ISessionTurnService
 				userMessage:      messageToSend,
 				onEvent:          evt => HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
 				                                     ref inputTokens, ref outputTokens, ref costUsd,
-				                                     ref firstAssistant, ref needsAuthRaceRetry, pendingModelId),
+				                                     ref firstAssistant, ref needsAuthRaceRetry, pendingModelId, pendingEffort),
 				model:            effectiveModelId,
 				profileConfigDir: profileConfigDir,
+				effort:           effort,
 				mcpConfigPath:    mcpConfigPath,
 				ollamaBaseUrl:    ollamaBaseUrl,
 				disableTools:     disableTools,
@@ -273,9 +296,10 @@ public sealed class SessionTurnService : ISessionTurnService
 					userMessage:      messageToSend,
 					onEvent:          evt => HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
 					                                     ref inputTokens, ref outputTokens, ref costUsd,
-					                                     ref firstAssistant, ref needsAuthRaceRetry, pendingModelId),
+					                                     ref firstAssistant, ref needsAuthRaceRetry, pendingModelId, pendingEffort),
 					model:            effectiveModelId,
 					profileConfigDir: profileConfigDir,
+					effort:           effort,
 					mcpConfigPath:    mcpConfigPath,
 					ollamaBaseUrl:    ollamaBaseUrl,
 					disableTools:     disableTools,
@@ -406,7 +430,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		ref double costUsd,
 		ref bool firstAssistant,
 		ref bool needsAuthRaceRetry,
-		string pendingModelId)
+		string pendingModelId,
+		string pendingEffort)
 	{
 		switch (evt.Type)
 		{
@@ -416,7 +441,7 @@ public sealed class SessionTurnService : ISessionTurnService
 				{
 					firstAssistant = false;
 					fileModelId    = pendingModelId;
-					fileEffort     = "default";
+					fileEffort     = pendingEffort;
 				}
 				_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleAssistant, evt.Content,
 					modelId: fileModelId, effort: fileEffort);
@@ -502,14 +527,57 @@ public sealed class SessionTurnService : ISessionTurnService
 	}
 
 	/// <summary>
+	/// The model of one turn: the per-turn choice (<c>"default"</c> = no --model flag), else
+	/// <see cref="ResolveEffectiveModel"/>.
+	/// </summary>
+	private string? ResolveTurnModel(SessionNodeModel node, TurnOptionsModel? options)
+	{
+		var requested = options?.ModelId;
+		if (string.IsNullOrEmpty(requested))
+			return ResolveEffectiveModel(node);
+
+		return string.Equals(requested, Constants.Remote.DefaultOptionId, StringComparison.OrdinalIgnoreCase) ? null : requested;
+	}
+
+	/// <summary>The --effort value for the turn; null (no flag) for a blank or "default" effort.</summary>
+	private static string? NormalizeEffort(string? effort) =>
+		string.IsNullOrWhiteSpace(effort) || string.Equals(effort, Constants.Remote.DefaultOptionId, StringComparison.OrdinalIgnoreCase)
+			? null
+			: effort;
+
+	/// <summary>
+	/// The profile display name to stamp on the turn's USER entry: the stored profile the name resolves to,
+	/// otherwise the Default profile's "[Sys] &lt;email&gt;" label (exactly what the desktop stamps for Default).
+	/// </summary>
+	private async Task<string> ResolveStampedProfileNameAsync(string? profileName)
+	{
+		if (!string.IsNullOrEmpty(profileName))
+		{
+			var stored = FindStoredProfile(profileName);
+			if (stored != null)
+				return stored.DisplayName;
+		}
+
+		return await _profileLabels.GetDefaultLabelAsync();
+	}
+
+	private ClaudeProfileModel? FindStoredProfile(string profileName)
+	{
+		lock (_appSettings.SyncRoot)
+		{
+			return _appSettings.Settings.Profiles.FirstOrDefault(
+				p => string.Equals(p.DisplayName, profileName, StringComparison.OrdinalIgnoreCase));
+		}
+	}
+
+	/// <summary>
 	/// Resolves the profile config dir to use for this turn, mapping the resolved profile name
 	/// (see <see cref="ResolveProfileName"/>) to its credential store. Scheduled/orchestrated turns
 	/// thereby use the same account as interactive turns on the same session, and spawned children
 	/// use their supervisor's account rather than a possibly-revoked Default.
 	/// </summary>
-	private string? ResolveProfileConfigDir(SessionNodeModel node)
+	private string? ResolveProfileConfigDir(string? name)
 	{
-		var name = ResolveProfileName(node);
 		if (string.IsNullOrEmpty(name))
 			return null; // No profile recorded → Default
 

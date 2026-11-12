@@ -47,6 +47,9 @@ public interface IDaemonClient
 	/// <summary>Raised once after a session's tags changed (FR.24.7); a null NodeId means every session may be affected. Relayed from ISessionTagService. May fire on any thread.</summary>
 	event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged;
 
+	/// <summary>Raised after a daemon method changed a session's settings (favourite, streaming mode) so open view-models refresh — relayed from ISessionRegistry. May fire on any thread.</summary>
+	event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged;
+
 	// ── Tree read ───────────────────────────────────────────────────────────────
 
 	/// <summary>The authoritative directory list (source of truth for the tree projection).</summary>

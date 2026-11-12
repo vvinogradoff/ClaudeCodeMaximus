@@ -75,6 +75,26 @@ public partial class App : Application
 		if (appSettings.Settings.TelegramEnabled)
 			Services.GetRequiredService<ITelegramBridgeService>().Start();
 
+		// Remote API (web client): publish the daemon's events as remote notifications. Never allowed to break start-up.
+		try
+		{
+			Services.GetRequiredService<IRemoteNotificationPublisher>().Start();
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Could not start the remote notification publisher");
+		}
+
+		// Web relay link: independent of AgentToolsEnabled; a no-op unless web-relay.dat is present and enabled.
+		try
+		{
+			Services.GetRequiredService<IRelayConnectorService>().Start();
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Could not start the relay connector");
+		}
+
 		// Wire toast click-to-activate before the window opens so early clicks are not missed (FR.16).
 		var mainVm = Services.GetRequiredService<MainWindowViewModel>();
 		var notifications = Services.GetRequiredService<INotificationService>();
@@ -104,6 +124,14 @@ public partial class App : Application
 				}
 				if (appSettings.Settings.TelegramEnabled)
 					Services.GetRequiredService<ITelegramBridgeService>().Stop();
+				try
+				{
+					Services.GetRequiredService<IRelayConnectorService>().Stop();
+				}
+				catch (Exception ex)
+				{
+					Log.Error(ex, "Could not stop the relay connector");
+				}
 			};
 
 			// Build/refresh the cross-project session search index in the background (Stage 6).
@@ -203,6 +231,7 @@ public partial class App : Application
 		// Agent orchestration singletons (FR.14, FR.15).
 		// Lazy<T> registrations break the circular dependency between ISessionTurnService ↔ IAgentMcpServer.
 		services.AddSingleton<ISessionTurnService, SessionTurnService>();
+		services.AddSingleton<ISessionCompactionService, SessionCompactionService>();
 		services.AddSingleton<IAgentMcpServer, AgentMcpServer>();
 		services.AddSingleton<ISchedulerService, SchedulerService>();
 		services.AddSingleton<ISkillProvisioningService, SkillProvisioningService>();
@@ -234,8 +263,49 @@ public partial class App : Application
 				appSettings.Save();
 			}
 
-			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), appSettings.Settings.TdcpToken);
+			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), sp.GetRequiredService<TdcpDispatcher>(), appSettings.Settings.TdcpToken);
 		});
+
+		// Remote API foundation (web client). Singletons, each because it owns state that must be shared and survive the call:
+		// the dispatcher (the method table built once from every IRemoteRpcModule), ClientRpcModule (the per-run id client.hello
+		// reports), the event bus (subscribers and pending coalescing timers), the tree-version and epoch trackers (counters shared
+		// by notifications and queries), the activity service (its per-file cache) and the publisher (its event subscriptions).
+		// The loopback module and the state builder hold no state, so they are transient.
+		services.AddTransient<IRemoteRpcModule, TdcpLoopbackRpcModule>();
+		services.AddSingleton<IRemoteRpcModule, ClientRpcModule>();
+		services.AddSingleton<TdcpDispatcher>();
+		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
+		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
+		services.AddSingleton<ITreeVersionTracker, TreeVersionTracker>();
+		services.AddSingleton<ISessionEpochTracker, SessionEpochTracker>();
+		services.AddSingleton<ISessionActivityService, SessionActivityService>();
+		services.AddTransient<ISessionStateBuilder, SessionStateBuilder>();
+		services.AddTransient<IRemoteTreeReader, RemoteTreeReader>();
+		services.AddTransient<IRemoteRpcModule, TreeRemoteRpcModule>();
+		services.AddTransient<IRemoteRpcModule, RecentRemoteRpcModule>();
+		services.AddTransient<IRemoteRpcModule, TagsRemoteRpcModule>();
+		services.AddSingleton<IRemoteNotificationPublisher, RemoteNotificationPublisher>();
+
+		// Web relay link. Singletons: the connector owns the connect loop, its status and its bus subscription;
+		// the config store and HTTP factory are stateless but shared with the Settings window.
+		services.AddSingleton<IRelayConfigStore, RelayConfigStore>();
+		services.AddSingleton<IRelayHttpClientFactory, RelayHttpClientFactory>();
+		services.AddSingleton<IRelayConnectorService, RelayConnectorService>();
+
+		// Remote session, attention, catalog and usage methods (web client). Singletons only where state must be shared: the
+		// Default profile label (its cached resolution), the parsed-entry cache, the pending-send counters and the per-profile
+		// usage cache with its desktop-poller subscription. The fetcher owns one HttpClient. Everything else is stateless.
+		services.AddSingleton<IProfileLabelService, ProfileLabelService>();
+		services.AddSingleton<ISessionEntryReader, SessionEntryReader>();
+		services.AddSingleton<ISessionSendService, SessionSendService>();
+		services.AddSingleton<IClaudeUsageFetcher, ClaudeUsageFetcher>();
+		services.AddSingleton<IRemoteUsageService, RemoteUsageService>();
+		services.AddTransient<ITurnOptionsResolver, TurnOptionsResolver>();
+		services.AddTransient<IAttentionReplyService, AttentionReplyService>();
+		services.AddTransient<IRemoteRpcModule, SessionRpcModule>();
+		services.AddTransient<IRemoteRpcModule, AttentionRpcModule>();
+		services.AddTransient<IRemoteRpcModule, CatalogRpcModule>();
+		services.AddTransient<IRemoteRpcModule, UsageRpcModule>();
 
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();

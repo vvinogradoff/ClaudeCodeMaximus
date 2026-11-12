@@ -1,0 +1,44 @@
+[Unit]
+Description=Tessyn Web (relay + SPA host)
+After=network.target
+
+[Service]
+Type=simple
+# Dedicated system user (no login, no home): useradd --system --no-create-home --shell /usr/sbin/nologin tessyn-web
+User=tessyn-web
+Group=tessyn-web
+WorkingDirectory=/var/www/tessyn
+ExecStart=/var/www/tessyn/Tessyn.Web
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5320
+Environment=TESSYN_WEB_CONFIG=/etc/tessyn-web/appsettings.Production.json
+Environment=DOTNET_gcServer=0
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=tessyn-web
+UMask=0077
+
+# Hardening (MemoryDenyWriteExecute is deliberately NOT set: the .NET JIT needs writable+executable memory).
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/tessyn-web
+
+[Install]
+WantedBy=multi-user.target

@@ -29,10 +29,13 @@ public sealed class SessionRegistry : ISessionRegistry
     private readonly IDirectoryLabelService       _labelService;
     private readonly IClaudeSessionStatusService  _sessionStatus;
 
-    // Running state: NodeId → bool (transient, never persisted).
-    private readonly ConcurrentDictionary<string, bool> _runningNodes = new();
+    // Running state: NodeId → number of open running activities (transient, never persisted). Guarded by _runningLock.
+    private readonly Dictionary<string, int> _runningNodes = new();
+    private readonly object _runningLock = new();
 
     public event EventHandler<TreeChangedEventArgs>? TreeChanged;
+
+    public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged;
 
     public string? SelectedNodeId { get; set; }
 
@@ -59,6 +62,7 @@ public sealed class SessionRegistry : ISessionRegistry
         {
             foreach (var dir in _appSettings.Settings.Tree)
             {
+                if (string.IsNullOrEmpty(dir.NodeId)) { dir.NodeId = NewNodeId(); dirty = true; }
                 dirty |= BackfillAgentIdentity(dir.Sessions);
                 foreach (var grp in dir.Groups)
                     dirty |= BackfillAgentIdentityInGroups(grp);
@@ -113,6 +117,25 @@ public sealed class SessionRegistry : ISessionRegistry
         }
     }
 
+    public DirectoryNodeModel? FindDirectoryByNodeId(string nodeId)
+    {
+        lock (_appSettings.SyncRoot)
+            return _appSettings.Settings.Tree.FirstOrDefault(d => d.NodeId == nodeId);
+    }
+
+    public GroupNodeModel? FindGroupByNodeId(string nodeId)
+    {
+        lock (_appSettings.SyncRoot)
+        {
+            foreach (var dir in _appSettings.Settings.Tree)
+            {
+                var found = FindGroup(dir.Groups, nodeId);
+                if (found != null) return found;
+            }
+            return null;
+        }
+    }
+
     // ── CRUD – Directory ──────────────────────────────────────────────────────
 
     public DirectoryNodeModel AddDirectory(string path)
@@ -125,7 +148,7 @@ public sealed class SessionRegistry : ISessionRegistry
                 string.Equals(d.Path, normalised, StringComparison.OrdinalIgnoreCase));
             if (existing != null) return existing;
 
-            var model = new DirectoryNodeModel { Path = normalised };
+            var model = new DirectoryNodeModel { Path = normalised, NodeId = NewNodeId() };
             _appSettings.Settings.Tree.Add(model);
             _appSettings.Save();
             Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.SettingsModified });
@@ -152,7 +175,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public GroupNodeModel AddGroup(DirectoryNodeModel parent, string name)
     {
-        var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.Path };
+        var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.Path, NodeId = NewNodeId() };
         lock (_appSettings.SyncRoot)
         {
             parent.Groups.Add(model);
@@ -165,7 +188,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public GroupNodeModel AddGroupToGroup(GroupNodeModel parent, string name)
     {
-        var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.WorkingDirectory };
+        var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.WorkingDirectory, NodeId = NewNodeId() };
         lock (_appSettings.SyncRoot)
         {
             parent.Groups.Add(model);
@@ -216,6 +239,130 @@ public sealed class SessionRegistry : ISessionRegistry
     }
 
     // ── CRUD – Session ────────────────────────────────────────────────────────
+
+    public SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name)
+    {
+        // The session file is created before the lock (file I/O), like every other creator; an unknown anchor leaves one empty file behind only
+        // when the caller passed a bad id, which the remote module rejects first.
+        lock (_appSettings.SyncRoot)
+        {
+            if (!TryFindContainerFor(anchorNodeId, out var directory, out var group, out var sessions, out var index))
+                return null;
+
+            var workingDir = group?.WorkingDirectory ?? directory.Path;
+            var model      = CreateSessionModel(name, workingDir);
+            var preceding  = index > 0 ? sessions[index - 1] : null;
+
+            sessions.Insert(index, model);
+            _appSettings.Save();
+
+            Raise(new TreeChangedEventArgs
+            {
+                Kind             = TreeChangeKind.SessionAdded,
+                Session          = model,
+                ParentDirectory  = directory,
+                ParentGroup      = group,
+                Index            = index,
+                PrecedingSession = preceding,
+            });
+
+            return new SessionPlacementModel(model, directory, group, index);
+        }
+    }
+
+    /// <summary>
+    /// Resolves the insertion point for a new session (settings lock held by the caller). A group or directory NodeId means
+    /// index 0 of its Sessions; a session NodeId means right after it, or after its top-level supervisor when it is a worker.
+    /// </summary>
+    private bool TryFindContainerFor(
+        string anchorNodeId, out DirectoryNodeModel directory, out GroupNodeModel? group, out List<SessionNodeModel> sessions, out int index)
+    {
+        directory = null!;
+        group     = null;
+        sessions  = null!;
+        index     = 0;
+
+        var tree = _appSettings.Settings.Tree;
+
+        var dir = tree.FirstOrDefault(d => d.NodeId == anchorNodeId);
+        if (dir != null)
+        {
+            directory = dir;
+            sessions  = dir.Sessions;
+            return true;
+        }
+
+        foreach (var d in tree)
+        {
+            var grp = FindGroup(d.Groups, anchorNodeId);
+            if (grp == null) continue;
+
+            directory = d;
+            group     = grp;
+            sessions  = grp.Sessions;
+            return true;
+        }
+
+        var anchorId = ResolveTopLevelSessionId(anchorNodeId);
+        if (anchorId == null) return false;
+
+        foreach (var d in tree)
+        {
+            if (TryLocateSession(d.Groups, d.Sessions, null, anchorId, out group, out sessions, out index))
+            {
+                directory = d;
+                index++;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>NodeId of the top-level session <paramref name="nodeId"/> belongs to (itself when it is no worker, or its supervisor is missing); null when the session does not exist. Cycle-safe.</summary>
+    private string? ResolveTopLevelSessionId(string nodeId)
+    {
+        var byId = new Dictionary<string, SessionNodeModel>(StringComparer.Ordinal);
+        foreach (var d in _appSettings.Settings.Tree)
+            IndexSessions(d.Sessions, d.Groups, byId);
+
+        if (!byId.TryGetValue(nodeId, out var current))
+            return null;
+
+        var visited = new HashSet<string>(StringComparer.Ordinal) { current.NodeId };
+        while (!string.IsNullOrEmpty(current.SupervisorNodeId) && byId.TryGetValue(current.SupervisorNodeId, out var supervisor) && visited.Add(supervisor.NodeId))
+            current = supervisor;
+
+        return current.NodeId;
+    }
+
+    private static void IndexSessions(List<SessionNodeModel> sessions, List<GroupNodeModel> groups, Dictionary<string, SessionNodeModel> byId)
+    {
+        foreach (var s in sessions) byId.TryAdd(s.NodeId, s);
+        foreach (var g in groups) IndexSessions(g.Sessions, g.Groups, byId);
+    }
+
+    private static bool TryLocateSession(
+        List<GroupNodeModel> groups, List<SessionNodeModel> sessions, GroupNodeModel? owner,
+        string nodeId, out GroupNodeModel? group, out List<SessionNodeModel> container, out int index)
+    {
+        index = sessions.FindIndex(s => s.NodeId == nodeId);
+        if (index >= 0)
+        {
+            group     = owner;
+            container = sessions;
+            return true;
+        }
+
+        foreach (var g in groups)
+            if (TryLocateSession(g.Groups, g.Sessions, g, nodeId, out group, out container, out index))
+                return true;
+
+        group     = null;
+        container = null!;
+        index     = 0;
+        return false;
+    }
 
     public SessionNodeModel AddSession(DirectoryNodeModel parent, string name)
     {
@@ -543,10 +690,22 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public void SetSessionRunning(string nodeId, bool isRunning)
     {
-        if (isRunning)
-            _runningNodes[nodeId] = true;
-        else
-            _runningNodes.TryRemove(nodeId, out _);
+        bool changed;
+        lock (_runningLock)
+        {
+            _runningNodes.TryGetValue(nodeId, out var count);
+            var next = isRunning ? count + 1 : Math.Max(0, count - 1);
+
+            if (next == 0)
+                _runningNodes.Remove(nodeId);
+            else
+                _runningNodes[nodeId] = next;
+
+            changed = (count == 0) != (next == 0);
+        }
+
+        if (!changed)
+            return;
 
         SessionNodeModel? session = FindModelByNodeId(nodeId);
         Raise(new TreeChangedEventArgs
@@ -556,12 +715,31 @@ public sealed class SessionRegistry : ISessionRegistry
         });
     }
 
-    public bool IsSessionRunning(string nodeId) =>
-        _runningNodes.TryGetValue(nodeId, out var v) && v;
+    public bool IsSessionRunning(string nodeId)
+    {
+        lock (_runningLock)
+            return _runningNodes.TryGetValue(nodeId, out var count) && count > 0;
+    }
+
+    public void RaiseSessionSettingsChanged(string nodeId) =>
+        SessionSettingsChanged?.Invoke(this, new SessionSettingsChangedEventArgs { NodeId = nodeId });
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private void Raise(TreeChangedEventArgs args) => TreeChanged?.Invoke(this, args);
+
+    private static string NewNodeId() => Guid.NewGuid().ToString("N");
+
+    private static GroupNodeModel? FindGroup(List<GroupNodeModel> groups, string nodeId)
+    {
+        foreach (var g in groups)
+        {
+            if (g.NodeId == nodeId) return g;
+            var found = FindGroup(g.Groups, nodeId);
+            if (found != null) return found;
+        }
+        return null;
+    }
 
     private SessionNodeModel CreateSessionModel(string name, string workingDir)
     {
@@ -578,7 +756,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
     private GroupNodeModel AddGroupModel(DirectoryNodeModel parent, string name)
     {
-        var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.Path };
+        var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.Path, NodeId = NewNodeId() };
         parent.Groups.Add(model);
         return model;
     }
@@ -596,7 +774,9 @@ public sealed class SessionRegistry : ISessionRegistry
 
     private static bool BackfillAgentIdentityInGroups(GroupNodeModel group)
     {
-        var dirty = BackfillAgentIdentity(group.Sessions);
+        var dirty = false;
+        if (string.IsNullOrEmpty(group.NodeId)) { group.NodeId = NewNodeId(); dirty = true; }
+        dirty |= BackfillAgentIdentity(group.Sessions);
         foreach (var child in group.Groups)
             dirty |= BackfillAgentIdentityInGroups(child);
         return dirty;

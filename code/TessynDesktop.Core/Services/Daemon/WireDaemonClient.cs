@@ -119,6 +119,14 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 	public event EventHandler<SessionTagsChangedEventArgs>? SessionTagsChanged;
 #pragma warning restore CS0067
 
+	/// <summary>
+	/// Not wired over TDCP — session-settings changes have no TDCP push; only <see cref="InProcDaemonClient"/>
+	/// relays it, and subscribing here is a silent no-op.
+	/// </summary>
+#pragma warning disable CS0067 // Never raised until session settings have a TDCP push — see doc comment.
+	public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged;
+#pragma warning restore CS0067
+
 	// ── Tree read ─────────────────────────────────────────────────────────────────
 
 	/// <summary>
@@ -256,7 +264,7 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 
 	public void AddSchedule(ScheduleModel schedule)
 	{
-		var scheduleNode = JsonNode.Parse(JsonSerializer.Serialize(schedule, TdcpServer.JsonOpts))!;
+		var scheduleNode = JsonNode.Parse(JsonSerializer.Serialize(schedule, TdcpJsonOptions.Default))!;
 		CallAsync("schedule.add", scheduleNode).GetAwaiter().GetResult();
 	}
 
@@ -535,7 +543,7 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 			{
 				case "tree.changed":
 					var paramsJson = notification?["params"]?.ToJsonString() ?? "{}";
-					var args = JsonSerializer.Deserialize<TreeChangedEventArgs>(paramsJson, TdcpServer.JsonOpts);
+					var args = JsonSerializer.Deserialize<TreeChangedEventArgs>(paramsJson, TdcpJsonOptions.Default);
 					if (args != null)
 					{
 						_cachedDirectories = null; // Invalidate cache on any tree change.
@@ -600,7 +608,7 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 		var result = await CallAsync(method, @params);
 		if (result == null)
 			return default; // JSON null → C# null (e.g. optional session lookup)
-		return JsonSerializer.Deserialize<T>(result.ToJsonString(), TdcpServer.JsonOpts);
+		return JsonSerializer.Deserialize<T>(result.ToJsonString(), TdcpJsonOptions.Default);
 	}
 
 	// ── Private deserialization records ───────────────────────────────────────────

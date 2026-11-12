@@ -29,7 +29,14 @@ public sealed class ClrMdRuntimeInspectorTests : IDisposable
 		if (!OperatingSystem.IsWindows())
 			return;
 
+		// Windows refuses to create a process snapshot now and then ("Could not create snapshot ... Error 6") when the machine
+		// is busy: that is the OS, not the inspector, so a refused snapshot is retried a few times.
 		var capture = _inspector.CaptureThreadStacks();
+		for (var attempt = 1; attempt < 5 && !capture.Success && capture.Text.Contains("snapshot", StringComparison.OrdinalIgnoreCase); attempt++)
+		{
+			System.Threading.Thread.Sleep(200);
+			capture = _inspector.CaptureThreadStacks();
+		}
 
 		Assert.True(capture.Success, capture.Text);
 		Assert.Contains($"managed thread {Environment.CurrentManagedThreadId} ", capture.Text);
@@ -47,6 +54,11 @@ public sealed class ClrMdRuntimeInspectorTests : IDisposable
 		Directory.CreateDirectory(_env.Folder);
 
 		var outcome = _inspector.WriteHeapHistogram(path);
+		for (var attempt = 1; attempt < 5 && !outcome.Success && outcome.Message.Contains("snapshot", StringComparison.OrdinalIgnoreCase); attempt++)
+		{
+			System.Threading.Thread.Sleep(200);
+			outcome = _inspector.WriteHeapHistogram(path);
+		}
 
 		Assert.True(outcome.Success, outcome.Message);
 		var text = File.ReadAllText(path);

@@ -413,6 +413,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		ITelegramBridgeService telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
 		ISessionSoundService soundService,
+		ISessionCompactionService compaction,
 		IUiDispatcher uiDispatcher,
 		IOperationTimer? timer = null)
 	{
@@ -438,7 +439,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
 		var composer = new SessionPromptComposer(fileService, appSettings, node, daemonClient);
 		_turn = new TurnController(node, fileService, draftService, processManager, streamingManager, appSettings, mcpServer, daemonClient,
-			telegramBridge, sessionStatus, soundService, _content, _models, _profiles, composer);
+			telegramBridge, sessionStatus, soundService, compaction, _content, _models, _profiles, composer);
 		turn = _turn;
 
 		_content.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
@@ -471,6 +472,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		RemoveProfileCommand  = ReactiveCommand.Create(_profiles.HandleRemoveProfile);
 
 		_daemonClient.ScheduleChanged += OnScheduleChanged;
+		_daemonClient.SessionSettingsChanged += OnSessionSettingsChanged;
 		RefreshScheduleState();
 
 		// Start background indexing for this session's working directory
@@ -482,6 +484,23 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private void OnScheduleChanged(object? sender, EventArgs e) =>
 		Dispatcher.UIThread.Post(RefreshScheduleState);
+
+	/// <summary>
+	/// A daemon method (the web client) changed this session's favourite or streaming flag: pull the model's values into the
+	/// view-models, which only read the model once when they are created.
+	/// </summary>
+	private void OnSessionSettingsChanged(object? sender, SessionSettingsChangedEventArgs e)
+	{
+		if (e.NodeId != _node.Model.NodeId)
+			return;
+
+		Dispatcher.UIThread.Post(() =>
+		{
+			_node.IsFavorite = _node.Model.IsFavorite;
+			this.RaisePropertyChanged(nameof(IsFavorite));
+			_turn.RefreshStreamingState();
+		});
+	}
 
 	/// <summary>Refreshes HasActiveSchedule and ScheduleTooltip from the scheduler's current state for this node.</summary>
 	private void RefreshScheduleState()
@@ -547,6 +566,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public void Dispose()
 	{
 		_daemonClient.ScheduleChanged -= OnScheduleChanged;
+		_daemonClient.SessionSettingsChanged -= OnSessionSettingsChanged;
 		FocusVm.Dispose();
 		TagsVm.Dispose();
 		_models.Dispose();

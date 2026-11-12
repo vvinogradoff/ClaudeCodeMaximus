@@ -118,6 +118,7 @@ internal sealed class FakeDirectoryLabelServiceForTelegram : IDirectoryLabelServ
 /// </summary>
 internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 {
+    public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged { add { } remove { } }
 	private readonly Dictionary<string, SessionNodeModel> _byNodeId = new();
 	private readonly Dictionary<string, SessionNodeModel> _byFileName = new();
 	private readonly ISessionFileService _fileService;

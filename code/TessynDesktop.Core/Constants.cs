@@ -5,7 +5,7 @@ using System.IO;
 namespace TessynDesktop;
 
 /// <remarks>Created by Claude</remarks>
-public static class Constants
+public static partial class Constants
 {
 	public const string AppDataFolderName = "TessynDesktop";
 	public const string SettingsFileName = "appsettings.json";

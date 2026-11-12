@@ -31,6 +31,12 @@ public sealed class TreeChangedEventArgs : EventArgs
 
     /// <summary>The parent group of the new session (for <see cref="TreeChangeKind.SessionAdded"/>), or null when under a directory.</summary>
     public GroupNodeModel? ParentGroup { get; init; }
+
+    /// <summary>Index of the new session within the parent's <c>Sessions</c> list (for <see cref="TreeChangeKind.SessionAdded"/> raised by <see cref="ISessionRegistry.CreateSessionAfter"/>); null when the session was appended (agent spawns).</summary>
+    public int? Index { get; init; }
+
+    /// <summary>The session immediately before the new one in the parent's <c>Sessions</c> list, or null when it is first (only set together with <see cref="Index"/>).</summary>
+    public SessionNodeModel? PrecedingSession { get; init; }
 }
 
 /// <summary>
@@ -44,6 +50,9 @@ public interface ISessionRegistry
     // ── Change notification ───────────────────────────────────────────────────
 
     event EventHandler<TreeChangedEventArgs> TreeChanged;
+
+    /// <summary>Raised by <see cref="RaiseSessionSettingsChanged"/> after a daemon method changed a session's settings (favourite, streaming mode).</summary>
+    event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged;
 
     // ── Tree read ─────────────────────────────────────────────────────────────
 
@@ -68,6 +77,12 @@ public interface ISessionRegistry
     /// <summary>Finds the session owning a given session file name (FR.21.9 — resolves an appended entry's session).</summary>
     SessionNodeModel? FindModelByFileName(string fileName);
 
+    /// <summary>Finds a directory node by its stable <see cref="DirectoryNodeModel.NodeId"/>; the search runs under the settings lock. Callers that then read the node must hold <see cref="IAppSettingsService.SyncRoot"/>.</summary>
+    DirectoryNodeModel? FindDirectoryByNodeId(string nodeId);
+
+    /// <summary>Finds a group node (at any depth) by its stable <see cref="GroupNodeModel.NodeId"/>; the search runs under the settings lock. Callers that then read the node must hold <see cref="IAppSettingsService.SyncRoot"/>.</summary>
+    GroupNodeModel? FindGroupByNodeId(string nodeId);
+
     // ── CRUD – Directory ──────────────────────────────────────────────────────
 
     DirectoryNodeModel AddDirectory(string path);
@@ -82,6 +97,14 @@ public interface ISessionRegistry
     void RenameGroup(GroupNodeModel group, string newName);
 
     // ── CRUD – Session ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a session positioned relative to <paramref name="anchorNodeId"/> in ONE step (one lock, one <c>Save()</c>):
+    /// a session anchor (a worker resolves to its top-level supervisor) puts the new session right after it in the same
+    /// container's <c>Sessions</c>; a group or directory anchor puts it at index 0 of that container. Raises
+    /// <see cref="TreeChangeKind.SessionAdded"/> carrying the parent and the index. Returns null when the anchor is not found.
+    /// </summary>
+    SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name);
 
     SessionNodeModel AddSession(DirectoryNodeModel parent, string name);
     SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name);
@@ -126,8 +149,15 @@ public interface ISessionRegistry
 
     // ── Running state ─────────────────────────────────────────────────────────
 
-    /// <summary>Marks the session as running or not. Thread-safe. Raises <see cref="TreeChangeKind.SessionIsRunningChanged"/>.</summary>
+    /// <summary>
+    /// Reference-counted: <c>true</c> adds one running activity, <c>false</c> removes one (never below zero). The session
+    /// counts as running while any activity is open, and <see cref="TreeChangeKind.SessionIsRunningChanged"/> is raised
+    /// only when the count moves between 0 and 1. Thread-safe.
+    /// </summary>
     void SetSessionRunning(string nodeId, bool isRunning);
+
+    /// <summary>Raises <see cref="SessionSettingsChanged"/> for <paramref name="nodeId"/>. Thread-safe.</summary>
+    void RaiseSessionSettingsChanged(string nodeId);
 
     /// <summary>Returns true while a claude process is running for the given node.</summary>
     bool IsSessionRunning(string nodeId);

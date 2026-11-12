@@ -30,12 +30,20 @@ internal sealed class FakeTurnService : ISessionTurnService
         return Task.FromResult(new TurnResultModel(AssistantText: "ok", SessionId: null));
     }
 
+    public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt,
+        TurnSource source, TurnOptionsModel? options, CancellationToken cancellationToken = default) =>
+        RunTurnAsync(node, prompt, source, cancellationToken);
+
     public bool CancelTurn(string nodeId) => false;
     public string? ResolveProfileName(SessionNodeModel node) => null;
 }
 
 internal sealed class FakeSessionRegistry : ISessionRegistry
 {
+    public event EventHandler<SessionSettingsChangedEventArgs>? SessionSettingsChanged { add { } remove { } }
+    public void RaiseSessionSettingsChanged(string nodeId) { }
+    public DirectoryNodeModel? FindDirectoryByNodeId(string nodeId) => null;
+    public GroupNodeModel? FindGroupByNodeId(string nodeId) => null;
     private readonly List<SessionNodeModel> _nodes = new();
     public string? SelectedNodeId { get; set; }
 
@@ -65,6 +73,7 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
     public bool TryDeleteGroup(DirectoryNodeModel parent, GroupNodeModel group) => false;
     public bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group) => false;
     public void RenameGroup(GroupNodeModel group, string newName) { }
+    public SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name) => throw new NotImplementedException();
     public SessionNodeModel AddSession(DirectoryNodeModel parent, string name) => throw new NotImplementedException();
     public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name) => throw new NotImplementedException();
     public SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId) => throw new NotImplementedException();

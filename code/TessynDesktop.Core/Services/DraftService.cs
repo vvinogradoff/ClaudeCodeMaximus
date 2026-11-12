@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
 
@@ -47,6 +48,12 @@ public sealed class DraftService : IDraftService
 	{
 		var path = GetDraftPath(sessionFileName);
 		return File.Exists(path) ? new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero) : null;
+	}
+
+	public SessionFileStampModel? GetDraftStamp(string sessionFileName)
+	{
+		var info = new FileInfo(GetDraftPath(sessionFileName));
+		return info.Exists ? new SessionFileStampModel(info.Length, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero)) : null;
 	}
 
 	private string GetDraftPath(string sessionFileName)
