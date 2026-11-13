@@ -139,6 +139,13 @@ public interface ISessionRegistry
     /// </summary>
     List<SessionTagIndexSessionModel> SnapshotSessionsForTagIndex();
 
+    /// <summary>
+    /// Every session (Worker Sessions included) as the lock-free snapshot the <c>list_sessions</c> listing uses
+    /// (FR.15.13), for tools that need Short Node Ids and the <c>You:</c> line (FR.24.15). The settings lock is
+    /// held only while fields are copied; no file is touched.
+    /// </summary>
+    IReadOnlyList<SessionSnapshotModel> SnapshotSessionsForListing();
+
     /// <summary>One bounded page of the <c>list_sessions</c> listing for <paramref name="callerNodeId"/> (FR.15.13).</summary>
     SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId);
 

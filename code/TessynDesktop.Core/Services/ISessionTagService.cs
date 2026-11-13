@@ -25,6 +25,12 @@ public interface ISessionTagService
 	/// <summary>Name-derived plus declared tags in FR.24.7 order (a name-derived tag hides a declared one with the same key). Returns copies.</summary>
 	IReadOnlyList<SessionTagModel> GetTags(string nodeId, string? sessionName);
 
+	/// <summary>
+	/// Parses one tag entry (FR.24.4 input forms) against the loaded Linear workspace map, read-only: nothing is
+	/// learned or persisted (FR.24.15). A blank entry gives <see cref="SessionTagParseOutcome.Empty"/>.
+	/// </summary>
+	SessionTagParseResultModel Parse(string entry);
+
 	/// <summary>True once per node per app run (FR.24.6); the state is in memory only.</summary>
 	bool TakeTagGuidanceDue(string nodeId);
 }

@@ -612,6 +612,8 @@ public sealed class SessionRegistry : ISessionRegistry
             CollectTagIndexSessions(g.Sessions, g.Groups, directoryPath, result);
     }
 
+    public IReadOnlyList<SessionSnapshotModel> SnapshotSessionsForListing() => SnapshotSessions();
+
     public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId)
     {
         var snapshots    = SnapshotSessions();

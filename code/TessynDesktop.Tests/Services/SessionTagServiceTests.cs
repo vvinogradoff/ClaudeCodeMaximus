@@ -269,7 +269,7 @@ public sealed class SessionTagServiceTests : IDisposable
 	{
 		var methods = typeof(ISessionTagService).GetMethods().Select(m => m.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray();
 
-		Assert.Equal(["Edit", "GetTags", "TakeTagGuidanceDue", "add_SessionTagsChanged", "remove_SessionTagsChanged"], methods);
+		Assert.Equal(["Edit", "GetTags", "Parse", "TakeTagGuidanceDue", "add_SessionTagsChanged", "remove_SessionTagsChanged"], methods);
 	}
 
 	[Fact]

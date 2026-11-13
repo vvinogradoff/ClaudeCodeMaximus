@@ -30,6 +30,7 @@ public sealed partial class SessionListPageBuilder
 		var offset = Math.Max(query.Offset, 0);
 
 		var index     = new SessionListIndex(sessions);
+		query         = query with { TagCarrierNodeIds = ExpandToWorkers(index, query.TagCarrierNodeIds) };
 		var caller    = index.Find(callerNodeId);
 		var isWorkers = query.Scope is SessionListScope.Children or SessionListScope.Subtree;
 		var scopeRoot = isWorkers ? index.Find(query.RootNodeId ?? callerNodeId) : null;
@@ -53,6 +54,23 @@ public sealed partial class SessionListPageBuilder
 			Limit              = limit,
 			WorkersHintShortId = FindWorkersHint(context, page.Rows),
 		};
+	}
+
+	/// <summary>
+	/// A Worker Session rolls up to its top-level supervisor (FR.24.12), so the carriers (already top-level, resolved
+	/// by <see cref="SessionTagIndexBuilder"/>, which owns the supervisor-chain and cycle rule) plus all their
+	/// descendants are the sessions that count as carrying the tags. Null stays null (no filter).
+	/// </summary>
+	private IReadOnlySet<string>? ExpandToWorkers(SessionListIndex index, IReadOnlySet<string>? carriers)
+	{
+		if (carriers == null)
+			return null;
+
+		var expanded = new HashSet<string>(carriers, StringComparer.OrdinalIgnoreCase);
+		foreach (var carrier in carriers)
+			foreach (var worker in index.Descendants(carrier))
+				expanded.Add(worker.NodeId);
+		return expanded;
 	}
 
 	private IReadOnlyList<SessionSnapshotModel> CollectCandidates(SessionListBuildContext ctx)
@@ -99,6 +117,9 @@ public sealed partial class SessionListPageBuilder
 			return false;
 
 		if (query.Running.HasValue && s.IsRunning != query.Running.Value)
+			return false;
+
+		if (query.TagCarrierNodeIds != null && !query.TagCarrierNodeIds.Contains(s.NodeId))
 			return false;
 
 		if (!query.ActiveWithinHours.HasValue)
@@ -332,7 +353,7 @@ public sealed partial class SessionListPageBuilder
 		return section == null ? [] : [section];
 	}
 
-	private SessionListCallerModel? BuildCaller(SessionListBuildContext ctx)
+	internal SessionListCallerModel? BuildCaller(SessionListBuildContext ctx)
 	{
 		var caller = ctx.Caller;
 		if (caller == null)

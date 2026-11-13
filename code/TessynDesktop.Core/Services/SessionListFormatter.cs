@@ -40,7 +40,6 @@ public sealed class SessionListFormatter
 	private const string IndentUnit        = "  ";
 	private const string PathOpen          = " (";
 	private const string NoMatchText       = "No sessions match.";
-	private const string OtherProjectsHint = "Other projects: scope=all.";
 	private const string WorkersHintPrefix = "Workers: scope=children nodeId=";
 	private const string NarrowHint        = "Narrow: query=, running=, activeWithinHours=.";
 
@@ -86,7 +85,7 @@ public sealed class SessionListFormatter
 		return string.Join("\n", lines);
 	}
 
-	private string FormatYouLine(SessionListCallerModel caller)
+	public string FormatYouLine(SessionListCallerModel caller)
 	{
 		var id    = $"{caller.ShortId} \"{_text.FormatName(caller.Name)}\"";
 		var label = _text.Sanitize(caller.DirectoryLabel);
@@ -172,20 +171,20 @@ public sealed class SessionListFormatter
 	{
 		var first = page.Offset + 1;
 		var last  = page.Offset + page.Rows.Count;
-		var text  = $"Rows {Number(first)}-{Number(last)} of {Number(page.TotalRows)}.";
+		var text  = string.Format(CultureInfo.InvariantCulture, Constants.Agent.ListFooterFormat, first, last, page.TotalRows);
 		if (last < page.TotalRows)
-			text += $" Next page: offset={Number(last)}.";
+			text += string.Format(CultureInfo.InvariantCulture, Constants.Agent.ListNextPageFormat, last);
 		return text;
 	}
 
 	private static string FormatPastEnd(SessionListPageModel page) =>
-		$"No rows at offset={Number(page.Offset)}; {Number(page.TotalRows)} in total.";
+		string.Format(CultureInfo.InvariantCulture, Constants.Agent.ListPastEndFormat, page.Offset, page.TotalRows);
 
 	private static string FormatHints(SessionListPageModel page)
 	{
 		var hints = new List<string>();
 		if (page.Scope == SessionListScope.Project)
-			hints.Add(OtherProjectsHint);
+			hints.Add(Constants.Agent.ListOtherProjectsHint);
 		if (page.WorkersHintShortId is not null)
 			hints.Add($"{WorkersHintPrefix}{page.WorkersHintShortId}.");
 		hints.Add(NarrowHint);

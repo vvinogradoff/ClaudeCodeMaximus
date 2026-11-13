@@ -148,6 +148,7 @@ internal sealed class FakeRegistryForTurnService : ISessionRegistry
 	public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotImplementedException();
 	public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group, int orchestrationDepth = 0, string? supervisorNodeId = null) => throw new NotImplementedException();
 	public List<SessionSummaryModel> BuildAgentSessionSummaries() => throw new NotImplementedException();
+	public IReadOnlyList<SessionSnapshotModel> SnapshotSessionsForListing() => throw new NotImplementedException();
 	public List<SessionTagIndexSessionModel> SnapshotSessionsForTagIndex() => throw new NotImplementedException();
 	public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId) => throw new NotImplementedException();
 	public NodeIdResolutionModel ResolveNodeId(string idOrPrefix) => throw new NotImplementedException();

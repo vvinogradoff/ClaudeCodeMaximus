@@ -158,6 +158,12 @@ public sealed class SessionTagService : ISessionTagService
 			return Merge(LoadDeclaredLocked(nodeId), sessionName, LoadWorkspacesLocked());
 	}
 
+	public SessionTagParseResultModel Parse(string entry)
+	{
+		lock (_lock)
+			return _parser.Parse(entry, LoadWorkspacesLocked());
+	}
+
 	public bool TakeTagGuidanceDue(string nodeId)
 	{
 		lock (_lock)

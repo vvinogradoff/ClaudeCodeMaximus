@@ -154,6 +154,7 @@ internal sealed class StubTagService : ISessionTagService
 
 	public SessionTagEditResultModel Edit(SessionNodeModel node, IReadOnlyList<string> add, IReadOnlyList<string> remove) => throw new NotImplementedException();
 	public IReadOnlyList<SessionTagModel> GetTags(string nodeId, string? sessionName) => Tags;
+	public SessionTagParseResultModel Parse(string entry) => throw new NotImplementedException();
 	public bool TakeTagGuidanceDue(string nodeId) => false;
 }
 

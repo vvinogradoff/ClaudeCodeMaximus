@@ -323,6 +323,17 @@ SESSION TRANSCRIPT TO COMPACT:
 		// Limits (FR.24.4)
 		public const int MaxEntriesPerArray = 30;
 
+		// Tag search tools (FR.24.15)
+		public const string SearchToolName = "search_tags";
+		public const string SearchToolDescription =
+			"Find the Linear issues, GitHub pull requests and repositories that sessions are tagged with, and how many sessions carry each. Use it to find sessions by what they work on: search here, then call list_sessions with tags=[...]. Defaults to your project; scope=all for every directory.";
+
+		/// <summary>Session ids printed on one <c>search_tags</c> row before <c>+&lt;k&gt;</c> (FR.24.15).</summary>
+		public const int SearchMaxCarriersPerRow = 5;
+
+		/// <summary><c>list_sessions</c> error for a <c>tags</c> entry that is no tag form (FR.15.13, FR.24.15); arg 0 = the entry.</summary>
+		public const string NotATagErrorFormat = "Not a tag: '{0}' - not a Linear issue, GitHub pull request or repository.";
+
 		// Tool (FR.24.4)
 		public const string ToolName = "tag_session";
 		public const string ToolDescription =
@@ -633,6 +644,12 @@ SESSION TRANSCRIPT TO COMPACT:
 
 		/// <summary>Session names in <c>list_sessions</c> rows are cut to this many characters (FR.15.13).</summary>
 		public const int ListSessionsNameMaxLength = 60;
+
+		// Texts shared by the list_sessions and search_tags footers (FR.15.13, FR.24.15)
+		public const string ListFooterFormat = "Rows {0}-{1} of {2}.";
+		public const string ListNextPageFormat = " Next page: offset={0}.";
+		public const string ListPastEndFormat = "No rows at offset={0}; {1} in total.";
+		public const string ListOtherProjectsHint = "Other projects: scope=all.";
 
 		/// <summary>Minimum length of a printed Short Node Id (FR.15.13).</summary>
 		public const int ShortNodeIdMinLength = 8;

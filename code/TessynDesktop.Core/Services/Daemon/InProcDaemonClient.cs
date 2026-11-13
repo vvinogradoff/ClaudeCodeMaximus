@@ -225,8 +225,7 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 	/// <summary>FR.24.13 — the tree is snapshotted briefly under the registry lock; tags (which may read files) are read outside it.</summary>
 	public IReadOnlyList<SessionTagUsageModel> GetSessionTagIndex(string? directoryPath)
 	{
-		var snapshot = _registry.SnapshotSessionsForTagIndex();
-		return SessionTagIndexBuilder.Build(snapshot, s => _tags.GetTags(s.NodeId, s.Name), directoryPath);
+		return new SessionTagIndexProvider(_registry, _tags).GetIndex(directoryPath);
 	}
 
 	// ── Cross-project search & titles ────────────────────────────────────────────────

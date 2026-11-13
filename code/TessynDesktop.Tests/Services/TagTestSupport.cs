@@ -71,6 +71,8 @@ internal sealed class FakeSessionTagService : ISessionTagService
 		return TagsByNode.TryGetValue(nodeId, out var own) ? own : Tags;
 	}
 
+	public SessionTagParseResultModel Parse(string entry) => throw new NotImplementedException();
+
 	public bool TakeTagGuidanceDue(string nodeId)
 	{
 		TakeCalls++;

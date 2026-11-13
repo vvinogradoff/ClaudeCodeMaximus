@@ -43,6 +43,9 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly DiagnosticsToolHandler?   _diagnostics;
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
+	private readonly SessionTagSearchPageBuilder _tagSearchBuilder   = new();
+	private readonly SessionTagSearchFormatter   _tagSearchFormatter = new();
+	private readonly SessionTagIndexProvider     _tagIndex;
 
 	// Enforced concurrent worker cap (FR.15.5).
 	private readonly SemaphoreSlim _workerSemaphore =
@@ -86,6 +89,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_labelService   = labelService;
 		_attention      = attention;
 		_tags           = tags;
+		_tagIndex       = new SessionTagIndexProvider(registry, tags);
 		_diagnostics    = diagnostics;
 	}
 
@@ -380,7 +384,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"Cancel a schedule by its ID.",
 				CancelScheduleSchema()),
 			BuildToolDef("list_sessions",
-				"Find sessions. With no arguments: your project's top-level sessions plus you and your own workers (nested under you), newest first, 30 rows per page. Each row: <id> <name> <age> [flags]; flags: running, fav, no-resume (next turn starts a fresh Claude session seeded from the transcript), N workers, worker of <id>, [other directory], (you). Narrow with query/running/activeWithinHours, widen with scope=all, see a session's workers with scope=children|subtree nodeId=<id>, page with offset. Short ids work wherever a session id is taken.",
+				"Find sessions. With no arguments: your project's top-level sessions plus you and your own workers (nested under you), newest first, 30 rows per page. Each row: <id> <name> <age> [flags]; flags: running, fav, no-resume (next turn starts a fresh Claude session seeded from the transcript), N workers, worker of <id>, [other directory], (you). Narrow with query/running/activeWithinHours, filter by tags=[...] (see search_tags), widen with scope=all, see a session's workers with scope=children|subtree nodeId=<id>, page with offset. Short ids work wherever a session id is taken.",
 				ListSessionsSchema()),
 			BuildToolDef("spawn_session",
 				"Create a new persistent session node and optionally run the first turn. Model is tier-enforced (FR.16).",
@@ -427,6 +431,9 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			BuildToolDef(Constants.SessionTags.ToolName,
 				Constants.SessionTags.ToolDescription,
 				TagSessionSchema()),
+			BuildToolDef(Constants.SessionTags.SearchToolName,
+				Constants.SessionTags.SearchToolDescription,
+				SearchTagsSchema()),
 			BuildToolDef(Constants.Diagnostics.SnapshotToolName,
 				Constants.Diagnostics.SnapshotToolDescription,
 				EmptyObjectSchema()),
@@ -467,6 +474,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			Constants.Attention.ResolveToolName => ResolveAttention(arguments, callerNode),
 			Constants.Attention.ListToolName    => ListAttention(arguments, callerNode),
 			Constants.SessionTags.ToolName      => TagSession(arguments, callerNode),
+			Constants.SessionTags.SearchToolName => SearchTags(arguments, callerNode),
 			Constants.Diagnostics.SnapshotToolName => RunDiagnosticsTool(h => h.Snapshot()),
 			Constants.Diagnostics.HeapToolName     => RunDiagnosticsTool(h => h.Heap()),
 			Constants.Diagnostics.DumpToolName     => RunDiagnosticsTool(h => h.Dump()),
@@ -588,7 +596,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 	private JsonNode ListSessions(JsonNode? args, SessionNodeModel callerNode)
 	{
-		var scope = ParseScope(GetOptionalString(args, "scope"));
+		var scope = ParseScope(GetOptionalString(args, "scope"),
+			SessionListScope.Project, SessionListScope.All, SessionListScope.Children, SessionListScope.Subtree);
 
 		var nodeIdArg         = GetOptionalString(args, "nodeId");
 		var query             = GetOptionalString(args, "query");
@@ -600,6 +609,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 		if (activeWithinHours is <= 0)
 			throw new McpToolException("'activeWithinHours' must be greater than 0.");
+
+		var tagCarriers = ResolveTagCarriers(args, scope, callerNode);
 
 		string? rootNodeId = null;
 		if (scope is SessionListScope.Children or SessionListScope.Subtree && !string.IsNullOrWhiteSpace(nodeIdArg))
@@ -613,6 +624,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			Running           = running,
 			ActiveWithinHours = activeWithinHours,
 			IncludeWorkers    = includeWorkers,
+			TagCarrierNodeIds = tagCarriers,
 			Limit             = limit ?? Constants.Agent.ListSessionsDefaultLimit,
 			Offset            = offset ?? 0,
 		};
@@ -621,19 +633,88 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		return BuildTextContent(_listFormatter.Format(page, DateTimeOffset.UtcNow));
 	}
 
-	private static SessionListScope ParseScope(string? scopeText)
+	/// <summary>
+	/// <c>list_sessions</c> <c>tags</c> (FR.15.13, FR.24.15): the entries become canonical keys through
+	/// <see cref="ISessionTagService.Parse"/> (nothing learned or persisted), then the top-level sessions carrying any
+	/// of them. Null = no filter. The index covers the caller's Directory node in <c>project</c> scope, every
+	/// directory otherwise; tag files are read outside the registry lock.
+	/// </summary>
+	private IReadOnlySet<string>? ResolveTagCarriers(JsonNode? args, SessionListScope scope, SessionNodeModel callerNode)
+	{
+		var entries = ReadStringArray(args, "tags");
+		if (entries.Count > Constants.SessionTags.MaxEntriesPerArray)
+			throw new McpToolException($"'tags' may contain at most {Constants.SessionTags.MaxEntriesPerArray} entries.");
+
+		var keys = new List<string>();
+		foreach (var entry in entries.Select(e => e.Trim()).Where(e => e.Length > 0))
+		{
+			var parse = _tags.Parse(entry);
+			keys.Add(parse.Outcome switch
+			{
+				SessionTagParseOutcome.Valid       => parse.Tag!.Key,
+				SessionTagParseOutcome.UnknownTeam => parse.UnknownIssueKey!,
+				_ => throw new McpToolException(string.Format(Constants.SessionTags.NotATagErrorFormat, entry)),
+			});
+		}
+
+		if (keys.Count == 0)
+			return null;
+
+		var snapshot  = _registry.SnapshotSessionsForTagIndex();
+		string? directoryPath = null;
+		if (scope == SessionListScope.Project)
+		{
+			directoryPath = snapshot.FirstOrDefault(s => string.Equals(s.NodeId, callerNode.NodeId, StringComparison.Ordinal))?.DirectoryPath;
+			if (directoryPath == null)
+				return new HashSet<string>(StringComparer.Ordinal);
+		}
+
+		return SessionTagSearch.SessionsWithAnyTag(_tagIndex.Build(snapshot, directoryPath), keys);
+	}
+
+	/// <summary><c>search_tags</c> (FR.24.15): one bounded page of the tags in the caller's project or in every directory.</summary>
+	private JsonNode SearchTags(JsonNode? args, SessionNodeModel callerNode)
+	{
+		var scope  = ParseTagSearchScope(GetOptionalString(args, "scope"));
+		var query  = GetOptionalString(args, "query");
+		var limit  = GetOptionalInt(args, "limit");
+		var offset = GetOptionalInt(args, "offset");
+
+		var searchQuery = new SessionTagSearchQueryModel
+		{
+			Query  = query,
+			Scope  = scope,
+			Limit  = limit ?? Constants.Agent.ListSessionsDefaultLimit,
+			Offset = offset ?? 0,
+		};
+
+		var page = _tagSearchBuilder.Build(
+			_registry.SnapshotSessionsForListing(),
+			callerNode.NodeId,
+			searchQuery,
+			_tagIndex.Build,
+			s => _fileService.GetLastWriteTimeUtc(s.FileName));
+
+		return BuildTextContent(_tagSearchFormatter.Format(page));
+	}
+
+	private static SessionListScope ParseTagSearchScope(string? scopeText) =>
+		ParseScope(scopeText, SessionListScope.Project, SessionListScope.All);
+
+	/// <summary>Parses a scope name (case-insensitive, trimmed); blank = project. Only <paramref name="allowed"/> names are accepted.</summary>
+	private static SessionListScope ParseScope(string? scopeText, params SessionListScope[] allowed)
 	{
 		if (string.IsNullOrWhiteSpace(scopeText))
 			return SessionListScope.Project;
 
-		return scopeText.Trim().ToLowerInvariant() switch
-		{
-			"project"  => SessionListScope.Project,
-			"all"      => SessionListScope.All,
-			"children" => SessionListScope.Children,
-			"subtree"  => SessionListScope.Subtree,
-			_          => throw new McpToolException($"Unknown scope '{scopeText}'. Use project, all, children or subtree."),
-		};
+		var name  = scopeText.Trim();
+		var match = allowed.Where(a => string.Equals(a.ToString(), name, StringComparison.OrdinalIgnoreCase)).ToList();
+		if (match.Count > 0)
+			return match[0];
+
+		var names = allowed.Select(a => a.ToString().ToLowerInvariant()).ToList();
+		var list  = names.Count == 1 ? names[0] : string.Join(", ", names.Take(names.Count - 1)) + " or " + names[^1];
+		throw new McpToolException($"Unknown scope '{scopeText}'. Use {list}.");
 	}
 
 	/// <summary>
@@ -1617,8 +1698,21 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"running":           { "type": "boolean", "description": "true: only sessions with a turn in progress; false: only idle ones." },
 				"activeWithinHours": { "type": "integer", "description": "Only sessions whose last activity is within the last N hours (N > 0)." },
 				"includeWorkers":    { "type": "boolean", "description": "scope=project|all: list every worker session as a row instead of only counting it on its supervisor's row. Default false." },
+				"tags":              { "type": "array", "items": { "type": "string" }, "description": "Only sessions tagged with ANY of these (a worker counts for its top-level supervisor): Linear or GitHub URL, HSE-230, owner/repo#215 or owner/repo. At most 30. Find tags with search_tags." },
 				"limit":             { "type": "integer", "description": "Rows per page, 1-200. Default 30." },
 				"offset":            { "type": "integer", "description": "Rows to skip. Default 0." }
+			}
+		}
+		""")!;
+
+	private static JsonNode SearchTagsSchema() => JsonNode.Parse("""
+		{
+			"type": "object",
+			"properties": {
+				"query":  { "type": "string", "description": "Words that must all occur, case-insensitively, in the tag's label or key (e.g. 'backend 303', 'HSE-254'). The URL is not searched. Blank or absent: every tag." },
+				"scope":  { "type": "string", "enum": ["project", "all"], "description": "project (default): tags of sessions under your Directory Node; all: every Directory Node." },
+				"limit":  { "type": "integer", "description": "Tags per page, 1-200. Default 30." },
+				"offset": { "type": "integer", "description": "Tags to skip. Default 0." }
 			}
 		}
 		""")!;

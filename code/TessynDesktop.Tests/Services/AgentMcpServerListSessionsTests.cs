@@ -132,7 +132,7 @@ public sealed class AgentMcpServerListSessionsTests : IDisposable
 		var properties = tool["inputSchema"]!["properties"]!.AsObject();
 
 		Assert.Equal(
-			new[] { "activeWithinHours", "includeWorkers", "limit", "nodeId", "offset", "query", "running", "scope" },
+			new[] { "activeWithinHours", "includeWorkers", "limit", "nodeId", "offset", "query", "running", "scope", "tags" },
 			properties.Select(p => p.Key).OrderBy(k => k, StringComparer.Ordinal));
 		Assert.Equal(
 			new[] { "project", "all", "children", "subtree" },

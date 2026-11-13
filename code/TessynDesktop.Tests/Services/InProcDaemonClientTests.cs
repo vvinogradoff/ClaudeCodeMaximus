@@ -187,6 +187,7 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
     public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group, int orchestrationDepth = 0, string? supervisorNodeId = null) => null;
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => BuildAgentSessionSummariesResult;
     public List<SessionTagIndexSessionModel> TagIndexSnapshot { get; set; } = new();
+    public IReadOnlyList<SessionSnapshotModel> SnapshotSessionsForListing() => new List<SessionSnapshotModel>();
     public List<SessionTagIndexSessionModel> SnapshotSessionsForTagIndex() => TagIndexSnapshot;
     public SessionListPageModel QueryAgentSessions(SessionListQueryModel query, string callerNodeId) =>
         new() { Scope = query.Scope, Sections = Array.Empty<SessionListSectionModel>(), Rows = Array.Empty<SessionListRowModel>(), TotalRows = 0, Offset = 0, Limit = query.Limit };
