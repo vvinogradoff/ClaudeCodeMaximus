@@ -176,6 +176,43 @@ export class MockDaemon {
 			const rec = put(group ?? dir, dir, group, { name, lastActivityMin: age, ...(extra ?? {}) }, name.toLowerCase(), 2);
 			if (name.startsWith('Wide table')) rec.entries.push(makeAssistantEntry(rec.entries.length, 100, WIDE_TABLE));
 		}
+		// --- portrait overflow stress session: deep location, 8 real-shaped tags, long URLs/tokens, wide table, long focus cards
+		const stressGroup: MockGroup = { id: newId(), name: 'QuickBooksSQL / Development / Some Deep Group', groups: [], expanded: true, sessionIds: [] };
+		scratch.groups.push(stressGroup);
+		const stress = put(stressGroup, scratch, stressGroup, { name: 'HSE-225 portrait stress: block built-in tools for the very long named session', lastActivityMin: 3 }, 'stress', 1);
+		for (const [kind, label, url] of [
+			['linearIssue', 'HSE-225', 'https://linear.app/hardstop/issue/HSE-225'],
+			['gitHubPullRequest', 'backend-v1 PR #198', 'https://github.com/hardstop/backend-v1/pull/198'],
+			['gitHubPullRequest', 'windows-app PR #288', 'https://github.com/hardstop/windows-app/pull/288'],
+			['gitHubPullRequest', 'frontend-v1 PR #1021', 'https://github.com/hardstop/frontend-v1/pull/1021'],
+			['gitHubRepository', 'frontend-v1', 'https://github.com/hardstop/frontend-v1'],
+			['gitHubRepository', 'backend-v1', 'https://github.com/hardstop/backend-v1'],
+			['gitHubRepository', 'windows-app', 'https://github.com/hardstop/windows-app'],
+			['linearIssue', 'HSE-286-block-built-in-tools-and-hooks-for-every-agent-type-in-the-pipeline', 'https://linear.app/hardstop/issue/HSE-286'],
+		] as [TagKind, string, string][]) stress.tags.push({ kind, label, url, source: 'session' });
+		stress.entries.push(
+			makeUserEntry(stress.entries.length, 12, `See https://linear.app/hardstop/issue/HSE-286/block-built-in-tools-and-hooks-for-every-agent-type-in-the-pipeline-v2-extended and ${'A'.repeat(120)}`),
+			makeAssistantEntry(stress.entries.length + 1, 11, `Long URL: https://github.com/hardstop/backend-v1/pull/198/files#diff-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef and token ${'x'.repeat(140)}
+
+Inline \`${'code_identifier_'.repeat(8)}\` here.
+
+- list item with https://example.com/${'seg/'.repeat(40)}
+
+> quote ${'q'.repeat(100)}
+
+# Heading ${'H'.repeat(80)}
+
+\`\`\`
+${'const veryLongLine = 1; '.repeat(12)}
+\`\`\`
+
+| Nowrap header one | Nowrap header two | Nowrap header three | Nowrap header four |
+|---|---|---|---|
+| a | b | c | d |`),
+		);
+		this.addAttention(stress, 'ask', `Which of https://linear.app/hardstop/issue/HSE-286/block-built-in-tools-and-hooks-for-every-agent-type ${'T'.repeat(60)} to use?`, `Body ${'B'.repeat(120)} https://example.com/${'p/'.repeat(60)}
+
+\`${'inline_'.repeat(20)}\``, ['An option with a really long label that goes on and on and on and on', `Unbroken${'O'.repeat(90)}`], 'An option with a really long label that goes on and on and on and on');
 		// tags on a few sessions (Tags tab)
 		const tagOf = (kind: TagKind, label: string, url: string): SessionTagDto => ({ kind, label, url, source: 'session' });
 		const byName = (n: string) => [...this.sessions.values()].find((s) => s.name === n)!;
@@ -421,9 +458,10 @@ export class MockDaemon {
 					{ id: 'claude-opus-5-5', displayName: 'Opus 5.5', provider: 'anthropic' },
 					{ id: 'claude-sonnet-5-5', displayName: 'Sonnet 5.5', provider: 'anthropic' },
 					{ id: 'claude-haiku-5-5', displayName: 'Haiku 5.5', provider: 'anthropic' },
+					{ id: 'claude-opus-5-5-1m', displayName: 'Opus 5.5 with the one million token extended context window (long context)', provider: 'anthropic' },
 				],
 				efforts: ['default', 'max', 'high', 'medium', 'low'],
-				profiles: [{ id: 'default', displayName: SYS_PROFILE }, { id: 'work', displayName: WORK_PROFILE }, { id: 'personal', displayName: 'Personal' }],
+				profiles: [{ id: 'default', displayName: SYS_PROFILE }, { id: 'work', displayName: WORK_PROFILE }, { id: 'personal', displayName: 'Personal' }, { id: 'sys2', displayName: '[Sys] vvinogradoff@gmail.com' }, { id: 'long', displayName: 'another.long.name@example-domain.com' }],
 			};
 			case 'usage.get': return this.usage(String(params.profileId ?? 'default'));
 			default: throw new RpcError(-32601, `Method not found: ${method}`);
