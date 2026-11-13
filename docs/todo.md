@@ -1070,3 +1070,13 @@ Brief: `.tagsearch-work/00-brief.md` (Architect request 2026-11-11).
 - [DONE] UI: fix the re-click on a Recent row that doesn't select the session (FR.1.16)
 - [DONE] Manual UI pass TC.TG.37–47 and TC.RT.02–10 — the Architect confirmed in the running app on 2026-11-12 that the Tags tab and the Recent collapse work as expected (FR.1.16, FR.24.11–FR.24.13)
 - [ ] FR.24.14 Related tags (ticket ↔ PR): decide the route (a/b/c in FR.24.14) — NOT STARTED
+
+## Phase 41 — Tag search for sessions as cmx MCP tools (FR.24.15, FR.15.13)
+
+Sessions get the Tags tab's flow: `search_tags` finds tags (FR.24.11 matching and order, FR.24.13 roll-up and scope), and `list_sessions` gains a `tags` filter (OR) for the sessions carrying them. Reuses `SessionTagSearch` and the tag index builder. Use cases UC.TG.24–UC.TG.25; test cases TC.TG.49–TC.TG.54.
+
+- [ ] `ISessionTagService.Parse` — FR.24.4 forms to canonical keys with the current workspace map, no learning (FR.24.15)
+- [ ] `search_tags` tool: arguments, rows, order, carriers, output text, description (FR.24.15)
+- [ ] `list_sessions` `tags` argument: parse, OR filter by top-level carrier, errors (FR.15.13, FR.24.15)
+- [ ] Tests TC.TG.49–TC.TG.53 (FR.24.15, FR.15.13)
+- [ ] Manual TC.TG.54 against the Tags tab after an app restart (FR.24.15)

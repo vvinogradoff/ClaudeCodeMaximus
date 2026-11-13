@@ -729,7 +729,7 @@ A supervisor session can spawn and control worker sessions. All workers are **pe
 **FR.15.1 — Orchestration tools:**
 | Tool | Required args | Optional args | Effect |
 |---|---|---|---|
-| `list_sessions` | — | `scope`, `nodeId`, `query`, `running`, `activeWithinHours`, `includeWorkers`, `limit`, `offset` | Returns one page of sessions, newest first — by default the caller's project, with the caller's own workers nested under its row (FR.15.13). Each row: Short Node Id, name, age of its Last Activity, and flags (`running`, `fav`, `no-resume`, worker counts). |
+| `list_sessions` | — | `scope`, `nodeId`, `query`, `running`, `activeWithinHours`, `includeWorkers`, `tags`, `limit`, `offset` | Returns one page of sessions, newest first — by default the caller's project, with the caller's own workers nested under its row (FR.15.13). Each row: Short Node Id, name, age of its Last Activity, and flags (`running`, `fav`, `no-resume`, worker counts). |
 | `spawn_session` | `name` | `workingDir`, `parentNodeId`, `prompt`, `model`, `group`, `outputFormat` | Creates a **new** session node, runs the first turn, returns `{nodeId, resultText}`. `model` is tier-enforced (FR.16). |
 | `send_to_session` | `nodeId`, `prompt` | `mode` (wait/async), `outputFormat` | **Resumes** an existing session node, runs a turn. In `wait` mode returns the result synchronously. In `async` mode posts the result back to the supervisor when done, as a Mailbox Delivery (FR.15.3, FR.15.12). `outputFormat` is advisory markdown shaping guidance (FR.15.7). |
 | `read_session` | `nodeId` | `lastN` | Returns the last N session file entries for the given node. |
@@ -814,6 +814,7 @@ Creates one session per item. Within each session the stages are sent as sequent
   | `running` | — | `true` — only sessions with a turn in progress; `false` — only idle ones |
   | `activeWithinHours` | — | Only sessions whose Last Activity is within the last N hours (N > 0) |
   | `includeWorkers` | `false` | `project`/`all` only: list every Worker Session as a row instead of only counting it on its supervisor's row |
+  | `tags` | — | Array of at most 30 tags in the FR.24.4 input forms (URL, `HSE-230`, `owner/repo#215`, `owner/repo`); only sessions whose top-level session (itself, or for a Worker Session the top-level supervisor it rolls up to, FR.24.12) carries ANY of them are rows (OR). Combines with every other argument; an empty array (or only blank entries) means no filter. An entry that is no tag form is a tool error: `Not a tag: '<entry>' - not a Linear issue, GitHub pull request or repository.` (FR.24.15) |
   | `limit` | 30 | Rows per page, clamped to 1–200 |
   | `offset` | 0 | Rows to skip; a negative value counts as 0 |
 
@@ -1553,6 +1554,36 @@ There is no exact-phrase toggle and no refresh button.
 - **(a)** Co-occurrence: tags carried by the same sessions. This is cheap and available from the index today.
 - **(b)** GitHub: pull requests whose branch, title or body mention the Linear key, e.g. `gh pr list -R <owner>/<repo> --search "HSE-254" --state all`.
 - **(c)** Linear's GitHub integration (the issue's PR attachments), read through the Linear API. This shares the access decision of FR.24.9.
+
+**FR.24.15 — Tag search for sessions (cmx MCP tools):** Sessions get the Tags tab's flow (FR.24.11–FR.24.13) through two tools: `search_tags` finds tags, and `list_sessions` with `tags` lists the sessions carrying them (FR.15.13). Matching, order, roll-up and scope are exactly the Tags tab's, through the same code (`SessionTagSearch`, `IDaemonClient.GetSessionTagIndex`'s builder); nothing is reimplemented.
+
+**`search_tags` arguments** (all optional):
+
+| Arg | Default | Meaning |
+|---|---|---|
+| `query` | — | FR.24.11 matching: every whitespace-separated part occurs, case-insensitively, in the label or canonical key; the URL isn't searched; blank or absent matches every tag |
+| `scope` | `project` | `project` — the caller's Directory node (for a Worker Session, the Directory node it is nested under), as the Tags tab's 📁 toggle; `all` — every directory |
+| `limit` | 30 | Tags per page, clamped to 1–200 |
+| `offset` | 0 | Tags to skip; a negative value counts as 0 |
+
+An unknown `scope` is a tool error (the same strict parsing as `list_sessions`). Surrounding whitespace of `query` and `scope` is ignored.
+
+**Rows and order.** One row per distinct tag carried by at least one top-level session in scope (Worker Sessions roll up to their top-level supervisor, FR.24.12), with the representative label and URL (FR.24.13). Order is FR.24.11's: kind, then the newest Last Activity among the carriers (the session file's last-write time, FR.15.13; no activity last), then label. There is no selection, so nothing is pinned first.
+
+**Output** (plain text, the conventions of FR.15.13 — the listing's own text is ASCII, labels printed as they are with control characters as spaces, names cut to 60 characters):
+- First line: the `You:` line of `list_sessions`.
+- Header: `Tags in <label> (<path>) - <n> tags` in `project` scope, `Tags in all directories - <n> tags` in `all`; `<n>` counts the matching tags. When `query` is set: `, matching "<query>"` is appended.
+- Row: `<label>  <url>  <n> session(s): <id>, <id>, ...` — the carriers' Short Node Ids, newest Last Activity first, at most 5, then `+<k>` when more carry it (`1 session: …` singular).
+- Footer: `Rows <a>-<b> of <n>.` plus `Next page: offset=<b>.` when rows remain, then the hints line: `Sessions: list_sessions tags=["<url or key>"].` always, `Other projects: scope=all.` in `project` scope.
+- Empty: `No tags in this directory` (`project` scope, no tags at all), `No tags yet` (`all`, none at all), `No matching tags` (otherwise), each followed by the hints that apply; with rows but an `offset` past the end, `No rows at offset=<o>; <n> in total.`
+
+**Cost.** The tree is snapshotted under `SyncRoot` (fields only); tag files and last-write times are read outside the lock, last-write times only for carriers of the tags on the returned page and for ordering.
+
+**`list_sessions` `tags`.** See FR.15.13. Entries use the FR.24.4 input forms and are resolved to canonical keys by `ISessionTagService` with the same Linear workspace map as `tag_session`, without learning or persisting anything. A short Linear key whose team isn't in the map still filters (its canonical key is the key itself).
+
+**Tool description** (this wording):
+
+> Find the Linear issues, GitHub pull requests and repositories that sessions are tagged with, and how many sessions carry each. Use it to find sessions by what they work on: search here, then call list_sessions with tags=[...]. Defaults to your project; scope=all for every directory.
 
 ---
 

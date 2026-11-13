@@ -450,6 +450,38 @@ Related requirements: FR.24.1–FR.24.14 in [requirements.md](/docs/requirements
 
 ---
 
+## UC.TG.24 — A session finds the sessions working on an issue or PR
+
+**Actors:** Any session (through the cmx MCP tools).
+
+**Main flow:**
+1. The session needs the sessions that work, or worked, on `HSE-254` — for example to message the one that built it.
+2. It calls `list_sessions` with `tags=["HSE-254"]` (any FR.24.4 form works: the Linear URL, `owner/repo#303`, a PR URL).
+3. Tessyn lists, in the usual FR.15.13 page, the sessions whose top-level session carries the tag; a supervisor counts when only its worker tagged it.
+4. It picks a session by name, age and flags and calls `send_to_session` or `read_session` with the printed short id.
+
+**Alternative:** nothing in the caller's project carries the tag — the page says `No sessions match.` and the hint suggests `scope=all`.
+
+**Covers:** FR.24.15, FR.15.13, FR.24.12.
+
+---
+
+## UC.TG.25 — A session searches the tags of a project
+
+**Actors:** Any session.
+
+**Main flow:**
+1. The session knows only part of what it looks for, e.g. `backend 303` or `windows-app`.
+2. It calls `search_tags` with `query="backend 303"`.
+3. Tessyn returns the matching tags of the caller's project in the Tags tab's order (FR.24.11), each with its URL, how many sessions carry it and their short ids.
+4. It calls `list_sessions` with `tags=[<the URL from the row>]`, as the footer hint shows, to get those sessions with their status.
+
+**Alternative:** `scope=all` searches every directory, as the Tags tab with 📁 off.
+
+**Covers:** FR.24.15, FR.24.11, FR.24.13.
+
+---
+
 ## Out of scope (Phase 1)
 
 - Detecting tags from conversation text.

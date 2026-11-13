@@ -512,3 +512,64 @@ Common set-up: directory X with top-level sessions A (tagged `HSE-254`), B (tagg
 ### TC.TG.48 — Related tags (DEFERRED) — NOT BUILT — FR.24.14 (UC.TG.23)
 
 No test is runnable. When the phase is approved, cases are to cover: selecting a Linear issue also suggests its pull requests (and a PR its issue) as extra chips, per the chosen source (co-occurrence, GitHub search, or Linear's GitHub integration). **Expected now:** selecting a chip adds no extra chips.
+
+---
+
+## Summary (tag search tools, FR.24.15)
+
+| TC | Title | Kind | UC | FR |
+|---|---|---|---|---|
+| TC.TG.49 | `search_tags`: rows, order, scope, roll-up | AUTOMATED | UC.TG.25 | FR.24.15, FR.24.11, FR.24.13 |
+| TC.TG.50 | `search_tags`: output text | AUTOMATED | UC.TG.25 | FR.24.15 |
+| TC.TG.51 | `search_tags`: arguments and tool surface | AUTOMATED | UC.TG.25 | FR.24.15 |
+| TC.TG.52 | `list_sessions` `tags` filter | AUTOMATED | UC.TG.24 | FR.15.13, FR.24.15, FR.24.12 |
+| TC.TG.53 | Cost and lock | AUTOMATED | UC.TG.24, UC.TG.25 | FR.24.15, FR.15.13 |
+| TC.TG.54 | Live check against the Tags tab | MANUAL | UC.TG.24, UC.TG.25 | FR.24.15 |
+
+Tests are Core xUnit tests calling `AgentMcpServer.HandleToolCallAsync` with a real `SessionRegistry` over a temp settings dir (the style of `AgentMcpServerListSessionsTests` and `AgentMcpServerTagToolTests`), plus pure tests for any new builder or formatter. Helper data as in TC.TG.29.
+
+### TC.TG.49 — `search_tags`: rows, order, scope, roll-up — FR.24.15, FR.24.11, FR.24.13 (UC.TG.25)
+
+- **TC.TG.49-1 Project scope (default):** only tags of top-level sessions under the caller's Directory node; for a Worker Session caller, the Directory node it is nested under.
+- **TC.TG.49-2 All:** `scope=all` returns the tags of every directory.
+- **TC.TG.49-3 Matching is FR.24.11's:** `backend 303` matches `backend PR #303`; `#303` matches through the key; `HSE` is case-insensitive; `linear.app` matches nothing (URL not searched); blank `query` matches all.
+- **TC.TG.49-4 Order:** kind first, then the newest Last Activity (session file last-write time) among the carriers, then label — the same result as `SessionTagSearch.Order` for the same data.
+- **TC.TG.49-5 Roll-up:** a tag declared only by a Worker Session is counted for its top-level supervisor; the row lists the supervisor's short id, not the worker's.
+- **TC.TG.49-6 Carriers:** newest Last Activity first, at most 5 ids, then `+<k>`; `1 session:` for one, `<n> sessions:` otherwise.
+- **TC.TG.49-7 Representative copy:** label and URL are the index's (FR.24.13).
+
+### TC.TG.50 — `search_tags`: output text — FR.24.15 (UC.TG.25)
+
+- **TC.TG.50-1 You line:** identical to `list_sessions`' for the same caller.
+- **TC.TG.50-2 Header:** `Tags in <label> (<path>) - <n> tags` (project), `Tags in all directories - <n> tags` (all); with a query `, matching "<query>"` is appended.
+- **TC.TG.50-3 Row:** `<label>  <url>  <n> sessions: <id>, <id>` with Short Node Ids.
+- **TC.TG.50-4 Footer:** `Rows <a>-<b> of <n>.`, `Next page: offset=<b>.` only when rows remain; hints `Sessions: list_sessions tags=["<url or key>"].` always and `Other projects: scope=all.` only in project scope.
+- **TC.TG.50-5 Empty states:** `No tags in this directory` (project, none at all), `No tags yet` (all, none at all), `No matching tags` (otherwise); `No rows at offset=<o>; <n> in total.` for an offset past the end.
+- **TC.TG.50-6 Text rules:** a label with a line break stays on one row; the tool's own text is ASCII.
+
+### TC.TG.51 — `search_tags`: arguments and tool surface — FR.24.15 (UC.TG.25)
+
+- **TC.TG.51-1 tools/list:** `search_tags` is listed with the FR.24.15 description wording and the arguments `query`, `scope` (enum `project`, `all`), `limit`, `offset`.
+- **TC.TG.51-2 Scope parsing:** `galaxy`, `2` and `project,all` are tool errors; ` ALL ` works.
+- **TC.TG.51-3 Paging:** `limit` clamped to 1–200; a negative `offset` counts as 0; wrong JSON types are tool errors naming the argument.
+
+### TC.TG.52 — `list_sessions` `tags` filter — FR.15.13, FR.24.15, FR.24.12 (UC.TG.24)
+
+- **TC.TG.52-1 Forms:** the Linear URL, `HSE-254`, a PR URL, `owner/repo#303` and `owner/repo` each keep exactly the carrying sessions.
+- **TC.TG.52-2 OR:** two tags list the sessions carrying either.
+- **TC.TG.52-3 Roll-up:** a top-level session that carries a tag only through its Worker Session is listed; with `includeWorkers` its workers are nested under it; a worker of a non-carrier is not listed.
+- **TC.TG.52-4 Combines:** with `scope=all` a carrier in another directory is listed, with the default project scope it is not; `query`, `running` and paging apply on top.
+- **TC.TG.52-5 Unknown Linear team:** `ABC-12` (team not in the workspace map) filters by its key and does not change the map.
+- **TC.TG.52-6 Errors:** `xyz` gives `Not a tag: 'xyz' - not a Linear issue, GitHub pull request or repository.`; more than 30 entries is a tool error; an empty array or blank entries mean no filter.
+- **TC.TG.52-7 No carrier:** `No sessions match.` with the usual hints.
+
+### TC.TG.53 — Cost and lock — FR.24.15, FR.15.13 (UC.TG.24, UC.TG.25)
+
+- **TC.TG.53-1 Lock:** while a fake `ISessionTagService.GetTags` runs for `search_tags` and for `list_sessions` with `tags`, another thread acquires `SyncRoot` within a timeout.
+- **TC.TG.53-2 No content reads:** neither tool reads session-file contents (fake file service counts `ReadEntries`).
+
+### TC.TG.54 — Live check against the Tags tab — MANUAL — FR.24.15 (UC.TG.24, UC.TG.25)
+
+1. In a session, call `search_tags` with the same text as typed in the Tags tab, 📁 on. **Expected:** the same tags in the same order as the chips (none selected).
+2. Repeat with `scope=all` against 📁 off. **Expected:** the same.
+3. Call `list_sessions` with `tags=[<url of a tag>]` and `scope=all`. **Expected:** the same top-level sessions the Tags tab lists for that one selected tag (📁 off).
