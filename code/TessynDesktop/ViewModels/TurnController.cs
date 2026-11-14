@@ -40,6 +40,9 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 	private readonly ProfileController _profiles;
 
 	private bool _isBusy;
+
+	/// <summary>The observer of the latest send: released from the engine on dispose, so the singleton engine does not keep this view alive.</summary>
+	private ITurnObserver? _lastObserver;
 	private bool _isNodeRunning;
 	private string _thinkingDuration = string.Empty;
 	private DispatcherTimer? _thinkingTimer;
@@ -270,6 +273,8 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 		_nodeRunningSubscription?.Dispose();
 		_nodeRunningSubscription = null;
 		_streamingManager.ProcessExited -= OnStreamingProcessExited;
+		if (_lastObserver != null)
+			_engine.ReleaseObserver(_node.Model.NodeId, _lastObserver);
 		if (_thinkingTimer != null)
 		{
 			_thinkingTimer.Tick -= OnThinkingTimerTick;
@@ -404,7 +409,8 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 		// The engine writes the user entry (its observer callback adds the rows, synchronously, as the controller did), runs the turn and
 		// returns once it was reported complete. The idle transition (JSONL refresh, IsBusy=false, sound) runs in the observer's
 		// BeforeIdleAsync/Idle, called by the engine in the controller's old order and before the running flag is released.
-		await _engine.RunAsync(new TurnRequest(_node.Model, message, BuildTurnSettings(), wasNewBranch), new RunObserver(this, message));
+		_lastObserver = new RunObserver(this, message);
+		await _engine.RunAsync(new TurnRequest(_node.Model, message, BuildTurnSettings(), wasNewBranch), _lastObserver);
 	}
 
 	/// <summary>The command bar's current choices as the launch settings of a turn (or a correction).</summary>

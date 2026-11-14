@@ -31,5 +31,13 @@ public static partial class RemoteProtocol
 
 		/// <summary>The notifications that only the local stream carries (the relay filters them out).</summary>
 		public static readonly IReadOnlyList<string> LocalOnlyEvents = [StartedEvent, DeltaEvent, ToolEvent, StatusEvent, UsageEvent];
+
+		/// <summary>
+		/// True for a notification the relay must not carry: the five turn-stream events, and the <c>turn.completed</c> of a turn that never
+		/// ran (a phone must not see an end for a turn it never saw run: it would clear its pending state while another turn still runs).
+		/// </summary>
+		public static bool IsLocalOnly(RemoteNotification notification) =>
+			LocalOnlyEvents.Contains(notification.Method)
+			|| (notification.Method == Events.TurnCompleted && notification.Params["neverRan"]?.GetValue<bool>() == true);
 	}
 }

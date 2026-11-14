@@ -25,6 +25,12 @@ public interface ITurnEngine
 	/// <summary>Cancels every engine turn of the node, running or queued. Returns true when there was one.</summary>
 	bool CancelRuns(string nodeId);
 
+	/// <summary>
+	/// Forgets <paramref name="observer"/> as the node's last observer (when it still is): a client calls it when it goes away, so the
+	/// singleton engine does not keep a disposed view alive.
+	/// </summary>
+	void ReleaseObserver(string nodeId, ITurnObserver observer);
+
 	/// <summary>True while an engine turn of the node is running or waiting for its turn.</summary>
 	bool IsBusy(string nodeId);
 

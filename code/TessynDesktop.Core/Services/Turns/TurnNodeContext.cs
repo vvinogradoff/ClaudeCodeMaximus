@@ -47,6 +47,16 @@ internal sealed class TurnNodeContext
 	/// <summary>The observer of the latest send that had one: it renders events outside any turn and receives the idle notifications.</summary>
 	public ITurnObserver? LastObserver { get; set; }
 
+	/// <summary>Clears <see cref="LastObserver"/> if it is <paramref name="observer"/>.</summary>
+	public void ReleaseObserver(ITurnObserver observer)
+	{
+		lock (_gate)
+		{
+			if (ReferenceEquals(LastObserver, observer))
+				LastObserver = null;
+		}
+	}
+
 	/// <summary>The one callback bound to the node's streaming process; it routes each event to the active run, or to a background handler.</summary>
 	public System.Action<Models.ClaudeStreamEvent>? StreamHandler { get; set; }
 

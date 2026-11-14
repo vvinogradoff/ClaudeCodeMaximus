@@ -240,7 +240,7 @@ public sealed class RelayConnectorService : IRelayConnectorService
 			// contract and the 1,000-event ring behind the relay do not take them.
 			handler = n =>
 			{
-				if (n.Method != Constants.Remote.Events.EntriesAppended && !RemoteProtocol.TurnStream.LocalOnlyEvents.Contains(n.Method))
+				if (n.Method != Constants.Remote.Events.EntriesAppended && !RemoteProtocol.TurnStream.IsLocalOnly(n))
 					eventWriter.TryWrite(n);
 			};
 			// With an event log the relay forwards the stamped notifications (additive "seq" per event); without one the bus ones.

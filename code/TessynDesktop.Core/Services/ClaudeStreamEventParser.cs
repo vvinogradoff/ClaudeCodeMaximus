@@ -55,8 +55,9 @@ public static class ClaudeStreamEventParser
 				_           => null,
 			};
 		}
-		catch (JsonException)
+		catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
 		{
+			// A line of an unexpected shape is skipped, never allowed to end the read loop.
 			return null;
 		}
 	}

@@ -69,6 +69,13 @@ public sealed class TurnEngine : ITurnEngine
 		_nodes.TryGetValue(nodeId, out var context) && context.CancelAll();
 
 	/// <inheritdoc />
+	public void ReleaseObserver(string nodeId, ITurnObserver observer)
+	{
+		if (_nodes.TryGetValue(nodeId, out var context))
+			context.ReleaseObserver(observer);
+	}
+
+	/// <inheritdoc />
 	public bool IsBusy(string nodeId) =>
 		_nodes.TryGetValue(nodeId, out var context) && context.IsBusy;
 

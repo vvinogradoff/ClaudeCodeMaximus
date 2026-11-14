@@ -44,8 +44,9 @@ public static class ClaudeActivityEventParser
 
 			return events;
 		}
-		catch (JsonException)
+		catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
 		{
+			// One odd line (a block that is no object, a field of another type) must never end a read loop or abort a turn.
 			return [];
 		}
 	}
@@ -57,7 +58,7 @@ public static class ClaudeActivityEventParser
 
 	private static void AddBlockEvent(List<ClaudeStreamEvent> events, JsonElement block, string? lineType)
 	{
-		if (!block.TryGetProperty("type", out var blockType))
+		if (block.ValueKind != JsonValueKind.Object || !block.TryGetProperty("type", out var blockType))
 			return;
 
 		switch (blockType.GetString())

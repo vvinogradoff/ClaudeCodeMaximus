@@ -57,6 +57,9 @@ public static partial class Constants
 			/// <summary>Items a turn's event buffer keeps between two flushes before the oldest deltas are dropped.</summary>
 			public const int BufferMaxItems = 256;
 
+			/// <summary>Ids of ended turns the event publisher remembers, to ignore their late items.</summary>
+			public const int ClosedTurnsRemembered = 512;
+
 			/// <summary>Delta characters a turn's event buffer keeps between two flushes before the oldest deltas are dropped.</summary>
 			public const int BufferMaxDeltaChars = 512 * 1024;
 		}

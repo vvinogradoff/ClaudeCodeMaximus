@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using Serilog;
 using TessynDesktop.Models.Remote;
@@ -26,6 +27,12 @@ public sealed class TurnEventPublisher : ITurnProgressSink, IDisposable
 	private readonly ConcurrentDictionary<string, TurnChannel> _turns = new(StringComparer.Ordinal);
 	private bool _disposed;
 
+	// Ids of recently ended turns: a late item of one (a reader-thread event racing the end of a stopped turn) is ignored instead of
+	// opening a new channel and timer that nothing would ever close.
+	private readonly object _closedGate = new();
+	private readonly HashSet<string> _closed = new(StringComparer.Ordinal);
+	private readonly Queue<string> _closedOrder = new();
+
 	public TurnEventPublisher(IRemoteEventBus bus, TimeSpan? batchWindow = null, int? maxBufferedItems = null, int? maxBufferedDeltaChars = null)
 	{
 		_bus           = bus;
@@ -37,7 +44,7 @@ public sealed class TurnEventPublisher : ITurnProgressSink, IDisposable
 	/// <inheritdoc />
 	public void Publish(TurnProgress progress)
 	{
-		if (_disposed)
+		if (_disposed || IsClosed(progress))
 			return;
 
 		try
@@ -70,13 +77,14 @@ public sealed class TurnEventPublisher : ITurnProgressSink, IDisposable
 					break;
 
 				case TurnFinishedProgress finished:
+					MarkClosed(finished.TurnId);
 					if (_turns.TryRemove(finished.TurnId, out var channel))
 						channel.Close();
 
 					// A turn that never ran gets no TurnCompleted from the file service: say so here, after its last notification.
 					if (!finished.Ran)
 						_bus.Publish(RemoteProtocol.Events.TurnCompleted,
-							new TurnCompletedPayload(finished.NodeId, finished.Cancelled, finished.Error, finished.TurnId));
+							new TurnCompletedPayload(finished.NodeId, finished.Cancelled, finished.Error, finished.TurnId, NeverRan: true));
 					break;
 			}
 		}
@@ -92,6 +100,27 @@ public sealed class TurnEventPublisher : ITurnProgressSink, IDisposable
 		foreach (var channel in _turns.Values)
 			channel.Close();
 		_turns.Clear();
+	}
+
+	private bool IsClosed(TurnProgress progress)
+	{
+		if (progress is TurnStartedProgress or TurnFinishedProgress)
+			return false;
+
+		lock (_closedGate) return _closed.Contains(progress.TurnId);
+	}
+
+	private void MarkClosed(string turnId)
+	{
+		lock (_closedGate)
+		{
+			if (!_closed.Add(turnId))
+				return;
+
+			_closedOrder.Enqueue(turnId);
+			while (_closedOrder.Count > Constants.Turns.Limits.ClosedTurnsRemembered)
+				_closed.Remove(_closedOrder.Dequeue());
+		}
 	}
 
 	private TurnChannel Channel(TurnProgress progress) =>
