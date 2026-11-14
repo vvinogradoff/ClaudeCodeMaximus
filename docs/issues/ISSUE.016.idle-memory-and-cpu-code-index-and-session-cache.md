@@ -1,7 +1,7 @@
 # ISSUE.016: Idle 1.9 GB / 70-110% CPU and GC-driven UI hangs: code index rescans and unbounded session cache
 
 **Status:** Fixes built and tested in branch `wpf/p0-perf` (1724 + 95 tests green). Not yet observed in the running app; compare MEM lines before and after (see Verification).
-**Affects:** the Avalonia app (daily driver). Related: ISSUE.015 (switch latency), WPF plan items 0.4, 0.5; `.perf-diag/` reports 01-12.
+**Affects:** the Avalonia app (daily driver). Related: ISSUE.015 (tree-search FTS), WPF plan items 0.4, 0.5; `.perf-diag/` reports 01-12.
 
 ## Summary
 
@@ -27,7 +27,7 @@ The dominant cost was not the session cache but the **code index** (`CodeIndex`,
 | 4 | `_sessionCache` keeps every opened `SessionViewModel` (messages, two watchers, timers, code-index reference) forever; `Dispose` was never called, and had gaps (see 5) | `MainWindowViewModel.cs:36` (pre-fix) | High (code), medium on size (messages are a small share of the heap: no Avalonia/VM type shows in the histogram top) |
 | 5 | Undisposed `WhenAnyValue(...).Subscribe` on the long-lived `SessionNodeViewModel` (SessionViewModel x2, TurnController x1) would keep an evicted VM and its transcript reachable; thinking timer and pending draft timer not stopped | `SessionViewModel.cs:464-465`, `TurnController.cs:281` | High (code) |
 | 6 | Switch re-reads and parses the whole session file | `SessionViewModel.RestoreLastUsedSettings` | High (code); small share of the measured 255 ms |
-| 7 | Not addressed: transcript not virtualized (SessionView build dominates `session-switch-until-idle`), startup scans on the UI thread, 60 s recency refresh over ~3,100 nodes | see ISSUE.015, WPF plan | Known |
+| 7 | Not addressed: transcript not virtualized (SessionView build dominates `session-switch-until-idle`), startup scans on the UI thread, 60 s recency refresh over ~3,100 nodes | see WPF plan (transcript virtualization, 1.10) | Known |
 
 Ruled out: `SessionView` event subscriptions (planned D2.3). `SessionView.OnDataContextChanged` already unsubscribes `Messages.CollectionChanged`, `CancelScheduleRequested`, `StreamingDisableConfirmationRequested` and the progress-message handler from the previous VM; the view is a single instance. The real leak was on the VM side (cause 5). The 1 s screensaver tick and the 60 s recency tick are cheap.
 
@@ -43,7 +43,7 @@ Ruled out: `SessionView` event subscriptions (planned D2.3). `SessionView.OnData
 - A tree larger than 200k files (HardStop) is truncated for autocomplete (Warning logged). A real fix is `.gitignore`-aware indexing or indexing on first `#` use (lazy) instead of at session open; a UX decision.
 - Index per-file memory could drop further with a trie or a name-only array.
 - Startup `RefreshLastPromptTimes` / `RefreshGitOrigins` still read files on the UI thread (4 of 6 hangs).
-- Transcript virtualization (WPF 1.10) for switch latency; Avalonia 11.3.9 -> latest (D2.5) not done.
+- Transcript virtualization (WPF 1.10) for switch latency; the Avalonia bump (D2.5) is already done on master (11.3.23, commit db8913d).
 - Scroll offset of an evicted session is lost on reload.
 
 ## Verification
