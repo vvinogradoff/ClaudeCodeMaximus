@@ -106,7 +106,7 @@ public sealed class SessionEntryReader : ISessionEntryReader
 		if (_store != null)
 		{
 			var stored = _store.ReadEntry(fileName, index) ?? throw new TdcpException("Entry not found");
-			return new SessionEntryDto(index, stored.Entry, int.MaxValue);
+			return stored.Entry.ToDto(index, int.MaxValue);
 		}
 
 		var entries = GetAll(fileName);
@@ -121,7 +121,7 @@ public sealed class SessionEntryReader : ISessionEntryReader
 	{
 		var page = _store!.ReadPage(fileName, new SessionContentPageRequest(beforeIndex, afterIndex, limit, int.MaxValue, int.MaxValue));
 		var dtos = page.Entries
-			.Select(e => new SessionEntryDto(e.Ordinal, e.Entry, Constants.Remote.Limits.EntryContentMaxChars))
+			.Select(e => e.Entry.ToDto(e.Ordinal, Constants.Remote.Limits.EntryContentMaxChars))
 			.ToList();
 
 		return new SessionEntriesResult(nodeId, epoch, page.Total, dtos);

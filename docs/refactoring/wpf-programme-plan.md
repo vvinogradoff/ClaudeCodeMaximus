@@ -124,7 +124,7 @@ Makes the daily driver faster. Only 0.8 needs a requirements change.
 | 0.7 | Switch-latency instrumentation; a synthetic benchmark data generator (never real data); the benchmark from §7 | test tooling | Baseline recorded in ISSUE.016 | Instrumentation **done** by the perf session (`OperationTimer` `session-switch`, UI hang watchdog, MEM lines). The generator comes with the transcript prototype (40). |
 | 0.8 | Link fidelity: the instruction block tells every session to write full URLs for GitHub PRs, issues and commits, Linear issues and Slack messages | `code/TessynDesktop.Core/Services/InstructionBlockBuilder.cs` | FR.26 approved first; a test asserts the text | **Done**, `afc5f47`. The FR.26 text moves into requirements.md after the FR.25 review. |
 | 0.9 | File ISSUE.016 with the causes in §3 and the live evidence | `docs/issues/` | — | **Done**: `docs/issues/ISSUE.016.idle-memory-and-cpu-code-index-and-session-cache.md`, merged `91b8d0c`. |
-| 0.10 | Startup scans off the UI thread: `RefreshLastPromptTimes` and `RefreshGitOrigins` (5 of the 6 recorded hangs, ~5 s each) | `SessionTreeViewModel.cs`, new Core scanners | No startup hang | Built on `wpf/p0-startup-scans`; review: merge after fixes (a late apply must not overwrite newer values; the Recent dropdown waits for the scan). Fixes in progress. |
+| 0.10 | Startup scans off the UI thread: `RefreshLastPromptTimes` and `RefreshGitOrigins` (5 of the 6 recorded hangs, ~5 s each) | `SessionTreeViewModel.cs`, new Core scanners | No startup hang | **Done**, merged `bfe4691`, with the review fixes: a late scan result never overwrites newer live values, and the Recent dropdown refreshes when the scan completes. |
 
 Exit: green on .NET 10; baseline numbers recorded; no sweep stall; flat memory across switches; logs
 around 50 MB/day or less.
@@ -151,11 +151,11 @@ Avalonia keeps working throughout. **[web+]** marks changes that also help Tessy
 
 | Step | Work package | Content | Status |
 |---|---|---|---|
-| 1 | P1.A Local push parity | Loopback SSE carries the same bus events as the relay, with SSE ids; legacy frames only on request | Done on `wpf/p1-foundation`; review verdict: merge. Follow-up fixes in progress (worker 122). |
-| 2 | P1.B Event log with resume | Monotonic `eventSeq`, bounded ring, `Last-Event-ID` replay or `resync` **[web+]** | Done on `wpf/p1-foundation`; review verdict: merge. Follow-up fixes in progress (worker 122). |
-| 3 | P1.C Hello and discovery (was 2.2) | `client.hello` capabilities; `%AppData%\TessynDesktop\daemon.json`; the token moves out of `appsettings.json` into a DPAPI file; constant-time compare; requests with an `Origin` header rejected; 401 on a bad token | Done on `wpf/p1-foundation`; review verdict: merge. Follow-up fixes in progress (worker 122). |
-| 4 | P1.D Contract tests | One suite over in-process, loopback and relay transports; golden shapes of the 21 remote methods | Done on `wpf/p1-foundation`; review verdict: merge. Follow-up fixes in progress (worker 122). |
-| 5 | P1.E Content store v2 | Per-session sidecar index; persisted `entryId`s that survive restarts; byte-range paging; `SessionEntryReader` backed by it; JSONL-to-`.txt` sync owned by the daemon alone (ends the ISSUE.009/014 class) **[web+]** | Done on `wpf/p1-content-store`; review verdict: merge. Follow-up fixes in progress (worker 122). |
+| 1 | P1.A Local push parity | Loopback SSE carries the same bus events as the relay, with SSE ids; legacy frames only on request | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
+| 2 | P1.B Event log with resume | Monotonic `eventSeq`, bounded ring, `Last-Event-ID` replay or `resync` **[web+]** | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
+| 3 | P1.C Hello and discovery (was 2.2) | `client.hello` capabilities; `%AppData%\TessynDesktop\daemon.json`; the token moves out of `appsettings.json` into a DPAPI file; constant-time compare; requests with an `Origin` header rejected; 401 on a bad token | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
+| 4 | P1.D Contract tests | One suite over in-process, loopback and relay transports; golden shapes of the 21 remote methods | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
+| 5 | P1.E Content store v2 | Per-session sidecar index; persisted `entryId`s that survive restarts; byte-range paging; `SessionEntryReader` backed by it; JSONL-to-`.txt` sync owned by the daemon alone (ends the ISSUE.009/014 class) **[web+]** | **Done**, merged `4d60cf0`, with review fixes B1–B3. Master after the merges: 1,880 + 95 + 16 tests green. One known timing flake is being fixed (worker 150). |
 | 6 | P1.F Entry ids and seq on the wire | `entryId`, `fileId` and `seq` fields; `afterSeq`/`beforeEntryId` paging; `entries.appended` with inline entries, published beside `session.appended` **[web+]** | Next |
 | 7 | P1.G O(1) session header | `session.get` from the sidecar; batch `session.headers` | Next |
 | 8 | P1.H Selection is client state | WPF never calls `tree.getSelected/setSelected`; a client-owned layout file | Docs only |
