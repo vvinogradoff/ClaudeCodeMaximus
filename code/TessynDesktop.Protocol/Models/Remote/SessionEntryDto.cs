@@ -6,32 +6,6 @@ namespace TessynDesktop.Models.Remote;
 /// <remarks>Created by Claude</remarks>
 public sealed record SessionEntryDto
 {
-	public SessionEntryDto()
-	{
-	}
-
-	/// <summary>Maps <paramref name="model"/>; the content is cut to <paramref name="maxContentChars"/> characters when longer.</summary>
-	public SessionEntryDto(int index, SessionEntryModel model, int maxContentChars)
-	{
-		Index       = index;
-		Timestamp   = model.Timestamp;
-		Role        = model.Role.ToLowerInvariant();
-		ProfileName = model.ProfileName;
-		ModelId     = model.ModelId;
-		Effort      = model.Effort;
-
-		if (model.Content.Length > maxContentChars)
-		{
-			Content    = model.Content[..maxContentChars];
-			Truncated  = true;
-			FullLength = model.Content.Length;
-		}
-		else
-		{
-			Content = model.Content;
-		}
-	}
-
 	/// <summary>Position in the parsed entry list.</summary>
 	public int Index { get; init; }
 

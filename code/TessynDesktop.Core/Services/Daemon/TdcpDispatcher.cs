@@ -16,12 +16,12 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public sealed class TdcpDispatcher
 {
-	private const int ParseError = -32700;
-	private const int InvalidRequest = -32600;
-	private const int MethodNotFound = -32601;
-	private const int InvalidParams = -32602;
-	private const int DaemonError = -32000;
-	private const int InternalError = -32603;
+	private const int ParseError = TessynDesktop.Models.Remote.RemoteProtocol.ErrorCodes.ParseError;
+	private const int InvalidRequest = TessynDesktop.Models.Remote.RemoteProtocol.ErrorCodes.InvalidRequest;
+	private const int MethodNotFound = TessynDesktop.Models.Remote.RemoteProtocol.ErrorCodes.MethodNotFound;
+	private const int InvalidParams = TessynDesktop.Models.Remote.RemoteProtocol.ErrorCodes.InvalidParams;
+	private const int DaemonError = TessynDesktop.Models.Remote.RemoteProtocol.ErrorCodes.DaemonError;
+	private const int InternalError = TessynDesktop.Models.Remote.RemoteProtocol.ErrorCodes.InternalError;
 
 	private const string InternalErrorMessage = "Internal error";
 	private const string InvalidParamsMessage = "Invalid params";

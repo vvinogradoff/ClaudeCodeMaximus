@@ -611,9 +611,9 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string McpServerName        = "cmx";
 		public const string McpConfigFolderName  = "mcp";
 		public const string McpConfigFileName    = "mcp-config.json";
-		public const string TokenHeader          = "X-CMX-Token";
+		public const string TokenHeader          = TessynDesktop.Models.Remote.RemoteProtocol.TokenHeader;
 		public const string McpEndpointPath      = "/mcp";
-		public const string TdcpEndpointPath     = "/tdcp";
+		public const string TdcpEndpointPath     = TessynDesktop.Models.Remote.RemoteProtocol.EndpointPath;
 
 		/// <summary>Skill name and on-disk layout for the orchestration skill (FR.15.11).
 		/// Provisioned under each profile's config dir as skills/{OrchestrationSkillName}/SKILL.md.</summary>

@@ -163,7 +163,7 @@ public sealed class SessionStateBuilderTests : IDisposable
 	{
 		var model = new AttentionSummaryModel { OpenCount = 1, TopKind = AttentionKind.Ask, AllOpenCount = 4, AllOpenTopKind = AttentionKind.Critical };
 
-		var dto = new AttentionSummaryDto(model);
+		var dto = model.ToDto();
 		var json = JsonSerializer.SerializeToNode(dto, TdcpJsonOptions.Default)!.AsObject();
 
 		Assert.Equal(1, dto.OpenCount);
@@ -173,7 +173,7 @@ public sealed class SessionStateBuilderTests : IDisposable
 		Assert.Equal("ask", json["topKind"]!.GetValue<string>());
 		Assert.Equal("critical", json["allOpenTopKind"]!.GetValue<string>());
 
-		var empty = JsonSerializer.SerializeToNode(new AttentionSummaryDto(new AttentionSummaryModel()), TdcpJsonOptions.Default)!.AsObject();
+		var empty = JsonSerializer.SerializeToNode(new AttentionSummaryModel().ToDto(), TdcpJsonOptions.Default)!.AsObject();
 		Assert.False(empty.ContainsKey("topKind"));
 		Assert.False(empty.ContainsKey("allOpenTopKind"));
 		Assert.Equal(0, empty["openCount"]!.GetValue<int>());
@@ -182,7 +182,7 @@ public sealed class SessionStateBuilderTests : IDisposable
 	[Fact]
 	public void AttentionSummaryDto_RoundTripsThroughJson()
 	{
-		var dto = new AttentionSummaryDto(new AttentionSummaryModel { OpenCount = 2, TopKind = AttentionKind.Todo, AllOpenCount = 3, AllOpenTopKind = AttentionKind.Alert });
+		var dto = new AttentionSummaryModel { OpenCount = 2, TopKind = AttentionKind.Todo, AllOpenCount = 3, AllOpenTopKind = AttentionKind.Alert }.ToDto();
 
 		var json = JsonSerializer.Serialize(dto, TdcpJsonOptions.Default);
 		var back = JsonSerializer.Deserialize<AttentionSummaryDto>(json, TdcpJsonOptions.Default);
