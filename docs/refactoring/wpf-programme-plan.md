@@ -156,10 +156,10 @@ Avalonia keeps working throughout. **[web+]** marks changes that also help Tessy
 | 3 | P1.C Hello and discovery (was 2.2) | `client.hello` capabilities; `%AppData%\TessynDesktop\daemon.json`; the token moves out of `appsettings.json` into a DPAPI file; constant-time compare; requests with an `Origin` header rejected; 401 on a bad token | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
 | 4 | P1.D Contract tests | One suite over in-process, loopback and relay transports; golden shapes of the 21 remote methods | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
 | 5 | P1.E Content store v2 | Per-session sidecar index; persisted `entryId`s that survive restarts; byte-range paging; `SessionEntryReader` backed by it; JSONL-to-`.txt` sync owned by the daemon alone (ends the ISSUE.009/014 class) **[web+]** | **Done**, merged `4d60cf0`, with review fixes B1–B3. Master after the merges: 1,880 + 95 + 16 tests green. One known timing flake is being fixed (worker 150). |
-| 6 | P1.F Entry ids and seq on the wire | `entryId`, `fileId` and `seq` fields; `afterSeq`/`beforeEntryId` paging; `entries.appended` with inline entries, published beside `session.appended` **[web+]** | Next |
-| 7 | P1.G O(1) session header | `session.get` from the sidecar; batch `session.headers` | Next |
+| 6 | P1.F Entry ids and seq on the wire | `entryId`, `fileId` and `seq` fields; `afterSeq`/`beforeEntryId` paging; `entries.appended` with inline entries, published beside `session.appended` **[web+]** | In progress (worker 170) |
+| 7 | P1.G O(1) session header | `session.get` from the sidecar; batch `session.headers` | In progress (worker 170) |
 | 8 | P1.H Selection is client state | WPF never calls `tree.getSelected/setSelected`; a client-owned layout file | Docs only |
-| 9 | P1.I Turn engine in Core | Move `TurnController`'s path into Core; `turn.started/delta/tool/status/usage` events; `turn.send`, with `session.send` kept as an alias **[web+]** | After 5–6 |
+| 9 | P1.I Turn engine in Core | Move `TurnController`'s path into Core; `turn.started/delta/tool/status/usage` events; `turn.send`, with `session.send` kept as an alias **[web+]** | In progress (worker 180), safety-net tests first |
 | 10 | P1.J Complete the wire | Loopback-only unless stated: tree mutation; global search and import; profiles (including ISSUE.013 `profile.switch`); versioned settings sections; schedules as DTOs; drafts; `attention.listAll` **[web+]**; `daemon.health` | After 3–7 |
 | 11 | P1.K Persistence split (P6, P7) | Tree, schedules and Telegram maps out of `appsettings.json`; a debounced single writer; `settings.changed` events | After 10 |
 | — | 1.8 ISSUE.013 daemon side · 1.9 index upkeep · 1.10 transcript prototype | Unchanged, in parallel. 1.10 is in progress (worker 40). | |
@@ -177,8 +177,13 @@ Exit:
 
 ### Phase 2 — WPF MVP beside Avalonia (M–L)
 
-**Status 2026-11-14:**
-- P2.A is in progress (worker 130): `TessynDesktop.Protocol` (the remote message types and wire constants moved out of Core) and `TessynDesktop.Client` (async `ITessynClient`, discovery through `daemon.json` and the DPAPI token, resumable SSE).
+**Status 2026-11-14 (later):**
+- **P2.A merged** (`03a3061`): `TessynDesktop.Protocol` and `TessynDesktop.Client`, after a review with fixes; master is green with 1,920 + 95 + 16 tests.
+- The WPF shell (2.1, 2.4–2.8) stage A is done: 123 view-model tests, and the transcript security design was reviewed as sound. The review fixes (the app did not exit; duplicate-append races) and stage B (the real client, live run) are in progress (worker 140).
+- P1.F/G (worker 170) and P1.I turn engine (worker 180) are in progress.
+
+Earlier status:
+- P2.A was in progress (worker 130): `TessynDesktop.Protocol` (the remote message types and wire constants moved out of Core) and `TessynDesktop.Client` (async `ITessynClient`, discovery through `daemon.json` and the DPAPI token, resumable SSE).
 - The WPF shell (2.1, 2.4) starts as soon as the client interface is committed.
 
 Starts when 1.1, 1.2, 1.4 and the 1.6 skeleton land. The first visible result is a read-only viewer;
