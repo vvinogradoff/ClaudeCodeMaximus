@@ -135,4 +135,94 @@ public sealed class SchedulerServiceConcurrencyTests : IDisposable
 			await Task.Delay(20);
 		Assert.Empty(settings.Settings.Schedules);
 	}
+
+	// ── Review fixes R1/R2 ───────────────────────────────────────────────────────
+
+	/// <summary>R1: 29 Feb fired on 29 Feb 2096 next matches 8 years later; that is not an invalid expression.</summary>
+	[Fact]
+	public void Poll_LeapDayCron_RearmsFarAheadInsteadOfBeingRemoved()
+	{
+		var settings = new AppSettingsService(_tempDir);
+		var registry = new FakeSessionRegistry();
+		registry.AddNode(new SessionNodeModel { NodeId = "n", Name = "n", FileName = "n.txt", WorkingDirectory = @"C:\proj" });
+		var leap = new ScheduleModel
+		{
+			ScheduleId = "leap", TargetNodeId = "n", Prompt = "p", Kind = ScheduleKind.Cron,
+			CronExpression = "0 0 29 2 *", FireAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1),
+		};
+		settings.Settings.Schedules.Add(leap);
+		var scheduler = new SchedulerService(settings, new FakeTurnService(), registry);
+
+		scheduler.Poll();
+
+		var deadline = DateTime.UtcNow.AddSeconds(5);
+		while (DateTime.UtcNow < deadline && leap.FireCount == 0)
+			Thread.Sleep(20);
+		Assert.Contains(leap, settings.Settings.Schedules);
+		Assert.True(leap.FireAtUtc > DateTimeOffset.UtcNow);
+		Assert.Equal(2, leap.FireAtUtc!.Value.Month);
+		Assert.Equal(29, leap.FireAtUtc.Value.Day);
+	}
+
+	/// <summary>A valid expression that never matches (31 Feb) is parked, not rejected.</summary>
+	[Fact]
+	public void AddSchedule_ValidCronThatNeverMatches_IsParkedNotRejected()
+	{
+		var settings = new AppSettingsService(_tempDir);
+		var scheduler = new SchedulerService(settings, new FakeTurnService(), new FakeSessionRegistry());
+
+		// 31 Feb never exists: valid syntax, no occurrence. Parked (never due), not removed and not thrown.
+		scheduler.AddSchedule(new ScheduleModel
+		{
+			ScheduleId = "never", TargetNodeId = "n", Prompt = "p", Kind = ScheduleKind.Cron, CronExpression = "0 0 31 2 *",
+		});
+
+		var saved = Assert.Single(settings.Settings.Schedules);
+		Assert.Null(saved.FireAtUtc);
+	}
+
+	[Theory]
+	[InlineData("*/0 * * * *")]
+	[InlineData("0-30/0 * * * *")]
+	[InlineData("* * * * */0")]
+	[InlineData("*/-1 * * * *")]
+	[InlineData("0-99999999 * * * *")]
+	[InlineData("*/2147483647 * * * *")]
+	public async Task AddSchedule_CronWithZeroStepOrBadRange_IsRejectedWithoutHanging(string cron)
+	{
+		var settings = new AppSettingsService(_tempDir);
+		var scheduler = new SchedulerService(settings, new FakeTurnService(), new FakeSessionRegistry());
+		var schedule = new ScheduleModel
+		{
+			ScheduleId = "z", TargetNodeId = "n", Prompt = "p", Kind = ScheduleKind.Cron, CronExpression = cron,
+		};
+
+		Exception? ex = null;
+		var t = Task.Run(() => ex = Record.Exception(() => scheduler.AddSchedule(schedule)));
+
+		await t.WaitAsync(TimeSpan.FromSeconds(10)); // TimeoutException = AddSchedule hung on the cron expression
+		if (cron.StartsWith("*/2147483647"))
+			Assert.Null(ex); // a huge step is valid: only minute 0 matches
+		else
+		{
+			Assert.IsType<ArgumentException>(ex);
+			Assert.Empty(settings.Settings.Schedules);
+		}
+	}
+
+	[Fact]
+	public async Task Start_PersistedScheduleWithZeroStep_IsDroppedAndDoesNotHang()
+	{
+		var settings = new AppSettingsService(_tempDir);
+		var bad = BadCron(MissedFirePolicy.Skip);
+		bad.CronExpression = "*/0 * * * *";
+		settings.Settings.Schedules.Add(bad);
+		var scheduler = new SchedulerService(settings, new FakeTurnService(), new FakeSessionRegistry());
+
+		var t = Task.Run(scheduler.Start);
+
+		await t.WaitAsync(TimeSpan.FromSeconds(10)); // TimeoutException = Start hung on a */0 cron expression
+		scheduler.Stop();
+		Assert.Empty(settings.Settings.Schedules);
+	}
 }

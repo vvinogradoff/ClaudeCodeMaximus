@@ -58,7 +58,12 @@ public sealed class SchedulerService : ISchedulerService
 	{
 		// For cron, compute the first FireAtUtc from 'now'.
 		if (schedule.Kind == ScheduleKind.Cron && schedule.FireAtUtc == null)
-			schedule.FireAtUtc = CronHelper.GetNextOccurrence(schedule.CronExpression!, DateTimeOffset.UtcNow);
+		{
+			// An invalid expression throws ArgumentException to the caller and nothing is added. An expression that
+			// is valid but never matches within the scan window is stored parked (FireAtUtc null: never due).
+			var first = CronHelper.TryGetNextOccurrence(schedule.CronExpression!, DateTimeOffset.UtcNow);
+			schedule.FireAtUtc = first;
+		}
 
 		lock (_lock)
 			_appSettings.Settings.Schedules.Add(schedule);
@@ -156,15 +161,15 @@ public sealed class SchedulerService : ISchedulerService
 						if (s.Kind == ScheduleKind.Cron)
 						{
 							// Advance to next future occurrence without firing.
-							var next = TryGetNextCronOccurrence(s, now);
+							var (invalid, next) = TryGetNextCronOccurrence(s, now);
 							lock (_lock)
 							{
-								if (next == null)
+								if (invalid)
 									_appSettings.Settings.Schedules.Remove(s);
 								else
-									s.FireAtUtc = next;
+									s.FireAtUtc = next; // null parks a schedule that never matches
 							}
-							if (next != null)
+							if (!invalid && next != null)
 								_log.Information("Missed cron fire skipped, advanced: {Id} → {At}", s.ScheduleId, next);
 						}
 						else
@@ -192,20 +197,25 @@ public sealed class SchedulerService : ISchedulerService
 	}
 
 	/// <summary>
-	/// The next occurrence of a cron schedule, or null (logged) when its expression cannot be evaluated. A persisted
-	/// schedule with such an expression can never fire correctly, so callers drop it instead of retrying forever.
+	/// The next occurrence of a cron schedule. <c>Invalid</c> is true (and logged) when the expression cannot be
+	/// evaluated: such a schedule can never fire correctly, so callers drop it instead of retrying forever.
+	/// A valid expression with no match inside the scan window yields <c>Next == null</c> and is NOT invalid.
 	/// </summary>
-	private DateTimeOffset? TryGetNextCronOccurrence(ScheduleModel schedule, DateTimeOffset after)
+	private (bool Invalid, DateTimeOffset? Next) TryGetNextCronOccurrence(ScheduleModel schedule, DateTimeOffset after)
 	{
 		try
 		{
-			return CronHelper.GetNextOccurrence(schedule.CronExpression!, after);
+			var next = CronHelper.TryGetNextOccurrence(schedule.CronExpression!, after);
+			if (next == null)
+				_log.Warning("Schedule {Id}: cron expression '{Cron}' has no occurrence within {Years} years → parked",
+					schedule.ScheduleId, schedule.CronExpression, CronHelper.ScanYears);
+			return (false, next);
 		}
 		catch (Exception ex)
 		{
 			_log.Error(ex, "Schedule {Id}: cron expression '{Cron}' is not usable → removing the schedule",
 				schedule.ScheduleId, schedule.CronExpression);
-			return null;
+			return (true, null);
 		}
 	}
 
@@ -274,11 +284,11 @@ public sealed class SchedulerService : ISchedulerService
 				shouldRemove = schedule.MaxFires > 0 && schedule.FireCount >= schedule.MaxFires;
 				if (!shouldRemove)
 				{
-					var next = TryGetNextCronOccurrence(schedule, DateTimeOffset.UtcNow);
-					if (next == null)
+					var (invalid, next) = TryGetNextCronOccurrence(schedule, DateTimeOffset.UtcNow);
+					if (invalid)
 						shouldRemove = true; // unusable expression: drop it so it is not retried on every poll
 					else
-						schedule.FireAtUtc = next;
+						schedule.FireAtUtc = next; // null parks a schedule that never matches again
 				}
 				if (shouldRemove)
 					_appSettings.Settings.Schedules.Remove(schedule);
@@ -331,8 +341,17 @@ public sealed class SchedulerService : ISchedulerService
 /// </summary>
 file static class CronHelper
 {
-	/// <summary>Returns the next occurrence after <paramref name="after"/>, aligned to whole minutes.</summary>
-	public static DateTimeOffset GetNextOccurrence(string expression, DateTimeOffset after)
+	/// <summary>
+	/// How far ahead the scan looks. A 29 February schedule's next match can be 8 years away (2096 → 2104), so
+	/// the window must exceed that.
+	/// </summary>
+	public const int ScanYears = 10;
+
+	/// <summary>
+	/// Returns the next occurrence after <paramref name="after"/>, aligned to whole minutes, or null when the
+	/// (valid) expression has no match within <see cref="ScanYears"/>. Throws for an invalid expression.
+	/// </summary>
+	public static DateTimeOffset? TryGetNextOccurrence(string expression, DateTimeOffset after)
 	{
 		var parts = expression.Trim().Split(' ');
 		if (parts.Length != 5)
@@ -350,8 +369,7 @@ file static class CronHelper
 			after.UtcDateTime.Hour, after.UtcDateTime.Minute, 0, TimeSpan.Zero)
 			.AddMinutes(1);
 
-		// Scan up to 2 years to find the next match.
-		var limit = after.AddYears(2);
+		var limit = after.AddYears(ScanYears);
 		while (candidate < limit)
 		{
 			if (!monthSet.Contains(candidate.Month))     { candidate = candidate.AddMonths(1); candidate = AlignToMonth(candidate); continue; }
@@ -361,7 +379,7 @@ file static class CronHelper
 			if (!minuteSet.Contains(candidate.Minute))   { candidate = candidate.AddMinutes(1); continue; }
 			return candidate;
 		}
-		throw new InvalidOperationException($"Cron expression '{expression}' has no occurrence in the next 2 years.");
+		return null;
 	}
 
 	private static DateTimeOffset AlignToMonth(DateTimeOffset dt) =>
@@ -377,31 +395,47 @@ file static class CronHelper
 		foreach (var part in field.Split(','))
 		{
 			if (part == "*")
-			{ for (var i = min; i <= max; i++) set.Add(i); }
+				AddRange(set, min, max, 1, field, min, max);
 			else if (part.StartsWith("*/"))
-			{
-				var step = int.Parse(part[2..]);
-				for (var i = min; i <= max; i += step) set.Add(i);
-			}
+				AddRange(set, min, max, ParseNumber(part[2..], field), field, min, max);
 			else if (part.Contains('-'))
 			{
 				var dash = part.IndexOf('-');
-				var lo   = int.Parse(part[..dash]);
+				var lo   = ParseNumber(part[..dash], field);
 				var rest = part[(dash + 1)..];
-				int hi, step2 = 1;
+				var step = 1;
+				int hi;
 				if (rest.Contains('/'))
 				{
 					var slash = rest.IndexOf('/');
-					hi    = int.Parse(rest[..slash]);
-					step2 = int.Parse(rest[(slash + 1)..]);
+					hi   = ParseNumber(rest[..slash], field);
+					step = ParseNumber(rest[(slash + 1)..], field);
 				}
 				else
-					hi = int.Parse(rest);
-				for (var i = lo; i <= hi; i += step2) set.Add(i);
+					hi = ParseNumber(rest, field);
+				AddRange(set, lo, hi, step, field, min, max);
 			}
 			else
-				set.Add(int.Parse(part));
+			{
+				var value = ParseNumber(part, field);
+				AddRange(set, value, value, 1, field, min, max);
+			}
 		}
 		return set;
+	}
+
+	private static int ParseNumber(string text, string field) =>
+		int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n)
+			? n
+			: throw new ArgumentException($"Invalid cron field '{field}': '{text}' is not a number");
+
+	/// <summary>Adds lo..hi by step. A step of 0 would never advance, so it (and any out-of-range bound) is invalid.</summary>
+	private static void AddRange(HashSet<int> set, int lo, int hi, int step, string field, int min, int max)
+	{
+		if (step <= 0)
+			throw new ArgumentException($"Invalid cron field '{field}': step must be at least 1");
+		if (lo < min || hi > max || lo > hi)
+			throw new ArgumentException($"Invalid cron field '{field}': range {lo}-{hi} is outside {min}-{max}");
+		for (long i = lo; i <= hi; i += step) set.Add((int)i);
 	}
 }
