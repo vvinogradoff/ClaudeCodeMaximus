@@ -1,4 +1,5 @@
 using System;
+using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop;
 
@@ -9,49 +10,49 @@ public static partial class Constants
 	public static class Remote
 	{
 		/// <summary>Version reported by <c>client.hello</c>; bumped only for a breaking wire change.</summary>
-		public const int ProtocolVersion = 1;
+		public const int ProtocolVersion = RemoteProtocol.ProtocolVersion;
 
 		/// <summary>JSON-RPC method names that may cross the relay (contract section 3).</summary>
 		public static class Methods
 		{
-			public const string ClientHello = "client.hello";
-			public const string TreeSnapshot = "tree.snapshot";
-			public const string TreeWorkers = "tree.workers";
-			public const string TreeSearch = "tree.search";
-			public const string TreeCreateSession = "tree.createSession";
-			public const string RecentList = "recent.list";
-			public const string RecentHide = "recent.hide";
-			public const string TagsSearch = "tags.search";
-			public const string SessionGet = "session.get";
-			public const string SessionEntries = "session.entries";
-			public const string SessionEntry = "session.entry";
-			public const string SessionSend = "session.send";
-			public const string SessionStop = "session.stop";
-			public const string SessionCompact = "session.compact";
-			public const string SessionSetFavorite = "session.setFavorite";
-			public const string SessionSetStreaming = "session.setStreaming";
-			public const string AttentionList = "attention.list";
-			public const string AttentionReply = "attention.reply";
-			public const string AttentionDismiss = "attention.dismiss";
-			public const string CatalogGet = "catalog.get";
-			public const string UsageGet = "usage.get";
+			public const string ClientHello = RemoteProtocol.Methods.ClientHello;
+			public const string TreeSnapshot = RemoteProtocol.Methods.TreeSnapshot;
+			public const string TreeWorkers = RemoteProtocol.Methods.TreeWorkers;
+			public const string TreeSearch = RemoteProtocol.Methods.TreeSearch;
+			public const string TreeCreateSession = RemoteProtocol.Methods.TreeCreateSession;
+			public const string RecentList = RemoteProtocol.Methods.RecentList;
+			public const string RecentHide = RemoteProtocol.Methods.RecentHide;
+			public const string TagsSearch = RemoteProtocol.Methods.TagsSearch;
+			public const string SessionGet = RemoteProtocol.Methods.SessionGet;
+			public const string SessionEntries = RemoteProtocol.Methods.SessionEntries;
+			public const string SessionEntry = RemoteProtocol.Methods.SessionEntry;
+			public const string SessionSend = RemoteProtocol.Methods.SessionSend;
+			public const string SessionStop = RemoteProtocol.Methods.SessionStop;
+			public const string SessionCompact = RemoteProtocol.Methods.SessionCompact;
+			public const string SessionSetFavorite = RemoteProtocol.Methods.SessionSetFavorite;
+			public const string SessionSetStreaming = RemoteProtocol.Methods.SessionSetStreaming;
+			public const string AttentionList = RemoteProtocol.Methods.AttentionList;
+			public const string AttentionReply = RemoteProtocol.Methods.AttentionReply;
+			public const string AttentionDismiss = RemoteProtocol.Methods.AttentionDismiss;
+			public const string CatalogGet = RemoteProtocol.Methods.CatalogGet;
+			public const string UsageGet = RemoteProtocol.Methods.UsageGet;
 		}
 
 		/// <summary>Notification names published on the remote event bus (contract section 4).</summary>
 		public static class Events
 		{
-			public const string TreeChanged = "tree.changed";
-			public const string SessionChanged = "session.changed";
-			public const string SessionAppended = "session.appended";
-			public const string SessionReset = "session.reset";
-			public const string TurnCompleted = "turn.completed";
-			public const string AttentionChanged = "attention.changed";
-			public const string TagsChanged = "tags.changed";
-			public const string UsageChanged = "usage.changed";
-			public const string IndexChanged = "index.changed";
+			public const string TreeChanged = RemoteProtocol.Events.TreeChanged;
+			public const string SessionChanged = RemoteProtocol.Events.SessionChanged;
+			public const string SessionAppended = RemoteProtocol.Events.SessionAppended;
+			public const string SessionReset = RemoteProtocol.Events.SessionReset;
+			public const string TurnCompleted = RemoteProtocol.Events.TurnCompleted;
+			public const string AttentionChanged = RemoteProtocol.Events.AttentionChanged;
+			public const string TagsChanged = RemoteProtocol.Events.TagsChanged;
+			public const string UsageChanged = RemoteProtocol.Events.UsageChanged;
+			public const string IndexChanged = RemoteProtocol.Events.IndexChanged;
 
 			/// <summary>Local-stream-only notification: the client's resume point is not covered and it must re-read its state. Params: <c>{ reason, eventSeq }</c>.</summary>
-			public const string Resync = "resync";
+			public const string Resync = RemoteProtocol.Events.Resync;
 		}
 
 		/// <summary>The event log that stamps <c>seq</c> on bus notifications and serves resume (P1.B).</summary>
@@ -67,13 +68,13 @@ public static partial class Constants
 			public static class ResyncReasons
 			{
 				/// <summary>The events after the client's seq are no longer (or were never) in the ring.</summary>
-				public const string Gap = "gap";
+				public const string Gap = RemoteProtocol.ResyncReasons.Gap;
 
 				/// <summary>The client's seq is newer than the log head, or it belongs to another daemon run.</summary>
-				public const string UnknownSeq = "unknown-seq";
+				public const string UnknownSeq = RemoteProtocol.ResyncReasons.UnknownSeq;
 
 				/// <summary>The stream's own queue overflowed and dropped events for a slow reader.</summary>
-				public const string Overflow = "overflow";
+				public const string Overflow = RemoteProtocol.ResyncReasons.Overflow;
 			}
 		}
 
@@ -81,13 +82,13 @@ public static partial class Constants
 		public static class Sse
 		{
 			/// <summary>Query flag (<c>?legacy=1</c>): also emit the legacy <c>tree.changed</c> / <c>schedule.changed</c> frames.</summary>
-			public const string LegacyQuery = "legacy";
+			public const string LegacyQuery = RemoteProtocol.Sse.LegacyQuery;
 
 			/// <summary>Optional query (<c>?runId=</c>): the run id the client's Last-Event-ID belongs to; a mismatch answers with a resync.</summary>
-			public const string RunIdQuery = "runId";
+			public const string RunIdQuery = RemoteProtocol.Sse.RunIdQuery;
 
 			/// <summary>Request header with the last event id a reconnecting client saw.</summary>
-			public const string LastEventIdHeader = "Last-Event-ID";
+			public const string LastEventIdHeader = RemoteProtocol.Sse.LastEventIdHeader;
 
 			/// <summary>Frames buffered per stream before the oldest are dropped (and a resync is signalled).</summary>
 			public const int ChannelCapacity = 1000;
@@ -97,20 +98,20 @@ public static partial class Constants
 		public static class Capabilities
 		{
 			/// <summary>The local SSE stream carries the bus notifications with ids.</summary>
-			public const string EventsLocal = "events.local";
+			public const string EventsLocal = RemoteProtocol.Capabilities.EventsLocal;
 
 			/// <summary>The local SSE stream honours Last-Event-ID and signals gaps with <see cref="Events.Resync"/>.</summary>
-			public const string EventsResume = "events.resume";
+			public const string EventsResume = RemoteProtocol.Capabilities.EventsResume;
 		}
 
 		/// <summary>Oldest client protocol version the daemon still serves.</summary>
-		public const int MinProtocolVersion = 1;
+		public const int MinProtocolVersion = RemoteProtocol.MinProtocolVersion;
 
 		/// <summary>Daemon discovery file (<c>daemon.json</c>) and the local token file.</summary>
 		public static class Discovery
 		{
-			public const string FileName = "daemon.json";
-			public const string TokenFileName = "tdcp-token.dat";
+			public const string FileName = RemoteProtocol.Discovery.FileName;
+			public const string TokenFileName = RemoteProtocol.Discovery.TokenFileName;
 		}
 
 		/// <summary>Debounce windows of the notification publisher (contract section 4).</summary>

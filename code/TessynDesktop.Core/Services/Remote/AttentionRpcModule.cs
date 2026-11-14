@@ -42,8 +42,8 @@ public sealed class AttentionRpcModule : IRemoteRpcModule
 
 		return new AttentionListResult(
 			node.NodeId,
-			new AttentionSummaryDto(_attention.GetSummary(node.NodeId)),
-			_attention.GetItems(node.NodeId).Select(item => new AttentionItemDto(item)).ToList());
+			_attention.GetSummary(node.NodeId).ToDto(),
+			_attention.GetItems(node.NodeId).Select(item => item.ToDto()).ToList());
 	}
 
 	private async Task<object?> ReplyAsync(JsonNode? @params)

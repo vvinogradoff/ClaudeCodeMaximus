@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TessynDesktop.Core\TessynDesktop.Core.csproj" />
+    <ProjectReference Include="..\TessynDesktop.Client\TessynDesktop.Client.csproj" />
   </ItemGroup>
 
 </Project>
