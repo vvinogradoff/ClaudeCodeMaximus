@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TessynDesktop.WPF", "Tessyn
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TessynDesktop.WPF.Tests", "TessynDesktop.WPF.Tests\TessynDesktop.WPF.Tests.csproj", "{D0771274-661C-4151-B61B-AAC50B967645}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TessynDesktop.WPF.E2E.Tests", "TessynDesktop.WPF.E2E.Tests\TessynDesktop.WPF.E2E.Tests.csproj", "{009D734B-0D54-4740-B589-74FA4E5867AD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -153,6 +155,18 @@ Global
 		{D0771274-661C-4151-B61B-AAC50B967645}.Release|x64.Build.0 = Release|Any CPU
 		{D0771274-661C-4151-B61B-AAC50B967645}.Release|x86.ActiveCfg = Release|Any CPU
 		{D0771274-661C-4151-B61B-AAC50B967645}.Release|x86.Build.0 = Release|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Debug|x64.Build.0 = Debug|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Debug|x86.Build.0 = Debug|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Release|x64.ActiveCfg = Release|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Release|x64.Build.0 = Release|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Release|x86.ActiveCfg = Release|Any CPU
+		{009D734B-0D54-4740-B589-74FA4E5867AD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

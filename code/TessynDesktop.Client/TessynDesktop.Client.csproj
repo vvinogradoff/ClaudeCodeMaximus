@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TessynDesktop.Tests" />
+    <InternalsVisibleTo Include="TessynDesktop.WPF.E2E.Tests" />
   </ItemGroup>
 
   <ItemGroup>

@@ -5,7 +5,7 @@ using TessynDesktop.Tests.Client;
 using TessynDesktop.Tests.Services;
 using static TessynDesktop.Tests.Services.RemoteTestHelpers;
 
-namespace TessynDesktop.Tests.WpfClient;
+namespace TessynDesktop.WPF.E2E.Tests;
 
 /// <summary>
 /// End to end: the BUILT WPF exe against a real loopback daemon (the real <see cref="TdcpServer"/> with the real tree and session
@@ -86,7 +86,7 @@ public sealed class WpfAppE2ETests : IDisposable
 			Assert.Contains($"Session {_mainSessionId} opened: 100 of {PagedEntryCount} entries loaded (cold)", log.ToString());
 			Assert.DoesNotContain("[ERR]", log.ToString());
 
-			Assert.True(process.CloseMainWindow(), "The main window could not be closed.");
+			Assert.True(new AppWindowFinder().Close(process), "The main window could not be closed.");
 			Assert.True(process.WaitForExit(TimeSpan.FromSeconds(20)), "The app is still running 20 s after its window was closed.");
 
 			var finalLog = ReadLog();
@@ -103,8 +103,9 @@ public sealed class WpfAppE2ETests : IDisposable
 
 	private Process StartApp()
 	{
-		var exe = FindWpfExe();
+		var exe = new BuiltAppLocator().FindExe();
 		var info = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
+		info.ArgumentList.Add("--test-window");
 		info.ArgumentList.Add("--data-root");
 		info.ArgumentList.Add(_root);
 		info.ArgumentList.Add("--daemon-file");
@@ -143,24 +144,5 @@ public sealed class WpfAppE2ETests : IDisposable
 		}
 
 		return text.ToString();
-	}
-
-	/// <summary>The newest built <c>TessynDesktop.WPF.exe</c> below the repository's code folder (the test project builds it first).</summary>
-	private static string FindWpfExe()
-	{
-		for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
-		{
-			var bin = Path.Combine(dir.FullName, "TessynDesktop.WPF", "bin");
-			if (!Directory.Exists(bin))
-				continue;
-
-			var newest = Directory.EnumerateFiles(bin, "TessynDesktop.WPF.exe", SearchOption.AllDirectories)
-				.OrderByDescending(File.GetLastWriteTimeUtc)
-				.FirstOrDefault();
-			if (newest != null)
-				return newest;
-		}
-
-		throw new FileNotFoundException("The built TessynDesktop.WPF.exe was not found; build code/TessynDesktop.sln first.");
 	}
 }

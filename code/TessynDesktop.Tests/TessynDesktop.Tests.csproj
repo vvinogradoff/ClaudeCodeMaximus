@@ -15,14 +15,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TessynDesktop.WPF.E2E.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TessynDesktop.Core\TessynDesktop.Core.csproj" />
     <ProjectReference Include="..\TessynDesktop.Client\TessynDesktop.Client.csproj" />
-    <!-- Build-order only: the WPF end-to-end test launches the built exe; nothing from the app is referenced. -->
-    <ProjectReference Include="..\TessynDesktop.WPF\TessynDesktop.WPF.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
