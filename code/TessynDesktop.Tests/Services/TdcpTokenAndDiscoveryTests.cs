@@ -51,6 +51,65 @@ public sealed class TdcpTokenAndDiscoveryTests : IDisposable
 	}
 
 	[Fact]
+	public void A_token_file_that_stays_locked_fails_the_load_and_is_never_overwritten()
+	{
+		var store = new TdcpTokenStore(Path.Combine(_dir, "token.dat"));
+		store.Save("kept-token");
+		var before = File.ReadAllBytes(store.FilePath);
+
+		using (new FileStream(store.FilePath, FileMode.Open, FileAccess.Read, FileShare.None))
+		{
+			Assert.Throws<IOException>(() => store.Load());
+			Assert.Throws<IOException>(() => TdcpTokenProvider.GetOrCreate(store, new AppSettingsService(_dir)));
+		}
+
+		Assert.Equal(before, File.ReadAllBytes(store.FilePath));
+		Assert.Equal("kept-token", store.Load());
+	}
+
+	[Fact]
+	public void A_briefly_locked_token_file_is_read_after_a_retry()
+	{
+		var store = new TdcpTokenStore(Path.Combine(_dir, "token.dat"));
+		store.Save("kept-token");
+
+		var locked = new FileStream(store.FilePath, FileMode.Open, FileAccess.Read, FileShare.None);
+		var release = new System.Threading.Thread(() =>
+		{
+			System.Threading.Thread.Sleep(120);
+			locked.Dispose();
+		});
+		release.Start();
+
+		Assert.Equal("kept-token", store.Load());
+		release.Join();
+	}
+
+	[Fact]
+	public void A_failing_token_save_degrades_to_an_in_memory_token_instead_of_throwing()
+	{
+		var settings = new AppSettingsService(_dir);
+		settings.Settings.TdcpToken = "legacy-token-1234";
+		settings.Save();
+
+		var token = TdcpTokenProvider.GetOrCreate(new ThrowingSaveStore(), settings);
+
+		Assert.Equal("legacy-token-1234", token);
+		// The file does not hold the token, so the plain-text copy must stay.
+		Assert.Equal("legacy-token-1234", settings.Settings.TdcpToken);
+
+		var fresh = TdcpTokenProvider.GetOrCreate(new ThrowingSaveStore(), new AppSettingsService(Path.Combine(_dir, "other")));
+		Assert.Matches("^[0-9a-f]{32}$", fresh);
+	}
+
+	private sealed class ThrowingSaveStore : ITdcpTokenStore
+	{
+		public string FilePath => "unwritable";
+		public string? Load() => null;
+		public void Save(string token) => throw new UnauthorizedAccessException("denied");
+	}
+
+	[Fact]
 	public void An_existing_appsettings_token_is_migrated_unchanged_and_removed_from_appsettings()
 	{
 		var settings = new AppSettingsService(_dir);

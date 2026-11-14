@@ -12,14 +12,20 @@ public sealed class SessionEntryReader : ISessionEntryReader
 {
 	private readonly ISessionFileService _files;
 	private readonly ISessionEpochTracker _epochs;
+	private readonly ISessionContentStore? _store;
 	private readonly object _gate = new();
 	private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
 	private long _tick;
 
-	public SessionEntryReader(ISessionFileService files, ISessionEpochTracker epochs)
+	/// <param name="store">
+	/// Serves pages and single entries by byte range from the sidecar index (P1.E), so neither parses the whole file. Without
+	/// one (stub-based tests) they fall back to the parsed-entry cache; <see cref="GetAll"/> always uses the cache.
+	/// </param>
+	public SessionEntryReader(ISessionFileService files, ISessionEpochTracker epochs, ISessionContentStore? store = null)
 	{
 		_files  = files;
 		_epochs = epochs;
+		_store  = store;
 	}
 
 	/// <inheritdoc />
@@ -59,7 +65,10 @@ public sealed class SessionEntryReader : ISessionEntryReader
 	public SessionEntriesResult GetPage(string nodeId, string fileName, int? beforeIndex, int? afterIndex, int limit)
 	{
 		// The epoch is read before the file: a rewrite in between makes the page older than its epoch says, never newer.
-		var epoch   = _epochs.GetEpoch(fileName);
+		var epoch = _epochs.GetEpoch(fileName);
+		if (_store != null)
+			return GetStorePage(nodeId, fileName, beforeIndex, afterIndex, limit, epoch);
+
 		var entries = GetAll(fileName);
 		var total   = entries.Count;
 
@@ -94,11 +103,28 @@ public sealed class SessionEntryReader : ISessionEntryReader
 		if (epoch != _epochs.GetEpoch(fileName))
 			throw new TdcpException("Session history changed");
 
+		if (_store != null)
+		{
+			var stored = _store.ReadEntry(fileName, index) ?? throw new TdcpException("Entry not found");
+			return new SessionEntryDto(index, stored.Entry, int.MaxValue);
+		}
+
 		var entries = GetAll(fileName);
 		if (index < 0 || index >= entries.Count)
 			throw new TdcpException("Entry not found");
 
 		return entries[index].ToDto(index, int.MaxValue);
+	}
+
+	/// <summary>A page read from the store; the same window and content as the parsed-list path, without parsing the file.</summary>
+	private SessionEntriesResult GetStorePage(string nodeId, string fileName, int? beforeIndex, int? afterIndex, int limit, int epoch)
+	{
+		var page = _store!.ReadPage(fileName, new SessionContentPageRequest(beforeIndex, afterIndex, limit, int.MaxValue, int.MaxValue));
+		var dtos = page.Entries
+			.Select(e => new SessionEntryDto(e.Ordinal, e.Entry, Constants.Remote.Limits.EntryContentMaxChars))
+			.ToList();
+
+		return new SessionEntriesResult(nodeId, epoch, page.Total, dtos);
 	}
 
 	private void EvictOldest()

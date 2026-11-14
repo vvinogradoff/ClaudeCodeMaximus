@@ -301,6 +301,7 @@ public partial class App : Application
 		// Default profile label (its cached resolution), the parsed-entry cache, the pending-send counters and the per-profile
 		// usage cache with its desktop-poller subscription. The fetcher owns one HttpClient. Everything else is stateless.
 		services.AddSingleton<IProfileLabelService, ProfileLabelService>();
+		services.AddSingleton<ISessionContentStore, SessionContentStore>();
 		services.AddSingleton<ISessionEntryReader, SessionEntryReader>();
 		services.AddSingleton<ISessionSendService, SessionSendService>();
 		services.AddSingleton<IClaudeUsageFetcher, ClaudeUsageFetcher>();

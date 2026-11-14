@@ -17,6 +17,9 @@ public interface ISessionFileService
 	/// <summary>Raised after the whole file was replaced (<see cref="RewriteSessionFile"/>, <see cref="WriteSessionFile"/>, compaction repair) — see <see cref="SessionFileRewrittenEventArgs"/>. May fire on any thread.</summary>
 	event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten;
 
+	/// <summary>Raised after <see cref="DeleteSessionFile"/> — see <see cref="SessionFileDeletedEventArgs"/>. May fire on any thread.</summary>
+	event EventHandler<SessionFileDeletedEventArgs>? SessionFileDeleted;
+
 	/// <summary>Raised once per turn after its last entry is appended (FR.21.22) — see <see cref="SessionTurnCompletedEventArgs"/>.</summary>
 	event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 

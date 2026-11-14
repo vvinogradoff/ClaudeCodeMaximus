@@ -16,6 +16,34 @@ public sealed class InstructionBlockBuilderTests
             IsAgentToolsEnabled: isAgentToolsEnabled, IsNewSession: isNewSession, IsStreamingMode: isStreamingMode,
             IsTelegramEnabled: isTelegramEnabled, IsWorkerSession: isWorkerSession, IsScheduledTurn: isScheduledTurn);
 
+    // FR.26.1 — with every toggle silent, the full-URL line is the only thing in the block.
+    private static readonly string LinkOnlyBlock =
+        Constants.Instructions.Delimiter + Environment.NewLine + "- " + Constants.Instructions.FullUrlReferences + Environment.NewLine;
+
+    [Fact]
+    public void Build_TopLevelSession_AsksForFullUrls()   // FR.26.1
+    {
+        var block = InstructionBlockBuilder.Build(Options(isAgentToolsEnabled: true, isNewSession: false, isStreamingMode: false));
+
+        Assert.Contains(Constants.Instructions.FullUrlReferences, block);
+        Assert.Contains("https://github.com/tryhardstop/windows-app/pull/196", block);
+        Assert.Contains("https://linear.app/hardstop/issue/HSE-240", block);
+    }
+
+    [Fact]
+    public void Build_WorkerSession_AsksForFullUrls()   // FR.26.1
+    {
+        var block = InstructionBlockBuilder.Build(Options(isAgentToolsEnabled: true, isNewSession: true, isStreamingMode: false, isWorkerSession: true));
+
+        Assert.Contains(Constants.Instructions.FullUrlReferences, block);
+    }
+
+    [Fact]
+    public void Build_AgentToolsDisabled_StillAsksForFullUrls()   // FR.26.1
+    {
+        Assert.Equal(LinkOnlyBlock, InstructionBlockBuilder.Build(Options(isAgentToolsEnabled: false, isNewSession: true, isStreamingMode: false)));
+    }
+
     [Fact]
     public void Build_OneShotNewSessionAgentToolsEnabled_IncludesBothRedirects()
     {
@@ -369,7 +397,7 @@ public sealed class InstructionBlockBuilderTests
         Assert.Equal(
             InstructionBlockBuilder.Build(plain),
             InstructionBlockBuilder.Build(plain with { PinnedAttentionItems = [], UserClosedAttentionItems = [] }));
-        Assert.Equal(string.Empty, InstructionBlockBuilder.Build(plain with { PinnedAttentionItems = null }));
+        Assert.Equal(LinkOnlyBlock, InstructionBlockBuilder.Build(plain with { PinnedAttentionItems = null }));
     }
 
     [Fact]
@@ -377,7 +405,7 @@ public sealed class InstructionBlockBuilderTests
     {
         var block = InstructionBlockBuilder.Build(AttentionOptions(pinned: [Pinned(1, AttentionKind.Ask, "gone", AttentionStatus.Answered)]));
 
-        Assert.Equal(string.Empty, block);
+        Assert.Equal(LinkOnlyBlock, block);
     }
 
     [Theory]
@@ -530,8 +558,8 @@ public sealed class InstructionBlockBuilderTests
 
         Assert.False(options.IsTagGuidanceDue);
         Assert.Null(options.SessionTags);
-        Assert.Equal(string.Empty, InstructionBlockBuilder.Build(options));
-        Assert.Equal(string.Empty, InstructionBlockBuilder.Build(options with { SessionTags = [TagOf("HSE-1")] }));
+        Assert.Equal(LinkOnlyBlock, InstructionBlockBuilder.Build(options));
+        Assert.Equal(LinkOnlyBlock, InstructionBlockBuilder.Build(options with { SessionTags = [TagOf("HSE-1")] }));
     }
 
     [Fact]

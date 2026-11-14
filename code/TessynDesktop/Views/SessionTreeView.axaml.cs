@@ -157,7 +157,7 @@ public partial class SessionTreeView : UserControl
 	private void OnRefreshGitOriginsClicked(object? sender, RoutedEventArgs e)
 	{
 		if (DataContext is SessionTreeViewModel vm)
-			vm.RefreshGitOrigins();
+			_ = vm.RefreshGitOriginsAsync();
 	}
 
 	// ── Add Directory ────────────────────────────────────────────────────────

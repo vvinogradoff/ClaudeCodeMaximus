@@ -70,6 +70,19 @@ public static partial class Constants
 	{
 		public const int DebounceMilliseconds = 300;
 		public const int MaxSuggestions = 15;
+
+		/// <summary>Safety cap on indexed files per working directory; a larger tree is truncated (and logged), not held in memory.</summary>
+		public const int MaxIndexedFiles = 200_000;
+
+		/// <summary>Largest .cs file parsed for symbols; bigger files are generated or data and cost far more than they help.</summary>
+		public const long MaxSymbolParseBytes = 2L * 1024 * 1024;
+
+		/// <summary>Directory names never indexed or watched: VCS, build output, vendored or generated trees.</summary>
+		public static readonly string[] ExcludedDirectories =
+		[
+			"bin", "obj", ".git", "node_modules", ".vs", ".idea",
+			"vcpkg", "vcpkg_installed", ".venv", "venv", "__pycache__", ".next", ".nuget", ".gradle", ".terraform", ".cache", ".svn", ".hg",
+		];
 		public const string SymbolTrigger = "#";
 		public const string FileTrigger = "##";
 	}
@@ -161,6 +174,13 @@ public static partial class Constants
 		/// </summary>
 		public const string SessionTagGuidance =
 			"This session shows tags under its name in Tessyn: the Linear issues, GitHub pull requests and GitHub repositories it works on, which the user opens from there. Keep them current with `mcp__" + Agent.McpServerName + "__tag_session`: tag an issue, PR or repository when this session starts working on it (pass the full URL), and don't tag things it only mentions. Finished work stays tagged; remove a tag only if it was added by mistake.";
+
+		/// <summary>
+		/// FR.26.1 — How links are written in any answer (not what the session works on, which is
+		/// <see cref="SessionTagGuidance"/>). Emitted on every turn of every session, worker sessions included.
+		/// </summary>
+		public const string FullUrlReferences =
+			"When you refer to a GitHub pull request, issue or commit, a Linear issue or a Slack message, write its full URL (for example https://github.com/tryhardstop/windows-app/pull/196 or https://linear.app/hardstop/issue/HSE-240), never a shorthand such as PR#196 or HSE-240.";
 
 		/// <summary>FR.24.6 — Suffix of <see cref="SessionTagGuidance"/>; arg 0 = the labels joined with ", ".</summary>
 		public const string SessionTagCurrentTagsFormat = " Current tags: {0}.";
@@ -517,6 +537,15 @@ SESSION TRANSCRIPT TO COMPACT:
 	}
 
 	/// <summary>Always-on runtime diagnostics: logging, hang watchdog, process metrics, heap capture and the diag_* MCP tools.</summary>
+	/// <summary>First tail window (bytes) read to find a session's last-used profile/model/effort; widened only if they are not in it.</summary>
+	public const int LastUsedSettingsTailBytes = 64 * 1024;
+
+	/// <summary>Largest tail window tried before falling back to reading the whole session file.</summary>
+	public const int LastUsedSettingsMaxTailBytes = 1024 * 1024;
+
+	/// <summary>How many session view models stay loaded (the active one plus the most recently used others). Busy ones are exempt (ISSUE.016).</summary>
+	public const int SessionCacheCapacity = 5;
+
 	public static class Diagnostics
 	{
 		public const string DiagFolderName = "diag";
@@ -577,6 +606,10 @@ SESSION TRANSCRIPT TO COMPACT:
 			public const string RefreshLastPromptTimes = "startup-refresh-last-prompt-times";
 			public const string ApplyAttentionSummaries = "startup-apply-attention-summaries";
 			public const string RefreshGitOrigins = "startup-refresh-git-origins";
+			/// <summary>Background (off-UI-thread) file and git reads feeding <see cref="RefreshLastPromptTimes"/> (ISSUE.016).</summary>
+			public const string ScanLastPromptTimes = "startup-scan-last-prompt-times";
+			/// <summary>Background (off-UI-thread) git reads feeding <see cref="RefreshGitOrigins"/> (ISSUE.016).</summary>
+			public const string ScanGitOrigins = "startup-scan-git-origins";
 			public const string ResumabilityApply = "resumability-apply";
 			public const string TreeSearchRestore = "tree-search-restore";
 			public const string SwapMessageSource = "swap-message-source";

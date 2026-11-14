@@ -80,6 +80,12 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		{
 			try
 			{
+				// Drain stderr from the start: if the child fills the stderr pipe while still writing stdout, reading
+				// stderr only after stdout ends would block both sides forever. Killing the process (cancellation) closes
+				// the pipe and ends the read.
+				var stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
+				_ = stderrTask.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); // never leave it unobserved
+
 				_log.Debug("Writing user message to stdin ({Length} chars)", userMessage.Length);
 				await process.StandardInput.WriteLineAsync(userMessage);
 				process.StandardInput.Close();
@@ -113,7 +119,7 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 				await process.WaitForExitAsync(cancellationToken);
 				_log.Debug("Claude process exited. Code={ExitCode}", process.ExitCode);
 
-				var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+				var stderr = await stderrTask.WaitAsync(cancellationToken);
 				if (!string.IsNullOrWhiteSpace(stderr))
 				{
 					_log.Warning("stderr: {Stderr}", stderr.Trim());
@@ -170,6 +176,10 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		{
 			try
 			{
+				// Drain stderr concurrently with stdout (see SendMessageAsync): a full stderr pipe must not stall stdout.
+				var stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
+				_ = stderrTask.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); // never leave it unobserved
+
 				await process.StandardInput.WriteLineAsync(prompt);
 				process.StandardInput.Close();
 
@@ -180,7 +190,7 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 				var stdout = await process.StandardOutput.ReadToEndAsync(linkedCts.Token);
 				await process.WaitForExitAsync(linkedCts.Token);
 
-				var stderr = await process.StandardError.ReadToEndAsync(linkedCts.Token);
+				var stderr = await stderrTask.WaitAsync(linkedCts.Token);
 				if (!string.IsNullOrWhiteSpace(stderr))
 					_log.Warning("RunPrintModeAsync: stderr: {Stderr}", stderr.Trim());
 

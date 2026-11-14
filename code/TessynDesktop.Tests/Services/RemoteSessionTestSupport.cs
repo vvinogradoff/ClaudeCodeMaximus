@@ -22,6 +22,7 @@ internal sealed class StubFileService : ISessionFileService
 	public int ReadCalls { get; private set; }
 
 	public event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten;
+	public event EventHandler<SessionFileDeletedEventArgs>? SessionFileDeleted;
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
 
