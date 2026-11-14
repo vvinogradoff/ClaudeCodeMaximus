@@ -31,6 +31,7 @@ public sealed class RelayConnectorService : IRelayConnectorService
 	private readonly IRelayConfigStore _store;
 	private readonly TdcpDispatcher _dispatcher;
 	private readonly IRemoteEventBus _bus;
+	private readonly IEventLog? _eventLog;
 	private readonly IRelayHttpClientFactory _httpFactory;
 	private readonly RelayConnectorTimings _timings;
 
@@ -45,11 +46,13 @@ public sealed class RelayConnectorService : IRelayConnectorService
 		TdcpDispatcher dispatcher,
 		IRemoteEventBus bus,
 		IRelayHttpClientFactory httpFactory,
-		RelayConnectorTimings? timings = null)
+		RelayConnectorTimings? timings = null,
+		IEventLog? eventLog = null)
 	{
 		_store = store;
 		_dispatcher = dispatcher;
 		_bus = bus;
+		_eventLog = eventLog;
 		_httpFactory = httpFactory;
 		_timings = timings ?? RelayConnectorTimings.Default;
 	}
@@ -234,7 +237,11 @@ public sealed class RelayConnectorService : IRelayConnectorService
 			// Events are only relayed while connected; the handler just enqueues (the bus requires O(1) subscribers).
 			var eventWriter = events.Writer;
 			handler = n => eventWriter.TryWrite(n);
-			_bus.Published += handler;
+			// With an event log the relay forwards the stamped notifications (additive "seq" per event); without one the bus ones.
+			if (_eventLog is not null)
+				_eventLog.Appended += handler;
+			else
+				_bus.Published += handler;
 
 			await ReadStreamAsync(response, requests.Writer, conn.Token);
 
@@ -256,7 +263,12 @@ public sealed class RelayConnectorService : IRelayConnectorService
 		finally
 		{
 			if (handler is not null)
-				_bus.Published -= handler;
+			{
+				if (_eventLog is not null)
+					_eventLog.Appended -= handler;
+				else
+					_bus.Published -= handler;
+			}
 
 			try { conn.Cancel(); } catch { /* already disposed/cancelled */ }
 			requests?.Writer.TryComplete();
@@ -383,11 +395,14 @@ public sealed class RelayConnectorService : IRelayConnectorService
 				var batch = new JsonArray();
 				while (reader.TryRead(out var notification))
 				{
-					batch.Add(new JsonObject
+					var item = new JsonObject
 					{
 						["method"] = notification.Method,
 						["params"] = notification.Params.DeepClone(),
-					});
+					};
+					if (notification.Seq > 0)
+						item["seq"] = notification.Seq;
+					batch.Add(item);
 				}
 
 				if (batch.Count == 0)

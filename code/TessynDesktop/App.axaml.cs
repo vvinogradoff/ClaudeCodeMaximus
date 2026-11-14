@@ -263,7 +263,8 @@ public partial class App : Application
 				appSettings.Save();
 			}
 
-			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), sp.GetRequiredService<TdcpDispatcher>(), appSettings.Settings.TdcpToken);
+			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), sp.GetRequiredService<TdcpDispatcher>(), appSettings.Settings.TdcpToken,
+				sp.GetRequiredService<IEventLog>(), sp.GetRequiredService<IDaemonRunInfo>());
 		});
 
 		// Remote API foundation (web client). Singletons, each because it owns state that must be shared and survive the call:
@@ -276,6 +277,8 @@ public partial class App : Application
 		services.AddSingleton<TdcpDispatcher>();
 		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
 		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
+		services.AddSingleton<IEventLog, EventLog>();
+		services.AddSingleton<IDaemonRunInfo, DaemonRunInfo>();
 		services.AddSingleton<ITreeVersionTracker, TreeVersionTracker>();
 		services.AddSingleton<ISessionEpochTracker, SessionEpochTracker>();
 		services.AddSingleton<ISessionActivityService, SessionActivityService>();

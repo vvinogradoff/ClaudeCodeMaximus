@@ -49,6 +49,68 @@ public static partial class Constants
 			public const string TagsChanged = "tags.changed";
 			public const string UsageChanged = "usage.changed";
 			public const string IndexChanged = "index.changed";
+
+			/// <summary>Local-stream-only notification: the client's resume point is not covered and it must re-read its state. Params: <c>{ reason, eventSeq }</c>.</summary>
+			public const string Resync = "resync";
+		}
+
+		/// <summary>The event log that stamps <c>seq</c> on bus notifications and serves resume (P1.B).</summary>
+		public static class EventLog
+		{
+			/// <summary>Most events the ring keeps.</summary>
+			public const int DefaultCapacity = 5000;
+
+			/// <summary>Events older than this are dropped from the ring.</summary>
+			public static readonly TimeSpan DefaultMaxAge = TimeSpan.FromMinutes(10);
+
+			/// <summary>Reasons carried by a <see cref="Events.Resync"/> notification.</summary>
+			public static class ResyncReasons
+			{
+				/// <summary>The events after the client's seq are no longer (or were never) in the ring.</summary>
+				public const string Gap = "gap";
+
+				/// <summary>The client's seq is newer than the log head, or it belongs to another daemon run.</summary>
+				public const string UnknownSeq = "unknown-seq";
+
+				/// <summary>The stream's own queue overflowed and dropped events for a slow reader.</summary>
+				public const string Overflow = "overflow";
+			}
+		}
+
+		/// <summary>The local SSE stream (<c>GET /tdcp</c>).</summary>
+		public static class Sse
+		{
+			/// <summary>Query flag (<c>?legacy=1</c>): also emit the legacy <c>tree.changed</c> / <c>schedule.changed</c> frames.</summary>
+			public const string LegacyQuery = "legacy";
+
+			/// <summary>Optional query (<c>?runId=</c>): the run id the client's Last-Event-ID belongs to; a mismatch answers with a resync.</summary>
+			public const string RunIdQuery = "runId";
+
+			/// <summary>Request header with the last event id a reconnecting client saw.</summary>
+			public const string LastEventIdHeader = "Last-Event-ID";
+
+			/// <summary>Frames buffered per stream before the oldest are dropped (and a resync is signalled).</summary>
+			public const int ChannelCapacity = 1000;
+		}
+
+		/// <summary>Feature flags announced by <c>client.hello</c>; a client enables a feature only when it is listed.</summary>
+		public static class Capabilities
+		{
+			/// <summary>The local SSE stream carries the bus notifications with ids.</summary>
+			public const string EventsLocal = "events.local";
+
+			/// <summary>The local SSE stream honours Last-Event-ID and signals gaps with <see cref="Events.Resync"/>.</summary>
+			public const string EventsResume = "events.resume";
+		}
+
+		/// <summary>Oldest client protocol version the daemon still serves.</summary>
+		public const int MinProtocolVersion = 1;
+
+		/// <summary>Daemon discovery file (<c>daemon.json</c>) and the local token file.</summary>
+		public static class Discovery
+		{
+			public const string FileName = "daemon.json";
+			public const string TokenFileName = "tdcp-token.dat";
 		}
 
 		/// <summary>Debounce windows of the notification publisher (contract section 4).</summary>

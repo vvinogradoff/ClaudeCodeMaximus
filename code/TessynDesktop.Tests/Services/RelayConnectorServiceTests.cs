@@ -208,6 +208,52 @@ public sealed class RelayConnectorServiceTests : IDisposable
 	}
 
 	[Fact]
+	public async Task PublishedEvents_CarryNoSeq_WithoutAnEventLog()
+	{
+		var service = await StartConnectedAsync();
+		try
+		{
+			_bus.Publish("tree.changed", new { version = 1 });
+			await WaitUntilAsync(() => !_server.Events.IsEmpty, "event POST");
+
+			_server.Events.TryPeek(out var body);
+			Assert.Null(JsonNode.Parse(body!)!["events"]![0]!["seq"]);
+		}
+		finally
+		{
+			service.Stop();
+		}
+	}
+
+	[Fact]
+	public async Task PublishedEvents_CarryTheStampedSeq_WithAnEventLog()
+	{
+		using var log = new EventLog(_bus);
+		Configure();
+		var service = new RelayConnectorService(_store, _dispatcher, _bus, new RelayHttpClientFactory(), FastTimings(), log);
+		service.Start();
+		try
+		{
+			await WaitUntilAsync(() => service.Status.State == RelayState.Connected, "Connected");
+			_bus.Publish("tree.changed", new { version = 1 });
+			_bus.Publish("tags.changed", new { });
+			await WaitUntilAsync(() => !_server.Events.IsEmpty, "event POST");
+			await Task.Delay(300);
+
+			_server.Events.TryPeek(out var body);
+			var events = JsonNode.Parse(body!)!["events"]!.AsArray();
+			Assert.Equal(2, events.Count);
+			Assert.Equal(1, events[0]!["seq"]!.GetValue<long>());
+			Assert.Equal(2, events[1]!["seq"]!.GetValue<long>());
+			Assert.Equal(1, events[0]!["params"]!["version"]!.GetValue<int>());
+		}
+		finally
+		{
+			service.Stop();
+		}
+	}
+
+	[Fact]
 	public async Task PublishedEvents_AreBatchedIntoOnePost()
 	{
 		var service = await StartConnectedAsync();
