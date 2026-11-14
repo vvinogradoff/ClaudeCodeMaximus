@@ -257,6 +257,28 @@ public sealed class SessionTurnServiceTests : IDisposable
 	private static SessionNodeModel MakeNode(string nodeId = "node-1") =>
 		new() { NodeId = nodeId, Name = "Test", FileName = $"{nodeId}.txt", WorkingDirectory = @"C:\proj" };
 
+	/// <summary>
+	/// The Telegram bridge is a Lazy; resolving it used to sit outside the try that holds the finally, so a failing
+	/// Lazy left the node marked running and the turn lock held forever.
+	/// </summary>
+	[Fact]
+	public async Task RunTurnAsync_TelegramBridgeLazyThrows_ReleasesTurnLockAndClearsRunning()
+	{
+		var sut = new SessionTurnService(
+			_processManager, _fileService, _appSettings, _profileService,
+			new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService()),
+			_registry, new FakeSessionStatusServiceForTurnService(), new FakeModelServiceForTurnService(),
+			new Lazy<ITelegramBridgeService>(() => throw new InvalidOperationException("bridge ctor failed")),
+			_streamingManager, _attention.Service, _tagEnv.Service,
+			new ProfileLabelService(_profileService, _appSettings));
+		var node = MakeNode();
+
+		await Record.ExceptionAsync(() => sut.RunTurnAsync(node, "hello", TurnSource.Scheduled));
+
+		Assert.Equal(1, sut.GetTurnLock(node.NodeId).CurrentCount);
+		Assert.Equal((node.NodeId, false), _registry.SetRunningCalls[^1]);
+	}
+
 	// ── One-shot fallback (no streaming process alive) ───────────────────────────
 
 	[Fact]
