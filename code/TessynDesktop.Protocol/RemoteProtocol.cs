@@ -45,6 +45,15 @@ public static class RemoteProtocol
 		public const string UsageGet = "usage.get";
 	}
 
+	/// <summary>
+	/// Loopback-only methods (<c>remoteCallable: false</c>): never on the relay and not part of the 21-method web contract.
+	/// </summary>
+	public static class LoopbackMethods
+	{
+		/// <summary>P1.G: batch of O(1) session headers, <c>{ nodeIds[] }</c>.</summary>
+		public const string SessionHeaders = "session.headers";
+	}
+
 	/// <summary>Notification names (contract section 4).</summary>
 	public static class Events
 	{
@@ -57,6 +66,10 @@ public static class RemoteProtocol
 		public const string TagsChanged = "tags.changed";
 		public const string UsageChanged = "usage.changed";
 		public const string IndexChanged = "index.changed";
+
+		// P1.F: entry ids. Published beside session.appended (which stays until the web cuts over).
+		/// <summary>New entries of a session: <c>{ nodeId, fileId, fromSeq, toSeq, entries? }</c>.</summary>
+		public const string EntriesAppended = "entries.appended";
 
 		/// <summary>Local-stream-only notification: the client's resume point is not covered and it must re-read its state. Params: <c>{ reason, eventSeq }</c>.</summary>
 		public const string Resync = "resync";
@@ -83,6 +96,9 @@ public static class RemoteProtocol
 
 		/// <summary>The local SSE stream honours Last-Event-ID and signals gaps with <see cref="Events.Resync"/>.</summary>
 		public const string EventsResume = "events.resume";
+
+		/// <summary>P1.F: entries carry <c>entryId</c>; <c>session.get</c>/<c>session.entries</c> carry <c>fileId</c> and <c>seq</c>; <c>entries.appended</c> is published.</summary>
+		public const string EntriesIds = "entries.ids";
 	}
 
 	/// <summary>JSON-RPC 2.0 error codes used on the wire.</summary>

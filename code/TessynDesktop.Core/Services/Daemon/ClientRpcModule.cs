@@ -19,13 +19,15 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly TimeProvider    _time;
 	private readonly IDaemonRunInfo  _runInfo;
 	private readonly IEventLog?      _eventLog;
+	private readonly bool           _hasContentStore;
 	private readonly string          _daemonVersion;
 
-	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null)
+	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null)
 	{
 		_time          = time ?? TimeProvider.System;
 		_runInfo       = runInfo ?? new DaemonRunInfo();
 		_eventLog      = eventLog;
+		_hasContentStore = contentStore != null;
 		_daemonVersion = ReadDaemonVersion();
 	}
 
@@ -59,10 +61,21 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	}
 
 	/// <summary>Only what is really wired: the event capabilities need the event log.</summary>
-	private IReadOnlyList<string> Capabilities() =>
-		_eventLog == null
-			? []
-			: [Constants.Remote.Capabilities.EventsLocal, Constants.Remote.Capabilities.EventsResume];
+	private IReadOnlyList<string> Capabilities()
+	{
+		var capabilities = new List<string>();
+		if (_eventLog != null)
+		{
+			capabilities.Add(Constants.Remote.Capabilities.EventsLocal);
+			capabilities.Add(Constants.Remote.Capabilities.EventsResume);
+		}
+
+		// P1.F: entry ids need the content store.
+		if (_hasContentStore)
+			capabilities.Add(Constants.Remote.Capabilities.EntriesIds);
+
+		return capabilities;
+	}
 
 	private static void ValidateCapabilities(JsonNode? node)
 	{

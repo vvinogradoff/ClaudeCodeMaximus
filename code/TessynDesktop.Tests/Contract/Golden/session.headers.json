@@ -1,0 +1,24 @@
+{
+  "headers": [
+    {
+      "nodeId": "<id1>",
+      "fileId": "<id2>",
+      "epoch": 0,
+      "entryCount": 4,
+      "seq": 4,
+      "firstTimestamp": "2026-11-14T08:00:00+00:00",
+      "lastTimestamp": "2026-11-14T08:03:00+00:00",
+      "lastUsed": {
+        "modelId": "default",
+        "effort": "high",
+        "profileId": "default",
+        "profileName": "[Sys] me@example.com"
+      },
+      "contentVersion": 1,
+      "fileLength": 310
+    }
+  ],
+  "missing": [
+    "unknown-node"
+  ]
+}

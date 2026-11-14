@@ -236,7 +236,12 @@ public sealed class RelayConnectorService : IRelayConnectorService
 
 			// Events are only relayed while connected; the handler just enqueues (the bus requires O(1) subscribers).
 			var eventWriter = events.Writer;
-			handler = n => eventWriter.TryWrite(n);
+			// entries.appended is local-SSE only: the web ignores it, and it can carry up to 64 KiB per window.
+			handler = n =>
+			{
+				if (n.Method != Constants.Remote.Events.EntriesAppended)
+					eventWriter.TryWrite(n);
+			};
 			// With an event log the relay forwards the stamped notifications (additive "seq" per event); without one the bus ones.
 			if (_eventLog is not null)
 				_eventLog.Appended += handler;

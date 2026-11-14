@@ -695,4 +695,37 @@ public sealed class TessynClient : ITessynClient
 	/// <inheritdoc />
 	public Task<UsageResult> UsageGetAsync(string? profileId = null, CancellationToken cancellationToken = default) =>
 		CallAsync<UsageResult>(RemoteProtocol.Methods.UsageGet, Params(("profileId", Node(profileId))), cancellationToken);
+
+	// ── P1.F / P1.G (additive; grouped at the end) ───────────────────────────────────────────
+
+	/// <inheritdoc />
+	public Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, SessionEntriesQuery query, CancellationToken cancellationToken = default) =>
+		CallAsync<SessionEntriesResult>(
+			RemoteProtocol.Methods.SessionEntries,
+			Params(
+				("nodeId", Node(nodeId)),
+				("beforeIndex", Node(query.BeforeIndex)),
+				("afterIndex", Node(query.AfterIndex)),
+				("afterSeq", Node(query.AfterSeq)),
+				("beforeEntryId", Node(query.BeforeEntryId)),
+				("fileId", Node(query.FileId)),
+				("limit", Node(query.Limit))),
+			cancellationToken);
+
+	/// <inheritdoc />
+	public Task<SessionEntryDto> SessionEntryByIdAsync(string nodeId, string entryId, EntryRangeParams? range = null, CancellationToken cancellationToken = default) =>
+		CallAsync<SessionEntryDto>(
+			RemoteProtocol.Methods.SessionEntry,
+			Params(
+				("nodeId", Node(nodeId)),
+				("entryId", Node(entryId)),
+				("range", range == null ? null : Params(("offset", Node(range.Offset)), ("length", Node(range.Length))))),
+			cancellationToken);
+
+	/// <inheritdoc />
+	public Task<SessionHeadersResult> SessionHeadersAsync(IReadOnlyList<string> nodeIds, CancellationToken cancellationToken = default) =>
+		CallAsync<SessionHeadersResult>(
+			RemoteProtocol.LoopbackMethods.SessionHeaders,
+			Params(("nodeIds", new JsonArray([.. nodeIds.Select(id => (JsonNode?)JsonValue.Create(id))]))),
+			cancellationToken);
 }

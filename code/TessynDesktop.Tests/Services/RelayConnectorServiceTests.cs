@@ -281,6 +281,27 @@ public sealed class RelayConnectorServiceTests : IDisposable
 	}
 
 	[Fact]
+	public async Task EntriesAppended_IsNeverRelayed_ButSessionAppendedStillIs()
+	{
+		var service = await StartConnectedAsync();
+		try
+		{
+			_bus.Publish("entries.appended", new { nodeId = "n", fileId = "f", fromSeq = 0, toSeq = 1 });
+			_bus.Publish("session.appended", new { nodeId = "n", epoch = 0 });
+
+			await WaitUntilAsync(() => !_server.Events.IsEmpty, "event POST");
+			await Task.Delay(300);
+
+			var methods = _server.Events.SelectMany(b => JsonNode.Parse(b)!["events"]!.AsArray()).Select(e => e!["method"]!.GetValue<string>()).ToList();
+			Assert.Equal(["session.appended"], methods);
+		}
+		finally
+		{
+			service.Stop();
+		}
+	}
+
+	[Fact]
 	public async Task EventsPublishedWhileNotConnected_AreDropped()
 	{
 		Configure();

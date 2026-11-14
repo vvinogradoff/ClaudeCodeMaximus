@@ -48,9 +48,13 @@ public sealed class SessionRpcModuleTests : IDisposable
 			Constants.Remote.Methods.SessionGet, Constants.Remote.Methods.SessionEntries, Constants.Remote.Methods.SessionEntry,
 			Constants.Remote.Methods.SessionSend, Constants.Remote.Methods.SessionStop,
 			Constants.Remote.Methods.SessionSetFavorite, Constants.Remote.Methods.SessionSetStreaming,
+			RemoteProtocol.LoopbackMethods.SessionHeaders,
 		];
 		Assert.True(expected.ToHashSet().SetEquals(names));
-		Assert.All(registry.Entries, e => Assert.True(e.RemoteCallable));
+
+		// The web contract stays the 21 remote methods: the P1.G batch method is loopback only.
+		Assert.All(registry.Entries.Where(e => e.Name != RemoteProtocol.LoopbackMethods.SessionHeaders), e => Assert.True(e.RemoteCallable));
+		Assert.False(registry.Entries.Single(e => e.Name == RemoteProtocol.LoopbackMethods.SessionHeaders).RemoteCallable);
 	}
 
 	[Theory]

@@ -16,6 +16,8 @@ namespace TessynDesktop.Models.Remote;
 /// <param name="IsStreamingMode">Streaming Session Mode is on.</param>
 /// <param name="EntryCount">Number of parsed transcript entries (empty ones included).</param>
 /// <param name="Epoch">Transcript epoch (see ISessionEpochTracker).</param>
+/// <param name="FileId">P1.F: content generation of the transcript file; omitted without a content store.</param>
+/// <param name="Seq">P1.F: entries ever appended to <paramref name="FileId"/>; omitted without a content store.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record SessionDetailDto(
 	string Id,
@@ -30,4 +32,6 @@ public sealed record SessionDetailDto(
 	LastUsedSettingsDto LastUsed,
 	bool IsStreamingMode,
 	int EntryCount,
-	int Epoch);
+	int Epoch,
+	string? FileId = null,
+	long? Seq = null);

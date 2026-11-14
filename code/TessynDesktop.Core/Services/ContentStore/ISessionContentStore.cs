@@ -14,6 +14,13 @@ public interface ISessionContentStore
 	/// <summary>O(1) summary of the file; <c>Exists = false</c> for a missing file.</summary>
 	SessionContentHeaderModel GetHeader(string fileName);
 
+	/// <summary>
+	/// The settings the session was last used with, by the same rule as a full parse (<c>LastUsedSettingsResolver</c>): the walk
+	/// back over the index is in memory and only the (at most two) entries that carry them are read, cut to their header line.
+	/// All members are null for a missing or empty file.
+	/// </summary>
+	SessionContentLastUsedModel GetLastUsed(string fileName);
+
 	/// <summary>A page of entries by ordinal, ascending; empty for a missing file.</summary>
 	SessionContentPageModel ReadPage(string fileName, SessionContentPageRequest request);
 

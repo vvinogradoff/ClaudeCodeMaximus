@@ -28,10 +28,27 @@ public static class LastUsedSettingsResolver
 		var lastWithProfile = entries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser && e.ProfileName != null);
 		var lastWithModel   = entries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleAssistant && e.ModelId != null);
 
+		return Resolve(lastWithProfile?.ProfileName, lastWithModel?.ModelId, lastWithModel?.Effort, models, profiles, defaultProfileLabel);
+	}
+
+	/// <summary>
+	/// The same resolution from the already found metadata (P1.G: the content store walks its index instead of a full parse).
+	/// </summary>
+	/// <param name="recordedProfileName">Profile of the last USER entry that recorded one.</param>
+	/// <param name="recordedModelId">Model of the last ASSISTANT entry that recorded one.</param>
+	/// <param name="recordedEffort">Effort of that same ASSISTANT entry.</param>
+	public static LastUsedSettingsDto Resolve(
+		string? recordedProfileName,
+		string? recordedModelId,
+		string? recordedEffort,
+		IReadOnlyList<ClaudeModelInfo> models,
+		IReadOnlyList<ClaudeProfileModel> profiles,
+		string defaultProfileLabel)
+	{
 		return new LastUsedSettingsDto(
-			ResolveModel(lastWithModel?.ModelId, models),
-			ResolveEffort(lastWithModel?.Effort),
-			ResolveProfileId(lastWithProfile?.ProfileName, profiles, out var profileName, defaultProfileLabel),
+			ResolveModel(recordedModelId, models),
+			ResolveEffort(recordedEffort),
+			ResolveProfileId(recordedProfileName, profiles, out var profileName, defaultProfileLabel),
 			profileName);
 	}
 

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
 using Xunit;
 
@@ -318,11 +319,14 @@ public sealed class SessionContentStoreReadTests : ContentStoreTestBase
 
 			Assert.Equal(expected.Total, actual.Total);
 			Assert.Equal(expected.Epoch, actual.Epoch);
-			Assert.Equal(expected.Entries, actual.Entries);
+
+			// P1.F adds entryId (and fileId/seq on the result) on the store path; everything else is the legacy shape.
+			Assert.Equal(expected.Entries, actual.Entries.Select(e => e with { EntryId = null }).ToList());
+			Assert.All(actual.Entries, e => Assert.NotNull(e.EntryId));
 		}
 
 		for (var i = 0; i < total; i++)
-			Assert.Equal(legacy.GetEntry(File1, i, legacy.GetPage("n", File1, null, null, 1).Epoch), backed.GetEntry(File1, i, legacy.GetPage("n", File1, null, null, 1).Epoch));
+			Assert.Equal(legacy.GetEntry(File1, i, legacy.GetPage("n", File1, null, null, 1).Epoch), backed.GetEntry(File1, i, legacy.GetPage("n", File1, null, null, 1).Epoch) with { EntryId = null });
 
 		Assert.Throws<TdcpException>(() => backed.GetEntry(File1, total, backed.GetPage("n", File1, null, null, 1).Epoch));
 		Assert.Throws<TdcpException>(() => backed.GetEntry(File1, 0, -1));
