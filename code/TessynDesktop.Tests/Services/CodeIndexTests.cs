@@ -221,4 +221,82 @@ public sealed class CodeIndexTests : IDisposable
 		Assert.False(service.IsIndexReady(_root));
 		Assert.Empty(service.SearchFiles(_root, "needle"));
 	}
+
+	[Theory]
+	[InlineData("obj")]
+	[InlineData("bin")]
+	[InlineData("node_modules")]
+	[InlineData(".git")]
+	public async Task ApplyChanges_CreatedExcludedDirectory_IsNotIndexed(string name)
+	{
+		Write("keep.txt");
+		using var index = await BuildAsync();
+
+		var generated = Write($"{name}/generated.dll");
+		Write($"{name}/sub/more.cs", "class More {}");
+		index.ApplyChanges(new[] { Path.GetDirectoryName(generated)! });
+
+		Assert.Equal(new[] { "keep.txt" }, RelativePaths(index));
+		Assert.DoesNotContain(index.SymbolSnapshot, s => s.Name == "More");
+	}
+
+	[Fact]
+	public async Task ApplyChanges_FileNamedLikeExcludedDirectory_IsStillIndexed()
+	{
+		using var index = await BuildAsync();
+
+		var file = Write("bin");
+		index.ApplyChanges(new[] { file });
+
+		Assert.Equal(new[] { "bin" }, RelativePaths(index));
+	}
+
+	[Fact]
+	public async Task ApplyChanges_ReplacedSubtree_IsSwappedInOneStep()
+	{
+		Write("d/old.txt");
+		using var index = await BuildAsync();
+
+		File.Delete(Path.Combine(_root, "d", "old.txt"));
+		Write("d/new.txt");
+		index.ApplyChanges(new[] { Path.Combine(_root, "d") });
+
+		Assert.Equal(new[] { "d/new.txt" }, RelativePaths(index));
+	}
+
+	[Fact]
+	public async Task Build_ReleasedDuringFirstScan_StartsNoWatcherAndIsNotReady()
+	{
+		Write("a.txt");
+		var index = new CodeIndex(_root, enableWatcher: true);
+		index.ScanCompletedHook = index.Dispose;
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.BuildAsync());
+
+		Assert.False(index.HasWatcher);
+		Assert.False(index.IsReady);
+	}
+
+	[Fact]
+	public async Task Service_FailedBuild_ReturnsFalse_AndDoesNotCountAReference()
+	{
+		Write("needle.txt");
+		var service = new CodeIndexService
+		{
+			IndexFactory = dir => new CodeIndex(dir, enableWatcher: false) { ScanCompletedHook = () => throw new InvalidOperationException("boom") },
+		};
+
+		Assert.False(await service.GetOrCreateIndexAsync(_root));
+		Assert.False(service.IsIndexReady(_root));
+
+		// A healthy index for the same directory is created afterwards and holds exactly one reference.
+		service.IndexFactory = dir => new CodeIndex(dir, enableWatcher: false);
+		Assert.True(await service.GetOrCreateIndexAsync(_root));
+		Assert.True(service.IsIndexReady(_root));
+
+		// The failed caller got false, so it does not release; the healthy index must still be there.
+		Assert.Single(service.SearchFiles(_root, "needle"));
+		service.ReleaseIndex(_root);
+		Assert.False(service.IsIndexReady(_root));
+	}
 }

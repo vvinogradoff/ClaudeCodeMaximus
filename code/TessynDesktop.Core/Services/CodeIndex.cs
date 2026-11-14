@@ -58,6 +58,11 @@ public sealed class CodeIndex : IDisposable
 
 	public int RefCount;
 
+	/// <summary>Test seam: runs on the build thread right after the initial scan.</summary>
+	internal Action? ScanCompletedHook;
+
+	internal bool HasWatcher => _watcher != null;
+
 	public bool IsReady => _isReady;
 
 	public IndexedFileModel[] FileSnapshot
@@ -78,7 +83,14 @@ public sealed class CodeIndex : IDisposable
 
 	public async Task BuildAsync()
 	{
-		await Task.Run(() => FullScan(), _cts.Token);
+		await Task.Run(() =>
+		{
+			FullScan();
+			ScanCompletedHook?.Invoke();
+		}, _cts.Token);
+
+		// Released while the scan ran: no watcher, no ready flag.
+		_cts.Token.ThrowIfCancellationRequested();
 		if (_enableWatcher)
 			StartWatcher();
 		_isReady = true;
@@ -200,12 +212,13 @@ public sealed class CodeIndex : IDisposable
 				}
 				else if (Directory.Exists(path))
 				{
-					RemoveSubtree(entryKey);
+					// Build the replacement first, then swap it in under one lock so searches never see the subtree missing.
 					var files = new Dictionary<string, IndexedFileModel>();
 					var symbols = new Dictionary<string, CodeSymbolModel[]>();
 					ScanDirectory(path, files, symbols);
 					lock (_dataLock)
 					{
+						RemoveSubtree(entryKey);
 						foreach (var (key, value) in files)
 						{
 							if (_files.Count >= Constants.CodeIndex.MaxIndexedFiles) break;
@@ -265,7 +278,11 @@ public sealed class CodeIndex : IDisposable
 		}
 	}
 
-	/// <summary>True when any directory segment of <paramref name="filePath"/> below the root is an excluded directory.</summary>
+	/// <summary>
+	/// True when any directory segment of <paramref name="filePath"/> below the root is an excluded directory, or when the
+	/// path itself is one (a Created event for the directory <c>obj</c> must not index what is generated inside it).
+	/// A plain file that merely carries an excluded name is still indexed.
+	/// </summary>
 	private bool IsExcluded(string filePath)
 	{
 		if (!filePath.StartsWith(_workingDirectory, StringComparison.OrdinalIgnoreCase)) return true;
@@ -275,7 +292,8 @@ public sealed class CodeIndex : IDisposable
 		while (!relative.IsEmpty)
 		{
 			var sep = relative.IndexOfAny('\\', '/');
-			if (sep < 0) return false; // last segment is the file itself
+			if (sep < 0)
+				return lookup.Contains(relative) && !File.Exists(filePath); // last segment: excluded only when it is not a file
 			if (sep > 0 && lookup.Contains(relative[..sep])) return true;
 			relative = relative[(sep + 1)..];
 		}
@@ -439,19 +457,26 @@ public sealed class CodeIndex : IDisposable
 	{
 		try
 		{
-			_watcher = new FileSystemWatcher(_workingDirectory)
+			// Under the same lock Dispose takes, so a watcher is never created after (or while) the index is disposed.
+			lock (_pendingLock)
 			{
-				IncludeSubdirectories = true,
-				NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.DirectoryName,
-				InternalBufferSize = 64 * 1024,
-			};
+				if (_cts.IsCancellationRequested) return;
 
-			_watcher.Created += OnFileEvent;
-			_watcher.Changed += OnFileEvent;
-			_watcher.Deleted += OnFileEvent;
-			_watcher.Renamed += OnRenamedEvent;
-			_watcher.Error += OnWatcherError;
-			_watcher.EnableRaisingEvents = true;
+				var watcher = new FileSystemWatcher(_workingDirectory)
+				{
+					IncludeSubdirectories = true,
+					NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.DirectoryName,
+					InternalBufferSize = 64 * 1024,
+				};
+
+				watcher.Created += OnFileEvent;
+				watcher.Changed += OnFileEvent;
+				watcher.Deleted += OnFileEvent;
+				watcher.Renamed += OnRenamedEvent;
+				watcher.Error += OnWatcherError;
+				watcher.EnableRaisingEvents = true;
+				_watcher = watcher;
+			}
 		}
 		catch (Exception ex)
 		{
@@ -561,7 +586,12 @@ public sealed class CodeIndex : IDisposable
 			_debounceTimer?.Dispose();
 		}
 
-		_watcher?.Dispose();
+		lock (_pendingLock)
+		{
+			_watcher?.Dispose();
+			_watcher = null;
+		}
+
 		lock (_dataLock)
 		{
 			_files = new Dictionary<string, IndexedFileModel>();

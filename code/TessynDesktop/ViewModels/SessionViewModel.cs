@@ -488,10 +488,18 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
 		{
 			_indexedDirectory = WorkingDirectory;
-			_ = codeIndexService.GetOrCreateIndexAsync(_indexedDirectory);
+			_ = AcquireCodeIndexAsync(WorkingDirectory);
 		}
 
 		_log.Debug("SessionViewModel created: ExternalId={ExternalId}", _node.ExternalId);
+	}
+
+	/// <summary>Takes the index reference; if the build failed nothing is held, so the later release must be skipped.</summary>
+	private async Task AcquireCodeIndexAsync(string directory)
+	{
+		var acquired = await _codeIndexService.GetOrCreateIndexAsync(directory);
+		if (!acquired && _indexedDirectory == directory)
+			_indexedDirectory = null;
 	}
 
 	private void OnScheduleChanged(object? sender, EventArgs e) =>

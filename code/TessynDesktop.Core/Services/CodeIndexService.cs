@@ -16,46 +16,61 @@ public sealed class CodeIndexService : ICodeIndexService
 
 	private readonly ConcurrentDictionary<string, CodeIndex> _indexes = new(StringComparer.OrdinalIgnoreCase);
 
-	public async Task GetOrCreateIndexAsync(string workingDirectory)
+	/// <summary>Test seam: creates the index for a directory.</summary>
+	internal Func<string, CodeIndex> IndexFactory { get; set; } = static directory => new CodeIndex(directory);
+
+	public async Task<bool> GetOrCreateIndexAsync(string workingDirectory)
 	{
-		if (string.IsNullOrWhiteSpace(workingDirectory)) return;
+		if (string.IsNullOrWhiteSpace(workingDirectory)) return false;
 
 		var normalized = NormalizePath(workingDirectory);
 
 		if (_indexes.TryGetValue(normalized, out var existing))
 		{
 			Interlocked.Increment(ref existing.RefCount);
-			return;
+			return true;
 		}
 
-		var index = new CodeIndex(normalized);
+		var index = IndexFactory(normalized);
 		if (_indexes.TryAdd(normalized, index))
 		{
 			Interlocked.Increment(ref index.RefCount);
 			try
 			{
 				await index.BuildAsync();
+				return true;
 			}
 			catch (OperationCanceledException)
 			{
 				// Released while the first scan was still running; ReleaseIndex already removed and disposed it.
-				_indexes.TryRemove(normalized, out _);
+				// The caller's reference went with that release, so nothing is held.
+				RemoveIfSame(normalized, index);
+				return false;
 			}
 			catch (Exception ex)
 			{
+				// A failed build holds no reference: the caller must not release one it never got.
 				_log.Error(ex, "Failed to build code index for {Directory}", normalized);
-				_indexes.TryRemove(normalized, out _);
+				RemoveIfSame(normalized, index);
 				index.Dispose();
+				return false;
 			}
 		}
-		else
+
+		// Another thread added it first
+		index.Dispose();
+		if (_indexes.TryGetValue(normalized, out existing))
 		{
-			// Another thread added it first
-			index.Dispose();
-			if (_indexes.TryGetValue(normalized, out existing))
-				Interlocked.Increment(ref existing.RefCount);
+			Interlocked.Increment(ref existing.RefCount);
+			return true;
 		}
+
+		return false;
 	}
+
+	/// <summary>Removes the entry only if it is still this instance, so a newer index for the same directory survives.</summary>
+	private void RemoveIfSame(string normalized, CodeIndex index) =>
+		_indexes.TryRemove(new KeyValuePair<string, CodeIndex>(normalized, index));
 
 	public void ReleaseIndex(string workingDirectory)
 	{
