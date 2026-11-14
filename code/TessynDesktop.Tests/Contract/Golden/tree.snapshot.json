@@ -1,0 +1,50 @@
+{
+  "version": 0,
+  "directories": [
+    {
+      "id": "<id1>",
+      "label": "<root>\\proj",
+      "isExpanded": false,
+      "groups": [
+        {
+          "id": "<id2>",
+          "name": "Group",
+          "isExpanded": false,
+          "groups": [],
+          "sessions": [
+            {
+              "id": "<id3>",
+              "name": "InGroup",
+              "workerCount": 0,
+              "state": {
+                "id": "<id3>",
+                "running": false,
+                "streamingAlive": false,
+                "favorite": true,
+                "lastActivityUtc": "2026-11-12T10:00:00+00:00",
+                "lastPromptUtc": "2026-11-12T10:00:00+00:00",
+                "hasDraft": true
+              }
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "id": "<id4>",
+          "name": "Supervisor",
+          "workerCount": 1,
+          "state": {
+            "id": "<id4>",
+            "running": false,
+            "streamingAlive": false,
+            "favorite": false,
+            "lastActivityUtc": "2026-11-12T09:00:00+00:00",
+            "lastPromptUtc": "2026-11-12T09:00:00+00:00",
+            "hasDraft": false
+          }
+        }
+      ]
+    }
+  ]
+}

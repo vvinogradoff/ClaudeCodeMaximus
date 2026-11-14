@@ -1,0 +1,22 @@
+{
+  "serverTimeUtc": "<ts>",
+  "sessions": [
+    {
+      "id": "<id1>",
+      "name": "InGroup",
+      "directoryLabel": "<root>\\proj",
+      "state": {
+        "id": "<id1>",
+        "running": false,
+        "streamingAlive": false,
+        "favorite": true,
+        "lastActivityUtc": "2026-11-12T10:00:00+00:00",
+        "lastPromptUtc": "2026-11-12T10:00:00+00:00",
+        "hasDraft": true
+      },
+      "hasSchedules": false,
+      "pinned": true,
+      "canHide": false
+    }
+  ]
+}
