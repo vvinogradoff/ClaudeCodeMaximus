@@ -89,6 +89,7 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 				}
 
 				_client = client;
+				_logger.LogInformation("Connected to daemon run {RunId} (protocol {Protocol})", client.ServerInfo?.RunId, client.ServerInfo?.ProtocolVersion);
 				_ui.Post(() =>
 				{
 					Apply(ConnectionBannerState.Connected, null);

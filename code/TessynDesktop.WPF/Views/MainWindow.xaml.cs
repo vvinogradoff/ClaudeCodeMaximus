@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.ViewModels;
 
@@ -16,17 +17,21 @@ public partial class MainWindow : Window
 	private readonly IClientStateStore _stateStore;
 	private readonly Win32WindowPlacement _placement;
 	private readonly WindowPlacementClamper _clamper;
+	private readonly bool _testWindow;
 	private readonly CancellationTokenSource _lifetime = new();
 	private readonly DispatcherTimer _placementTimer;
 
-	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper)
+	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options)
 	{
+		_testWindow = options.TestWindow;
 		_viewModel = viewModel;
 		_stateStore = stateStore;
 		_placement = placement;
 		_clamper = clamper;
 		DataContext = viewModel;
 		InitializeComponent();
+		if (_testWindow)
+			PrepareTestWindow();
 
 		TreeColumn.Width = new GridLength(JsonClientStateStore.ClampTreeWidth(stateStore.State.TreeWidth));
 		_placementTimer = new DispatcherTimer { Interval = PlacementSaveDelay };
@@ -46,8 +51,21 @@ public partial class MainWindow : Window
 		Splitter.DragCompleted += (_, _) => _stateStore.Update(state => state.TreeWidth = TreeColumn.ActualWidth);
 	}
 
+	/// <summary>Test mode: shown but never activated, off every monitor, hidden from the taskbar.</summary>
+	private void PrepareTestWindow()
+	{
+		ShowActivated = false;
+		ShowInTaskbar = false;
+		WindowStartupLocation = WindowStartupLocation.Manual;
+		Left = Constants.Limits.OffScreenCoordinate;
+		Top = Constants.Limits.OffScreenCoordinate;
+	}
+
 	private void OnSourceInitialized(object? sender, EventArgs e)
 	{
+		if (_testWindow)
+			return;
+
 		var (monitors, primary) = _placement.GetMonitors();
 		var clamped = _clamper.Clamp(_stateStore.State.Window, monitors, primary);
 		if (clamped != null)
@@ -67,6 +85,9 @@ public partial class MainWindow : Window
 
 	private void CapturePlacement()
 	{
+		if (_testWindow)
+			return;
+
 		if (WindowState == WindowState.Minimized)
 			return;
 

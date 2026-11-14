@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Explicitly-run end-to-end tests that start the BUILT WPF app. They open a real (off-screen, non-activating) window, so they are
+    kept out of the suites that run after every change. Run them with:  dotnet test code/TessynDesktop.WPF.E2E.Tests
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TessynDesktop.Core\TessynDesktop.Core.csproj" />
+    <ProjectReference Include="..\TessynDesktop.Client\TessynDesktop.Client.csproj" />
+    <!-- The loopback test host and the seeded-registry fakes live in the main test project. -->
+    <ProjectReference Include="..\TessynDesktop.Tests\TessynDesktop.Tests.csproj" />
+    <!-- Build-order only: the tests launch the built exe; nothing from the app is referenced. -->
+    <ProjectReference Include="..\TessynDesktop.WPF\TessynDesktop.WPF.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

@@ -16,6 +16,7 @@
         </Border>
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem Content="{Binding StatusText}" />
+            <StatusBarItem Content="{Binding ErrorText}" Foreground="OrangeRed" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
         </StatusBar>
         <Grid x:Name="ContentGrid">
             <Grid.ColumnDefinitions>

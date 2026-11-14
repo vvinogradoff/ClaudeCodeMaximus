@@ -36,6 +36,14 @@ public sealed class StartupOptionsTests
 	}
 
 	[Fact]
+	public void Parse_RecognizesTheTestWindowSwitch_AnywhereInTheArguments()
+	{
+		Assert.True(StartupOptions.Parse(["--test-window"]).TestWindow);
+		Assert.True(StartupOptions.Parse(["--data-root", "x", "--test-window"]).TestWindow);
+		Assert.False(StartupOptions.Parse(["--data-root", "x"]).TestWindow);
+	}
+
+	[Fact]
 	public void Parse_IgnoresATrailingOptionWithoutValue()
 	{
 		Assert.Null(StartupOptions.Parse(["--daemon-file"]).DaemonFile);

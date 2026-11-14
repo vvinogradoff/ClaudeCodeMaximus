@@ -198,6 +198,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 			_current = model;
 			_surface.Load(nodeId, model.Views, model.HasOlder, toBottom: true);
+			_logger.LogInformation("Session {NodeId} opened: {Loaded} of {Total} entries loaded ({Kind})", nodeId, model.Entries.Count, model.Total, warm ? "warm" : "cold");
 
 			var detail = await detailTask;
 			if (token != _openToken)
@@ -310,7 +311,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	}
 
 	[RelayCommand]
-	private void FindStep(int direction) => _surface.FindStep(direction);
+	private void FindNext() => _surface.FindStep(1);
+
+	[RelayCommand]
+	private void FindPrevious() => _surface.FindStep(-1);
 
 	[RelayCommand]
 	private Task FindAsync()

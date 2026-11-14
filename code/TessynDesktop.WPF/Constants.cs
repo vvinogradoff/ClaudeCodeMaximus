@@ -31,6 +31,7 @@ public static partial class Constants
 		public const int MinWindowHeight = 400;
 		public const double DefaultTreeWidth = 320;
 		public const double MinTreeWidth = 160;
+		public const double OffScreenCoordinate = -32000;
 		public const double MaxTreeWidth = 2000;
 	}
 
