@@ -36,6 +36,11 @@ public sealed class CodeIndexService : ICodeIndexService
 			{
 				await index.BuildAsync();
 			}
+			catch (OperationCanceledException)
+			{
+				// Released while the first scan was still running; ReleaseIndex already removed and disposed it.
+				_indexes.TryRemove(normalized, out _);
+			}
 			catch (Exception ex)
 			{
 				_log.Error(ex, "Failed to build code index for {Directory}", normalized);
@@ -112,6 +117,8 @@ public sealed class CodeIndexService : ICodeIndexService
 			if (name.StartsWith(query, StringComparison.Ordinal))
 			{
 				tier1.Add(item);
+				// Tier 1 is the best tier: once it alone fills the result there is nothing to gain from scanning on.
+				if (tier1.Count >= maxResults) return tier1;
 			}
 			else if (name.StartsWith(query, StringComparison.OrdinalIgnoreCase))
 			{

@@ -396,6 +396,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public event Action? CancelScheduleRequested;
 
 	private readonly IOperationTimer _timer;
+	private readonly ICodeIndexService _codeIndexService;
+
+	/// <summary>The working directory this view model holds a code-index reference for, or null when it holds none.</summary>
+	private string? _indexedDirectory;
 
 	public SessionViewModel(
 		SessionNodeViewModel node,
@@ -476,8 +480,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		RefreshScheduleState();
 
 		// Start background indexing for this session's working directory
+		_codeIndexService = codeIndexService;
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
-			_ = codeIndexService.GetOrCreateIndexAsync(WorkingDirectory);
+		{
+			_indexedDirectory = WorkingDirectory;
+			_ = codeIndexService.GetOrCreateIndexAsync(_indexedDirectory);
+		}
 
 		_log.Debug("SessionViewModel created: ExternalId={ExternalId}", _node.ExternalId);
 	}
@@ -567,6 +575,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	{
 		_daemonClient.ScheduleChanged -= OnScheduleChanged;
 		_daemonClient.SessionSettingsChanged -= OnSessionSettingsChanged;
+
+		// Give back the reference taken at construction; the index (watcher, file and symbol tables) is freed with the last one.
+		if (_indexedDirectory != null)
+		{
+			_codeIndexService.ReleaseIndex(_indexedDirectory);
+			_indexedDirectory = null;
+		}
+
 		FocusVm.Dispose();
 		TagsVm.Dispose();
 		_models.Dispose();

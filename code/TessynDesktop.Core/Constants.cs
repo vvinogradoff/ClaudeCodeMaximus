@@ -70,6 +70,19 @@ public static partial class Constants
 	{
 		public const int DebounceMilliseconds = 300;
 		public const int MaxSuggestions = 15;
+
+		/// <summary>Safety cap on indexed files per working directory; a larger tree is truncated (and logged), not held in memory.</summary>
+		public const int MaxIndexedFiles = 200_000;
+
+		/// <summary>Largest .cs file parsed for symbols; bigger files are generated or data and cost far more than they help.</summary>
+		public const long MaxSymbolParseBytes = 2L * 1024 * 1024;
+
+		/// <summary>Directory names never indexed or watched: VCS, build output, vendored or generated trees.</summary>
+		public static readonly string[] ExcludedDirectories =
+		[
+			"bin", "obj", ".git", "node_modules", ".vs", ".idea",
+			"vcpkg", "vcpkg_installed", ".venv", "venv", "__pycache__", ".next", ".nuget", ".gradle", ".terraform", ".cache", ".svn", ".hg",
+		];
 		public const string SymbolTrigger = "#";
 		public const string FileTrigger = "##";
 	}
