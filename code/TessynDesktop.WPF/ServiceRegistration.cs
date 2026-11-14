@@ -1,0 +1,51 @@
+using System.Windows.Threading;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using TessynDesktop.Client;
+using TessynDesktop.WPF.Infrastructure;
+using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.Rendering;
+using TessynDesktop.WPF.State;
+using TessynDesktop.WPF.Transcript;
+using TessynDesktop.WPF.ViewModels;
+using TessynDesktop.WPF.Views;
+
+namespace TessynDesktop.WPF;
+
+/// <summary>The DI composition root.</summary>
+/// <remarks>Created by Claude</remarks>
+public sealed class ServiceRegistration
+{
+	public void Register(IServiceCollection services, AppPaths paths, Dispatcher dispatcher, StartupOptions options)
+	{
+		services.AddSingleton(paths);
+		services.AddSingleton(options);
+		services.AddSingleton<IUiDispatcher>(new WpfUiDispatcher(dispatcher));
+		services.AddTransient<GlobalExceptionLogger>();
+
+		// Daemon connection: daemon.json discovery (overridable with --daemon-file) and the real TessynClient.
+		services.AddSingleton<IDaemonLocator>(new DaemonLocator(options.DaemonFile));
+		services.AddSingleton<ITessynClientFactory, TessynClientFactory>();
+		services.AddSingleton<ConnectionViewModel>();
+
+		services.AddSingleton<Func<ITessynClient, TreeViewModel>>(sp => client => new TreeViewModel(
+			client, sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<TreeViewModel>>()));
+		services.AddSingleton<UrlPolicy>();
+		services.AddSingleton<IUrlLauncher, SystemUrlLauncher>();
+		services.AddSingleton<IEntryRenderer, MarkdigEntryRenderer>();
+		services.AddSingleton<SwitchLatencyTracker>();
+		services.AddSingleton<WebViewEnvironmentProvider>();
+		services.AddSingleton<ITranscriptSurface, WebView2TranscriptSurface>();
+		services.AddSingleton<WebView2TranscriptSurface>(sp => (WebView2TranscriptSurface)sp.GetRequiredService<ITranscriptSurface>());
+		services.AddSingleton<Func<ITessynClient, SessionPaneViewModel>>(sp => client => new SessionPaneViewModel(
+			client, sp.GetRequiredService<ITranscriptSurface>(), sp.GetRequiredService<IEntryRenderer>(), sp.GetRequiredService<IUrlLauncher>(),
+			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<SwitchLatencyTracker>(), sp.GetRequiredService<ILogger<SessionPaneViewModel>>()));
+		services.AddSingleton<IClientStateStore, JsonClientStateStore>();
+		services.AddSingleton<WindowPlacementClamper>();
+		services.AddSingleton<Win32WindowPlacement>();
+		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));
+		services.AddSingleton<MainViewModel>();
+		services.AddSingleton<MainWindow>();
+	}
+}

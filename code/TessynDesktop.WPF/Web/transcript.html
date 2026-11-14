@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
+<style>
+:root{color-scheme:light dark;--fg:#1b1b1f;--bg:#fff;--user:#e3eefd;--asst:#f6f6f8;--sys:#666677;--comp:#fff4cc;--compb:#e0c060;--code:#f0f0f3;--icode:#e8e8ec;--line:#c8c8cd;--link:#0066cc;--hdr:#555577}
+@media (prefers-color-scheme: dark){:root{--fg:#e6e6ea;--bg:#1e1e22;--user:#27384f;--asst:#2a2a30;--sys:#9a9aa8;--comp:#4a4120;--compb:#8a7a30;--code:#17171a;--icode:#333339;--line:#4a4a52;--link:#6cb0ff;--hdr:#a0a0b8}}
+html,body{margin:0;height:100%;overflow:hidden;font:13px/1.45 "Segoe UI",sans-serif;color:var(--fg);background:var(--bg)}
+#vp{position:absolute;inset:0;overflow-y:auto;overflow-anchor:none}
+.e{padding:4px 10px}
+.e .c{border-radius:8px;padding:5px 10px;overflow-wrap:anywhere}
+.e.U .c{background:var(--user);margin-left:50px}
+.e.A .c{background:var(--asst);margin-right:50px}
+.e.S .c{padding:2px 8px;font-size:12px;color:var(--sys);margin:0 20px}
+.e.C .c{background:var(--comp);border:1px solid var(--compb)}
+.h{font-size:11px;color:var(--hdr);margin-bottom:3px}
+.e.C .h{font-weight:bold}
+.b p{margin:2px 0 4px}.b ul,.b ol{margin:2px 0 4px;padding-left:22px}.b li{margin:0}
+.b pre{background:var(--code);border-radius:4px;padding:6px 8px;margin:3px 0 5px;overflow-x:auto;font:12px Consolas,monospace}
+.b code{font-family:Consolas,monospace}.b p code,.b li code,.b td code{background:var(--icode);padding:0 2px}
+.b table{border-collapse:collapse;margin:4px 0 6px}.b th,.b td{border:.5px solid var(--line);padding:2px 6px;text-align:left;max-width:420px}
+.b th{font-weight:600}
+.b blockquote{margin:2px 0 4px 10px;color:var(--sys)}
+.b h1{font-size:19px;margin:6px 0 3px}.b h2{font-size:16px;margin:6px 0 3px}.b h3,.b h4{font-size:14px;margin:6px 0 3px}
+.b a{color:var(--link);cursor:pointer}.b a.blocked{color:inherit;text-decoration:none;cursor:default}
+a.more{display:inline-block;margin-top:3px;color:var(--link);cursor:pointer;font-size:12px}
+mark{background:#ffeb3b;color:#000}mark.cur{background:#ff9800}
+</style>
+</head>
+<body>
+<div id="vp"><div id="padTop"></div><div id="items"></div><div id="padBot"></div></div>
+<script src="transcript.js"></script>
+</body>
+</html>
