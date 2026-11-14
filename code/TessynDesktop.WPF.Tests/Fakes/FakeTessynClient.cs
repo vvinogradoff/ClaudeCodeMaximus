@@ -176,6 +176,13 @@ public sealed class FakeTessynClient : ITessynClient
 
 	public Task<UsageResult> UsageGetAsync(string? profileId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
+	// P1.F / P1.G additions to ITessynClient; the WPF client does not use them yet.
+	public Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, SessionEntriesQuery query, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+	public Task<SessionEntryDto> SessionEntryByIdAsync(string nodeId, string entryId, EntryRangeParams? range = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+	public Task<SessionHeadersResult> SessionHeadersAsync(IReadOnlyList<string> nodeIds, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
 	public ValueTask DisposeAsync()
 	{
 		Disposed = true;
