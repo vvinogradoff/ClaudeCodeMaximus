@@ -13,6 +13,7 @@ namespace TessynDesktop.Tests.Services;
 internal sealed class FakeSessionFileService : ISessionFileService
 {
     public event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten { add { } remove { } }
+    public event EventHandler<SessionFileDeletedEventArgs>? SessionFileDeleted { add { } remove { } }
     public IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes) => Array.Empty<SessionEntryModel>();
     public IReadOnlyList<SessionEntryModel> ReadEntriesFrom(string fileName, long startOffset) => Array.Empty<SessionEntryModel>();
     public SessionFileStampModel? GetFileStamp(string fileName) => null;

@@ -330,7 +330,7 @@ public sealed class SessionContentStoreIndexTests : ContentStoreTestBase
 	}
 
 	[Fact]
-	public void OrphanedSidecar_IsHarmless()
+	public void OrphanedSidecar_IsHarmlessAndRemovedOnceTheMissingFileIsSeen()
 	{
 		WriteConversation(File1, 3);
 		using (var first = NewStore())
@@ -340,7 +340,7 @@ public sealed class SessionContentStoreIndexTests : ContentStoreTestBase
 		using var second = NewStore();
 
 		Assert.False(second.GetHeader(File1).Exists);
-		Assert.Single(SidecarFiles());
+		Assert.Empty(SidecarFiles()); // review B3: seeing the file missing clears the leftover sidecar
 	}
 
 	[Fact]

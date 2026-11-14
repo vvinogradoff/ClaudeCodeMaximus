@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
+using Serilog;
 using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
@@ -16,6 +19,11 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 internal sealed class EntryIndexCatalog : IDisposable
 {
+	private static readonly ILogger _log = Log.ForContext<EntryIndexCatalog>();
+
+	/// <summary>How long <see cref="Dispose"/> waits for the background indexer to finish its current file.</summary>
+	private static readonly TimeSpan DisposeWait = TimeSpan.FromSeconds(5);
+
 	private readonly ISessionFileService _files;
 	private readonly string _directory;
 	private readonly SessionFileScanner _scanner = new();
@@ -23,6 +31,11 @@ internal sealed class EntryIndexCatalog : IDisposable
 	private readonly EntryIndexFileCodec _codec = new();
 	private readonly ConcurrentDictionary<string, FileIndexState> _states = new(StringComparer.OrdinalIgnoreCase);
 	private readonly object _evictGate = new();
+
+	// Files whose tail still has to be indexed after an append; one worker drains it so an appender never waits for an index.
+	private readonly Channel<string> _appended = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
+	private readonly ConcurrentDictionary<string, byte> _queued = new(StringComparer.OrdinalIgnoreCase);
+	private readonly Task _indexer;
 	private long _tick;
 
 	public EntryIndexCatalog(ISessionFileService files, string directory)
@@ -32,12 +45,27 @@ internal sealed class EntryIndexCatalog : IDisposable
 
 		_files.EntryAppended        += OnEntryAppended;
 		_files.SessionFileRewritten += OnSessionFileRewritten;
+		_files.SessionFileDeleted   += OnSessionFileDeleted;
+
+		_indexer = Task.Run(IndexAppendedAsync);
 	}
 
 	public void Dispose()
 	{
 		_files.EntryAppended        -= OnEntryAppended;
 		_files.SessionFileRewritten -= OnSessionFileRewritten;
+		_files.SessionFileDeleted   -= OnSessionFileDeleted;
+
+		_appended.Writer.TryComplete();
+		try
+		{
+			_indexer.Wait(DisposeWait);
+		}
+		catch (AggregateException)
+		{
+			// The worker never throws; nothing to report on shutdown.
+		}
+
 		Flush();
 	}
 
@@ -47,7 +75,7 @@ internal sealed class EntryIndexCatalog : IDisposable
 		var stamp = _files.GetFileStamp(fileName);
 		if (stamp == null)
 		{
-			_states.TryRemove(fileName, out _);
+			Forget(fileName);
 			return null;
 		}
 
@@ -78,7 +106,7 @@ internal sealed class EntryIndexCatalog : IDisposable
 			}
 		}
 
-		TryDelete(SidecarPath(fileName));
+		DeleteSidecar(fileName);
 	}
 
 	/// <summary>Writes every sidecar that is behind its in-memory index.</summary>
@@ -94,27 +122,60 @@ internal sealed class EntryIndexCatalog : IDisposable
 	private void OnEntryAppended(object? sender, SessionEntryAppendedEventArgs e)
 	{
 		// Only files whose index is already loaded are kept current eagerly; a never-read session is indexed on first read.
-		if (!_states.TryGetValue(e.FileName, out var state) || state.Snapshot == null)
-			return;
-
+		// The work itself runs on the indexer thread: the appender must neither wait for a rebuild holding the file's gate nor
+		// ever see an exception from here (review B1). A skipped update is harmless, every read validates the index.
 		try
 		{
-			Acquire(e.FileName);
+			if (_states.TryGetValue(e.FileName, out var state) && state.Snapshot != null && _queued.TryAdd(e.FileName, 0))
+				_appended.Writer.TryWrite(e.FileName);
 		}
-		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		catch (Exception ex)
 		{
-			// The next read validates the index against the file again.
+			_log.Warning(ex, "EntryIndexCatalog: could not queue the index update of {File}", e.FileName);
+		}
+	}
+
+	private async Task IndexAppendedAsync()
+	{
+		await foreach (var fileName in _appended.Reader.ReadAllAsync().ConfigureAwait(false))
+		{
+			_queued.TryRemove(fileName, out _);
+			try
+			{
+				Acquire(fileName);
+			}
+			catch (Exception ex)
+			{
+				// The next read validates the index against the file again.
+				_log.Warning(ex, "EntryIndexCatalog: eager index update of {File} failed", fileName);
+			}
 		}
 	}
 
 	private void OnSessionFileRewritten(object? sender, SessionFileRewrittenEventArgs e) => Invalidate(e.FileName);
+
+	private void OnSessionFileDeleted(object? sender, SessionFileDeletedEventArgs e) => Forget(e.FileName);
+
+	/// <summary>Drops the in-memory index of a file that no longer exists, together with its sidecar and any temp file (review B3).</summary>
+	private void Forget(string fileName)
+	{
+		_states.TryRemove(fileName, out _);
+		DeleteSidecar(fileName);
+	}
+
+	private void DeleteSidecar(string fileName)
+	{
+		var path = SidecarPath(fileName);
+		TryDelete(path);
+		TryDelete(path + Constants.ContentStore.TempFileExtension);
+	}
 
 	private EntryIndexSnapshot? Refresh(string fileName, FileIndexState state, bool rebuild)
 	{
 		var stamp = _files.GetFileStamp(fileName);
 		if (stamp == null)
 		{
-			_states.TryRemove(fileName, out _);
+			Forget(fileName);
 			return null;
 		}
 
@@ -135,12 +196,12 @@ internal sealed class EntryIndexCatalog : IDisposable
 		}
 		catch (FileNotFoundException)
 		{
-			_states.TryRemove(fileName, out _);
+			Forget(fileName);
 			return null;
 		}
 		catch (DirectoryNotFoundException)
 		{
-			_states.TryRemove(fileName, out _);
+			Forget(fileName);
 			return null;
 		}
 
