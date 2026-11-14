@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -124,12 +125,8 @@ public sealed class TdcpServer : IDisposable
 
 	private async Task HandlePostAsync(HttpListenerContext ctx)
 	{
-		var token = ctx.Request.Headers[Constants.Agent.TokenHeader];
-		if (string.IsNullOrEmpty(token) || token != _token)
-		{
-			await WriteJsonResponseAsync(ctx, InvalidTokenResponse().ToJsonString(), 200);
+		if (!await AuthorizeAsync(ctx))
 			return;
-		}
 
 		using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
 		var body = await reader.ReadToEndAsync();
@@ -138,12 +135,47 @@ public sealed class TdcpServer : IDisposable
 		await WriteJsonResponseAsync(ctx, response.ToJsonString(), 200);
 	}
 
-	private static JsonNode InvalidTokenResponse() =>
+	// ── Request checks ────────────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Origin first (a request carrying one comes from a browser context, e.g. the planned in-app browser pane, and is never a
+	/// legitimate TDCP client: 403), then the token (401). Both answer with a JSON-RPC error body. Returns false after having
+	/// written the rejection.
+	/// </summary>
+	private async Task<bool> AuthorizeAsync(HttpListenerContext ctx)
+	{
+		if (!string.IsNullOrEmpty(ctx.Request.Headers["Origin"]))
+		{
+			await WriteJsonResponseAsync(ctx, ErrorResponse("Requests with an Origin header are not allowed").ToJsonString(), 403);
+			return false;
+		}
+
+		if (!TokenMatches(ctx.Request.Headers[Constants.Agent.TokenHeader]))
+		{
+			await WriteJsonResponseAsync(ctx, ErrorResponse("Invalid or missing X-CMX-Token").ToJsonString(), 401);
+			return false;
+		}
+
+		return true;
+	}
+
+	private bool TokenMatches(string? candidate)
+	{
+		if (string.IsNullOrEmpty(candidate))
+			return false;
+
+		// Hashing first gives both sides the same length, so the comparison is constant-time for any input.
+		var expected = SHA256.HashData(Encoding.UTF8.GetBytes(_token));
+		var actual   = SHA256.HashData(Encoding.UTF8.GetBytes(candidate));
+		return CryptographicOperations.FixedTimeEquals(expected, actual);
+	}
+
+	private static JsonNode ErrorResponse(string message) =>
 		new JsonObject
 		{
 			["jsonrpc"] = "2.0",
 			["id"]      = null,
-			["error"]   = new JsonObject { ["code"] = -32600, ["message"] = "Invalid or missing X-CMX-Token" },
+			["error"]   = new JsonObject { ["code"] = -32600, ["message"] = message },
 		};
 
 	// ── GET SSE handler ───────────────────────────────────────────────────────────
@@ -153,13 +185,8 @@ public sealed class TdcpServer : IDisposable
 
 	private async Task HandleGetSseAsync(HttpListenerContext ctx)
 	{
-		var token = ctx.Request.Headers[Constants.Agent.TokenHeader];
-		if (string.IsNullOrEmpty(token) || token != _token)
-		{
-			ctx.Response.StatusCode = 401;
-			ctx.Response.Close();
+		if (!await AuthorizeAsync(ctx))
 			return;
-		}
 
 		var legacy      = ctx.Request.QueryString[Constants.Remote.Sse.LegacyQuery] == "1";
 		var clientRunId = ctx.Request.QueryString[Constants.Remote.Sse.RunIdQuery];

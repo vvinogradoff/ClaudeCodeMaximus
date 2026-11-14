@@ -66,7 +66,11 @@ public partial class App : Application
 		// Start agent MCP server and scheduler (FR.14, FR.15).
 		if (appSettings.Settings.AgentToolsEnabled)
 		{
-			Services.GetRequiredService<IAgentMcpServer>().Start();
+			var mcpServer = Services.GetRequiredService<IAgentMcpServer>();
+			mcpServer.Start();
+			// Publish endpoint, pid and run id for client processes (the token stays in its DPAPI file).
+			if (mcpServer.Port > 0)
+				Services.GetRequiredService<DaemonDiscoveryFile>().Write(mcpServer.Port);
 			Services.GetRequiredService<ISchedulerService>().Start();
 			Services.GetRequiredService<ISkillProvisioningService>().ProvisionAll();
 		}
@@ -119,6 +123,7 @@ public partial class App : Application
 				Services.GetRequiredService<ISessionIndexUpdater>().Stop();
 				if (appSettings.Settings.AgentToolsEnabled)
 				{
+					Services.GetRequiredService<DaemonDiscoveryFile>().Clear();
 					Services.GetRequiredService<IAgentMcpServer>().Stop();
 					Services.GetRequiredService<ISchedulerService>().Stop();
 				}
@@ -253,17 +258,14 @@ public partial class App : Application
 		services.AddSingleton<IDaemonClient, InProcDaemonClient>();
 
 		// TDCP control surface (Stage 5a): co-hosted with AgentMcpServer on the /tdcp path.
-		// Token is generated once on first run and persisted so restarts keep the same value.
+		// The token is generated once on first run and kept in a DPAPI-protected file (never in appsettings.json); a token from an
+		// older appsettings.json is moved there once so it does not change. daemon.json tells client processes where to connect.
+		services.AddSingleton<ITdcpTokenStore, TdcpTokenStore>();
+		services.AddSingleton<DaemonDiscoveryFile>();
 		services.AddSingleton(sp =>
 		{
-			var appSettings = sp.GetRequiredService<IAppSettingsService>();
-			if (string.IsNullOrEmpty(appSettings.Settings.TdcpToken))
-			{
-				appSettings.Settings.TdcpToken = Guid.NewGuid().ToString("N");
-				appSettings.Save();
-			}
-
-			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), sp.GetRequiredService<TdcpDispatcher>(), appSettings.Settings.TdcpToken,
+			var token = TdcpTokenProvider.GetOrCreate(sp.GetRequiredService<ITdcpTokenStore>(), sp.GetRequiredService<IAppSettingsService>());
+			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), sp.GetRequiredService<TdcpDispatcher>(), token,
 				sp.GetRequiredService<IEventLog>(), sp.GetRequiredService<IDaemonRunInfo>());
 		});
 
@@ -273,7 +275,7 @@ public partial class App : Application
 		// by notifications and queries), the activity service (its per-file cache) and the publisher (its event subscriptions).
 		// The loopback module and the state builder hold no state, so they are transient.
 		services.AddTransient<IRemoteRpcModule, TdcpLoopbackRpcModule>();
-		services.AddSingleton<IRemoteRpcModule, ClientRpcModule>();
+		services.AddSingleton<IRemoteRpcModule, ClientRpcModule>(); // gets the shared IDaemonRunInfo and IEventLog from DI
 		services.AddSingleton<TdcpDispatcher>();
 		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
 		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
