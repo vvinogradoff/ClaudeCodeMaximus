@@ -147,6 +147,7 @@ public sealed class DaemonHarness : IDisposable
 		s.AddTransient<IRemoteRpcModule, TagsRemoteRpcModule>();
 		s.AddSingleton<IRemoteNotificationPublisher, RemoteNotificationPublisher>();
 		s.AddSingleton<IProfileLabelService, ProfileLabelService>();
+		s.AddSingleton<ISessionContentStore>(sp => new SessionContentStore(sp.GetRequiredService<ISessionFileService>(), Path.Combine(root, "entry-index")));
 		s.AddSingleton<ISessionEntryReader, SessionEntryReader>();
 		s.AddSingleton<ISessionSendService, SessionSendService>();
 		s.AddSingleton<IRemoteUsageService, RemoteUsageService>();
