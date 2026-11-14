@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -397,6 +398,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private readonly IOperationTimer _timer;
 	private readonly ICodeIndexService _codeIndexService;
+	private readonly CompositeDisposable _nodeSubscriptions = new();
+	private bool _disposed;
 
 	/// <summary>The working directory this view model holds a code-index reference for, or null when it holds none.</summary>
 	private string? _indexedDirectory;
@@ -465,8 +468,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		TagsVm = new SessionTagsViewModel(node.Model.NodeId, daemonClient, uiDispatcher, new SessionTagLauncher(),
 			node.WhenAnyValue(x => x.Name));
 
-		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
-		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
+		// Subscriptions on the tree node outlive this view model unless disposed (the node is held by the tree for the whole run).
+		_nodeSubscriptions.Add(node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n));
+		_nodeSubscriptions.Add(node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive))));
 
 		SendCommand           = ReactiveCommand.Create(() => { _ = _turn.SendAsync(InputText); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
@@ -571,8 +575,32 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
+	/// <summary>
+	/// False while this view model must stay loaded: a turn is running or streaming (any path), the tree marks the session
+	/// externally active, or the input box holds text that has not been sent. Anything else can be rebuilt from the file.
+	/// </summary>
+	public bool CanEvict =>
+		!IsBusy && !IsNodeRunning && !IsStreamingProcessAlive && !IsExternallyActive && string.IsNullOrWhiteSpace(InputText);
+
 	public void Dispose()
 	{
+		if (_disposed)
+			return;
+		_disposed = true;
+
+		_nodeSubscriptions.Dispose();
+
+		// A pending debounced draft write would otherwise be lost (or fire later on a dead view model): write it now.
+		if (_draftDebounceTimer != null)
+		{
+			_draftDebounceTimer.Stop();
+			_draftDebounceTimer = null;
+			if (string.IsNullOrWhiteSpace(_inputText))
+				_draftService.DeleteDraft(_node.FileName);
+			else
+				_draftService.SaveDraft(_node.FileName, _inputText);
+		}
+
 		_daemonClient.ScheduleChanged -= OnScheduleChanged;
 		_daemonClient.SessionSettingsChanged -= OnSessionSettingsChanged;
 

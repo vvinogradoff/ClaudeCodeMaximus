@@ -48,6 +48,9 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	private bool _isNodeRunning;
 	private string _thinkingDuration = string.Empty;
 	private DispatcherTimer? _thinkingTimer;
+
+	/// <summary>Subscription on the (long-lived) tree node; must be disposed or the node keeps this controller alive.</summary>
+	private IDisposable? _nodeRunningSubscription;
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
 
@@ -278,7 +281,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_profiles         = profiles;
 		_composer         = composer;
 
-		node.WhenAnyValue(x => x.IsRunning).Subscribe(running => IsNodeRunning = running);
+		_nodeRunningSubscription = node.WhenAnyValue(x => x.IsRunning).Subscribe(running => IsNodeRunning = running);
 		_streamingManager.ProcessExited += OnStreamingProcessExited;
 	}
 
@@ -290,7 +293,16 @@ public sealed class TurnController : ReactiveObject, IDisposable
 
 	public void Dispose()
 	{
+		_nodeRunningSubscription?.Dispose();
+		_nodeRunningSubscription = null;
 		_streamingManager.ProcessExited -= OnStreamingProcessExited;
+		if (_thinkingTimer != null)
+		{
+			_thinkingTimer.Tick -= OnThinkingTimerTick;
+			_thinkingTimer.Stop();
+			_thinkingTimer = null;
+		}
+
 		lock (_ctsLock) { foreach (var c in _activeCts) c.Dispose(); _activeCts.Clear(); }
 
 		// Release this controller's share of the daemon's reference-counted running flag, so a view disposed

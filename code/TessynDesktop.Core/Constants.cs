@@ -530,6 +530,9 @@ SESSION TRANSCRIPT TO COMPACT:
 	}
 
 	/// <summary>Always-on runtime diagnostics: logging, hang watchdog, process metrics, heap capture and the diag_* MCP tools.</summary>
+	/// <summary>How many session view models stay loaded (the active one plus the most recently used others). Busy ones are exempt (ISSUE.016).</summary>
+	public const int SessionCacheCapacity = 5;
+
 	public static class Diagnostics
 	{
 		public const string DiagFolderName = "diag";
