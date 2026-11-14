@@ -49,6 +49,15 @@ public interface ITurnObserver
 	void Interrupted(DateTimeOffset timestamp) { }
 
 	/// <summary>
+	/// The node's last send has ended. Called before the running flag is released; a client finishes its bookkeeping here (the JSONL entry
+	/// count) while its busy state still holds. Skipped for the idle transition when a new send started meanwhile.
+	/// </summary>
+	Task BeforeIdleAsync() => Task.CompletedTask;
+
+	/// <summary>The node is idle now (called right before the running flag is released): clear the busy state, stop the timer, play the sound.</summary>
+	void Idle() { }
+
+	/// <summary>
 	/// Called after the response, still holding the node's turn lock, so a client can run its post-response step (the Auto-Compact
 	/// of FR.11.6). Cancellation of the turn interrupts it like the rest of the turn.
 	/// </summary>

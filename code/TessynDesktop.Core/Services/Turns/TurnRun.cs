@@ -26,7 +26,7 @@ internal sealed class TurnRun
 	private string? _pendingEffort;
 
 	public TurnRun(string turnId, SessionNodeModel node, ISessionFileService files, IAppSettingsService appSettings, ITurnObserver observer,
-		TurnProgressTracker progress, string pendingModelId, string pendingEffort)
+		TurnProgressTracker progress, string? pendingModelId, string? pendingEffort)
 	{
 		TurnId          = turnId;
 		_node           = node;

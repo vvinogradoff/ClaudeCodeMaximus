@@ -87,6 +87,8 @@ public sealed class TurnEngine : ITurnEngine
 			settings.ModelId ?? Constants.Turns.DefaultOptionText, settings.Effort ?? Constants.Turns.DefaultOptionText);
 
 		context.Enter();
+		if (observer is not NullTurnObserver)
+			context.LastObserver = observer;
 
 		var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		context.Add(cts);
@@ -161,13 +163,14 @@ public sealed class TurnEngine : ITurnEngine
 					lockAcquired = true;
 				}
 				run.SendErrorText = null;
+				context.Active = run;
 				progress.Status(TurnState.Running);
 
 				if (node.IsStreamingMode)
 				{
 					// Streaming Session Mode (FR.19): no --resume "No conversation found" retry path - the same open process
 					// carries the conversation, so context-retry doesn't apply.
-					await SendViaStreamingAsync(run, observer, node, settings, sessionId, messageToSend, launch, ct);
+					await SendViaStreamingAsync(run, observer, context, node, settings, sessionId, messageToSend, launch, ct);
 				}
 				else
 				{
@@ -186,6 +189,9 @@ public sealed class TurnEngine : ITurnEngine
 			}
 			finally
 			{
+				// From here on the process's output belongs to no turn.
+				context.Active = null;
+
 				// FR.21.22 - once per send that actually ran, after its last entry is appended and before the lock is released
 				// (the next queued send starts as soon as it acquires the lock). A send stopped while still queued behind
 				// another turn never ran one, so it reports nothing - reporting it cancelled would drop the running turn's
@@ -223,11 +229,63 @@ public sealed class TurnEngine : ITurnEngine
 		{
 			context.Remove(cts);
 			cts.Dispose();
-
-			if (context.Leave())
-				CloseRunning(context, nodeId);
+			context.Leave();
+			await EndBusyAsync(context, nodeId);
 		}
 	}
+
+	/// <summary>
+	/// After the node's last send: the client finishes its bookkeeping, then the node becomes idle (client state first, then the daemon's
+	/// running flag - the order the controller always used). A send that started meanwhile owns the idle transition instead.
+	/// </summary>
+	private async Task EndBusyAsync(TurnNodeContext context, string nodeId)
+	{
+		if (context.IsBusy)
+			return;
+
+		var idleObserver = context.LastObserver;
+		if (idleObserver != null)
+		{
+			try
+			{
+				await idleObserver.BeforeIdleAsync();
+			}
+			catch (Exception ex)
+			{
+				_log.Warning(ex, "A turn observer failed before the idle transition of node {NodeId}", nodeId);
+			}
+		}
+
+		if (!context.TryBecomeIdle(out var shareWasOpen))
+			return;
+
+		try
+		{
+			idleObserver?.Idle();
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "A turn observer failed in the idle transition of node {NodeId}", nodeId);
+		}
+
+		if (shareWasOpen && !string.IsNullOrEmpty(nodeId))
+			_registry.SetSessionRunning(nodeId, false);
+	}
+
+	/// <summary>
+	/// The one callback bound to a node's streaming process (bound again on every turn, like the controller's method was). It hands each event
+	/// to the turn holding the lock; events outside any turn - background-task output, native schedules (FR.19.4), anything arriving while the
+	/// next turn still waits for the lock - go to a fresh background run: persisted and rendered by the last observer exactly as the controller
+	/// always did, but without any state of a finished turn (retry flags, error text, model stamp) and without progress.
+	/// </summary>
+	private Action<ClaudeStreamEvent> StreamHandlerFor(TurnNodeContext context, SessionNodeModel node) =>
+		context.StreamHandler ??= evt =>
+		{
+			var run = context.Active
+				?? new TurnRun(string.Empty, node, _files, _appSettings, context.LastObserver ?? new NullTurnObserver(),
+					new TurnProgressTracker(node.NodeId, string.Empty, []), null, null);
+			run.HandleStreamEvent(evt);
+		};
 
 	/// <inheritdoc />
 	public void SendCorrection(SessionNodeModel node, TurnSettings settings, string prompt)
@@ -370,7 +428,7 @@ public sealed class TurnEngine : ITurnEngine
 	/// turn's model/profile/effort/mcp config if this is the first turn), then writes the turn to its open stdin and awaits the next
 	/// result event. The run's event handler is bound as the process's primary callback, as a one-shot launch binds it.
 	/// </summary>
-	private async Task SendViaStreamingAsync(TurnRun run, ITurnObserver observer, SessionNodeModel node, TurnSettings settings,
+	private async Task SendViaStreamingAsync(TurnRun run, ITurnObserver observer, TurnNodeContext context, SessionNodeModel node, TurnSettings settings,
 		string? sessionId, string messageToSend, TurnLaunch launch, CancellationToken ct)
 	{
 		var nodeId = node.NodeId;
@@ -388,7 +446,7 @@ public sealed class TurnEngine : ITurnEngine
 			LocalToolSpec:    launch.LocalToolSpec,
 			StrictMcpConfig:  launch.StrictMcpConfig);
 
-		var justStarted = _streamingManager.EnsureStarted(nodeId, spawnParams, run.HandleStreamEvent);
+		var justStarted = _streamingManager.EnsureStarted(nodeId, spawnParams, StreamHandlerFor(context, node));
 		if (justStarted)
 			observer.StreamingProcessStarted();
 
@@ -414,13 +472,5 @@ public sealed class TurnEngine : ITurnEngine
 			return;
 
 		_registry.SetSessionRunning(nodeId, true);
-	}
-
-	private void CloseRunning(TurnNodeContext context, string nodeId)
-	{
-		if (string.IsNullOrEmpty(nodeId) || !context.TryCloseRunning())
-			return;
-
-		_registry.SetSessionRunning(nodeId, false);
 	}
 }

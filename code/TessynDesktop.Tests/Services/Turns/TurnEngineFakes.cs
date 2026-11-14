@@ -101,8 +101,17 @@ internal sealed class ScriptedStreamingManager : IClaudeStreamingSessionManager
 			return Task.CompletedTask;
 		});
 
+	/// <summary>When set, a spawn reports a launch error on the callback (like the real manager) and throws this.</summary>
+	public Exception? EnsureFailure { get; set; }
+
 	public bool EnsureStarted(string nodeId, StreamingSpawnParams spawnParams, Action<ClaudeStreamEvent> onEvent)
 	{
+		if (EnsureFailure != null)
+		{
+			onEvent(new ClaudeStreamEvent { Type = "system", Subtype = "error", IsError = true, Content = "Could not launch claude in Streaming Session Mode." });
+			throw EnsureFailure;
+		}
+
 		EnsureCalls.Add((nodeId, spawnParams));
 		_primary = onEvent;
 		return _alive.Add(nodeId);
@@ -352,6 +361,22 @@ internal sealed class RecordingTurnObserver : ITurnObserver
 	{
 		Add("afterResponse");
 		return AfterResponse?.Invoke() ?? Task.CompletedTask;
+	}
+
+	/// <summary>Runs inside <see cref="BeforeIdleAsync"/> and <see cref="Idle"/>, to look at the world at that moment.</summary>
+	public Action<string>? OnIdleStep { get; set; }
+
+	public Task BeforeIdleAsync()
+	{
+		Add("beforeIdle");
+		OnIdleStep?.Invoke("beforeIdle");
+		return Task.CompletedTask;
+	}
+
+	public void Idle()
+	{
+		Add("idle");
+		OnIdleStep?.Invoke("idle");
 	}
 
 	public IReadOnlyList<string> Snapshot()

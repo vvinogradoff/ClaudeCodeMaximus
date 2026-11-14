@@ -47,7 +47,6 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 	/// <summary>Subscription on the (long-lived) tree node; must be disposed or the node keeps this controller alive.</summary>
 	private IDisposable? _nodeRunningSubscription;
 	private DateTimeOffset _thinkingStartedAt;
-	private int _busyCount;
 
 	private bool _isNewBranch;
 	private bool _isAutoCompact;
@@ -388,7 +387,6 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 		// Reset one-shot toggles immediately
 		if (wasNewBranch) IsNewBranch = false;
 
-		_busyCount++;
 		IsBusy = true;
 		_node.IsRunning = true;
 
@@ -403,38 +401,10 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 			_thinkingTimer.Start();
 		}
 
-		try
-		{
-			// The engine writes the user entry (its observer callback adds the rows, synchronously, as the controller did), runs the
-			// turn, and returns once the turn was reported complete.
-			await _engine.RunAsync(new TurnRequest(_node.Model, message, BuildTurnSettings(), wasNewBranch), new RunObserver(this, message));
-		}
-		finally
-		{
-			_busyCount = Math.Max(0, _busyCount - 1);
-			if (_busyCount == 0)
-			{
-				// Update JSONL entry count before IsBusy goes false, so the watcher
-				// doesn't re-detect entries we already processed during this send cycle.
-				// The parse runs off the UI thread; IsBusy stays true (watcher suppressed) while we await it.
-				await _content.RefreshJsonlEntryCountAsync();
-			}
-
-			// A send that started during the await owns the idle transition now (its own finally runs it).
-			if (_busyCount == 0)
-			{
-				var t = _thinkingTimer;
-				_thinkingTimer = null;
-				t?.Stop();
-				ThinkingDuration = string.Empty;
-				IsBusy = false;
-				_node.IsRunning = false;
-
-				// FR.22.1: only on natural completion of the whole batch, never after user Stop.
-				if (!_anyCancelledInBatch && _node.Model.PlayCompletionSound)
-					_soundService.PlayCompletionSound(_node.Model.NodeId);
-			}
-		}
+		// The engine writes the user entry (its observer callback adds the rows, synchronously, as the controller did), runs the turn and
+		// returns once it was reported complete. The idle transition (JSONL refresh, IsBusy=false, sound) runs in the observer's
+		// BeforeIdleAsync/Idle, called by the engine in the controller's old order and before the running flag is released.
+		await _engine.RunAsync(new TurnRequest(_node.Model, message, BuildTurnSettings(), wasNewBranch), new RunObserver(this, message));
 	}
 
 	/// <summary>The command bar's current choices as the launch settings of a turn (or a correction).</summary>

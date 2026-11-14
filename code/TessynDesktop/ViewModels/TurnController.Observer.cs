@@ -140,6 +140,32 @@ public sealed partial class TurnController
 			});
 		}
 
+		public async Task BeforeIdleAsync()
+		{
+			// Update the JSONL entry count before IsBusy goes false, so the watcher doesn't re-detect entries processed during this send
+			// cycle. The parse runs off the UI thread; IsBusy stays true (watcher suppressed) while it is awaited. The engine may call this
+			// on behalf of a turn this controller did not run (a remote one): then there is nothing to do.
+			if (_owner.IsBusy)
+				await Content.RefreshJsonlEntryCountAsync();
+		}
+
+		public void Idle()
+		{
+			if (!_owner.IsBusy)
+				return;
+
+			var t = _owner._thinkingTimer;
+			_owner._thinkingTimer = null;
+			t?.Stop();
+			_owner.ThinkingDuration = string.Empty;
+			_owner.IsBusy = false;
+			_owner._node.IsRunning = false;
+
+			// FR.22.1: only on natural completion of the whole batch, never after user Stop.
+			if (!_owner._anyCancelledInBatch && _owner._node.Model.PlayCompletionSound)
+				_owner._soundService.PlayCompletionSound(_owner._node.Model.NodeId);
+		}
+
 		public async Task AfterResponseWhileLockedAsync()
 		{
 			// Auto-Compact (FR.11.6): _midRunAutoCompactState reflects any mid-run toggle change. Runs inside the send flow, which

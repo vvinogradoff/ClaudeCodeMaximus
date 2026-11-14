@@ -17,15 +17,38 @@ internal sealed class TurnNodeContext
 		lock (_gate) _busy++;
 	}
 
-	/// <summary>Leaves a send; returns true when it was the last one.</summary>
-	public bool Leave()
+	/// <summary>Leaves a send.</summary>
+	public void Leave()
+	{
+		lock (_gate) _busy = _busy > 0 ? _busy - 1 : 0;
+	}
+
+	/// <summary>
+	/// Ends the node's busy period if no send is in it: atomically with <see cref="Enter"/> and <see cref="TryOpenRunning"/>, so a send that
+	/// enters meanwhile either keeps the period (and the share) open, or finds the share closed and opens its own. False when a send is busy.
+	/// </summary>
+	public bool TryBecomeIdle(out bool shareWasOpen)
 	{
 		lock (_gate)
 		{
-			_busy = _busy > 0 ? _busy - 1 : 0;
-			return _busy == 0;
+			shareWasOpen = false;
+			if (_busy > 0)
+				return false;
+
+			shareWasOpen = _runningOpen;
+			_runningOpen = false;
+			return true;
 		}
 	}
+
+	/// <summary>The send holding the turn lock (null between turns): the target of a streaming process's events.</summary>
+	public TurnRun? Active { get; set; }
+
+	/// <summary>The observer of the latest send that had one: it renders events outside any turn and receives the idle notifications.</summary>
+	public ITurnObserver? LastObserver { get; set; }
+
+	/// <summary>The one callback bound to the node's streaming process; it routes each event to the active run, or to a background handler.</summary>
+	public System.Action<Models.ClaudeStreamEvent>? StreamHandler { get; set; }
 
 	/// <summary>True while at least one send of the node is between <see cref="Enter"/> and <see cref="Leave"/>.</summary>
 	public bool IsBusy
@@ -42,19 +65,6 @@ internal sealed class TurnNodeContext
 				return false;
 
 			_runningOpen = true;
-			return true;
-		}
-	}
-
-	/// <summary>Gives the share back; false when it was not held.</summary>
-	public bool TryCloseRunning()
-	{
-		lock (_gate)
-		{
-			if (!_runningOpen)
-				return false;
-
-			_runningOpen = false;
 			return true;
 		}
 	}

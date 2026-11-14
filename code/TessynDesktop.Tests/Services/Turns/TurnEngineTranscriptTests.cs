@@ -182,7 +182,7 @@ public sealed class TurnEngineTranscriptTests : IDisposable
 		await _h.Run(TurnEngineHarness.Node(), "Hi", observer).Within();
 
 		Assert.Equal(
-			["user:Work", "progress:[Read] a.txt", "assistant:answer", "authError:False", "sessionId", "resultEnded", "afterResponse"],
+			["user:Work", "progress:[Read] a.txt", "assistant:answer", "authError:False", "sessionId", "resultEnded", "afterResponse", "beforeIdle", "idle"],
 			observer.Snapshot());
 	}
 
@@ -327,7 +327,7 @@ public sealed class TurnEngineTranscriptTests : IDisposable
 		await _h.Run(node, "Hi", observer).Within();
 
 		Assert.Equal("new", node.ClaudeSessionId);
-		Assert.Equal(["user:Work", "authError:False", "sessionId", "resultEnded", "afterResponse"], observer.Snapshot());
+		Assert.Equal(["user:Work", "authError:False", "sessionId", "resultEnded", "afterResponse", "beforeIdle", "idle"], observer.Snapshot());
 	}
 
 	[Fact]
