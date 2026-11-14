@@ -29,6 +29,8 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly IClaudeSessionStatusService _claudeSessionStatus;
 	private readonly ISessionSearchService _searchService;
 	private readonly IGitOriginService _gitOriginService;
+	private readonly IGitOriginScanner _gitOriginScanner;
+	private readonly ISessionLastActivityScanner _lastActivityScanner;
 	private readonly IDraftService _draftService;
 	private readonly IOperationTimer _timer;
 	private int _resumabilitySweepInFlight;
@@ -183,17 +185,17 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		_searchService = searchService;
 		_gitOriginService = gitOriginService;
 		_draftService = draftService;
+		_gitOriginScanner = new GitOriginScanner(gitOriginService);
+		_lastActivityScanner = new SessionLastActivityScanner(sessionFileService, draftService);
 
 		AddDirectoryCommand = ReactiveCommand.Create(PromptAddDirectory);
 
 		// Registry backfills NodeId/AgentToken, then we project models → VMs.
 		_daemon.LoadFromSettings();
 		LoadFromSettings();
-		using (_timer.Measure(Constants.Diagnostics.Operation.RefreshGitOrigins, Constants.Diagnostics.WarnThresholds.UiLoadMs))
-			RefreshGitOrigins();
+		_ = RefreshGitOriginsAsync();
 		_ = RefreshSessionResumabilityAsync();
-		using (_timer.Measure(Constants.Diagnostics.Operation.RefreshLastPromptTimes, Constants.Diagnostics.WarnThresholds.UiLoadMs))
-			RefreshLastPromptTimes();
+		_ = RefreshLastPromptTimesAsync();
 		using (_timer.Measure(Constants.Diagnostics.Operation.ApplyAttentionSummaries, Constants.Diagnostics.WarnThresholds.UiLoadMs))
 		{
 			foreach (var dir in Directories)
@@ -638,10 +640,35 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	// --- Git origin ---
 
-	public void RefreshGitOrigins()
+	/// <summary>
+	/// Resolves every directory's git origin. The file reads run on a background thread over a snapshot of the
+	/// directory paths; the results are applied to the view models in one UI-thread pass (ISSUE.016).
+	/// </summary>
+	public async Task RefreshGitOriginsAsync()
 	{
-		foreach (var dir in Directories)
-			dir.GitOrigin = _gitOriginService.GetOriginUrl(dir.Path);
+		try
+		{
+			var directories = Directories.ToList();
+			var paths = directories.Select(d => d.Path).ToList();
+
+			// Measured inside the task so the scope runs on the pool thread (timed, but not published as the current UI operation).
+			var results = await Task.Run(() =>
+			{
+				using var scanScope = _timer.Measure(Constants.Diagnostics.Operation.ScanGitOrigins, Constants.Diagnostics.WarnThresholds.UiLoadMs);
+				return _gitOriginScanner.Scan(paths);
+			}).ConfigureAwait(false);
+
+			await Dispatcher.UIThread.InvokeAsync(() =>
+			{
+				using var applyScope = _timer.Measure(Constants.Diagnostics.Operation.RefreshGitOrigins, Constants.Diagnostics.WarnThresholds.UiLoadMs);
+				for (var i = 0; i < directories.Count; i++)
+					directories[i].GitOrigin = results[i].OriginUrl;
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Git origin refresh failed");
+		}
 	}
 
 	/// <summary>
@@ -1636,27 +1663,66 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	// --- Last prompt time ---
 
-	private void RefreshLastPromptTimes()
+	/// <summary>
+	/// Reloads last-prompt, last-response, profile and draft timestamps for every session. The session-file and
+	/// draft reads run on a background thread over a snapshot of the nodes; the results are applied to the view
+	/// models in one UI-thread pass (ISSUE.016).
+	/// </summary>
+	private async Task RefreshLastPromptTimesAsync()
 	{
-		foreach (var dir in Directories)
-			RefreshLastPromptTimesInChildren(dir.Children);
+		try
+		{
+			var sessions = new List<SessionNodeViewModel>();
+			foreach (var dir in Directories)
+				CollectSessionsWithSubSessions(dir.Children, sessions);
+
+			var fileNames = sessions.Select(s => s.FileName).ToList();
+
+			// Measured inside the task so the scope runs on the pool thread (timed, but not published as the current UI operation).
+			var results = await Task.Run(() =>
+			{
+				using var scanScope = _timer.Measure(Constants.Diagnostics.Operation.ScanLastPromptTimes, Constants.Diagnostics.WarnThresholds.UiLoadMs);
+				return _lastActivityScanner.Scan(fileNames);
+			}).ConfigureAwait(false);
+
+			await Dispatcher.UIThread.InvokeAsync(() =>
+			{
+				using var applyScope = _timer.Measure(Constants.Diagnostics.Operation.RefreshLastPromptTimes, Constants.Diagnostics.WarnThresholds.UiLoadMs);
+				for (var i = 0; i < sessions.Count; i++)
+					ApplyLastActivity(sessions[i], results[i]);
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Last prompt time refresh failed");
+		}
 	}
 
-	private void RefreshLastPromptTimesInChildren(ObservableCollection<ViewModelBase> children)
+	/// <summary>Collects each session followed by its direct sub-sessions, in tree order.</summary>
+	private static void CollectSessionsWithSubSessions(IEnumerable<ViewModelBase> children, List<SessionNodeViewModel> sessions)
 	{
 		foreach (var child in children)
 		{
 			switch (child)
 			{
 				case SessionNodeViewModel session:
-					LoadLastPromptTime(session);
-					foreach (var sub in session.SubSessions) LoadLastPromptTime(sub);
+					sessions.Add(session);
+					sessions.AddRange(session.SubSessions);
 					break;
 				case GroupNodeViewModel group:
-					RefreshLastPromptTimesInChildren(group.Children);
+					CollectSessionsWithSubSessions(group.Children, sessions);
 					break;
 			}
 		}
+	}
+
+	private static void ApplyLastActivity(SessionNodeViewModel session, SessionLastActivityModel activity)
+	{
+		session.LastPromptTimestamp = activity.LastPromptTimestamp;
+		session.LastPromptTime = activity.LastPromptTimestamp?.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+		session.LastResponseTimestamp = activity.LastResponseTimestamp;
+		session.ProfileName = activity.ProfileName;
+		session.LastDraftEditTimestamp = activity.LastDraftEditTimestamp;
 	}
 
 	/// <summary>
@@ -1664,39 +1730,4 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// </summary>
 	public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeViewModel session)
 		=> _daemon.GetSessionLocation(session.Model);
-
-	private void LoadLastPromptTime(SessionNodeViewModel session)
-	{
-		SessionEntryModel? lastUserEntry = null;
-		DateTimeOffset? lastAssistant = null;
-
-		try
-		{
-			var entries = _sessionFileService.ReadEntries(session.FileName);
-			for (var i = entries.Count - 1; i >= 0 && (lastUserEntry == null || lastAssistant == null); i--)
-			{
-				if (lastUserEntry == null && entries[i].Role == Constants.SessionFile.RoleUser)
-					lastUserEntry = entries[i];
-				else if (lastAssistant == null && entries[i].Role == Constants.SessionFile.RoleAssistant)
-					lastAssistant = entries[i].Timestamp;
-			}
-		}
-		catch
-		{
-			// Session file may not exist or be corrupted; leave timestamps null.
-		}
-
-		session.LastPromptTimestamp = lastUserEntry?.Timestamp;
-		session.LastPromptTime = lastUserEntry?.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-		session.LastResponseTimestamp = lastAssistant;
-		session.ProfileName = lastUserEntry?.ProfileName;
-
-		// A draft file can persist with whitespace-only content (e.g. all text deleted without
-		// clearing the draft); that isn't a real pending draft, so its timestamp must not count.
-		var draftText = _draftService.LoadDraft(session.FileName);
-		session.LastDraftEditTimestamp = !string.IsNullOrWhiteSpace(draftText)
-			? _draftService.GetDraftTimestamp(session.FileName)
-			: null;
-	}
-
 }
