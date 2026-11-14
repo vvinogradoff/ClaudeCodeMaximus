@@ -32,7 +32,10 @@ public sealed class TessynClient : ITessynClient
 	private long _nextRequestId;
 	private long _lastSeq;
 	private string? _runId;
-	private bool _disposed;
+	private int _disposed;
+	private int _skippedFrameReported;
+	private readonly Queue<TessynClientStateChangedEventArgs> _pendingStateEvents = new();
+	private bool _drainingStateEvents;
 
 	/// <summary>Creates a client for <paramref name="endpoint"/> (the full <c>/tdcp</c> URL) authenticated with <paramref name="token"/>.</summary>
 	public TessynClient(Uri endpoint, string token, TessynClientOptions? options = null)
@@ -95,15 +98,13 @@ public sealed class TessynClient : ITessynClient
 	/// <inheritdoc />
 	public async Task ConnectAsync(CancellationToken cancellationToken = default)
 	{
-		ObjectDisposedException.ThrowIf(_disposed, this);
+		ObjectDisposedException.ThrowIf(IsDisposed, this);
 
-		lock (_gate)
-		{
-			if (_state is TessynClientState.Connecting or TessynClientState.Connected or TessynClientState.Reconnecting)
-				throw new InvalidOperationException($"The client is already {_state}.");
-		}
+		// Capture the lifetime token first: after disposal the source cannot hand one out.
+		var lifetime = _lifetime.Token;
 
-		SetState(TessynClientState.Connecting);
+		if (!TryBeginConnect())
+			throw new InvalidOperationException($"The client is already {State}.");
 
 		try
 		{
@@ -130,20 +131,42 @@ public sealed class TessynClient : ITessynClient
 			throw;
 		}
 
+		if (lifetime.IsCancellationRequested)
+		{
+			SetState(TessynClientState.Disconnected);
+			throw new ObjectDisposedException(nameof(TessynClient));
+		}
+
 		SetState(TessynClientState.Connected);
 
 		// A daemon without the local stream still serves calls; it just pushes nothing.
 		if (HasCapability(RemoteProtocol.Capabilities.EventsLocal))
-			_streamTask = Task.Run(() => RunStreamAsync(_lifetime.Token), CancellationToken.None);
+			_streamTask = Task.Run(() => RunStreamAsync(lifetime), CancellationToken.None);
+	}
+
+	private bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
+	/// <summary>Moves to Connecting unless a connection is already running; the check and the change are one step.</summary>
+	private bool TryBeginConnect()
+	{
+		lock (_gate)
+		{
+			if (_state is TessynClientState.Connecting or TessynClientState.Connected or TessynClientState.Reconnecting)
+				return false;
+
+			QueueStateChange(TessynClientState.Connecting);
+		}
+
+		DrainStateEvents();
+		return true;
 	}
 
 	/// <inheritdoc />
 	public async ValueTask DisposeAsync()
 	{
-		if (_disposed)
+		if (Interlocked.Exchange(ref _disposed, 1) != 0)
 			return;
 
-		_disposed = true;
 		await _lifetime.CancelAsync().ConfigureAwait(false);
 
 		if (_streamTask != null)
@@ -183,17 +206,47 @@ public sealed class TessynClient : ITessynClient
 
 	private void SetState(TessynClientState next)
 	{
-		TessynClientState previous;
+		lock (_gate)
+			QueueStateChange(next);
+
+		DrainStateEvents();
+	}
+
+	/// <summary>Records a state change; the caller holds <c>_gate</c>. Events are raised in the order they were queued.</summary>
+	private void QueueStateChange(TessynClientState next)
+	{
+		if (_state == next)
+			return;
+
+		_pendingStateEvents.Enqueue(new TessynClientStateChangedEventArgs(_state, next));
+		_state = next;
+	}
+
+	/// <summary>Raises queued state events one at a time; a thread that finds another one draining leaves its events to it.</summary>
+	private void DrainStateEvents()
+	{
 		lock (_gate)
 		{
-			if (_state == next)
+			if (_drainingStateEvents)
 				return;
 
-			previous = _state;
-			_state   = next;
+			_drainingStateEvents = true;
 		}
 
-		Raise(() => StateChanged?.Invoke(this, new TessynClientStateChangedEventArgs(previous, next)));
+		while (true)
+		{
+			TessynClientStateChangedEventArgs? args;
+			lock (_gate)
+			{
+				if (!_pendingStateEvents.TryDequeue(out args))
+				{
+					_drainingStateEvents = false;
+					return;
+				}
+			}
+
+			Raise(() => StateChanged?.Invoke(this, args));
+		}
 	}
 
 	/// <summary>Runs a consumer handler; a throwing handler must never kill the stream loop.</summary>
@@ -223,12 +276,14 @@ public sealed class TessynClient : ITessynClient
 				if (rehello)
 					await RefreshAfterDropAsync(ct).ConfigureAwait(false);
 
-				await ReadStreamAsync(ct, () =>
-				{
-					attempt = 0;
-					if (State == TessynClientState.Reconnecting)
-						SetState(TessynClientState.Connected);
-				}).ConfigureAwait(false);
+				await ReadStreamAsync(
+					ct,
+					onHeaders: () =>
+					{
+						if (State == TessynClientState.Reconnecting)
+							SetState(TessynClientState.Connected);
+					},
+					onActivity: () => attempt = 0).ConfigureAwait(false);
 			}
 			catch (OperationCanceledException) when (ct.IsCancellationRequested)
 			{
@@ -291,7 +346,9 @@ public sealed class TessynClient : ITessynClient
 		Raise(() => Resynced?.Invoke(this, new ResyncedEventArgs(ResyncedEventArgs.RunChangedReason, hello.EventSeq)));
 	}
 
-	private async Task ReadStreamAsync(CancellationToken ct, Action onConnected)
+	/// <param name="onHeaders">Runs when the daemon accepted the stream request.</param>
+	/// <param name="onActivity">Runs for every line received (a comment counts): only then is the backoff reset.</param>
+	private async Task ReadStreamAsync(CancellationToken ct, Action onHeaders, Action onActivity)
 	{
 		long lastSeq;
 		string? runId;
@@ -316,15 +373,37 @@ public sealed class TessynClient : ITessynClient
 		ThrowIfAuthRejected(response);
 		response.EnsureSuccessStatusCode();
 
-		onConnected();
+		onHeaders();
 
 		await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
 		using var reader = new StreamReader(stream, Encoding.UTF8);
 
-		await foreach (var frame in SseFrameReader.ReadAsync(reader, onConnected, ct).ConfigureAwait(false))
-			await HandleFrameAsync(frame, ct).ConfigureAwait(false);
+		await foreach (var frame in SseFrameReader.ReadAsync(reader, onActivity, ct).ConfigureAwait(false))
+		{
+			try
+			{
+				await HandleFrameAsync(frame, ct).ConfigureAwait(false);
+			}
+			catch (Exception ex) when (ex is InvalidOperationException or FormatException)
+			{
+				// A frame of the wrong shape (non-string method, primitive payload): skip it and move past it, or a reconnect would replay it forever.
+				SkipFrame(frame, ex);
+			}
+		}
 
 		throw new IOException("The notification stream was closed by the daemon.");
+	}
+
+	private void SkipFrame(SseFrame frame, Exception error)
+	{
+		lock (_gate)
+		{
+			if (frame.Id > _lastSeq)
+				_lastSeq = frame.Id;
+		}
+
+		if (Interlocked.Exchange(ref _skippedFrameReported, 1) == 0)
+			System.Diagnostics.Trace.TraceWarning($"TessynClient: skipped a malformed notification frame ({error.Message}); further ones are skipped silently.");
 	}
 
 	/// <summary>Dispatches one frame: a resync to <see cref="Resynced"/>, anything else to <see cref="NotificationReceived"/>.</summary>
@@ -351,8 +430,9 @@ public sealed class TessynClient : ITessynClient
 			var reason = frameParams?["reason"]?.GetValue<string>() ?? RemoteProtocol.ResyncReasons.Gap;
 			var head   = frameParams?["eventSeq"]?.GetValue<long>() ?? frame.Id;
 
+			// unknown-seq means another daemon run: its seqs restart, so the old high-water mark must not survive.
 			lock (_gate)
-				_lastSeq = Math.Max(_lastSeq, head);
+				_lastSeq = reason == RemoteProtocol.ResyncReasons.UnknownSeq ? head : Math.Max(_lastSeq, head);
 
 			Raise(() => Resynced?.Invoke(this, new ResyncedEventArgs(reason, head)));
 
@@ -388,7 +468,7 @@ public sealed class TessynClient : ITessynClient
 
 	private async Task<T> CallAsync<T>(string method, JsonObject? parameters, CancellationToken cancellationToken)
 	{
-		ObjectDisposedException.ThrowIf(_disposed, this);
+		ObjectDisposedException.ThrowIf(IsDisposed, this);
 
 		var id = Interlocked.Increment(ref _nextRequestId);
 		var envelope = new JsonObject
@@ -418,7 +498,7 @@ public sealed class TessynClient : ITessynClient
 			status = response.StatusCode;
 			body   = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
 		}
-		catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+		catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
 		{
 			throw new TimeoutException($"{method} did not answer within {_options.RequestTimeout.TotalSeconds:0} s.");
 		}

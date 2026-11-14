@@ -24,15 +24,27 @@ internal sealed class ClientTestHost : IDisposable
 		_dispatcherFactory = dispatcherFactory ?? ((run, log) => new TdcpDispatcher([new ClientRpcModule(runInfo: run, eventLog: log)]));
 		_logCapacity       = logCapacity;
 
-		var listener = new TcpListener(IPAddress.Loopback, 0);
-		listener.Start();
-		Port = ((IPEndPoint)listener.LocalEndpoint).Port;
-		listener.Stop();
+		// A free port is only known to be free until it is released: another test class may take it before the bind, so try again.
+		for (var attempt = 1; ; attempt++)
+		{
+			var listener = new TcpListener(IPAddress.Loopback, 0);
+			listener.Start();
+			Port = ((IPEndPoint)listener.LocalEndpoint).Port;
+			listener.Stop();
 
-		StartRun();
+			try
+			{
+				StartRun();
+				return;
+			}
+			catch (HttpListenerException) when (attempt < 10)
+			{
+				DisposeRun();
+			}
+		}
 	}
 
-	public int Port { get; }
+	public int Port { get; private set; }
 	public Uri Endpoint => new($"http://127.0.0.1:{Port}{Constants.Agent.TdcpEndpointPath}");
 	public RemoteEventBus Bus { get; private set; } = null!;
 	public EventLog Log { get; private set; } = null!;
@@ -52,8 +64,21 @@ internal sealed class ClientTestHost : IDisposable
 	/// <summary>Starts a new listener over the same bus, log and run id (a network drop, not a daemon restart), optionally with another token.</summary>
 	public void StartServer(string? token = null)
 	{
-		Server = new TdcpServer(_daemonClient, _dispatcherFactory(RunInfo, Log), token ?? Token, Log, RunInfo);
-		Server.Start(Port);
+		// The port was ours a moment ago; a parallel test may have grabbed it in between, so retry briefly before giving up.
+		for (var attempt = 1; ; attempt++)
+		{
+			Server = new TdcpServer(_daemonClient, _dispatcherFactory(RunInfo, Log), token ?? Token, Log, RunInfo);
+			try
+			{
+				Server.Start(Port);
+				return;
+			}
+			catch (HttpListenerException) when (attempt < 40)
+			{
+				Server.Dispose();
+				Thread.Sleep(50);
+			}
+		}
 	}
 
 	/// <summary>Stops everything and starts a new daemon run (new run id, empty log) on the same port.</summary>
