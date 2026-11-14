@@ -49,3 +49,12 @@ Ruled out: `SessionView` event subscriptions (planned D2.3). `SessionView.OnData
 ## Verification
 
 After deploying, compare `MEM` lines at the same uptime: expect gen0 rate while idle to drop to a few per minute, cpu below about 5% idle, heap not growing over a day. Look for `Code index ready` once per directory and no repeats. If heap still grows, take `diag_heap` and look for `SessionViewModel` / `MessageEntryViewModel` counts (should stay near 5 sessions' worth).
+
+## Follow-up 2026-11-14: render-loop CPU after the fixes
+
+After the restart onto the fixed build, memory was settled: about 0.7 GB private and a 440 MB heap, against 1.9 GB and 1.3 GB before, with gen-1 churn gone. But CPU stayed at 73-78 % of one core while idle.
+
+- **Measurement:** per-thread CPU sampling showed one thread using about 3.7 s of 3.8 s over 5 s. A ClrMD snapshot (`DataTarget.CreateSnapshotAndAttach`, three samples) showed it was Avalonia's composition render thread: `RenderLoop.TimerTick` -> `ServerCompositor.RenderCore` -> about 20 nested `ServerCompositionContainerVisual.Update` calls.
+- **Cause:** the tree-search "Searching…" spinner (`SessionTreeView.axaml`, FR.1.11) and the Tags tab spinner (`TagSearchView.axaml`) had an infinite rotate animation on the style selector `TextBlock`. That selector always matches, so both spinners kept animating while hidden. Every tick requested a frame, and every frame re-walked the whole visual tree, including the non-virtualized transcript of the open session.
+- **Fix:** commit `7de9c1f`. The animation runs only on `TextBlock.spinning`, a class bound to `IsSearching` / `IsLoading`.
+- **Verify** after the next restart: `cpu=` in the MEM lines should drop to low single digits when the app is idle.
