@@ -122,7 +122,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 	private sealed record ContentSummary(
 		string? FileId,
 		int EntryCount,
-		long Seq,
+		long? Seq,
 		DateTimeOffset? FirstTimestamp,
 		DateTimeOffset? LastTimestamp,
 		LastUsedSettingsDto LastUsed,
@@ -144,7 +144,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		{
 			var entries = _entries.GetAll(fileName);
 			return new ContentSummary(
-				null, entries.Count, entries.Count,
+				null, entries.Count, null,
 				entries.Count > 0 ? entries[0].Timestamp : null,
 				entries.Count > 0 ? entries[^1].Timestamp : null,
 				LastUsedSettingsResolver.Resolve(entries, models, profiles, label), 0, 0);
@@ -203,7 +203,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 				content.FileId,
 				_epochs.GetEpoch(node.FileName),
 				content.EntryCount,
-				content.Seq,
+				content.Seq ?? content.EntryCount,
 				content.FirstTimestamp,
 				content.LastTimestamp,
 				content.LastUsed,
@@ -360,8 +360,8 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 			start--;
 
 		var end = (int)System.Math.Min((long)full, (long)start + (range.Length ?? Constants.Remote.Limits.EntryContentMaxChars));
-		if (end < full && end > start + 1 && char.IsHighSurrogate(content[end - 1]) && char.IsLowSurrogate(content[end]))
-			end--;
+		if (end < full && char.IsHighSurrogate(content[end - 1]) && char.IsLowSurrogate(content[end]))
+			end = end > start + 1 ? end - 1 : end + 1; // one character of the pair must not be cut off; a 1-char slice takes both halves
 
 		return entry with
 		{
