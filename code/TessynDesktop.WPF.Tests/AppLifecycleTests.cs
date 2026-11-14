@@ -4,6 +4,7 @@ namespace TessynDesktop.WPF.Tests;
 
 /// <summary>Starts the built app and checks that closing its window really ends the process (review finding F1).</summary>
 /// <remarks>Created by Claude</remarks>
+[Collection("timing-sensitive")]
 public sealed class AppLifecycleTests : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "tessyn-wpf-app-" + Guid.NewGuid().ToString("N"));

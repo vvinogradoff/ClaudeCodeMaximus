@@ -5,6 +5,7 @@ namespace TessynDesktop.WPF.Tests;
 
 /// <summary>The UI-thread watchdog reports only stalls longer than its threshold.</summary>
 /// <remarks>Created by Claude</remarks>
+[Collection("timing-sensitive")]
 public sealed class UiStallMonitorTests
 {
 	private static async Task<List<TimeSpan>> RunAsync(Func<CancellationToken, Task> ping, int runMs)

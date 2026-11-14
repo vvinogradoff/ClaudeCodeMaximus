@@ -44,6 +44,9 @@ public sealed class UiStallMonitor
 				var timeout = Task.Delay(_threshold, _time, cancellationToken);
 				if (await Task.WhenAny(ping, timeout) != ping)
 				{
+					if (cancellationToken.IsCancellationRequested)
+						break;
+
 					_logger.LogWarning("UI thread not responding for more than {Ms:0} ms", _threshold.TotalMilliseconds);
 					await ping;
 					var stalled = _time.GetElapsedTime(start);
