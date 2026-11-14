@@ -157,7 +157,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 
 		_bus.PublishCoalesced(
 			Constants.Remote.Events.AttentionChanged, NodeKeyPrefix + nodeId,
-			() => new AttentionChangedPayload(nodeId, new AttentionSummaryDto(_daemon.GetAttentionSummary(nodeId))),
+			() => new AttentionChangedPayload(nodeId, _daemon.GetAttentionSummary(nodeId).ToDto()),
 			Constants.Remote.Timings.AttentionChangedWindow);
 
 		PublishSessionChangedByNode(nodeId);

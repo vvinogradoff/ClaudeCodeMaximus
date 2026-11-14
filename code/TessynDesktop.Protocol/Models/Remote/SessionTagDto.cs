@@ -6,19 +6,6 @@ namespace TessynDesktop.Models.Remote;
 /// <remarks>Created by Claude</remarks>
 public sealed record SessionTagDto
 {
-	public SessionTagDto()
-	{
-	}
-
-	public SessionTagDto(SessionTagModel model)
-	{
-		Kind     = model.Kind;
-		Label    = model.Label;
-		Url      = model.Url;
-		Source   = model.Source;
-		AddedUtc = model.AddedUtc;
-	}
-
 	public SessionTagKind Kind { get; init; }
 	public string Label { get; init; } = string.Empty;
 	public string Url { get; init; } = string.Empty;

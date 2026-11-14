@@ -91,7 +91,7 @@ public sealed class SessionEntryReader : ISessionEntryReader
 		}
 
 		var page = Enumerable.Range(start, end - start)
-			.Select(i => new SessionEntryDto(i, entries[i], Constants.Remote.Limits.EntryContentMaxChars))
+			.Select(i => entries[i].ToDto(i, Constants.Remote.Limits.EntryContentMaxChars))
 			.ToList();
 
 		return new SessionEntriesResult(nodeId, epoch, total, page);
@@ -113,7 +113,7 @@ public sealed class SessionEntryReader : ISessionEntryReader
 		if (index < 0 || index >= entries.Count)
 			throw new TdcpException("Entry not found");
 
-		return new SessionEntryDto(index, entries[index], int.MaxValue);
+		return entries[index].ToDto(index, int.MaxValue);
 	}
 
 	/// <summary>A page read from the store; the same window and content as the parsed-list path, without parsing the file.</summary>

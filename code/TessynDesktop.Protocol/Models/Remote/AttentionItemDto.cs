@@ -7,27 +7,6 @@ namespace TessynDesktop.Models.Remote;
 /// <remarks>Created by Claude</remarks>
 public sealed record AttentionItemDto
 {
-	public AttentionItemDto()
-	{
-	}
-
-	public AttentionItemDto(AttentionItemModel model)
-	{
-		Id             = model.Id;
-		Number         = model.Number;
-		Kind           = model.Kind;
-		Title          = model.Title;
-		Body           = string.IsNullOrEmpty(model.Body) ? null : model.Body;
-		Options        = [.. model.Options];
-		Recommendation = model.Recommendation;
-		Status         = model.Status;
-		Answer         = model.Answer;
-		ResolutionNote = model.ResolutionNote;
-		CreatedUtc     = model.CreatedUtc;
-		UpdatedUtc     = model.UpdatedUtc;
-		ClosedUtc      = model.ClosedUtc;
-	}
-
 	public string Id { get; init; } = string.Empty;
 	public int Number { get; init; }
 	public AttentionKind Kind { get; init; }

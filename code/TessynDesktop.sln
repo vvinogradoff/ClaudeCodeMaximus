@@ -15,6 +15,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tessyn.Web.Tests", "Tessyn.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tessyn.Web.E2E.Tests", "Tessyn.Web.E2E.Tests\Tessyn.Web.E2E.Tests.csproj", "{ECDDDE6B-6ADC-47B7-9968-F2F603C94A45}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TessynDesktop.Protocol", "TessynDesktop.Protocol\TessynDesktop.Protocol.csproj", "{E1EC8E98-A100-45D6-9456-04B84736DEF0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TessynDesktop.Client", "TessynDesktop.Client\TessynDesktop.Client.csproj", "{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -97,6 +101,30 @@ Global
 		{ECDDDE6B-6ADC-47B7-9968-F2F603C94A45}.Release|x64.Build.0 = Release|Any CPU
 		{ECDDDE6B-6ADC-47B7-9968-F2F603C94A45}.Release|x86.ActiveCfg = Release|Any CPU
 		{ECDDDE6B-6ADC-47B7-9968-F2F603C94A45}.Release|x86.Build.0 = Release|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Debug|x64.Build.0 = Debug|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Debug|x86.Build.0 = Debug|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Release|x64.ActiveCfg = Release|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Release|x64.Build.0 = Release|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Release|x86.ActiveCfg = Release|Any CPU
+		{E1EC8E98-A100-45D6-9456-04B84736DEF0}.Release|x86.Build.0 = Release|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Debug|x64.Build.0 = Debug|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Debug|x86.Build.0 = Debug|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Release|Any CPU.Build.0 = Release|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Release|x64.ActiveCfg = Release|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Release|x64.Build.0 = Release|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Release|x86.ActiveCfg = Release|Any CPU
+		{236A14C5-2121-4AFA-84D9-4BA0BE0ED396}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

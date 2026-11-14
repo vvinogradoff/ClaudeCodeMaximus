@@ -4,18 +4,6 @@ namespace TessynDesktop.Models.Remote;
 /// <remarks>Created by Claude</remarks>
 public sealed record AttentionSummaryDto
 {
-	public AttentionSummaryDto()
-	{
-	}
-
-	public AttentionSummaryDto(AttentionSummaryModel model)
-	{
-		OpenCount      = model.OpenCount;
-		TopKind        = model.TopKind;
-		AllOpenCount   = model.AllOpenCount;
-		AllOpenTopKind = model.AllOpenTopKind;
-	}
-
 	/// <summary>Open items, Decided excluded (FR.23.13).</summary>
 	public int OpenCount { get; init; }
 
