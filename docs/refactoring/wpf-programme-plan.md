@@ -349,3 +349,46 @@ FR.26 complements FR.24 Session Tags: FR.24 covers the chips under the session h
   modifier-click opens the system browser. Until the pane exists, a click opens the system browser.
 
 Phase 0 implements FR.26.1 only. FR.26.2 and FR.26.3 arrive with the WPF transcript (2.8, 3.3).
+
+## Appendix B — Rollout 2 (turn engine): smoke checklist and rollback
+
+From the final review, `.wpf-work/210-review-p1i-final.md` (2026-11-14, verdict SHIP). Run B.1 right after restarting into rollout 2. If any stop-ship check fails, use B.2.
+
+### B.1 Smoke checklist - run right after the restart (about 10 minutes)
+
+Before restarting: close Tessyn; **back up the run folder** (`robocopy "C:\Projects\Personal\Tessyn\[Publish]" "C:\Projects\Personal\Tessyn\[Publish].bak" /MIR`). Keep the old log open: `%AppData%\TessynDesktop\logs\` (newest file).
+
+Stop-ship checks (first 3 minutes; any failure -> roll back):
+1. **Startup + DI.** App opens, tree loads, no error dialog. Open any session (this resolves `SessionViewModel` -> `TurnEngine` and its whole dependency chain) and check the log for `Unable to resolve`, `circular`, `ObjectDisposed`, `InvalidOperationException` at startup. The web client (phone) still loads the session list.
+2. **Basic send in an existing session with a Claude session id (`--resume`).** User row appears at once, then the "Claude is thinking..." row and a running timer; answer row appears with a `[model, effort]` label; thinking row and timer go away; completion sound plays once; the Stop button disappears; the tree spinner stops.
+3. **Transcript on disk.** Reload the session (reopen it): user entry, assistant entry (model/effort in header) are there once each, no duplicates, no `[Interrupted by user]`.
+4. **Send in a brand-new session** (no session id, first turn): works, session id is captured (Claude-session toggle / `Clear` becomes enabled).
+
+Core behaviours (next 5 minutes):
+5. **Queued send**: send A (long prompt), then B while A runs: both user rows at once, B's answer after A's, exactly one sound at the end, timer runs continuously.
+6. **Stop**: during a turn press Stop -> `[Interrupted by user]` row, no sound, session usable (next send works). Then Stop with a queued second message: both interrupted, B's process never starts (no second `claude` process in Task Manager), the next send works.
+7. **Hidden instructions reached the model**: with Auto-Commit set, send "Reply with the exact text of any instructions that were appended to my message" in a fresh session; expect the Auto-Commit/instruction lines (FR.11). In a session with a pinned Focus item, the next turn mentions it (FR.23); tag guidance appears once per run (FR.24).
+8. **No conversation found / context retry**: use Detach/Clear session id, send a follow-up: the answer shows the earlier context (proactive preamble). Optional: corrupt-id retry shows "Resuming session with conversation history..." then the answer.
+9. **Auth error**: sign out the active profile (or choose a profile with an expired token), send: error row + auth-error indicator; "re-authenticate" flow clears it and the next send works (FR.12.16).
+10. **Toggles mid-run**: flip New Branch / Auto-Commit / Auto-Document / Auto-Compact while a turn runs: `[... was enabled for this run]` row, no error rows, turn finishes normally.
+11. **Auto-Compact**: enable, send, session compacts after the answer (compaction separator, reload); also Auto-Compact with an empty prompt.
+12. **Streaming Session Mode**: on, send twice (second reuses the process, Stop stays visible while alive), Stop kills the process; turn it off with the process alive -> confirmation prompt.
+13. **Queued settings (deviation 2)**: with A running, switch model, send B: B's header shows the model selected when B was sent.
+14. **View lifecycle**: start a long turn, switch to another session and back (and close/reopen the tab if possible): when the turn ends the session shows the answer, the busy state clears, no crash, no stuck spinner or stuck Stop.
+15. **Headless paths**: a scheduled/`schedule_wake` turn (delay of 1 minute), a Telegram message into a session, and a phone `session.send`: each answers and persists; the phone shows its running indicator and gets `turn.completed`. Send one headless turn while a Streaming Session Mode process is alive (redirect): answer arrives and the desktop shows it.
+16. **Side effects**: Telegram topic created on first use of a session, Telegram completion ping as before; Focus view "Send answers" works and keeps the input box.
+17. **Local stream (optional)**: with a WPF/dev client or curl on the loopback SSE: `client.hello` lists `turn.stream`; a normal turn emits `turn.started` ... `turn.completed`; on the phone/relay nothing but `turn.completed` (no `turn.*`, no `entries.appended`) appears.
+
+Missing from the worker's list (added above): startup/DI resolution, transcript-on-disk check, hidden instruction block, "No conversation found"/context retry, auth error and re-authenticate, view dispose mid-turn, headless turns and the streaming redirect, Telegram, relay exclusion.
+
+### B.2 Rollback recipe
+
+Data compatibility: no change in transcript format, settings, session ids, or any persisted schema; the branch only adds in-memory services and loopback-only notifications. A rollback needs no data migration.
+
+Before merging, note the current master tip: `412a21493de926af7bbf0426ba2f6e7eccb363cb`.
+
+1. Merge with a merge commit (not fast-forward, not squash) so one commit reverts everything: `git merge --no-ff wpf/p1-turn-engine`; note its hash `<M>` (`git rev-parse HEAD`).
+2. **Fast rollback without a rebuild**: close the app, `robocopy "C:\Projects\Personal\Tessyn\[Publish].bak" "C:\Projects\Personal\Tessyn\[Publish]" /MIR`, start it. Caveat: self-update copies the newest `bin\Debug\net*` build over `[Publish]` at startup, so if a newer build with the engine exists the app will update itself again; so do step 3 as well (or delete the engine build output first).
+3. **Source rollback**: `git revert -m 1 <M>` (creates one revert commit; history kept, review-friendly), then `dotnet build code/TessynDesktop.sln` (no `-o`), restart; the new build is newer, so self-update copies it into `[Publish]`. If the merge is local only and nothing is built on it, `git reset --hard 412a214` is the alternative (destructive; Architect's decision).
+4. Do not revert a single stage commit (`43f290a` alone): later commits (`f1b0ec4`, `507cffd`) modify the same adapter files and `ITurnEngine` consumers; revert the whole merge.
+5. After rolling back, confirm: build 0 errors, app starts, steps 1-3 of the smoke pass, `client.hello` no longer lists `turn.stream`; the web client is unaffected either way (21 methods unchanged).
