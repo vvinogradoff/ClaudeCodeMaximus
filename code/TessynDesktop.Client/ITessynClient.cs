@@ -97,4 +97,18 @@ public interface ITessynClient : IAsyncDisposable
 
 	/// <summary><c>usage.get</c>.</summary>
 	Task<UsageResult> UsageGetAsync(string? profileId = null, CancellationToken cancellationToken = default);
+
+	// ── P1.F / P1.G (additive; grouped at the end) ───────────────────────────────────────────
+
+	/// <summary><c>session.entries</c> with the P1.F bounds (<c>afterSeq</c>, <c>beforeEntryId</c>); needs the <c>entries.ids</c> capability for ids.</summary>
+	Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, SessionEntriesQuery query, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// <c>session.entry</c> by stable id (<see cref="SessionEntryDto.EntryId"/>), optionally only a character slice of the content.
+	/// Fails with a <see cref="TessynRpcException"/> "Session history changed" when the id's content generation is gone.
+	/// </summary>
+	Task<SessionEntryDto> SessionEntryByIdAsync(string nodeId, string entryId, EntryRangeParams? range = null, CancellationToken cancellationToken = default);
+
+	/// <summary><c>session.headers</c> (loopback only): O(1) content headers of many sessions at once; at most 500 ids.</summary>
+	Task<SessionHeadersResult> SessionHeadersAsync(IReadOnlyList<string> nodeIds, CancellationToken cancellationToken = default);
 }
