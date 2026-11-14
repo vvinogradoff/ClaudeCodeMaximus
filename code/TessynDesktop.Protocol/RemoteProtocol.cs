@@ -96,6 +96,12 @@ public static class RemoteProtocol
 
 		/// <summary>A daemon-level failure whose message is safe to show.</summary>
 		public const int DaemonError = -32000;
+
+		/// <summary>Relay only: the daemon behind the relay is offline.</summary>
+		public const int DaemonOffline = -32001;
+
+		/// <summary>Relay only: the daemon did not answer in time.</summary>
+		public const int DaemonTimeout = -32002;
 	}
 
 	/// <summary>The local SSE stream (<c>GET /tdcp</c>).</summary>
