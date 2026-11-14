@@ -318,6 +318,7 @@ public sealed class SessionTurnService : ISessionTurnService
 				progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryAuth);
 				_log.Information("OAuth refresh race for node {NodeId} — retrying turn once", node.NodeId);
 				await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+				progress.Status(TurnState.Running);
 
 				await _processManager.SendMessageAsync(
 					workingDirectory: node.WorkingDirectory,
@@ -452,6 +453,7 @@ public sealed class SessionTurnService : ISessionTurnService
 			progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryAuth);
 			_log.Information("OAuth refresh race for node {NodeId} (streaming) — retrying turn once", node.NodeId);
 			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+			progress.Status(TurnState.Running);
 			await _streamingManager.SendTurnAsync(node.NodeId, augmentedPrompt, ct, ObserveEvent);
 		}
 

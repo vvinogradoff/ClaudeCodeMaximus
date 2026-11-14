@@ -69,15 +69,18 @@ internal sealed class TurnNodeContext
 		lock (_gate) _active.Remove(cts);
 	}
 
-	/// <summary>Cancels every registered source; returns true when there was one.</summary>
+	/// <summary>
+	/// Cancels every registered source, newest first; returns true when there was one. A queued send must be cancelled before the running
+	/// one: ending the running send releases the turn lock, and a queued send that is not cancelled yet would take it and start a process.
+	/// </summary>
 	public bool CancelAll()
 	{
 		List<CancellationTokenSource> snapshot;
 		lock (_gate) snapshot = [.. _active];
 
-		foreach (var cts in snapshot)
+		for (var i = snapshot.Count - 1; i >= 0; i--)
 		{
-			try { cts.Cancel(); }
+			try { snapshot[i].Cancel(); }
 			catch (System.ObjectDisposedException) { /* the send just finished */ }
 		}
 

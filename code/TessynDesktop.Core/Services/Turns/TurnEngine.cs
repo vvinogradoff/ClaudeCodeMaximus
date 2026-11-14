@@ -149,6 +149,15 @@ public sealed class TurnEngine : ITurnEngine
 						progress.Status(TurnState.Queued);
 
 					await turnLock.WaitAsync(ct);
+
+					// SemaphoreSlim.WaitAsync(token) can still hand the lock to a waiter whose token was cancelled meanwhile. A send that was
+					// stopped while queued must not run: give the lock back and end as interrupted, as if the wait had been cancelled.
+					if (ct.IsCancellationRequested)
+					{
+						turnLock.Release();
+						ct.ThrowIfCancellationRequested();
+					}
+
 					lockAcquired = true;
 				}
 				run.SendErrorText = null;

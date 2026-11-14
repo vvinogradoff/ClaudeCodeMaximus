@@ -146,6 +146,24 @@ public sealed class SessionTurnServiceProgressTests : IDisposable
 	}
 
 	[Fact]
+	public async Task AnAuthRaceRetry_ReportsRetryingThenRunningAgain()
+	{
+		var launches = 0;
+		_process.EmitEvents = onEvent =>
+		{
+			if (++launches == 1)
+				onEvent(new ClaudeStreamEvent { Type = "result", IsError = true, Content = Constants.Auth.OAuthRefreshRaceMarker });
+			else
+				onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "s" });
+			return Task.CompletedTask;
+		};
+
+		await _sut.RunTurnAsync(Node(), "Q", TurnSource.Web).Within();
+
+		Assert.Equal(["started:-", "status:Running", "status:Retrying:auth", "status:Running", "finished:cancelled=False:error=null:ran=True"], _sink.Lines());
+	}
+
+	[Fact]
 	public async Task AHeadlessTurnRedirectedIntoALiveStreamingProcess_ReportsTheStreamsEventsUnderItsOwnId()
 	{
 		_streaming.AliveResult = true;
