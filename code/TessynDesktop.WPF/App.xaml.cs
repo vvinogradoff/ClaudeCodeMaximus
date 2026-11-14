@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.State;
+using TessynDesktop.WPF.ViewModels;
 using TessynDesktop.WPF.Views;
 
 namespace TessynDesktop.WPF;
@@ -13,6 +14,8 @@ namespace TessynDesktop.WPF;
 /// <remarks>Created by Claude</remarks>
 public partial class App : Application
 {
+	private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(6);
+
 	private IHost? _host;
 	private Mutex? _singleInstanceMutex;
 
@@ -23,7 +26,8 @@ public partial class App : Application
 	{
 		base.OnStartup(e);
 
-		_singleInstanceMutex = new Mutex(initiallyOwned: true, Constants.Identity.SingleInstanceMutexName, out var createdNew);
+		var options = StartupOptions.Parse(e.Args);
+		_singleInstanceMutex = new Mutex(initiallyOwned: true, options.MutexName, out var createdNew);
 		if (!createdNew)
 		{
 			_singleInstanceMutex.Dispose();
@@ -32,12 +36,12 @@ public partial class App : Application
 			return;
 		}
 
-		var paths = new AppPaths();
+		var paths = options.DataRoot == null ? new AppPaths() : new AppPaths(options.DataRoot);
 		Log.Logger = new LoggingSetup().CreateLogger(paths);
 
 		_host = Host.CreateDefaultBuilder()
 			.UseSerilog(Log.Logger)
-			.ConfigureServices(services => new ServiceRegistration().Register(services, paths, Dispatcher))
+			.ConfigureServices(services => new ServiceRegistration().Register(services, paths, Dispatcher, options))
 			.Build();
 
 		_host.Services.GetRequiredService<GlobalExceptionLogger>().Attach(this);
@@ -55,13 +59,34 @@ public partial class App : Application
 	{
 		if (_host != null)
 		{
-			_host.Services.GetRequiredService<IClientStateStore>().FlushAsync().GetAwaiter().GetResult();
-			_host.StopAsync(TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
-			_host.Dispose();
+			// Never block the UI thread on work that may need it: run the shutdown on the thread pool with a bounded wait.
+			var host = _host;
+			var shutdown = Task.Run(async () =>
+			{
+				try
+				{
+					await host.Services.GetRequiredService<IClientStateStore>().FlushAsync();
+					await host.Services.GetRequiredService<ConnectionViewModel>().DisposeAsync();
+					await host.StopAsync(TimeSpan.FromSeconds(3));
+				}
+				catch (Exception ex)
+				{
+					Log.Error(ex, "Shutdown failed");
+				}
+			});
+			shutdown.Wait(ShutdownTimeout);
+			host.Dispose();
 		}
 
 		Log.CloseAndFlush();
-		_singleInstanceMutex?.ReleaseMutex();
+		try
+		{
+			_singleInstanceMutex?.ReleaseMutex();
+		}
+		catch (ApplicationException)
+		{
+		}
+
 		_singleInstanceMutex?.Dispose();
 		base.OnExit(e);
 	}

@@ -6,7 +6,12 @@ namespace TessynDesktop.WPF.Services;
 /// <remarks>Created by Claude</remarks>
 public sealed class DaemonLocator : IDaemonLocator
 {
-	private readonly DaemonDiscovery _discovery = new();
+	private readonly DaemonDiscovery _discovery;
+
+	public DaemonLocator(string? daemonFilePath = null)
+	{
+		_discovery = string.IsNullOrWhiteSpace(daemonFilePath) ? new DaemonDiscovery() : new DaemonDiscovery(daemonFilePath);
+	}
 
 	public Task<DaemonDiscoveryResult> DiscoverAsync(CancellationToken cancellationToken) => _discovery.DiscoverAsync(cancellationToken);
 }

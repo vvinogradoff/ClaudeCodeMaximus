@@ -14,6 +14,7 @@ public static partial class Constants
 		public const string ClientStateFileName = "wpf.json";
 		public const string LogFilePattern = "wpf-.txt";
 		public const string WebAssetsFolder = "Web";
+		public const string BadFileSuffix = ".bad";
 		public const string TranscriptPageFileName = "transcript.html";
 	}
 
@@ -29,6 +30,8 @@ public static partial class Constants
 		public const int MinWindowWidth = 640;
 		public const int MinWindowHeight = 400;
 		public const double DefaultTreeWidth = 320;
+		public const double MinTreeWidth = 160;
+		public const double MaxTreeWidth = 2000;
 	}
 
 	/// <summary>Durations.</summary>

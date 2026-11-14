@@ -23,15 +23,32 @@ public partial class SessionPane : UserControl
 	private async void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		Loaded -= OnLoaded;
-		var services = ((App)Application.Current).Services;
+		var surface = ((App)Application.Current).Services.GetRequiredService<WebView2TranscriptSurface>();
+		surface.BrowserLost += (_, _) => Dispatcher.BeginInvoke(() => _ = RecreateAsync(surface));
+		await AttachAsync(surface, Transcript);
+	}
+
+	private async Task AttachAsync(WebView2TranscriptSurface surface, Microsoft.Web.WebView2.Wpf.WebView2 control)
+	{
+		var logger = ((App)Application.Current).Services.GetRequiredService<ILogger<SessionPane>>();
 		try
 		{
-			await services.GetRequiredService<WebView2TranscriptSurface>().AttachAsync(Transcript);
+			await surface.AttachAsync(control);
 		}
 		catch (Exception ex)
 		{
-			services.GetRequiredService<ILogger<SessionPane>>().LogError(ex, "The transcript WebView2 failed to initialize");
+			logger.LogError(ex, "The transcript WebView2 failed to initialize");
 		}
+	}
+
+	/// <summary>The WebView2 browser process died: replace the control; the surface asks the view model to replay the current session.</summary>
+	private async Task RecreateAsync(WebView2TranscriptSurface surface)
+	{
+		TranscriptHost.Children.Remove(Transcript);
+		Transcript.Dispose();
+		Transcript = new Microsoft.Web.WebView2.Wpf.WebView2();
+		TranscriptHost.Children.Add(Transcript);
+		await AttachAsync(surface, Transcript);
 	}
 
 	private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)

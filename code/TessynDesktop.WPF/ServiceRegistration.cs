@@ -17,15 +17,16 @@ namespace TessynDesktop.WPF;
 /// <remarks>Created by Claude</remarks>
 public sealed class ServiceRegistration
 {
-	public void Register(IServiceCollection services, AppPaths paths, Dispatcher dispatcher)
+	public void Register(IServiceCollection services, AppPaths paths, Dispatcher dispatcher, StartupOptions options)
 	{
 		services.AddSingleton(paths);
+		services.AddSingleton(options);
 		services.AddSingleton<IUiDispatcher>(new WpfUiDispatcher(dispatcher));
 		services.AddTransient<GlobalExceptionLogger>();
 
-		// Daemon connection. Stage B replaces PendingTessynClientFactory with the factory of the real TessynClient.
-		services.AddSingleton<IDaemonLocator, DaemonLocator>();
-		services.AddSingleton<ITessynClientFactory, PendingTessynClientFactory>();
+		// Daemon connection: daemon.json discovery (overridable with --daemon-file) and the real TessynClient.
+		services.AddSingleton<IDaemonLocator>(new DaemonLocator(options.DaemonFile));
+		services.AddSingleton<ITessynClientFactory, TessynClientFactory>();
 		services.AddSingleton<ConnectionViewModel>();
 
 		services.AddSingleton<Func<ITessynClient, TreeViewModel>>(sp => client => new TreeViewModel(

@@ -28,7 +28,7 @@ public partial class MainWindow : Window
 		DataContext = viewModel;
 		InitializeComponent();
 
-		TreeColumn.Width = new GridLength(Math.Max(TreeColumn.MinWidth, stateStore.State.TreeWidth));
+		TreeColumn.Width = new GridLength(JsonClientStateStore.ClampTreeWidth(stateStore.State.TreeWidth));
 		_placementTimer = new DispatcherTimer { Interval = PlacementSaveDelay };
 		_placementTimer.Tick += (_, _) =>
 		{

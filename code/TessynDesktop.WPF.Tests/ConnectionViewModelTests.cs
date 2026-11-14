@@ -88,17 +88,36 @@ public sealed class ConnectionViewModelTests
 	}
 
 	[Fact]
-	public async Task AuthFailure_IsTerminalAndShownInTheBanner()
+	public async Task AuthFailure_ShowsTheBannerThenRereadsDaemonFileAndRetries()
 	{
 		var locator = new ScriptedLocator();
 		locator.Results.Enqueue(Found);
-		var client = new FakeTessynClient { ConnectException = new TessynAuthException(401, "bad token") };
-		var connection = Create(locator, client);
+		var stale = new FakeTessynClient { ConnectException = new TessynAuthException(401, "bad token") };
+		var fresh = new FakeTessynClient();
+		var connection = new ConnectionViewModel(locator, new SequenceClientFactory(stale, fresh), new ImmediateUiDispatcher(), NullLogger<ConnectionViewModel>.Instance, TimeSpan.FromMilliseconds(5));
+		var states = new List<ConnectionBannerState>();
+		connection.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ConnectionViewModel.State)) states.Add(connection.State); };
 
 		await connection.RunAsync(CancellationToken.None);
 
-		Assert.Equal(ConnectionBannerState.AuthFailed, connection.State);
-		Assert.Equal(1, locator.Calls);
+		Assert.Contains(ConnectionBannerState.AuthFailed, states);
+		Assert.Equal(ConnectionBannerState.Connected, connection.State);
+		Assert.Equal(2, locator.Calls);
+		Assert.True(stale.Disposed);
+	}
+
+	[Fact]
+	public async Task Dispose_DisposesTheClient()
+	{
+		var locator = new ScriptedLocator();
+		locator.Results.Enqueue(Found);
+		var client = new FakeTessynClient();
+		var connection = Create(locator, client);
+		await connection.RunAsync(CancellationToken.None);
+
+		await connection.DisposeAsync();
+
+		Assert.True(client.Disposed);
 	}
 
 	[Fact]
@@ -116,7 +135,7 @@ public sealed class ConnectionViewModelTests
 	}
 
 	[Fact]
-	public async Task ConnectFailure_FallsBackToDaemonNotFoundAndRetries()
+	public async Task ConnectFailure_ShowsDaemonUnreachableAndRetries()
 	{
 		var locator = new ScriptedLocator();
 		locator.Results.Enqueue(Found);
@@ -126,7 +145,8 @@ public sealed class ConnectionViewModelTests
 
 		await connection.RunAsync(cts.Token);
 
-		Assert.Equal(ConnectionBannerState.DaemonNotFound, connection.State);
+		Assert.Equal(ConnectionBannerState.DaemonUnreachable, connection.State);
+		Assert.Contains("not reachable", connection.BannerText);
 		Assert.True(locator.Calls > 1);
 	}
 }

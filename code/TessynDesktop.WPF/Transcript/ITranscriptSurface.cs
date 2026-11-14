@@ -48,6 +48,9 @@ public interface ITranscriptSurface
 	/// <summary>F3 / Shift+F3 was pressed inside the page (argument: direction).</summary>
 	event EventHandler<int>? FindStepRequested;
 
+	/// <summary>The page restarted (reload or render-process recovery) and is empty: the owner must replay the current <see cref="Load"/>.</summary>
+	event EventHandler? PageRestarted;
+
 	/// <summary>The page reports the current match position.</summary>
 	event EventHandler<FindStatusEventArgs>? FindStatusChanged;
 }

@@ -378,4 +378,78 @@ public sealed class SessionPaneViewModelTests
 		Assert.NotNull(pane.Error);
 		Assert.False(pane.IsLoading);
 	}
+
+	[Fact]
+	public async Task WarmOpenOfARunningSession_WithAnAppendWhileSessionGetIsPending_HasNoDuplicates()
+	{
+		var a = AddSession("a", 20);
+		AddSession("b", 5);
+		using var pane = CreatePane();
+		await pane.OpenAsync("a");
+		await pane.OpenAsync("b");
+		a.Entries.Add(FakeSession.MakeEntry(20));
+		_client.SessionGetGate = new TaskCompletionSource();
+
+		var open = pane.OpenAsync("a");
+		_client.RaiseNotification("session.appended", new SessionEpochPayload("a", 1));
+		_client.SessionGetGate.SetResult();
+		await open;
+		await pane.WhenIdleAsync();
+
+		Assert.Equal(Enumerable.Range(0, 21), _surface.PageIndexes);
+		Assert.True(pane.Cache.TryGet("a", out var model));
+		Assert.Equal(Enumerable.Range(0, 21), model.Entries.Select(e => e.Index));
+	}
+
+	[Fact]
+	public async Task AppendArrivingDuringAColdOpen_IsCaughtUpAfterTheLoad()
+	{
+		var a = AddSession("a", 10);
+		using var pane = CreatePane();
+		_client.SessionGetGate = new TaskCompletionSource();
+
+		var open = pane.OpenAsync("a");
+		a.Entries.Add(FakeSession.MakeEntry(10));
+		_client.RaiseNotification("session.appended", new SessionEpochPayload("a", 1));
+		_client.SessionGetGate.SetResult();
+		await open;
+		await pane.WhenIdleAsync();
+
+		Assert.Equal(Enumerable.Range(0, 11), _surface.PageIndexes);
+	}
+
+	[Fact]
+	public async Task OlderRequestInFlightForOneSession_DoesNotBlockPagingOfTheNext()
+	{
+		AddSession("a", 250);
+		AddSession("b", 250);
+		using var pane = CreatePane();
+		await pane.OpenAsync("a");
+		var gate = new TaskCompletionSource();
+		_client.OlderGate = gate;
+		_surface.RaiseOlderRequested();
+
+		await pane.OpenAsync("b");
+		_client.OlderGate = null;
+		_surface.RaiseOlderRequested();
+		await Task.Delay(50);
+		gate.SetResult();
+		await pane.WhenIdleAsync();
+
+		Assert.Equal(Enumerable.Range(50, 200), _surface.PageIndexes);
+	}
+
+	[Fact]
+	public async Task PageRestart_ReplaysTheCurrentSession()
+	{
+		AddSession("a", 30);
+		using var pane = CreatePane();
+		await pane.OpenAsync("a");
+		var loads = _surface.Calls.Count(c => c.StartsWith("load:a", StringComparison.Ordinal));
+
+		_surface.RaisePageRestarted();
+
+		Assert.Equal(loads + 1, _surface.Calls.Count(c => c.StartsWith("load:a", StringComparison.Ordinal)));
+		Assert.Equal(Enumerable.Range(0, 30), _surface.PageIndexes);
+	}
 }

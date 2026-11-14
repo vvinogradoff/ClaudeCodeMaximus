@@ -36,6 +36,14 @@ public sealed class FakeTessynClient : ITessynClient
 
 	public Exception? ConnectException { get; set; }
 
+	/// <summary>When set, <see cref="SessionGetAsync"/> waits for it (to deliver events while a call is pending).</summary>
+	public TaskCompletionSource? SessionGetGate { get; set; }
+
+	/// <summary>When set, older-page requests (beforeIndex) wait for it.</summary>
+	public TaskCompletionSource? OlderGate { get; set; }
+
+	public bool Disposed { get; private set; }
+
 	public int SendCount => Calls.Count(c => c.StartsWith("session.send:", StringComparison.Ordinal));
 
 	public void SetState(TessynClientState state)
@@ -93,18 +101,22 @@ public sealed class FakeTessynClient : ITessynClient
 
 	public Task<TagSearchResult> TagsSearchAsync(string text, IReadOnlyList<TagRefDto> selected, string? scopeNodeId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-	public Task<SessionDetailDto> SessionGetAsync(string nodeId, CancellationToken cancellationToken = default)
+	public async Task<SessionDetailDto> SessionGetAsync(string nodeId, CancellationToken cancellationToken = default)
 	{
 		Record($"session.get:{nodeId}");
+		if (SessionGetGate != null)
+			await SessionGetGate.Task;
 		var session = Sessions[nodeId];
-		return Task.FromResult(new SessionDetailDto(
+		return new SessionDetailDto(
 			nodeId, session.Name, "dir", null, null!, null, session.State(nodeId), session.Tags,
-			new AttentionSummaryDto(), null!, false, session.Entries.Count, session.Epoch));
+			new AttentionSummaryDto(), null!, false, session.Entries.Count, session.Epoch);
 	}
 
-	public Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, int? beforeIndex = null, int? afterIndex = null, int? limit = null, CancellationToken cancellationToken = default)
+	public async Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, int? beforeIndex = null, int? afterIndex = null, int? limit = null, CancellationToken cancellationToken = default)
 	{
 		Record($"session.entries:{nodeId}:before={beforeIndex?.ToString() ?? "-"}:after={afterIndex?.ToString() ?? "-"}:limit={limit?.ToString() ?? "-"}");
+		if (beforeIndex.HasValue && OlderGate != null)
+			await OlderGate.Task;
 		var session = Sessions[nodeId];
 		var total = session.Entries.Count;
 		var max = limit ?? 100;
@@ -126,7 +138,7 @@ public sealed class FakeTessynClient : ITessynClient
 			start = Math.Max(0, end - max);
 		}
 
-		return Task.FromResult(new SessionEntriesResult(nodeId, session.Epoch, total, session.Entries.Skip(start).Take(end - start).ToList()));
+		return new SessionEntriesResult(nodeId, session.Epoch, total, session.Entries.Skip(start).Take(end - start).ToList());
 	}
 
 	public Task<SessionEntryDto> SessionEntryAsync(string nodeId, int index, int epoch, CancellationToken cancellationToken = default)
@@ -164,7 +176,11 @@ public sealed class FakeTessynClient : ITessynClient
 
 	public Task<UsageResult> UsageGetAsync(string? profileId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-	public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+	public ValueTask DisposeAsync()
+	{
+		Disposed = true;
+		return ValueTask.CompletedTask;
+	}
 
 	private void Record(string call)
 	{

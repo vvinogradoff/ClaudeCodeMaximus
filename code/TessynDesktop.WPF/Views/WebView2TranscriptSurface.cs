@@ -34,7 +34,10 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private WebView2? _control;
 	private CoreWebView2Environment? _env;
 	private bool _ready;
+	private bool _everReady;
 	private int _token;
+	private Task _sendTail = Task.CompletedTask;
+	private int _generation;
 
 	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, ILogger<WebView2TranscriptSurface> logger)
 	{
@@ -59,10 +62,18 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	public event EventHandler<FindStatusEventArgs>? FindStatusChanged;
 
+	public event EventHandler? PageRestarted;
+
+	/// <summary>The WebView2 browser process died: the view must create a new control and call <see cref="AttachAsync"/> again.</summary>
+	public event EventHandler? BrowserLost;
+
 	/// <summary>Binds the surface to the WebView2 control of the session pane and starts loading the page.</summary>
 	public async Task AttachAsync(WebView2 control)
 	{
 		_control = control;
+		_ready = false;
+		_pending.Clear();
+		_generation++;
 		_env = await _environment.GetAsync();
 		await control.EnsureCoreWebView2Async(_env);
 		var core = control.CoreWebView2;
@@ -77,6 +88,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		settings.IsSwipeNavigationEnabled = false;
 		settings.IsBuiltInErrorPageEnabled = false;
 		settings.IsWebMessageEnabled = true;
+		settings.AreDefaultContextMenusEnabled = false;
 
 		core.SetVirtualHostNameToFolderMapping(HostName, _paths.WebAssetsDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
 		core.NavigationStarting += OnNavigationStarting;
@@ -87,38 +99,81 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
 		core.WebResourceRequested += OnWebResourceRequested;
 		core.WebMessageReceived += OnWebMessageReceived;
+		core.ProcessFailed += OnProcessFailed;
 		core.Navigate(PageUri);
 	}
 
 	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom)
 	{
 		_token++;
-		var message = JsonSerializer.Serialize(new { cmd = "load", tok = _token, key, entries = entries.Select(ToPage), hasOlder, toBottom }, Json);
-		Post(message, replacesQueue: true);
+		var token = _token;
+		var snapshot = entries.ToList();
+		Post(() => JsonSerializer.Serialize(new { cmd = "load", tok = token, key, entries = snapshot.Select(ToPage), hasOlder, toBottom }, Json), replacesQueue: true);
 	}
 
-	public void Prepend(IReadOnlyList<TranscriptEntryView> entries, bool hasOlder) =>
-		Post(JsonSerializer.Serialize(new { cmd = "prepend", tok = _token, entries = entries.Select(ToPage), hasOlder }, Json));
+	public void Prepend(IReadOnlyList<TranscriptEntryView> entries, bool hasOlder)
+	{
+		var token = _token;
+		var snapshot = entries.ToList();
+		Post(() => JsonSerializer.Serialize(new { cmd = "prepend", tok = token, entries = snapshot.Select(ToPage), hasOlder }, Json));
+	}
 
-	public void Append(IReadOnlyList<TranscriptEntryView> entries) =>
-		Post(JsonSerializer.Serialize(new { cmd = "append", tok = _token, entries = entries.Select(ToPage) }, Json));
+	public void Append(IReadOnlyList<TranscriptEntryView> entries)
+	{
+		var token = _token;
+		var snapshot = entries.ToList();
+		Post(() => JsonSerializer.Serialize(new { cmd = "append", tok = token, entries = snapshot.Select(ToPage) }, Json));
+	}
 
-	public void Replace(TranscriptEntryView entry) =>
-		Post(JsonSerializer.Serialize(new { cmd = "replace", tok = _token, entry = ToPage(entry) }, Json));
+	public void Replace(TranscriptEntryView entry)
+	{
+		var token = _token;
+		Post(() => JsonSerializer.Serialize(new { cmd = "replace", tok = token, entry = ToPage(entry) }, Json));
+	}
 
-	public void Find(string term, IReadOnlyList<int> matchingIndexes) =>
-		Post(JsonSerializer.Serialize(new { cmd = "find", term, idx = matchingIndexes }, Json));
+	public void Find(string term, IReadOnlyList<int> matchingIndexes)
+	{
+		var snapshot = matchingIndexes.ToList();
+		Post(() => JsonSerializer.Serialize(new { cmd = "find", term, idx = snapshot }, Json));
+	}
 
 	public void FindStep(int direction) =>
-		Post(JsonSerializer.Serialize(new { cmd = "findStep", dir = direction }, Json));
+		Post(() => JsonSerializer.Serialize(new { cmd = "findStep", dir = direction }, Json));
 
-	public void ClearFind() => Post(JsonSerializer.Serialize(new { cmd = "clearFind" }, Json));
+	public void ClearFind() => Post(() => JsonSerializer.Serialize(new { cmd = "clearFind" }, Json));
 
 	private static object ToPage(TranscriptEntryView view) =>
 		new { i = view.Index, r = view.Role, ts = view.Timestamp, html = view.Html, trunc = view.Truncated, full = view.FullLength, h = view.EstimatedHeight };
 
-	private void Post(string json, bool replacesQueue = false)
+	/// <summary>
+	/// Queues a message. The JSON is built on a thread-pool thread (a warm switch can carry thousands of entries), and the messages
+	/// are posted to the page on the UI thread in the order they were queued.
+	/// </summary>
+	private void Post(Func<string> build, bool replacesQueue = false)
 	{
+		var generation = _generation;
+		var previous = _sendTail;
+		var built = Task.Run(build);
+		_sendTail = PostInOrderAsync(previous, built, generation, replacesQueue);
+	}
+
+	private async Task PostInOrderAsync(Task previous, Task<string> built, int generation, bool replacesQueue)
+	{
+		await previous.ConfigureAwait(true);
+		string json;
+		try
+		{
+			json = await built.ConfigureAwait(true);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "Building a page message failed");
+			return;
+		}
+
+		if (generation != _generation)
+			return;
+
 		if (!_ready || _control?.CoreWebView2 == null)
 		{
 			if (replacesQueue)
@@ -128,6 +183,22 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		}
 
 		_control.CoreWebView2.PostWebMessageAsJson(json);
+	}
+
+	private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+	{
+		_logger.LogWarning("WebView2 process failed: {Kind}", e.ProcessFailedKind);
+		_ready = false;
+		switch (e.ProcessFailedKind)
+		{
+			case CoreWebView2ProcessFailedKind.BrowserProcessExited:
+				BrowserLost?.Invoke(this, EventArgs.Empty);
+				break;
+			case CoreWebView2ProcessFailedKind.RenderProcessExited:
+			case CoreWebView2ProcessFailedKind.RenderProcessUnresponsive:
+				_control?.CoreWebView2?.Reload();
+				break;
+		}
 	}
 
 	private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
@@ -208,10 +279,16 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	private void FlushPending()
 	{
+		var restarted = _everReady;
 		_ready = true;
+		_everReady = true;
 		var queued = _pending.ToList();
 		_pending.Clear();
 		foreach (var json in queued)
 			_control!.CoreWebView2.PostWebMessageAsJson(json);
+
+		// A "ready" after the first one means the page was reloaded or recovered and is empty: ask the owner to replay.
+		if (restarted && queued.Count == 0)
+			PageRestarted?.Invoke(this, EventArgs.Empty);
 	}
 }

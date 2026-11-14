@@ -38,8 +38,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private Task _appendTask = Task.CompletedTask;
 	private bool _appendRunning;
 	private bool _appendPending;
+	private bool _missedAppend;
 	private Task _olderTask = Task.CompletedTask;
 	private bool _olderRunning;
+	private int _olderToken;
 	private Task _reloadTask = Task.CompletedTask;
 	private Task _expandTask = Task.CompletedTask;
 	private Task _findTask = Task.CompletedTask;
@@ -119,6 +121,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_surface.FindRequested += OnFindRequested;
 		_surface.FindStepRequested += OnFindStepRequested;
 		_surface.FindStatusChanged += OnFindStatusChanged;
+		_surface.PageRestarted += OnPageRestarted;
 	}
 
 	/// <summary>The session tag chips of the header.</summary>
@@ -166,6 +169,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		InputText = _drafts.GetValueOrDefault(nodeId, string.Empty);
 		IsLoading = true;
 		_current = null;
+		_missedAppend = false;
+		_olderRunning = false;
 
 		try
 		{
@@ -201,8 +206,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			ApplyDetail(detail);
 			if (detail.Epoch != model.Epoch)
 				await ReloadCoreAsync(token);
-			else if (warm || detail.EntryCount > model.LastIndex + 1)
-				await AppendNewCoreAsync(token);
+			else if (warm || _missedAppend || detail.EntryCount > model.LastIndex + 1)
+				await RequestAppend();
 		}
 		catch (OperationCanceledException)
 		{
@@ -391,15 +396,29 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 	private void OnAppended(SessionEpochPayload payload)
 	{
-		if (payload.NodeId != NodeId || _current == null)
+		if (payload.NodeId != NodeId)
 			return;
 
+		if (_current == null)
+		{
+			_missedAppend = true;
+			return;
+		}
+
+		_ = RequestAppend();
+	}
+
+	/// <summary>The one guarded path for catching up: at most one append loop runs; requests during a run cause one more pass.</summary>
+	private Task RequestAppend()
+	{
 		_appendPending = true;
-		if (_appendRunning)
-			return;
+		if (!_appendRunning)
+		{
+			_appendRunning = true;
+			_appendTask = RunAppendLoopAsync();
+		}
 
-		_appendRunning = true;
-		_appendTask = RunAppendLoopAsync();
+		return _appendTask;
 	}
 
 	private async Task RunAppendLoopAsync()
@@ -510,17 +529,22 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 				return;
 			}
 
-			if (page.Entries.Count == 0)
+			var fresh = page.Entries.Where(e => e.Index > model.LastIndex).ToList();
+			if (fresh.Count == 0)
 			{
 				model.UpdateTotal(page.Total);
 				return;
 			}
 
-			var views = await RenderAsync(page.Entries);
+			var views = await RenderAsync(fresh);
 			if (token != _openToken || model != _current)
 				return;
 
-			model.Append(page.Entries, views, page.Total);
+			fresh = fresh.Where(e => e.Index > model.LastIndex).ToList();
+			if (fresh.Count != views.Count)
+				views = views.Where(v => v.Index > model.LastIndex).ToList();
+
+			model.Append(fresh, views, page.Total);
 			_surface.Append(views);
 			if (page.Entries.Count < Constants.Limits.EntriesPageSize)
 				return;
@@ -533,10 +557,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			return;
 
 		_olderRunning = true;
-		_olderTask = LoadOlderAsync();
+		_olderTask = LoadOlderAsync(++_olderToken);
 	});
 
-	private async Task LoadOlderAsync()
+	private async Task LoadOlderAsync(int olderToken)
 	{
 		var token = _openToken;
 		var model = _current;
@@ -572,7 +596,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		}
 		finally
 		{
-			_olderRunning = false;
+			if (olderToken == _olderToken)
+				_olderRunning = false;
 		}
 	}
 
@@ -604,6 +629,14 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		}
 	}
 
+	/// <summary>The page restarted (reload or crash recovery): replay everything loaded for the current session.</summary>
+	private void OnPageRestarted(object? sender, EventArgs e) => _ui.Post(() =>
+	{
+		var model = _current;
+		if (model != null)
+			_surface.Load(model.NodeId, model.Views, model.HasOlder, toBottom: true);
+	});
+
 	private void OnLinkClicked(object? sender, string url) => _ui.Post(() => _launcher.TryOpen(url));
 
 	private void OnPainted(object? sender, TranscriptPaintedEventArgs e) => _ui.Post(() => _switchTracker.Painted(e.Key, e.JsMilliseconds));
@@ -628,5 +661,6 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_surface.FindRequested -= OnFindRequested;
 		_surface.FindStepRequested -= OnFindStepRequested;
 		_surface.FindStatusChanged -= OnFindStatusChanged;
+		_surface.PageRestarted -= OnPageRestarted;
 	}
 }

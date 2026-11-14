@@ -115,6 +115,37 @@ public sealed class ClientStateStoreTests : IDisposable
 	}
 
 	[Fact]
+	public async Task CorruptFile_IsKeptAsBadBeforeDefaultsAreUsed()
+	{
+		var path = new AppPaths(_root).ClientStateFilePath;
+		Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+		await File.WriteAllTextAsync(path, "{ not json");
+		var store = Create();
+
+		await store.LoadAsync();
+
+		Assert.False(File.Exists(path));
+		Assert.Equal("{ not json", await File.ReadAllTextAsync(path + ".bad"));
+	}
+
+	[Theory]
+	[InlineData(1e9, Constants.Limits.MaxTreeWidth)]
+	[InlineData(-5, Constants.Limits.MinTreeWidth)]
+	[InlineData(0, Constants.Limits.MinTreeWidth)]
+	[InlineData(400, 400)]
+	public async Task TreeWidth_IsClampedOnLoad(double saved, double expected)
+	{
+		var path = new AppPaths(_root).ClientStateFilePath;
+		Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+		await File.WriteAllTextAsync(path, "{\"treeWidth\":" + saved.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "}");
+		var store = Create();
+
+		await store.LoadAsync();
+
+		Assert.Equal(expected, store.State.TreeWidth);
+	}
+
+	[Fact]
 	public async Task UnknownFieldsInTheFile_AreIgnored()
 	{
 		var path = new AppPaths(_root).ClientStateFilePath;

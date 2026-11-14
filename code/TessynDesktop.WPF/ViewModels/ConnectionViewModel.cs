@@ -11,7 +11,7 @@ namespace TessynDesktop.WPF.ViewModels;
 /// (reconnects and resume are its own job); this view model reports its state changes.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed partial class ConnectionViewModel : ObservableObject
+public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDisposable
 {
 	private readonly IDaemonLocator _locator;
 	private readonly ITessynClientFactory _factory;
@@ -50,6 +50,7 @@ public sealed partial class ConnectionViewModel : ObservableObject
 	public string BannerText => State switch
 	{
 		ConnectionBannerState.DaemonNotFound => "Daemon not found. Start TessynDesktop to connect.",
+		ConnectionBannerState.DaemonUnreachable => "Daemon found but not reachable. It may still be starting.",
 		ConnectionBannerState.Connecting => "Connecting to the daemon...",
 		ConnectionBannerState.Connected => "Connected",
 		ConnectionBannerState.Reconnecting => "Connection lost. Reconnecting...",
@@ -101,9 +102,11 @@ public sealed partial class ConnectionViewModel : ObservableObject
 			}
 			catch (TessynAuthException ex)
 			{
-				_logger.LogWarning(ex, "Daemon rejected the token");
+				// The daemon may have restarted with a new token: show the banner, then re-read daemon.json and try again.
+				_logger.LogWarning("Daemon rejected the token: {Message}", ex.Message);
 				Set(ConnectionBannerState.AuthFailed, ex.Message);
-				return;
+				if (!await DelayAsync(cancellationToken))
+					return;
 			}
 			catch (TessynIncompatibleException ex)
 			{
@@ -114,17 +117,36 @@ public sealed partial class ConnectionViewModel : ObservableObject
 			catch (Exception ex)
 			{
 				_logger.LogInformation("Connect attempt failed: {Message}", ex.Message);
-				Set(ConnectionBannerState.DaemonNotFound, ex.Message);
-				try
-				{
-					await Task.Delay(_retryDelay, cancellationToken);
-				}
-				catch (OperationCanceledException)
-				{
+				Set(ConnectionBannerState.DaemonUnreachable, ex.Message);
+				if (!await DelayAsync(cancellationToken))
 					return;
-				}
 			}
 		}
+	}
+
+	private async Task<bool> DelayAsync(CancellationToken cancellationToken)
+	{
+		try
+		{
+			await Task.Delay(_retryDelay, cancellationToken);
+			return true;
+		}
+		catch (OperationCanceledException)
+		{
+			return false;
+		}
+	}
+
+	/// <summary>Disconnects and disposes the client (at exit).</summary>
+	public async ValueTask DisposeAsync()
+	{
+		var client = _client;
+		_client = null;
+		if (client == null)
+			return;
+
+		client.StateChanged -= OnClientStateChanged;
+		await client.DisposeAsync().ConfigureAwait(false);
 	}
 
 	/// <summary>Maps a client state to the banner state it implies once the client exists.</summary>

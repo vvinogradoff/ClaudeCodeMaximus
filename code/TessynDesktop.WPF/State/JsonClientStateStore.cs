@@ -45,14 +45,34 @@ public sealed class JsonClientStateStore : IClientStateStore
 				return;
 
 			await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-			var loaded = await JsonSerializer.DeserializeAsync<ClientStateModel>(stream, Json);
+			var loaded = await JsonSerializer.DeserializeAsync<ClientStateModel>(stream, Json).ConfigureAwait(false);
 			if (loaded != null)
+			{
+				loaded.TreeWidth = ClampTreeWidth(loaded.TreeWidth);
 				State = loaded;
+			}
 		}
 		catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
 		{
-			_logger.LogWarning(ex, "Client state at {Path} is unreadable; starting with defaults", path);
+			_logger.LogWarning(ex, "Client state at {Path} is unreadable; keeping it as .bad and starting with defaults", path);
 			State = new ClientStateModel();
+			KeepCorruptFile(path);
+		}
+	}
+
+	/// <summary>A tree width from a hand-edited or damaged file is brought into a usable range.</summary>
+	public static double ClampTreeWidth(double width) =>
+		double.IsNaN(width) || double.IsInfinity(width) ? Constants.Limits.DefaultTreeWidth : Math.Clamp(width, Constants.Limits.MinTreeWidth, Constants.Limits.MaxTreeWidth);
+
+	private static void KeepCorruptFile(string path)
+	{
+		try
+		{
+			File.Move(path, path + Constants.Paths.BadFileSuffix, overwrite: true);
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		{
+			// Nothing more to do: the next save replaces the file.
 		}
 	}
 
@@ -79,22 +99,22 @@ public sealed class JsonClientStateStore : IClientStateStore
 			pending = _writeTask;
 		}
 
-		await pending;
-		await WriteNowAsync();
+		await pending.ConfigureAwait(false);
+		await WriteNowAsync().ConfigureAwait(false);
 	}
 
 	private async Task WriteAfterDelayAsync(CancellationToken cancellationToken)
 	{
 		try
 		{
-			await Task.Delay(_debounce, cancellationToken);
+			await Task.Delay(_debounce, cancellationToken).ConfigureAwait(false);
 		}
 		catch (OperationCanceledException)
 		{
 			return;
 		}
 
-		await WriteNowAsync();
+		await WriteNowAsync().ConfigureAwait(false);
 	}
 
 	private async Task WriteNowAsync()
@@ -114,7 +134,7 @@ public sealed class JsonClientStateStore : IClientStateStore
 		{
 			Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 			var temp = path + ".tmp";
-			await File.WriteAllTextAsync(temp, json);
+			await File.WriteAllTextAsync(temp, json).ConfigureAwait(false);
 			File.Move(temp, path, overwrite: true);
 		}
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

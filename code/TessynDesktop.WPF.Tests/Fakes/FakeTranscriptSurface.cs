@@ -32,6 +32,10 @@ public sealed class FakeTranscriptSurface : ITranscriptSurface
 
 	public event EventHandler<FindStatusEventArgs>? FindStatusChanged;
 
+	public event EventHandler? PageRestarted;
+
+	public void RaisePageRestarted() => PageRestarted?.Invoke(this, EventArgs.Empty);
+
 	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom)
 	{
 		Calls.Add($"load:{key}:{entries.Count}");

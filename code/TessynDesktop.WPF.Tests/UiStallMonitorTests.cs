@@ -11,7 +11,7 @@ public sealed class UiStallMonitorTests
 	{
 		var stalls = new List<TimeSpan>();
 		var monitor = new UiStallMonitor(ping, NullLogger<UiStallMonitor>.Instance, TimeProvider.System,
-			threshold: TimeSpan.FromMilliseconds(50), pollInterval: TimeSpan.FromMilliseconds(5), onStall: stall => { lock (stalls) stalls.Add(stall); });
+			threshold: TimeSpan.FromMilliseconds(250), pollInterval: TimeSpan.FromMilliseconds(5), onStall: stall => { lock (stalls) stalls.Add(stall); });
 		using var cts = new CancellationTokenSource(runMs);
 		await monitor.RunAsync(cts.Token);
 		lock (stalls)
@@ -33,10 +33,35 @@ public sealed class UiStallMonitorTests
 		var stalls = await RunAsync(async ct =>
 		{
 			if (Interlocked.Increment(ref calls) == 2)
-				await Task.Delay(200, CancellationToken.None);
-		}, runMs: 600);
+				await Task.Delay(600, CancellationToken.None);
+		}, runMs: 1500);
 
 		Assert.Single(stalls);
-		Assert.True(stalls[0] >= TimeSpan.FromMilliseconds(150), stalls[0].ToString());
+		Assert.True(stalls[0] >= TimeSpan.FromMilliseconds(500), stalls[0].ToString());
+	}
+
+	[Fact]
+	public async Task LongStall_IsLoggedWhenItPassesTheThresholdNotOnlyWhenItEnds()
+	{
+		var logger = new Fakes.CapturingLogger<UiStallMonitor>();
+		var release = new TaskCompletionSource();
+		var calls = 0;
+		var monitor = new UiStallMonitor(_ => Interlocked.Increment(ref calls) == 1 ? release.Task : Task.CompletedTask, logger, TimeProvider.System,
+			TimeSpan.FromMilliseconds(30), TimeSpan.FromMilliseconds(5));
+		using var cts = new CancellationTokenSource();
+		var run = monitor.RunAsync(cts.Token);
+
+		await Task.Delay(150);
+		string[] during;
+		lock (logger.Messages)
+			during = logger.Messages.ToArray();
+		release.SetResult();
+		await Task.Delay(50);
+		cts.Cancel();
+		await run;
+
+		Assert.Single(during);
+		Assert.Contains("not responding", during[0]);
+		Assert.Contains(logger.Messages, m => m.Contains("stalled for", StringComparison.Ordinal));
 	}
 }
