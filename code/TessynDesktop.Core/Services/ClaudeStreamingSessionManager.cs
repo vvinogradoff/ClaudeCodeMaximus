@@ -126,21 +126,20 @@ public sealed class ClaudeStreamingSessionManager : IClaudeStreamingSessionManag
 
 				_log.Debug("streaming stdout [{NodeId}]: {Line}", nodeId, line);
 
-				var evt = ClaudeStreamEventParser.TryParseEvent(line);
-				if (evt == null)
-					continue;
-
-				handle.OnEvent(evt);
-
-				Action<ClaudeStreamEvent>? observer;
-				lock (handle.Lock) observer = handle.TurnObserver;
-				observer?.Invoke(evt);
-
-				if (evt.Type == "result")
+				foreach (var evt in ClaudeStreamEventParser.ParseEvents(line))
 				{
-					TaskCompletionSource<bool>? pending;
-					lock (handle.Lock) { pending = handle.PendingTurn; handle.PendingTurn = null; handle.TurnObserver = null; }
-					pending?.TrySetResult(true);
+					handle.OnEvent(evt);
+
+					Action<ClaudeStreamEvent>? observer;
+					lock (handle.Lock) observer = handle.TurnObserver;
+					observer?.Invoke(evt);
+
+					if (evt.Type == "result")
+					{
+						TaskCompletionSource<bool>? pending;
+						lock (handle.Lock) { pending = handle.PendingTurn; handle.PendingTurn = null; handle.TurnObserver = null; }
+						pending?.TrySetResult(true);
+					}
 				}
 			}
 		}

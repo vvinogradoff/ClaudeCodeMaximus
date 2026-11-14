@@ -5,7 +5,7 @@ namespace TessynDesktop.Models.Remote;
 /// the token header, the protocol version and the capability names. Contract: <c>.web-work/10-contract.md</c>.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public static class RemoteProtocol
+public static partial class RemoteProtocol
 {
 	/// <summary>Version reported by <c>client.hello</c>; bumped only for a breaking wire change.</summary>
 	public const int ProtocolVersion = 1;

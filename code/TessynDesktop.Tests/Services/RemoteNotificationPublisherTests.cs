@@ -264,6 +264,24 @@ public sealed class RemoteNotificationPublisherTests : IDisposable
 		Assert.Equal("limit reached", notification.Params["error"]!.GetValue<string>());
 	}
 
+	[Fact]
+	public void TurnCompleted_CarriesTheTurnId_WhenTheTurnPathHasOne()
+	{
+		_fake.Raise(nameof(IDaemonClient.TurnCompleted), new SessionTurnCompletedEventArgs { FileName = _node.FileName, TurnId = "turn-7" });
+
+		var notification = Assert.Single(WaitFor(Constants.Remote.Events.TurnCompleted, 1));
+		Assert.Equal("turn-7", notification.Params["turnId"]!.GetValue<string>());
+	}
+
+	[Fact]
+	public void TurnCompleted_WithoutATurnId_OmitsTheField_AsBefore()
+	{
+		_fake.Raise(nameof(IDaemonClient.TurnCompleted), new SessionTurnCompletedEventArgs { FileName = _node.FileName });
+
+		var notification = Assert.Single(WaitFor(Constants.Remote.Events.TurnCompleted, 1));
+		Assert.False(notification.Params.AsObject().ContainsKey("turnId"));
+	}
+
 	private List<string> ReceivedMethods()
 	{
 		lock (_received)

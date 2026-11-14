@@ -25,6 +25,9 @@ public interface ITurnEngine
 	/// <summary>Cancels every engine turn of the node, running or queued. Returns true when there was one.</summary>
 	bool CancelRuns(string nodeId);
 
+	/// <summary>True while an engine turn of the node is running or waiting for its turn.</summary>
+	bool IsBusy(string nodeId);
+
 	/// <summary>
 	/// Fires a mid-run correction prompt (a toggle changed while Claude is working, FR.11.12) as a one-shot <c>--resume</c> process
 	/// against the session's current Claude session id, even in Streaming Session Mode (FR.19.11). Only the session id of its

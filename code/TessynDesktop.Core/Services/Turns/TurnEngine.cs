@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Remote;
 using TessynDesktop.Models.Turns;
 
 namespace TessynDesktop.Services;
@@ -30,6 +32,7 @@ public sealed class TurnEngine : ITurnEngine
 	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly IAttentionService _attention;
 	private readonly ISessionTagService _tags;
+	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
 
 	private readonly ConcurrentDictionary<string, TurnNodeContext> _nodes = new();
 
@@ -44,7 +47,8 @@ public sealed class TurnEngine : ITurnEngine
 		Lazy<ITelegramBridgeService> telegramBridge,
 		IClaudeSessionStatusService sessionStatus,
 		IAttentionService attention,
-		ISessionTagService tags)
+		ISessionTagService tags,
+		IEnumerable<ITurnProgressSink>? progressSinks = null)
 	{
 		_files            = files;
 		_registry         = registry;
@@ -57,11 +61,16 @@ public sealed class TurnEngine : ITurnEngine
 		_sessionStatus    = sessionStatus;
 		_attention        = attention;
 		_tags             = tags;
+		_progressSinks    = progressSinks?.ToArray() ?? [];
 	}
 
 	/// <inheritdoc />
 	public bool CancelRuns(string nodeId) =>
 		_nodes.TryGetValue(nodeId, out var context) && context.CancelAll();
+
+	/// <inheritdoc />
+	public bool IsBusy(string nodeId) =>
+		_nodes.TryGetValue(nodeId, out var context) && context.IsBusy;
 
 	/// <inheritdoc />
 	public async Task<TurnOutcome> RunAsync(TurnRequest request, ITurnObserver? observer = null, CancellationToken cancellationToken = default)
@@ -70,10 +79,11 @@ public sealed class TurnEngine : ITurnEngine
 		var settings = request.Settings;
 		var nodeId   = node.NodeId;
 		var context  = _nodes.GetOrAdd(nodeId, _ => new TurnNodeContext());
-		var turnId   = Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
+		var turnId   = request.TurnId ?? Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
 		observer   ??= new NullTurnObserver();
 
-		var run = new TurnRun(turnId, node, _files, _appSettings, observer,
+		var progress = new TurnProgressTracker(nodeId, turnId, _progressSinks);
+		var run = new TurnRun(turnId, node, _files, _appSettings, observer, progress,
 			settings.ModelId ?? Constants.Turns.DefaultOptionText, settings.Effort ?? Constants.Turns.DefaultOptionText);
 
 		context.Enter();
@@ -89,6 +99,8 @@ public sealed class TurnEngine : ITurnEngine
 
 		try
 		{
+			progress.Started(request.ClientRequestId);
+
 			// FR.21.2 - lazily ensure a Telegram topic exists for this session on its first interactive activity since the
 			// bridge was enabled. Fire-and-forget: never throws, never delays the turn.
 			_ = _telegramBridge.Value.EnsureTopicForSessionAsync(node);
@@ -133,10 +145,14 @@ public sealed class TurnEngine : ITurnEngine
 			{
 				if (turnLock != null)
 				{
+					if (turnLock.CurrentCount == 0)
+						progress.Status(TurnState.Queued);
+
 					await turnLock.WaitAsync(ct);
 					lockAcquired = true;
 				}
 				run.SendErrorText = null;
+				progress.Status(TurnState.Running);
 
 				if (node.IsStreamingMode)
 				{
@@ -168,20 +184,31 @@ public sealed class TurnEngine : ITurnEngine
 				if (lockAcquired || turnLock == null)
 				{
 					sendErrorText = sendCancelled ? null : run.SendErrorText;
+
+					// The sinks flush first, so a turn's last notifications precede its turn.completed.
+					progress.Finished(sendCancelled, sendErrorText, ran: true);
 					try
 					{
-						_files.NotifyTurnCompleted(node.FileName, sendCancelled, sendErrorText);
+						_files.NotifyTurnCompleted(node.FileName, sendCancelled, sendErrorText, turnId);
 					}
 					catch (Exception ex)
 					{
 						_log.Warning(ex, "TurnCompleted handler failed for session {FileName}", node.FileName);
 					}
 				}
+				else
+					progress.Finished(sendCancelled, null, ran: false);
 
 				if (lockAcquired) turnLock?.Release();
 			}
 
 			return new TurnOutcome(turnId, sendCancelled, sendErrorText);
+		}
+		catch (Exception ex)
+		{
+			// A failure before the dispatch (or one rethrown from it): the turn is over. A no-op when the dispatch already reported it.
+			progress.Finished(false, ex.Message, ran: false);
+			throw;
 		}
 		finally
 		{
@@ -289,7 +316,9 @@ public sealed class TurnEngine : ITurnEngine
 		{
 			run.NeedsAuthRaceRetry = false;
 			_log.Information("Retrying turn after transient OAuth refresh race for session {FileName}", node.FileName);
+			run.Progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryAuth);
 			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+			run.Progress.Status(TurnState.Running);
 
 			await LaunchOneShotAsync(run, node, settings, sessionId, messageToSend, launch, ct);
 		}
@@ -300,6 +329,8 @@ public sealed class TurnEngine : ITurnEngine
 			var enrichedMessage = InstructionBlockBuilder.BuildContextPreamble(_files.ReadEntries(node.FileName), augmentedMessage);
 
 			observer.ContextRetrying();
+			run.Progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryContext);
+			run.Progress.Status(TurnState.Running);
 
 			await LaunchOneShotAsync(run, node, settings, null, enrichedMessage, launch, ct);
 		}
@@ -360,7 +391,9 @@ public sealed class TurnEngine : ITurnEngine
 			// alive, so retrying just writes the turn again.
 			run.NeedsAuthRaceRetry = false;
 			_log.Information("Retrying streaming turn after transient OAuth refresh race for session {FileName}", node.FileName);
+			run.Progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryAuth);
 			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+			run.Progress.Status(TurnState.Running);
 			await _streamingManager.SendTurnAsync(nodeId, messageToSend, ct);
 		}
 	}

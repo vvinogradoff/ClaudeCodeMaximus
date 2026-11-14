@@ -14,6 +14,15 @@ public static partial class Constants
 			public const string Assistant = "assistant";
 			public const string System = "system";
 			public const string Result = "result";
+
+			/// <summary>Not a claude line type: the thinking block of an assistant message, surfaced as an event of its own (P1.I).</summary>
+			public const string Thinking = "thinking";
+
+			/// <summary>Not a claude line type: a tool_use block of an assistant message, surfaced as an event of its own (P1.I).</summary>
+			public const string ToolUse = "tool_use";
+
+			/// <summary>Not a claude line type: a tool_result block of a user message, surfaced as an event of its own (P1.I).</summary>
+			public const string ToolResult = "tool_result";
 		}
 
 		/// <summary>Subtypes of <see cref="EventTypes.System"/> events the engine reacts to.</summary>
@@ -35,5 +44,34 @@ public static partial class Constants
 
 		/// <summary>Format of a turn id: a GUID without dashes.</summary>
 		public const string TurnIdFormat = "N";
+
+		/// <summary>Name shown for a tool result whose call was not seen.</summary>
+		public const string UnknownToolName = "tool";
+
+		/// <summary>Limits of the progress events.</summary>
+		public static class Limits
+		{
+			/// <summary>Longest one-line tool summary; longer text is cut and ends with an ellipsis.</summary>
+			public const int ToolSummaryMaxChars = 160;
+
+			/// <summary>Items a turn's event buffer keeps between two flushes before the oldest deltas are dropped.</summary>
+			public const int BufferMaxItems = 256;
+
+			/// <summary>Delta characters a turn's event buffer keeps between two flushes before the oldest deltas are dropped.</summary>
+			public const int BufferMaxDeltaChars = 512 * 1024;
+		}
+
+		/// <summary>Timings of the progress events.</summary>
+		public static class Timings
+		{
+			/// <summary>Deltas, tool, status and usage notifications of a turn are batched for this long (not the 250 ms of the other events).</summary>
+			public static readonly TimeSpan BatchWindow = TimeSpan.FromMilliseconds(50);
+		}
+
+		/// <summary>The keys of a tool call's input tried, in order, for its one-line summary.</summary>
+		public static readonly string[] ToolSummaryInputKeys = ["command", "file_path", "path", "pattern", "url", "query", "description", "prompt"];
+
+		/// <summary>The marker that ends a cut tool summary.</summary>
+		public const string Ellipsis = "...";
 	}
 }

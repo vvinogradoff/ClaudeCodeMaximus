@@ -32,7 +32,7 @@ internal sealed class TurnEngineHarness : IDisposable
 	public TagTestEnv Tags { get; } = new();
 	public TurnEngine Engine { get; }
 
-	public TurnEngineHarness(bool agentTools = false)
+	public TurnEngineHarness(bool agentTools = false, System.Collections.Generic.IEnumerable<ITurnProgressSink>? sinks = null)
 	{
 		_dir = Path.Combine(Path.GetTempPath(), $"turn-engine-tests-{Guid.NewGuid():N}");
 		Directory.CreateDirectory(_dir);
@@ -46,7 +46,7 @@ internal sealed class TurnEngineHarness : IDisposable
 		Engine = new TurnEngine(
 			Files, Registry, Turns, Process, Streaming, Settings,
 			new Lazy<IAgentMcpServer>(() => Mcp), new Lazy<ITelegramBridgeService>(() => Telegram),
-			Status, Attention.Service, Tags.Service);
+			Status, Attention.Service, Tags.Service, sinks);
 	}
 
 	public static SessionNodeModel Node(string? sessionId = null, bool streaming = false, int depth = 0) => new()

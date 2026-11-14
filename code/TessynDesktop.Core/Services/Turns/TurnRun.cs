@@ -19,24 +19,29 @@ internal sealed class TurnRun
 	private readonly ISessionFileService _files;
 	private readonly IAppSettingsService _appSettings;
 	private readonly ITurnObserver _observer;
+	private readonly TurnProgressTracker _progress;
 
 	// Cross-thread (prepared on the caller's thread, consumed on the reader thread): use Interlocked.
 	private string? _pendingModelId;
 	private string? _pendingEffort;
 
 	public TurnRun(string turnId, SessionNodeModel node, ISessionFileService files, IAppSettingsService appSettings, ITurnObserver observer,
-		string pendingModelId, string pendingEffort)
+		TurnProgressTracker progress, string pendingModelId, string pendingEffort)
 	{
 		TurnId          = turnId;
 		_node           = node;
 		_files          = files;
 		_appSettings    = appSettings;
 		_observer       = observer;
+		_progress       = progress;
 		_pendingModelId = pendingModelId;
 		_pendingEffort  = pendingEffort;
 	}
 
 	public string TurnId { get; }
+
+	/// <summary>Reports this turn's progress to the sinks.</summary>
+	public TurnProgressTracker Progress => _progress;
 
 	/// <summary>"No conversation found": the engine retries once with the history as context. Reset when the retry is launched.</summary>
 	public bool NeedsContextRetry { get; set; }
@@ -115,6 +120,9 @@ internal sealed class TurnRun
 				_observer.ResultEnded();
 				break;
 		}
+
+		// After the persistence above, so a delta never announces text that is not in the transcript yet.
+		_progress.Observe(evt);
 	}
 
 	private void HandleSystemError(ClaudeStreamEvent evt)

@@ -90,6 +90,9 @@ internal sealed class ScriptedStreamingManager : IClaudeStreamingSessionManager
 
 	public void Script(Func<Action<ClaudeStreamEvent>, CancellationToken, Task> behaviour) => _script.Enqueue(behaviour);
 
+	/// <summary>Delivers an event to the primary callback, as the process's read loop does for output outside any turn.</summary>
+	public void EmitToPrimary(ClaudeStreamEvent evt) => _primary!(evt);
+
 	public void ScriptEvents(params ClaudeStreamEvent[] events) =>
 		Script((primary, _) =>
 		{
@@ -133,6 +136,7 @@ internal sealed class InMemorySessionFileService : ISessionFileService
 {
 	private readonly object _gate = new();
 	private readonly List<SessionEntryModel> _entries = [];
+	private int _created;
 
 	public List<string> Log { get; } = [];
 	public List<(string FileName, bool Cancelled, string? ErrorText, int LockCount)> Completions { get; } = [];
@@ -141,10 +145,13 @@ internal sealed class InMemorySessionFileService : ISessionFileService
 	/// <summary>Reports the current count of the turn lock a completion is raised under (0 = still held).</summary>
 	public Func<int>? LockCount { get; set; }
 
+	/// <summary>The turn id of every completion, parallel to <see cref="Completions"/> (null when reported without one).</summary>
+	public List<string?> CompletionTurnIds { get; } = [];
+
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
 	public event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten { add { } remove { } }
 	public event EventHandler<SessionFileDeletedEventArgs>? SessionFileDeleted { add { } remove { } }
-	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
+	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
 
 	public void Seed(string role, string content)
 	{
@@ -183,13 +190,19 @@ internal sealed class InMemorySessionFileService : ISessionFileService
 		}
 	}
 
-	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText)
+	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText) =>
+		NotifyTurnCompleted(fileName, cancelled, errorText, turnId: null);
+
+	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText, string? turnId)
 	{
 		lock (_gate)
 		{
 			Completions.Add((fileName, cancelled, errorText, LockCount?.Invoke() ?? -1));
+			CompletionTurnIds.Add(turnId);
 			Log.Add($"completed:cancelled={cancelled}:error={errorText ?? "null"}");
 		}
+
+		TurnCompleted?.Invoke(this, new SessionTurnCompletedEventArgs { FileName = fileName, Cancelled = cancelled, ErrorText = errorText, TurnId = turnId });
 	}
 
 	public IReadOnlyList<SessionEntryModel> ReadEntries(string fileName) => Entries;
@@ -197,7 +210,7 @@ internal sealed class InMemorySessionFileService : ISessionFileService
 	public IReadOnlyList<SessionEntryModel> ReadTailEntries(string fileName, int maxBytes) => [];
 	public IReadOnlyList<SessionEntryModel> ReadEntriesFrom(string fileName, long startOffset) => [];
 	public SessionFileStampModel? GetFileStamp(string fileName) => null;
-	public string CreateSessionFile() => throw new NotSupportedException();
+	public string CreateSessionFile() => $"mem-{Interlocked.Increment(ref _created)}.txt";
 	public bool SessionFileExists(string fileName) => true;
 	public DateTimeOffset? GetLastWriteTimeUtc(string fileName) => null;
 	public void DeleteSessionFile(string fileName) { }

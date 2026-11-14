@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 using TessynDesktop.Models;
@@ -15,6 +16,24 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public static class ClaudeStreamEventParser
 {
+	/// <summary>
+	/// All events of one stream-json line: the one <see cref="TryParseEvent"/> yields (unchanged), followed by the activity events
+	/// (thinking, tool_use, tool_result) of <see cref="ClaudeActivityEventParser"/>. The process managers deliver every one of them.
+	/// </summary>
+	public static IReadOnlyList<ClaudeStreamEvent> ParseEvents(string line)
+	{
+		var primary  = TryParseEvent(line);
+		var activity = ClaudeActivityEventParser.Parse(line);
+		if (activity.Count == 0)
+			return primary == null ? [] : [primary];
+
+		var events = new List<ClaudeStreamEvent>(activity.Count + 1);
+		if (primary != null)
+			events.Add(primary);
+		events.AddRange(activity);
+		return events;
+	}
+
 	public static ClaudeStreamEvent? TryParseEvent(string line)
 	{
 		try
