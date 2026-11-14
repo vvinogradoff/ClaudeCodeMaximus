@@ -119,7 +119,7 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 				await process.WaitForExitAsync(cancellationToken);
 				_log.Debug("Claude process exited. Code={ExitCode}", process.ExitCode);
 
-				var stderr = await stderrTask;
+				var stderr = await stderrTask.WaitAsync(cancellationToken);
 				if (!string.IsNullOrWhiteSpace(stderr))
 				{
 					_log.Warning("stderr: {Stderr}", stderr.Trim());
