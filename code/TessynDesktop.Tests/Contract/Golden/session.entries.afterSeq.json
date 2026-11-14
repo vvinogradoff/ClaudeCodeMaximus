@@ -1,0 +1,23 @@
+{
+  "nodeId": "<id1>",
+  "epoch": 0,
+  "total": 4,
+  "entries": [
+    {
+      "index": 2,
+      "timestamp": "2026-11-14T08:02:00+00:00",
+      "role": "user",
+      "content": "A longer question that the client may want to read in slices",
+      "entryId": "<id2>:2"
+    },
+    {
+      "index": 3,
+      "timestamp": "2026-11-14T08:03:00+00:00",
+      "role": "assistant",
+      "content": "[x] checklist and [link](http://example.test)",
+      "entryId": "<id2>:3"
+    }
+  ],
+  "fileId": "<id2>",
+  "seq": 4
+}

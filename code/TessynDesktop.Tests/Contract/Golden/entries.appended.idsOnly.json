@@ -1,0 +1,6 @@
+{
+  "nodeId": "<id1>",
+  "fileId": "<id2>",
+  "fromSeq": 10,
+  "toSeq": 12
+}

@@ -1,0 +1,32 @@
+{
+  "id": "<id1>",
+  "name": "Main session",
+  "directoryId": "<id2>",
+  "location": {
+    "directoryLabel": "<root>/proj",
+    "treePath": ""
+  },
+  "state": {
+    "id": "<id1>",
+    "running": false,
+    "streamingAlive": false,
+    "favorite": false,
+    "hasDraft": false
+  },
+  "tags": [],
+  "attention": {
+    "openCount": 0,
+    "allOpenCount": 0
+  },
+  "lastUsed": {
+    "modelId": "default",
+    "effort": "high",
+    "profileId": "default",
+    "profileName": "[Sys] me@example.com"
+  },
+  "isStreamingMode": false,
+  "entryCount": 4,
+  "epoch": 0,
+  "fileId": "<id3>",
+  "seq": 4
+}
