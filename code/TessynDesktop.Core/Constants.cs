@@ -584,6 +584,10 @@ SESSION TRANSCRIPT TO COMPACT:
 			public const string RefreshLastPromptTimes = "startup-refresh-last-prompt-times";
 			public const string ApplyAttentionSummaries = "startup-apply-attention-summaries";
 			public const string RefreshGitOrigins = "startup-refresh-git-origins";
+			/// <summary>Background (off-UI-thread) file and git reads feeding <see cref="RefreshLastPromptTimes"/> (ISSUE.016).</summary>
+			public const string ScanLastPromptTimes = "startup-scan-last-prompt-times";
+			/// <summary>Background (off-UI-thread) git reads feeding <see cref="RefreshGitOrigins"/> (ISSUE.016).</summary>
+			public const string ScanGitOrigins = "startup-scan-git-origins";
 			public const string ResumabilityApply = "resumability-apply";
 			public const string TreeSearchRestore = "tree-search-restore";
 			public const string SwapMessageSource = "swap-message-source";
