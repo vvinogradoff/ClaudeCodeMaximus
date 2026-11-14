@@ -179,7 +179,8 @@ Exit:
 
 **Status 2026-11-14 (later):**
 - **P2.A merged** (`03a3061`): `TessynDesktop.Protocol` and `TessynDesktop.Client`, after a review with fixes; master is green with 1,920 + 95 + 16 tests.
-- The WPF shell (2.1, 2.4–2.8) stage A is done: 123 view-model tests, and the transcript security design was reviewed as sound. The review fixes (the app did not exit; duplicate-append races) and stage B (the real client, live run) are in progress (worker 140).
+- **WPF MVP merged** (`11fe62b`): shell, virtualized tree, WebView2 transcript, send/stop, client state, `run-wpf.ps1`, `--daemon-file` / `--data-root`. Tests: 1,920 + 95 + 16 + 140 green. The live run waits for the Architect to restart TessynDesktop onto this master. Follow-ups: F7 (reuse tree nodes by id), F8 (find covers loaded entries only).
+- Before that merge: the WPF shell (2.1, 2.4–2.8) stage A was done: 123 view-model tests, and the transcript security design was reviewed as sound. The review fixes (the app did not exit; duplicate-append races) and stage B (the real client, live run) are in progress (worker 140).
 - P1.F/G (worker 170) and P1.I turn engine (worker 180) are in progress.
 
 Earlier status:
