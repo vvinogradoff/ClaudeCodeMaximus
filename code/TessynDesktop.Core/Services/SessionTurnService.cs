@@ -129,13 +129,14 @@ public sealed class SessionTurnService : ISessionTurnService
 		var turnCancelled = false;
 		string? turnErrorText = null;
 
-		// FR.21.2 — lazily ensure a Telegram topic exists for this session on its first activity
-		// since the bridge was enabled. Fire-and-forget: EnsureTopicForSessionAsync never throws
-		// and must never delay or fail the turn it was piggybacked on.
-		_ = _telegramBridge.Value.EnsureTopicForSessionAsync(node);
-
 		try
 		{
+			// FR.21.2 — lazily ensure a Telegram topic exists for this session on its first activity
+			// since the bridge was enabled. Fire-and-forget: EnsureTopicForSessionAsync never throws
+			// and must never delay or fail the turn it was piggybacked on. Inside the try so that a failing
+			// Lazy can never leave the node marked running with the turn lock held.
+			_ = _telegramBridge.Value.EnsureTopicForSessionAsync(node);
+
 			// The profile this turn uses: the per-turn choice, else the pinned/last-recorded one, else Default.
 			var requestedProfileName = turnOptions?.ProfileName ?? ResolveProfileName(node);
 

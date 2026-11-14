@@ -257,6 +257,28 @@ public sealed class SessionTurnServiceTests : IDisposable
 	private static SessionNodeModel MakeNode(string nodeId = "node-1") =>
 		new() { NodeId = nodeId, Name = "Test", FileName = $"{nodeId}.txt", WorkingDirectory = @"C:\proj" };
 
+	/// <summary>
+	/// The Telegram bridge is a Lazy; resolving it used to sit outside the try that holds the finally, so a failing
+	/// Lazy left the node marked running and the turn lock held forever.
+	/// </summary>
+	[Fact]
+	public async Task RunTurnAsync_TelegramBridgeLazyThrows_ReleasesTurnLockAndClearsRunning()
+	{
+		var sut = new SessionTurnService(
+			_processManager, _fileService, _appSettings, _profileService,
+			new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService()),
+			_registry, new FakeSessionStatusServiceForTurnService(), new FakeModelServiceForTurnService(),
+			new Lazy<ITelegramBridgeService>(() => throw new InvalidOperationException("bridge ctor failed")),
+			_streamingManager, _attention.Service, _tagEnv.Service,
+			new ProfileLabelService(_profileService, _appSettings));
+		var node = MakeNode();
+
+		await Record.ExceptionAsync(() => sut.RunTurnAsync(node, "hello", TurnSource.Scheduled));
+
+		Assert.Equal(1, sut.GetTurnLock(node.NodeId).CurrentCount);
+		Assert.Equal((node.NodeId, false), _registry.SetRunningCalls[^1]);
+	}
+
 	// ── One-shot fallback (no streaming process alive) ───────────────────────────
 
 	[Fact]
@@ -978,5 +1000,52 @@ public sealed class SessionTurnServiceTests : IDisposable
 		Assert.Empty(_processManager.Calls);
 		Assert.Single(_streamingManager.SendTurnCalls);
 		Assert.Equal("[Sys] me@example.com", UserEntry().profileName);
+	}
+
+	// ── Running flag across queued turns (robustness item 0.6/2) ──────────────────
+
+	/// <summary>
+	/// A turn queued behind another on the same node must leave the node running: the first turn's
+	/// "not running" report (which comes after its lock release) must not cancel out the queued turn's
+	/// "running" report. SessionRegistry reference-counts the reports (FR.1.8), so the calls must balance.
+	/// </summary>
+	[Fact]
+	public async Task RunTurnAsync_QueuedTurn_NodeStaysRunningUntilLastTurnEnds()
+	{
+		_streamingManager.AliveResult = false;
+		var gate = new SemaphoreSlim(0);
+		_processManager.EmitEvents = async _ => await gate.WaitAsync();
+		var node = MakeNode();
+
+		int RunningCount()
+		{
+			var count = 0;
+			foreach (var (_, running) in _registry.SetRunningCalls.ToArray())
+				count = running ? count + 1 : Math.Max(0, count - 1);
+			return count;
+		}
+
+		var first = _sut.RunTurnAsync(node, "one", TurnSource.Scheduled);
+		await WaitUntilAsync(() => _processManager.Calls.Count == 1);
+		var second = _sut.RunTurnAsync(node, "two", TurnSource.Scheduled); // queued on the turn lock
+
+		gate.Release();
+		await first;
+		await WaitUntilAsync(() => _processManager.Calls.Count == 2);
+		Assert.True(RunningCount() > 0, "node reported not running while the queued turn is executing");
+
+		gate.Release();
+		await second;
+		Assert.Equal(0, RunningCount());
+	}
+
+	private static async Task WaitUntilAsync(Func<bool> condition)
+	{
+		var deadline = DateTime.UtcNow.AddSeconds(10);
+		while (!condition())
+		{
+			Assert.True(DateTime.UtcNow < deadline, "condition not reached in time");
+			await Task.Delay(5);
+		}
 	}
 }
