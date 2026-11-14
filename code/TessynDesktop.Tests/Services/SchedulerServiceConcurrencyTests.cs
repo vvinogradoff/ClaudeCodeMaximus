@@ -96,4 +96,43 @@ public sealed class SchedulerServiceConcurrencyTests : IDisposable
 
 		await call.WaitAsync(TimeSpan.FromSeconds(10)); // proceeds once the lock is released
 	}
+
+	// ── Robustness item 0.6/4: faults on the scheduler's fire-and-forget paths ─────────────────
+
+	private static ScheduleModel BadCron(MissedFirePolicy policy = MissedFirePolicy.FireOnce) => new()
+	{
+		ScheduleId = "bad", TargetNodeId = "n", Prompt = "p", Kind = ScheduleKind.Cron,
+		CronExpression = "not a cron", FireAtUtc = DateTimeOffset.UtcNow.AddMinutes(-5), MissedFirePolicy = policy,
+	};
+
+	[Fact]
+	public void Start_PersistedScheduleWithUnparsableCron_DoesNotAbortStartup()
+	{
+		var settings = new AppSettingsService(_tempDir);
+		settings.Settings.Schedules.Add(BadCron(MissedFirePolicy.Skip));
+		var scheduler = new SchedulerService(settings, new FakeTurnService(), new FakeSessionRegistry());
+
+		var ex = Record.Exception(scheduler.Start);
+		scheduler.Stop();
+
+		Assert.Null(ex);
+		Assert.Empty(settings.Settings.Schedules); // can never fire correctly: dropped, not retried forever
+	}
+
+	[Fact]
+	public async Task Poll_ScheduleWithUnparsableCron_IsDroppedInsteadOfRefiringEveryPoll()
+	{
+		var settings = new AppSettingsService(_tempDir);
+		var registry = new FakeSessionRegistry();
+		registry.AddNode(new SessionNodeModel { NodeId = "n", Name = "n", FileName = "n.txt", WorkingDirectory = @"C:\proj" });
+		settings.Settings.Schedules.Add(BadCron());
+		var scheduler = new SchedulerService(settings, new FakeTurnService(), registry);
+
+		scheduler.Poll();
+
+		var deadline = DateTime.UtcNow.AddSeconds(5);
+		while (DateTime.UtcNow < deadline && settings.Settings.Schedules.Count > 0)
+			await Task.Delay(20);
+		Assert.Empty(settings.Settings.Schedules);
+	}
 }

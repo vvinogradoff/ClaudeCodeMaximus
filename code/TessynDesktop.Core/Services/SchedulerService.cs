@@ -44,7 +44,7 @@ public sealed class SchedulerService : ISchedulerService
 	public void Start()
 	{
 		HandleMissedFires();
-		_timer = new Timer(_ => Poll(), null, 0, PollIntervalMs);
+		_timer = new Timer(_ => PollSafe(), null, 0, PollIntervalMs);
 		_log.Information("SchedulerService started. Active schedules: {Count}", _appSettings.Settings.Schedules.Count);
 	}
 
@@ -148,31 +148,65 @@ public sealed class SchedulerService : ISchedulerService
 
 		foreach (var s in missed)
 		{
-			switch (s.MissedFirePolicy)
+			try
 			{
-				case MissedFirePolicy.Skip:
-					if (s.Kind == ScheduleKind.Cron)
-					{
-						// Advance to next future occurrence without firing.
-						s.FireAtUtc = CronHelper.GetNextOccurrence(s.CronExpression!, now);
-						_log.Information("Missed cron fire skipped, advanced: {Id} → {At}", s.ScheduleId, s.FireAtUtc);
-					}
-					else
-					{
-						lock (_lock)
-							_appSettings.Settings.Schedules.Remove(s);
-						_log.Information("Missed one-shot fire skipped and removed: {Id}", s.ScheduleId);
-					}
-					break;
+				switch (s.MissedFirePolicy)
+				{
+					case MissedFirePolicy.Skip:
+						if (s.Kind == ScheduleKind.Cron)
+						{
+							// Advance to next future occurrence without firing.
+							var next = TryGetNextCronOccurrence(s, now);
+							lock (_lock)
+							{
+								if (next == null)
+									_appSettings.Settings.Schedules.Remove(s);
+								else
+									s.FireAtUtc = next;
+							}
+							if (next != null)
+								_log.Information("Missed cron fire skipped, advanced: {Id} → {At}", s.ScheduleId, next);
+						}
+						else
+						{
+							lock (_lock)
+								_appSettings.Settings.Schedules.Remove(s);
+							_log.Information("Missed one-shot fire skipped and removed: {Id}", s.ScheduleId);
+						}
+						break;
 
-				default: // FireOnce
-					_log.Information("Firing missed schedule on startup: {Id}", s.ScheduleId);
-					_ = FireScheduleAsync(s);
-					break;
+					default: // FireOnce
+						_log.Information("Firing missed schedule on startup: {Id}", s.ScheduleId);
+						_ = FireScheduleAsync(s);
+						break;
+				}
+			}
+			catch (Exception ex)
+			{
+				// One bad persisted schedule must not abort startup or the handling of the others.
+				_log.Error(ex, "SchedulerService: could not handle missed fire of schedule {Id}", s.ScheduleId);
 			}
 		}
 
 		_appSettings.Save();
+	}
+
+	/// <summary>
+	/// The next occurrence of a cron schedule, or null (logged) when its expression cannot be evaluated. A persisted
+	/// schedule with such an expression can never fire correctly, so callers drop it instead of retrying forever.
+	/// </summary>
+	private DateTimeOffset? TryGetNextCronOccurrence(ScheduleModel schedule, DateTimeOffset after)
+	{
+		try
+		{
+			return CronHelper.GetNextOccurrence(schedule.CronExpression!, after);
+		}
+		catch (Exception ex)
+		{
+			_log.Error(ex, "Schedule {Id}: cron expression '{Cron}' is not usable → removing the schedule",
+				schedule.ScheduleId, schedule.CronExpression);
+			return null;
+		}
 	}
 
 	private static readonly Regex _singleNote = new(
@@ -191,6 +225,13 @@ public sealed class SchedulerService : ISchedulerService
 		var single = _singleNote.Match(currentNote);
 		var first  = single.Success ? single.Groups["name"].Value : currentNote;
 		return string.Format(Constants.Agent.MailboxMergedNoteFormat, 2, $"{first}, {workerName}");
+	}
+
+	/// <summary>Timer entry point: an exception escaping a thread-pool timer callback would take the whole process down.</summary>
+	private void PollSafe()
+	{
+		try { Poll(); }
+		catch (Exception ex) { _log.Error(ex, "SchedulerService: poll failed; will retry on the next tick"); }
 	}
 
 	internal void Poll()
@@ -232,8 +273,14 @@ public sealed class SchedulerService : ISchedulerService
 			{
 				shouldRemove = schedule.MaxFires > 0 && schedule.FireCount >= schedule.MaxFires;
 				if (!shouldRemove)
-					schedule.FireAtUtc = CronHelper.GetNextOccurrence(schedule.CronExpression!, DateTimeOffset.UtcNow);
-				else
+				{
+					var next = TryGetNextCronOccurrence(schedule, DateTimeOffset.UtcNow);
+					if (next == null)
+						shouldRemove = true; // unusable expression: drop it so it is not retried on every poll
+					else
+						schedule.FireAtUtc = next;
+				}
+				if (shouldRemove)
 					_appSettings.Settings.Schedules.Remove(schedule);
 			}
 			else
@@ -244,8 +291,17 @@ public sealed class SchedulerService : ISchedulerService
 					return;
 			}
 		}
-		_appSettings.Save();
-		ScheduleChanged?.Invoke(this, EventArgs.Empty);
+		try
+		{
+			_appSettings.Save();
+			ScheduleChanged?.Invoke(this, EventArgs.Empty);
+		}
+		catch (Exception ex)
+		{
+			// The schedule is already advanced/removed in memory; a failed save or a throwing subscriber must
+			// not turn this fire-and-forget task into an unobserved fault or skip the turn.
+			_log.Warning(ex, "SchedulerService: persisting/announcing schedule {Id} failed", schedule.ScheduleId);
+		}
 
 		// Build the prompt — prefix with note if available.
 		var prompt = string.IsNullOrEmpty(schedule.Note)
