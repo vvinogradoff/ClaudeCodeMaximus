@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using TessynDesktop.Models;
 using TessynDesktop.Services;
@@ -338,6 +339,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 		// Populate the top-bar recent-sessions dropdown on startup
 		RefreshRecentDropdown();
+
+		// Last-prompt times load in the background (ISSUE.016); rebuild the dropdown once they are applied.
+		_ = SessionTree.LastPromptScanTask.ContinueWith(
+			_ => Dispatcher.UIThread.Post(RefreshRecentDropdown), TaskScheduler.Default);
 	}
 
 	private void OnSelectedSessionChanged(SessionNodeViewModel? node)

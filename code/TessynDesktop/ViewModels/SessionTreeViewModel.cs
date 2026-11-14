@@ -34,6 +34,8 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly IDraftService _draftService;
 	private readonly IOperationTimer _timer;
 	private int _resumabilitySweepInFlight;
+	private int _gitOriginRefreshInFlight;
+	private readonly SessionLastActivityMerger _lastActivityMerger = new();
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
 	private ViewModelBase? _selectedTreeItem;
@@ -195,7 +197,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		LoadFromSettings();
 		_ = RefreshGitOriginsAsync();
 		_ = RefreshSessionResumabilityAsync();
-		_ = RefreshLastPromptTimesAsync();
+		LastPromptScanTask = RefreshLastPromptTimesAsync();
 		using (_timer.Measure(Constants.Diagnostics.Operation.ApplyAttentionSummaries, Constants.Diagnostics.WarnThresholds.UiLoadMs))
 		{
 			foreach (var dir in Directories)
@@ -646,6 +648,10 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// </summary>
 	public async Task RefreshGitOriginsAsync()
 	{
+		// A refresh still in flight makes a repeated click (or call) a no-op.
+		if (Interlocked.CompareExchange(ref _gitOriginRefreshInFlight, 1, 0) != 0)
+			return;
+
 		try
 		{
 			var directories = Directories.ToList();
@@ -668,6 +674,10 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		catch (Exception ex)
 		{
 			_log.Warning(ex, "Git origin refresh failed");
+		}
+		finally
+		{
+			Volatile.Write(ref _gitOriginRefreshInFlight, 0);
 		}
 	}
 
@@ -1663,6 +1673,9 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	// --- Last prompt time ---
 
+	/// <summary>Completes once the startup last-prompt scan has been applied to the view models (never faults).</summary>
+	public Task LastPromptScanTask { get; }
+
 	/// <summary>
 	/// Reloads last-prompt, last-response, profile and draft timestamps for every session. The session-file and
 	/// draft reads run on a background thread over a snapshot of the nodes; the results are applied to the view
@@ -1716,13 +1729,26 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		}
 	}
 
-	private static void ApplyLastActivity(SessionNodeViewModel session, SessionLastActivityModel activity)
+	/// <summary>
+	/// Applies a scan result without overwriting values the node gained while the scan ran (prompt sent, response,
+	/// draft edit): see <see cref="SessionLastActivityMerger"/>.
+	/// </summary>
+	private void ApplyLastActivity(SessionNodeViewModel session, SessionLastActivityModel scanned)
 	{
-		session.LastPromptTimestamp = activity.LastPromptTimestamp;
-		session.LastPromptTime = activity.LastPromptTimestamp?.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-		session.LastResponseTimestamp = activity.LastResponseTimestamp;
-		session.ProfileName = activity.ProfileName;
-		session.LastDraftEditTimestamp = activity.LastDraftEditTimestamp;
+		var current = new SessionLastActivityModel(session.FileName, session.LastPromptTimestamp,
+			session.LastResponseTimestamp, session.ProfileName, session.LastDraftEditTimestamp);
+		var merged = _lastActivityMerger.Merge(current, scanned);
+
+		if (merged.LastPromptTimestamp != current.LastPromptTimestamp)
+		{
+			session.LastPromptTimestamp = merged.LastPromptTimestamp;
+			session.LastPromptTime = merged.LastPromptTimestamp?.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+			session.ProfileName = merged.ProfileName;
+		}
+		if (merged.LastResponseTimestamp != current.LastResponseTimestamp)
+			session.LastResponseTimestamp = merged.LastResponseTimestamp;
+		if (merged.LastDraftEditTimestamp != current.LastDraftEditTimestamp)
+			session.LastDraftEditTimestamp = merged.LastDraftEditTimestamp;
 	}
 
 	/// <summary>
