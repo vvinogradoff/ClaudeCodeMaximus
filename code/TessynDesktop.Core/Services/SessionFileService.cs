@@ -22,6 +22,8 @@ public sealed class SessionFileService : ISessionFileService
 
 	public event EventHandler<SessionFileRewrittenEventArgs>? SessionFileRewritten;
 
+	public event EventHandler<SessionFileDeletedEventArgs>? SessionFileDeleted;
+
 	private void NotifyRewritten(string fileName) =>
 		SessionFileRewritten?.Invoke(this, new SessionFileRewrittenEventArgs { FileName = fileName });
 
@@ -176,6 +178,35 @@ public sealed class SessionFileService : ISessionFileService
 		var fullPath = GetFullPath(fileName);
 		if (File.Exists(fullPath))
 			File.Delete(fullPath);
+
+		// Also for a file that was already gone: it clears an orphaned index sidecar.
+		SessionFileDeleted?.Invoke(this, new SessionFileDeletedEventArgs { FileName = fileName });
+	}
+
+	/// <summary>Attempts of <see cref="MoveOverWithRetry"/> and the first pause between them (doubled each time).</summary>
+	private const int MoveAttempts = 6;
+	private const int MoveFirstPauseMs = 20;
+
+	/// <summary>
+	/// Replaces <paramref name="target"/> with <paramref name="temp"/>. Windows refuses while a reader (index rebuild, page read,
+	/// antivirus) has the target open without delete sharing, so a brief collision is retried with a growing pause (review B2).
+	/// </summary>
+	private static void MoveOverWithRetry(string temp, string target)
+	{
+		var pause = MoveFirstPauseMs;
+		for (var attempt = 1; ; attempt++)
+		{
+			try
+			{
+				File.Move(temp, target, overwrite: true);
+				return;
+			}
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < MoveAttempts)
+			{
+				System.Threading.Thread.Sleep(pause);
+				pause *= 2;
+			}
+		}
 	}
 
 	public void RewriteSessionFile(string fileName, string content)
@@ -183,7 +214,7 @@ public sealed class SessionFileService : ISessionFileService
 		var fullPath = GetFullPath(fileName);
 		var tmpPath = fullPath + ".tmp";
 		File.WriteAllText(tmpPath, content, Encoding.UTF8);
-		File.Move(tmpPath, fullPath, overwrite: true);
+		MoveOverWithRetry(tmpPath, fullPath);
 		NotifyRewritten(fileName);
 	}
 
@@ -207,7 +238,7 @@ public sealed class SessionFileService : ISessionFileService
 		var fullPath = GetFullPath(fileName);
 		var tmpPath = fullPath + ".tmp";
 		File.WriteAllText(tmpPath, sb.ToString(), Encoding.UTF8);
-		File.Move(tmpPath, fullPath, overwrite: true);
+		MoveOverWithRetry(tmpPath, fullPath);
 		NotifyRewritten(fileName);
 	}
 
@@ -243,7 +274,7 @@ public sealed class SessionFileService : ISessionFileService
 
 				var tmpPath = filePath + ".tmp";
 				File.WriteAllText(tmpPath, sb.ToString(), Encoding.UTF8);
-				File.Move(tmpPath, filePath, overwrite: true);
+				MoveOverWithRetry(tmpPath, filePath);
 				repaired++;
 				NotifyRewritten(Path.GetFileName(filePath));
 			}
@@ -292,7 +323,7 @@ public sealed class SessionFileService : ISessionFileService
 
 	private static string EscapeMetaValue(string value) => value.Replace("\"", "'");
 
-	private static IReadOnlyList<SessionEntryModel> ParseEntries(string[] lines)
+	internal static IReadOnlyList<SessionEntryModel> ParseEntries(string[] lines)
 	{
 		var entries = new List<SessionEntryModel>();
 		var i = 0;
@@ -348,7 +379,7 @@ public sealed class SessionFileService : ISessionFileService
 		return entries;
 	}
 
-	private static bool TryParseHeader(string line, out DateTimeOffset timestamp, out string role, out string rawMeta)
+	internal static bool TryParseHeader(string line, out DateTimeOffset timestamp, out string role, out string rawMeta)
 	{
 		timestamp = default;
 		role = string.Empty;
@@ -391,7 +422,7 @@ public sealed class SessionFileService : ISessionFileService
 	}
 
 	/// <summary>Parses space-delimited key="value" pairs from a header metadata string.</summary>
-	private static Dictionary<string, string> ParseMetadata(string rawMeta)
+	internal static Dictionary<string, string> ParseMetadata(string rawMeta)
 	{
 		var result = new Dictionary<string, string>(StringComparer.Ordinal);
 		if (string.IsNullOrWhiteSpace(rawMeta))
