@@ -11,33 +11,10 @@ namespace TessynDesktop.WPF.Tests;
 /// <remarks>Created by Claude</remarks>
 public sealed class ConnectionViewModelTests
 {
-	private sealed class ScriptedLocator : IDaemonLocator
-	{
-		public Queue<DaemonDiscoveryResult> Results { get; } = new();
-
-		public int Calls { get; private set; }
-
-		public Task<DaemonDiscoveryResult> DiscoverAsync(CancellationToken cancellationToken)
-		{
-			Calls++;
-			var next = Results.Count > 1 ? Results.Dequeue() : Results.Peek();
-			return Task.FromResult(next);
-		}
-	}
-
-	private sealed class FixedFactory : ITessynClientFactory
-	{
-		public FixedFactory(FakeTessynClient client) => Client = client;
-
-		public FakeTessynClient Client { get; }
-
-		public ITessynClient Create(DaemonEndpoint endpoint) => Client;
-	}
-
 	private static readonly DaemonDiscoveryResult Found = new(DaemonDiscoveryStatus.Found, new DaemonEndpoint(new Uri("http://127.0.0.1:1/tdcp"), "token", "run", 1));
 
 	private static ConnectionViewModel Create(ScriptedLocator locator, FakeTessynClient client) =>
-		new(locator, new FixedFactory(client), new ImmediateUiDispatcher(), NullLogger<ConnectionViewModel>.Instance, TimeSpan.FromMilliseconds(5));
+		new(locator, new FixedClientFactory(client), new ImmediateUiDispatcher(), NullLogger<ConnectionViewModel>.Instance, TimeSpan.FromMilliseconds(5));
 
 	[Fact]
 	public async Task NoDaemonFile_ShowsDaemonNotFoundAndKeepsRetrying()

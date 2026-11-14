@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using TessynDesktop.WPF.Infrastructure;
+using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Views;
 
 namespace TessynDesktop.WPF;
@@ -43,6 +44,7 @@ public partial class App : Application
 		_host.Services.GetRequiredService<ILogger<App>>().LogInformation("TessynDesktop.WPF starting");
 
 		await _host.StartAsync();
+		await _host.Services.GetRequiredService<IClientStateStore>().LoadAsync();
 
 		var window = _host.Services.GetRequiredService<MainWindow>();
 		MainWindow = window;
@@ -53,6 +55,7 @@ public partial class App : Application
 	{
 		if (_host != null)
 		{
+			_host.Services.GetRequiredService<IClientStateStore>().FlushAsync().GetAwaiter().GetResult();
 			_host.StopAsync(TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
 			_host.Dispose();
 		}

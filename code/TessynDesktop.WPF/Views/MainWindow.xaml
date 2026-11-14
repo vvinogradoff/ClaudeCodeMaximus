@@ -24,7 +24,7 @@
                 <ColumnDefinition Width="*" MinWidth="320" />
             </Grid.ColumnDefinitions>
             <v:TreePanel Grid.Column="0" DataContext="{Binding Tree}" />
-            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" />
+            <GridSplitter x:Name="Splitter" Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" />
             <v:SessionPane Grid.Column="2" DataContext="{Binding Session}" />
         </Grid>
     </DockPanel>

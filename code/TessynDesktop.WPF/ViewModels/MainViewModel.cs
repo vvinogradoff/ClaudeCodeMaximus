@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.Client;
 using TessynDesktop.WPF.Infrastructure;
+using TessynDesktop.WPF.State;
 
 namespace TessynDesktop.WPF.ViewModels;
 
@@ -14,6 +15,7 @@ public sealed partial class MainViewModel : ObservableObject
 {
 	private readonly Func<ITessynClient, TreeViewModel> _treeFactory;
 	private readonly Func<ITessynClient, SessionPaneViewModel> _sessionFactory;
+	private readonly IClientStateStore _stateStore;
 	private readonly ILogger<MainViewModel> _logger;
 
 	[ObservableProperty]
@@ -25,11 +27,12 @@ public sealed partial class MainViewModel : ObservableObject
 	[ObservableProperty]
 	private string _statusText = "Not connected";
 
-	public MainViewModel(ConnectionViewModel connection, Func<ITessynClient, TreeViewModel> treeFactory, Func<ITessynClient, SessionPaneViewModel> sessionFactory, ILogger<MainViewModel> logger)
+	public MainViewModel(ConnectionViewModel connection, Func<ITessynClient, TreeViewModel> treeFactory, Func<ITessynClient, SessionPaneViewModel> sessionFactory, IClientStateStore stateStore, ILogger<MainViewModel> logger)
 	{
 		Connection = connection;
 		_treeFactory = treeFactory;
 		_sessionFactory = sessionFactory;
+		_stateStore = stateStore;
 		_logger = logger;
 		Connection.ClientReady += OnClientReady;
 		Connection.PropertyChanged += (_, _) => UpdateStatus();
@@ -47,10 +50,16 @@ public sealed partial class MainViewModel : ObservableObject
 			var tree = _treeFactory(client);
 			tree.PropertyChanged += (_, _) => UpdateStatus();
 			tree.SelectionChanged += OnTreeSelectionChanged;
+			tree.ExpansionChanged += (_, _) => _stateStore.Update(state => state.ExpandedNodeIds = tree.ExpandedNodeIds.ToList());
+			tree.RestoreExpansion(_stateStore.State.ExpandedNodeIds);
 			Session = _sessionFactory(client);
 			Tree = tree;
 			await tree.LoadAsync();
 			UpdateStatus();
+
+			var last = _stateStore.State.LastSelectedNodeId;
+			if (last != null)
+				tree.SelectNodeById(last);
 		}
 		catch (Exception ex)
 		{
@@ -60,6 +69,7 @@ public sealed partial class MainViewModel : ObservableObject
 
 	private void OnTreeSelectionChanged(object? sender, TreeNodeViewModel node)
 	{
+		_stateStore.Update(state => state.LastSelectedNodeId = node.Id);
 		if (!node.IsSessionLike || Session == null)
 			return;
 

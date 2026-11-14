@@ -1,10 +1,12 @@
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.Client;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.Rendering;
+using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Transcript;
 using TessynDesktop.WPF.ViewModels;
 using TessynDesktop.WPF.Views;
@@ -38,6 +40,10 @@ public sealed class ServiceRegistration
 		services.AddSingleton<Func<ITessynClient, SessionPaneViewModel>>(sp => client => new SessionPaneViewModel(
 			client, sp.GetRequiredService<ITranscriptSurface>(), sp.GetRequiredService<IEntryRenderer>(), sp.GetRequiredService<IUrlLauncher>(),
 			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<SwitchLatencyTracker>(), sp.GetRequiredService<ILogger<SessionPaneViewModel>>()));
+		services.AddSingleton<IClientStateStore, JsonClientStateStore>();
+		services.AddSingleton<WindowPlacementClamper>();
+		services.AddSingleton<Win32WindowPlacement>();
+		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));
 		services.AddSingleton<MainViewModel>();
 		services.AddSingleton<MainWindow>();
 	}
