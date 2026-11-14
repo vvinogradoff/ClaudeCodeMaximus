@@ -139,12 +139,16 @@ public sealed class CodeIndex : IDisposable
 		return true;
 	}
 
+	/// <summary>The key an entry is stored under: the root-relative, '/'-separated path. The model's RelativePath is the same string instance, so a file costs one path string, not two.</summary>
+	private string ToKey(string absolutePath) => Path.GetRelativePath(_workingDirectory, absolutePath).Replace('\\', '/');
+
 	private void AddFile(string filePath, Dictionary<string, IndexedFileModel> files, Dictionary<string, CodeSymbolModel[]> symbols)
 	{
-		files[filePath] = new IndexedFileModel
+		var key = ToKey(filePath);
+		files[key] = new IndexedFileModel
 		{
 			FileName = Path.GetFileName(filePath),
-			RelativePath = Path.GetRelativePath(_workingDirectory, filePath).Replace('\\', '/'),
+			RelativePath = key,
 			Root = _workingDirectory,
 		};
 
@@ -153,9 +157,9 @@ public sealed class CodeIndex : IDisposable
 			var list = new List<CodeSymbolModel>();
 			ExtractSymbols(filePath, list);
 			if (list.Count > 0)
-				symbols[filePath] = list.ToArray();
+				symbols[key] = list.ToArray();
 			else
-				symbols.Remove(filePath);
+				symbols.Remove(key);
 		}
 	}
 
@@ -172,11 +176,12 @@ public sealed class CodeIndex : IDisposable
 
 			try
 			{
+				var entryKey = ToKey(path);
 				if (File.Exists(path))
 				{
 					lock (_dataLock)
 					{
-						if (_truncated && !_files.ContainsKey(path) && _files.Count >= Constants.CodeIndex.MaxIndexedFiles) continue;
+						if (_truncated && !_files.ContainsKey(entryKey) && _files.Count >= Constants.CodeIndex.MaxIndexedFiles) continue;
 					}
 
 					var one = new Dictionary<string, IndexedFileModel>(1);
@@ -184,18 +189,18 @@ public sealed class CodeIndex : IDisposable
 					AddFile(path, one, oneSymbols);
 					lock (_dataLock)
 					{
-						_files[path] = one[path];
-						if (oneSymbols.TryGetValue(path, out var symbols))
-							_symbolsByFile[path] = symbols;
+						_files[entryKey] = one[entryKey];
+						if (oneSymbols.TryGetValue(entryKey, out var symbols))
+							_symbolsByFile[entryKey] = symbols;
 						else
-							_symbolsByFile.Remove(path);
+							_symbolsByFile.Remove(entryKey);
 						_fileArray = null;
 						_symbolArray = null;
 					}
 				}
 				else if (Directory.Exists(path))
 				{
-					RemoveSubtree(path);
+					RemoveSubtree(entryKey);
 					var files = new Dictionary<string, IndexedFileModel>();
 					var symbols = new Dictionary<string, CodeSymbolModel[]>();
 					ScanDirectory(path, files, symbols);
@@ -215,7 +220,7 @@ public sealed class CodeIndex : IDisposable
 				}
 				else
 				{
-					RemoveSubtree(path);
+					RemoveSubtree(entryKey);
 				}
 			}
 			catch (Exception ex)
@@ -225,15 +230,15 @@ public sealed class CodeIndex : IDisposable
 		}
 	}
 
-	/// <summary>Removes <paramref name="path"/> and, if it was a directory, every entry below it.</summary>
-	private void RemoveSubtree(string path)
+	/// <summary>Removes the entry under <paramref name="entryKey"/> and, if it was a directory, every entry below it.</summary>
+	private void RemoveSubtree(string entryKey)
 	{
 		lock (_dataLock)
 		{
-			var changed = _files.Remove(path);
-			changed |= _symbolsByFile.Remove(path);
+			var changed = _files.Remove(entryKey);
+			changed |= _symbolsByFile.Remove(entryKey);
 
-			var prefix = path.TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+			var prefix = entryKey.TrimEnd('/') + "/";
 			List<string>? doomed = null;
 			foreach (var key in _files.Keys)
 			{
