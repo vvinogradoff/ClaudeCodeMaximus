@@ -282,11 +282,15 @@ public sealed class SchedulerServiceTests : IDisposable
 
         var svc = BuildService();
         var pastFireAt = DateTimeOffset.UtcNow.AddMinutes(-5);
-        var schedule = CronSchedule(nodeId, "* * * * *", pastFireAt, MissedFirePolicy.Skip);
+        // Yearly cron (not "* * * * *"): the advanced FireAtUtc is months away, so the poll timer that Start()
+        // arms can never find it due, whatever the wall clock does (a per-minute cron could cross a minute
+        // boundary mid-test and legitimately fire). Skip handling runs synchronously inside Start(), so no
+        // sleep is needed before asserting.
+        var schedule = CronSchedule(nodeId, "0 0 1 1 *", pastFireAt, MissedFirePolicy.Skip);
         _appSettings.Settings.Schedules.Add(schedule);
 
         svc.Start();
-        await Task.Delay(200);
+        await Task.Yield();
 
         var saved = _appSettings.Settings.Schedules.FirstOrDefault(s => s.ScheduleId == schedule.ScheduleId);
 

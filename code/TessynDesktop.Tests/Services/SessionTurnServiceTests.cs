@@ -30,8 +30,12 @@ internal sealed class FakeProcessManagerForTurnService : IClaudeProcessManager
 		LocalToolSpec? localToolSpec = null, bool strictMcpConfig = false,
 		CancellationToken cancellationToken = default)
 	{
-		Calls.Add((workingDirectory, sessionId, userMessage));
-		Spawns.Add((model, effort, profileConfigDir));
+		// Turns on different threads can reach this concurrently (queued-turn tests): List<T> is not thread-safe.
+		lock (Calls)
+		{
+			Calls.Add((workingDirectory, sessionId, userMessage));
+			Spawns.Add((model, effort, profileConfigDir));
+		}
 		if (EmitEvents != null)
 			await EmitEvents(onEvent);
 	}
@@ -156,7 +160,9 @@ internal sealed class FakeRegistryForTurnService : ISessionRegistry
 	public IReadOnlySet<string> CollectAllClaudeSessionIds() => throw new NotImplementedException();
 	public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session) => throw new NotImplementedException();
 
-	public void SetSessionRunning(string nodeId, bool isRunning) => SetRunningCalls.Add((nodeId, isRunning));
+	// A turn's trailing "not running" report and a queued turn's "running" report come from different
+	// threads; List<T>.Add is not thread-safe, so serialise on the list (readers lock it too).
+	public void SetSessionRunning(string nodeId, bool isRunning) { lock (SetRunningCalls) SetRunningCalls.Add((nodeId, isRunning)); }
 	public bool IsSessionRunning(string nodeId) => throw new NotImplementedException();
 }
 
@@ -1021,18 +1027,20 @@ public sealed class SessionTurnServiceTests : IDisposable
 		int RunningCount()
 		{
 			var count = 0;
-			foreach (var (_, running) in _registry.SetRunningCalls.ToArray())
+			(string nodeId, bool isRunning)[] reports;
+			lock (_registry.SetRunningCalls) reports = _registry.SetRunningCalls.ToArray();
+			foreach (var (_, running) in reports)
 				count = running ? count + 1 : Math.Max(0, count - 1);
 			return count;
 		}
 
 		var first = _sut.RunTurnAsync(node, "one", TurnSource.Scheduled);
-		await WaitUntilAsync(() => _processManager.Calls.Count == 1);
+		await WaitUntilAsync(() => { lock (_processManager.Calls) return _processManager.Calls.Count == 1; });
 		var second = _sut.RunTurnAsync(node, "two", TurnSource.Scheduled); // queued on the turn lock
 
 		gate.Release();
 		await first;
-		await WaitUntilAsync(() => _processManager.Calls.Count == 2);
+		await WaitUntilAsync(() => { lock (_processManager.Calls) return _processManager.Calls.Count == 2; });
 		Assert.True(RunningCount() > 0, "node reported not running while the queued turn is executing");
 
 		gate.Release();
