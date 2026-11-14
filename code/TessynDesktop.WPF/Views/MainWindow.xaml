@@ -25,7 +25,7 @@
             </Grid.ColumnDefinitions>
             <v:TreePanel Grid.Column="0" DataContext="{Binding Tree}" />
             <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" />
-            <ContentControl Grid.Column="2" x:Name="SessionHost" />
+            <v:SessionPane Grid.Column="2" DataContext="{Binding Session}" />
         </Grid>
     </DockPanel>
 </Window>

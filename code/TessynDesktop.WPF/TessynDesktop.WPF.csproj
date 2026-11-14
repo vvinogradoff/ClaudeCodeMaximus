@@ -38,7 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Web\transcript.html">
+    <Content Include="Web\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

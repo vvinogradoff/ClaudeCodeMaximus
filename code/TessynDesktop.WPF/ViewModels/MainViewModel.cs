@@ -13,18 +13,23 @@ namespace TessynDesktop.WPF.ViewModels;
 public sealed partial class MainViewModel : ObservableObject
 {
 	private readonly Func<ITessynClient, TreeViewModel> _treeFactory;
+	private readonly Func<ITessynClient, SessionPaneViewModel> _sessionFactory;
 	private readonly ILogger<MainViewModel> _logger;
 
 	[ObservableProperty]
 	private TreeViewModel? _tree;
 
 	[ObservableProperty]
+	private SessionPaneViewModel? _session;
+
+	[ObservableProperty]
 	private string _statusText = "Not connected";
 
-	public MainViewModel(ConnectionViewModel connection, Func<ITessynClient, TreeViewModel> treeFactory, ILogger<MainViewModel> logger)
+	public MainViewModel(ConnectionViewModel connection, Func<ITessynClient, TreeViewModel> treeFactory, Func<ITessynClient, SessionPaneViewModel> sessionFactory, ILogger<MainViewModel> logger)
 	{
 		Connection = connection;
 		_treeFactory = treeFactory;
+		_sessionFactory = sessionFactory;
 		_logger = logger;
 		Connection.ClientReady += OnClientReady;
 		Connection.PropertyChanged += (_, _) => UpdateStatus();
@@ -41,6 +46,8 @@ public sealed partial class MainViewModel : ObservableObject
 		{
 			var tree = _treeFactory(client);
 			tree.PropertyChanged += (_, _) => UpdateStatus();
+			tree.SelectionChanged += OnTreeSelectionChanged;
+			Session = _sessionFactory(client);
 			Tree = tree;
 			await tree.LoadAsync();
 			UpdateStatus();
@@ -49,6 +56,14 @@ public sealed partial class MainViewModel : ObservableObject
 		{
 			_logger.LogError(ex, "Loading the tree failed");
 		}
+	}
+
+	private void OnTreeSelectionChanged(object? sender, TreeNodeViewModel node)
+	{
+		if (!node.IsSessionLike || Session == null)
+			return;
+
+		_ = Session.OpenAsync(node.Id, node.Label);
 	}
 
 	private void UpdateStatus()

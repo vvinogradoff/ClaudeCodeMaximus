@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging;
 using TessynDesktop.Client;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.Rendering;
+using TessynDesktop.WPF.Transcript;
 using TessynDesktop.WPF.ViewModels;
 using TessynDesktop.WPF.Views;
 
@@ -26,6 +28,16 @@ public sealed class ServiceRegistration
 
 		services.AddSingleton<Func<ITessynClient, TreeViewModel>>(sp => client => new TreeViewModel(
 			client, sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<TreeViewModel>>()));
+		services.AddSingleton<UrlPolicy>();
+		services.AddSingleton<IUrlLauncher, SystemUrlLauncher>();
+		services.AddSingleton<IEntryRenderer, MarkdigEntryRenderer>();
+		services.AddSingleton<SwitchLatencyTracker>();
+		services.AddSingleton<WebViewEnvironmentProvider>();
+		services.AddSingleton<ITranscriptSurface, WebView2TranscriptSurface>();
+		services.AddSingleton<WebView2TranscriptSurface>(sp => (WebView2TranscriptSurface)sp.GetRequiredService<ITranscriptSurface>());
+		services.AddSingleton<Func<ITessynClient, SessionPaneViewModel>>(sp => client => new SessionPaneViewModel(
+			client, sp.GetRequiredService<ITranscriptSurface>(), sp.GetRequiredService<IEntryRenderer>(), sp.GetRequiredService<IUrlLauncher>(),
+			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<SwitchLatencyTracker>(), sp.GetRequiredService<ILogger<SessionPaneViewModel>>()));
 		services.AddSingleton<MainViewModel>();
 		services.AddSingleton<MainWindow>();
 	}

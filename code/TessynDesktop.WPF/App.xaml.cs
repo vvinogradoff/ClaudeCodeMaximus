@@ -15,6 +15,9 @@ public partial class App : Application
 	private IHost? _host;
 	private Mutex? _singleInstanceMutex;
 
+	/// <summary>The application's service provider (set once the host is built).</summary>
+	public IServiceProvider Services => _host!.Services;
+
 	protected override async void OnStartup(StartupEventArgs e)
 	{
 		base.OnStartup(e);

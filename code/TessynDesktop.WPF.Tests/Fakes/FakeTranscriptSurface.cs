@@ -1,0 +1,79 @@
+using TessynDesktop.WPF.Rendering;
+using TessynDesktop.WPF.Transcript;
+
+namespace TessynDesktop.WPF.Tests.Fakes;
+
+/// <summary>Records what the session pane asks the transcript surface to do and lets tests raise page events.</summary>
+/// <remarks>Created by Claude</remarks>
+public sealed class FakeTranscriptSurface : ITranscriptSurface
+{
+	public List<string> Calls { get; } = [];
+
+	/// <summary>The indexes currently on the page, as the real page would hold them (Load replaces, Prepend/Append extend).</summary>
+	public List<int> PageIndexes { get; } = [];
+
+	public string? LoadedKey { get; private set; }
+
+	public bool HasOlder { get; private set; }
+
+	public bool LastLoadToBottom { get; private set; }
+
+	public event EventHandler<TranscriptPaintedEventArgs>? Painted;
+
+	public event EventHandler? OlderRequested;
+
+	public event EventHandler<int>? ExpandRequested;
+
+	public event EventHandler<string>? LinkClicked;
+
+	public event EventHandler? FindRequested;
+
+	public event EventHandler<int>? FindStepRequested;
+
+	public event EventHandler<FindStatusEventArgs>? FindStatusChanged;
+
+	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom)
+	{
+		Calls.Add($"load:{key}:{entries.Count}");
+		LoadedKey = key;
+		HasOlder = hasOlder;
+		LastLoadToBottom = toBottom;
+		PageIndexes.Clear();
+		PageIndexes.AddRange(entries.Select(e => e.Index));
+	}
+
+	public void Prepend(IReadOnlyList<TranscriptEntryView> entries, bool hasOlder)
+	{
+		Calls.Add($"prepend:{entries.Count}");
+		HasOlder = hasOlder;
+		PageIndexes.InsertRange(0, entries.Select(e => e.Index));
+	}
+
+	public void Append(IReadOnlyList<TranscriptEntryView> entries)
+	{
+		Calls.Add($"append:{entries.Count}");
+		PageIndexes.AddRange(entries.Select(e => e.Index));
+	}
+
+	public void Replace(TranscriptEntryView entry) => Calls.Add($"replace:{entry.Index}:{entry.Html}");
+
+	public void Find(string term, IReadOnlyList<int> matchingIndexes) => Calls.Add($"find:{term}:{string.Join(",", matchingIndexes)}");
+
+	public void FindStep(int direction) => Calls.Add($"findStep:{direction}");
+
+	public void ClearFind() => Calls.Add("clearFind");
+
+	public void RaisePainted(string key, double jsMs = 1) => Painted?.Invoke(this, new TranscriptPaintedEventArgs(key, jsMs));
+
+	public void RaiseOlderRequested() => OlderRequested?.Invoke(this, EventArgs.Empty);
+
+	public void RaiseExpandRequested(int index) => ExpandRequested?.Invoke(this, index);
+
+	public void RaiseLinkClicked(string url) => LinkClicked?.Invoke(this, url);
+
+	public void RaiseFindRequested() => FindRequested?.Invoke(this, EventArgs.Empty);
+
+	public void RaiseFindStatus(int current, int count) => FindStatusChanged?.Invoke(this, new FindStatusEventArgs(current, count));
+
+	public void RaiseFindStep(int direction) => FindStepRequested?.Invoke(this, direction);
+}
