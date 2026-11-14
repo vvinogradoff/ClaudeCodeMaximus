@@ -78,7 +78,7 @@ public sealed class SessionEntryReader : ISessionEntryReader
 		int end;
 		if (afterIndex.HasValue)
 		{
-			start = Math.Clamp(afterIndex.Value + 1, 0, total);
+			start = (int)Math.Clamp((long)afterIndex.Value + 1, 0, total);
 			end   = Math.Min(total, start + limit);
 		}
 		else if (beforeIndex.HasValue)

@@ -246,6 +246,72 @@ public sealed class SessionHeadersAndCompatibilityTests : IDisposable
 	}
 
 	[Fact]
+	public async Task Session_get_falls_back_to_the_full_parse_when_GetLastUsed_fails()
+	{
+		_env.WriteRaw(Mixed());
+		var failing = new FailingLastUsedReader(_env.Reader);
+		var module = new SessionRpcModule(
+			_env.Registry, _env.Settings,
+			new SessionStateBuilder(_env.Registry, new StubStreamingManager(), new FakeAttentionService(), new FakeActivityService()),
+			new StubTagService(), new FakeAttentionService(), failing, _env.Epochs, _env.Models,
+			new ProfileLabelService(_env.ProfileService, _env.Settings), new SessionSendService(new StubTurnService(), _env.Registry),
+			new TurnOptionsResolver(_env.Models, _env.Settings, new ProfileLabelService(_env.ProfileService, _env.Settings)),
+			new StubTurnService(), new StubStreamingManager());
+
+		var result = await RemoteTestHelpers.CallAsync(module, "session.get", _env.NodeParams());
+		var legacy = await _env.LegacyResultAsync("session.get", _env.NodeParams());
+
+		Assert.Equal(EntryIdsEnv.Canonical(legacy["lastUsed"]!), EntryIdsEnv.Canonical(result!["lastUsed"]!));
+		Assert.Equal(7, result["entryCount"]!.GetValue<int>());
+	}
+
+	private sealed class FailingLastUsedReader(ISessionEntryReader inner) : ISessionEntryReader
+	{
+		public System.Collections.Generic.IReadOnlyList<SessionEntryModel> GetAll(string f) => inner.GetAll(f);
+		public SessionEntriesResult GetPage(string n, string f, int? b, int? a, int l) => inner.GetPage(n, f, b, a, l);
+		public SessionEntriesResult GetPage(string n, string f, int? b, int? a, int l, Guid id) => inner.GetPage(n, f, b, a, l, id);
+		public SessionEntryDto GetEntryById(string f, Guid id, int o) => inner.GetEntryById(f, id, o);
+		public SessionContentHeaderModel? GetHeader(string f) => inner.GetHeader(f);
+		public SessionContentLastUsedModel? GetLastUsed(string f) => throw new TdcpException("Session history changed");
+		public SessionEntryDto GetEntry(string f, int i, int e) => inner.GetEntry(f, i, e);
+	}
+
+	[Fact]
+	public async Task Session_headers_reads_the_cached_models_once_not_per_node()
+	{
+		_env.WriteConversation(2);
+		var ids = new System.Collections.Generic.List<string> { _env.Session.NodeId };
+		for (var i = 0; i < 5; i++)
+			ids.Add(_env.Registry.AddSession(_env.Directory, "S" + i).NodeId);
+
+		var models = RecordingProxy<IClaudeModelService>.Wrap(_env.Models, out var recorder);
+		var labels = new ProfileLabelService(_env.ProfileService, _env.Settings);
+		var module = new SessionRpcModule(
+			_env.Registry, _env.Settings,
+			new SessionStateBuilder(_env.Registry, new StubStreamingManager(), new FakeAttentionService(), new FakeActivityService()),
+			new StubTagService(), new FakeAttentionService(), _env.Reader, _env.Epochs, models, labels,
+			new SessionSendService(new StubTurnService(), _env.Registry), new TurnOptionsResolver(_env.Models, _env.Settings, labels),
+			new StubTurnService(), new StubStreamingManager());
+
+		var registry = new TdcpMethodRegistry();
+		module.Register(registry);
+		registry.TryGet("session.headers", out var entry);
+		await entry.Handler(System.Text.Json.Nodes.JsonNode.Parse("{\"nodeIds\":[" + string.Join(",", ids.Select(i => "\"" + i + "\"")) + "]}"), System.Threading.CancellationToken.None);
+
+		Assert.Equal(1, recorder.CountOf(nameof(IClaudeModelService.GetCachedModels)));
+	}
+
+	[Fact]
+	public async Task Without_a_store_a_huge_afterSeq_pages_to_empty_not_to_the_first_page()
+	{
+		_env.WriteConversation(3);
+
+		var result = await _env.LegacyResultAsync("session.entries", _env.NodeParams("\"afterSeq\":9223372036854775807"));
+
+		Assert.Empty(result["entries"]!.AsArray());
+	}
+
+	[Fact]
 	public async Task Session_headers_lists_unknown_ids_as_missing_and_removes_duplicates()
 	{
 		_env.WriteConversation(2);

@@ -136,6 +136,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 
 		if (_store != null)
 		{
+			SeedPublishedSeq(fileName);
 			lock (_entriesGate)
 				_pendingAppends[fileName] = _pendingAppends.GetValueOrDefault(fileName) + 1;
 
@@ -262,13 +263,19 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	{
 		var node = _daemon.FindSessionByFileName(fileName);
 		if (node == null || _store == null)
+		{
+			ForgetFile(fileName); // deleted session: drop its bookkeeping
 			return null;
+		}
 
 		try
 		{
 			var header = _store.GetHeader(fileName);
 			if (!header.Exists)
+			{
+				ForgetFile(fileName);
 				return null;
+			}
 
 			long from;
 			long to = header.NextOrdinal;
@@ -295,6 +302,45 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		{
 			_log.Debug(ex, "RemoteNotificationPublisher: entries.appended skipped for {FileName}", fileName);
 			return null;
+		}
+	}
+
+	private void ForgetFile(string fileName)
+	{
+		lock (_entriesGate)
+		{
+			_pendingAppends.Remove(fileName);
+			_publishedSeq.Remove(fileName);
+		}
+	}
+
+	/// <summary>
+	/// Before the first append of a content generation is counted, records the sequence just before it (the header's next
+	/// ordinal minus the entry that raised this event), so the first <c>fromSeq</c> is exact instead of counted.
+	/// </summary>
+	private void SeedPublishedSeq(string fileName)
+	{
+		lock (_entriesGate)
+		{
+			if (_publishedSeq.ContainsKey(fileName))
+				return;
+		}
+
+		try
+		{
+			var header = _store!.GetHeader(fileName);
+			if (!header.Exists)
+				return;
+
+			lock (_entriesGate)
+			{
+				if (!_publishedSeq.ContainsKey(fileName))
+					_publishedSeq[fileName] = (header.FileId, Math.Max(0, header.NextOrdinal - 1));
+			}
+		}
+		catch (Exception ex) when (ex is TdcpException or System.IO.IOException)
+		{
+			// The counted fallback in BuildEntriesAppendedPayload still applies.
 		}
 	}
 

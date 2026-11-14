@@ -98,7 +98,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 
 		var location = _registry.GetSessionLocation(node);
 		var epoch    = _epochs.GetEpoch(node.FileName);
-		var content  = await ReadContentHeaderAsync(node.FileName, profiles);
+		var content  = ReadContentHeader(node.FileName, profiles, _models.GetCachedModels(), await _labels.GetDefaultLabelAsync());
 
 		return new SessionDetailDto(
 			node.NodeId,
@@ -133,13 +133,19 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 	/// P1.G: the summary comes from the content store's index (O(1), the last-used metadata by an in-memory walk and at most two
 	/// header reads). Without a store (stub-based tests) it falls back to a full parse and reports no file id.
 	/// </summary>
-	private async Task<ContentSummary> ReadContentHeaderAsync(string fileName, ClaudeProfileModel[] profiles)
+	private ContentSummary ReadContentHeader(string fileName, ClaudeProfileModel[] profiles, IReadOnlyList<ClaudeModelInfo> models, string label)
 	{
-		var label  = await _labels.GetDefaultLabelAsync();
-		var models = _models.GetCachedModels();
-
 		var header = _entries.GetHeader(fileName);
-		var used   = header == null ? null : _entries.GetLastUsed(fileName);
+		SessionContentLastUsedModel? used = null;
+		try
+		{
+			used = header == null ? null : _entries.GetLastUsed(fileName);
+		}
+		catch (TdcpException)
+		{
+			// Rapid rewrites: fall back to the full parse below instead of failing the call.
+		}
+
 		if (header == null || used == null)
 		{
 			var entries = _entries.GetAll(fileName);
@@ -186,6 +192,8 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		lock (_appSettings.SyncRoot)
 			profiles = [.. _appSettings.Settings.Profiles];
 
+		var models  = _models.GetCachedModels();
+		var label   = await _labels.GetDefaultLabelAsync();
 		var headers = new List<SessionHeaderDto>(ids.Count);
 		List<string>? missing = null;
 		foreach (var id in ids)
@@ -197,7 +205,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 				continue;
 			}
 
-			var content = await ReadContentHeaderAsync(node.FileName, profiles);
+			var content = ReadContentHeader(node.FileName, profiles, models, label);
 			headers.Add(new SessionHeaderDto(
 				id,
 				content.FileId,

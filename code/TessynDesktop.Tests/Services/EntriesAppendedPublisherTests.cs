@@ -192,6 +192,40 @@ public sealed class EntriesAppendedPublisherTests : IDisposable
 	}
 
 	[Fact]
+	public void The_first_range_is_exact_even_when_one_notification_covers_several_entries()
+	{
+		// Three entries reach the file, but only one notification is raised for them.
+		_env.Files.AppendMessage(_env.FileName, Constants.SessionFile.RoleUser, "a");
+		_env.Files.AppendMessage(_env.FileName, Constants.SessionFile.RoleUser, "b");
+		_env.Files.AppendMessage(_env.FileName, Constants.SessionFile.RoleUser, "c");
+		_fake.Raise(nameof(IDaemonClient.EntryAppended), new SessionEntryAppendedEventArgs { FileName = _env.FileName, Entry = new SessionEntryModel { Timestamp = DateTimeOffset.UtcNow, Role = "USER", Content = "c" } });
+		var first = Payload(WaitFor(Constants.Remote.Events.EntriesAppended, 1)[0]);
+		Assert.Equal(2L, first.FromSeq); // seeded just before the last entry
+		Assert.Equal(3L, first.ToSeq);
+
+		// A later notification continues from the published watermark, so nothing is missed.
+		Append(Constants.SessionFile.RoleUser, "d");
+		var second = Payload(WaitFor(Constants.Remote.Events.EntriesAppended, 2)[1]);
+		Assert.Equal((3L, 4L), (second.FromSeq, second.ToSeq));
+	}
+
+	[Fact]
+	public void Bookkeeping_is_dropped_when_the_session_is_gone()
+	{
+		Append(Constants.SessionFile.RoleUser, "x");
+		WaitFor(Constants.Remote.Events.EntriesAppended, 1);
+
+		_fake.ByFileName.Clear();
+		Append(Constants.SessionFile.RoleUser, "y");
+		Thread.Sleep(Constants.Remote.Timings.SessionAppendedWindow * 3);
+
+		var gate = typeof(RemoteNotificationPublisher).GetField("_publishedSeq", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+		var pending = typeof(RemoteNotificationPublisher).GetField("_pendingAppends", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+		Assert.Empty((System.Collections.IDictionary)gate.GetValue(_sut)!);
+		Assert.Empty((System.Collections.IDictionary)pending.GetValue(_sut)!);
+	}
+
+	[Fact]
 	public void The_first_publication_after_a_restart_counts_back_from_the_end_of_the_file()
 	{
 		_env.WriteConversation(5);
