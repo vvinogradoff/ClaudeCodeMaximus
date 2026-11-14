@@ -162,6 +162,13 @@ public static partial class Constants
 		public const string SessionTagGuidance =
 			"This session shows tags under its name in Tessyn: the Linear issues, GitHub pull requests and GitHub repositories it works on, which the user opens from there. Keep them current with `mcp__" + Agent.McpServerName + "__tag_session`: tag an issue, PR or repository when this session starts working on it (pass the full URL), and don't tag things it only mentions. Finished work stays tagged; remove a tag only if it was added by mistake.";
 
+		/// <summary>
+		/// FR.26.1 — How links are written in any answer (not what the session works on, which is
+		/// <see cref="SessionTagGuidance"/>). Emitted on every turn of every session, worker sessions included.
+		/// </summary>
+		public const string FullUrlReferences =
+			"When you refer to a GitHub pull request, issue or commit, a Linear issue or a Slack message, write its full URL (for example https://github.com/tryhardstop/windows-app/pull/196 or https://linear.app/hardstop/issue/HSE-240), never a shorthand such as PR#196 or HSE-240.";
+
 		/// <summary>FR.24.6 — Suffix of <see cref="SessionTagGuidance"/>; arg 0 = the labels joined with ", ".</summary>
 		public const string SessionTagCurrentTagsFormat = " Current tags: {0}.";
 

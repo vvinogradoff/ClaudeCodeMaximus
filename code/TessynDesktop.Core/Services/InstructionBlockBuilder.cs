@@ -71,15 +71,14 @@ public static class InstructionBlockBuilder
 		if (options.IsAgentToolsEnabled && options.IsTelegramEnabled && options.IsScheduledTurn && !options.IsWorkerSession)
 			lines.AppendLine($"- {Constants.Instructions.ScheduledTurnNotifyReminder}");
 
+		// FR.26.1 — link-writing policy for every session, worker sessions included; no gates. Placed before the
+		// attention lines (which stay last, FR.23.11); tags (FR.24) say what a session works on, this says how links are written.
+		lines.AppendLine($"- {Constants.Instructions.FullUrlReferences}");
+
 		// FR.23.11 — describes this turn's state (pinned items, closures since the last turn), so no
 		// IsNewSession gate; appended last, after the existing lines.
 		if (options.IsAgentToolsEnabled && !options.IsWorkerSession)
 			AppendAttentionLines(lines, options);
-
-		// FR.11.2 — omit the block entirely when there is nothing to say (Auto-Commit silent and
-		// no other toggle active), instead of appending a dangling preamble with no instructions.
-		if (lines.Length == 0)
-			return string.Empty;
 
 		var sb = new StringBuilder();
 		sb.AppendLine(Constants.Instructions.Delimiter);
