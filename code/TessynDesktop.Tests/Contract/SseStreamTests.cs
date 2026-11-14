@@ -14,6 +14,8 @@ public sealed class SseStreamTests : IDisposable
 
 	public void Dispose() => _host.Dispose();
 
+	private string RunQuery => "?runId=" + _host.RunInfo.RunId;
+
 	[Fact]
 	public async Task Bus_notifications_arrive_with_increasing_ids_and_the_same_payload()
 	{
@@ -62,7 +64,7 @@ public sealed class SseStreamTests : IDisposable
 	public async Task Last_Event_ID_replays_the_events_after_it_and_then_continues_live()
 	{
 		_host.Publish(5);
-		using var sse = await _host.OpenStreamAsync(lastEventId: "3");
+		using var sse = await _host.OpenStreamAsync(RunQuery, lastEventId: "3");
 
 		var four = await sse.NextAsync();
 		var five = await sse.NextAsync();
@@ -78,7 +80,7 @@ public sealed class SseStreamTests : IDisposable
 	public async Task A_resume_point_at_the_head_replays_nothing()
 	{
 		_host.Publish(2);
-		using var sse = await _host.OpenStreamAsync(lastEventId: "2");
+		using var sse = await _host.OpenStreamAsync(RunQuery, lastEventId: "2");
 
 		Assert.True(await sse.StaysQuietAsync(TimeSpan.FromMilliseconds(300)));
 		_host.Publish(1, first: 2);
@@ -91,7 +93,7 @@ public sealed class SseStreamTests : IDisposable
 		using var small = new TdcpTestHost(new TdcpDispatcher([new ClientRpcModule()]), logCapacity: 3);
 		small.Publish(10);
 
-		using var sse = await small.OpenStreamAsync(lastEventId: "2");
+		using var sse = await small.OpenStreamAsync("?runId=" + small.RunInfo.RunId, lastEventId: "2");
 
 		var resync = await sse.NextAsync();
 		Assert.Equal("resync", resync.Method);
@@ -107,7 +109,7 @@ public sealed class SseStreamTests : IDisposable
 	public async Task A_resume_point_ahead_of_the_head_answers_with_a_resync_frame()
 	{
 		_host.Publish(2);
-		using var sse = await _host.OpenStreamAsync(lastEventId: "500");
+		using var sse = await _host.OpenStreamAsync(RunQuery, lastEventId: "500");
 
 		var resync = await sse.NextAsync();
 		Assert.Equal("resync", resync.Method);
@@ -132,6 +134,33 @@ public sealed class SseStreamTests : IDisposable
 		using var sse = await _host.OpenStreamAsync("?runId=" + _host.RunInfo.RunId, lastEventId: "1");
 
 		Assert.Equal(2, (await sse.NextAsync()).Id);
+	}
+
+	[Fact]
+	public async Task A_resume_without_a_run_id_answers_with_a_resync_frame_instead_of_replaying()
+	{
+		_host.Publish(2);
+		using var sse = await _host.OpenStreamAsync(lastEventId: "1");
+
+		var resync = await sse.NextAsync();
+		Assert.Equal("resync", resync.Method);
+		Assert.Equal("unknown-seq", resync.Params!["reason"]!.GetValue<string>());
+		Assert.Equal(2, resync.Params["eventSeq"]!.GetValue<long>());
+	}
+
+	[Fact]
+	public async Task Events_published_right_after_a_fresh_connect_are_never_lost()
+	{
+		// Regression for the connect window (A1): the stream counts as connected as soon as it is subscribed.
+		for (var i = 0; i < 15; i++)
+		{
+			using var sse = await _host.OpenStreamAsync();
+			_host.Publish(1, first: i);
+
+			var frame = await sse.NextAsync();
+			Assert.Equal(i + 1, frame.Id);
+			Assert.Equal("n" + i, frame.Params!["name"]!.GetValue<string>());
+		}
 	}
 
 	[Fact]

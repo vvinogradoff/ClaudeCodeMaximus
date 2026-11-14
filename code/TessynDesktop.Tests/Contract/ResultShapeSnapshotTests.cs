@@ -115,7 +115,7 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 
 	private void AssertGolden(string method, JsonNode result)
 	{
-		var actual = Normalize(result.ToJsonString());
+		var actual = Eol(Normalize(result.ToJsonString()));
 		var path = GoldenPath(method);
 
 		if (Environment.GetEnvironmentVariable("TESSYN_UPDATE_GOLDEN") == "1")
@@ -125,8 +125,11 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 		}
 
 		Assert.True(File.Exists(path), $"Missing golden file {path}; run once with TESSYN_UPDATE_GOLDEN=1");
-		Assert.Equal(File.ReadAllText(path).TrimEnd(), actual);
+		Assert.Equal(Eol(File.ReadAllText(path)).TrimEnd(), actual.TrimEnd());
 	}
+
+	/// <summary>Line endings differ between the indented JSON writer (Environment.NewLine) and a checkout (LF or CRLF).</summary>
+	private static string Eol(string text) => text.Replace("\r\n", "\n");
 
 	/// <summary>Replaces GUIDs (numbered by first appearance), temp paths and timestamps so the snapshot is stable across runs.</summary>
 	private string Normalize(string json)
@@ -139,6 +142,8 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 			return placeholder;
 		});
 		json = json.Replace(JsonEncodedRoot(), "<root>");
+		// Path separators after the root are OS-specific (JSON-escaped backslash on Windows): make them '/'.
+		json = Regex.Replace(json, "<root>[^\"]*", m => m.Value.Replace("\\\\", "/"));
 		json = Regex.Replace(json, "\"serverTimeUtc\":\"[^\"]*\"", "\"serverTimeUtc\":\"<ts>\"");
 		var node = JsonNode.Parse(json)!;
 		return node.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });

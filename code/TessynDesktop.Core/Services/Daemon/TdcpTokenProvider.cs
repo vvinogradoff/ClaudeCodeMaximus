@@ -21,8 +21,18 @@ public static class TdcpTokenProvider
 		if (string.IsNullOrEmpty(token))
 		{
 			token = string.IsNullOrEmpty(legacy) ? Guid.NewGuid().ToString("N") : legacy;
-			store.Save(token);
-			_log.Information("TDCP token stored in the protected token file ({Source})", string.IsNullOrEmpty(legacy) ? "new" : "migrated from appsettings.json");
+			try
+			{
+				store.Save(token);
+				_log.Information("TDCP token stored in the protected token file ({Source})", string.IsNullOrEmpty(legacy) ? "new" : "migrated from appsettings.json");
+			}
+			catch (Exception ex)
+			{
+				// Degrade instead of failing the agent MCP server startup: the token lives in memory for this run only, and the
+				// legacy appsettings copy (if any) is kept because the file does not hold it (review A4).
+				_log.Error(ex, "TDCP token could not be saved; using an in-memory token for this run");
+				return token;
+			}
 		}
 
 		// Only after the file really holds a token is the plain-text copy removed.

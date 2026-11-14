@@ -244,6 +244,10 @@ public sealed class TdcpServer : IDisposable
 			_client.ScheduleChanged += OnScheduleChanged;
 		}
 
+		// Read right after subscribing, before any await: an event appended while the stream is being opened is already queued
+		// (seq > connectHead) and must be delivered, not filtered as "older than the connect point" (review A1).
+		var connectHead = _eventLog?.HeadSeq ?? 0;
+
 		try
 		{
 			var writer = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: true);
@@ -253,7 +257,7 @@ public sealed class TdcpServer : IDisposable
 				await writer.WriteAsync(": connected\n\n").ConfigureAwait(false);
 				await writer.FlushAsync().ConfigureAwait(false);
 
-				var lastSent = _eventLog?.HeadSeq ?? 0;
+				var lastSent = connectHead;
 
 				if (_eventLog != null && lastEventId is { } resumeFrom)
 				{
@@ -327,8 +331,9 @@ public sealed class TdcpServer : IDisposable
 
 	private EventReplay ResolveReplay(long lastEventId, string? clientRunId)
 	{
-		// A seq is only meaningful inside one run; a client that names its run gets a resync after a daemon restart.
-		if (!string.IsNullOrEmpty(clientRunId) && _runInfo != null && clientRunId != _runInfo.RunId)
+		// A seq is only meaningful inside one run: a resume must name the run it counted in, otherwise (or on a mismatch, e.g. after a
+		// daemon restart) the client gets a resync instead of a silent replay of unrelated events (review A7).
+		if (_runInfo != null && (string.IsNullOrEmpty(clientRunId) || clientRunId != _runInfo.RunId))
 			return new EventReplay([], Constants.Remote.EventLog.ResyncReasons.UnknownSeq, _eventLog!.HeadSeq);
 
 		return _eventLog!.ReadSince(lastEventId);

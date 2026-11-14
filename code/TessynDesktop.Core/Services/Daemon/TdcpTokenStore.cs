@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using Serilog;
 
 namespace TessynDesktop.Services;
@@ -40,18 +41,45 @@ public sealed class TdcpTokenStore : ITdcpTokenStore
 		if (!File.Exists(FilePath))
 			return null;
 
+		byte[] encrypted = ReadWithRetry();
+
 		try
 		{
-			var encrypted = File.ReadAllBytes(FilePath);
 			var plaintext = ProtectedData.Unprotect(encrypted, optionalEntropy: null, DataProtectionScope.CurrentUser);
 			var token = Encoding.UTF8.GetString(plaintext);
 			return string.IsNullOrEmpty(token) ? null : token;
 		}
-		catch (Exception ex)
+		catch (CryptographicException ex)
 		{
-			// Corrupt file or another user's DPAPI context: treated as "no token"; the caller issues a new one.
-			_log.Warning(ex, "TdcpTokenStore: failed to load/decrypt the TDCP token");
+			// Corrupt/malformed file or another user's DPAPI context: treated as "no token"; the caller issues a new one.
+			_log.Warning(ex, "TdcpTokenStore: the TDCP token file cannot be decrypted");
 			return null;
+		}
+		catch (ArgumentException ex)
+		{
+			_log.Warning(ex, "TdcpTokenStore: the TDCP token file is malformed");
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// Reads the file, retrying briefly on <see cref="IOException"/> (antivirus/indexer sharing violations). Persistent failure
+	/// throws, so the caller never mistakes an unreadable file for "no token" and overwrites (rotates) the good one (review A3).
+	/// </summary>
+	private byte[] ReadWithRetry()
+	{
+		const int attempts = 5;
+		for (var attempt = 1; ; attempt++)
+		{
+			try
+			{
+				return File.ReadAllBytes(FilePath);
+			}
+			catch (IOException ex) when (attempt < attempts)
+			{
+				_log.Debug(ex, "TdcpTokenStore: token file busy, retrying ({Attempt}/{Attempts})", attempt, attempts);
+				Thread.Sleep(50 * attempt);
+			}
 		}
 	}
 

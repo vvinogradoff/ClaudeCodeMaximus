@@ -3,7 +3,7 @@
   "directories": [
     {
       "id": "<id1>",
-      "label": "<root>\\proj",
+      "label": "<root>/proj",
       "isExpanded": false,
       "groups": [
         {

@@ -4,7 +4,7 @@
     {
       "id": "<id1>",
       "name": "InGroup",
-      "directoryLabel": "<root>\\proj",
+      "directoryLabel": "<root>/proj",
       "state": {
         "id": "<id1>",
         "running": false,
