@@ -639,7 +639,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	}
 
 	/// <summary>
-	/// Reads the session file and restores the last-used profile, model, and effort to the UI dropdowns.
+	/// Reads the tail of the session file and restores the last-used profile, model, and effort to the UI dropdowns.
 	/// Sets backing fields directly (no directory-model write or settings save) so that switching
 	/// sessions shows each session's own history rather than the shared per-directory values.
 	/// </summary>
@@ -648,17 +648,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		using var scope = _timer.Measure(Constants.Diagnostics.Operation.RestoreLastUsedSettings, Constants.Diagnostics.WarnThresholds.UiOperationMs);
 		try
 		{
-			var entries = _fileService.ReadEntries(_node.FileName).ToList();
+			// Tail read: the values live on the newest entries, so a switch no longer parses the whole transcript (ISSUE.016).
+			var last = LastUsedSessionSettingsReader.Read(_fileService, _node.FileName);
 
 			// --- Profile: last user entry that recorded a profile name ---
-			var lastUserWithProfile = entries.LastOrDefault(
-				e => e.Role == Constants.SessionFile.RoleUser && e.ProfileName != null);
-			_profiles.RestoreFromEntry(lastUserWithProfile?.ProfileName);
+			_profiles.RestoreFromEntry(last.ProfileName);
 
 			// --- Model + Effort: last assistant entry that recorded a model ID ---
-			var lastAssistantWithModel = entries.LastOrDefault(
-				e => e.Role == Constants.SessionFile.RoleAssistant && e.ModelId != null);
-			_models.RestoreFromEntry(lastAssistantWithModel?.ModelId, lastAssistantWithModel?.Effort);
+			_models.RestoreFromEntry(last.ModelId, last.Effort);
 		}
 		catch (Exception ex)
 		{

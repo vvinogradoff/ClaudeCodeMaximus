@@ -530,6 +530,12 @@ SESSION TRANSCRIPT TO COMPACT:
 	}
 
 	/// <summary>Always-on runtime diagnostics: logging, hang watchdog, process metrics, heap capture and the diag_* MCP tools.</summary>
+	/// <summary>First tail window (bytes) read to find a session's last-used profile/model/effort; widened only if they are not in it.</summary>
+	public const int LastUsedSettingsTailBytes = 64 * 1024;
+
+	/// <summary>Largest tail window tried before falling back to reading the whole session file.</summary>
+	public const int LastUsedSettingsMaxTailBytes = 1024 * 1024;
+
 	/// <summary>How many session view models stay loaded (the active one plus the most recently used others). Busy ones are exempt (ISSUE.016).</summary>
 	public const int SessionCacheCapacity = 5;
 
