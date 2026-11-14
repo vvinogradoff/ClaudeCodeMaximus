@@ -22,6 +22,26 @@ public interface ISessionEntryReader
 	SessionEntriesResult GetPage(string nodeId, string fileName, int? beforeIndex, int? afterIndex, int limit);
 
 	/// <summary>
+	/// <see cref="GetPage(string, string, int?, int?, int)"/> that fails with "Session history changed" when the page was read
+	/// from another content generation than <paramref name="expectedFileId"/> (P1.F: <c>afterSeq</c>, <c>beforeEntryId</c>); the
+	/// check and the read use one snapshot. Throws <see cref="TdcpInvalidParamsException"/> without a content store.
+	/// </summary>
+	SessionEntriesResult GetPage(string nodeId, string fileName, int? beforeIndex, int? afterIndex, int limit, System.Guid expectedFileId);
+
+	/// <summary>
+	/// One entry with its full content, by its stable id (P1.F). Throws <see cref="TdcpException"/> "Session history changed" when
+	/// <paramref name="fileId"/> is not the file's current generation, "Entry not found" when the ordinal does not exist, and
+	/// <see cref="TdcpInvalidParamsException"/> without a content store.
+	/// </summary>
+	SessionEntryDto GetEntryById(string fileName, System.Guid fileId, int ordinal);
+
+	/// <summary>O(1) content header (P1.G); null when the reader has no content store.</summary>
+	SessionContentHeaderModel? GetHeader(string fileName);
+
+	/// <summary>The metadata the last-used settings are resolved from (P1.G), without a full parse; null when the reader has no content store.</summary>
+	SessionContentLastUsedModel? GetLastUsed(string fileName);
+
+	/// <summary>
 	/// One entry with its full content. Throws <see cref="TdcpException"/> when <paramref name="epoch"/> is not the
 	/// file's current epoch ("Session history changed") or the index does not exist.
 	/// </summary>

@@ -13,6 +13,8 @@ public sealed class SessionEntryReader : ISessionEntryReader
 	private readonly ISessionFileService _files;
 	private readonly ISessionEpochTracker _epochs;
 	private readonly ISessionContentStore? _store;
+	private const string HistoryChangedMessage = "Session history changed";
+
 	private readonly object _gate = new();
 	private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
 	private long _tick;
@@ -67,7 +69,7 @@ public sealed class SessionEntryReader : ISessionEntryReader
 		// The epoch is read before the file: a rewrite in between makes the page older than its epoch says, never newer.
 		var epoch = _epochs.GetEpoch(fileName);
 		if (_store != null)
-			return GetStorePage(nodeId, fileName, beforeIndex, afterIndex, limit, epoch);
+			return GetStorePage(nodeId, fileName, beforeIndex, afterIndex, limit, epoch, expectedFileId: null);
 
 		var entries = GetAll(fileName);
 		var total   = entries.Count;
@@ -98,16 +100,37 @@ public sealed class SessionEntryReader : ISessionEntryReader
 	}
 
 	/// <inheritdoc />
+	public SessionEntriesResult GetPage(string nodeId, string fileName, int? beforeIndex, int? afterIndex, int limit, Guid expectedFileId)
+	{
+		if (_store == null)
+			throw new TdcpInvalidParamsException("Entry ids are not available");
+
+		return GetStorePage(nodeId, fileName, beforeIndex, afterIndex, limit, _epochs.GetEpoch(fileName), expectedFileId);
+	}
+
+	/// <inheritdoc />
+	public SessionEntryDto GetEntryById(string fileName, Guid fileId, int ordinal)
+	{
+		if (_store == null)
+			throw new TdcpInvalidParamsException("Entry ids are not available");
+
+		return ReadStoreEntry(fileName, ordinal, fileId);
+	}
+
+	/// <inheritdoc />
+	public SessionContentHeaderModel? GetHeader(string fileName) => _store?.GetHeader(fileName);
+
+	/// <inheritdoc />
+	public SessionContentLastUsedModel? GetLastUsed(string fileName) => _store?.GetLastUsed(fileName);
+
+	/// <inheritdoc />
 	public SessionEntryDto GetEntry(string fileName, int index, int epoch)
 	{
 		if (epoch != _epochs.GetEpoch(fileName))
 			throw new TdcpException("Session history changed");
 
 		if (_store != null)
-		{
-			var stored = _store.ReadEntry(fileName, index) ?? throw new TdcpException("Entry not found");
-			return stored.Entry.ToDto(index, int.MaxValue);
-		}
+			return ReadStoreEntry(fileName, index, expectedFileId: null);
 
 		var entries = GetAll(fileName);
 		if (index < 0 || index >= entries.Count)
@@ -117,14 +140,36 @@ public sealed class SessionEntryReader : ISessionEntryReader
 	}
 
 	/// <summary>A page read from the store; the same window and content as the parsed-list path, without parsing the file.</summary>
-	private SessionEntriesResult GetStorePage(string nodeId, string fileName, int? beforeIndex, int? afterIndex, int limit, int epoch)
+	private SessionEntriesResult GetStorePage(string nodeId, string fileName, int? beforeIndex, int? afterIndex, int limit, int epoch, Guid? expectedFileId)
 	{
 		var page = _store!.ReadPage(fileName, new SessionContentPageRequest(beforeIndex, afterIndex, limit, int.MaxValue, int.MaxValue));
+		if (expectedFileId.HasValue && page.FileId != expectedFileId.Value)
+			throw new TdcpException(HistoryChangedMessage);
+
 		var dtos = page.Entries
-			.Select(e => e.Entry.ToDto(e.Ordinal, Constants.Remote.Limits.EntryContentMaxChars))
+			.Select(e => e.Entry.ToDto(e.Ordinal, Constants.Remote.Limits.EntryContentMaxChars) with { EntryId = EntryIds.Format(page.FileId, e.Ordinal) })
 			.ToList();
 
-		return new SessionEntriesResult(nodeId, epoch, page.Total, dtos);
+		return new SessionEntriesResult(nodeId, epoch, page.Total, dtos, page.FileId == Guid.Empty ? null : EntryIds.FormatFileId(page.FileId), page.Total);
+	}
+
+	/// <summary>
+	/// One full entry through a one-entry page, so that its content and the file generation it belongs to come from the same
+	/// snapshot of the index.
+	/// </summary>
+	private SessionEntryDto ReadStoreEntry(string fileName, int ordinal, Guid? expectedFileId)
+	{
+		if (ordinal < 0)
+			throw new TdcpException("Entry not found");
+
+		var page = _store!.ReadPage(fileName, new SessionContentPageRequest(null, ordinal - 1, 1, int.MaxValue, int.MaxValue));
+		if (expectedFileId.HasValue && page.FileId != expectedFileId.Value)
+			throw new TdcpException(HistoryChangedMessage);
+
+		if (page.Entries.Count == 0 || page.Entries[0].Ordinal != ordinal)
+			throw new TdcpException("Entry not found");
+
+		return page.Entries[0].Entry.ToDto(ordinal, int.MaxValue) with { EntryId = EntryIds.Format(page.FileId, ordinal) };
 	}
 
 	private void EvictOldest()

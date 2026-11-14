@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Serilog;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
@@ -32,13 +34,24 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	private readonly object _gate = new();
 	private bool _started;
 
+	// P1.F: entries.appended bookkeeping (grouped to keep merges easy).
+	private readonly ISessionContentStore? _store;
+	private readonly object _entriesGate = new();
+	private readonly Dictionary<string, int> _pendingAppends = new(StringComparer.OrdinalIgnoreCase);
+	private readonly Dictionary<string, (Guid FileId, long Seq)> _publishedSeq = new(StringComparer.OrdinalIgnoreCase);
+
+	/// <param name="store">
+	/// The content store (P1.F). It is a dependency so that its own rewrite subscription is registered before this class's, and
+	/// so that <c>entries.appended</c> and the file id of <c>session.reset</c> can be built. Without one neither is published.
+	/// </param>
 	public RemoteNotificationPublisher(
 		IDaemonClient daemon,
 		ISessionFileService files,
 		IRemoteEventBus bus,
 		ITreeVersionTracker treeVersion,
 		ISessionEpochTracker epochs,
-		ISessionStateBuilder states)
+		ISessionStateBuilder states,
+		ISessionContentStore? store = null)
 	{
 		_daemon      = daemon;
 		_files       = files;
@@ -46,6 +59,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		_treeVersion = treeVersion;
 		_epochs      = epochs;
 		_states      = states;
+		_store       = store;
 	}
 
 	/// <inheritdoc />
@@ -120,6 +134,17 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			() => BuildEpochPayload(fileName),
 			Constants.Remote.Timings.SessionAppendedWindow);
 
+		if (_store != null)
+		{
+			lock (_entriesGate)
+				_pendingAppends[fileName] = _pendingAppends.GetValueOrDefault(fileName) + 1;
+
+			_bus.PublishCoalesced(
+				Constants.Remote.Events.EntriesAppended, FileKeyPrefix + fileName,
+				() => BuildEntriesAppendedPayload(fileName),
+				Constants.Remote.Timings.SessionAppendedWindow);
+		}
+
 		_bus.PublishCoalesced(
 			Constants.Remote.Events.SessionChanged, FileKeyPrefix + fileName,
 			() => BuildSessionChangedPayload(_daemon.FindSessionByFileName(fileName)),
@@ -139,6 +164,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			() =>
 			{
 				_bus.FlushPending(Constants.Remote.Events.SessionAppended, FileKeyPrefix + fileName);
+				_bus.FlushPending(Constants.Remote.Events.EntriesAppended, FileKeyPrefix + fileName);
 				_bus.FlushPending(Constants.Remote.Events.SessionChanged, FileKeyPrefix + fileName);
 
 				var node = _daemon.FindSessionByFileName(fileName);
@@ -186,9 +212,16 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	{
 		var fileName = e.FileName;
 
+		// A new content generation starts: what was counted for the old one no longer applies.
+		lock (_entriesGate)
+		{
+			_pendingAppends.Remove(fileName);
+			_publishedSeq.Remove(fileName);
+		}
+
 		_bus.PublishCoalesced(
 			Constants.Remote.Events.SessionReset, FileKeyPrefix + fileName,
-			() => BuildEpochPayload(fileName),
+			() => BuildResetPayload(fileName),
 			Constants.Remote.Timings.Immediate);
 	});
 
@@ -205,6 +238,79 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	{
 		var node = _daemon.FindSessionByFileName(fileName);
 		return node == null ? null : new SessionEpochPayload(node.NodeId, _epochs.GetEpoch(fileName));
+	}
+
+	private SessionResetPayload? BuildResetPayload(string fileName)
+	{
+		var node = _daemon.FindSessionByFileName(fileName);
+		if (node == null)
+			return null;
+
+		// The header read is what rebuilds the index of a rewritten file, so the id published here is the new generation's.
+		var header = _store?.GetHeader(fileName);
+		var fileId = header is { Exists: true } ? EntryIds.FormatFileId(header.FileId) : null;
+		return new SessionResetPayload(node.NodeId, _epochs.GetEpoch(fileName), fileId);
+	}
+
+	/// <summary>
+	/// <c>entries.appended</c> for everything appended since the last publication of the file. The range starts at the sequence
+	/// last published for the same content generation; for the first publication of a generation in this run (or after a
+	/// rewrite) it is the number of append notifications counted since then. The entries ride inline when they are few and
+	/// small, else the payload carries the id range only.
+	/// </summary>
+	private EntriesAppendedPayload? BuildEntriesAppendedPayload(string fileName)
+	{
+		var node = _daemon.FindSessionByFileName(fileName);
+		if (node == null || _store == null)
+			return null;
+
+		try
+		{
+			var header = _store.GetHeader(fileName);
+			if (!header.Exists)
+				return null;
+
+			long from;
+			long to = header.NextOrdinal;
+			lock (_entriesGate)
+			{
+				var pending = _pendingAppends.GetValueOrDefault(fileName);
+				_pendingAppends.Remove(fileName);
+
+				from = _publishedSeq.TryGetValue(fileName, out var mark) && mark.FileId == header.FileId && mark.Seq <= to
+					? mark.Seq
+					: Math.Max(0, to - pending);
+
+				_publishedSeq[fileName] = (header.FileId, to);
+			}
+
+			if (from >= to)
+				return null;
+
+			return new EntriesAppendedPayload(
+				node.NodeId, EntryIds.FormatFileId(header.FileId), from, to,
+				ReadInlineEntries(fileName, header.FileId, from, to));
+		}
+		catch (Exception ex) when (ex is TdcpException or System.IO.IOException)
+		{
+			_log.Debug(ex, "RemoteNotificationPublisher: entries.appended skipped for {FileName}", fileName);
+			return null;
+		}
+	}
+
+	/// <summary>The new entries as DTOs when they fit the inline caps; null (ids only) when not or when the file changed meanwhile.</summary>
+	private IReadOnlyList<SessionEntryDto>? ReadInlineEntries(string fileName, Guid fileId, long from, long to)
+	{
+		var count = to - from;
+		if (count > Constants.Remote.Limits.EntriesAppendedInlineMaxEntries)
+			return null;
+
+		var cap  = Constants.Remote.Limits.EntriesAppendedInlineMaxBytes;
+		var page = _store!.ReadPage(fileName, new SessionContentPageRequest(null, (int)from - 1, (int)count, cap, cap));
+		if (page.FileId != fileId || page.Entries.Count != count || page.Entries.Any(e => e.Truncated))
+			return null;
+
+		return [.. page.Entries.Select(e => e.Entry.ToDto(e.Ordinal, Constants.Remote.Limits.EntryContentMaxChars) with { EntryId = EntryIds.Format(fileId, e.Ordinal) })];
 	}
 
 	/// <summary>An event handler must never throw into the thread that raised the event.</summary>

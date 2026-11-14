@@ -47,6 +47,46 @@ public sealed class SessionContentStore : ISessionContentStore, IDisposable
 	}
 
 	/// <inheritdoc />
+	public SessionContentLastUsedModel GetLastUsed(string fileName)
+	{
+		for (var attempt = 0; attempt <= Constants.ContentStore.MaxReadRetries; attempt++)
+		{
+			var snapshot = _catalog.Acquire(fileName, rebuild: attempt > 0);
+			if (snapshot == null || snapshot.Count == 0)
+				return new SessionContentLastUsedModel(null, null, null);
+
+			var profileAt = LastIndexWhere(snapshot, EntryRoleCode.User, EntryIndexFlags.HasProfile);
+			var modelAt   = LastIndexWhere(snapshot, EntryRoleCode.Assistant, EntryIndexFlags.HasModel);
+
+			// Only the header line matters, so the entries are read cut to the header prefix.
+			var profileEntry = profileAt < 0 ? null : ReadEntries(fileName, snapshot, profileAt, profileAt + 1, Constants.ContentStore.HeaderPrefixMaxBytes);
+			var modelEntry   = modelAt < 0 ? null : ReadEntries(fileName, snapshot, modelAt, modelAt + 1, Constants.ContentStore.HeaderPrefixMaxBytes);
+			if ((profileAt >= 0 && profileEntry == null) || (modelAt >= 0 && modelEntry == null))
+				continue;
+
+			return new SessionContentLastUsedModel(
+				profileEntry?[0].Entry.ProfileName,
+				modelEntry?[0].Entry.ModelId,
+				modelEntry?[0].Entry.Effort);
+		}
+
+		throw new TdcpException(ChangedMessage);
+	}
+
+	/// <summary>The position of the last entry of <paramref name="role"/> whose header carries <paramref name="flag"/>; -1 when none.</summary>
+	private static int LastIndexWhere(EntryIndexSnapshot snapshot, EntryRoleCode role, EntryIndexFlags flag)
+	{
+		for (var position = snapshot.Count - 1; position >= 0; position--)
+		{
+			var record = snapshot.Records[position];
+			if (record.Role == role && (record.Flags & flag) != 0)
+				return position;
+		}
+
+		return -1;
+	}
+
+	/// <inheritdoc />
 	public SessionContentPageModel ReadPage(string fileName, SessionContentPageRequest request)
 	{
 		for (var attempt = 0; attempt <= Constants.ContentStore.MaxReadRetries; attempt++)
