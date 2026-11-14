@@ -30,10 +30,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IClaudeModelService _modelService;
 	private readonly IClaudeUsageService _usageService;
 	private readonly ISelfUpdateService _selfUpdate;
-	private readonly IAgentMcpServer _mcpServer;
+	private readonly ITurnEngine _turnEngine;
 	private readonly IDaemonClient _daemonClient;
-	private readonly ITelegramBridgeService _telegramBridge;
-	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly ISessionSoundService _soundService;
 	private readonly ISessionCompactionService _compaction;
 	private readonly IUiDispatcher _uiDispatcher;
@@ -255,10 +253,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ISelfUpdateService selfUpdate,
 		IDirectoryLabelService labelService,
 		SessionTreeViewModel sessionTree,
-		IAgentMcpServer mcpServer,
+		ITurnEngine turnEngine,
 		IDaemonClient daemonClient,
-		ITelegramBridgeService telegramBridge,
-		IClaudeSessionStatusService sessionStatus,
 		ISessionSoundService soundService,
 		ISessionCompactionService compaction,
 		IUiDispatcher uiDispatcher,
@@ -276,10 +272,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_modelService     = modelService;
 		_usageService     = usageService;
 		_selfUpdate       = selfUpdate;
-		_mcpServer        = mcpServer;
+		_turnEngine       = turnEngine;
 		_daemonClient     = daemonClient;
-		_telegramBridge   = telegramBridge;
-		_sessionStatus    = sessionStatus;
 		_soundService     = soundService;
 		_compaction       = compaction;
 		_uiDispatcher     = uiDispatcher;
@@ -395,7 +389,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _telegramBridge, _sessionStatus, _soundService, _compaction, _uiDispatcher);
+				vm = new SessionViewModel(node, _fileService, _turnEngine, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _daemonClient, _soundService, _compaction, _uiDispatcher);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache.Set(cacheKey, vm);

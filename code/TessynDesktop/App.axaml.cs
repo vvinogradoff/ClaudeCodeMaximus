@@ -237,6 +237,7 @@ public partial class App : Application
 		// Lazy<T> registrations break the circular dependency between ISessionTurnService ↔ IAgentMcpServer.
 		services.AddSingleton<ISessionTurnService, SessionTurnService>();
 		services.AddSingleton<ISessionCompactionService, SessionCompactionService>();
+		services.AddSingleton<ITurnEngine, TurnEngine>();
 		services.AddSingleton<IAgentMcpServer, AgentMcpServer>();
 		services.AddSingleton<ISchedulerService, SchedulerService>();
 		services.AddSingleton<ISkillProvisioningService, SkillProvisioningService>();
