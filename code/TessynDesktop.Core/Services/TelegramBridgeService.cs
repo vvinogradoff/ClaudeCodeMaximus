@@ -92,7 +92,10 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			return;
 
 		_nodeIdByThreadId.Clear();
-		foreach (var kv in _appSettings.Settings.TelegramTopicThreadIdsByNodeId)
+		KeyValuePair<string, int>[] knownTopics;
+		lock (_appSettings.SyncRoot)
+			knownTopics = _appSettings.Settings.TelegramTopicThreadIdsByNodeId.ToArray();
+		foreach (var kv in knownTopics)
 			_nodeIdByThreadId[kv.Value] = kv.Key;
 
 		_inbox.CleanupOlderThan(TimeSpan.FromDays(Constants.Telegram.InboxRetentionDays)); // FR.21.14
@@ -131,14 +134,14 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			return;
 		if (node.OrchestrationDepth > 0) // FR.21.19 — Worker Sessions never get a topic
 			return;
-		if (_appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey(node.NodeId))
+		if (TryGetThreadId(node.NodeId, out _))
 			return;
 
 		await _topicLock.WaitAsync();
 		try
 		{
 			// Re-check inside the lock — a concurrent caller may have just created it.
-			if (_appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey(node.NodeId))
+			if (TryGetThreadId(node.NodeId, out _))
 				return;
 
 			var topicName = BuildTopicName(node);
@@ -160,6 +163,13 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 		{
 			_topicLock.Release();
 		}
+	}
+
+	/// <summary>Looks up a session's topic thread under the settings lock (writers and <c>Save</c> hold it too).</summary>
+	private bool TryGetThreadId(string nodeId, out int threadId)
+	{
+		lock (_appSettings.SyncRoot)
+			return _appSettings.Settings.TelegramTopicThreadIdsByNodeId.TryGetValue(nodeId, out threadId);
 	}
 
 	/// <summary>The FR.21.2 topic name, shared by topic creation and reconciliation (untruncated; the client truncates).</summary>
@@ -351,7 +361,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 
 			await EnsureTopicForSessionAsync(node);
 
-			int? threadId = _appSettings.Settings.TelegramTopicThreadIdsByNodeId.TryGetValue(nodeId, out var t) ? t : null;
+			int? threadId = TryGetThreadId(nodeId, out var t) ? t : null;
 
 			// FR.21.10 — a notification is a ping directed at the user, not mirrored conversation
 			// text (FR.21.9), so it carries the mention handle when one is configured.
@@ -456,7 +466,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 		try
 		{
 			await EnsureTopicForSessionAsync(node);
-			if (!_appSettings.Settings.TelegramTopicThreadIdsByNodeId.TryGetValue(node.NodeId, out var threadId))
+			if (!TryGetThreadId(node.NodeId, out var threadId))
 				return;
 
 			foreach (var text in texts)
@@ -550,9 +560,12 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			return;
 
 		var next = updates.Max(u => u.UpdateId) + 1;
-		if (next > _appSettings.Settings.TelegramUpdateOffset)
-			_appSettings.Settings.TelegramUpdateOffset = next;
-		_appSettings.Save();
+		lock (_appSettings.SyncRoot)
+		{
+			if (next > _appSettings.Settings.TelegramUpdateOffset)
+				_appSettings.Settings.TelegramUpdateOffset = next;
+			_appSettings.Save();
+		}
 	}
 
 	/// <summary>
@@ -687,7 +700,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	{
 		var summaries = _daemon.BuildAgentSessionSummaries()
 			.Where(s => s.OrchestrationDepth == 0) // FR.21.19 — Worker Sessions never appear, favorited or not
-			.Where(s => s.IsFavorite || _appSettings.Settings.TelegramTopicThreadIdsByNodeId.ContainsKey(s.NodeId))
+			.Where(s => s.IsFavorite || TryGetThreadId(s.NodeId, out _))
 			.ToList();
 
 		if (summaries.Count == 0)

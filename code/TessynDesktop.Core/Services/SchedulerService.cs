@@ -25,7 +25,9 @@ public sealed class SchedulerService : ISchedulerService
 	private readonly ISessionRegistry       _registry;
 
 	private Timer? _timer;
-	private readonly object _lock = new();
+	// No private lock: Settings.Schedules is part of the settings graph that Save() serializes under
+	// IAppSettingsService.SyncRoot, so every access must use that same lock (ISSUE.008 class).
+	private object _lock => _appSettings.SyncRoot;
 
 	public event EventHandler? ScheduleChanged;
 
