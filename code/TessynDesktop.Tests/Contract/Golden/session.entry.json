@@ -1,0 +1,9 @@
+{
+  "index": 1,
+  "timestamp": "2026-11-14T08:01:00+00:00",
+  "role": "assistant",
+  "content": "Hi! Second sentence",
+  "modelId": "opus",
+  "effort": "high",
+  "entryId": "<id1>:1"
+}

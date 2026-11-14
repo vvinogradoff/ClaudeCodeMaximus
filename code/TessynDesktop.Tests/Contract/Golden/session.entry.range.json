@@ -1,0 +1,10 @@
+{
+  "index": 2,
+  "timestamp": "2026-11-14T08:02:00+00:00",
+  "role": "user",
+  "content": "question that ",
+  "truncated": true,
+  "fullLength": 60,
+  "entryId": "<id1>:2",
+  "contentOffset": 9
+}

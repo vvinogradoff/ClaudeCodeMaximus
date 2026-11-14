@@ -25,4 +25,15 @@ public sealed record SessionEntryDto
 	public string? ProfileName { get; init; }
 	public string? ModelId { get; init; }
 	public string? Effort { get; init; }
+
+	// P1.F (additive): stable entry identity and ranged reads.
+
+	/// <summary>
+	/// Stable id <c>{fileId}:{ordinal}</c> (see <see cref="EntryIds"/>); survives daemon restarts and is never reused. Omitted when
+	/// the daemon has no content store.
+	/// </summary>
+	public string? EntryId { get; init; }
+
+	/// <summary>Set only for a <c>session.entry</c> call with a <c>range</c>: where in the full content <see cref="Content"/> starts (characters).</summary>
+	public int? ContentOffset { get; init; }
 }

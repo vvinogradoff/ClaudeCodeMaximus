@@ -1,0 +1,37 @@
+namespace TessynDesktop.WPF.Infrastructure;
+
+/// <summary>
+/// Command-line overrides, mainly for automated tests: <c>--daemon-file &lt;path&gt;</c> (use this daemon.json instead of the
+/// default one) and <c>--data-root &lt;path&gt;</c> (logs, client state and WebView2 data go there). A custom data root also gets its
+/// own single-instance mutex, so a test run never collides with the user's running app.
+/// </summary>
+/// <remarks>Created by Claude</remarks>
+public sealed class StartupOptions
+{
+	public const string DaemonFileArgument = "--daemon-file";
+	public const string DataRootArgument = "--data-root";
+
+	public string? DaemonFile { get; init; }
+
+	public string? DataRoot { get; init; }
+
+	/// <summary>The single-instance mutex name for this run.</summary>
+	public string MutexName => DataRoot == null
+		? Constants.Identity.SingleInstanceMutexName
+		: Constants.Identity.SingleInstanceMutexName + "." + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(DataRoot).ToLowerInvariant())))[..16];
+
+	public static StartupOptions Parse(IReadOnlyList<string> args)
+	{
+		string? daemonFile = null;
+		string? dataRoot = null;
+		for (var i = 0; i < args.Count - 1; i++)
+		{
+			if (string.Equals(args[i], DaemonFileArgument, StringComparison.OrdinalIgnoreCase))
+				daemonFile = args[++i];
+			else if (string.Equals(args[i], DataRootArgument, StringComparison.OrdinalIgnoreCase))
+				dataRoot = args[++i];
+		}
+
+		return new StartupOptions { DaemonFile = daemonFile, DataRoot = dataRoot };
+	}
+}

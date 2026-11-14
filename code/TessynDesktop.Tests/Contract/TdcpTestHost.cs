@@ -28,15 +28,27 @@ internal sealed class TdcpTestHost : IDisposable
 		RunInfo  = runInfo ?? new DaemonRunInfo();
 		Client   = new WireFakeDaemonClient();
 		Dispatcher = dispatcher;
-		Server   = new TdcpServer(Client, dispatcher, Token, Log, RunInfo);
 
-		var listener = new TcpListener(IPAddress.Loopback, 0);
-		listener.Start();
-		var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-		listener.Stop();
+		// A free port is only known to be free until it is released: a parallel test class may take it before the bind, so try again.
+		for (var attempt = 1; ; attempt++)
+		{
+			var listener = new TcpListener(IPAddress.Loopback, 0);
+			listener.Start();
+			var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+			listener.Stop();
 
-		BaseUrl = $"http://127.0.0.1:{port}";
-		Server.Start(port);
+			Server = new TdcpServer(Client, dispatcher, Token, Log, RunInfo);
+			try
+			{
+				Server.Start(port);
+				BaseUrl = $"http://127.0.0.1:{port}";
+				return;
+			}
+			catch (HttpListenerException) when (attempt < 20)
+			{
+				Server.Dispose();
+			}
+		}
 	}
 
 	public RemoteEventBus Bus { get; }

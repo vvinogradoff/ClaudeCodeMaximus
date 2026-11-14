@@ -51,6 +51,9 @@ public static partial class Constants
 			public const string UsageChanged = RemoteProtocol.Events.UsageChanged;
 			public const string IndexChanged = RemoteProtocol.Events.IndexChanged;
 
+			/// <summary>P1.F: new entries with their ids, published beside <see cref="SessionAppended"/>.</summary>
+			public const string EntriesAppended = RemoteProtocol.Events.EntriesAppended;
+
 			/// <summary>Local-stream-only notification: the client's resume point is not covered and it must re-read its state. Params: <c>{ reason, eventSeq }</c>.</summary>
 			public const string Resync = RemoteProtocol.Events.Resync;
 		}
@@ -102,6 +105,9 @@ public static partial class Constants
 
 			/// <summary>The local SSE stream honours Last-Event-ID and signals gaps with <see cref="Events.Resync"/>.</summary>
 			public const string EventsResume = RemoteProtocol.Capabilities.EventsResume;
+
+			/// <summary>P1.F: entry ids, <c>fileId</c>/<c>seq</c> and <c>entries.appended</c>.</summary>
+			public const string EntriesIds = RemoteProtocol.Capabilities.EntriesIds;
 		}
 
 		/// <summary>Oldest client protocol version the daemon still serves.</summary>
@@ -175,6 +181,17 @@ public static partial class Constants
 			public const int EntryContentMaxChars = 32_768;
 			public const int EntriesDefaultLimit = 50;
 			public const int EntriesMaxLimit = 200;
+
+			// P1.F / P1.G (grouped to keep merges easy).
+
+			/// <summary><c>entries.appended</c> carries the entries inline only up to this many of them ...</summary>
+			public const int EntriesAppendedInlineMaxEntries = 50;
+
+			/// <summary>... and only while their UTF-8 size (content included) stays within this many bytes; otherwise ids only.</summary>
+			public const int EntriesAppendedInlineMaxBytes = 65_536;
+
+			/// <summary>Most NodeIds one <c>session.headers</c> call accepts.</summary>
+			public const int HeadersMaxNodeIds = 500;
 		}
 
 		/// <summary>Per-model effort values offered by <c>catalog.get</c>; the first is "no flag".</summary>

@@ -1,0 +1,92 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.SessionPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels"
+             xmlns:v="clr-namespace:TessynDesktop.WPF.Views"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <v:InvertedBooleanToVisibilityConverter x:Key="InvertedBoolToVis" />
+    </UserControl.Resources>
+    <UserControl.InputBindings>
+        <KeyBinding Gesture="Ctrl+F" Command="{Binding ShowFindCommand}" />
+    </UserControl.InputBindings>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header: name, state, tag chips -->
+        <StackPanel Grid.Row="0" Margin="10,6,10,4">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding StateText}" Margin="10,0,0,0" VerticalAlignment="Center" Opacity="0.7" />
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding Tags}" Margin="0,4,0,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:SessionTagViewModel}">
+                        <Button Command="{Binding OpenCommand}" Margin="0,0,6,0" Padding="6,1" MinHeight="0" ToolTip="{Binding Url}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding KindText}" Opacity="0.6" Margin="0,0,4,0" />
+                                <TextBlock Text="{Binding Label}" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding Error}" Foreground="OrangeRed" TextWrapping="Wrap" Margin="0,4,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Error}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </StackPanel>
+
+        <!-- Find bar (WebView2 cannot be overlapped, so it lives in its own row) -->
+        <DockPanel Grid.Row="1" Margin="10,0,10,4" Visibility="{Binding FindBarVisible, Converter={StaticResource BoolToVis}}">
+            <Button DockPanel.Dock="Right" Content="x" Command="{Binding CloseFindCommand}" Padding="6,1" ToolTip="Close (Esc)" />
+            <Button DockPanel.Dock="Right" Content="v" Command="{Binding FindStepCommand}" CommandParameter="1" Padding="6,1" ToolTip="Next (F3)" Margin="2,0" />
+            <Button DockPanel.Dock="Right" Content="^" Command="{Binding FindStepCommand}" CommandParameter="-1" Padding="6,1" ToolTip="Previous (Shift+F3)" Margin="2,0" />
+            <TextBlock DockPanel.Dock="Right" Text="{Binding FindStatus}" VerticalAlignment="Center" Margin="6,0" Opacity="0.7" />
+            <TextBox x:Name="FindBox" Text="{Binding FindText, UpdateSourceTrigger=PropertyChanged}" KeyDown="OnFindKeyDown" />
+        </DockPanel>
+
+        <!-- Transcript -->
+        <Grid Grid.Row="2" x:Name="TranscriptHost">
+            <wv2:WebView2 x:Name="Transcript" />
+        </Grid>
+
+        <!-- Input -->
+        <Grid Grid.Row="3" Margin="10,6,10,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="InputBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" MaxHeight="200"
+                     VerticalScrollBarVisibility="Auto" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="Ctrl+Enter sends">
+                <TextBox.InputBindings>
+                    <KeyBinding Gesture="Ctrl+Enter" Command="{Binding SendCommand}" />
+                </TextBox.InputBindings>
+            </TextBox>
+            <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Bottom">
+                <Button Content="Send" Command="{Binding SendCommand}" Margin="0,0,0,4" />
+                <Button Content="Stop" Command="{Binding StopCommand}" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

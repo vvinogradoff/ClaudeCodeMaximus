@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
@@ -69,6 +70,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		registry.AddSync(Constants.Remote.Methods.SessionEntries, Entries, remoteCallable: true);
 		registry.AddSync(Constants.Remote.Methods.SessionEntry, Entry, remoteCallable: true);
 		registry.Add(Constants.Remote.Methods.SessionSend, async (p, _) => await SendAsync(p), remoteCallable: true);
+		registry.Add(RemoteProtocol.LoopbackMethods.SessionHeaders, async (p, _) => await HeadersAsync(p), remoteCallable: false);
 		registry.AddSync(Constants.Remote.Methods.SessionStop, Stop, remoteCallable: true);
 		registry.AddSync(Constants.Remote.Methods.SessionSetFavorite, SetFavorite, remoteCallable: true);
 		registry.AddSync(Constants.Remote.Methods.SessionSetStreaming, SetStreaming, remoteCallable: true);
@@ -99,8 +101,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 
 		var location = _registry.GetSessionLocation(node);
 		var epoch    = _epochs.GetEpoch(node.FileName);
-		var entries  = _entries.GetAll(node.FileName);
-		var lastUsed = LastUsedSettingsResolver.Resolve(entries, _models.GetCachedModels(), profiles, await _labels.GetDefaultLabelAsync());
+		var content  = ReadContentHeader(node.FileName, profiles, _models.GetCachedModels(), await _labels.GetDefaultLabelAsync());
 
 		return new SessionDetailDto(
 			node.NodeId,
@@ -112,10 +113,116 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 			_stateBuilder.Build(node),
 			_tags.GetTags(node.NodeId, name).Select(tag => tag.ToDto()).ToList(),
 			_attention.GetSummary(node.NodeId).ToDto(),
-			lastUsed,
+			content.LastUsed,
 			isStreamingMode,
-			entries.Count,
-			epoch);
+			content.EntryCount,
+			epoch,
+			content.FileId,
+			content.Seq);
+	}
+
+	/// <summary>What <c>session.get</c> and <c>session.headers</c> need from the transcript.</summary>
+	private sealed record ContentSummary(
+		string? FileId,
+		int EntryCount,
+		long? Seq,
+		DateTimeOffset? FirstTimestamp,
+		DateTimeOffset? LastTimestamp,
+		LastUsedSettingsDto LastUsed,
+		long ContentVersion,
+		long FileLength);
+
+	/// <summary>
+	/// P1.G: the summary comes from the content store's index (O(1), the last-used metadata by an in-memory walk and at most two
+	/// header reads). Without a store (stub-based tests) it falls back to a full parse and reports no file id.
+	/// </summary>
+	private ContentSummary ReadContentHeader(string fileName, ClaudeProfileModel[] profiles, IReadOnlyList<ClaudeModelInfo> models, string label)
+	{
+		var header = _entries.GetHeader(fileName);
+		SessionContentLastUsedModel? used = null;
+		try
+		{
+			used = header == null ? null : _entries.GetLastUsed(fileName);
+		}
+		catch (TdcpException)
+		{
+			// Rapid rewrites: fall back to the full parse below instead of failing the call.
+		}
+
+		if (header == null || used == null)
+		{
+			var entries = _entries.GetAll(fileName);
+			return new ContentSummary(
+				null, entries.Count, null,
+				entries.Count > 0 ? entries[0].Timestamp : null,
+				entries.Count > 0 ? entries[^1].Timestamp : null,
+				LastUsedSettingsResolver.Resolve(entries, models, profiles, label), 0, 0);
+		}
+
+		return new ContentSummary(
+			header.Exists ? EntryIds.FormatFileId(header.FileId) : null,
+			header.EntryCount,
+			header.NextOrdinal,
+			header.FirstTimestamp,
+			header.LastTimestamp,
+			LastUsedSettingsResolver.Resolve(used.ProfileName, used.ModelId, used.Effort, models, profiles, label),
+			header.ContentVersion,
+			header.FileLength);
+	}
+
+	// ── session.headers (loopback only) ──────────────────────────────────────
+
+	private async Task<object?> HeadersAsync(JsonNode? @params)
+	{
+		if (TdcpParams.Find(@params, "nodeIds") is not JsonArray array)
+			throw new TdcpInvalidParamsException("'nodeIds' must be an array of strings");
+
+		var ids  = new List<string>();
+		var seen = new HashSet<string>(StringComparer.Ordinal);
+		foreach (var item in array)
+		{
+			if (item is not JsonValue value || !value.TryGetValue<string>(out var id) || id.Length == 0)
+				throw new TdcpInvalidParamsException("'nodeIds' must be an array of strings");
+
+			if (seen.Add(id))
+				ids.Add(id);
+		}
+
+		if (ids.Count > Constants.Remote.Limits.HeadersMaxNodeIds)
+			throw new TdcpInvalidParamsException($"'nodeIds' holds at most {Constants.Remote.Limits.HeadersMaxNodeIds} ids");
+
+		ClaudeProfileModel[] profiles;
+		lock (_appSettings.SyncRoot)
+			profiles = [.. _appSettings.Settings.Profiles];
+
+		var models  = _models.GetCachedModels();
+		var label   = await _labels.GetDefaultLabelAsync();
+		var headers = new List<SessionHeaderDto>(ids.Count);
+		List<string>? missing = null;
+		foreach (var id in ids)
+		{
+			var node = _registry.FindModelByNodeId(id);
+			if (node == null)
+			{
+				(missing ??= []).Add(id);
+				continue;
+			}
+
+			var content = ReadContentHeader(node.FileName, profiles, models, label);
+			headers.Add(new SessionHeaderDto(
+				id,
+				content.FileId,
+				_epochs.GetEpoch(node.FileName),
+				content.EntryCount,
+				content.Seq ?? content.EntryCount,
+				content.FirstTimestamp,
+				content.LastTimestamp,
+				content.LastUsed,
+				content.ContentVersion,
+				content.FileLength));
+		}
+
+		return new SessionHeadersResult(headers, missing);
 	}
 
 	/// <summary>The ids of the directory holding <paramref name="node"/> and of its immediate group. The caller holds the settings lock.</summary>
@@ -154,27 +261,126 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 	private object? Entries(JsonNode? @params)
 	{
 		var node        = RemoteSessionLookup.Require(_registry, TdcpParams.RequireString(@params, "nodeId"));
-		var beforeIndex = TdcpParams.OptionalInt(@params, "beforeIndex");
-		var afterIndex  = TdcpParams.OptionalInt(@params, "afterIndex");
-		var limit       = TdcpParams.OptionalInt(@params, "limit") ?? Constants.Remote.Limits.EntriesDefaultLimit;
+		var beforeIndex   = TdcpParams.OptionalInt(@params, "beforeIndex");
+		var afterIndex    = TdcpParams.OptionalInt(@params, "afterIndex");
+		var afterSeq      = TdcpParams.OptionalLong(@params, "afterSeq");
+		var beforeEntryId = TdcpParams.OptionalString(@params, "beforeEntryId");
+		var fileIdText    = TdcpParams.OptionalString(@params, "fileId");
+		var limit         = TdcpParams.OptionalInt(@params, "limit") ?? Constants.Remote.Limits.EntriesDefaultLimit;
 
 		if (beforeIndex.HasValue && afterIndex.HasValue)
 			throw new TdcpInvalidParamsException("'beforeIndex' and 'afterIndex' cannot be combined");
+
+		// P1.F: afterSeq and beforeEntryId are alternatives to afterIndex and beforeIndex, not additions.
+		var bounds = (beforeIndex.HasValue ? 1 : 0) + (afterIndex.HasValue ? 1 : 0) + (afterSeq.HasValue ? 1 : 0) + (beforeEntryId != null ? 1 : 0);
+		if (bounds > 1)
+			throw new TdcpInvalidParamsException("'beforeIndex', 'afterIndex', 'afterSeq' and 'beforeEntryId' cannot be combined");
+
+		if (fileIdText != null && !afterSeq.HasValue)
+			throw new TdcpInvalidParamsException("'fileId' is only valid together with 'afterSeq'");
 
 		if (limit < 1)
 			throw new TdcpInvalidParamsException("'limit' must be at least 1");
 
 		limit = System.Math.Min(limit, Constants.Remote.Limits.EntriesMaxLimit);
+
+		if (afterSeq.HasValue)
+		{
+			if (afterSeq.Value < 0)
+				throw new TdcpInvalidParamsException("'afterSeq' must not be negative");
+
+			// seq counts the entries a client holds, so the entries after it start at ordinal seq: afterIndex = seq - 1.
+			var after = (int)System.Math.Min(afterSeq.Value - 1, int.MaxValue);
+			if (fileIdText == null)
+				return _entries.GetPage(node.NodeId, node.FileName, null, after, limit);
+
+			if (!EntryIds.TryParseFileId(fileIdText, out var seqFileId))
+				throw new TdcpInvalidParamsException("'fileId' is not a file id");
+
+			return _entries.GetPage(node.NodeId, node.FileName, null, after, limit, seqFileId);
+		}
+
+		if (beforeEntryId != null)
+		{
+			if (!EntryIds.TryParse(beforeEntryId, out var fileId, out var ordinal))
+				throw new TdcpInvalidParamsException("'beforeEntryId' is not an entry id");
+
+			return _entries.GetPage(node.NodeId, node.FileName, ordinal, null, limit, fileId);
+		}
+
 		return _entries.GetPage(node.NodeId, node.FileName, beforeIndex, afterIndex, limit);
 	}
 
 	private object? Entry(JsonNode? @params)
 	{
-		var node  = RemoteSessionLookup.Require(_registry, TdcpParams.RequireString(@params, "nodeId"));
-		var index = TdcpParams.OptionalInt(@params, "index") ?? throw new TdcpInvalidParamsException("'index' is required");
-		var epoch = TdcpParams.OptionalInt(@params, "epoch") ?? throw new TdcpInvalidParamsException("'epoch' is required");
+		var node    = RemoteSessionLookup.Require(_registry, TdcpParams.RequireString(@params, "nodeId"));
+		var entryId = TdcpParams.OptionalString(@params, "entryId");
+		var range   = ParseRange(TdcpParams.Find(@params, "range"));
 
-		return _entries.GetEntry(node.FileName, index, epoch);
+		SessionEntryDto entry;
+		if (entryId != null)
+		{
+			// P1.F: by stable id; the id carries the content generation, so no epoch is needed.
+			if (TdcpParams.Find(@params, "index") != null || TdcpParams.Find(@params, "epoch") != null)
+				throw new TdcpInvalidParamsException("'entryId' cannot be combined with 'index' or 'epoch'");
+
+			if (!EntryIds.TryParse(entryId, out var fileId, out var ordinal))
+				throw new TdcpInvalidParamsException("'entryId' is not an entry id");
+
+			entry = _entries.GetEntryById(node.FileName, fileId, ordinal);
+		}
+		else
+		{
+			var index = TdcpParams.OptionalInt(@params, "index") ?? throw new TdcpInvalidParamsException("'index' is required");
+			var epoch = TdcpParams.OptionalInt(@params, "epoch") ?? throw new TdcpInvalidParamsException("'epoch' is required");
+			entry = _entries.GetEntry(node.FileName, index, epoch);
+		}
+
+		return range == null ? entry : SliceContent(entry, range);
+	}
+
+	private static EntryRangeParams? ParseRange(JsonNode? node)
+	{
+		if (node == null)
+			return null;
+
+		if (node is not JsonObject)
+			throw new TdcpInvalidParamsException("'range' must be an object { offset, length }");
+
+		var offset = TdcpParams.OptionalInt(node, "offset") ?? 0;
+		var length = TdcpParams.OptionalInt(node, "length") ?? Constants.Remote.Limits.EntryContentMaxChars;
+		if (offset < 0)
+			throw new TdcpInvalidParamsException("'range.offset' must not be negative");
+
+		if (length < 1)
+			throw new TdcpInvalidParamsException("'range.length' must be at least 1");
+
+		return new EntryRangeParams(offset, System.Math.Min(length, Constants.Remote.Limits.EntryContentMaxChars));
+	}
+
+	/// <summary>
+	/// A slice of the content in characters. Both ends are moved off a surrogate pair so the slice is valid text; a client that
+	/// continues at <c>contentOffset + content.length</c> loses and repeats nothing.
+	/// </summary>
+	private static SessionEntryDto SliceContent(SessionEntryDto entry, EntryRangeParams range)
+	{
+		var content = entry.Content;
+		var full    = content.Length;
+		var start   = System.Math.Min(range.Offset, full);
+		if (start > 0 && start < full && char.IsLowSurrogate(content[start]) && char.IsHighSurrogate(content[start - 1]))
+			start--;
+
+		var end = (int)System.Math.Min((long)full, (long)start + (range.Length ?? Constants.Remote.Limits.EntryContentMaxChars));
+		if (end < full && char.IsHighSurrogate(content[end - 1]) && char.IsLowSurrogate(content[end]))
+			end = end > start + 1 ? end - 1 : end + 1; // one character of the pair must not be cut off; a 1-char slice takes both halves
+
+		return entry with
+		{
+			Content       = content[start..end],
+			ContentOffset = start,
+			Truncated     = start > 0 || end < full ? true : null,
+			FullLength    = full,
+		};
 	}
 
 	// ── session.send / session.stop ──────────────────────────────────────────
