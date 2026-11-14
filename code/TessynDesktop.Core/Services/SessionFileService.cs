@@ -292,7 +292,7 @@ public sealed class SessionFileService : ISessionFileService
 
 	private static string EscapeMetaValue(string value) => value.Replace("\"", "'");
 
-	private static IReadOnlyList<SessionEntryModel> ParseEntries(string[] lines)
+	internal static IReadOnlyList<SessionEntryModel> ParseEntries(string[] lines)
 	{
 		var entries = new List<SessionEntryModel>();
 		var i = 0;
@@ -348,7 +348,7 @@ public sealed class SessionFileService : ISessionFileService
 		return entries;
 	}
 
-	private static bool TryParseHeader(string line, out DateTimeOffset timestamp, out string role, out string rawMeta)
+	internal static bool TryParseHeader(string line, out DateTimeOffset timestamp, out string role, out string rawMeta)
 	{
 		timestamp = default;
 		role = string.Empty;
@@ -391,7 +391,7 @@ public sealed class SessionFileService : ISessionFileService
 	}
 
 	/// <summary>Parses space-delimited key="value" pairs from a header metadata string.</summary>
-	private static Dictionary<string, string> ParseMetadata(string rawMeta)
+	internal static Dictionary<string, string> ParseMetadata(string rawMeta)
 	{
 		var result = new Dictionary<string, string>(StringComparer.Ordinal);
 		if (string.IsNullOrWhiteSpace(rawMeta))
