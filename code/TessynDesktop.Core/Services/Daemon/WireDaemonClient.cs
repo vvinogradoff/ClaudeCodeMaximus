@@ -492,7 +492,7 @@ public sealed class WireDaemonClient : IDaemonClient, IDisposable
 		{
 			try
 			{
-				using var request = new HttpRequestMessage(HttpMethod.Get, _tdcpUrl);
+				using var request = new HttpRequestMessage(HttpMethod.Get, _tdcpUrl + "?" + Constants.Remote.Sse.LegacyQuery + "=1");
 				request.Headers.Add("Accept", "text/event-stream");
 				request.Headers.Add(Constants.Agent.TokenHeader, _token);
 
