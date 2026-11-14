@@ -2,7 +2,7 @@
 # Starts the app, then rebuilds when it closes so changes are ready for the next run.
 
 $projectRoot = $PSScriptRoot
-$exe = Join-Path $projectRoot "code\TessynDesktop\bin\Debug\net9.0-windows10.0.17763.0\TessynDesktop.exe"
+$exe = Join-Path $projectRoot "code\TessynDesktop\bin\Debug\net10.0-windows10.0.17763.0\TessynDesktop.exe"
 $sln = Join-Path $projectRoot "code\TessynDesktop.sln"
 
 Write-Host "Starting TessynDesktop..." -ForegroundColor Cyan
