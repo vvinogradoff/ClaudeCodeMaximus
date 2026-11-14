@@ -156,10 +156,10 @@ Avalonia keeps working throughout. **[web+]** marks changes that also help Tessy
 | 3 | P1.C Hello and discovery (was 2.2) | `client.hello` capabilities; `%AppData%\TessynDesktop\daemon.json`; the token moves out of `appsettings.json` into a DPAPI file; constant-time compare; requests with an `Origin` header rejected; 401 on a bad token | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
 | 4 | P1.D Contract tests | One suite over in-process, loopback and relay transports; golden shapes of the 21 remote methods | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
 | 5 | P1.E Content store v2 | Per-session sidecar index; persisted `entryId`s that survive restarts; byte-range paging; `SessionEntryReader` backed by it; JSONL-to-`.txt` sync owned by the daemon alone (ends the ISSUE.009/014 class) **[web+]** | **Done**, merged `4d60cf0`, with review fixes B1–B3. Master after the merges: 1,880 + 95 + 16 tests green. One known timing flake is being fixed (worker 150). |
-| 6 | P1.F Entry ids and seq on the wire | `entryId`, `fileId` and `seq` fields; `afterSeq`/`beforeEntryId` paging; `entries.appended` with inline entries, published beside `session.appended` **[web+]** | In progress (worker 170) |
-| 7 | P1.G O(1) session header | `session.get` from the sidecar; batch `session.headers` | In progress (worker 170) |
+| 6 | P1.F Entry ids and seq on the wire | `entryId`, `fileId` and `seq` fields; `afterSeq`/`beforeEntryId` paging; `entries.appended` with inline entries, published beside `session.appended` **[web+]** | **Done**, merged `7a783f1`, with review fixes. `entries.appended` stays local-only (not relayed to phones); `session.get` falls back to the full parse. |
+| 7 | P1.G O(1) session header | `session.get` from the sidecar; batch `session.headers` | **Done**, merged `7a783f1`: `session.get` reads its header from the content store; loopback `session.headers`. |
 | 8 | P1.H Selection is client state | WPF never calls `tree.getSelected/setSelected`; a client-owned layout file | Docs only |
-| 9 | P1.I Turn engine in Core | Move `TurnController`'s path into Core; `turn.started/delta/tool/status/usage` events; `turn.send`, with `session.send` kept as an alias **[web+]** | In progress (worker 180), safety-net tests first |
+| 9 | P1.I Turn engine in Core | Move `TurnController`'s path into Core; `turn.started/delta/tool/status/usage` events; `turn.send`, with `session.send` kept as an alias **[web+]** | Built on `wpf/p1-turn-engine`: Core `TurnEngine`, `TurnController` as an adapter, `turn.*` events, loopback `turn.send` / `turn.stop`. Equivalence review: proceed after fixes; the fixes are done. It ships separately as **rollout 2** (see below). |
 | 10 | P1.J Complete the wire | Loopback-only unless stated: tree mutation; global search and import; profiles (including ISSUE.013 `profile.switch`); versioned settings sections; schedules as DTOs; drafts; `attention.listAll` **[web+]**; `daemon.health` | After 3–7 |
 | 11 | P1.K Persistence split (P6, P7) | Tree, schedules and Telegram maps out of `appsettings.json`; a debounced single writer; `settings.changed` events | After 10 |
 | — | 1.8 ISSUE.013 daemon side · 1.9 index upkeep · 1.10 transcript prototype | Unchanged, in parallel. 1.10 is in progress (worker 40). | |
@@ -174,6 +174,12 @@ Exit:
 - A scripted client can page the largest session, stream a turn, and resync after a daemon restart.
 - Tessyn Web is unaffected.
 - Nothing changes for you in Avalonia.
+
+### Rollout plan (decided 2026-11-14)
+
+- **Rollout 1** is master as of `2be3407`: Phase 0, P1.A–G, P2.A and the WPF MVP. The Architect restarts TessynDesktop, checks the daily driver, and tries the WPF client with `run-wpf.ps1`.
+- **Rollout 2** is P1.I alone, the turn engine under the Avalonia send path. Nobody could run it live, because a second Avalonia instance cannot be isolated from the live one. It ships after a final review, with the smoke checklist in `.wpf-work/180-p1i-turn-engine.md` §8, and a one-commit revert if anything misbehaves.
+- **Behaviour change in rollout 2** (supervisor decision, the Architect may veto): a queued send uses the model, effort and profile selected when Send was pressed, not whatever is selected when the turn starts.
 
 ### Phase 2 — WPF MVP beside Avalonia (M–L)
 
