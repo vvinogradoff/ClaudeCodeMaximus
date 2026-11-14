@@ -37,7 +37,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ISessionCompactionService _compaction;
 	private readonly IUiDispatcher _uiDispatcher;
 	private readonly IOperationTimer _timer;
-	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
+	// Bounded: the active session plus the most recently used others. Sessions that are running, streaming or hold unsent
+	// input are exempt from eviction (SessionViewModel.CanEvict); evicted view models are disposed (ISSUE.016).
+	private readonly BoundedLruCache<string, SessionViewModel> _sessionCache =
+		new(Constants.SessionCacheCapacity, vm => !vm.CanEvict);
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
 	private bool _isTreePanelVisible;
@@ -381,17 +384,16 @@ public sealed class MainWindowViewModel : ViewModelBase
 		if (!_sessionCache.TryGetValue(cacheKey, out var vm))
 		{
 			// Check if the VM is cached under the old FileName key (ExternalId was set after caching)
-			if (node.ExternalId != null && _sessionCache.TryGetValue(node.FileName, out vm))
+			if (node.ExternalId != null && _sessionCache.Rekey(node.FileName, cacheKey))
 			{
-				_sessionCache.Remove(node.FileName);
-				_sessionCache[cacheKey] = vm;
+				_sessionCache.TryGetValue(cacheKey, out vm);
 			}
 			else
 			{
 				vm = new SessionViewModel(node, _fileService, _processManager, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _mcpServer, _daemonClient, _telegramBridge, _sessionStatus, _soundService, _compaction, _uiDispatcher);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
-				_sessionCache[cacheKey] = vm;
+				_sessionCache.Set(cacheKey, vm);
 			}
 		}
 
@@ -401,6 +403,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 		vm.TreePath = treePath;
 
 		ActiveSession = vm;
+
+		// The view now shows the new session; give back the memory of the ones that fell out of the recently-used window.
+		foreach (var evicted in _sessionCache.Trim(cacheKey))
+			evicted.Dispose();
 
 		// Sync the top-bar dropdown to follow whatever session is now active
 		_suppressRecentNav = true;

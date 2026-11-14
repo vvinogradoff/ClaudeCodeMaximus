@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -396,6 +397,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public event Action? CancelScheduleRequested;
 
 	private readonly IOperationTimer _timer;
+	private readonly ICodeIndexService _codeIndexService;
+	private readonly CompositeDisposable _nodeSubscriptions = new();
+	private bool _disposed;
+
+	/// <summary>The working directory this view model holds a code-index reference for, or null when it holds none.</summary>
+	private string? _indexedDirectory;
 
 	public SessionViewModel(
 		SessionNodeViewModel node,
@@ -461,8 +468,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		TagsVm = new SessionTagsViewModel(node.Model.NodeId, daemonClient, uiDispatcher, new SessionTagLauncher(),
 			node.WhenAnyValue(x => x.Name));
 
-		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
-		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
+		// Subscriptions on the tree node outlive this view model unless disposed (the node is held by the tree for the whole run).
+		_nodeSubscriptions.Add(node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n));
+		_nodeSubscriptions.Add(node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive))));
 
 		SendCommand           = ReactiveCommand.Create(() => { _ = _turn.SendAsync(InputText); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
@@ -476,10 +484,22 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		RefreshScheduleState();
 
 		// Start background indexing for this session's working directory
+		_codeIndexService = codeIndexService;
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
-			_ = codeIndexService.GetOrCreateIndexAsync(WorkingDirectory);
+		{
+			_indexedDirectory = WorkingDirectory;
+			_ = AcquireCodeIndexAsync(WorkingDirectory);
+		}
 
 		_log.Debug("SessionViewModel created: ExternalId={ExternalId}", _node.ExternalId);
+	}
+
+	/// <summary>Takes the index reference; if the build failed nothing is held, so the later release must be skipped.</summary>
+	private async Task AcquireCodeIndexAsync(string directory)
+	{
+		var acquired = await _codeIndexService.GetOrCreateIndexAsync(directory);
+		if (!acquired && _indexedDirectory == directory)
+			_indexedDirectory = null;
 	}
 
 	private void OnScheduleChanged(object? sender, EventArgs e) =>
@@ -563,10 +583,42 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
+	/// <summary>
+	/// False while this view model must stay loaded: a turn is running or streaming (any path), the tree marks the session
+	/// externally active, or the input box holds text that has not been sent. Anything else can be rebuilt from the file.
+	/// </summary>
+	public bool CanEvict =>
+		!IsBusy && !IsNodeRunning && !IsStreamingProcessAlive && !IsExternallyActive && string.IsNullOrWhiteSpace(InputText);
+
 	public void Dispose()
 	{
+		if (_disposed)
+			return;
+		_disposed = true;
+
+		_nodeSubscriptions.Dispose();
+
+		// A pending debounced draft write would otherwise be lost (or fire later on a dead view model): write it now.
+		if (_draftDebounceTimer != null)
+		{
+			_draftDebounceTimer.Stop();
+			_draftDebounceTimer = null;
+			if (string.IsNullOrWhiteSpace(_inputText))
+				_draftService.DeleteDraft(_node.FileName);
+			else
+				_draftService.SaveDraft(_node.FileName, _inputText);
+		}
+
 		_daemonClient.ScheduleChanged -= OnScheduleChanged;
 		_daemonClient.SessionSettingsChanged -= OnSessionSettingsChanged;
+
+		// Give back the reference taken at construction; the index (watcher, file and symbol tables) is freed with the last one.
+		if (_indexedDirectory != null)
+		{
+			_codeIndexService.ReleaseIndex(_indexedDirectory);
+			_indexedDirectory = null;
+		}
+
 		FocusVm.Dispose();
 		TagsVm.Dispose();
 		_models.Dispose();
@@ -595,7 +647,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	}
 
 	/// <summary>
-	/// Reads the session file and restores the last-used profile, model, and effort to the UI dropdowns.
+	/// Reads the tail of the session file and restores the last-used profile, model, and effort to the UI dropdowns.
 	/// Sets backing fields directly (no directory-model write or settings save) so that switching
 	/// sessions shows each session's own history rather than the shared per-directory values.
 	/// </summary>
@@ -604,17 +656,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		using var scope = _timer.Measure(Constants.Diagnostics.Operation.RestoreLastUsedSettings, Constants.Diagnostics.WarnThresholds.UiOperationMs);
 		try
 		{
-			var entries = _fileService.ReadEntries(_node.FileName).ToList();
+			// Tail read: the values live on the newest entries, so a switch no longer parses the whole transcript (ISSUE.016).
+			var last = LastUsedSessionSettingsReader.Read(_fileService, _node.FileName);
 
 			// --- Profile: last user entry that recorded a profile name ---
-			var lastUserWithProfile = entries.LastOrDefault(
-				e => e.Role == Constants.SessionFile.RoleUser && e.ProfileName != null);
-			_profiles.RestoreFromEntry(lastUserWithProfile?.ProfileName);
+			_profiles.RestoreFromEntry(last.ProfileName);
 
 			// --- Model + Effort: last assistant entry that recorded a model ID ---
-			var lastAssistantWithModel = entries.LastOrDefault(
-				e => e.Role == Constants.SessionFile.RoleAssistant && e.ModelId != null);
-			_models.RestoreFromEntry(lastAssistantWithModel?.ModelId, lastAssistantWithModel?.Effort);
+			_models.RestoreFromEntry(last.ModelId, last.Effort);
 		}
 		catch (Exception ex)
 		{
