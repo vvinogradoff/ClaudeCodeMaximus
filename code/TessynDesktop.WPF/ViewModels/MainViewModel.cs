@@ -27,6 +27,13 @@ public sealed partial class MainViewModel : ObservableObject
 	[ObservableProperty]
 	private string _statusText = "Not connected";
 
+	/// <summary>A startup failure of the tree or the pane, shown in the status bar (not only logged).</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasError))]
+	private string? _errorText;
+
+	public bool HasError => !string.IsNullOrEmpty(ErrorText);
+
 	public MainViewModel(ConnectionViewModel connection, Func<ITessynClient, TreeViewModel> treeFactory, Func<ITessynClient, SessionPaneViewModel> sessionFactory, IClientStateStore stateStore, ILogger<MainViewModel> logger)
 	{
 		Connection = connection;
@@ -45,16 +52,40 @@ public sealed partial class MainViewModel : ObservableObject
 
 	private async void OnClientReady(ITessynClient client)
 	{
+		// The session pane and the tree are set up independently: a failure in one must never prevent the other, and is shown to the user.
+		TreeViewModel? tree = null;
 		try
 		{
-			var tree = _treeFactory(client);
+			tree = _treeFactory(client);
 			tree.PropertyChanged += (_, _) => UpdateStatus();
 			tree.SelectionChanged += OnTreeSelectionChanged;
 			tree.ExpansionChanged += (_, _) => _stateStore.Update(state => state.ExpandedNodeIds = tree.ExpandedNodeIds.ToList());
 			tree.RestoreExpansion(_stateStore.State.ExpandedNodeIds);
+		}
+		catch (Exception ex)
+		{
+			ReportError("The session tree could not be created", ex);
+			tree = null;
+		}
+
+		try
+		{
 			Session = _sessionFactory(client);
+		}
+		catch (Exception ex)
+		{
+			ReportError("The session pane could not be created", ex);
+		}
+
+		if (tree == null)
+			return;
+
+		try
+		{
 			Tree = tree;
 			await tree.LoadAsync();
+			if (tree.Version < 0)
+				ReportError("Loading the session tree failed", new InvalidOperationException(tree.StatusText ?? "no answer from the daemon"));
 			UpdateStatus();
 
 			var last = _stateStore.State.LastSelectedNodeId;
@@ -63,8 +94,15 @@ public sealed partial class MainViewModel : ObservableObject
 		}
 		catch (Exception ex)
 		{
-			_logger.LogError(ex, "Loading the tree failed");
+			ReportError("Loading the session tree failed", ex);
 		}
+	}
+
+	private void ReportError(string what, Exception ex)
+	{
+		_logger.LogError(ex, "{What}", what);
+		ErrorText = $"{what}: {ex.Message}";
+		UpdateStatus();
 	}
 
 	private void OnTreeSelectionChanged(object? sender, TreeNodeViewModel node)

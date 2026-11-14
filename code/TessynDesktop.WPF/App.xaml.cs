@@ -7,6 +7,7 @@ using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.ViewModels;
 using TessynDesktop.WPF.Views;
+using TessynDesktop.WPF.Views;
 
 namespace TessynDesktop.WPF;
 
@@ -26,6 +27,7 @@ public partial class App : Application
 	{
 		base.OnStartup(e);
 
+		var startup = System.Diagnostics.Stopwatch.StartNew();
 		var options = StartupOptions.Parse(e.Args);
 		_singleInstanceMutex = new Mutex(initiallyOwned: true, options.MutexName, out var createdNew);
 		if (!createdNew)
@@ -44,15 +46,24 @@ public partial class App : Application
 			.ConfigureServices(services => new ServiceRegistration().Register(services, paths, Dispatcher, options))
 			.Build();
 
+		var logger = _host.Services.GetRequiredService<ILogger<App>>();
+		var hostBuilt = startup.ElapsedMilliseconds;
 		_host.Services.GetRequiredService<GlobalExceptionLogger>().Attach(this);
-		_host.Services.GetRequiredService<ILogger<App>>().LogInformation("TessynDesktop.WPF starting");
+		logger.LogInformation("TessynDesktop.WPF starting");
+
+		// The WebView2 environment takes a second or more to create; start it now so it overlaps with the rest of the startup.
+		_ = _host.Services.GetRequiredService<WebViewEnvironmentProvider>().GetAsync();
 
 		await _host.StartAsync();
 		await _host.Services.GetRequiredService<IClientStateStore>().LoadAsync();
+		var stateLoaded = startup.ElapsedMilliseconds;
 
 		var window = _host.Services.GetRequiredService<MainWindow>();
+		var windowCreated = startup.ElapsedMilliseconds;
 		MainWindow = window;
 		window.Show();
+		logger.LogInformation("Startup: host built {Host} ms, state loaded {State} ms, window created {Created} ms, shown {Shown} ms",
+			hostBuilt, stateLoaded, windowCreated, startup.ElapsedMilliseconds);
 	}
 
 	protected override void OnExit(ExitEventArgs e)

@@ -44,6 +44,9 @@ public sealed class FakeTessynClient : ITessynClient
 
 	public bool Disposed { get; private set; }
 
+	/// <summary>When set, <see cref="TreeSnapshotAsync"/> throws it.</summary>
+	public Exception? TreeSnapshotException { get; set; }
+
 	public int SendCount => Calls.Count(c => c.StartsWith("session.send:", StringComparison.Ordinal));
 
 	public void SetState(TessynClientState state)
@@ -74,6 +77,8 @@ public sealed class FakeTessynClient : ITessynClient
 	public Task<TreeSnapshotResult> TreeSnapshotAsync(long? sinceVersion = null, CancellationToken cancellationToken = default)
 	{
 		Record($"tree.snapshot:{sinceVersion?.ToString() ?? "full"}");
+		if (TreeSnapshotException != null)
+			throw TreeSnapshotException;
 		if (sinceVersion == TreeVersion)
 			return Task.FromResult(new TreeSnapshotResult(TreeVersion, true, null));
 		return Task.FromResult(new TreeSnapshotResult(TreeVersion, null, Directories));

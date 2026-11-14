@@ -59,8 +59,8 @@
         <!-- Find bar (WebView2 cannot be overlapped, so it lives in its own row) -->
         <DockPanel Grid.Row="1" Margin="10,0,10,4" Visibility="{Binding FindBarVisible, Converter={StaticResource BoolToVis}}">
             <Button DockPanel.Dock="Right" Content="x" Command="{Binding CloseFindCommand}" Padding="6,1" ToolTip="Close (Esc)" />
-            <Button DockPanel.Dock="Right" Content="v" Command="{Binding FindStepCommand}" CommandParameter="1" Padding="6,1" ToolTip="Next (F3)" Margin="2,0" />
-            <Button DockPanel.Dock="Right" Content="^" Command="{Binding FindStepCommand}" CommandParameter="-1" Padding="6,1" ToolTip="Previous (Shift+F3)" Margin="2,0" />
+            <Button DockPanel.Dock="Right" Content="v" Command="{Binding FindNextCommand}" Padding="6,1" ToolTip="Next (F3)" Margin="2,0" />
+            <Button DockPanel.Dock="Right" Content="^" Command="{Binding FindPreviousCommand}" Padding="6,1" ToolTip="Previous (Shift+F3)" Margin="2,0" />
             <TextBlock DockPanel.Dock="Right" Text="{Binding FindStatus}" VerticalAlignment="Center" Margin="6,0" Opacity="0.7" />
             <TextBox x:Name="FindBox" Text="{Binding FindText, UpdateSourceTrigger=PropertyChanged}" KeyDown="OnFindKeyDown" />
         </DockPanel>

@@ -78,7 +78,7 @@ public partial class SessionPane : UserControl
 		switch (e.Key)
 		{
 			case Key.Enter when Keyboard.Modifiers.HasFlag(ModifierKeys.Shift):
-				_subscribed.FindStepCommand.Execute(-1);
+				_subscribed.FindPreviousCommand.Execute(null);
 				e.Handled = true;
 				break;
 			case Key.Enter:
