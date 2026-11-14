@@ -21,11 +21,11 @@ internal sealed class TdcpTestHost : IDisposable
 
 	private readonly HttpClient _http = new();
 
-	public TdcpTestHost(TdcpDispatcher dispatcher, int logCapacity = Constants.Remote.EventLog.DefaultCapacity)
+	public TdcpTestHost(TdcpDispatcher dispatcher, int logCapacity = Constants.Remote.EventLog.DefaultCapacity, RemoteEventBus? bus = null, DaemonRunInfo? runInfo = null)
 	{
-		Bus      = new RemoteEventBus();
+		Bus      = bus ?? new RemoteEventBus();
 		Log      = new EventLog(Bus, capacity: logCapacity);
-		RunInfo  = new DaemonRunInfo();
+		RunInfo  = runInfo ?? new DaemonRunInfo();
 		Client   = new WireFakeDaemonClient();
 		Dispatcher = dispatcher;
 		Server   = new TdcpServer(Client, dispatcher, Token, Log, RunInfo);

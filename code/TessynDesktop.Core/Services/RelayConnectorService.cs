@@ -236,7 +236,12 @@ public sealed class RelayConnectorService : IRelayConnectorService
 
 			// Events are only relayed while connected; the handler just enqueues (the bus requires O(1) subscribers).
 			var eventWriter = events.Writer;
-			handler = n => eventWriter.TryWrite(n);
+			// The turn stream (P1.I) is local: the web contract and the 1,000-event ring behind the relay do not take it.
+			handler = n =>
+			{
+				if (!RemoteProtocol.TurnStream.LocalOnlyEvents.Contains(n.Method))
+					eventWriter.TryWrite(n);
+			};
 			// With an event log the relay forwards the stamped notifications (additive "seq" per event); without one the bus ones.
 			if (_eventLog is not null)
 				_eventLog.Appended += handler;

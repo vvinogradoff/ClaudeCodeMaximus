@@ -19,13 +19,15 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly TimeProvider    _time;
 	private readonly IDaemonRunInfo  _runInfo;
 	private readonly IEventLog?      _eventLog;
+	private readonly ITurnEngine?    _turnEngine;
 	private readonly string          _daemonVersion;
 
-	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null)
+	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ITurnEngine? turnEngine = null)
 	{
 		_time          = time ?? TimeProvider.System;
 		_runInfo       = runInfo ?? new DaemonRunInfo();
 		_eventLog      = eventLog;
+		_turnEngine    = turnEngine;
 		_daemonVersion = ReadDaemonVersion();
 	}
 
@@ -59,10 +61,16 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	}
 
 	/// <summary>Only what is really wired: the event capabilities need the event log.</summary>
-	private IReadOnlyList<string> Capabilities() =>
-		_eventLog == null
-			? []
-			: [Constants.Remote.Capabilities.EventsLocal, Constants.Remote.Capabilities.EventsResume];
+	private IReadOnlyList<string> Capabilities()
+	{
+		if (_eventLog == null)
+			return [];
+
+		// The interactive turn stream (P1.I) needs the engine that publishes it and the log that carries it.
+		return _turnEngine == null
+			? [Constants.Remote.Capabilities.EventsLocal, Constants.Remote.Capabilities.EventsResume]
+			: [Constants.Remote.Capabilities.EventsLocal, Constants.Remote.Capabilities.EventsResume, RemoteProtocol.TurnStream.Capability];
+	}
 
 	private static void ValidateCapabilities(JsonNode? node)
 	{
