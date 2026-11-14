@@ -1,0 +1,4 @@
+<Window x:Class="TessynDesktop.WPF.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Tessyn" Width="1280" Height="800" />
