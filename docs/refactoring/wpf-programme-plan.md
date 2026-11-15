@@ -209,7 +209,7 @@ Exit:
   - attachments, daemon and web server: merge `98fa1f4`; reviews 310 and 310b, SHIP;
   - web refs UI (SPA): merge `b59b14f`; reviews 311 and 311b, SHIP.
   - Verified in a separate worktree, because the main tree's build output must stay at rollout 2 until the Architect restarts: 2,556 + 131 + 24 + 146 + 3 tests, SPA build, 99 vitest.
-  - The web deploy waits for A19. It needs the nginx `/api/attachments` block; the unit already has `PrivateTmp`.
+  - **Web deployed 2026-11-15** (A19: "deploy now"). Master `405feef` is live on tessyn.vvinogradoff.com, and nginx has the `/api/attachments` block (repo `12de7fb`, server backup `.bak-20261115`). The link is online, the new CSP is served, and a 5 MB unauthenticated POST gets 401, not 413. Uploads fail with a clear message until the desktop runs rollout 3.
 - **Rollout 3** (one more restart after A15): the attachments daemon side, plus ISSUE.013 (320, review 313 fixes in progress) and index upkeep (330, review 314 fixes in progress) once they pass. Then the web deploy.
 - **Supervisor decision:** the A11 default (WorkingDirectory) comes with a one-time settings migration (`FileAccess.ModeRevision`). A stored ReferencedOnly that was only the old default moves once; there was never a way to choose it.
 - **Running:**
