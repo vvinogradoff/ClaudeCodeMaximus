@@ -80,6 +80,7 @@ public sealed class WpfSelfUpdater
 	{
 		try
 		{
+			ReportPreviousUpdate();
 			if (SourceBuilds.IsBuildOutput(_runFolder))
 			{
 				_logger.LogWarning("Self-update: running from a build output ({Folder}); it is disabled. Start the client from {RunFolder}", _runFolder, Constants.Switch.RunFolderName);
@@ -99,9 +100,7 @@ public sealed class WpfSelfUpdater
 				return SelfUpdateOutcome.NoBuild;
 			}
 
-			var sourceAssembly = Path.Combine(buildDir, Constants.Switch.WpfAssemblyName);
-			var runAssembly = Path.Combine(_runFolder, Constants.Switch.WpfAssemblyName);
-			if (File.Exists(runAssembly) && File.GetLastWriteTimeUtc(sourceAssembly) <= File.GetLastWriteTimeUtc(runAssembly))
+			if (!NeedsUpdate(buildDir, _runFolder))
 			{
 				_logger.LogInformation("Self-update: the run folder is current");
 				return SelfUpdateOutcome.UpToDate;
@@ -110,8 +109,8 @@ public sealed class WpfSelfUpdater
 			_logger.LogInformation("Self-update: a newer build exists in {Build}; restarting after the copy", buildDir);
 			var arguments = new List<string> { Constants.Switch.NoSelfUpdateArgument };
 			arguments.AddRange(restartArguments.Where(a => !string.Equals(a, Constants.Switch.NoSelfUpdateArgument, StringComparison.OrdinalIgnoreCase)));
-			var scriptPath = Path.Combine(_scriptDirectory, Constants.Switch.UpdateScriptFileName);
-			File.WriteAllText(scriptPath, BuildScript(buildDir, _runFolder, Path.Combine(_runFolder, Constants.Switch.WpfExeName), arguments, processId), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+			var scriptPath = Path.Combine(_scriptDirectory, string.Format(Constants.Switch.UpdateScriptFileFormat, processId));
+			File.WriteAllText(scriptPath, BuildScript(buildDir, _runFolder, Path.Combine(_runFolder, Constants.Switch.WpfExeName), arguments, processId, ResultPath), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 			_launcher.Start(scriptPath);
 			return SelfUpdateOutcome.RestartScheduled;
 		}
@@ -122,29 +121,93 @@ public sealed class WpfSelfUpdater
 		}
 	}
 
-	/// <summary>The script text: wait for the process, copy with retries (robocopy, nothing deleted), start the client again.</summary>
-	public static string BuildScript(string sourceDir, string destinationDir, string exePath, IReadOnlyList<string> arguments, int processId)
+	/// <summary>Where the script records how the copy ended ("ok" or "failed ..."); the next start reads and deletes it.</summary>
+	public string ResultPath => Path.Combine(_scriptDirectory, Constants.Switch.UpdateResultFileName);
+
+	/// <summary>
+	/// True when the build folder holds something the run folder does not: a file the run folder lacks, or a newest write time (over all files, not only the main assembly) that is later.
+	/// The run folder's own <c>host</c> sub folder is ignored. A copy that stopped half way is thereby noticed at the next start.
+	/// </summary>
+	public static bool NeedsUpdate(string buildDir, string runFolder)
 	{
-		var source = Quote(sourceDir);
-		var destination = Quote(destinationDir);
-		var exe = Quote(exePath);
-		var argumentText = Quote(string.Join(' ', arguments.Select(WindowsArgument)));
-		var delays = string.Join(", ", Constants.Switch.ScriptRetryDelaysSeconds);
+		var buildNewest = DateTime.MinValue;
+		foreach (var file in Directory.EnumerateFiles(buildDir, "*", SearchOption.AllDirectories))
+		{
+			buildNewest = Max(buildNewest, File.GetLastWriteTimeUtc(file));
+			if (!File.Exists(Path.Combine(runFolder, Path.GetRelativePath(buildDir, file))))
+				return true;
+		}
+
+		var runNewest = DateTime.MinValue;
+		var hostFolder = Path.Combine(runFolder, Constants.Switch.HostFolderName) + Path.DirectorySeparatorChar;
+		foreach (var file in Directory.EnumerateFiles(runFolder, "*", SearchOption.AllDirectories))
+		{
+			if (!file.StartsWith(hostFolder, StringComparison.OrdinalIgnoreCase))
+				runNewest = Max(runNewest, File.GetLastWriteTimeUtc(file));
+		}
+
+		return buildNewest > runNewest;
+	}
+
+	private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
+
+	/// <summary>Logs a warning when the previous update's script reported a failed copy (a mixed-version run folder), then forgets it.</summary>
+	private void ReportPreviousUpdate()
+	{
+		try
+		{
+			if (!File.Exists(ResultPath))
+				return;
+
+			var text = File.ReadAllText(ResultPath).Trim();
+			File.Delete(ResultPath);
+			if (text.StartsWith("failed", StringComparison.OrdinalIgnoreCase))
+				_logger.LogWarning("The previous self-update did not finish copying ({Result}); the run folder may hold files of two builds. It will be tried again at the next start", text);
+		}
+		catch (IOException)
+		{
+		}
+	}
+
+	/// <summary>
+	/// The script text: wait for the process, copy with retries (robocopy, nothing deleted), write the result, start the client again. The client is started with
+	/// <c>Process.Start</c>: <c>Start-Process</c> takes its path as a wildcard pattern, and <c>[Publish-WPF]</c> is an invalid one.
+	/// </summary>
+	public static string BuildScript(string sourceDir, string destinationDir, string exePath, IReadOnlyList<string> arguments, int processId, string resultPath, IReadOnlyList<int>? retryDelays = null)
+	{
+		var delays = string.Join(", ", retryDelays ?? Constants.Switch.ScriptRetryDelaysSeconds);
 		return
-$@"$source = {source}
-$dest = {destination}
-$exe = {exe}
-$arguments = {argumentText}
+$@"$source = {Quote(sourceDir)}
+$dest = {Quote(destinationDir)}
+$result = {Quote(resultPath)}
 $delays = @({delays})
 try {{ Wait-Process -Id {processId} -Timeout {Constants.Switch.ScriptWaitForExitSeconds} -ErrorAction SilentlyContinue }} catch {{ }}
+$code = 16
 foreach ($delay in $delays) {{
     robocopy $source $dest /E /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
-    if ($LASTEXITCODE -lt 8) {{ break }}
+    $code = $LASTEXITCODE
+    if ($code -lt 8) {{ break }}
     Start-Sleep -Seconds $delay
 }}
-Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory $dest
-";
+try {{
+    if ($code -lt 8) {{ Set-Content -LiteralPath $result -Value 'ok' }} else {{ Set-Content -LiteralPath $result -Value ('failed: robocopy exit code ' + $code) }}
+}} catch {{ }}
+{StartClientSnippet(exePath, arguments, "$dest")}";
 	}
+
+	/// <summary>A script that only waits for this process to exit and starts the client again (the daemon was restarted underneath it).</summary>
+	public static string BuildRestartScript(string exePath, IReadOnlyList<string> arguments, int processId, string workingDirectory) =>
+$@"try {{ Wait-Process -Id {processId} -Timeout {Constants.Switch.ScriptWaitForExitSeconds} -ErrorAction SilentlyContinue }} catch {{ }}
+{StartClientSnippet(exePath, arguments, Quote(workingDirectory))}";
+
+	private static string StartClientSnippet(string exePath, IReadOnlyList<string> arguments, string workingDirectoryExpression) =>
+$@"$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = {Quote(exePath)}
+$psi.Arguments = {Quote(string.Join(' ', arguments.Select(WindowsArgument)))}
+$psi.WorkingDirectory = {workingDirectoryExpression}
+$psi.UseShellExecute = $false
+[System.Diagnostics.Process]::Start($psi) | Out-Null
+";
 
 	private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
 

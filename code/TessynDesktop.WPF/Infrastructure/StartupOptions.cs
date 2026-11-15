@@ -28,13 +28,16 @@ public sealed class StartupOptions
 	/// <summary>
 	/// The self-update looks only in the real environment: not for a test window, not with a custom data root or daemon file, and not when switched off.
 	/// </summary>
-	public bool SelfUpdateEnabled => !NoSelfUpdate && !TestWindow && DataRoot == null && DaemonFile == null;
+	public bool SelfUpdateEnabled => !NoSelfUpdate && IsRealEnvironment;
 
 	/// <summary>
 	/// The client starts the Avalonia background host only in the real environment (the same rule as <see cref="SelfUpdateEnabled"/> without the update flag):
 	/// a test or a custom daemon file must never launch a real host against the user's data.
 	/// </summary>
-	public bool AutoStartHostEnabled => !NoHostStart && !TestWindow && DataRoot == null && DaemonFile == null;
+	public bool AutoStartHostEnabled => !NoHostStart && IsRealEnvironment;
+
+	/// <summary>The user's own environment: not a test window, no custom data root and no custom daemon file. Everything that touches the real world (update, host start, the settings import) needs it.</summary>
+	public bool IsRealEnvironment => !TestWindow && DataRoot == null && DaemonFile == null;
 
 	public string? DaemonFile { get; init; }
 

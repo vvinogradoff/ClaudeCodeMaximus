@@ -155,5 +155,8 @@ public static partial class RemoteProtocol
 
 		/// <summary>The session-local named mutex of the one daemon host per user: the Avalonia process takes it for its whole life, the WPF client only looks at it.</summary>
 		public const string HostMutexName = @"Local\TessynDesktop.DaemonHost";
+
+		/// <summary>The named event a client sets to ask the background host to end itself (sessions terminated, then exit). The client has already asked the user; the host does not ask again.</summary>
+		public const string HostExitEventName = @"Local\TessynDesktop.DaemonHost.Exit";
 	}
 }

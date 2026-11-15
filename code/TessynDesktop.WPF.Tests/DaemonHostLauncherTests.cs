@@ -225,6 +225,39 @@ public sealed class DaemonHostLauncherTests : IDisposable
 	}
 
 	[Fact]
+	public async Task TheHostFolderCopy_RunsOffTheCallersThread_AndNeverUnderTheLock()
+	{
+		// M4: the copy is blocking disk I/O; the call must return a pending task at once, and a second call must not wait for the copy.
+		InstallHost();
+		var build = Path.Combine(_root, "src", "code", "TessynDesktop", "bin", "Debug", "net10.0");
+		Directory.CreateDirectory(build);
+		File.WriteAllText(Path.Combine(build, "TessynDesktop.dll"), "dll");
+		using var entered = new ManualResetEventSlim();
+		using var release = new ManualResetEventSlim();
+		var copyThread = -1;
+		var launcher = new DaemonHostLauncher(RunFolder, Path.Combine(_root, "src"), _starter, _presence, _time, TimeSpan.FromSeconds(60), NullLogger.Instance, (_, _) =>
+		{
+			copyThread = Environment.CurrentManagedThreadId;
+			entered.Set();
+			release.Wait(TimeSpan.FromSeconds(20));
+			return new BuildCopyResult(0, 0, 0);
+		});
+
+		var first = launcher.EnsureStartedAsync(DaemonDiscoveryStatus.NoDaemonFile, CancellationToken.None);
+		Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the copy never started");
+		Assert.False(first.IsCompleted); // still copying, and the caller was not blocked
+		Assert.NotEqual(Environment.CurrentManagedThreadId, copyThread);
+
+		var second = await launcher.EnsureStartedAsync(DaemonDiscoveryStatus.NoDaemonFile, CancellationToken.None); // would hang if the lock were held during the copy
+		Assert.Equal(HostLaunchOutcome.AlreadyStarting, second);
+		Assert.Empty(_starter.Starts);
+
+		release.Set();
+		Assert.Equal(HostLaunchOutcome.Started, await first);
+		Assert.Single(_starter.Starts);
+	}
+
+	[Fact]
 	public void MutexHostPresence_SeesAHostThatHoldsTheNamedMutex()
 	{
 		var name = @"Local\TessynDesktop.Test." + Guid.NewGuid().ToString("N");

@@ -29,7 +29,11 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IDaemonLocator>(new DaemonLocator(options.DaemonFile));
 		services.AddSingleton<ITessynClientFactory, TessynClientFactory>();
 		services.AddSingleton<IDaemonHostLauncher>(sp => CreateHostLauncher(sp, paths, options));
-		services.AddSingleton<ConnectionViewModel>();
+		services.AddSingleton<DaemonRestarter>(sp => CreateRestarter(sp, paths, options));
+		services.AddSingleton<ConnectionViewModel>(sp => new ConnectionViewModel(
+			sp.GetRequiredService<IDaemonLocator>(), sp.GetRequiredService<ITessynClientFactory>(), sp.GetRequiredService<IUiDispatcher>(),
+			sp.GetRequiredService<ILogger<ConnectionViewModel>>(), sp.GetRequiredService<IDaemonHostLauncher>(),
+			options.AutoStartHostEnabled ? sp.GetRequiredService<DaemonRestarter>() : null));
 
 		services.AddSingleton<TreeContext>();
 		services.AddSingleton<IShellModule, TreeShellModule>();
@@ -120,7 +124,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IHostedService, CompletionSoundHost>();
 
 		// A23 Q8: the one-time Avalonia settings import. A test window never asks it: its scripted dialog answers belong to the test.
-		if (!options.TestWindow)
+		if (options.IsRealEnvironment)
 		{
 			services.AddSingleton<AvaloniaImportHost>();
 			services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<AvaloniaImportHost>());
@@ -131,6 +135,18 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));
 		services.AddSingleton<MainViewModel>();
 		services.AddSingleton<MainWindow>();
+	}
+
+	/// <summary>The "daemon is older than the build" check and the one-click restart: only in the real environment and from the run folder.</summary>
+	private static DaemonRestarter CreateRestarter(IServiceProvider sp, AppPaths paths, StartupOptions options)
+	{
+		var sourceLocation = new SourceBuilds(Path.Combine(paths.DataRoot, Constants.Switch.AppSettingsFileName)).ReadSourceLocation();
+		var scriptDirectory = Path.GetTempPath();
+		var exe = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, Constants.Switch.WpfExeName);
+		var restarter = new ScriptClientRestarter(new PowerShellScriptLauncher(), scriptDirectory, exe, options.Arguments, Environment.ProcessId,
+			() => System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() => System.Windows.Application.Current.Shutdown())));
+		return new DaemonRestarter(sourceLocation, new ProcessDaemonBuildProbe(), sp.GetRequiredService<IDialogService>(), new NamedEventHostExitSignal(),
+			new ProcessExitWaiter(), restarter, Constants.Switch.DaemonExitTimeout, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonRestarter>());
 	}
 
 	/// <summary>The launcher of the Avalonia background host (A23 Q6): real only in the real environment and only when running from the run folder (rule A15).</summary>

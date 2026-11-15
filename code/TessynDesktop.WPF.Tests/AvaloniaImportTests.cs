@@ -23,10 +23,15 @@ public sealed class AvaloniaImportTests : IDisposable
 		{
 		}
 
-		public Task<bool> ConfirmAsync(ConfirmDialogRequest request)
+		public Task? Gate { get; set; }
+
+		public async Task<bool> ConfirmAsync(ConfirmDialogRequest request)
 		{
 			Confirms.Add(request);
-			return Task.FromResult(Answer);
+			if (Gate != null)
+				await Gate;
+
+			return Answer;
 		}
 
 		public Task<string?> InputAsync(InputDialogRequest request) => Task.FromResult<string?>(null);
@@ -90,6 +95,22 @@ public sealed class AvaloniaImportTests : IDisposable
 		Assert.Single(keys); // ImportSessions and Send have no WPF command yet
 		Assert.True(_settings.Get<ImportState>().AvaloniaUiHandled);
 		Assert.Equal("imported", _settings.Get<ImportState>().AvaloniaUiOutcome);
+		Assert.Single(_dialogs.Confirms);
+	}
+
+	[Fact]
+	public async Task AReconnectWhileTheDialogIsOpen_DoesNotOpenASecondDialog()
+	{
+		// L1: ClientReady fires again on a reconnect; the open dialog must not be asked twice.
+		var gate = new TaskCompletionSource();
+		_dialogs.Gate = gate.Task;
+
+		var first = _host.RunAsync(_client);
+		var second = await _host.RunAsync(_client);
+		gate.SetResult();
+
+		Assert.False(second);
+		Assert.True(await first);
 		Assert.Single(_dialogs.Confirms);
 	}
 

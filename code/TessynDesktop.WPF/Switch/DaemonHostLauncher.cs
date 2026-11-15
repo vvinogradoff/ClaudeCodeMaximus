@@ -152,11 +152,14 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 	private readonly ILogger _logger;
 	private readonly object _gate = new();
 
+	private readonly Func<string, string, BuildCopyResult> _copier;
 	private IHostProcess? _started;
+	private bool _starting;
 	private DateTimeOffset _lastAttempt = DateTimeOffset.MinValue;
 
-	public DaemonHostLauncher(string runFolder, string? sourceLocation, IHostProcessStarter starter, IHostPresence presence, TimeProvider time, TimeSpan cooldown, ILogger logger)
+	public DaemonHostLauncher(string runFolder, string? sourceLocation, IHostProcessStarter starter, IHostPresence presence, TimeProvider time, TimeSpan cooldown, ILogger logger, Func<string, string, BuildCopyResult>? copier = null)
 	{
+		_copier = copier ?? BuildCopier.Copy;
 		_runFolder = runFolder.TrimEnd('\\', '/');
 		_sourceLocation = sourceLocation;
 		_starter = starter;
@@ -176,19 +179,19 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 	public static bool NeedsHost(DaemonDiscoveryStatus status) =>
 		status is DaemonDiscoveryStatus.NoDaemonFile or DaemonDiscoveryStatus.StaleFile or DaemonDiscoveryStatus.InvalidFile;
 
-	public Task<HostLaunchOutcome> EnsureStartedAsync(DaemonDiscoveryStatus status, CancellationToken cancellationToken)
+	public async Task<HostLaunchOutcome> EnsureStartedAsync(DaemonDiscoveryStatus status, CancellationToken cancellationToken)
 	{
 		if (!NeedsHost(status))
-			return Task.FromResult(HostLaunchOutcome.NotNeeded);
+			return HostLaunchOutcome.NotNeeded;
 
 		lock (_gate)
 		{
-			if (_started is { HasExited: false })
-				return Task.FromResult(HostLaunchOutcome.AlreadyStarting);
+			if (_starting || _started is { HasExited: false })
+				return HostLaunchOutcome.AlreadyStarting;
 
 			var now = _time.GetUtcNow();
 			if (now - _lastAttempt < _cooldown)
-				return Task.FromResult(HostLaunchOutcome.AlreadyStarting);
+				return HostLaunchOutcome.AlreadyStarting;
 
 			_started?.Dispose();
 			_started = null;
@@ -196,33 +199,60 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 			if (_presence.IsHostRunning())
 			{
 				// A host holds the guard but has not published daemon.json yet (it is starting), or a visible Avalonia window is the daemon. Wait for it.
-				return Task.FromResult(HostLaunchOutcome.HostPresent);
+				return HostLaunchOutcome.HostPresent;
 			}
 
 			_lastAttempt = now;
-			UpdateHostFolder();
-			if (!File.Exists(HostExecutable))
-			{
-				_logger.LogWarning("No daemon host at {Path}. Build the solution and start the client through run-wpf.ps1 once, or start TessynDesktop yourself", HostExecutable);
-				return Task.FromResult(HostLaunchOutcome.HostMissing);
-			}
-
-			try
-			{
-				_started = _starter.Start(HostExecutable, [Constants.Switch.BackgroundArgument], HostFolder);
-			}
-			catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
-			{
-				_logger.LogError(ex, "Could not start the daemon host {Path}", HostExecutable);
-				return Task.FromResult(HostLaunchOutcome.Failed);
-			}
-
-			if (_started == null)
-				return Task.FromResult(HostLaunchOutcome.Failed);
-
-			_logger.LogInformation("Started the background daemon host {Path}", HostExecutable);
-			return Task.FromResult(HostLaunchOutcome.Started);
+			_starting = true;
 		}
+
+		try
+		{
+			// The copy is blocking disk I/O over several hundred files: never on the caller's (possibly the UI) thread, and never under the lock.
+			await Task.Run(UpdateHostFolder, cancellationToken);
+			return StartHost();
+		}
+		finally
+		{
+			lock (_gate)
+				_starting = false;
+		}
+	}
+
+	/// <summary>Forgets the last attempt so the next call may start a host at once (the user asked for a restart).</summary>
+	public void ResetCooldown()
+	{
+		lock (_gate)
+			_lastAttempt = DateTimeOffset.MinValue;
+	}
+
+	private HostLaunchOutcome StartHost()
+	{
+		if (!File.Exists(HostExecutable))
+		{
+			_logger.LogWarning("No daemon host at {Path}. Build the solution and start the client through run-wpf.ps1 once, or start TessynDesktop yourself", HostExecutable);
+			return HostLaunchOutcome.HostMissing;
+		}
+
+		IHostProcess? started;
+		try
+		{
+			started = _starter.Start(HostExecutable, [Constants.Switch.BackgroundArgument], HostFolder);
+		}
+		catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+		{
+			_logger.LogError(ex, "Could not start the daemon host {Path}", HostExecutable);
+			return HostLaunchOutcome.Failed;
+		}
+
+		if (started == null)
+			return HostLaunchOutcome.Failed;
+
+		lock (_gate)
+			_started = started;
+
+		_logger.LogInformation("Started the background daemon host {Path}", HostExecutable);
+		return HostLaunchOutcome.Started;
 	}
 
 	/// <summary>Copies the newest Avalonia build into the host folder (nothing is running there: the guard was free).</summary>
@@ -237,7 +267,7 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 			if (buildDir == null)
 				return;
 
-			var result = BuildCopier.Copy(buildDir, HostFolder);
+			var result = _copier(buildDir, HostFolder);
 			_logger.LogInformation("Host folder updated from {Build}: {Copied} copied, {Skipped} skipped, {UpToDate} current", buildDir, result.Copied, result.Skipped, result.UpToDate);
 		}
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

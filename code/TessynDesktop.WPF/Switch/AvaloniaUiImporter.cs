@@ -118,6 +118,7 @@ public sealed class AvaloniaImportHost : IHostedService, IDisposable
 	private readonly IClientSettingsStore _settings;
 	private readonly IDialogService _dialogs;
 	private readonly ILogger<AvaloniaImportHost> _logger;
+	private int _running;
 
 	public AvaloniaImportHost(ConnectionViewModel connection, IClientSettingsStore settings, IDialogService dialogs, ILogger<AvaloniaImportHost> logger)
 	{
@@ -149,6 +150,10 @@ public sealed class AvaloniaImportHost : IHostedService, IDisposable
 	/// <summary>Asks and imports when the question is still open; true when something was imported.</summary>
 	public async Task<bool> RunAsync(ITessynClient client)
 	{
+		// A reconnect while the dialog is open must not open a second one.
+		if (Interlocked.Exchange(ref _running, 1) == 1)
+			return false;
+
 		try
 		{
 			if (_settings.Get<ImportState>().AvaloniaUiHandled)
@@ -175,6 +180,10 @@ public sealed class AvaloniaImportHost : IHostedService, IDisposable
 		{
 			_logger.LogWarning(ex, "The Avalonia settings import failed; it will be offered again at the next start");
 			return false;
+		}
+		finally
+		{
+			Interlocked.Exchange(ref _running, 0);
 		}
 	}
 }

@@ -24,6 +24,7 @@ public partial class App : Application
 	public static bool IsBackgroundHost { get; set; }
 
 	private TrayIcons? _trayIcons; // kept so the tray icon is not collected
+	private DaemonHostExitListener? _exitListener;
 
 	public override void Initialize()
 	{
@@ -117,8 +118,14 @@ public partial class App : Application
 			{
 				// A23 Q6: the daemon without a window or taskbar entry. The process lives until the tray icon's Exit (or a system shutdown).
 				desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-				_trayIcons = BackgroundTray.Create(desktop);
+				// Exit (tray, or a client's request through the named event) terminates the active sessions the way the window's close does.
+				var exit = new DaemonHostExit(
+					() => mainVm.ActiveSessionCount, BackgroundTray.ConfirmAsync,
+					mainVm.TerminateAllSessions, () => Avalonia.Threading.Dispatcher.UIThread.Post(() => desktop.Shutdown()));
+				_trayIcons = BackgroundTray.Create(exit);
 				TrayIcon.SetIcons(this, _trayIcons);
+				_exitListener = new DaemonHostExitListener();
+				_exitListener.Start(() => Avalonia.Threading.Dispatcher.UIThread.Post(exit.Exit));
 				Log.Information("Running as the background daemon host (no main window)");
 			}
 			else
