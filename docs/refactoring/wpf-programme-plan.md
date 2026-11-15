@@ -223,6 +223,13 @@ Exit:
   - local-path chips;
   - allowlisted "Open in default app".
   - Verified: 2,685 + 131 + 24 + 546 + 9 tests. WPF only, so the Avalonia restart does not carry it.
+- **Also merged (evening):**
+  - WPF drag-and-drop and paste of files, path mode and file mode, FR.31.2: `f139a19`, reviews 316 and 316b SHIP;
+  - the low-findings batch: `e05a957`, review 317 SHIP;
+  - AngleSharp 1.5.0 for GHSA-pgww-w46g-26qg: `830c88e`;
+  - the A20 docs: `f3ddbd4` and `de5bfb4`.
+  - Master verified: 2,693 + 134 + 24 + 594 + 13 tests.
+  - The batch's web-server and SPA parts need a web redeploy, to be asked with rollout 3.
 - **Rollout 3** (one more restart after A15): the attachments daemon side, plus ISSUE.013 (320, review 313 fixes in progress) and index upkeep (330, review 314 fixes in progress) once they pass. Then the web deploy.
 - **Supervisor decision:** the A11 default (WorkingDirectory) comes with a one-time settings migration (`FileAccess.ModeRevision`). A stored ReferencedOnly that was only the old default moves once; there was never a way to choose it.
 - **Running:**
