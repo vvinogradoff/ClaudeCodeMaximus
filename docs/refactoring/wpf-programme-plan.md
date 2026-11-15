@@ -475,6 +475,12 @@ Rollout 3 is master at `f57d404` or later. It is built in the main tree only **a
 
 `b59b14f` (web refs UI) changes only the SPA. It goes live with the web deploy (A19), not with the desktop restart.
 
+**Update 2026-11-15, 16:00.** Rollout 2 passed B.1. The Architect reports Tessyn noticeably faster and lighter on RAM. The ISSUE.016 follow-up shows idle CPU at 3-13 % and GC pauses at 0.3-0.5 %. Rollout 3 is now master `fdf29d2`, built in the main tree at 16:01, with the rollout-2 run folder backed up to `[Publish].bak3`. Beyond the three merges above it also carries:
+- `e05a957`: the low-findings batch;
+- `27764c3`: J3 part 1. Settings sections, and profile administration moved from the Avalonia `ProfileController` into Core.
+- `fdf29d2`: J1. Tree mutation API; the git-origin move rule moved into Core; the Avalonia tree reloads after daemon-side mutations; the A24 broad-folder guard.
+- WPF-only work (W0, the Focus view, drag-and-drop, AngleSharp 1.5.0), which does not affect the Avalonia app.
+
 ### C.1 Smoke checklist, right after the restart (about 5 minutes)
 
 Before the restart, close Tessyn and back up the run folder: `robocopy "C:\Projects\Personal\Tessyn\[Publish]" "C:\Projects\Personal\Tessyn\[Publish].bak3" /MIR`.
@@ -490,6 +496,9 @@ Before the restart, close Tessyn and back up the run folder: `robocopy "C:\Proje
 4. **Search.** Tree search and Global Search still find an old tree session whose `.jsonl` Claude has removed. Search "deploy" or a word you remember.
 5. **Idle.** After the upkeep pass (under a minute), idle CPU and memory are back to the rollout-2 level.
 6. **Phone.** The web client still works. It is the old SPA until A19, talking to the new daemon (additive).
+7. **Profiles (J3).** The profile dropdown lists your profiles. A turn on a chosen profile runs on it. Optionally, rename a profile in Avalonia and check that the label updates.
+8. **Tree moves (J1).** Drag a session to another group in the same project: it moves. A move into a directory of a different git repository is refused, as before.
+9. **Avalonia Settings window.** Change one harmless setting and save: no error, and the value persists after reopening.
 
 ### C.2 Rollback
 
@@ -500,4 +509,4 @@ Data stays compatible:
 
 Steps:
 1. **Fast:** close the app, then `robocopy "C:\Projects\Personal\Tessyn\[Publish].bak3" "C:\Projects\Personal\Tessyn\[Publish]" /MIR`. Self-update would bring the newer build back, so also do step 2, or delete the newer `bin\Debug\net*` output.
-2. **Source:** `git revert -m 1 f57d404 9fa7cd6 98fa1f4`, in that order, one revert commit each. Then build and restart. Revert only the merge that misbehaves if the log makes the culprit clear: index upkeep, profiles or attachments.
+2. **Source:** `git revert -m 1 fdf29d2 27764c3 e05a957 f57d404 9fa7cd6 98fa1f4`, in that order, one revert commit each. Then build and restart. Revert only the merge that misbehaves if the log makes the culprit clear: index upkeep, profiles or attachments.
