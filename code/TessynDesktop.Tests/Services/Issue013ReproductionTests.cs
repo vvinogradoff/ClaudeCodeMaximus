@@ -76,25 +76,42 @@ public sealed class Issue013ReproductionTests : IDisposable
 		Assert.Equal(@"C:\profiles\p1", _processManager.Spawns.Single().profileConfigDir);
 	}
 
+	// Before the fix these two turns ran on Default with no error (the pre-fix commit records that). Since ISSUE.013 R2 they are errors.
+
 	[Fact]
-	public async Task Reproduction_ChildPinnedToARenamedProfile_SilentlyFallsBackToDefault()
+	public async Task ChildPinnedByNameToARenamedProfile_IsAnError_AndNeverRunsOnDefault()
 	{
 		_appSettings.Settings.Profiles.Add(new ClaudeProfileModel { ProfileId = "p1", DisplayName = "Account A (renamed)" });
 
 		var result = await _sut.RunTurnAsync(Child("Account A"), "continue", TurnSource.Orchestrated);
 
-		// The pinned display name no longer matches: the turn runs on the Default account with no error and no hint.
-		Assert.False(result.IsError);
-		Assert.Null(_processManager.Spawns.Single().profileConfigDir);
-		Assert.Equal("[Sys] me@example.com", _fileService.AppendDetails.First(d => d.role == Constants.SessionFile.RoleUser).profileName);
+		Assert.True(result.IsError);
+		Assert.Contains("'Account A'", result.ErrorMessage);
+		Assert.Empty(_processManager.Spawns);
 	}
 
 	[Fact]
-	public async Task Reproduction_ChildPinnedToARemovedProfile_SilentlyFallsBackToDefault()
+	public async Task ChildPinnedByIdSurvivesARename_AndStillRunsOnItsProfile()
 	{
-		var result = await _sut.RunTurnAsync(Child("Account A"), "continue", TurnSource.Orchestrated);
+		_appSettings.Settings.Profiles.Add(new ClaudeProfileModel { ProfileId = "p1", DisplayName = "Account A (renamed)" });
+		var child = Child("Account A");
+		child.ProfileId = "p1";
+
+		var result = await _sut.RunTurnAsync(child, "continue", TurnSource.Orchestrated);
 
 		Assert.False(result.IsError);
-		Assert.Null(_processManager.Spawns.Single().profileConfigDir);
+		Assert.Equal(@"C:\profiles\p1", _processManager.Spawns.Single().profileConfigDir);
+	}
+
+	[Fact]
+	public async Task ChildPinnedToARemovedProfile_IsAnError_AndNeverRunsOnDefault()
+	{
+		var child = Child("Account A");
+		child.ProfileId = "p1";
+
+		var result = await _sut.RunTurnAsync(child, "continue", TurnSource.Orchestrated);
+
+		Assert.True(result.IsError);
+		Assert.Empty(_processManager.Spawns);
 	}
 }

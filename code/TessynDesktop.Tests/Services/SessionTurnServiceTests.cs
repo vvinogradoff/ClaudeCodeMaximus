@@ -963,17 +963,20 @@ public sealed class SessionTurnServiceTests : IDisposable
 		Assert.Null(_processManager.Spawns[0].profileConfigDir);
 	}
 
+	/// <summary>ISSUE.013 R2: a pinned profile that no longer resolves is an error naming it, never a silent fallback to Default.</summary>
 	[Fact]
-	public async Task RunTurnAsync_DeletedProfile_FallsBackToDefaultAndStampsTheDefaultLabel()
+	public async Task RunTurnAsync_PinnedProfileThatNoLongerExists_IsAnErrorAndNeverRunsOnDefault()
 	{
 		EmitOneAnswer();
 		var node = MakeNode();
 		node.ProfileName = "Gone";
 
-		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+		var result = await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
 
-		Assert.Equal("[Sys] me@example.com", UserEntry().profileName);
-		Assert.Null(_processManager.Spawns[0].profileConfigDir);
+		Assert.True(result.IsError);
+		Assert.Contains("'Gone'", result.ErrorMessage);
+		Assert.Empty(_processManager.Calls);
+		Assert.Empty(_fileService.AppendDetails);
 	}
 
 	[Fact]
