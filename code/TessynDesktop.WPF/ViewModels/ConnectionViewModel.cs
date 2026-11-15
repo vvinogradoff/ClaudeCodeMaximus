@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.Client;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.Switch;
 
 namespace TessynDesktop.WPF.ViewModels;
 
@@ -18,6 +21,10 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<ConnectionViewModel> _logger;
 	private readonly TimeSpan _retryDelay;
+	private readonly IDaemonHostLauncher _hostLauncher;
+	private readonly DaemonRestarter? _restarter;
+	private long _startingSince;
+	private int _daemonPid;
 
 	private ITessynClient? _client;
 
@@ -28,13 +35,15 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	[ObservableProperty]
 	private string? _detail;
 
-	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger)
-		: this(locator, factory, ui, logger, Constants.Timeouts.DaemonDiscoveryRetry)
+	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null)
+		: this(locator, factory, ui, logger, Constants.Timeouts.DaemonDiscoveryRetry, hostLauncher, restarter)
 	{
 	}
 
-	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, TimeSpan retryDelay)
+	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, TimeSpan retryDelay, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null)
 	{
+		_restarter = restarter;
+		_hostLauncher = hostLauncher ?? new NoDaemonHostLauncher();
 		_locator = locator;
 		_factory = factory;
 		_ui = ui;
@@ -54,6 +63,7 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	{
 		ConnectionBannerState.DaemonNotFound => "Daemon not found. Start TessynDesktop to connect.",
 		ConnectionBannerState.DaemonUnreachable => "Daemon found but not reachable. It may still be starting.",
+		ConnectionBannerState.StartingDaemon => "Starting the Tessyn daemon in the background...",
 		ConnectionBannerState.Connecting => "Connecting to the daemon...",
 		ConnectionBannerState.Connected => "Connected",
 		ConnectionBannerState.Reconnecting => "Connection lost. Reconnecting...",
@@ -72,7 +82,19 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 				var found = await _locator.DiscoverAsync(cancellationToken);
 				if (found.Status != DaemonDiscoveryStatus.Found || found.Daemon == null)
 				{
-					Set(ConnectionBannerState.DaemonNotFound, found.Status.ToString());
+					var launch = await StartHostIfNeededAsync(found.Status, cancellationToken);
+					var waiting = launch is HostLaunchOutcome.Started or HostLaunchOutcome.AlreadyStarting or HostLaunchOutcome.HostPresent;
+					if (waiting && _startingSince == 0)
+						_startingSince = Stopwatch.GetTimestamp();
+					else if (!waiting)
+						_startingSince = 0;
+
+					if (waiting && Stopwatch.GetElapsedTime(_startingSince) < StartingTimeout)
+						Set(ConnectionBannerState.StartingDaemon, found.Status.ToString());
+					else if (waiting)
+						Set(ConnectionBannerState.DaemonNotFound, Constants.Switch.StartingTimedOutDetail); // never "Starting..." for ever
+					else
+						Set(ConnectionBannerState.DaemonNotFound, found.Status == DaemonDiscoveryStatus.TokenUnavailable ? Constants.Switch.TokenUnavailableDetail : found.Status.ToString());
 					await Task.Delay(_retryDelay, cancellationToken);
 					continue;
 				}
@@ -92,12 +114,15 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 				}
 
 				_client = client;
+				_startingSince = 0; // a later disconnect starts its own "Starting..." clock
+				_daemonPid = found.Daemon.Pid;
 				_logger.LogInformation("Connected to daemon run {RunId} (protocol {Protocol})", client.ServerInfo?.RunId, client.ServerInfo?.ProtocolVersion);
 				_ui.Post(() =>
 				{
 					Apply(ConnectionBannerState.Connected, null);
 					ClientReady?.Invoke(client);
 				});
+				_ = CheckDaemonBuildAsync(found.Daemon.Pid);
 				return;
 			}
 			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -125,6 +150,77 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 				if (!await DelayAsync(cancellationToken))
 					return;
 			}
+		}
+	}
+
+	/// <summary>How long "Starting the daemon..." may last before the banner says what is wrong.</summary>
+	public TimeSpan StartingTimeout { get; set; } = Constants.Switch.StartingTimeout;
+
+	/// <summary>True when the connected daemon runs an older build than the newest host build (the banner offers "Restart daemon").</summary>
+	[ObservableProperty]
+	private bool _isDaemonOlder;
+
+	/// <summary>Why the last restart attempt did not end the daemon; null when there is nothing to say.</summary>
+	[ObservableProperty]
+	private string? _restartNote;
+
+	public string DaemonOlderText => Constants.Switch.DaemonOlderText;
+
+	private async Task CheckDaemonBuildAsync(int pid)
+	{
+		if (_restarter == null)
+			return;
+
+		try
+		{
+			var stale = await Task.Run(() => _restarter.Check(pid));
+			_ui.Post(() => IsDaemonOlder = stale != null);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogInformation(ex, "Could not compare the daemon's build with the newest build");
+		}
+	}
+
+	/// <summary>The banner's "Restart daemon": asks, ends the daemon, restarts this client (the new start brings the host back on the newest build).</summary>
+	[RelayCommand]
+	private async Task RestartDaemonAsync()
+	{
+		if (_restarter == null)
+			return;
+
+		var sessions = 0;
+		try
+		{
+			if (_client != null)
+				sessions = (await _client.DaemonHealthAsync()).SessionsRunning;
+		}
+		catch (Exception ex) when (ex is not OperationCanceledException)
+		{
+			_logger.LogInformation(ex, "Could not read the number of running sessions");
+		}
+
+		var outcome = await _restarter.RestartAsync(_daemonPid, sessions, CancellationToken.None);
+		var detail = outcome switch
+		{
+			DaemonRestartOutcome.NotSupported => "this daemon cannot be restarted from here; exit it from its tray icon or window, then start the client",
+			DaemonRestartOutcome.DidNotExit => "the daemon did not exit in time; exit it from its tray icon",
+			_ => null,
+		};
+		_ui.Post(() => RestartNote = detail);
+	}
+
+	/// <summary>Asks the launcher to start the background host; a failure of that never ends the connect loop.</summary>
+	private async Task<HostLaunchOutcome> StartHostIfNeededAsync(DaemonDiscoveryStatus status, CancellationToken cancellationToken)
+	{
+		try
+		{
+			return await _hostLauncher.EnsureStartedAsync(status, cancellationToken);
+		}
+		catch (Exception ex) when (ex is not OperationCanceledException)
+		{
+			_logger.LogWarning(ex, "Starting the daemon host failed");
+			return HostLaunchOutcome.Failed;
 		}
 	}
 

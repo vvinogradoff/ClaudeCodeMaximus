@@ -6,6 +6,7 @@ using Serilog;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
+using TessynDesktop.WPF.Switch;
 using TessynDesktop.WPF.ViewModels;
 using TessynDesktop.WPF.Views;
 using TessynDesktop.WPF.Views;
@@ -48,6 +49,13 @@ public partial class App : Application
 		var paths = options.DataRoot == null ? new AppPaths() : new AppPaths(options.DataRoot);
 		Log.Logger = new LoggingSetup().CreateLogger(paths);
 
+		// A23 Q7: a newer build under SourceCodesLocation is copied over this run folder by a script that waits for this process to exit and starts the client again.
+		if (options.SelfUpdateEnabled && UpdateBeforeStart(options, paths))
+		{
+			Shutdown();
+			return;
+		}
+
 		_host = Host.CreateDefaultBuilder()
 			.UseSerilog(Log.Logger)
 			.ConfigureServices(services => new ServiceRegistration().Register(services, paths, Dispatcher, options))
@@ -75,6 +83,15 @@ public partial class App : Application
 			ActivateMainWindow(options); // a second start arrived while this one was still starting
 		logger.LogInformation("Startup: host built {Host} ms, state loaded {State} ms, window created {Created} ms, shown {Shown} ms",
 			hostBuilt, stateLoaded, windowCreated, startup.ElapsedMilliseconds);
+	}
+
+	/// <summary>True when an update was scheduled and this process must exit now (the script restarts it).</summary>
+	private static bool UpdateBeforeStart(StartupOptions options, AppPaths paths)
+	{
+		using var loggers = new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger);
+		var sourceLocation = new SourceBuilds(Path.Combine(paths.DataRoot, Constants.Switch.AppSettingsFileName)).ReadSourceLocation();
+		var updater = new WpfSelfUpdater(AppContext.BaseDirectory, sourceLocation, new PowerShellScriptLauncher(), Path.GetTempPath(), loggers.CreateLogger<WpfSelfUpdater>());
+		return updater.CheckAndScheduleRestart(Environment.ProcessId, options.Arguments) == SelfUpdateOutcome.RestartScheduled;
 	}
 
 	protected override void OnExit(ExitEventArgs e)
