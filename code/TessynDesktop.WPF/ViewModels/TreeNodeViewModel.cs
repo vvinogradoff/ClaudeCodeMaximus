@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.WPF.ViewModels;
@@ -14,7 +14,6 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	private string _label;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(Glyph))]
 	private bool _isExpanded;
 
 	[ObservableProperty]
@@ -64,8 +63,6 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	/// <summary>Whether the row shows an expander.</summary>
 	public bool CanExpand => IsSessionLike ? WorkerCount > 0 : Children.Count > 0;
 
-	public string Glyph => !CanExpand ? string.Empty : IsExpanded ? "v" : ">";
-
 	public bool IsRunning => State?.Running == true;
 
 	public bool IsFavorite => State?.Favorite == true;
@@ -78,7 +75,6 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	public void RefreshExpander()
 	{
 		OnPropertyChanged(nameof(CanExpand));
-		OnPropertyChanged(nameof(Glyph));
 	}
 
 	partial void OnStateChanged(SessionStateDto? value) => OnPropertyChanged(nameof(CanExpand));
