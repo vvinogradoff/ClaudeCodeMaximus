@@ -77,6 +77,8 @@ System.Text.Json).
 | A18 | Supervisor decision, accepted: a ProfileId pin or an explicit per-turn choice that does not resolve is an error. A legacy name-only label that matches no profile runs on Default, with a visible note. |
 | A19 | Deploy the Tessyn Web update now (refs, previews, attachments, and the nginx upload block). Uploads fail with a clear message until the desktop runs rollout 3. Done 2026-11-15. |
 | A20 | Apply the documentation for the work merged on 2026-11-15, by the A10 procedure. |
+| A21 | Supervisor decision, accepted by default: the WPF E2E tests use a `--test-drop` startup seam, honoured only with `--test-window`. |
+| A22 | Next wave: WPF for daily use, meaning P1.J (complete the remote API) plus Phase 3 parity, so the daily driver can switch to WPF. |
 
 ## 3. Why the current UI slows down
 
