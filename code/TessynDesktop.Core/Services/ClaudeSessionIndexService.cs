@@ -26,6 +26,10 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	private readonly object _searchSync = new();
 	private int _activeSearches;
 
+	/// <summary>VACUUM thresholds; defaults from <see cref="Constants.SessionIndex"/>, adjustable so tests need not write 64 MB of free pages.</summary>
+	internal long VacuumMinFreeBytes { get; set; } = Constants.SessionIndex.VacuumMinFreeBytes;
+	internal double VacuumMinFreeRatio { get; set; } = Constants.SessionIndex.VacuumMinFreeRatio;
+
 	// False until the rowid map is known to exist for the whole index (set under the write gate).
 	private volatile bool _schemaMigrated;
 
@@ -466,8 +470,8 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		var free = ScalarLong(conn, Constants.SqlQueries.FreelistCount);
 		freeBytes = free * pageSize;
 		return pages > 0
-			&& freeBytes >= Constants.SessionIndex.VacuumMinFreeBytes
-			&& (double)free / pages >= Constants.SessionIndex.VacuumMinFreeRatio;
+			&& freeBytes >= VacuumMinFreeBytes
+			&& (double)free / pages >= VacuumMinFreeRatio;
 	}
 
 	/// <summary>
@@ -512,7 +516,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	}
 
 	/// <summary>Marks a search as in flight for the lifetime of the scope (see <see cref="TryVacuum"/>).</summary>
-	private readonly struct SearchScope : IDisposable
+	internal readonly struct SearchScope : IDisposable
 	{
 		private readonly ClaudeSessionIndexService _owner;
 
