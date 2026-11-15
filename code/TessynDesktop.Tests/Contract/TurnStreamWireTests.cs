@@ -280,7 +280,7 @@ public sealed class TurnStreamWireTests : IDisposable
 		Assert.Contains("session.send", methods);
 		Assert.DoesNotContain("turn.send", methods);
 		Assert.DoesNotContain("turn.stop", methods);
-		Assert.Equal(21, methods.Count);
+		Assert.Equal(23, methods.Count); // the 21 of the web contract plus file.read and file.preview (Focus refs step 1)
 	}
 
 	[Fact]
