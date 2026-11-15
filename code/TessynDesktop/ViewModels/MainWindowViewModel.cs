@@ -302,8 +302,10 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 		// Repair session files corrupted by the auto-compaction bug (one-time on startup). It reads every session
 		// file (15-30 s cold, ISSUE.016), so it runs off the UI thread; a repaired file only had zero parseable
-		// entries, and SessionFileRewritten may fire on any thread.
-		_ = Task.Run(() =>
+		// entries, and SessionFileRewritten may fire on any thread. It starts only after the last-prompt scan
+		// finished: both read every file, and run together they slowed the scan to 45 s, so the tree rows stayed
+		// bare. Repair finds nothing in practice, so it can wait.
+		_ = StartupWork.RunAfter(sessionTree.LastPromptScanTask, () =>
 		{
 			try
 			{
