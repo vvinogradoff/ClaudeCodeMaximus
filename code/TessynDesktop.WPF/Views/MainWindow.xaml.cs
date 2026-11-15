@@ -68,7 +68,11 @@ public partial class MainWindow : Window
 	private void OnSourceInitialized(object? sender, EventArgs e)
 	{
 		if (_testWindow)
+		{
+			// Never take the user's foreground or keyboard focus, also when WebView2 activates the window later.
+			TestWindowFocusGuard.Apply(new WindowInteropHelper(this).Handle);
 			return;
+		}
 
 		var (monitors, primary) = _placement.GetMonitors();
 		var clamped = _clamper.Clamp(_stateStore.State.Window, monitors, primary);
