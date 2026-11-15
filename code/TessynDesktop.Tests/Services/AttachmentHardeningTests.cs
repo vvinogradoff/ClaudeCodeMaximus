@@ -411,7 +411,45 @@ public sealed class AttachmentHardeningTests : IDisposable
 		var ex = Assert.Throws<TdcpException>(() => service.Import(NodeId, Source(new string('f', 100) + ".txt", [1])));
 
 		Assert.Contains("too long", ex.Message);
-		Assert.Empty(Directory.GetFiles(deepRoot, "*", SearchOption.AllDirectories));
+		// N2: a refused import creates no folder at all, so there is nothing to list.
+		Assert.Empty(Directory.Exists(deepRoot) ? Directory.GetFiles(deepRoot, "*", SearchOption.AllDirectories) : []);
+	}
+
+	[Fact]
+	public void N2_A_refused_import_leaves_no_empty_node_folder()
+	{
+		var deepRoot = Path.Combine(_env.Base.Root, new string('d', 120), new string('e', 100));
+		var service = new AttachmentService(
+			_env.Base.Registry, _env.Base.Settings, _ => null, _blobs, deepRoot, _env.Clock, userProfile: _env.UserProfile);
+
+		Assert.Throws<TdcpException>(() => service.Import(NodeId, Source(new string('f', 100) + ".txt", [1])));
+
+		Assert.False(Directory.Exists(Path.Combine(deepRoot, "attachments", "default", NodeId)));
+	}
+
+	[Fact]
+	public async Task N2_A_fetch_refused_after_the_download_leaves_no_empty_node_folder()
+	{
+		_blobs.Content = [1, 2];
+
+		await Assert.ThrowsAsync<TdcpException>(() => _attachments.FetchAsync(NodeId, new string('a', 32), "x.bin", 2, Sha([9, 9]), CancellationToken.None));
+
+		Assert.False(Directory.Exists(Path.Combine(Root, "default", NodeId)));
+	}
+
+	[Fact]
+	public async Task N4_A_name_too_long_for_the_path_limit_is_refused_before_the_download()
+	{
+		var deepRoot = Path.Combine(_env.Base.Root, new string('d', 120), new string('e', 100));
+		var service = new AttachmentService(
+			_env.Base.Registry, _env.Base.Settings, _ => null, _blobs, deepRoot, _env.Clock, userProfile: _env.UserProfile);
+		_blobs.Content = [1];
+
+		var ex = await Assert.ThrowsAsync<TdcpException>(() => service.FetchAsync(NodeId, new string('a', 32), new string('f', 100) + ".txt", 1, Sha([1]), CancellationToken.None));
+
+		Assert.Contains("too long", ex.Message);
+		Assert.Null(_blobs.LastBlobId); // nothing was downloaded
+		Assert.False(Directory.Exists(Path.Combine(deepRoot, "attachments")));
 	}
 
 	// ── test 6: parallel imports ─────────────────────────────────────────────
