@@ -72,6 +72,11 @@ System.Text.Json).
 | A12 | Attachments are stored per profile in app data. |
 | A13 | https media previews auto-load from an allowlist; other hosts are click-to-load. |
 | A14 | A queued send keeps the model, profile and effort that were selected when Send was pressed. |
+| A16 | Supervisor decision, accepted: the A11 working-directory default comes with a one-time settings migration (`FileAccess.ModeRevision`). |
+| A17 | Supervisor decision, accepted: the index orphan purge keeps every session still referred to by the Tessyn tree. |
+| A18 | Supervisor decision, accepted: a ProfileId pin or an explicit per-turn choice that does not resolve is an error. A legacy name-only label that matches no profile runs on Default, with a visible note. |
+| A19 | Deploy the Tessyn Web update now (refs, previews, attachments, and the nginx upload block). Uploads fail with a clear message until the desktop runs rollout 3. Done 2026-11-15. |
+| A20 | Apply the documentation for the work merged on 2026-11-15, by the A10 procedure. |
 
 ## 3. Why the current UI slows down
 
