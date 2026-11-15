@@ -28,6 +28,9 @@ public sealed class ClientStateModel
 	/// <summary>The session tag area shows up to <see cref="Constants.TagArea.MaxFullLines"/> lines (FR.24 "full") instead of one line ("mini"). Global, not per session.</summary>
 	public bool TagAreaExpanded { get; set; }
 
+	/// <summary>The command bar (model, effort, profile) under the input box is shown (FR.12.11). Global for the WPF client, not per working directory.</summary>
+	public bool CommandBarVisible { get; set; } = true;
+
 	/// <summary>Typed, versioned settings sections by name (see <see cref="IClientSettingsStore"/>); new sections never need a new property here.</summary>
 	public Dictionary<string, ClientSectionModel> Sections { get; set; } = new();
 }

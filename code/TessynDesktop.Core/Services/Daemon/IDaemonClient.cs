@@ -160,6 +160,9 @@ public interface IDaemonClient
 	/// <summary>All Attention Items of a session, any status, ordered per FR.23.2.</summary>
 	IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId);
 
+	/// <summary>False when the ledger of the node could not be read, so <see cref="GetAttentionItems"/> is empty without meaning "no items" (see <see cref="IAttentionService.IsLedgerReadable"/>).</summary>
+	bool IsAttentionLedgerReadable(string nodeId) => true;
+
 	/// <summary>Open-item count (Decided excluded) and most severe open kind — the Focus badge's inputs (FR.23.13) — plus both over every open item (Decided included) for the session-row badge in the tree and the Recent dropdown.</summary>
 	AttentionSummaryModel GetAttentionSummary(string nodeId);
 

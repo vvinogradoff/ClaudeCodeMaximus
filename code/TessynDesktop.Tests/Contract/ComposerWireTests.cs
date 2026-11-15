@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
+using TessynDesktop.Tests.Services;
 using TessynDesktop.Tests.Services.Turns;
 using Xunit;
 
@@ -246,6 +247,74 @@ public sealed class ComposerWireTests : IDisposable
 		AssertGolden("draft.delete", deleted["result"]!);
 		Assert.False(gone["result"]!["deleted"]!.GetValue<bool>());
 		Assert.Null(_env.Drafts.LoadDraft(_env.Session.FileName));
+	}
+
+	// FR.23.19: the optional itemId addresses the reply draft of a Focus item; the answers keep the shapes of the composer draft (same golden files).
+	[Fact]
+	public async Task Drafts_WithAnItemId_HaveTheSameGoldenShapes_AndLeaveTheComposerDraftAlone()
+	{
+		_env.Drafts.SaveDraft(_env.Session.FileName, "composer text");
+		PostItem("first");
+
+		var empty   = await CallAsync("draft.get", P(("itemId", "A1")));
+		var set     = await CallAsync("draft.set", P(("itemId", "A1"), ("text", "hello"), ("baseRevision", RemoteProtocol.Composer.EmptyDraftRevision)));
+		var read    = await CallAsync("draft.get", P(("itemId", "A1")));
+		var deleted = await CallAsync("draft.delete", P(("itemId", "A1")));
+		var gone    = await CallAsync("draft.delete", P(("itemId", "A1")));
+
+		AssertGolden("draft.get.empty", empty["result"]!);
+		AssertGolden("draft.set", set["result"]!);
+		AssertGolden("draft.get", read["result"]!);
+		AssertGolden("draft.delete", deleted["result"]!);
+		Assert.False(gone["result"]!["deleted"]!.GetValue<bool>());
+		Assert.Null(_env.Drafts.LoadItemDraft(_env.Session.FileName, "A1"));
+		Assert.Equal("composer text", _env.Drafts.LoadDraft(_env.Session.FileName));
+	}
+
+	[Fact]
+	public async Task DraftSet_WithAnItemId_WritesTheItemDraftOnly_AndItsStaleBaseRevisionIsDraftChanged()
+	{
+		PostItem("first");
+		var a2 = PostItem("second");
+		await CallAsync("draft.set", P(("itemId", a2), ("text", "reply")));
+
+		Assert.Equal("reply", _env.Drafts.LoadItemDraft(_env.Session.FileName, a2));
+		Assert.Null(_env.Drafts.LoadDraft(_env.Session.FileName));
+
+		var stale = await CallAsync("draft.set", P(("itemId", a2), ("text", "mine"), ("baseRevision", RemoteProtocol.Composer.EmptyDraftRevision)));
+		Assert.Equal(-32000, ErrorCode(stale));
+		Assert.Equal("reply", _env.Drafts.LoadItemDraft(_env.Session.FileName, a2));
+	}
+
+	[Theory]
+	[InlineData("draft.get")]
+	[InlineData("draft.set")]
+	[InlineData("draft.delete")]
+	public async Task DraftMethods_WithAnUnknownOrClosedItem_AreInvalidParams(string method)
+	{
+		var closed = PostItem("closed one");
+		_env.Attention.Service.CloseByUser(_env.Session, closed);
+
+		var unknown = await CallAsync(method, P(("itemId", "A99"), ("text", "t")));
+		var closedResponse = await CallAsync(method, P(("itemId", closed), ("text", "t")));
+
+		Assert.Equal(-32602, ErrorCode(unknown));
+		Assert.Equal(-32602, ErrorCode(closedResponse));
+		Assert.Null(_env.Drafts.LoadItemDraft(_env.Session.FileName, closed));
+	}
+
+	private string PostItem(string title) =>
+		_env.Attention.Service.Post(_env.Session, [AttentionTestEnv.Req(title)]).Single().Item.Id;
+
+	[Theory]
+	[InlineData("draft.get")]
+	[InlineData("draft.set")]
+	[InlineData("draft.delete")]
+	public async Task DraftMethods_WithAnItemIdThatCannotBeAFileName_AreInvalidParams(string method)
+	{
+		var response = await CallAsync(method, P(("itemId", "a/b"), ("text", "t")));
+
+		Assert.Equal(-32602, ErrorCode(response));
 	}
 
 	[Fact]

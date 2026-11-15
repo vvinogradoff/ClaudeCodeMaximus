@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using TessynDesktop.Models;
@@ -27,9 +28,100 @@ public sealed class DraftService : IDraftService
 		Directory.CreateDirectory(_draftsDirectory);
 	}
 
-	public string? LoadDraft(string sessionFileName)
+	public string? LoadDraft(string sessionFileName) => Read(GetDraftPath(sessionFileName));
+
+	public void SaveDraft(string sessionFileName, string text) => SaveCore(sessionFileName, null, text);
+
+	public void DeleteDraft(string sessionFileName) => DeleteCore(sessionFileName, null);
+
+	public bool TryWriteDraft(string sessionFileName, string text, Func<string?, bool> isExpected)
+		=> TryWriteCore(sessionFileName, null, text, isExpected);
+
+	public string? LoadItemDraft(string sessionFileName, string itemId) => Read(GetItemDraftPath(sessionFileName, itemId));
+
+	public void SaveItemDraft(string sessionFileName, string itemId, string text) => SaveCore(sessionFileName, itemId, text);
+
+	public void DeleteItemDraft(string sessionFileName, string itemId) => DeleteCore(sessionFileName, itemId);
+
+	public bool TryWriteItemDraft(string sessionFileName, string itemId, string text, Func<string?, bool> isExpected)
+		=> TryWriteCore(sessionFileName, itemId, text, isExpected);
+
+	public IReadOnlyList<string> ListItemDraftIds(string sessionFileName)
 	{
-		var path = GetDraftPath(sessionFileName);
+		var prefix = sessionFileName + Constants.ItemDraftInfix;
+		var ids = new List<string>();
+		foreach (var path in Directory.EnumerateFiles(_draftsDirectory, prefix + "*" + Constants.DraftFileExtension))
+		{
+			var name = Path.GetFileName(path);
+			var id = name[prefix.Length..^Constants.DraftFileExtension.Length];
+			if (IsValidItemId(id))
+				ids.Add(id);
+		}
+		return ids;
+	}
+
+	public void DeleteItemDrafts(string sessionFileName)
+	{
+		foreach (var id in ListItemDraftIds(sessionFileName))
+			DeleteItemDraft(sessionFileName, id);
+	}
+
+	/// <summary>True for an item id that can be part of a draft file name: letters, digits, '_' and '-', at most <see cref="Constants.MaxItemIdLength"/> characters.</summary>
+	public static bool IsValidItemId(string? itemId)
+	{
+		if (string.IsNullOrEmpty(itemId) || itemId.Length > Constants.MaxItemIdLength)
+			return false;
+
+		foreach (var c in itemId)
+		{
+			if (!(char.IsAsciiLetterOrDigit(c) || c == '_' || c == '-'))
+				return false;
+		}
+		return true;
+	}
+
+	private void SaveCore(string sessionFileName, string? itemId, string text)
+	{
+		bool changed;
+		lock (_writeGate)
+			changed = Write(PathOf(sessionFileName, itemId), text);
+
+		if (changed)
+			DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName, itemId));
+	}
+
+	private void DeleteCore(string sessionFileName, string? itemId)
+	{
+		bool changed;
+		lock (_writeGate)
+			changed = Delete(PathOf(sessionFileName, itemId));
+
+		if (changed)
+			DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName, itemId));
+	}
+
+	private bool TryWriteCore(string sessionFileName, string? itemId, string text, Func<string?, bool> isExpected)
+	{
+		var path = PathOf(sessionFileName, itemId);
+		bool changed;
+		lock (_writeGate)
+		{
+			if (!isExpected(Read(path)))
+				return false;
+
+			changed = text.Length == 0 ? Delete(path) : Write(path, text);
+		}
+
+		if (changed)
+			DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName, itemId));
+		return true;
+	}
+
+	private string PathOf(string sessionFileName, string? itemId)
+		=> itemId == null ? GetDraftPath(sessionFileName) : GetItemDraftPath(sessionFileName, itemId);
+
+	private static string? Read(string path)
+	{
 		if (!File.Exists(path))
 			return null;
 
@@ -37,51 +129,14 @@ public sealed class DraftService : IDraftService
 		return string.IsNullOrEmpty(text) ? null : text;
 	}
 
-	public void SaveDraft(string sessionFileName, string text)
+	private static bool Write(string path, string text)
 	{
-		bool changed;
-		lock (_writeGate)
-			changed = Write(sessionFileName, text);
-
-		if (changed)
-			DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
-	}
-
-	public void DeleteDraft(string sessionFileName)
-	{
-		bool changed;
-		lock (_writeGate)
-			changed = Delete(sessionFileName);
-
-		if (changed)
-			DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
-	}
-
-	public bool TryWriteDraft(string sessionFileName, string text, Func<string?, bool> isExpected)
-	{
-		bool changed;
-		lock (_writeGate)
-		{
-			if (!isExpected(LoadDraft(sessionFileName)))
-				return false;
-
-			changed = text.Length == 0 ? Delete(sessionFileName) : Write(sessionFileName, text);
-		}
-
-		if (changed)
-			DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
+		File.WriteAllText(path, text, Encoding.UTF8);
 		return true;
 	}
 
-	private bool Write(string sessionFileName, string text)
+	private static bool Delete(string path)
 	{
-		File.WriteAllText(GetDraftPath(sessionFileName), text, Encoding.UTF8);
-		return true;
-	}
-
-	private bool Delete(string sessionFileName)
-	{
-		var path = GetDraftPath(sessionFileName);
 		if (!File.Exists(path))
 			return false;
 
@@ -103,6 +158,14 @@ public sealed class DraftService : IDraftService
 
 	private string GetDraftPath(string sessionFileName)
 		=> Path.Combine(_draftsDirectory, sessionFileName + Constants.DraftFileExtension);
+
+	private string GetItemDraftPath(string sessionFileName, string itemId)
+	{
+		if (!IsValidItemId(itemId))
+			throw new ArgumentException("Not a valid Focus item id", nameof(itemId));
+
+		return Path.Combine(_draftsDirectory, sessionFileName + Constants.ItemDraftInfix + itemId + Constants.DraftFileExtension);
+	}
 
 	private static string GetDefaultDraftsDir()
 	{

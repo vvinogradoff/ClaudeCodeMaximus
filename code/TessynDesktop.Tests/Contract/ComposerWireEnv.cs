@@ -78,7 +78,7 @@ internal sealed class ComposerWireEnv : IDisposable
 			runInfo: runInfo, eventLog: helloLog, turnEngine: Engine,
 			drafts: withDrafts ? Drafts : null, codeIndex: withCodeIndex ? CodeIndex : null, authErrors: AuthErrors);
 
-		Dispatcher = new TdcpDispatcher([hello, turnModule, new DraftRpcModule(Registry, Drafts), Autocomplete]);
+		Dispatcher = new TdcpDispatcher([hello, turnModule, new DraftRpcModule(Registry, Drafts, Attention.Service), Autocomplete]);
 		Host = new TdcpTestHost(Dispatcher, bus: bus, runInfo: runInfo);
 
 		// The file service's TurnCompleted becomes turn.completed, as RemoteNotificationPublisher does.

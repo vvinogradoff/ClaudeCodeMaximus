@@ -16,9 +16,11 @@ namespace TessynDesktop.ViewModels;
 /// The Focus view of one session (FR.23.12-FR.23.16): the Session/Focus selection (in memory only),
 /// the Focus badge, and the cards of the session's Attention Ledger. Reaches the ledger only through
 /// <see cref="IDaemonClient"/> and refreshes on the UI thread when <c>AttentionChanged</c> fires for its node.
+/// The unsent reply text of every card is kept in the draft store (FR.23.19): saved after a pause in typing, flushed by <see cref="Dispose"/>,
+/// restored when the card is created, deleted when the reply is sent or the item closes.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class FocusViewModel : ViewModelBase, IDisposable
+public sealed class FocusViewModel : ViewModelBase, IDisposable, IFlushesDrafts
 {
 	private static readonly ILogger _log = Log.ForContext<FocusViewModel>();
 
@@ -27,6 +29,9 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 	private readonly IUiDispatcher _dispatcher;
 	private readonly Func<string, Task> _sendPrompt;
 	private readonly Dictionary<string, FocusItemViewModel> _cards = new(StringComparer.OrdinalIgnoreCase);
+	private readonly FocusReplyDrafts? _replyDrafts;
+	private bool _restoringDraft;
+	private bool _prunedDrafts;
 
 	private bool _isFocusSelected;
 	private bool _isClosedExpanded;
@@ -37,13 +42,17 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 
 	/// <param name="nodeId">The session's NodeId; events of other nodes are ignored.</param>
 	/// <param name="sendPrompt">Sends a prompt through the session's interactive send path without touching the input box or draft (FR.23.15).</param>
+	/// <param name="drafts">The draft store of the reply boxes (FR.23.19); null keeps no drafts.</param>
+	/// <param name="sessionFileName">The session file the reply drafts belong to; required with <paramref name="drafts"/>.</param>
+	/// <param name="draftDebounce">The pause in typing before a reply draft is written; <see cref="Constants.DraftDebounceMilliseconds"/> by default.</param>
 	public FocusViewModel(string nodeId, IDaemonClient daemonClient, IUiDispatcher dispatcher,
-		Func<string, Task> sendPrompt)
+		Func<string, Task> sendPrompt, IDraftService? drafts = null, string? sessionFileName = null, TimeSpan? draftDebounce = null)
 	{
 		_nodeId = nodeId;
 		_daemonClient = daemonClient;
 		_dispatcher = dispatcher;
 		_sendPrompt = sendPrompt;
+		_replyDrafts = drafts == null || sessionFileName == null ? null : new FocusReplyDrafts(drafts, sessionFileName, draftDebounce);
 
 		var canExecute = this.WhenAnyValue(x => x.ReplyCount)
 			.Select(count => count > 0);
@@ -155,7 +164,15 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 	/// <summary>Switches to the Session view (used by Enter in the output search box, FR.23.12).</summary>
 	public void SelectSession() => SetSelection(false);
 
-	public void Dispose() => _daemonClient.AttentionChanged -= OnAttentionChanged;
+	/// <summary>Writes the reply texts still waiting for their pause (the exit path, FR.23.19).</summary>
+	public void FlushDrafts() => _replyDrafts?.Flush();
+
+	/// <summary>Stops listening and writes the reply texts still waiting for their pause (the close path, FR.23.19).</summary>
+	public void Dispose()
+	{
+		_daemonClient.AttentionChanged -= OnAttentionChanged;
+		_replyDrafts?.Dispose();
+	}
 
 	private void SetSelection(bool focus)
 	{
@@ -182,6 +199,7 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 	private void Refresh()
 	{
 		var items = _daemonClient.GetAttentionItems(_nodeId);
+		var ledgerReadable = _daemonClient.IsAttentionLedgerReadable(_nodeId);
 
 		var open = new List<FocusItemViewModel>();
 		var decided = new List<FocusItemViewModel>();
@@ -197,6 +215,7 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 			{
 				// A closed card has no reply box, so unsent text on it is dropped.
 				card.ReplyText = string.Empty;
+				_replyDrafts?.DiscardClosed(item.Id, ledgerReadable);
 				closed.Add(card);
 			}
 			else if (item.Kind == AttentionKind.Decided)
@@ -205,8 +224,18 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 				open.Add(card);
 		}
 
+		// Only a ledger that was read: an unreadable one answers with no items, and that must not delete every draft. Tried again on the next refresh.
+		if (!_prunedDrafts && ledgerReadable)
+		{
+			_prunedDrafts = true;
+			_replyDrafts?.Prune(items.Where(i => i.Status == AttentionStatus.Open).Select(i => i.Id));
+		}
+
 		foreach (var staleId in _cards.Keys.Where(id => !seen.Contains(id)).ToList())
+		{
 			_cards.Remove(staleId);
+			_replyDrafts?.DiscardClosed(staleId, ledgerReadable);
+		}
 
 		Sync(OpenItems, open);
 		Sync(DecidedItems, decided);
@@ -233,9 +262,47 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 			return existing;
 		}
 
-		var card = new FocusItemViewModel(item, UpdateReplyCount, CloseItem, card => SendCards([card]));
+		var card = new FocusItemViewModel(item, OnReplyChanged, CloseItem, card => SendCards([card]));
 		_cards[item.Id] = card;
+		RestoreDraft(card, item);
 		return card;
+	}
+
+	/// <summary>A reply box changed: the "Send answers" count follows and the text is queued for the draft store (FR.23.19).</summary>
+	private void OnReplyChanged(FocusItemViewModel card)
+	{
+		UpdateReplyCount();
+		if (_restoringDraft)
+			return;
+
+		_replyDrafts?.Queue(card.Id, card.ReplyText);
+	}
+
+	/// <summary>Fills a new card from its stored reply draft; a card of a closed item has no reply box, so its draft is dropped instead (FR.23.19).</summary>
+	private void RestoreDraft(FocusItemViewModel card, AttentionItemModel item)
+	{
+		if (_replyDrafts == null)
+			return;
+
+		if (item.Status != AttentionStatus.Open)
+		{
+			_replyDrafts.DiscardClosed(item.Id, _daemonClient.IsAttentionLedgerReadable(_nodeId));
+			return;
+		}
+
+		var text = _replyDrafts.Load(item.Id);
+		if (string.IsNullOrEmpty(text))
+			return;
+
+		_restoringDraft = true;
+		try
+		{
+			card.ReplyText = text;
+		}
+		finally
+		{
+			_restoringDraft = false;
+		}
 	}
 
 	/// <summary>Brings <paramref name="target"/> to the same sequence as <paramref name="desired"/> with minimal moves, so unchanged cards are not rebuilt.</summary>
@@ -285,7 +352,10 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 			return;
 
 		foreach (var card in cards)
+		{
 			card.ReplyText = string.Empty;
+			_replyDrafts?.Discard(card.Id);
+		}
 
 		Task sendTask;
 		try

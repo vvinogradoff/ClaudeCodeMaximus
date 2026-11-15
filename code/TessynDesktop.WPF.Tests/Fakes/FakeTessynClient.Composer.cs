@@ -53,6 +53,44 @@ public sealed partial class FakeTessynClient
 		return Task.FromResult(new DraftSetResult(RevisionOf(text)));
 	}
 
+	/// <summary>The reply drafts of the fake daemon, by (session, item).</summary>
+	public Dictionary<(string NodeId, string ItemId), string> ReplyDraftTexts { get; } = [];
+
+	/// <summary>Items the fake daemon refuses reply drafts for, as it does for an unknown or closed item (-32602).</summary>
+	public HashSet<(string NodeId, string ItemId)> ClosedReplyItems { get; } = [];
+
+	/// <summary>When set, <see cref="ReplyDraftSetAsync"/> throws it.</summary>
+	public Exception? ReplyDraftSetException { get; set; }
+
+	public Task<DraftGetResult> ReplyDraftGetAsync(string nodeId, string itemId, CancellationToken cancellationToken = default)
+	{
+		Record($"draft.get:{nodeId}:{itemId}");
+		if (ClosedReplyItems.Contains((nodeId, itemId)))
+			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, "'itemId' is not an open item of the session");
+
+		ReplyDraftTexts.TryGetValue((nodeId, itemId), out var text);
+		return Task.FromResult(new DraftGetResult(text ?? string.Empty, RevisionOf(text)));
+	}
+
+	public Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, CancellationToken cancellationToken = default)
+	{
+		Record($"draft.set:{nodeId}:{itemId}:{baseRevision ?? "-"}");
+		if (ReplyDraftSetException != null)
+			throw ReplyDraftSetException;
+		if (ClosedReplyItems.Contains((nodeId, itemId)))
+			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, "'itemId' is not an open item of the session");
+
+		ReplyDraftTexts.TryGetValue((nodeId, itemId), out var current);
+		if (baseRevision != null && baseRevision != RevisionOf(current))
+			throw DraftChangedConflict();
+
+		if (text.Length == 0)
+			ReplyDraftTexts.Remove((nodeId, itemId));
+		else
+			ReplyDraftTexts[(nodeId, itemId)] = text;
+		return Task.FromResult(new DraftSetResult(RevisionOf(text)));
+	}
+
 	public Task<DraftDeleteResult> DraftDeleteAsync(string nodeId, CancellationToken cancellationToken = default)
 	{
 		Record($"draft.delete:{nodeId}");

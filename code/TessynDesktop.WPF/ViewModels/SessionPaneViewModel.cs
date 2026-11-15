@@ -125,6 +125,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_cache = new TranscriptCache(cacheCapacity);
 		_media = media;
 		InitializeComposer(stateStore);
+		InitializeInputArea(stateStore);
 		InitializeToolbar();
 		InitializeDrafts();
 		InitializeAutocomplete();
@@ -201,7 +202,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private async Task<bool> OpenCoreAsync(string nodeId, string? title, JumpTarget? target, SessionEntriesResult? preloaded, Action? shown)
 	{
 		var wasShown = false;
-		if (nodeId != NodeId)
+		var switching = nodeId != NodeId;
+		if (switching)
 			AbandonImport();   // first: a copy that ends at once still adds to the text this switch is about to save
 		if (NodeId != null)
 			LeaveDraft(NodeId, InputText);
@@ -216,6 +218,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		ResetRunningForOpen();
 		ResetSelectionForOpen();
 		ResetAuthForOpen();
+		if (switching)
+			ResetViewForOpen(nodeId);   // FR.23.12, FR.12.29: the session's view, and that view's default input area
+		if (target != null)
+			IsFocusSelected = false;   // a jump lands on the transcript
 		Error = null;
 		Tags.Clear();
 		FindBarVisible = false;
@@ -322,6 +328,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	[RelayCommand]
 	private void ShowFind()
 	{
+		ShowTranscriptForFind();
 		FindBarVisible = true;
 		FindFocusRequested?.Invoke(this, EventArgs.Empty);
 	}
@@ -335,14 +342,30 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	}
 
 	[RelayCommand]
-	private void FindNext() => _surface.FindStep(1);
+	private void FindNext()
+	{
+		ShowTranscriptForFind();
+		_surface.FindStep(1);
+	}
 
 	[RelayCommand]
-	private void FindPrevious() => _surface.FindStep(-1);
+	private void FindPrevious()
+	{
+		ShowTranscriptForFind();
+		_surface.FindStep(-1);
+	}
+
+	/// <summary>Search always searches the transcript, so a search from the Focus view switches to the Session view first (FR.23.12).</summary>
+	private void ShowTranscriptForFind()
+	{
+		if (IsFocusSelected)
+			IsFocusSelected = false;
+	}
 
 	[RelayCommand]
 	private Task FindAsync()
 	{
+		ShowTranscriptForFind();
 		_findTask = RunFindAsync(FindText);
 		return _findTask;
 	}

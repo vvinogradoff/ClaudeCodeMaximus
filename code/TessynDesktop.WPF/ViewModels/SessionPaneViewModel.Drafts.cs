@@ -18,6 +18,9 @@ public sealed partial class SessionPaneViewModel
 	/// <summary>Writes drafts to the daemon; the app flushes it at exit.</summary>
 	public DraftSynchronizer DraftSync { get; private set; } = null!;
 
+	/// <summary>Writes every pending draft, the composer's and the Focus reply boxes' (FR.23.19); the app calls it at exit.</summary>
+	public Task FlushDraftsAsync() => Task.WhenAll(DraftSync.FlushAllAsync(), Focus.FlushDraftsAsync());
+
 	private void InitializeDrafts()
 	{
 		DraftSync = new DraftSynchronizer(_client, _logger, Constants.ComposerLimits.DraftSaveDelay);
@@ -113,6 +116,10 @@ public sealed partial class SessionPaneViewModel
 
 	private void OnDraftChanged(DraftChangedPayload payload)
 	{
+		// FR.23.19: the reply draft of a Focus item has its own revision and is not the composer text; it must not trigger a reconcile or drop the cache.
+		if (payload.ItemId != null)
+			return;
+
 		if (DraftSync.IsKnownRevision(payload.NodeId, payload.Revision))
 			return;   // our own write
 

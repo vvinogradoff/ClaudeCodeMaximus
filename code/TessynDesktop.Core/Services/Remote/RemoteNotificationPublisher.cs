@@ -246,10 +246,15 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	private void OnDraftChanged(object? sender, DraftChangedEventArgs e) => Guard(() =>
 	{
 		var fileName = e.FileName;
+		var itemId   = e.ItemId;
 		_bus.PublishCoalesced(
-			RemoteProtocol.Composer.DraftChangedEvent, FileKeyPrefix + fileName,
-			() => BuildDraftChangedPayload(fileName),
+			RemoteProtocol.Composer.DraftChangedEvent, FileKeyPrefix + fileName + (itemId == null ? string.Empty : Constants.ItemDraftInfix + itemId),
+			() => BuildDraftChangedPayload(fileName, itemId),
 			Constants.Composer.DraftChangedWindow);
+
+		// A Focus reply draft (FR.23.19) is neither HasDraft nor last activity of the session: no row refresh.
+		if (itemId != null)
+			return;
 
 		// HasDraft is part of the session state (and moves the last-activity time), so the row state is refreshed too. The activity service
 		// caches the draft by its file stamp, so the state read when the window ends already sees the write.
@@ -259,10 +264,14 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			Constants.Remote.Timings.SessionChangedWindow);
 	});
 
-	private DraftChangedPayload? BuildDraftChangedPayload(string fileName)
+	private DraftChangedPayload? BuildDraftChangedPayload(string fileName, string? itemId)
 	{
 		var node = _daemon.FindSessionByFileName(fileName);
-		return node == null || _drafts == null ? null : new DraftChangedPayload(node.NodeId, _revisions.Of(_drafts.LoadDraft(fileName)));
+		if (node == null || _drafts == null)
+			return null;
+
+		var text = itemId == null ? _drafts.LoadDraft(fileName) : _drafts.LoadItemDraft(fileName, itemId);
+		return new DraftChangedPayload(node.NodeId, _revisions.Of(text), itemId);
 	}
 
 	// schedule.changed is local-stream only (the relay filters it). The scheduler event does not say what changed, so when the window ends the schedule ids

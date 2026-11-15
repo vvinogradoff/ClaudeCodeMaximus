@@ -121,6 +121,11 @@ internal sealed class FakeAttentionService : IAttentionService
 
 	public int SubscriberCount => AttentionChanged?.GetInvocationList().Length ?? 0;
 
+	/// <summary>What <see cref="IsLedgerReadable"/> answers.</summary>
+	public bool LedgerReadable { get; set; } = true;
+
+	public bool IsLedgerReadable(string nodeId) => LedgerReadable;
+
 	public void Raise(string nodeId) => AttentionChanged?.Invoke(this, new AttentionChangedEventArgs(nodeId));
 
 	public IReadOnlyList<AttentionPostOutcomeModel> Post(SessionNodeModel node, IReadOnlyList<AttentionPostRequestModel> requests) =>

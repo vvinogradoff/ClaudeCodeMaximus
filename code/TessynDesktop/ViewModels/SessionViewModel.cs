@@ -27,7 +27,7 @@ namespace TessynDesktop.ViewModels;
 /// SessionView.axaml.cs) working unchanged (Stage 7 decomposition of the former 2551-LOC class).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class SessionViewModel : ViewModelBase, IDisposable
+public sealed class SessionViewModel : ViewModelBase, IDisposable, IFlushesDrafts
 {
 	private static readonly ILogger _log = Log.ForContext<SessionViewModel>();
 
@@ -461,7 +461,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// leave the input box and its draft alone (FR.23.15). The main Send button has no enable rule, so Send
 		// answers only needs a non-empty reply box (FR.23.14).
 		FocusVm = new FocusViewModel(node.Model.NodeId, daemonClient, uiDispatcher,
-			prompt => _turn.SendAsync(prompt, preserveInput: true));
+			prompt => _turn.SendAsync(prompt, preserveInput: true), draftService, node.FileName);
 
 		TagsVm = new SessionTagsViewModel(node.Model.NodeId, daemonClient, uiDispatcher, new SessionTagLauncher(),
 			node.WhenAnyValue(x => x.Name));
@@ -606,6 +606,29 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	public bool CanEvict =>
 		!IsBusy && !IsNodeRunning && !IsStreamingProcessAlive && !IsExternallyActive && string.IsNullOrWhiteSpace(InputText);
 
+	/// <summary>Writes the composer draft and the Focus reply drafts that are still waiting for their pause. The exit path calls it for every cached session (FR.23.19).</summary>
+	public void FlushDrafts()
+	{
+		if (_disposed)
+			return;
+
+		WritePendingComposerDraft();
+		FocusVm.FlushDrafts();
+	}
+
+	private void WritePendingComposerDraft()
+	{
+		if (_draftDebounceTimer == null)
+			return;
+
+		_draftDebounceTimer.Stop();
+		_draftDebounceTimer = null;
+		if (string.IsNullOrWhiteSpace(_inputText))
+			_draftService.DeleteDraft(_node.FileName);
+		else
+			_draftService.SaveDraft(_node.FileName, _inputText);
+	}
+
 	public void Dispose()
 	{
 		if (_disposed)
@@ -615,15 +638,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_nodeSubscriptions.Dispose();
 
 		// A pending debounced draft write would otherwise be lost (or fire later on a dead view model): write it now.
-		if (_draftDebounceTimer != null)
-		{
-			_draftDebounceTimer.Stop();
-			_draftDebounceTimer = null;
-			if (string.IsNullOrWhiteSpace(_inputText))
-				_draftService.DeleteDraft(_node.FileName);
-			else
-				_draftService.SaveDraft(_node.FileName, _inputText);
-		}
+		WritePendingComposerDraft();
 
 		_daemonClient.ScheduleChanged -= OnScheduleChanged;
 		_daemonClient.SessionSettingsChanged -= OnSessionSettingsChanged;

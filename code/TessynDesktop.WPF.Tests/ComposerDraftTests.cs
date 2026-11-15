@@ -205,6 +205,39 @@ public sealed class ComposerDraftTests : IDisposable
 		await WaitForAsync(() => pane.InputText == "theirs" + Environment.NewLine + "mine", "merged");
 	}
 
+	// FR.23.19: the reply draft of a Focus item (draft.changed with itemId) is not the composer text.
+	[Fact]
+	public async Task AReplyDraftChange_OfTheOpenSession_IsIgnored_NoReconcileAndTheTextStays()
+	{
+		var pane = CreatePane();
+		await pane.OpenAsync(A);
+		await WaitForAsync(() => Count("draft.get:a") == 1, "draft.get");
+		_client.DraftTexts[A] = "composer text that must not be read";
+
+		_client.RaiseNotification(RemoteProtocol.Composer.DraftChangedEvent, new DraftChangedPayload(A, "reply-revision", "A1"));
+		await Task.Delay(150);
+
+		Assert.Equal(1, Count("draft.get:a"));
+		Assert.NotEqual("composer text that must not be read", pane.InputText);
+	}
+
+	[Fact]
+	public async Task AReplyDraftChange_OfAnotherSession_KeepsItsCachedDraftAndKnownRevision()
+	{
+		var pane = CreatePane();
+		await pane.OpenAsync(A);
+		pane.InputText = "typed in a";
+		await WaitForAsync(() => pane.DraftSync.IsKnownRevision(A, FakeTessynClient.RevisionOf("typed in a")), "revision recorded");
+		await pane.OpenAsync(B);
+
+		_client.RaiseNotification(RemoteProtocol.Composer.DraftChangedEvent, new DraftChangedPayload(A, "reply-revision", "A1"));
+		await Task.Delay(100);
+		Assert.True(pane.DraftSync.IsKnownRevision(A, FakeTessynClient.RevisionOf("typed in a")));
+		await pane.OpenAsync(A);
+
+		Assert.Equal("typed in a", pane.InputText);
+	}
+
 	[Fact]
 	public async Task OurOwnWritesEcho_DoesNotCauseAReadBack()
 	{
