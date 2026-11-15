@@ -125,6 +125,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_cache = new TranscriptCache(cacheCapacity);
 		_media = media;
 		InitializeComposer(stateStore);
+		InitializeDrafts();
+		InitializeAutocomplete();
 		Focus = focus ?? new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance);
 		Preview = preview;
 		Focus.RefActivated += OnRefActivated;
@@ -201,7 +203,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		if (nodeId != NodeId)
 			AbandonImport();   // first: a copy that ends at once still adds to the text this switch is about to save
 		if (NodeId != null)
-			_drafts[NodeId] = InputText;
+			LeaveDraft(NodeId, InputText);
 
 		var token = ++_openToken;
 		_switchTracker.Begin(nodeId);
@@ -212,12 +214,14 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		IsFavoriteKnown = false;
 		ResetRunningForOpen();
 		ResetSelectionForOpen();
+		ResetAuthForOpen();
 		Error = null;
 		Tags.Clear();
 		FindBarVisible = false;
 		FindText = string.Empty;
 		FindStatus = string.Empty;
-		InputText = _drafts.GetValueOrDefault(nodeId, string.Empty);
+		SetInputQuietly(_drafts.GetValueOrDefault(nodeId, string.Empty));
+		_ = ReconcileDraftAsync(nodeId);
 		IsLoading = true;
 		_current = null;
 		_missedAppend = false;
@@ -297,7 +301,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	public void Close()
 	{
 		if (NodeId != null)
-			_drafts[NodeId] = InputText;
+			LeaveDraft(NodeId, InputText);
 
 		_openToken++;
 		NodeId = null;
@@ -378,6 +382,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	{
 		Title = detail.Name;
 		ApplyFavorite(detail.State);
+		ApplyAuthError(detail.State);
 		ApplySelection(detail.LastUsed);
 		if (stateEventsAtRequest == _stateEvents)
 			SetDaemonRunning(detail.State.Running);
@@ -392,6 +397,12 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	{
 		if (TryHandleTurnNotification(notification))
 			return;
+
+		if (notification.TryGetDraftChanged(out var draftChanged))
+		{
+			_ui.Post(() => OnDraftChanged(draftChanged));
+			return;
+		}
 
 		switch (notification.Method)
 		{
@@ -488,6 +499,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			return;
 
 		ApplyFavorite(state);
+		ApplyAuthError(state);
 		_stateEvents++;
 		SetDaemonRunning(state.Running);
 	}
@@ -502,6 +514,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			// The stream may have lost turn events: what is known about turns in flight is dropped, and the session's own state (a running
 			// turn shows as a generic working row) and its entries are read again. A resume without a gap never gets here.
 			_turnStates.Clear();
+			ResyncDrafts(current != null && HasSession ? current : null);
 			if (current != null && HasSession)
 			{
 				_reloadTask = ReloadAsync();
@@ -773,6 +786,9 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	public void Dispose()
 	{
 		_importCts?.Cancel();
+		DraftSync.Merged -= OnDraftMerged;
+		DraftSync.Dispose();
+		DisposeAutocomplete();
 		_client.NotificationReceived -= OnNotification;
 		_client.Resynced -= OnResynced;
 		_surface.Painted -= OnPainted;

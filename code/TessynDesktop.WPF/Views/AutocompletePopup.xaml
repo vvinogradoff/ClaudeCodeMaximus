@@ -1,0 +1,34 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.AutocompletePopup"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels"
+             Focusable="False">
+    <UserControl.Resources>
+        <!-- A row is a button without a look of its own: a click (or an Invoke of UI Automation) accepts the suggestion, and it never takes the keyboard focus. -->
+        <ControlTemplate x:Key="RowButtonTemplate" TargetType="Button">
+            <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                <ContentPresenter />
+            </Border>
+        </ControlTemplate>
+    </UserControl.Resources>
+    <!-- The suggestions of the prompt input (W1b). The DataContext is the AutocompleteViewModel; keyboard handling is the input box's (it keeps the focus). -->
+    <Border BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+        <ListBox x:Name="List" ItemsSource="{Binding Items}" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}" Focusable="False" MinWidth="340" MaxWidth="620" MaxHeight="260"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Suggestions"
+                 SelectionChanged="OnSelectionChanged">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:AutocompleteItemViewModel}">
+                    <Button Template="{StaticResource RowButtonTemplate}" Focusable="False" Click="OnRowClick" AutomationProperties.Name="{Binding Label}" HorizontalContentAlignment="Stretch">
+                        <DockPanel LastChildFill="True">
+                            <TextBlock DockPanel.Dock="Left" Text="{Binding Kind}" Width="64" Margin="0,0,8,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding Detail}" Margin="12,0,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="260" />
+                            <TextBlock TextTrimming="CharacterEllipsis">
+                                <Run Text="{Binding Before, Mode=OneWay}" /><Run Text="{Binding Match, Mode=OneWay}" FontWeight="Bold" /><Run Text="{Binding After, Mode=OneWay}" />
+                            </TextBlock>
+                        </DockPanel>
+                    </Button>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Border>
+</UserControl>

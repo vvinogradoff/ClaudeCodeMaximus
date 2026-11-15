@@ -1,0 +1,390 @@
+﻿using Microsoft.Extensions.Logging.Abstractions;
+using TessynDesktop.Client;
+using TessynDesktop.Models.Remote;
+using TessynDesktop.WPF.Infrastructure;
+using TessynDesktop.WPF.Rendering;
+using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.State;
+using TessynDesktop.WPF.Tests.Fakes;
+using TessynDesktop.WPF.ViewModels;
+
+namespace TessynDesktop.WPF.Tests;
+
+/// <summary>W1b: the auth-error indicator with Re-authenticate, the completion sound with its acknowledgement, the client's presence registration, and the two W1a leftovers (R1, R2).</summary>
+/// <remarks>Created by Claude</remarks>
+public sealed class ComposerAuthAndSoundTests : IDisposable
+{
+	private const string Node = "a";
+
+	private readonly FakeTessynClient _client = new();
+	private readonly FakeTranscriptSurface _surface = new();
+	private readonly List<IDisposable> _disposables = [];
+
+	public void Dispose()
+	{
+		foreach (var d in _disposables)
+			d.Dispose();
+	}
+
+	private FakeSession AddSession(string id = Node)
+	{
+		var session = FakeSession.WithEntries(4, "Session " + id);
+		_client.Sessions[id] = session;
+		return session;
+	}
+
+	private SessionPaneViewModel CreatePane()
+	{
+		var pane = new SessionPaneViewModel(_client, _surface, new MarkdigEntryRenderer(new UrlPolicy()), new FakeUrlLauncher(), new ImmediateUiDispatcher(),
+			new SwitchLatencyTracker(NullLogger<SwitchLatencyTracker>.Instance), NullLogger<SessionPaneViewModel>.Instance)
+		{
+			LiveFlushInterval = TimeSpan.Zero,
+		};
+		pane.DraftSync.Delay = TimeSpan.FromMinutes(5);
+		_disposables.Add(pane);
+		return pane;
+	}
+
+	private static async Task WaitForAsync(Func<bool> condition, string what)
+	{
+		var deadline = DateTime.UtcNow.AddSeconds(10);
+		while (!condition() && DateTime.UtcNow < deadline)
+			await Task.Delay(10);
+
+		Assert.True(condition(), "Not reached in time: " + what);
+	}
+
+	private static SessionStateDto State(bool authError) => new(Node, false, false, null, false, null, null, false, null, authError);
+
+	// ---- auth error ----
+
+	[Fact]
+	public async Task ASessionWithTheAuthErrorFlag_ShowsTheIndicator_WhenOpened()
+	{
+		AddSession().AuthError = true;
+		var pane = CreatePane();
+
+		await pane.OpenAsync(Node);
+
+		Assert.True(pane.HasAuthError);
+	}
+
+	[Fact]
+	public async Task TheIndicator_FollowsSessionChanged_BothWays()
+	{
+		AddSession();
+		var pane = CreatePane();
+		await pane.OpenAsync(Node);
+		Assert.False(pane.HasAuthError);
+
+		_client.RaiseNotification(RemoteProtocol.Events.SessionChanged, new SessionChangedPayload(State(authError: true)));
+		Assert.True(pane.HasAuthError);
+
+		_client.RaiseNotification(RemoteProtocol.Events.SessionChanged, new SessionChangedPayload(State(authError: false)));
+		Assert.False(pane.HasAuthError);
+	}
+
+	[Fact]
+	public async Task TheIndicator_BelongsToTheOpenSession()
+	{
+		AddSession().AuthError = true;
+		AddSession("b");
+		var pane = CreatePane();
+		await pane.OpenAsync(Node);
+
+		await pane.OpenAsync("b");
+
+		Assert.False(pane.HasAuthError);
+	}
+
+	[Fact]
+	public async Task ReAuthenticate_StartsTheLoginForTheSessionsProfile()
+	{
+		AddSession().LastUsed = new LastUsedSettingsDto("default", "default", "work", "Work");
+		_client.Sessions[Node].AuthError = true;
+		var pane = CreatePane();
+		await pane.OpenAsync(Node);
+
+		await pane.ReauthenticateCommand.ExecuteAsync(null);
+
+		Assert.Contains("profile.authenticate:work", _client.Calls);
+		Assert.Equal(Constants.ComposerTexts.ReauthenticateStarted, pane.AuthNotice);
+	}
+
+	[Fact]
+	public async Task ReAuthenticate_PrefersTheProfileThatWasPicked_AndFallsBackToDefault()
+	{
+		_client.Catalog = new([new ModelOptionDto("default", "Default", null)], ["default"], [new ProfileOptionDto("default", "[Sys] Default"), new ProfileOptionDto("pick", "Pick")]);
+		AddSession().AuthError = true;
+		var pane = CreatePane();
+		await pane.OpenAsync(Node);
+		await pane.LoadCatalogAsync();
+
+		await pane.ReauthenticateCommand.ExecuteAsync(null);
+		pane.SelectedProfile = pane.Profiles.Single(p => p.Id == "pick");
+		await pane.ReauthenticateCommand.ExecuteAsync(null);
+
+		Assert.Equal(["profile.authenticate:default", "profile.authenticate:pick"], _client.Calls.Where(c => c.StartsWith("profile.authenticate", StringComparison.Ordinal)));
+	}
+
+	[Fact]
+	public async Task ReAuthenticate_SaysWhenALoginIsAlreadyRunning_AndWhenItFails()
+	{
+		AddSession().AuthError = true;
+		var pane = CreatePane();
+		await pane.OpenAsync(Node);
+
+		_client.AuthenticateStarted = false;
+		await pane.ReauthenticateCommand.ExecuteAsync(null);
+		Assert.Equal(Constants.ComposerTexts.ReauthenticateRunning, pane.AuthNotice);
+
+		_client.ProfileException = new IOException("no such profile");
+		await pane.ReauthenticateCommand.ExecuteAsync(null);
+		Assert.Equal(Constants.ComposerTexts.ReauthenticateFailed + "no such profile", pane.AuthNotice);
+	}
+
+	[Fact]
+	public async Task TheNotice_GoesWhenTheErrorGoes()
+	{
+		AddSession().AuthError = true;
+		var pane = CreatePane();
+		await pane.OpenAsync(Node);
+		await pane.ReauthenticateCommand.ExecuteAsync(null);
+
+		_client.RaiseNotification(RemoteProtocol.Events.SessionChanged, new SessionChangedPayload(State(authError: false)));
+
+		Assert.Null(pane.AuthNotice);
+	}
+
+	// ---- completion sound ----
+
+	private sealed class RecordingPlayer : ISoundPlayer
+	{
+		public List<string> Played { get; } = [];
+
+		public void Play(string file) => Played.Add(file);
+	}
+
+	private sealed class ManualClock : TimeProvider
+	{
+		private DateTimeOffset _now = new(2026, 11, 15, 10, 0, 0, TimeSpan.Zero);
+
+		public override DateTimeOffset GetUtcNow() => _now;
+
+		public void Advance(TimeSpan by) => _now += by;
+	}
+
+	private (CompletionSoundService Service, RecordingPlayer Player, ManualClock Clock) CreateSound(int throttleSeconds = 60)
+	{
+		_client.SettingsValues[RemoteProtocol.SettingsApi.NotificationsSection] = new NotificationsSettingsDto(true, @"C:\Windows\Media\done.wav", throttleSeconds);
+		var player = new RecordingPlayer();
+		var clock = new ManualClock();
+		var service = new CompletionSoundService(_client, player, clock, NullLogger<CompletionSoundService>.Instance);
+		service.Attach();
+		_disposables.Add(service);
+		return (service, player, clock);
+	}
+
+	[Fact]
+	public async Task ACompletedTurn_PlaysTheConfiguredSound_AndAcknowledgesIt()
+	{
+		var (service, player, _) = CreateSound();
+
+		_client.RaiseTurnCompleted(Node, "t1");
+		await service.WhenIdleAsync();
+
+		Assert.Equal([@"C:\Windows\Media\done.wav"], player.Played);
+		Assert.Equal([Node], _client.AckedSounds);
+	}
+
+	[Fact]
+	public async Task AStoppedTurn_AndATurnThatNeverRan_AreSilent_AndNotAcknowledged()
+	{
+		var (service, player, _) = CreateSound();
+
+		_client.RaiseTurnCompleted(Node, "t1", cancelled: true);
+		_client.RaiseNotification(RemoteProtocol.Events.TurnCompleted, new TurnCompletedPayload(Node, false, null, "t2", NeverRan: true));
+		await service.WhenIdleAsync();
+
+		Assert.Empty(player.Played);
+		Assert.Empty(_client.AckedSounds);
+	}
+
+	[Fact]
+	public async Task ATurnThatEndedInAnError_StillPlays()
+	{
+		var (service, player, _) = CreateSound();
+
+		_client.RaiseTurnCompleted(Node, "t1", error: "boom");
+		await service.WhenIdleAsync();
+
+		Assert.Single(player.Played);
+	}
+
+	[Fact]
+	public async Task WhenTheSessionTurnedTheSoundOff_NothingPlays()
+	{
+		var (service, player, _) = CreateSound();
+		_client.SetOptionsHandler = (_, _, _, _) => new SessionSetOptionsResult(new SessionOptionsDto(null, false, PlayCompletionSound: false), null);
+
+		_client.RaiseTurnCompleted(Node, "t1");
+		await service.WhenIdleAsync();
+
+		Assert.Empty(player.Played);
+		Assert.Empty(_client.AckedSounds);
+	}
+
+	[Fact]
+	public async Task TheSessionsOption_IsReadWithoutChangingAnything()
+	{
+		var (service, _, _) = CreateSound();
+
+		_client.RaiseTurnCompleted(Node, "t1");
+		await service.WhenIdleAsync();
+
+		Assert.Contains($"session.setOptions:{Node}:::", _client.Calls);
+	}
+
+	[Fact]
+	public async Task ASecondCompletionInsideTheThrottleWindow_IsSilent_ButAcknowledged_AndPlaysAgainAfterIt()
+	{
+		var (service, player, clock) = CreateSound(throttleSeconds: 60);
+
+		_client.RaiseTurnCompleted(Node, "t1");
+		await service.WhenIdleAsync();
+		clock.Advance(TimeSpan.FromSeconds(10));
+		_client.RaiseTurnCompleted(Node, "t2");
+		await service.WhenIdleAsync();
+		Assert.Single(player.Played);
+		Assert.Equal([Node, Node], _client.AckedSounds);
+
+		clock.Advance(TimeSpan.FromSeconds(61));
+		_client.RaiseTurnCompleted(Node, "t3");
+		await service.WhenIdleAsync();
+		Assert.Equal(2, player.Played.Count);
+	}
+
+	[Fact]
+	public async Task TheThrottle_IsPerSession()
+	{
+		var (service, player, _) = CreateSound();
+
+		_client.RaiseTurnCompleted("a", "t1");
+		_client.RaiseTurnCompleted("b", "t1");
+		await service.WhenIdleAsync();
+
+		Assert.Equal(2, player.Played.Count);
+	}
+
+	[Fact]
+	public async Task WhenTheSettingsCannotBeRead_NothingPlaysAndNothingIsAcknowledged_SoTheHostPlaysItsOwn()
+	{
+		var player = new RecordingPlayer();
+		_client.SettingsValues.Clear();
+		using var service = new CompletionSoundService(_client, player, new ManualClock(), NullLogger<CompletionSoundService>.Instance);
+		service.Attach();
+
+		_client.RaiseTurnCompleted(Node, "t1");
+		await service.WhenIdleAsync();
+
+		Assert.Empty(player.Played);
+		Assert.Empty(_client.AckedSounds);
+	}
+
+	[Fact]
+	public async Task TheSettings_AreReadOnceWhileFresh()
+	{
+		var (service, _, clock) = CreateSound(throttleSeconds: 0);
+
+		_client.RaiseTurnCompleted(Node, "t1");
+		_client.RaiseTurnCompleted(Node, "t2");
+		await service.WhenIdleAsync();
+		Assert.Equal(1, _client.Calls.Count(c => c.StartsWith("settings.get:notifications", StringComparison.Ordinal)));
+
+		clock.Advance(Constants.SoundRules.SettingsCacheAge + TimeSpan.FromSeconds(1));
+		_client.RaiseTurnCompleted(Node, "t3");
+		await service.WhenIdleAsync();
+		Assert.Equal(2, _client.Calls.Count(c => c.StartsWith("settings.get:notifications", StringComparison.Ordinal)));
+	}
+
+	// ---- presence registration ----
+
+	[Fact]
+	public void TheClientFactory_GivesEveryStartTheSameClientId()
+	{
+		using var temp = new TempAppPaths();
+		var store = new JsonClientStateStore(temp.Paths, NullLogger<JsonClientStateStore>.Instance);
+		var factory = new TessynClientFactory(store);
+		var endpoint = new DaemonEndpoint(new Uri("http://127.0.0.1:1/tdcp"), "token", "run", 1);
+
+		_ = factory.Create(endpoint);
+		var first = store.State.ClientId;
+		_ = factory.Create(endpoint);
+
+		Assert.False(string.IsNullOrWhiteSpace(first));
+		Assert.StartsWith("wpf-", first);
+		Assert.True(first!.Length <= 64);
+		Assert.Equal(first, store.State.ClientId);
+	}
+
+	// ---- R1: the live row stays while the answer is being appended ----
+
+	[Fact]
+	public async Task R1_ASessionChangedDuringTheHandOff_DoesNotClearTheLiveRowBeforeTheEntryArrives()
+	{
+		var session = AddSession();
+		var pane = CreatePane();
+		await pane.OpenAsync(Node);
+		_client.RaiseTurnStarted(Node, "t1");
+		_client.RaiseTurnStatus(Node, "t1", TurnState.Running);
+		_client.RaiseTurnDelta(Node, "t1", 1, "the answer");
+		session.Entries.Add(FakeSession.MakeEntry(4));
+		_surface.Calls.Clear();
+		// The daemon's session.changed (the debounced flush) lands while the append page is on its way.
+		_client.AfterPageHook = () => _client.RaiseNotification(RemoteProtocol.Events.SessionChanged, new SessionChangedPayload(State(authError: false)));
+
+		_client.RaiseTurnCompleted(Node, "t1");
+		await pane.WhenIdleAsync();
+
+		var appended = _surface.Calls.FindIndex(c => c.StartsWith("append:", StringComparison.Ordinal));
+		var cleared = _surface.Calls.FindIndex(c => c == "live:none");
+		Assert.True(appended >= 0 && cleared > appended, "calls: " + string.Join(", ", _surface.Calls));
+	}
+
+	// ---- R2: a pick that left the catalog is not sent ----
+
+	[Fact]
+	public async Task R2_APickWhoseIdLeftTheCatalog_IsNotSent()
+	{
+		_client.Catalog = new([new ModelOptionDto("default", "Default", null)], ["default"], [new ProfileOptionDto("default", "[Sys] Default"), new ProfileOptionDto("work", "Work")]);
+		AddSession();
+		var pane = CreatePane();
+		await pane.OpenAsync(Node);
+		await pane.LoadCatalogAsync();
+		pane.SelectedProfile = pane.Profiles.Single(p => p.Id == "work");
+
+		_client.Catalog = new([new ModelOptionDto("default", "Default", null)], ["default"], [new ProfileOptionDto("default", "[Sys] Default")]);   // "work" was deleted
+		await pane.LoadCatalogAsync();
+		pane.InputText = "hello";
+		await pane.SendCommand.ExecuteAsync(null);
+
+		Assert.Equal("default", pane.SelectedProfile!.Id);
+		Assert.Null(_client.TurnSends.Single().ProfileId);
+	}
+
+	[Fact]
+	public async Task R2_APickThatIsStillListed_IsStillSent()
+	{
+		_client.Catalog = new([new ModelOptionDto("default", "Default", null)], ["default"], [new ProfileOptionDto("default", "[Sys] Default"), new ProfileOptionDto("work", "Work")]);
+		AddSession();
+		var pane = CreatePane();
+		await pane.OpenAsync(Node);
+		await pane.LoadCatalogAsync();
+		pane.SelectedProfile = pane.Profiles.Single(p => p.Id == "work");
+
+		pane.InputText = "hello";
+		await pane.SendCommand.ExecuteAsync(null);
+
+		Assert.Equal("work", _client.TurnSends.Single().ProfileId);
+	}
+}

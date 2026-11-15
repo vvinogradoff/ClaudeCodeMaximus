@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using TessynDesktop.Services;
 using TessynDesktop.Tests.Contract;
@@ -17,12 +17,14 @@ internal sealed class ClientTestHost : IDisposable
 
 	private readonly Func<IDaemonRunInfo, IEventLog, TdcpDispatcher> _dispatcherFactory;
 	private readonly int _logCapacity;
+	private readonly IClientPresenceRegistry? _presence;
 	private readonly WireFakeDaemonClient _daemonClient = new();
 
-	public ClientTestHost(Func<IDaemonRunInfo, IEventLog, TdcpDispatcher>? dispatcherFactory = null, int logCapacity = Constants.Remote.EventLog.DefaultCapacity)
+	public ClientTestHost(Func<IDaemonRunInfo, IEventLog, TdcpDispatcher>? dispatcherFactory = null, int logCapacity = Constants.Remote.EventLog.DefaultCapacity, IClientPresenceRegistry? presence = null)
 	{
 		_dispatcherFactory = dispatcherFactory ?? ((run, log) => new TdcpDispatcher([new ClientRpcModule(runInfo: run, eventLog: log)]));
 		_logCapacity       = logCapacity;
+		_presence          = presence;
 
 		// A free port is only known to be free until it is released: another test class may take it before the bind, so try again.
 		for (var attempt = 1; ; attempt++)
@@ -67,7 +69,7 @@ internal sealed class ClientTestHost : IDisposable
 		// The port was ours a moment ago; a parallel test may have grabbed it in between, so retry briefly before giving up.
 		for (var attempt = 1; ; attempt++)
 		{
-			Server = new TdcpServer(_daemonClient, _dispatcherFactory(RunInfo, Log), token ?? Token, Log, RunInfo);
+			Server = new TdcpServer(_daemonClient, _dispatcherFactory(RunInfo, Log), token ?? Token, Log, RunInfo, _presence);
 			try
 			{
 				Server.Start(Port);

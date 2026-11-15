@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -15,6 +16,7 @@ public partial class SessionPane : UserControl
 	private SessionPaneViewModel? _subscribed;
 	private double _sideWidth = Constants.Limits.DefaultSidePaneWidth;
 	private readonly FileDropReader _fileDrops = new();
+	private bool _caretIsOurs;
 
 	public SessionPane()
 	{
@@ -22,6 +24,8 @@ public partial class SessionPane : UserControl
 		DataContextChanged += OnDataContextChanged;
 		Loaded += OnLoaded;
 		DataObject.AddPastingHandler(InputBox, OnInputPasting);
+		SuggestionsPopup.CustomPopupPlacementCallback = PlaceSuggestionsAt;
+		Suggestions.ItemChosen += OnSuggestionChosen;
 	}
 
 	private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -175,9 +179,104 @@ public partial class SessionPane : UserControl
 
 	private void OnInputCaretRequested(object? sender, int caret)
 	{
-		InputBox.CaretIndex = Math.Min(caret, InputBox.Text.Length);
+		// The caret move is the pane's own (a drop, an accepted suggestion, a draft arriving): it is no typing and must not open the popup.
+		_caretIsOurs = true;
+		try
+		{
+			InputBox.CaretIndex = Math.Min(caret, InputBox.Text.Length);
+		}
+		finally
+		{
+			_caretIsOurs = false;
+		}
+
 		if (IsKeyboardFocusWithin || InputBox.IsKeyboardFocused)   // never pull focus away from another control or window
 			InputBox.Focus();
+	}
+
+	// ---- autocomplete (W1b) ----
+
+	/// <summary>The text or the caret of the input changed: typing and caret moves of the user ask for suggestions, the pane's own changes close the popup.</summary>
+	private void OnInputEdited(object sender, RoutedEventArgs e)
+	{
+		if (_subscribed == null)
+			return;
+
+		if (_caretIsOurs || _subscribed.IsProgrammaticInput)
+		{
+			_subscribed.Autocomplete.Close();
+			return;
+		}
+
+		_subscribed.Autocomplete.Update(InputBox.Text, InputBox.CaretIndex);
+		PlaceSuggestions();
+	}
+
+	private void OnInputLostFocus(object sender, KeyboardFocusChangedEventArgs e) => _subscribed?.Autocomplete.Close();
+
+	/// <summary>Up, Down, Tab, Enter and Esc drive the popup while it is open; Ctrl+Enter still sends, every other key types as usual.</summary>
+	private void OnInputPreviewKeyDown(object sender, KeyEventArgs e)
+	{
+		var autocomplete = _subscribed?.Autocomplete;
+		if (autocomplete is not { IsOpen: true })
+			return;
+
+		switch (e.Key)
+		{
+			case Key.Down:
+				autocomplete.Move(1);
+				e.Handled = true;
+				break;
+			case Key.Up:
+				autocomplete.Move(-1);
+				e.Handled = true;
+				break;
+			case Key.Escape:
+				autocomplete.Close();
+				e.Handled = true;
+				break;
+			case Key.Tab when !Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
+			case Key.Enter when !Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift):
+				AcceptSuggestion(-1);
+				e.Handled = true;
+				break;
+		}
+	}
+
+	private void OnSuggestionChosen(object? sender, int index)
+	{
+		AcceptSuggestion(index);
+		InputBox.Focus();
+	}
+
+	private void AcceptSuggestion(int index)
+	{
+		if (_subscribed?.AcceptSuggestion(index) is { ContinuesPath: true })
+		{
+			// A directory was accepted: the path goes on, so the next level is offered.
+			Dispatcher.BeginInvoke(() => _subscribed?.Autocomplete.Update(InputBox.Text, InputBox.CaretIndex), System.Windows.Threading.DispatcherPriority.Input);
+		}
+	}
+
+	/// <summary>The popup opens above the caret (or below it when there is no room above): it never covers the line being typed.</summary>
+	private CustomPopupPlacement[] PlaceSuggestionsAt(Size popupSize, Size targetSize, Point offset)
+	{
+		var caret = InputBox.GetRectFromCharacterIndex(Math.Min(InputBox.CaretIndex, InputBox.Text.Length));
+		var left = caret.IsEmpty ? 0 : Math.Clamp(caret.Left, 0, Math.Max(0, targetSize.Width - popupSize.Width));
+		var top = caret.IsEmpty ? 0 : Math.Clamp(caret.Top, 0, targetSize.Height);
+		var bottom = caret.IsEmpty ? targetSize.Height : Math.Clamp(caret.Bottom, 0, targetSize.Height);
+		return
+		[
+			new CustomPopupPlacement(new Point(left, top - popupSize.Height), PopupPrimaryAxis.Horizontal),
+			new CustomPopupPlacement(new Point(left, bottom), PopupPrimaryAxis.Horizontal),
+		];
+	}
+
+	/// <summary>Asks the popup to place itself again (the caret moved while it is open).</summary>
+	private void PlaceSuggestions()
+	{
+		if (SuggestionsPopup.IsOpen)
+			SuggestionsPopup.VerticalOffset = SuggestionsPopup.VerticalOffset == 0 ? 0.01 : 0;
 	}
 
 	/// <summary>The <c>--test-drop</c> seam (see <see cref="SessionPaneViewModel.TestDropPaths"/>): hands the paths over once, when the first session is shown.</summary>
