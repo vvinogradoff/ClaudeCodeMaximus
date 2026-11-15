@@ -1,4 +1,5 @@
-using System.Text.Json;
+﻿using System.Text.Json;
+using System.Windows;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
@@ -100,6 +101,8 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		core.WebResourceRequested += OnWebResourceRequested;
 		core.WebMessageReceived += OnWebMessageReceived;
 		core.ProcessFailed += OnProcessFailed;
+		SystemParameters.StaticPropertyChanged -= OnSystemParameterChanged;
+		SystemParameters.StaticPropertyChanged += OnSystemParameterChanged;
 		core.Navigate(PageUri);
 	}
 
@@ -275,6 +278,22 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		}
 	}
 
+	private void OnSystemParameterChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(SystemParameters.WindowGlassColor))
+			ApplyAccent();
+	}
+
+	/// <summary>Hands the Windows accent colour to the page as the --accent CSS variable; light/dark follows the system through prefers-color-scheme.</summary>
+	private void ApplyAccent()
+	{
+		if (_control?.CoreWebView2 == null || !_ready)
+			return;
+
+		var accent = SystemParameters.WindowGlassColor;
+		_ = _control.CoreWebView2.ExecuteScriptAsync($"document.documentElement.style.setProperty('--accent','#{accent.R:X2}{accent.G:X2}{accent.B:X2}')");
+	}
+
 	private bool TokenMatches(JsonElement root) => root.TryGetProperty("tok", out var tok) && tok.ValueKind == JsonValueKind.Number && tok.GetInt32() == _token;
 
 	private void FlushPending()
@@ -282,6 +301,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		var restarted = _everReady;
 		_ready = true;
 		_everReady = true;
+		ApplyAccent();
 		var queued = _pending.ToList();
 		_pending.Clear();
 		foreach (var json in queued)
