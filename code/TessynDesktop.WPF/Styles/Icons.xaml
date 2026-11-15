@@ -1,0 +1,27 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+    <!-- Segoe Fluent Icons ship with Windows 11; Segoe MDL2 Assets is the Windows 10 fallback with the same code points. -->
+    <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <sys:String x:Key="GlyphChevronRight">&#xE76C;</sys:String>
+    <sys:String x:Key="GlyphChevronDown">&#xE70D;</sys:String>
+    <sys:String x:Key="GlyphChevronUp">&#xE70E;</sys:String>
+    <sys:String x:Key="GlyphClose">&#xE711;</sys:String>
+    <sys:String x:Key="GlyphSend">&#xE724;</sys:String>
+    <sys:String x:Key="GlyphStop">&#xE71A;</sys:String>
+    <sys:String x:Key="GlyphRefresh">&#xE72C;</sys:String>
+    <sys:String x:Key="GlyphSearch">&#xE721;</sys:String>
+    <sys:String x:Key="GlyphWarning">&#xE7BA;</sys:String>
+    <sys:String x:Key="GlyphLink">&#xE71B;</sys:String>
+
+    <Style x:Key="IconText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        <Setter Property="Focusable" Value="False" />
+    </Style>
+</ResourceDictionary>
+
