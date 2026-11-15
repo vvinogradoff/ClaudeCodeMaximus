@@ -120,7 +120,8 @@ public sealed class DaemonHarness : IDisposable
 			sp.GetRequiredService<IClaudeSessionImportService>(),
 			sp.GetRequiredService<IClaudeAssistService>(),
 			Path.Combine(root, "index.db"),
-			[projectsDir]));
+			[projectsDir],
+			TimeSpan.Zero));
 		s.AddSingleton<ISessionRegistry, SessionRegistry>();
 		s.AddSingleton<IProfileResolver, ProfileResolver>();
 		s.AddSingleton<IClaudeSessionMigrator>(sp => new ClaudeSessionMigrator(sp.GetRequiredService<IClaudeProfileService>(), Path.Combine(root, "default-claude-home")));
