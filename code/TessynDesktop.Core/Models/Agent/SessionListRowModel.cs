@@ -18,6 +18,12 @@ public sealed record SessionListRowModel
 
 	public bool IsRunning { get; init; }
 
+	/// <summary>The profile the session runs on (<c>profile=</c> field, ISSUE.013 R5).</summary>
+	public string ProfileLabel { get; init; } = Constants.ProfileSwitch.DefaultProfileName;
+
+	/// <summary>The profile a queued switch will move the session to; null when none is queued.</summary>
+	public string? SwitchingToLabel { get; init; }
+
 	public bool IsFavorite { get; init; }
 
 	public bool IsResumable { get; init; }

@@ -42,6 +42,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly ISessionTagService        _tags;
 	private readonly DiagnosticsToolHandler?   _diagnostics;
 	private readonly IFocusRefResolver?        _refs;
+	private readonly IProfileResolver?         _profiles;
+	private readonly IProfileSwitchService?    _profileSwitch;
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
 	private readonly SessionTagSearchPageBuilder _tagSearchBuilder   = new();
@@ -76,7 +78,9 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		IAttentionService attention,
 		ISessionTagService tags,
 		DiagnosticsToolHandler? diagnostics = null,
-		IFocusRefResolver? refResolver = null)
+		IFocusRefResolver? refResolver = null,
+		IProfileResolver? profiles = null,
+		IProfileSwitchService? profileSwitch = null)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -94,6 +98,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_tagIndex       = new SessionTagIndexProvider(registry, tags);
 		_diagnostics    = diagnostics;
 		_refs           = refResolver;
+		_profiles       = profiles;
+		_profileSwitch  = profileSwitch;
 	}
 
 	public void Start()
@@ -205,12 +211,24 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	/// </summary>
 	private void InheritSupervisorProfile(SessionNodeModel child, SessionNodeModel supervisor)
 	{
-		if (!string.IsNullOrEmpty(child.ProfileName))
+		if (!string.IsNullOrEmpty(child.ProfileName) || !string.IsNullOrEmpty(child.ProfileId))
 			return; // already pinned
 
-		var profileName = _turnService.Value.ResolveProfileName(supervisor);
-		if (!string.IsNullOrEmpty(profileName))
-			child.ProfileName = profileName;
+		var recordedName = _turnService.Value.ResolveProfileName(supervisor);
+		if (string.IsNullOrEmpty(recordedName) && string.IsNullOrEmpty(supervisor.ProfileId))
+			return; // the supervisor is on Default without any record: the child is unpinned too
+
+		// ISSUE.013: the child is pinned by ProfileId, so a later rename of the profile does not re-route it to Default.
+		var profile = _profiles?.Resolve(supervisor, recordedName);
+		if (profile is { IsResolved: true })
+		{
+			child.ProfileId   = profile.ProfileId;
+			child.ProfileName = profile.IsDefault ? recordedName : profile.DisplayName;
+			return;
+		}
+
+		if (!string.IsNullOrEmpty(recordedName))
+			child.ProfileName = recordedName;
 	}
 
 	/// <summary>
@@ -387,13 +405,13 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"Cancel a schedule by its ID.",
 				CancelScheduleSchema()),
 			BuildToolDef("list_sessions",
-				"Find sessions. With no arguments: your project's top-level sessions plus you and your own workers (nested under you), newest first, 30 rows per page. Each row: <id> <name> <age> [flags]; flags: running, fav, no-resume (next turn starts a fresh Claude session seeded from the transcript), N workers, worker of <id>, [other directory], (you). Narrow with query/running/activeWithinHours, filter by tags=[...] (see search_tags), widen with scope=all, see a session's workers with scope=children|subtree nodeId=<id>, page with offset. Short ids work wherever a session id is taken.",
+				"Find sessions. With no arguments: your project's top-level sessions plus you and your own workers (nested under you), newest first, 30 rows per page. Each row: <id> <name> <age> [flags]; flags: running, fav, no-resume (next turn starts a fresh Claude session seeded from the transcript), N workers, worker of <id>, [other directory], (you); every row also states the profile it runs on as profile=<name> (and switching-to=<name> while a profile switch waits for a running turn). Narrow with query/running/activeWithinHours, filter by tags=[...] (see search_tags), widen with scope=all, see a session's workers with scope=children|subtree nodeId=<id>, page with offset. Short ids work wherever a session id is taken.",
 				ListSessionsSchema()),
 			BuildToolDef("spawn_session",
 				"Create a new persistent session node and optionally run the first turn. Model is tier-enforced (FR.16).",
 				SpawnSessionSchema()),
 			BuildToolDef("send_to_session",
-				"Resume an existing session and run a turn. Use mode=async to not block. Supports an optional markdown outputFormat hint.",
+				"Resume an existing session and run a turn on the profile it is pinned to (the result states it as [profile=<name>]). A target whose pinned profile is removed or logged out returns an error naming the profile; migrate=true (only for your own descendants) first moves it to your profile. Use mode=async to not block. Supports an optional markdown outputFormat hint.",
 				SendToSessionSchema()),
 			BuildToolDef("read_session",
 				"Read the last N entries from a session's file.",
@@ -832,7 +850,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		var newModel = _registry.CreateSessionForAgent(workingDir, name, group, childDepth, callerNode.NodeId);
 
 		if (newModel == null)
-			throw new McpToolException($"Could not create session under working dir: {workingDir}");
+			throw new McpToolException(BuildNotUnderProjectMessage(workingDir));
 
 		// Inherit the supervisor's profile so the child authenticates with the same account (ISSUE-002).
 		InheritSupervisorProfile(newModel, callerNode);
@@ -862,9 +880,13 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		                   ?? throw new McpToolException("'prompt' is required");
 		var mode         = args?["mode"]?.GetValue<string>() ?? "wait";
 		var outputFormat = args?["outputFormat"]?.GetValue<string>();
+		var migrate      = args?["migrate"]?.GetValue<bool>() ?? false;
 
 		var targetModel = ResolveSession(targetNodeId, "Session not found");
 		targetNodeId    = targetModel.NodeId;
+
+		// ISSUE.013 R2: the target runs on its own pinned profile; a dead one is an actionable error, never a silent Default.
+		var profileNote = PrepareTargetProfile(targetModel, callerNode, migrate);
 
 		var augmentedPrompt = ApplyOutputFormat(prompt, outputFormat);
 
@@ -886,15 +908,76 @@ public sealed class AgentMcpServer : IAgentMcpServer
 					_log.Warning(ex, "Async send_to_session failed for node {NodeId}", targetNodeId);
 				}
 			});
-			return BuildTextContent($"Sent async to '{targetModel.Name}' ({targetNodeId}). Result will be posted back.");
+			return BuildTextContent($"Sent async to '{targetModel.Name}' ({targetNodeId}){profileNote?.Suffix}. Result will be posted back.");
 		}
 		else
 		{
 			var result = await _turnService.Value.RunTurnAsync(targetModel, augmentedPrompt, TurnSource.Orchestrated);
-			return BuildTextContent(result.IsError
+			return BuildTextContent((result.IsError
 				? $"Error: {result.ErrorMessage}"
-				: result.AssistantText);
+				: result.AssistantText) + profileNote?.Footer);
 		}
+	}
+
+	/// <summary>What <c>send_to_session</c> tells the caller about the profile the target runs on.</summary>
+	private sealed record TargetProfileNote(string Suffix, string Footer);
+
+	/// <summary>
+	/// Checks the profile the target will run on and, with <paramref name="migrate"/>, moves a descendant of the caller to the caller's
+	/// profile first. Null when no profile services are wired (nothing to state).
+	/// </summary>
+	private TargetProfileNote? PrepareTargetProfile(SessionNodeModel target, SessionNodeModel caller, bool migrate)
+	{
+		if (_profiles == null)
+			return null;
+
+		var migrated = string.Empty;
+		if (migrate)
+		{
+			if (_profileSwitch == null || !_profileSwitch.IsDescendantOf(target.NodeId, caller.NodeId))
+				throw new McpToolException("'migrate' is allowed only for your own descendants: that session is not one of the sessions you spawned.");
+
+			var callerProfile = _profiles.Resolve(caller, _turnService.Value.ResolveProfileName(caller));
+			if (!callerProfile.IsResolved)
+				throw new McpToolException($"Cannot migrate: your own profile is not usable. {callerProfile.Error}");
+
+			try
+			{
+				var switched = _profileSwitch.Switch(target.NodeId, callerProfile.ProfileId, includeDescendants: false);
+				migrated = switched.NodeMoved
+					? $"\n[migrated to profile={switched.ProfileName}" + (switched.OldConfigPaths.Count > 0
+						? $"; the transcript still names {switched.OldConfigPaths.Count} path(s) under the old config dir, e.g. {switched.OldConfigPaths[0]}"
+						: string.Empty) + "]"
+					: string.Empty;
+			}
+			catch (ProfileSwitchException ex)
+			{
+				throw new McpToolException(ex.Message);
+			}
+		}
+
+		var profile = _profiles.Resolve(target, _turnService.Value.ResolveProfileName(target), checkLogin: true);
+		if (!profile.IsResolved)
+			throw new McpToolException(profile.Error + Constants.ProfileSwitch.MigrateHint);
+		if (profile.IsLoggedOut)
+			throw new McpToolException(string.Format(Constants.ProfileSwitch.PinnedProfileLoggedOutFormat, target.Name, profile.DisplayName) + Constants.ProfileSwitch.MigrateHint);
+
+		return new TargetProfileNote($" on profile={profile.DisplayName}", $"{migrated}\n[profile={profile.DisplayName}]");
+	}
+
+	/// <summary>ISSUE.013 R9: the spawn error for a working dir outside every registered project, listing the registered ones.</summary>
+	private string BuildNotUnderProjectMessage(string workingDir)
+	{
+		string[] registered;
+		lock (_appSettings.SyncRoot)
+			registered = _appSettings.Settings.Tree.Select(d => d.Path).ToArray();
+
+		var listed = registered.Length == 0
+			? Constants.ProfileSwitch.NoRegisteredDirectories
+			: string.Join(", ", registered.Take(Constants.ProfileSwitch.MaxListedDirectories))
+			  + (registered.Length > Constants.ProfileSwitch.MaxListedDirectories ? $" (+{registered.Length - Constants.ProfileSwitch.MaxListedDirectories} more)" : string.Empty);
+
+		return string.Format(Constants.ProfileSwitch.NotUnderProjectFormat, workingDir, listed);
 	}
 
 	private Task<JsonNode> ReadSessionAsync(JsonNode? args)
@@ -1778,7 +1861,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			"type": "object",
 			"properties": {
 				"name":         { "type": "string", "description": "Display name for the new session." },
-				"workingDir":   { "type": "string", "description": "Filesystem working directory. Mutually exclusive with parentNodeId." },
+				"workingDir":   { "type": "string", "description": "Filesystem working directory; must be a registered project directory in the Tessyn tree or lie below one (spawn_session never registers a new directory: add it in Tessyn or use parentNodeId; the error lists the registered ones). Mutually exclusive with parentNodeId." },
 				"parentNodeId": { "type": "string", "description": "Inherit working dir from this node (full NodeId or a unique prefix of at least 6 characters). Mutually exclusive with workingDir." },
 				"prompt":       { "type": "string", "description": "Optional first prompt to run on the new session." },
 				"group":        { "type": "string", "description": "Optional group name to place the session under." },
@@ -1796,7 +1879,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"nodeId":       { "type": "string", "description": "Session to resume. A full NodeId or a unique prefix of at least 6 characters is accepted." },
 				"prompt":       { "type": "string" },
 				"mode":         { "type": "string", "enum": ["wait", "async"], "description": "wait=block for result, async=return immediately and post the result back to you via mailbox. Async results that arrive while you are busy are delivered together in one turn once you are idle." },
-				"outputFormat": { "type": "string", "description": "Optional markdown/free-text description of the desired response shape. Advisory guidance appended to the prompt — not validated (FR.15.7)." }
+				"outputFormat": { "type": "string", "description": "Optional markdown/free-text description of the desired response shape. Advisory guidance appended to the prompt — not validated (FR.15.7)." },
+				"migrate":      { "type": "boolean", "description": "Move the target to your own profile before running (transcript and session folder, then the pin). Allowed only when the target is one of your own descendants; use it when the target pinned profile is removed or logged out." }
 			},
 			"required": ["nodeId", "prompt"]
 		}

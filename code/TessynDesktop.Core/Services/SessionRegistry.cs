@@ -521,6 +521,20 @@ public sealed class SessionRegistry : ISessionRegistry
 
     // ── Orchestration helpers ─────────────────────────────────────────────────
 
+    /// <summary>
+    /// True when <paramref name="workingDir"/> is the registered directory or lies below it. The match respects path separators:
+    /// <c>C:\a\bc</c> is not under <c>C:\a\b</c> (ISSUE.013 R9).
+    /// </summary>
+    internal static bool IsUnderDirectory(string workingDir, string directoryPath)
+    {
+        var dir  = Path.TrimEndingDirectorySeparator(directoryPath);
+        var work = Path.TrimEndingDirectorySeparator(workingDir);
+        if (work.Length < dir.Length || !work.StartsWith(dir, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return work.Length == dir.Length || work[dir.Length] is '\\' or '/';
+    }
+
     public SessionNodeModel? CreateSessionForAgent(
         string workingDir, string name, string? group,
         int orchestrationDepth = 0, string? supervisorNodeId = null)
@@ -536,7 +550,7 @@ public sealed class SessionRegistry : ISessionRegistry
             if (dir == null)
             {
                 dir = _appSettings.Settings.Tree.FirstOrDefault(d =>
-                    workingDir.StartsWith(d.Path, StringComparison.OrdinalIgnoreCase));
+                    IsUnderDirectory(workingDir, d.Path));
             }
 
             if (dir == null)
@@ -857,6 +871,8 @@ public sealed class SessionRegistry : ISessionRegistry
                 OrchestrationDepth = s.OrchestrationDepth,
                 SupervisorNodeId   = s.SupervisorNodeId,
                 IsRunning          = IsSessionRunning(s.NodeId),
+                ProfileLabel       = ProfileLabelOf(s),
+                SwitchingToLabel   = string.IsNullOrEmpty(s.PendingProfileId) ? null : ProfileLabelOfId(s.PendingProfileId),
                 DirectoryPath      = directoryPath,
                 DirectoryLabel     = directoryLabel,
                 GroupPath          = groupPath.ToArray(),
@@ -869,6 +885,27 @@ public sealed class SessionRegistry : ISessionRegistry
             CollectSnapshots(g.Sessions, g.Groups, directoryPath, directoryLabel, groupPath, result);
             groupPath.RemoveAt(groupPath.Count - 1);
         }
+    }
+
+    /// <summary>The profile label of a session for listings (ISSUE.013 R5). The caller holds the settings lock; nothing is read from disk.</summary>
+    private string ProfileLabelOf(SessionNodeModel s)
+    {
+        if (!string.IsNullOrEmpty(s.ProfileId))
+            return ProfileLabelOfId(s.ProfileId, s.ProfileName);
+
+        if (string.IsNullOrEmpty(s.ProfileName) || s.ProfileName.StartsWith(Constants.Remote.Profiles.SystemPrefix, StringComparison.Ordinal))
+            return Constants.ProfileSwitch.DefaultProfileName;
+
+        return s.ProfileName;
+    }
+
+    private string ProfileLabelOfId(string profileId, string? fallbackName = null)
+    {
+        if (string.Equals(profileId, Constants.ProfileSwitch.DefaultProfileId, StringComparison.OrdinalIgnoreCase))
+            return Constants.ProfileSwitch.DefaultProfileName;
+
+        var stored = _appSettings.Settings.Profiles.FirstOrDefault(p => string.Equals(p.ProfileId, profileId, StringComparison.OrdinalIgnoreCase));
+        return stored?.DisplayName ?? (fallbackName ?? profileId) + Constants.ProfileSwitch.MissingProfileSuffix;
     }
 
     private bool IsResumable(SessionSnapshotModel s, Lazy<IReadOnlyList<string>> projectsDirs) =>

@@ -24,6 +24,12 @@ public sealed record SessionSnapshotModel
 
 	public bool IsRunning { get; init; }
 
+	/// <summary>The profile the session runs on (ISSUE.013 R5): its pin's display name, <c>default</c> for the Default profile.</summary>
+	public string ProfileLabel { get; init; } = Constants.ProfileSwitch.DefaultProfileName;
+
+	/// <summary>The profile a queued switch will move the session to when its running turn ends; null when none is queued.</summary>
+	public string? SwitchingToLabel { get; init; }
+
 	public required string DirectoryPath { get; init; }
 
 	public required string DirectoryLabel { get; init; }
