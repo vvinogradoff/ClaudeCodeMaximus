@@ -16,9 +16,11 @@ public sealed class FocusRefResolver : IFocusRefResolver
 	private readonly ISessionRegistry _registry;
 	private readonly ISessionContentStore? _store;
 	private readonly string _dataRoot;
+	private readonly string _userProfile;
 
-	public FocusRefResolver(ISessionRegistry registry, ISessionContentStore? store = null, string? dataRoot = null)
+	public FocusRefResolver(ISessionRegistry registry, ISessionContentStore? store = null, string? dataRoot = null, string? userProfile = null)
 	{
+		_userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 		_registry = registry;
 		_store    = store;
 		_dataRoot = dataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.AppDataFolderName);
@@ -65,8 +67,7 @@ public sealed class FocusRefResolver : IFocusRefResolver
 
 		// Every rule runs on the real path of the open file as well, so a junction, link or short name cannot hide a denied location.
 		if (opened.FinalPath.Length == 0
-		    || FileAccessPolicy.IsDenied(full, _dataRoot, relay: true)
-		    || FileAccessPolicy.IsDenied(opened.FinalPath, _dataRoot, relay: true))
+		    || FileAccessPolicy.IsDeniedOpened(full, opened.FinalPath, opened.LinkCount, referenced: true, _dataRoot, _userProfile, relay: true))
 			throw new FocusRefException($"file '{Shorten(raw)}' cannot be referenced: it is a credential, key or token file, app data, or leads outside the local drives.");
 
 		if (opened.LinkCount > 1)

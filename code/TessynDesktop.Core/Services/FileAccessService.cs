@@ -26,6 +26,7 @@ public sealed class FileAccessService : IFileAccessService
 	private readonly ISessionEntryReader _entries;
 	private readonly IAppSettingsService _settings;
 	private readonly string _dataRoot;
+	private readonly string _userProfile;
 	private readonly TimeProvider _time;
 
 	private readonly ConcurrentDictionary<string, PreviewHandle> _previews = new(StringComparer.Ordinal);
@@ -39,8 +40,10 @@ public sealed class FileAccessService : IFileAccessService
 		IAppSettingsService settings,
 		string? dataRoot = null,
 		TimeProvider? time = null,
-		ILogger? log = null)
+		ILogger? log = null,
+		string? userProfile = null)
 	{
+		_userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 		_registry  = registry;
 		_attention = attention;
 		_entries   = entries;
@@ -178,7 +181,8 @@ public sealed class FileAccessService : IFileAccessService
 		if (opened.FinalPath.Length == 0)
 			return "It leads outside the local drives.";
 
-		if (FileAccessPolicy.IsDenied(fullPath, _dataRoot, relay) || FileAccessPolicy.IsDenied(opened.FinalPath, _dataRoot, relay))
+		var referenced = grantedByRef || IsReferenced(nodeId, fullPath, opened.FinalPath);
+		if (FileAccessPolicy.IsDeniedOpened(fullPath, opened.FinalPath, opened.LinkCount, referenced, _dataRoot, _userProfile, relay))
 			return relay ? "It is a credential, key or token file, or app data." : "It is a credential, key or token file.";
 
 		if (!relay)
@@ -202,7 +206,7 @@ public sealed class FileAccessService : IFileAccessService
 		if (opened.Length > cap)
 			return $"It is larger than the {cap} byte limit for its type.";
 
-		if (grantedByRef || IsReferenced(nodeId, fullPath, opened.FinalPath))
+		if (referenced)
 			return null;
 
 		if (settings.Mode == FileAccessMode.WorkingDirectory && IsUnder(workingDirectory, opened.FinalPath))

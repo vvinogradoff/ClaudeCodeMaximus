@@ -43,6 +43,7 @@ internal sealed class FocusRefsEnv : IDisposable
 	public EntryIdsEnv Base { get; } = new();
 	public string LedgerRoot { get; }
 	public string DataRoot { get; }
+	public string UserProfile { get; }
 	public string WorkDir => Base.Directory.Path;
 	public CollectingSink Log { get; } = new();
 	public AttentionLedgerStore LedgerStore { get; }
@@ -63,11 +64,13 @@ internal sealed class FocusRefsEnv : IDisposable
 		LedgerRoot = Path.Combine(Base.Root, "attention");
 		DataRoot   = Path.Combine(Base.Root, "data-root");
 		Directory.CreateDirectory(WorkDir);
+		UserProfile = Path.Combine(Base.Root, "home");
 		Directory.CreateDirectory(DataRoot);
+		Directory.CreateDirectory(UserProfile);
 
 		LedgerStore = new AttentionLedgerStore(LedgerRoot);
 		Attention   = new AttentionService(LedgerStore, Base.Files, Clock);
-		Resolver    = new FocusRefResolver(Base.Registry, Base.Store, DataRoot);
+		Resolver    = new FocusRefResolver(Base.Registry, Base.Store, DataRoot, UserProfile);
 		Files       = NewFiles(Attention);
 
 		Mcp = new AgentMcpServer(
@@ -91,7 +94,7 @@ internal sealed class FocusRefsEnv : IDisposable
 	}
 
 	private FileAccessService NewFiles(IAttentionService attention) =>
-		new(Base.Registry, attention, Base.Reader, Base.Settings, DataRoot, Clock, log: new LoggerConfiguration().WriteTo.Sink(Log).CreateLogger());
+		new(Base.Registry, attention, Base.Reader, Base.Settings, DataRoot, Clock, log: new LoggerConfiguration().WriteTo.Sink(Log).CreateLogger(), userProfile: UserProfile);
 
 	private void BuildDispatcher()
 	{

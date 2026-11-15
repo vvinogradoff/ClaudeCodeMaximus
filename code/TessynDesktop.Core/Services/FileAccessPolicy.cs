@@ -103,14 +103,7 @@ public static class FileAccessPolicy
 			}
 		}
 
-		var name = segments[^1];
-		if (DeniedNames.Contains(name) || DeniedExtensions.Contains(Path.GetExtension(name)))
-			return true;
-
-		if (name.StartsWith(".env.", StringComparison.OrdinalIgnoreCase)
-		    || name.Contains("credentials", StringComparison.OrdinalIgnoreCase)
-		    || name.StartsWith("id_rsa", StringComparison.OrdinalIgnoreCase)
-		    || name.StartsWith("id_ed25519", StringComparison.OrdinalIgnoreCase))
+		if (NameDenied(segments[^1]))
 			return true;
 
 		var root = dataRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -128,6 +121,62 @@ public static class FileAccessPolicy
 		}
 
 		return false;
+	}
+
+	private static bool NameDenied(string name) =>
+		DeniedNames.Contains(name)
+		|| DeniedExtensions.Contains(Path.GetExtension(name))
+		|| name.StartsWith(".env.", StringComparison.OrdinalIgnoreCase)
+		|| name.Contains("credentials", StringComparison.OrdinalIgnoreCase)
+		|| name.StartsWith("id_rsa", StringComparison.OrdinalIgnoreCase)
+		|| name.StartsWith("id_ed25519", StringComparison.OrdinalIgnoreCase);
+
+	/// <summary>
+	/// True for a Markdown file directly inside a plans folder of a Claude config directory: <c>&lt;user profile&gt;\.claude\plans</c> or
+	/// <c>&lt;data root&gt;\profiles\&lt;id&gt;\plans</c>, no subfolders. This is where plan mode writes the plans a user approves.
+	/// </summary>
+	/// <param name="finalPath">The real path of the open file.</param>
+	public static bool IsPlanFile(string finalPath, string dataRoot, string userProfile)
+	{
+		if (!string.Equals(Path.GetExtension(finalPath), ".md", StringComparison.OrdinalIgnoreCase))
+			return false;
+
+		return DirectlyIn(finalPath, Path.Combine(userProfile, ".claude", "plans"))
+		       || IsProfilePlan(finalPath, dataRoot);
+	}
+
+	private static bool DirectlyIn(string path, string folder)
+	{
+		if (folder.Length == 0 || Path.GetFileName(folder).Length == 0)
+			return false;
+
+		var directory = Path.GetDirectoryName(path);
+		return directory != null
+		       && string.Equals(directory.TrimEnd(Path.DirectorySeparatorChar), folder.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
+	}
+
+	private static bool IsProfilePlan(string path, string dataRoot)
+	{
+		var profiles = Path.Combine(dataRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), "profiles") + Path.DirectorySeparatorChar;
+		if (!path.StartsWith(profiles, StringComparison.OrdinalIgnoreCase))
+			return false;
+
+		var inner = path[profiles.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+		return inner.Length == 3 && string.Equals(inner[1], "plans", StringComparison.OrdinalIgnoreCase);
+	}
+
+	/// <summary>
+	/// The deny decision for an open file. One exception to the folder rules: a referenced, single-link Markdown file that lies directly in
+	/// a plans folder (<see cref="IsPlanFile"/>) and was reached without a link (the path as named is the real path). Name rules still apply.
+	/// </summary>
+	public static bool IsDeniedOpened(string namedPath, string finalPath, int linkCount, bool referenced, string dataRoot, string userProfile, bool relay)
+	{
+		if (referenced && linkCount == 1
+		    && string.Equals(namedPath, finalPath, StringComparison.OrdinalIgnoreCase)
+		    && IsPlanFile(finalPath, dataRoot, userProfile))
+			return NameDenied(Path.GetFileName(finalPath));
+
+		return IsDenied(namedPath, dataRoot, relay) || IsDenied(finalPath, dataRoot, relay);
 	}
 
 	private static Dictionary<string, (FileTypeClass, string)> BuildTypes()
