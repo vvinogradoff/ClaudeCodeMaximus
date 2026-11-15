@@ -27,14 +27,14 @@ public sealed class TurnSendService : ITurnSendService
 	}
 
 	/// <inheritdoc />
-	public TurnTicketModel Send(SessionNodeModel node, string text, TurnSettings settings, string? clientRequestId)
+	public TurnTicketModel Send(SessionNodeModel node, string text, TurnSettings settings, string? clientRequestId, bool newBranch = false, bool autoCompact = false)
 	{
 		var nodeId = node.NodeId;
 		var queued = _registry.IsSessionRunning(nodeId) || _engine.IsBusy(nodeId) || _pending.TryGetValue(nodeId, out var waiting) && waiting > 0;
 		var turnId = Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
 
 		_pending.AddOrUpdate(nodeId, 1, (_, count) => count + 1);
-		_ = Task.Run(() => RunAsync(new TurnRequest(node, text, settings, IsNewBranch: false, turnId, clientRequestId)));
+		_ = Task.Run(() => RunAsync(new TurnRequest(node, text, settings, IsNewBranch: newBranch, turnId, clientRequestId, AutoCompact: autoCompact)));
 
 		return new TurnTicketModel(turnId, queued);
 	}

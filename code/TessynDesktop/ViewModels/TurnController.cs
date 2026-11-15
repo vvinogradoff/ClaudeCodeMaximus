@@ -34,7 +34,6 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 	private readonly IAppSettingsService _appSettings;
 	private readonly IDaemonClient _daemonClient;
 	private readonly ISessionSoundService _soundService;
-	private readonly ISessionCompactionService _compaction;
 	private readonly SessionContentViewModel _content;
 	private readonly ModelSelectionController _models;
 	private readonly ProfileController _profiles;
@@ -240,7 +239,6 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 		IAppSettingsService appSettings,
 		IDaemonClient daemonClient,
 		ISessionSoundService soundService,
-		ISessionCompactionService compaction,
 		SessionContentViewModel content,
 		ModelSelectionController models,
 		ProfileController profiles)
@@ -253,7 +251,6 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 		_appSettings      = appSettings;
 		_daemonClient     = daemonClient;
 		_soundService     = soundService;
-		_compaction       = compaction;
 		_content          = content;
 		_models           = models;
 		_profiles         = profiles;
@@ -372,12 +369,12 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 			_draftService.DeleteDraft(_node.FileName);
 		}
 
-		// Auto-Compact can be triggered with an empty prompt: skip straight to compaction (no turn sent).
+		// Auto-Compact can be triggered with an empty prompt: the engine sends no turn and only compacts (it takes the turn lock itself);
+		// the observer renders the compaction and resets the toggle.
 		if (string.IsNullOrEmpty(message) && _isAutoCompact)
 		{
-			// No turn is running here, so the lock is taken by the service.
-			await SendCompactionPromptAsync(turnLockHeld: false);
-			IsAutoCompact = false;
+			_midRunAutoCompactState = true;
+			await _engine.RunAsync(new TurnRequest(_node.Model, string.Empty, BuildTurnSettings(), AutoCompact: true), new RunObserver(this, message));
 			return;
 		}
 
@@ -410,7 +407,7 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 		// returns once it was reported complete. The idle transition (JSONL refresh, IsBusy=false, sound) runs in the observer's
 		// BeforeIdleAsync/Idle, called by the engine in the controller's old order and before the running flag is released.
 		_lastObserver = new RunObserver(this, message);
-		await _engine.RunAsync(new TurnRequest(_node.Model, message, BuildTurnSettings(), wasNewBranch), _lastObserver);
+		await _engine.RunAsync(new TurnRequest(_node.Model, message, BuildTurnSettings(), wasNewBranch, AutoCompact: _midRunAutoCompactState), _lastObserver);
 	}
 
 	/// <summary>The command bar's current choices as the launch settings of a turn (or a correction).</summary>
@@ -454,77 +451,6 @@ public sealed partial class TurnController : ReactiveObject, IDisposable
 			this.RaisePropertyChanged(nameof(CanClear));
 			_content.NotifyClaudeSessionChanged();
 		});
-	}
-
-	/// <summary>
-	/// Compacts the session through the shared Core service (FR.11.6) and does the UI-only parts: the progress row, the
-	/// reload of Messages, the in-memory outcome lines and the auth-error flag. <paramref name="turnLockHeld"/> is true when
-	/// the caller (the send flow) still holds the node's turn lock, so the service must not take it again.
-	/// </summary>
-	private async Task SendCompactionPromptAsync(bool turnLockHeld)
-	{
-		var progressRow = new MessageEntryViewModel
-		{
-			Role       = Constants.SessionFile.RoleSystem,
-			Content    = "Compacting session...",
-			Timestamp  = DateTimeOffset.UtcNow,
-			IsProgress = true,
-		};
-		Dispatcher.UIThread.Post(() => _content.Messages.Add(progressRow));
-
-		var options = new SessionCompactionOptionsModel(
-			_models.SelectedModelId, _models.SelectedEffort, _profiles.SelectedProfileConfigDir, _models.SelectedModelInfo);
-
-		var result = turnLockHeld
-			? await _compaction.CompactWhileHoldingTurnLockAsync(_node.Model, options)
-			: await _compaction.CompactAsync(_node.Model, options);
-
-		switch (result.Outcome)
-		{
-			case SessionCompactionOutcome.NothingToCompact:
-				// Only this run's own row: nothing was sent, so other progress rows (a queued send) stay.
-				Dispatcher.UIThread.Post(() =>
-				{
-					_content.Messages.Remove(progressRow);
-					_content.AddSystemMessage(result.SystemMessage);
-				});
-				break;
-
-			case SessionCompactionOutcome.Compacted:
-				Dispatcher.UIThread.Post(() =>
-				{
-					_content.Messages.Clear();
-					var entries = _fileService.ReadEntries(_node.FileName);
-					foreach (var entry in entries)
-					{
-						if (entry.Role != Constants.SessionFile.RoleCompaction
-						    && string.IsNullOrWhiteSpace(entry.Content))
-							continue;
-						_content.Messages.Add(SessionContentViewModel.EntryToViewModel(entry));
-					}
-
-					// The service detached the JSONL (FR.11.8); only when it had a live session is there anything to announce.
-					if (result.SessionDetached)
-					{
-						_content.AddSystemMessage(result.SystemMessage);
-						this.RaisePropertyChanged(nameof(CanClear));
-						_content.NotifyClaudeSessionChanged();
-					}
-				});
-				break;
-
-			default:
-				if (!string.IsNullOrEmpty(result.Error)
-				    && result.Error.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
-					Dispatcher.UIThread.Post(() => _profiles.HasAuthError = true);
-
-				Dispatcher.UIThread.Post(() =>
-				{
-					RemoveProgressRows();
-					_content.AddSystemMessage(result.SystemMessage);
-				});
-				break;
-		}
 	}
 
 	private void RemoveProgressRows()

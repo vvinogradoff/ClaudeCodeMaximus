@@ -11,7 +11,8 @@
         "running": false,
         "streamingAlive": false,
         "favorite": false,
-        "hasDraft": false
+        "hasDraft": false,
+        "authError": false
       }
     }
   ]

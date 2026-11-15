@@ -34,6 +34,8 @@ public sealed class TurnEngine : ITurnEngine
 	private readonly ISessionTagService _tags;
 	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
 	private readonly IProfileSwitchService? _profileSwitch;
+	private readonly ISessionCompactionService? _compaction;
+	private readonly ISessionAuthErrorTracker? _authErrors;
 
 	private readonly ConcurrentDictionary<string, TurnNodeContext> _nodes = new();
 
@@ -50,7 +52,9 @@ public sealed class TurnEngine : ITurnEngine
 		IAttentionService attention,
 		ISessionTagService tags,
 		IEnumerable<ITurnProgressSink>? progressSinks = null,
-		IProfileSwitchService? profileSwitch = null)
+		IProfileSwitchService? profileSwitch = null,
+		ISessionCompactionService? compaction = null,
+		ISessionAuthErrorTracker? authErrors = null)
 	{
 		_files            = files;
 		_registry         = registry;
@@ -65,6 +69,8 @@ public sealed class TurnEngine : ITurnEngine
 		_tags             = tags;
 		_progressSinks    = progressSinks?.ToArray() ?? [];
 		_profileSwitch    = profileSwitch;
+		_compaction       = compaction;
+		_authErrors       = authErrors;
 	}
 
 	/// <inheritdoc />
@@ -88,13 +94,18 @@ public sealed class TurnEngine : ITurnEngine
 		var node     = request.Node;
 		var settings = request.Settings;
 		var nodeId   = node.NodeId;
+
+		// Auto-Compact with an empty prompt (FR.11.6): no turn is sent, the session is only compacted.
+		if (request.AutoCompact && string.IsNullOrEmpty(request.Message))
+			return await RunCompactionOnlyAsync(request, observer ?? new NullTurnObserver(), cancellationToken);
+
 		var context  = _nodes.GetOrAdd(nodeId, _ => new TurnNodeContext());
 		var turnId   = request.TurnId ?? Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
 		observer   ??= new NullTurnObserver();
 
 		var progress = new TurnProgressTracker(nodeId, turnId, _progressSinks);
 		var run = new TurnRun(turnId, node, _files, _appSettings, observer, progress,
-			settings.ModelId ?? Constants.Turns.DefaultOptionText, settings.Effort ?? Constants.Turns.DefaultOptionText);
+			settings.ModelId ?? Constants.Turns.DefaultOptionText, settings.Effort ?? Constants.Turns.DefaultOptionText, AuthErrorSink(nodeId));
 
 		context.Enter();
 		if (observer is not NullTurnObserver)
@@ -199,6 +210,14 @@ public sealed class TurnEngine : ITurnEngine
 
 				// Post-response step of the client (Auto-Compact, FR.11.6), still holding the turn lock.
 				await observer.AfterResponseWhileLockedAsync();
+
+				// Auto-Compact (FR.11.6): after the answer, still holding the turn lock; the observer may have a live toggle state.
+				if (observer.ShouldAutoCompact(request.AutoCompact))
+				{
+					// A Stop that arrived between the answer and here must not be followed by a compaction (V1).
+					ct.ThrowIfCancellationRequested();
+					await CompactAsync(node, settings, observer, turnLockHeld: true, ct);
+				}
 			}
 			catch (OperationCanceledException)
 			{
@@ -254,6 +273,108 @@ public sealed class TurnEngine : ITurnEngine
 		}
 	}
 
+	/// <summary>Where a turn of the node reports its auth outcome so that the session state carries it (null when the engine has no tracker).</summary>
+	private Action<bool>? AuthErrorSink(string nodeId) =>
+		_authErrors == null ? null : hasAuthError => _authErrors.Set(nodeId, hasAuthError);
+
+	/// <summary>
+	/// An Auto-Compact without a prompt: nothing is sent, the compaction takes the node's turn lock itself. It is still reported as a turn of its
+	/// own (V2): <c>turn.started</c> first, then <c>turn.completed</c> with the failure of the compaction as its error. A failure is also appended to the
+	/// transcript as a system line, like the other turn errors. A Stop reaches it through <see cref="CancelRuns"/> (V1).
+	/// </summary>
+	private async Task<TurnOutcome> RunCompactionOnlyAsync(TurnRequest request, ITurnObserver observer, CancellationToken cancellationToken)
+	{
+		var node   = request.Node;
+		var turnId = request.TurnId ?? Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
+		var context = _nodes.GetOrAdd(node.NodeId, _ => new TurnNodeContext());
+
+		using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+		context.Add(cts);
+
+		var progress = new TurnProgressTracker(node.NodeId, turnId, _progressSinks);
+		progress.Started(request.ClientRequestId);
+
+		var cancelled = false;
+		string? error = null;
+		try
+		{
+			var result = await CompactAsync(node, request.Settings, observer, turnLockHeld: false, cts.Token);
+			if (result is { Outcome: SessionCompactionOutcome.Failed })
+			{
+				error = result.Error ?? result.SystemMessage;
+				_files.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, result.SystemMessage);
+			}
+		}
+		catch (OperationCanceledException)
+		{
+			cancelled = true;
+			_files.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, Constants.Turns.InterruptedByUserText);
+			observer.Interrupted(DateTimeOffset.UtcNow);
+		}
+		catch (Exception ex)
+		{
+			error = ex.Message;
+			throw;
+		}
+		finally
+		{
+			context.Remove(cts);
+			progress.Finished(cancelled, error, ran: true);
+			try
+			{
+				_files.NotifyTurnCompleted(node.FileName, cancelled, error, turnId);
+			}
+			catch (Exception ex)
+			{
+				_log.Warning(ex, "TurnCompleted handler failed for session {FileName}", node.FileName);
+			}
+		}
+
+		return new TurnOutcome(turnId, cancelled, error);
+	}
+
+	/// <summary>
+	/// Compacts the session through the shared <see cref="ISessionCompactionService"/> (FR.11.6) with the model, effort and profile of the turn
+	/// and reports to the observer. A failure for invalid credentials raises the auth error. Returns null when the engine has no compaction service.
+	/// </summary>
+	private async Task<SessionCompactionResultModel?> CompactAsync(SessionNodeModel node, TurnSettings settings, ITurnObserver observer, bool turnLockHeld, CancellationToken ct)
+	{
+		if (_compaction == null)
+		{
+			_log.Warning("Auto-Compact requested for session {FileName} but the engine has no compaction service", node.FileName);
+			return null;
+		}
+
+		observer.CompactionStarted();
+
+		var options = new SessionCompactionOptionsModel(settings.ModelId, settings.Effort, settings.ProfileConfigDir, settings.ModelInfo);
+		SessionCompactionResultModel result;
+		try
+		{
+			result = turnLockHeld
+				? await _compaction.CompactWhileHoldingTurnLockAsync(node, options, ct)
+				: await _compaction.CompactAsync(node, options, ct);
+		}
+		catch (OperationCanceledException)
+		{
+			// Stopped: the transcript is untouched (the service rewrites it only after the CLI call returned). The client drops its progress row.
+			observer.CompactionFinished(new SessionCompactionResultModel(
+				SessionCompactionOutcome.Failed, null, Constants.Compaction.StoppedMessage, SessionDetached: false));
+			throw;
+		}
+
+		if (result.Outcome == SessionCompactionOutcome.Failed
+		    && !string.IsNullOrEmpty(result.Error)
+		    && result.Error.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
+		{
+			observer.AuthErrorChanged(true);
+			_authErrors?.Set(node.NodeId, true);
+		}
+
+		observer.CompactionFinished(result);
+		return result;
+	}
+
 	/// <summary>
 	/// After the node's last send: the client finishes its bookkeeping, then the node becomes idle (client state first, then the daemon's
 	/// running flag - the order the controller always used). A send that started meanwhile owns the idle transition instead.
@@ -303,7 +424,7 @@ public sealed class TurnEngine : ITurnEngine
 		{
 			var run = context.Active
 				?? new TurnRun(string.Empty, node, _files, _appSettings, context.LastObserver ?? new NullTurnObserver(),
-					new TurnProgressTracker(node.NodeId, string.Empty, []), null, null);
+					new TurnProgressTracker(node.NodeId, string.Empty, []), null, null, AuthErrorSink(node.NodeId));
 			run.HandleStreamEvent(evt);
 		};
 

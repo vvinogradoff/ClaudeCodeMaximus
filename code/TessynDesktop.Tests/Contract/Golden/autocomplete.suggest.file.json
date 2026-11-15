@@ -1,0 +1,16 @@
+{
+  "mode": "file",
+  "triggerStart": 4,
+  "triggerLength": 5,
+  "indexReady": true,
+  "items": [
+    {
+      "label": "Foo.cs",
+      "insertText": "src\\Foo.cs",
+      "kind": "file",
+      "detail": "src\\Foo.cs",
+      "matchStart": 0,
+      "matchLength": 3
+    }
+  ]
+}

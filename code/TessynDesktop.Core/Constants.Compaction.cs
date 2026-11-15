@@ -10,6 +10,9 @@ public static partial class Constants
 		public const string CompactedMessage = "[Session compacted and JSONL detached — next prompt will use the compacted text session as context]";
 		public const string EmptyResultMessage = "[Compaction returned no content — session left unchanged]";
 
+		/// <summary>Line shown when Stop interrupted a compaction (the session file is left unchanged).</summary>
+		public const string StoppedMessage = "[Compaction stopped — session left unchanged]";
+
 		/// <summary>Format of the failure line; the argument is the error text.</summary>
 		public const string FailedMessageFormat = "[Compaction failed — session left unchanged: {0}]";
 

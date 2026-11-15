@@ -5,10 +5,11 @@ namespace TessynDesktop.Client;
 public sealed partial class TessynClient
 {
 	/// <inheritdoc />
-	public Task<TurnSendResult> TurnSendAsync(string nodeId, string text, string? modelId = null, string? effort = null, string? profileId = null, string? clientRequestId = null, CancellationToken cancellationToken = default) =>
+	public Task<TurnSendResult> TurnSendAsync(string nodeId, string text, string? modelId = null, string? effort = null, string? profileId = null, string? clientRequestId = null, bool newBranch = false, bool autoCompact = false, CancellationToken cancellationToken = default) =>
 		CallAsync<TurnSendResult>(
 			RemoteProtocol.TurnStream.SendMethod,
-			Params(("nodeId", Node(nodeId)), ("text", Node(text)), ("modelId", Node(modelId)), ("effort", Node(effort)), ("profileId", Node(profileId)), ("clientRequestId", Node(clientRequestId))),
+			Params(("nodeId", Node(nodeId)), ("text", Node(text)), ("modelId", Node(modelId)), ("effort", Node(effort)), ("profileId", Node(profileId)), ("clientRequestId", Node(clientRequestId)),
+				("newBranch", Node(newBranch ? true : null)), ("autoCompact", Node(autoCompact ? true : null))),
 			cancellationToken);
 
 	/// <inheritdoc />

@@ -21,7 +21,8 @@ internal sealed class TdcpTestHost : IDisposable
 
 	private readonly HttpClient _http = new();
 
-	public TdcpTestHost(TdcpDispatcher dispatcher, int logCapacity = Constants.Remote.EventLog.DefaultCapacity, RemoteEventBus? bus = null, DaemonRunInfo? runInfo = null)
+	public TdcpTestHost(TdcpDispatcher dispatcher, int logCapacity = Constants.Remote.EventLog.DefaultCapacity, RemoteEventBus? bus = null, DaemonRunInfo? runInfo = null,
+		IClientPresenceRegistry? presence = null, TimeSpan? keepAlive = null)
 	{
 		Bus      = bus ?? new RemoteEventBus();
 		Log      = new EventLog(Bus, capacity: logCapacity);
@@ -37,7 +38,7 @@ internal sealed class TdcpTestHost : IDisposable
 			var port = ((IPEndPoint)listener.LocalEndpoint).Port;
 			listener.Stop();
 
-			Server = new TdcpServer(Client, dispatcher, Token, Log, RunInfo);
+			Server = new TdcpServer(Client, dispatcher, Token, Log, RunInfo, presence, keepAlive);
 			try
 			{
 				Server.Start(port);

@@ -11,17 +11,20 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 	private readonly IClaudeStreamingSessionManager _streaming;
 	private readonly IAttentionService _attention;
 	private readonly ISessionActivityService _activity;
+	private readonly ISessionAuthErrorTracker? _authErrors;
 
 	public SessionStateBuilder(
 		ISessionRegistry registry,
 		IClaudeStreamingSessionManager streaming,
 		IAttentionService attention,
-		ISessionActivityService activity)
+		ISessionActivityService activity,
+		ISessionAuthErrorTracker? authErrors = null)
 	{
 		_registry  = registry;
 		_streaming = streaming;
 		_attention = attention;
 		_activity  = activity;
+		_authErrors = authErrors;
 	}
 
 	/// <inheritdoc />
@@ -45,6 +48,7 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 			LastActivityUtc: activity.LastActivityUtc,
 			LastPromptUtc:   activity.LastPromptUtc,
 			HasDraft:        activity.HasDraft,
-			ProfileName:     activity.LastPromptProfileName);
+			ProfileName:     activity.LastPromptProfileName,
+			AuthError:       _authErrors?.Has(nodeId) ?? false);
 	}
 }

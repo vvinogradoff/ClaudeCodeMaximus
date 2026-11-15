@@ -21,12 +21,14 @@ public sealed class ProfileAdminService : IProfileAdminService
 	private readonly IClaudeProfileService _profileService;
 	private readonly IAppSettingsService _appSettings;
 	private readonly IRemoteEventBus? _bus;
+	private readonly ISessionAuthErrorTracker? _authErrors;
 	private readonly object _gate = new();
 	private readonly HashSet<string> _reservedIds = new(StringComparer.OrdinalIgnoreCase);
 	private readonly HashSet<string> _authRunning = new(StringComparer.OrdinalIgnoreCase);
 
-	public ProfileAdminService(IClaudeProfileService profileService, IAppSettingsService appSettings, IRemoteEventBus? bus = null)
+	public ProfileAdminService(IClaudeProfileService profileService, IAppSettingsService appSettings, IRemoteEventBus? bus = null, ISessionAuthErrorTracker? authErrors = null)
 	{
+		_authErrors     = authErrors;
 		_profileService = profileService;
 		_appSettings    = appSettings;
 		_bus            = bus;
@@ -289,6 +291,11 @@ public sealed class ProfileAdminService : IProfileAdminService
 
 	private void Complete(string profileId, bool success)
 	{
+		// A successful login ends the sessions' auth error (V5): the flag is per session, not per profile, so every session's flag is cleared;
+		// one that still fails sets it again with its next turn.
+		if (success)
+			_authErrors?.ClearAll();
+
 		RaiseProfilesChanged();
 		try
 		{

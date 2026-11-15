@@ -32,12 +32,17 @@ public sealed class TdcpServer : IDisposable
 	private readonly string                  _token;
 	private readonly IEventLog?              _eventLog;
 	private readonly IDaemonRunInfo?         _runInfo;
+	private readonly IClientPresenceRegistry? _presence;
+	private readonly TimeSpan                _keepAlive;
 	private readonly CancellationTokenSource _cts = new();
 
 	private HttpListener? _listener;
 
-	public TdcpServer(IDaemonClient client, TdcpDispatcher dispatcher, string token, IEventLog? eventLog = null, IDaemonRunInfo? runInfo = null)
+	public TdcpServer(IDaemonClient client, TdcpDispatcher dispatcher, string token, IEventLog? eventLog = null, IDaemonRunInfo? runInfo = null,
+		IClientPresenceRegistry? presence = null, TimeSpan? keepAlive = null)
 	{
+		_presence  = presence;
+		_keepAlive = keepAlive ?? Constants.Composer.SseKeepAliveInterval;
 		_client     = client;
 		_dispatcher = dispatcher;
 		_token      = token;
@@ -190,6 +195,7 @@ public sealed class TdcpServer : IDisposable
 
 		var legacy      = ctx.Request.QueryString[Constants.Remote.Sse.LegacyQuery] == "1";
 		var clientRunId = ctx.Request.QueryString[Constants.Remote.Sse.RunIdQuery];
+		var presenceClientId = ctx.Request.QueryString[RemoteProtocol.Notifications.ClientIdQuery];
 		long? lastEventId = long.TryParse(ctx.Request.Headers[Constants.Remote.Sse.LastEventIdHeader], out var parsed) ? parsed : null;
 
 		ctx.Response.StatusCode  = 200;
@@ -209,6 +215,10 @@ public sealed class TdcpServer : IDisposable
 		using var connectionCts = new CancellationTokenSource();
 		using var linkedCts     = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, connectionCts.Token);
 		var ct = linkedCts.Token;
+
+		// Package J2: while this stream is open its client's notification registration counts (see IClientPresenceRegistry).
+		using var presenceLease = _presence?.OpenStream(presenceClientId);
+		_ = KeepAliveAsync(channel.Writer, ct);
 
 		void OnAppended(RemoteNotification notification) =>
 			channel.Writer.TryWrite(new SseFrame(notification.Seq, NotificationJson(notification)));
@@ -280,6 +290,14 @@ public sealed class TdcpServer : IDisposable
 
 				await foreach (var frame in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
 				{
+					if (frame.Seq < 0)
+					{
+						// Keep-alive: a comment line. Writing it is what notices a connection that is gone.
+						await writer.WriteAsync(": ping\n\n").ConfigureAwait(false);
+						await writer.FlushAsync().ConfigureAwait(false);
+						continue;
+					}
+
 					if (frame.Seq == 0)
 					{
 						await WriteFrameAsync(writer, 0, frame.Json).ConfigureAwait(false);
@@ -324,6 +342,10 @@ public sealed class TdcpServer : IDisposable
 				_client.ScheduleChanged -= OnScheduleChanged;
 			}
 
+			// Whatever ended the stream (a write failure surfaces as HttpListenerException, not only IOException), the keep-alive of this stream
+			// must end with it, or it would wake every interval for the life of the daemon (V4).
+			try { connectionCts.Cancel(); } catch (ObjectDisposedException) { /* already gone */ }
+
 			channel.Writer.TryComplete();
 			try { ctx.Response.Close(); } catch { /* best effort */ }
 		}
@@ -354,6 +376,33 @@ public sealed class TdcpServer : IDisposable
 			["method"]  = Constants.Remote.Events.Resync,
 			["params"]  = new JsonObject { ["reason"] = reason, ["eventSeq"] = head },
 		}.ToJsonString();
+
+	/// <summary>Feeds the stream's channel a keep-alive frame every interval until the stream ends.</summary>
+	private async Task KeepAliveAsync(ChannelWriter<SseFrame> writer, CancellationToken ct)
+	{
+		Interlocked.Increment(ref _activeKeepAlives);
+		try
+		{
+			using var timer = new PeriodicTimer(_keepAlive);
+			while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+				writer.TryWrite(new SseFrame(KeepAliveSeq, string.Empty));
+		}
+		catch (OperationCanceledException)
+		{
+			// The stream ended.
+		}
+		finally
+		{
+			Interlocked.Decrement(ref _activeKeepAlives);
+		}
+	}
+
+	private int _activeKeepAlives;
+
+	/// <summary>Keep-alive loops still running (one per open stream); a test seam for "a finished stream leaves nothing behind".</summary>
+	internal int ActiveKeepAlives => Volatile.Read(ref _activeKeepAlives);
+
+	private const long KeepAliveSeq = -1;
 
 	private static async Task WriteFrameAsync(StreamWriter writer, long id, string json)
 	{

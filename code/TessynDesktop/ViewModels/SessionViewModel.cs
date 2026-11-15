@@ -444,7 +444,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_models = new ModelSelectionController(modelService, appSettings, _directoryModel);
 		_profiles = new ProfileController(profileService, profileAdmin, appSettings, _directoryModel, _content);
 		_turn = new TurnController(node, fileService, draftService, turnEngine, streamingManager, appSettings, daemonClient,
-			soundService, compaction, _content, _models, _profiles);
+			soundService, _content, _models, _profiles);
 		turn = _turn;
 
 		_content.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);

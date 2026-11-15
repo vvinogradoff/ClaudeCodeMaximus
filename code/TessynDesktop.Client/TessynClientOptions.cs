@@ -10,6 +10,18 @@ public sealed record TessynClientOptions
 	/// <summary>Sent in <c>client.hello</c>.</summary>
 	public string ClientVersion { get; init; } = "0.1.0";
 
+	/// <summary>
+	/// Names this client to the daemon (package J2): sent with <c>client.hello</c> and on the notification stream's request, so the daemon can tie
+	/// <see cref="Presents"/> to the life of the stream. Null (the default) means an anonymous client.
+	/// </summary>
+	public string? ClientId { get; init; }
+
+	/// <summary>
+	/// Notification channels this client shows itself (<c>"toast"</c>, <c>"sound"</c>). Needs <see cref="ClientId"/>. Registered with every hello, so a
+	/// reconnect or a daemon restart registers again. While the stream is open the desktop host does not show those notifications.
+	/// </summary>
+	public IReadOnlyList<string> Presents { get; init; } = [];
+
 	/// <summary>Per-call timeout of a JSON-RPC request.</summary>
 	public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(30);
 

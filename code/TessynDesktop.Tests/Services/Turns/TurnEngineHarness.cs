@@ -30,6 +30,8 @@ internal sealed class TurnEngineHarness : IDisposable
 	public RecordingTelegramBridge Telegram { get; } = new();
 	public AttentionTestEnv Attention { get; } = new();
 	public TagTestEnv Tags { get; } = new();
+	public RecordingCompactionService Compaction { get; }
+	public SessionAuthErrorTracker AuthErrors { get; } = new();
 	public TurnEngine Engine { get; }
 
 	public TurnEngineHarness(bool agentTools = false, System.Collections.Generic.IEnumerable<ITurnProgressSink>? sinks = null)
@@ -42,11 +44,12 @@ internal sealed class TurnEngineHarness : IDisposable
 		Settings.Settings.ClaudePath        = "claude-test";
 
 		Files.LockCount = () => Turns.GetTurnLock(NodeId).CurrentCount;
+		Compaction = new RecordingCompactionService(() => Turns.GetTurnLock(NodeId).CurrentCount, Files.Log);
 
 		Engine = new TurnEngine(
 			Files, Registry, Turns, Process, Streaming, Settings,
 			new Lazy<IAgentMcpServer>(() => Mcp), new Lazy<ITelegramBridgeService>(() => Telegram),
-			Status, Attention.Service, Tags.Service, sinks);
+			Status, Attention.Service, Tags.Service, sinks, compaction: Compaction, authErrors: AuthErrors);
 	}
 
 	public static SessionNodeModel Node(string? sessionId = null, bool streaming = false, int depth = 0) => new()
@@ -67,8 +70,8 @@ internal sealed class TurnEngineHarness : IDisposable
 		new(model, effort, profileDir, profileName, ollamaUrl, disableTools, chrome, modelInfo, null);
 
 	public Task<TurnOutcome> Run(SessionNodeModel node, string message = "Hi", ITurnObserver? observer = null, TurnSettings? settings = null,
-		bool isNewBranch = false, CancellationToken ct = default) =>
-		Engine.RunAsync(new TurnRequest(node, message, settings ?? Chosen(), isNewBranch), observer, ct);
+		bool isNewBranch = false, CancellationToken ct = default, bool autoCompact = false) =>
+		Engine.RunAsync(new TurnRequest(node, message, settings ?? Chosen(), isNewBranch, AutoCompact: autoCompact), observer, ct);
 
 	/// <summary>What the former composer would have built for the same inputs (the oracle the engine's block is compared with).</summary>
 	public string ExpectedBlock(SessionNodeModel node, bool isNewBranch, bool isNewSession, bool? streamingOverride = null)

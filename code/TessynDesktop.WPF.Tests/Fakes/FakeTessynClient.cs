@@ -73,7 +73,6 @@ public sealed partial class FakeTessynClient : ITessynClient
 		return Task.CompletedTask;
 	}
 
-	public Task<TurnSendResult> TurnSendAsync(string nodeId, string text, string? modelId = null, string? effort = null, string? profileId = null, string? clientRequestId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 	public Task<SessionStopResult> TurnStopAsync(string nodeId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 	public Task<HelloResult> HelloAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 

@@ -43,7 +43,7 @@ public sealed class TurnStreamWireTests : IDisposable
 		var result = (await _env.Host.CallAsync("client.hello"))["result"]!;
 
 		var capabilities = result["capabilities"]!.AsArray().Select(c => c!.GetValue<string>()).ToArray();
-		Assert.Equal(["events.local", "events.resume", "turn.stream"], capabilities);
+		Assert.Equal(["events.local", "events.resume", "turn.stream", "turn.options"], capabilities);
 	}
 
 	[Fact]
