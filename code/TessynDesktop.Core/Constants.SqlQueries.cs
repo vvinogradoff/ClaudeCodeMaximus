@@ -55,6 +55,12 @@ public static partial class Constants
 		/// <summary>FTS row count and highest rowid, in one scan.</summary>
 		public const string AuditFts = "SELECT COUNT(*), MAX(rowid) FROM messages;";
 
+		/// <summary>A few random mapped sessions for the spot check (the map is small: one row per session).</summary>
+		public const string SampleMap = "SELECT external_id, first_rowid, last_rowid, row_count FROM session_rows ORDER BY RANDOM() LIMIT @n;";
+
+		/// <summary>Rows of one session inside its mapped range: bounded by the rowid range, so it never scans the whole FTS table.</summary>
+		public const string CountRowsInRange = "SELECT COUNT(*) FROM messages WHERE rowid BETWEEN @first AND @last AND external_id = @externalId;";
+
 		public const string SelectSessionPaths = "SELECT external_id, jsonl_path FROM sessions;";
 
 		public const string SelectRowRange = "SELECT first_rowid, last_rowid, row_count FROM session_rows WHERE external_id = @externalId;";
