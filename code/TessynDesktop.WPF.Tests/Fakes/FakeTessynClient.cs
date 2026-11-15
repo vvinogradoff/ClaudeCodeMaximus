@@ -238,9 +238,19 @@ public sealed class FakeTessynClient : ITessynClient
 	public Task<UsageResult> UsageGetAsync(string? profileId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
 	// P1.F / P1.G additions to ITessynClient; the WPF client does not use them yet.
-	public Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, SessionEntriesQuery query, CancellationToken cancellationToken = default)
+	/// <summary>When set, around-entry queries wait for it (a jump still loading while the user does something else).</summary>
+	public TaskCompletionSource? AroundGate { get; set; }
+
+	/// <summary>When set, around-entry queries throw it.</summary>
+	public Exception? AroundException { get; set; }
+
+	public async Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, SessionEntriesQuery query, CancellationToken cancellationToken = default)
 	{
 		Record($"session.entries.query:{nodeId}:around={query.AroundEntryId ?? "-"}");
+		if (AroundGate != null)
+			await AroundGate.Task;
+		if (AroundException != null)
+			throw AroundException;
 		var session = Sessions[nodeId];
 		var total = session.Entries.Count;
 		var max = query.Limit ?? 100;
@@ -249,10 +259,10 @@ public sealed class FakeTessynClient : ITessynClient
 
 		var at = session.Entries.FindIndex(e => e.EntryId == query.AroundEntryId);
 		if (at < 0)
-			return Task.FromResult(new SessionEntriesResult(nodeId, session.Epoch, total, []));
+			return new SessionEntriesResult(nodeId, session.Epoch, total, []);
 
 		var start = Math.Clamp(at - max / 2, 0, Math.Max(0, total - max));
-		return Task.FromResult(new SessionEntriesResult(nodeId, session.Epoch, total, session.Entries.Skip(start).Take(max).ToList()));
+		return new SessionEntriesResult(nodeId, session.Epoch, total, session.Entries.Skip(start).Take(max).ToList());
 	}
 
 	public Task<SessionEntryDto> SessionEntryByIdAsync(string nodeId, string entryId, EntryRangeParams? range = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();

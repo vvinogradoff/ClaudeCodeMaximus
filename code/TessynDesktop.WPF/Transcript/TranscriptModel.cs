@@ -39,6 +39,9 @@ public sealed class TranscriptModel
 	/// <summary>Whether older entries exist that are not loaded.</summary>
 	public bool HasOlder => FirstIndex > 0;
 
+	/// <summary>Whether newer entries exist that are not loaded (the model came from a jump and stops short of the end).</summary>
+	public bool HasNewer => LastIndex + 1 < Total;
+
 	public void Prepend(IReadOnlyList<SessionEntryDto> entries, IReadOnlyList<TranscriptEntryView> views)
 	{
 		Entries.InsertRange(0, entries);

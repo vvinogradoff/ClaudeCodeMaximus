@@ -93,14 +93,21 @@ public sealed partial class SessionPaneViewModel
 		_back.RemoveAt(_back.Count - 1);
 		NotifyBack();
 		_logger.LogInformation("Going back to {NodeId}", origin.NodeId);
+		var openToken = _openToken;
 		try
 		{
 			if (origin.NodeId == NodeId && _current != null)
 			{
 				if (origin.AtBottom)
 				{
+					if (_current.HasNewer)
+					{
+						await ReloadCoreAsync(_openToken);   // the view came from a jump and stops short of the newest entries
+						return;
+					}
+
 					_viewAtBottom = true;
-					_surface.Load(origin.NodeId, _current.Views, _current.HasOlder, toBottom: true);
+					_surface.Load(origin.NodeId, _current.Views, _current.HasOlder, toBottom: true, hasNewer: false);
 					return;
 				}
 
@@ -123,8 +130,10 @@ public sealed partial class SessionPaneViewModel
 					page = null; // the entry is gone: show the newest page instead
 			}
 
-			await OpenCoreAsync(origin.NodeId, null, target, page);
-			Navigated?.Invoke(this, origin.NodeId);
+			if (openToken != _openToken)
+				return;   // a plain selection (tree click) happened meanwhile: it wins
+
+			await OpenCoreAsync(origin.NodeId, null, target, page, shown: () => Navigated?.Invoke(this, origin.NodeId));
 		}
 		catch (Exception ex)
 		{
@@ -171,6 +180,7 @@ public sealed partial class SessionPaneViewModel
 		Notice = null;
 		var origin = CaptureAnchor();
 		_logger.LogInformation("Jumping to entry {EntryId} of {NodeId}", entryId, nodeId);
+		var openToken = _openToken;
 		try
 		{
 			// Already loaded in this session: just scroll.
@@ -192,9 +202,17 @@ public sealed partial class SessionPaneViewModel
 				return;
 			}
 
+			if (openToken != _openToken)
+				return;   // a plain selection (tree click) happened while the page was loading: it wins, nothing is pushed or announced
+
 			PushBack(origin); // only now: when the entry is gone nothing changed and there is nothing to go back to
-			await OpenCoreAsync(nodeId, null, new JumpTarget(entryId, reference.Offset, reference.Length, Highlight: true), page);
-			Navigated?.Invoke(this, nodeId);
+			var shown = await OpenCoreAsync(nodeId, null, new JumpTarget(entryId, reference.Offset, reference.Length, Highlight: true), page,
+				shown: () => Navigated?.Invoke(this, nodeId));   // announced right after the page got the entries, only if this open is still current
+			if (!shown && origin != null && _back.Count > 0 && ReferenceEquals(_back[^1], origin))
+			{
+				_back.RemoveAt(_back.Count - 1);   // the open did not happen: there is nothing to go back from
+				NotifyBack();
+			}
 		}
 		catch (Exception ex)
 		{

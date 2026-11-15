@@ -109,7 +109,8 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		Assert.Contains(_surface.Calls, c => c.StartsWith("goto:120:", StringComparison.Ordinal) && c.EndsWith(":hl", StringComparison.Ordinal));
 		Assert.Equal(["b"], navigated);
 		Assert.Contains(120, _surface.PageIndexes);
-		Assert.Equal(299, _surface.PageIndexes[^1]);         // the newer entries were caught up after the around page
+		Assert.Equal(169, _surface.PageIndexes[^1]);         // only the around page: newer entries load on demand (V4)
+		Assert.True(_surface.HasNewer);
 
 		await _pane.BackCommand.ExecuteAsync(null);
 
@@ -317,6 +318,125 @@ public sealed class SessionPaneNavigationTests : IDisposable
 
 		Assert.Equal(calls, _client.Calls.Count);
 		Assert.True(_pane.CanGoBack);
+	}
+
+	[Fact]
+	public async Task AJump_IntoALongSession_LoadsOnlyTheAroundPage_AndNewerPagesComeOnDemand()
+	{
+		AddSession("a", 20);
+		AddSession("long", 20_000);
+		await _pane.OpenAsync("a");
+		_client.Calls.Clear();
+
+		await _pane.JumpToEntryAsync(EntryRef("long", 100));
+		await _pane.WhenIdleAsync();
+
+		Assert.False(_pane.IsLoading);                                                        // no catch-up behind the spinner
+		Assert.Single(_client.Calls, c => c.StartsWith("session.entries.query:long", StringComparison.Ordinal));
+		Assert.DoesNotContain(_client.Calls, c => c.StartsWith("session.entries:long:before=-:after=", StringComparison.Ordinal) && !c.Contains("after=-", StringComparison.Ordinal));
+		Assert.True(_surface.HasNewer);
+		Assert.Equal(149, _surface.PageIndexes[^1]);
+
+		for (var page = 1; page <= 3; page++)
+		{
+			_surface.RaiseNewerRequested();
+			await _pane.WhenIdleAsync();
+			Assert.Equal(149 + page * 100, _surface.PageIndexes[^1]);                          // exactly one page per request
+			Assert.True(_surface.HasNewer);
+		}
+
+		Assert.Equal(3, _client.Calls.Count(c => c.StartsWith("session.entries:long:before=-:after=", StringComparison.Ordinal)));
+	}
+
+	[Fact]
+	public async Task OnDemandPaging_EndsAtTheNewestEntry_AndLiveAppendsDoNotChaseTheTailMeanwhile()
+	{
+		AddSession("a", 20);
+		var session = AddSession("b", 260);
+		await _pane.OpenAsync("a");
+		await _pane.JumpToEntryAsync(EntryRef("b", 100));         // around page 50..149
+		session.Entries.Add(session.Entries[^1] with { Index = 260, EntryId = "fb:260" });
+		_client.RaiseNotification(RemoteProtocol.Events.SessionAppended, new SessionEpochPayload("b", 1));
+		await _pane.WhenIdleAsync();
+
+		Assert.Equal(149, _surface.PageIndexes[^1]);                // a live append did not load the whole gap
+
+		_surface.RaiseNewerRequested();
+		await _pane.WhenIdleAsync();
+		_surface.RaiseNewerRequested();
+		await _pane.WhenIdleAsync();
+
+		Assert.Equal(260, _surface.PageIndexes[^1]);
+		Assert.False(_surface.HasNewer);
+	}
+
+	[Fact]
+	public async Task Back_ToTheBottomOfASessionOpenedByAJump_ShowsTheNewestEntries()
+	{
+		AddSession("long", 1000);
+		await _pane.OpenAsync("long");                              // the bottom view
+		await _pane.JumpToEntryAsync(EntryRef("long", 5));          // loads around entry 5, which is far from the end
+		Assert.True(_surface.HasNewer);
+
+		await _pane.BackCommand.ExecuteAsync(null);
+
+		Assert.Equal(999, _surface.PageIndexes[^1]);
+		Assert.False(_surface.HasNewer);
+		Assert.True(_surface.LastLoadToBottom);
+	}
+
+	[Fact]
+	public async Task AJumpSupersededByATreeClick_RaisesNothing_AndLeavesTheTrailAlone()
+	{
+		AddSession("a", 40);
+		AddSession("b", 40);
+		AddSession("c", 40);
+		var navigated = new List<string>();
+		_pane.Navigated += (_, id) => navigated.Add(id);
+		await _pane.OpenAsync("a");
+		_client.AroundGate = new TaskCompletionSource();
+
+		var jump = _pane.JumpToEntryAsync(EntryRef("b", 20));        // still loading the around page
+		await _pane.OpenAsync("c");                                  // the user clicks another session in the tree
+		_client.AroundGate.SetResult();
+		await jump;
+
+		Assert.Empty(navigated);
+		Assert.Equal("c", _pane.NodeId);
+		Assert.False(_pane.CanGoBack);
+		Assert.Equal("c", _surface.LoadedKey);
+	}
+
+	[Fact]
+	public async Task AJumpThatFails_RaisesNothing_AndPushesNothing()
+	{
+		AddSession("a", 40);
+		AddSession("b", 40);
+		var navigated = new List<string>();
+		_pane.Navigated += (_, id) => navigated.Add(id);
+		await _pane.OpenAsync("a");
+		_client.AroundException = new InvalidOperationException("daemon error");
+
+		await _pane.JumpToEntryAsync(EntryRef("b", 20));
+
+		Assert.Empty(navigated);
+		Assert.Equal("a", _pane.NodeId);
+		Assert.False(_pane.CanGoBack);
+		Assert.Contains("daemon error", _pane.Notice);
+	}
+
+	[Fact]
+	public async Task NavigatedIsRaisedOnce_RightAfterThePageGotTheEntries()
+	{
+		AddSession("a", 40);
+		AddSession("b", 400);
+		var seen = new List<string>();
+		_pane.Navigated += (_, id) => seen.Add(id + ":" + _surface.LoadedKey + ":" + _surface.Calls[^1].Split(':')[0]);
+		await _pane.OpenAsync("a");
+
+		await _pane.JumpToEntryAsync(EntryRef("b", 200));
+
+		Assert.Equal(["b:b:goto"], seen);        // the surface was loaded and scrolled before the announcement; no catch-up preceded it
 	}
 
 	[Fact]

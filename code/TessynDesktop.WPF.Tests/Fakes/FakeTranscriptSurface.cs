@@ -36,8 +36,15 @@ public sealed class FakeTranscriptSurface : ITranscriptSurface
 
 	public void RaisePageRestarted() => PageRestarted?.Invoke(this, EventArgs.Empty);
 
-	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom)
+	public bool HasNewer { get; private set; }
+
+	public event EventHandler? NewerRequested;
+
+	public void RaiseNewerRequested() => NewerRequested?.Invoke(this, EventArgs.Empty);
+
+	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom, bool hasNewer = false)
 	{
+		HasNewer = hasNewer;
 		Calls.Add($"load:{key}:{entries.Count}");
 		LoadedKey = key;
 		HasOlder = hasOlder;
@@ -53,8 +60,9 @@ public sealed class FakeTranscriptSurface : ITranscriptSurface
 		PageIndexes.InsertRange(0, entries.Select(e => e.Index));
 	}
 
-	public void Append(IReadOnlyList<TranscriptEntryView> entries)
+	public void Append(IReadOnlyList<TranscriptEntryView> entries, bool hasNewer = false)
 	{
+		HasNewer = hasNewer;
 		Calls.Add($"append:{entries.Count}");
 		PageIndexes.AddRange(entries.Select(e => e.Index));
 	}

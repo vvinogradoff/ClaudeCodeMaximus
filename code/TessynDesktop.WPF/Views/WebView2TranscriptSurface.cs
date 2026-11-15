@@ -124,14 +124,16 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		core.Navigate(PageUri);
 	}
 
-	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom)
+	public event EventHandler? NewerRequested;
+
+	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom, bool hasNewer = false)
 	{
 		_token++;
 		_broker.Reset();
 		var token = _token;
 		var snapshot = entries.ToList();
 		Offer(snapshot);
-		Post(() => JsonSerializer.Serialize(new { cmd = "load", tok = token, key, entries = snapshot.Select(ToPage), hasOlder, toBottom }, Json), replacesQueue: true);
+		Post(() => JsonSerializer.Serialize(new { cmd = "load", tok = token, key, entries = snapshot.Select(ToPage), hasOlder, toBottom, hasNewer }, Json), replacesQueue: true);
 	}
 
 	public void Prepend(IReadOnlyList<TranscriptEntryView> entries, bool hasOlder)
@@ -142,12 +144,12 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		Post(() => JsonSerializer.Serialize(new { cmd = "prepend", tok = token, entries = snapshot.Select(ToPage), hasOlder }, Json));
 	}
 
-	public void Append(IReadOnlyList<TranscriptEntryView> entries)
+	public void Append(IReadOnlyList<TranscriptEntryView> entries, bool hasNewer = false)
 	{
 		var token = _token;
 		var snapshot = entries.ToList();
 		Offer(snapshot);
-		Post(() => JsonSerializer.Serialize(new { cmd = "append", tok = token, entries = snapshot.Select(ToPage) }, Json));
+		Post(() => JsonSerializer.Serialize(new { cmd = "append", tok = token, entries = snapshot.Select(ToPage), hasNewer }, Json));
 	}
 
 	public void Replace(TranscriptEntryView entry)
@@ -324,6 +326,9 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 					break;
 				case "needOlder" when TokenMatches(root):
 					OlderRequested?.Invoke(this, EventArgs.Empty);
+					break;
+				case "needNewer" when TokenMatches(root):
+					NewerRequested?.Invoke(this, EventArgs.Empty);
 					break;
 				case "expand" when TokenMatches(root):
 					ExpandRequested?.Invoke(this, root.GetProperty("i").GetInt32());

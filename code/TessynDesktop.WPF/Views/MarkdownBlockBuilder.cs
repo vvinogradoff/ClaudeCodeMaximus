@@ -41,8 +41,20 @@ public sealed class MarkdownBlockBuilder
 		if (string.IsNullOrWhiteSpace(markdown))
 			return result;
 
-		foreach (var block in Markdown.Parse(markdown, Pipeline))
-			AddBlock(block, result);
+		if (markdown.Length > Constants.Limits.MaxMarkdownChars)
+			markdown = markdown[..Constants.Limits.MaxMarkdownChars] + "…";
+
+		try
+		{
+			foreach (var block in Markdown.Parse(markdown, Pipeline))
+				AddBlock(block, result);
+		}
+		catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or InsufficientExecutionStackException or NotSupportedException)
+		{
+			// Pathological input (for example thousands of nested quotes) must not make the card body vanish: show the text as it is (V6).
+			result.Clear();
+			result.Add(new TextBlock { Text = markdown, TextWrapping = TextWrapping.Wrap });
+		}
 
 		return result;
 	}

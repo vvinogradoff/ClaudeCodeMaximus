@@ -131,7 +131,31 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 			if (token != _loadToken)
 				return;
 
-			Apply(loaded);
+			// Markdown is parsed on a worker thread (up to 2 MB of pathological input must not freeze the pane), capped, and guarded: when it cannot
+			// be rendered the source is shown instead (V6).
+			string? html = null;
+			var renderNote = (string?)null;
+			if (loaded.Kind == PreviewKind.Markdown && loaded.Refusal == null)
+			{
+				var text = loaded.Text ?? string.Empty;
+				var part = text.Length > Constants.Limits.MaxMarkdownChars ? text[..Constants.Limits.MaxMarkdownChars] : text;
+				try
+				{
+					html = await Task.Run(() => _markdown.RenderMarkdown(part), cancellationToken);
+					if (part.Length < text.Length)
+						renderNote = "Rendered the first part only; the source shows all of it.";
+				}
+				catch (Exception ex) when (ex is not OperationCanceledException)
+				{
+					_logger.LogInformation(ex, "Markdown could not be rendered; showing the source");
+					renderNote = "The markdown could not be rendered; showing the source.";
+				}
+
+				if (token != _loadToken)
+					return;
+			}
+
+			Apply(loaded, html, renderNote);
 		}
 		catch (OperationCanceledException)
 		{
@@ -151,7 +175,7 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 		}
 	}
 
-	private void Apply(LoadedPreview loaded)
+	private void Apply(LoadedPreview loaded, string? markdownHtml, string? renderNote)
 	{
 		_rawName = loaded.Name;
 		Title = _openPolicy.DisplayName(loaded.Name);
@@ -169,8 +193,12 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 		{
 			case PreviewKind.Markdown:
 				_markdownSource = loaded.Text ?? string.Empty;
-				_markdownHtml = _markdown.RenderMarkdown(_markdownSource);
-				ShowCurrentMarkdown();
+				_markdownHtml = markdownHtml;
+				if (markdownHtml == null)
+					_surface.ShowText(_markdownSource);   // not renderable: the source
+				else
+					ShowCurrentMarkdown();
+				Message = renderNote;
 				break;
 			case PreviewKind.Text:
 				_surface.ShowText(loaded.Text ?? string.Empty);

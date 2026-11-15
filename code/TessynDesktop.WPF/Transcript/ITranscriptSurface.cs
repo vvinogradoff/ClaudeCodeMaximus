@@ -10,13 +10,15 @@ namespace TessynDesktop.WPF.Transcript;
 public interface ITranscriptSurface
 {
 	/// <summary>Replaces the content with <paramref name="entries"/> (ascending); scrolls to the newest entry when <paramref name="toBottom"/>.</summary>
-	void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom);
+	/// <param name="hasNewer">Newer entries exist that are not loaded (a view that started at a jump target): the page asks for them when scrolled to the end.</param>
+	void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom, bool hasNewer = false);
 
 	/// <summary>Adds an older page above the content, keeping the scroll position. An empty page with <paramref name="hasOlder"/> false ends paging.</summary>
 	void Prepend(IReadOnlyList<TranscriptEntryView> entries, bool hasOlder);
 
 	/// <summary>Adds newer entries below; the page follows them when it is scrolled to the bottom.</summary>
-	void Append(IReadOnlyList<TranscriptEntryView> entries);
+	/// <param name="hasNewer">More newer entries remain unloaded after these (see <c>Load</c>).</param>
+	void Append(IReadOnlyList<TranscriptEntryView> entries, bool hasNewer = false);
 
 	/// <summary>Replaces one entry (e.g. its full content after a truncated one was expanded).</summary>
 	void Replace(TranscriptEntryView entry);
@@ -48,6 +50,9 @@ public interface ITranscriptSurface
 
 	/// <summary>The user scrolled near the top and older entries exist.</summary>
 	event EventHandler? OlderRequested;
+
+	/// <summary>The user scrolled to the end of loaded entries and newer ones exist.</summary>
+	event EventHandler? NewerRequested;
 
 	/// <summary>The user asked for the full content of a truncated entry (argument: entry index).</summary>
 	event EventHandler<int>? ExpandRequested;

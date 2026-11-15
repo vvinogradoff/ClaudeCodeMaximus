@@ -94,11 +94,13 @@ public sealed class FocusViewBindingTests
 			pane.OpenAsync("a", "A").GetAwaiter().GetResult();
 			pane.Focus.WhenIdleAsync().GetAwaiter().GetResult();
 
+			// The markdown preview renders on a worker thread and continues there (no dispatcher is pumping in this test), so it is opened
+			// before the view binds; in the app the continuation returns to the UI thread.
+			preview.OpenAsync(new PreviewTarget("r", "plan.md")).GetAwaiter().GetResult();
 			var view = new SessionPane { DataContext = pane };
 			Layout(view);
 			pane.Focus.Items[1].ReplyText = "Postgres";
 			pane.Notice = "Something to know";
-			preview.OpenAsync(new PreviewTarget("r", "plan.md")).GetAwaiter().GetResult();
 			Layout(view);
 
 			var side = (Grid)view.FindName("SidePane");
