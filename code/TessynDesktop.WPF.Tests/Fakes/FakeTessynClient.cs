@@ -8,7 +8,7 @@ namespace TessynDesktop.WPF.Tests.Fakes;
 
 /// <summary>An in-memory <see cref="ITessynClient"/> with scriptable tree, workers, search and transcripts; records every call.</summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class FakeTessynClient : ITessynClient
+public sealed partial class FakeTessynClient : ITessynClient
 {
 	private readonly object _gate = new();
 
