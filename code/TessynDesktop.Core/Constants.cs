@@ -402,6 +402,35 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string EncodingBase64 = "base64";
 		public const string DeniedMessage = "That file cannot be read remotely.";
 		public const string UnknownHandleMessage = "Unknown file handle";
+
+		/// <summary>Decision A13: media from these hosts auto-loads in a client's preview.</summary>
+		public static readonly string[] DefaultMediaPreviewHosts = ["annielartens.online", "*.githubusercontent.com"];
+	}
+
+	/// <summary>Constants of the session attachments (attachment.import, attachment.fetch, attachment.list).</summary>
+	public static class Attachments
+	{
+		/// <summary>Folder of the data root; <see cref="Services.FileAccessPolicy.DataRootAttachmentsFolder"/> is the same name.</summary>
+		public const string FolderName = "attachments";
+		public const string DefaultProfileKey = "default";
+		public const string TimestampFormat = "yyyyMMdd-HHmmss";
+
+		/// <summary>The timestamp prefix and its separator: <c>yyyyMMdd-HHmmss-</c>.</summary>
+		public const int PrefixLength = 16;
+		public const char FallbackNameChar = '_';
+		public const string FallbackName = "file";
+		public const int MaxNameLength = 120;
+		public const int MaxSuffix = 999;
+		public const int Sha256HexLength = 64;
+		public const string IdPrefix = "att.";
+		public const string TempExtension = ".part";
+
+		/// <summary>The cap the web server enforces for an upload (decision A12); the daemon checks the same bound on a fetch.</summary>
+		public const long MaxFetchBytes = 200L * 1024 * 1024;
+		public const int CopyBufferBytes = 81920;
+		public static readonly System.TimeSpan FetchTimeout = System.TimeSpan.FromMinutes(5);
+		public const string NotConnectedMessage = "The web link is not connected";
+		public const string UnknownAttachmentMessage = "Unknown attachment";
 	}
 
 	/// <summary>Constants for the Attention Ledger and the Focus view (FR.23).</summary>

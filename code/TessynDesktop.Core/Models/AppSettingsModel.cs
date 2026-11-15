@@ -129,6 +129,12 @@ public sealed class AppSettingsModel
 	public FileAccessSettingsModel FileAccess { get; set; } = new();
 
 	/// <summary>
+	/// Hosts whose images and videos a client loads without asking (decision A13); <c>*.example.com</c> covers subdomains. Served to
+	/// the clients by <c>catalog.get</c> as <c>mediaPreviewHosts</c>.
+	/// </summary>
+	public List<string> MediaPreviewHosts { get; set; } = [.. Constants.FileAccess.DefaultMediaPreviewHosts];
+
+	/// <summary>
 	/// Master toggle for the Telegram Notification Bridge (FR.21). When false, the bridge does not
 	/// start and <c>notify_user</c>/<c>ITelegramBridgeService</c> calls are no-ops. The bot token
 	/// itself is never stored here — see the Telegram Token Store (FR.21.6).

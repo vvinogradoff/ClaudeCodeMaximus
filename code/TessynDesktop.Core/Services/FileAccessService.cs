@@ -29,6 +29,7 @@ public sealed class FileAccessService : IFileAccessService
 	private readonly string[] _dataRoots;
 	private readonly string[] _userProfiles;
 	private readonly TimeProvider _time;
+	private readonly IAttachmentService? _attachments;
 
 	private readonly ConcurrentDictionary<string, PreviewHandle> _previews = new(StringComparer.Ordinal);
 
@@ -42,8 +43,10 @@ public sealed class FileAccessService : IFileAccessService
 		string? dataRoot = null,
 		TimeProvider? time = null,
 		ILogger? log = null,
-		string? userProfile = null)
+		string? userProfile = null,
+		IAttachmentService? attachments = null)
 	{
+		_attachments = attachments;
 		var profile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 		_registry  = registry;
 		_attention = attention;
@@ -151,6 +154,10 @@ public sealed class FileAccessService : IFileAccessService
 
 			_previews.TryRemove(handle, out _);
 		}
+
+		// An attachment is granted like a referenced file: the session's own upload, in the attachments folder of the data root.
+		if (_attachments != null && _attachments.TryResolve(handle, out var attachmentNode, out var attachmentPath))
+			return (attachmentNode, attachmentPath, true);
 
 		var reference = _attention.FindFileRef(handle);
 		if (reference is { Ref.AbsolutePath: { Length: > 0 } path })

@@ -47,6 +47,10 @@ public static class RemoteProtocol
 		// Focus references (additive).
 		public const string FileRead = "file.read";
 		public const string FilePreview = "file.preview";
+
+		// Attachments (additive). attachment.import is loopback-only; attachment.fetch is called by the web server, never by a browser.
+		public const string AttachmentList = "attachment.list";
+		public const string AttachmentFetch = "attachment.fetch";
 	}
 
 	/// <summary>
@@ -56,6 +60,9 @@ public static class RemoteProtocol
 	{
 		/// <summary>P1.G: batch of O(1) session headers, <c>{ nodeIds[] }</c>.</summary>
 		public const string SessionHeaders = "session.headers";
+
+		/// <summary>Attachments: <c>{ nodeId, sourcePath }</c>, copies a local file into the session's attachments folder.</summary>
+		public const string AttachmentImport = "attachment.import";
 	}
 
 	/// <summary>Notification names (contract section 4).</summary>

@@ -38,6 +38,8 @@ public static partial class Constants
 			public const string UsageGet = RemoteProtocol.Methods.UsageGet;
 			public const string FileRead = RemoteProtocol.Methods.FileRead;
 			public const string FilePreview = RemoteProtocol.Methods.FilePreview;
+			public const string AttachmentList = RemoteProtocol.Methods.AttachmentList;
+			public const string AttachmentFetch = RemoteProtocol.Methods.AttachmentFetch;
 		}
 
 		/// <summary>Notification names published on the remote event bus (contract section 4).</summary>
@@ -142,6 +144,7 @@ public static partial class Constants
 			public const string StreamPath = "/link/stream";
 			public const string ReplyPath = "/link/reply";
 			public const string EventsPath = "/link/events";
+			public const string BlobPath = "/link/blob/";
 			public const string DaemonHeader = "X-Tessyn-Daemon";
 			public const string ProtocolHeader = "X-Tessyn-Protocol";
 			public const int DispatchConcurrency = 8;

@@ -35,7 +35,13 @@ public sealed class CatalogRpcModule : IRemoteRpcModule
 			.Concat(StoredProfiles().Select(p => new ProfileOptionDto(p.ProfileId, p.DisplayName)))
 			.ToList();
 
-		return new CatalogResult(models, [.. Constants.Remote.Efforts], profiles);
+		return new CatalogResult(models, [.. Constants.Remote.Efforts], profiles, MediaPreviewHosts());
+	}
+
+	private string[] MediaPreviewHosts()
+	{
+		lock (_appSettings.SyncRoot)
+			return [.. _appSettings.Settings.MediaPreviewHosts.Where(h => !string.IsNullOrWhiteSpace(h)).Select(h => h.Trim().ToLowerInvariant())];
 	}
 
 	private ClaudeProfileModel[] StoredProfiles()
