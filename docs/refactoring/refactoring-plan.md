@@ -519,7 +519,9 @@ Now safe (VMs are thin over `IDaemonClient`, engine is tested).
 
 ---
 
-### Stage 8 — Additional WPF client (D3) 🟡
+### Stage 8 — Additional WPF client (D3) ⛔ SUPERSEDED
+> **Superseded 2026-11-15 by `wpf-programme-plan.md`.** The Architect decided that WPF *replaces* Avalonia (P1, A9) rather than sitting beside it, and that the WPF client talks to the daemon through the remote API (P2, P13). The text below is kept as history; do not follow it.
+
 D3 is settled: Avalonia stays the sole client through the split; the **WPF** client is a
 *later, separate, additive* project once the daemon boundary exists — not a rewrite.
 - 🟡 Reconcile NR.1 (Windows-only) in requirements **first** (Architect owns the doc edit).

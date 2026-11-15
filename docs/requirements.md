@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**TessynDesktop** is a cross-platform Avalonia desktop application that wraps the Claude Code CLI tool, providing a structured session management UI. It does not replace Claude Code — it hosts it, stores its history, and presents it in an organized, navigable interface.
+**TessynDesktop** is a Windows desktop application (WPF client over a UI-free daemon; see NR.1) that wraps the Claude Code CLI tool, providing a structured session management UI. It does not replace Claude Code — it hosts it, stores its history, and presents it in an organized, navigable interface.
 
 ---
 
@@ -129,10 +129,10 @@ The selected tab isn't persisted: the app starts on Tree. Picking a session in t
 
 Old session files without metadata are parsed correctly (backward-compatible). The role keyword is always the first word after the timestamp; metadata keys never conflict with role names.
 
-**FR.2.3.2 — Text selectability:** All rendered text in the output panel must be selectable (copy-able) by the user, including user prompts, assistant responses (both plain text and markdown mode), headings, list items, code blocks, and system messages. Text blocks display an I-beam cursor on hover and show a visible blue selection highlight when text is selected. Cross-block selection is supported: when a pointer drag crosses from one text block into another, the selection extends across all intervening blocks. The first and last blocks receive partial selection; intermediate blocks are fully selected. Ctrl+C copies the combined cross-block text. Auto-scrolling is triggered when the pointer nears the viewport edges during a drag. This works uniformly in both plain-text mode (across messages) and markdown mode (across paragraphs, headings, code blocks within and across messages). Implementation: `CrossBlockSelectionHandler` attaches tunnel-level pointer handlers to the `MessageScroller` ScrollViewer and manages `SelectionStart`/`SelectionEnd` on each `SelectableTextBlock` in range.
+**FR.2.3.2 — Text selectability:** All rendered text in the output panel must be selectable (copy-able) by the user, including user prompts, assistant responses (both plain text and markdown mode), headings, list items, code blocks, and system messages. Text blocks display an I-beam cursor on hover and show a visible blue selection highlight when text is selected. Cross-block selection is supported: when a pointer drag crosses from one text block into another, the selection extends across all intervening blocks. The first and last blocks receive partial selection; intermediate blocks are fully selected. Ctrl+C copies the combined cross-block text. Auto-scrolling is triggered when the pointer nears the viewport edges during a drag. This works uniformly in both plain-text mode (across messages) and markdown mode (across paragraphs, headings, code blocks within and across messages). Cross-message selection works within the rendered window of the transcript (about 1.5 screens either side of the viewport; Architect decision A4, 2026-11-15).
 
 **FR.2.3.3 — Markdown table rendering:** Tables in markdown responses shall render with:
-- Theme-aware border and header colors that adapt correctly to both dark and light themes (using Avalonia system brushes `SystemControlForegroundBaseLowBrush` / `SystemControlBackgroundChromeMediumBrush`)
+- Theme-aware border and header colors that adapt correctly to both dark and light themes (taken from the platform theme's low-emphasis foreground and chrome colours)
 - Column alignment (left, center, right) as specified in the markdown source via `:---`, `:---:`, `---:` syntax
 - Alternating row shading on data rows for readability
 - Header row visually distinguished with a background fill
@@ -232,15 +232,21 @@ Subsequent messages continue after the separator. The full pre-compaction histor
 
 ## Non-Functional Requirements
 
-**NR.1 — Cross-platform:** Runs on Windows, macOS, and Linux. Platform-specific code (path resolution, process launching, app data directory) is isolated behind interfaces.
+**NR.1 — Platform:** The desktop client is a Windows application (WPF). The daemon logic (sessions, turns, orchestration, remote API) stays free of UI types and becomes cross-platform when the daemon moves out of the desktop process (Phase 4 of the WPF programme, `docs/refactoring/wpf-programme-plan.md`). Platform-specific code (path resolution, process launching, app data directory) is isolated behind interfaces. New desktop UI is built in WPF only (decision A9, 2026-11-15); the Avalonia client receives no new UI features and is removed once WPF reaches parity.
 
-**NR.2 — Performance:** Session tree is responsive for up to 500 sessions. Search via full file scan is acceptable for v1; may be slow on large sets.
+**NR.2 — Performance:** The budgets below are measured with the Phase 0 benchmark (`docs/refactoring/wpf-programme-plan.md` section 6). The session tree holds about 2,700 sessions today.
+- First paint after a session switch: cold at most 100 ms (small sessions), 400 ms (1,600 entries) and 600 ms (5,000 entries); warm at most 150 ms for every size.
+- No degradation: the p95 of the last 50 switches is at most 1.2 times the p95 of the first 50, over a 200-switch round robin.
+- Memory growth is at most 50 MB over 200 switches.
+- UI-thread stall at most 50 ms in steady state and 250 ms during a switch; with 2,500 sessions idle, no stall over 16 ms.
+- Built transcript visuals stay under 500 whatever the session length.
+- Logs stay under 5 MB per hour at the default level.
 
 **NR.3 — Durability:** Session file appends are flushed immediately. `appsettings.json` is written atomically (temp-write + rename) AND all reads/writes are serialized under a single process-wide lock (`IAppSettingsService.SyncRoot`), so concurrent Saves from multiple threads (orchestration workers, Streaming Session Mode, UI toggles) can no longer race and silently lose an update (see ISSUE.008).
 
-**NR.4 — Architecture:** MVVM with Avalonia + ReactiveUI. One ViewModel per significant view. Models and services have no UI dependencies.
+**NR.4 — Architecture:** MVVM with WPF and CommunityToolkit.Mvvm. One ViewModel per significant view. Models and services have no UI dependencies. Clients (the WPF desktop client, Tessyn Web) reach the daemon only through the remote API (TDCP, `docs/refactoring/tdcp-spec.md`); they never call daemon services directly.
 
-**NR.5 — Testability:** Session file I/O, tree persistence, and process management are behind interfaces; unit tests require no real `claude` process or real filesystem.
+**NR.5 — Testability:** Session file I/O, tree persistence, and process management are behind interfaces; unit tests require no real `claude` process or real filesystem. One contract-test suite runs against every way a client reaches the daemon (in-process, loopback HTTP, relay) and the answers must match. UI end-to-end tests live in explicitly-run projects (`Tessyn.Web.E2E.Tests`, `TessynDesktop.WPF.E2E.Tests`) that start the app against a test daemon on a temporary data root.
 
 ---
 
@@ -308,7 +314,7 @@ Maximum 15 results displayed.
 
 ### FR.9 — Theme & Color Customization
 
-**FR.9.1 — Theme variants:** The application supports Dark and Light themes. The selected theme controls the Avalonia `RequestedThemeVariant` (which affects all built-in control styling) and also selects which set of custom colors to apply.
+**FR.9.1 — Theme variants:** The application supports Dark and Light themes. The selected theme controls the UI framework's theme variant (which affects all built-in control styling) and also selects which set of custom colors to apply.
 
 **FR.9.2 — Per-theme custom colors:** Each theme (Dark and Light) has an independent set of customizable colors stored as hex strings in `appsettings.json`:
 - Input box background and text color
@@ -318,7 +324,7 @@ Maximum 15 results displayed.
 - System message bubble background color
 - Session recency bar colors (3 tiers: 15 min, 30 min, 60 min)
 
-**FR.9.3 — Color application:** Custom colors are applied as application-level dynamic resources (`CmxInputBg`, `CmxInputFg`, `CmxUserBubbleBg`, `CmxUserBubbleFg`, `CmxCodeBg`, `CmxCodeFg`, `CmxInlineCodeBg`, `CmxInlineCodeFg`, `CmxSystemBubbleBg`, `CmxRecency15Min`, `CmxRecency30Min`, `CmxRecency60Min`). These are consumed by SessionView (AXAML `DynamicResource` bindings), MarkdownView (code-behind resource lookups), and SessionNodeViewModel (recency brush lookup). Colors are re-applied immediately when the theme is toggled or when settings are saved.
+**FR.9.3 — Color application:** Custom colors are applied as application-level theme resources (named `Cmx*` colour keys: `CmxInputBg`, `CmxInputFg`, `CmxUserBubbleBg`, `CmxUserBubbleFg`, `CmxCodeBg`, `CmxCodeFg`, `CmxInlineCodeBg`, `CmxInlineCodeFg`, `CmxSystemBubbleBg`, `CmxRecency15Min`, `CmxRecency30Min`, `CmxRecency60Min`). These are consumed by the session view, the markdown/transcript renderer and the session-tree rows (recency colours). The editable colour palette is dropped at WPF parity (decision A8); the WPF client may revisit theming later. Colors are re-applied immediately when the theme is toggled or when settings are saved.
 
 **FR.9.5 — Session recency bars:** Session nodes in the tree display a colored background bar indicating how recently the last user prompt was sent:
 - **Light green** (customizable): last prompt within 15 minutes
@@ -369,7 +375,7 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 
 **FR.10.6 — Re-search on text change:** When the user modifies the search text while a search is active and presses Enter, a new search is performed with the updated text instead of navigating within the old search results.
 
-Highlighting is implemented via `HighlightTextBlock` (extends `SelectableTextBlock`) which splits text at match boundaries and renders matches as `Run` elements with yellow background. `MarkdownView` accepts a `HighlightTerm` styled property and applies the same highlighting within its inline rendering. Highlighting is cleared when the search is dismissed.
+Highlighting splits the text at match boundaries and renders matches with the yellow background, in plain-text and markdown modes alike. Highlighting is cleared when the search is dismissed.
 
 **FR.10.5 — Dismissal behavior:** Closing the search overlay (via `X` button or `Escape` key) hides the overlay and clears any match highlighting, but does **not** clear the search text from the search box.
 
@@ -559,10 +565,10 @@ The Default profile cannot be removed (the Remove button never appears while Def
 
 **FR.12.22 — Command-bar selector compaction & left-truncated model label:** The Model, Profile, and Effort selector boxes in the command bar are each fixed to their own compact width via a local `Width` override on the shared `.cmxCompact` style: **Model ~120px, Profile ~100px, Effort ~60px** (Model needs the most room to keep a useful suffix legible after left-truncation below; Effort's option labels are short enough that 60px rarely truncates at all). Each selector's own dropdown flyout is unaffected by this and still opens at full/natural content width — only the closed box is narrowed.
 
-- **Left-truncated model label:** unlike Profile and Effort (whose values truncate normally, trailing-edge, via Avalonia's built-in `TextTrimming`), the Model box's selected value is right-aligned and truncated from the **left** — e.g. `claude-opus-4-8` displays as `…pus-4-8` — so the distinctive trailing suffix of a model ID (the part that actually distinguishes it from sibling models) stays visible instead of the shared `claude-` prefix. Implemented via `TextTrimming="LeadingCharacterEllipsis"`, sized to the box's actual available width rather than a fixed character count.
+- **Left-truncated model label:** unlike Profile and Effort (whose values truncate normally, trailing-edge, via the framework's standard trailing-ellipsis trimming), the Model box's selected value is right-aligned and truncated from the **left** — e.g. `claude-opus-4-8` displays as `…pus-4-8` — so the distinctive trailing suffix of a model ID (the part that actually distinguishes it from sibling models) stays visible instead of the shared `claude-` prefix. Implemented with leading-ellipsis trimming, sized to the box's actual available width rather than a fixed character count.
 - **`:latest` tag stripped from the displayed model text only:** Ollama tags commonly carry a trailing `:latest` (e.g. `qwen3.6:35b-a3b:latest`). Both the Model box's closed-box label and its open dropdown list strip this trailing `:latest` from the text shown to the user — so the example above displays as `qwen3.6:35b-a3b` — via display converters. This is purely cosmetic: the underlying model ID string is completely unchanged everywhere it is actually used — the `--model` CLI flag, `SelectedModelId` persistence, and `LocalToolProfileResolver`'s model matching all continue to see the full ID including `:latest`.
 - **Local Tool Profile control relocated (amended by FR.12.23):** the per-directory Local Tool Profile (FR.12.21) is no longer a selector in the Model/Profile/Effort row. It is now an icon-style toggle button — sized to match the existing 26×26 icon buttons (Chrome, Streaming Session Mode, Session Completion Sound) — positioned immediately to the right of the Session Completion Sound button (FR.22). It remains visible only when the directory's currently selected model is local (`ModelProvider.Ollama`), and remains disabled (with the existing tooltip explaining why) when the selected local model does not support tool calling. Its click/press-and-hold interaction and popup content are specified in FR.12.23.
-- **No drop-down arrow chrome:** the three `.cmxCompact` boxes also suppress FluentTheme's built-in drop-down arrow glyph and let the closed-box content span into the reclaimed space — clicking anywhere on the closed box still opens the dropdown, so the arrow was pure decoration and, on the 60px Effort box, ate about half the available width.
+- **No drop-down arrow chrome:** the three `.cmxCompact` boxes also suppress the theme's built-in drop-down arrow glyph and let the closed-box content span into the reclaimed space — clicking anywhere on the closed box still opens the dropdown, so the arrow was pure decoration and, on the 60px Effort box, ate about half the available width.
 
 **FR.12.23 — Local Tools master enable/disable:** The relocated Tools icon button (FR.12.22) is not just a way to open the tool/MCP checklist — it is itself a master on/off switch for whether the Local Tool Profile applies at all.
 
@@ -747,7 +753,7 @@ Every argument that takes a session id (`nodeId`, `target`, `parentNodeId`) acce
 
 **FR.15.3 — Async mailbox:** When `send_to_session` is called with `mode=async`, on worker turn completion a follow-up turn is automatically triggered on the supervisor node — a **Mailbox Delivery**. It is implemented as a delay-0 schedule targeting the supervisor (`ScheduleModel.IsMailboxDelivery = true`), reusing the scheduler engine from FR.14; its prompt is `[Worker finished] <name>` followed by the worker's result text on the next line, and its note is `Worker '<name>' result`. Results that arrive while a delivery for the same supervisor is still pending are merged into it (FR.15.12).
 
-**FR.15.4 — UI thread marshaling:** All tree mutations triggered by orchestration tools (node creation, model changes) are executed on the Avalonia UI thread via `Dispatcher.UIThread.InvokeAsync`.
+**FR.15.4 — UI thread marshaling:** All tree mutations triggered by orchestration tools (node creation, model changes) are executed on the UI thread through the UI dispatcher abstraction (`IUiDispatcher`), never directly from the worker thread that handled the tool call.
 
 **FR.15.5 — Guardrails (enforced):** To prevent runaway loops, the following limits are checked at runtime — they are not advisory:
 - `Constants.Agent.MaxOrchestrationDepth` (default: 5) — maximum supervisor-worker nesting depth. Checked on `spawn_session`, `orchestrate_parallel`, and `orchestrate_pipeline`; a `McpToolException` is thrown when exceeded.
@@ -1352,6 +1358,14 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 - **Data:** `AttentionSummaryModel.AllOpenCount` and `AllOpenTopKind`, from `IDaemonClient.GetAttentionSummary`. Loaded for every session at startup and refreshed for the changed node on `AttentionChanged` (FR.23.16).
 - **Recent dropdown:** a session with open items is a Pinned Session there (FR.9.8).
 
+**FR.23.18 — References on items (amendment, built 2026-11-15, Focus references step 1):** Design: `docs/features/focus-references-attachments-previews.md`. Implementation report: `.wpf-work/230-focus-refs-core.md`.
+- **Refs.** `post_attention` items take an optional `refs` array (at most 10 per item). Kinds: `entry` (`quote` exact text from an entry, optional `session` default = the caller, `occurrence` `last` default or `first`), `file` (`path`, absolute or relative to the session's working directory, must be an existing regular file), `url` (http/https, at most 2000 characters). Every ref may carry a `label` (at most 100 characters). `attention.list` items return the resolved refs.
+- **Quote resolution.** Done when the item is posted, against the content store (entry ids, see `docs/refactoring/tdcp-spec.md` "Local client additions"). The search runs from the newest entry (or the oldest) in pages; whitespace runs are collapsed and the match is case-sensitive; the quote must occur exactly once in the entry it lands on. SYSTEM and COMPACTION entries are skipped. The resolved ref stores `nodeId`, `fileId`, `entryId`, `offset` and `length` (characters of the entry content as the API serves it). A ref that cannot be resolved fails the whole call with a message naming it, and nothing is pinned. Re-posting an open item with refs replaces its refs; re-posting without refs keeps them.
+- **Jump to an entry.** `session.entries` accepts `aroundEntryId` and returns the page centred on that entry, so a client can open the session at the referenced entry and highlight `offset`/`length`. Back navigation is client state.
+- **File handles.** A file ref gets an opaque `refId` (128-bit random) that survives restarts. Clients never send a raw path to read a file: `file.read { handle, offset?, length? }` takes a `refId`, or a preview handle from `file.preview { nodeId, entryId, path }` (the path must occur in that entry's text; the handle lives 1 hour). Responses carry no absolute path; `attention.list` gives only the path relative to the working directory, when the file lies inside it.
+- **FileAccess policy** (`AppSettings.FileAccess`). Denied paths are always refused, on every transport (credential and key folders and files, token stores, `.dat` files, the data root's settings and token files). The relay (web) additionally applies a type allowlist (text, images, video, pdf), per-type size caps and a chunk cap (`MaxRelayChunkBytes`, 512 KB), and logs every read. The relay `Mode` is `ReferencedOnly` (default: only files referenced by a Focus item of that session) or `WorkingDirectory` (decision A11: additionally any file inside the session's working directory). No TOTP. Loopback clients (desktop) may read any non-denied file a handle points to.
+- **Not built yet.** Attachment handles (FR.31), the WPF and web Focus UI for refs (jump, preview pane, Back control), and the FR.25 web contract amendment that opens `file.read`, `file.preview` and `aroundEntryId` on the relay.
+
 **Out of scope for FR.23:**
 - A cross-session Attention list in the left panel, and a badge on Recent-tab rows (tree and recent-dropdown rows have one, FR.23.17).
 - Answering by replying to a Telegram ping, and a Telegram `/attention` command.
@@ -1584,6 +1598,32 @@ An unknown `scope` is a tool error (the same strict parsing as `list_sessions`).
 **Tool description** (this wording):
 
 > Find the Linear issues, GitHub pull requests and repositories that sessions are tagged with, and how many sessions carry each. Use it to find sessions by what they work on: search here, then call list_sessions with tags=[...]. Defaults to your project; scope=all for every directory.
+
+---
+
+### FR.26 — Link Fidelity, Interactive Links and Output Previews
+
+Complements FR.24 Session Tags (chips under the session header that come from `tag_session`): FR.26 covers links and files inside the transcript text. Source: `docs/refactoring/wpf-programme-plan.md` Appendix A and A13; design `docs/features/focus-references-attachments-previews.md` section 4. New desktop UI for FR.26.2-FR.26.5 is built in WPF only (decision A9); the web client gets the same features through the remote API.
+
+- **FR.26.1 — Full-URL references.** [DONE] Every session's hidden instruction block (FR.11) asks the model to refer to GitHub pull requests, issues and commits, Linear issues and Slack messages by their full URL, for example `https://github.com/tryhardstop/windows-app/pull/196` or `https://linear.app/hardstop/issue/HSE-240`, and never by shorthand such as `PR#196` or `HSE-240`. This applies to worker sessions too.
+- **FR.26.2 — Link chips.** The transcript renders recognised URLs (GitHub PR, issue or commit; Linear issue; Slack permalink) as chips with a short label, such as `windows-app#196`, `HSE-240` or the Slack channel name. Any other http(s) URL renders as a plain link. Recognition is pattern-based: no network call and no credentials.
+- **FR.26.3 — Preview on click.** Clicking a link opens it in the embedded browser pane, and a modifier-click opens the system browser. Until the pane exists, a click opens the system browser.
+- **FR.26.4 — Media previews.** *Planned (WPF and web).* When session output contains an https URL whose path ends in an image or video extension, or whose host is on the media allowlist, the transcript offers an inline preview. Hosts on the allowlist load automatically (initial list: `annielartens.online`, `*.githubusercontent.com`; editable in Settings). Every other host shows a "load preview" button and loads only on click (decision A13).
+- **FR.26.5 — Local-file chips.** *Planned (WPF and web).* An absolute local path (`C:\...`, `\\server\...`) in session output renders as a chip. On desktop a click previews the file (markdown rendered, images, text and code, video). On the web a click asks `file.preview { nodeId, entryId, path }`: the daemon checks that the path occurs in that entry's text, applies the FileAccess policy (FR.23.18, decision A11) and returns a handle for `file.read`.
+
+Status: FR.26.1 implemented (Phase 0). FR.26.2 and FR.26.3 arrive with the WPF transcript; FR.26.4 and FR.26.5 follow steps 4-6 of the design's phasing.
+
+---
+
+### FR.31 — Attachments
+
+*Planned.* Design: `docs/features/focus-references-attachments-previews.md` section 3. (FR.27-FR.30 are reserved by the WPF programme plan: browser pane, output modes, multi-screen layout, helper models.)
+
+- **FR.31.1 — Storage.** Attachments are stored per profile in app data (decision A12), under `%AppData%\TessynDesktop\attachments\`, grouped by profile and session, one timestamp-prefixed file per attachment, kept until the session is deleted. Name collisions get a suffix. The exact folder layout is settled when the feature is built.
+- **FR.31.2 — Desktop.** In the WPF client, dropping files onto the input inserts their full paths at the caret. A "file mode" toggle beside the input instead copies the files into the session's attachments folder and inserts that path.
+- **FR.31.3 — Web.** The input area has an attach button. The browser uploads the file to the Tessyn.Web server (cap 200 MB); the daemon fetches it over the link, checks its hash, stores it as an attachment and returns the path; the server then deletes its copy and the page inserts the path into the prompt.
+- **FR.31.4 — Session side.** The prompt gets a plain path, for example `Attached file: C:\...\attachments\...\photo.png`. Sessions read it like any other file; no MCP change is needed.
+- **FR.31.5 — Handles.** An attachment is readable through `file.read` with an `attachmentId` handle under the FileAccess policy (FR.23.18).
 
 ---
 

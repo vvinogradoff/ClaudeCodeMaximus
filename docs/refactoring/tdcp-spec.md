@@ -171,3 +171,25 @@ decomposition, Stage 7, and the still-undesigned turn-streaming work):
 3. **S3 (future):** the daemon→web-server link reuses this same TDCP JSON-RPC schema over an
    outbound HTTPS connection with an SSE downstream (design implication only; not built during
    the split) — see refactoring-plan.md §0.2.
+
+---
+
+## 8. Local client additions (2026-11)
+
+Added for the WPF client (`wpf-programme-plan.md`, decision P13: no "TDCP v2"). All additions are additive: the 21 remote methods of the web contract and their result shapes are unchanged, `protocolVersion` stays 1, and the new fields are optional on the wire. Features are announced as capabilities in `client.hello`. Reports with the full wire formats are in `.wpf-work/` (cited per item).
+
+**8.1 Capabilities and hello** (P1.C, report 60). `client.hello` takes optional `{ clientName, clientVersion, protocolVersion, capabilities }` and returns, additively, `capabilities[]`, `minProtocolVersion` and `eventSeq`. Capabilities today: `events.local`, `events.resume`, `entries.ids` (the last only when the daemon has a content store). A client enables a feature only when it is listed.
+
+**8.2 Local event stream, ids and resume** (P1.A and P1.B, report 60). `GET /tdcp` is an SSE stream of the same notifications the relay gets, each with `id: <seq>`. `seq` is monotonic per daemon run, starting at 1, stamped by the Event Log (ring of 5,000 events or 10 minutes). The legacy `tree.changed` and `schedule.changed` frames come only with `?legacy=1`. A client reconnects with `Last-Event-ID` (and `?runId=<hello.runId>`): the daemon replays from the ring, or sends `resync { reason, eventSeq }` with reason `gap`, `unknown-seq` or `overflow`, and the client refetches its state. The Client library adds the reason `run-changed` when a hello after a reconnect shows another run (report 130).
+
+**8.3 Discovery and auth** (P1.C, report 60). `%AppData%\TessynDesktop\daemon.json` (`endpoint`, `pid`, `protocolVersion`, `runId`, `tokenFile`) is written when the server starts and removed on clean exit. The token lives in a DPAPI-protected file (`tdcp-token.dat`), not in `appsettings.json`. `X-CMX-Token` is compared in constant time; a bad or missing token answers HTTP 401 with a JSON-RPC error body; any request that carries an `Origin` header answers HTTP 403.
+
+**8.4 Entry ids** (P1.E to P1.G, reports 90 and 170). `SessionEntryDto` gains `entryId` = `{fileId}:{ordinal}`; `session.get` and `session.entries` results gain `fileId` and `seq`. `session.entries` accepts `afterSeq` (resume from the N entries a client already holds) and `beforeEntryId`, with an optional `fileId` check; a stale id fails with `-32000 "Session history changed"`. `session.entry` accepts an `entryId` and an optional character `range`. `session.reset` carries the new `fileId`. `session.get` reads its header from the content store's sidecar index and no longer parses the transcript.
+
+**8.5 `entries.appended`** (P1.F, report 170). Published beside `session.appended` with the same 250 ms coalescing: `{ nodeId, fileId, fromSeq, toSeq, entries? }`. Entries are inline only for at most 50 entries within 65,536 bytes; otherwise the notification carries ids only and the client fetches with `afterSeq`. **Local-only**: the relay connector drops it; phones keep using `session.appended`.
+
+**8.6 `session.headers`** (P1.G, report 170). Loopback only (`remoteCallable: false`, listed in `RemoteProtocol.LoopbackMethods`, not in `Methods`; answers `-32601` on the relay). `{ nodeIds[] }` (at most 500) returns per-session `{ fileId, epoch, entryCount, seq, firstTimestamp, lastTimestamp, lastUsed, contentVersion, fileLength }` and a `missing` list.
+
+**8.7 Focus references** (report 230, FR.23.18). `attention.list` items gain `refs[]` (entry, file and url refs, resolved by the daemon when the item is posted). `session.entries { aroundEntryId }` returns the page centred on an entry (not combinable with the other paging parameters). New `file.read { handle, offset?, length? }` (UTF-8 text or base64, chunked) and `file.preview { nodeId, entryId, path }` (returns a handle for a path that occurs in that entry's text). Handles are opaque; a raw path is never accepted. The `AppSettings.FileAccess` policy applies: denied paths on every transport; type allowlist, size and chunk caps, audit log and the `ReferencedOnly` / `WorkingDirectory` mode (decision A11) on the relay only. Opening these three on the relay for Tessyn Web needs an FR.25 amendment; until then they are loopback-only in practice.
+
+Test coverage: the contract suite (`code/TessynDesktop.Tests/Contract`) runs against the in-process module and loopback HTTP, with golden result shapes; the web-compatibility proofs in `SessionHeadersAndCompatibilityTests` show that the existing 21 methods answer as before.
