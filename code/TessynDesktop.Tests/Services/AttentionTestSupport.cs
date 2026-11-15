@@ -155,6 +155,8 @@ internal sealed class FakeAttentionService : IAttentionService
 
 	public (string NodeId, AttentionRefModel Ref)? FindFileRef(string refId) => null;
 
+	public IReadOnlyList<AttentionRefModel> GetActiveFileRefs(string nodeId) => [];
+
 	public IReadOnlyList<AttentionItemModel> TakeUnreportedUserClosures(string nodeId)
 	{
 		LastTakeNodeId = nodeId;

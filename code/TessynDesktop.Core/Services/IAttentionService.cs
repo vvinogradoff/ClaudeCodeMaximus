@@ -57,4 +57,7 @@ public interface IAttentionService
 	/// through every ledger, including those not loaded yet; the index is built once and kept current by <see cref="Post"/>.
 	/// </summary>
 	(string NodeId, AttentionRefModel Ref)? FindFileRef(string refId);
+
+	/// <summary>The file references of the node that grant read access now: those of open items and of items closed within <see cref="Constants.FileAccess.RefGracePeriod"/>.</summary>
+	IReadOnlyList<AttentionRefModel> GetActiveFileRefs(string nodeId);
 }

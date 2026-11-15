@@ -46,6 +46,7 @@ internal sealed class FocusRefsEnv : IDisposable
 	public string WorkDir => Base.Directory.Path;
 	public CollectingSink Log { get; } = new();
 	public AttentionLedgerStore LedgerStore { get; }
+	public ManualTimeProvider Clock { get; } = new();
 	public AttentionService Attention { get; private set; }
 	public FocusRefResolver Resolver { get; }
 	public FileAccessService Files { get; private set; }
@@ -65,7 +66,7 @@ internal sealed class FocusRefsEnv : IDisposable
 		Directory.CreateDirectory(DataRoot);
 
 		LedgerStore = new AttentionLedgerStore(LedgerRoot);
-		Attention   = new AttentionService(LedgerStore, Base.Files);
+		Attention   = new AttentionService(LedgerStore, Base.Files, Clock);
 		Resolver    = new FocusRefResolver(Base.Registry, Base.Store, DataRoot);
 		Files       = NewFiles(Attention);
 
@@ -90,7 +91,7 @@ internal sealed class FocusRefsEnv : IDisposable
 	}
 
 	private FileAccessService NewFiles(IAttentionService attention) =>
-		new(Base.Registry, attention, Base.Reader, Base.Settings, DataRoot, log: new LoggerConfiguration().WriteTo.Sink(Log).CreateLogger());
+		new(Base.Registry, attention, Base.Reader, Base.Settings, DataRoot, Clock, log: new LoggerConfiguration().WriteTo.Sink(Log).CreateLogger());
 
 	private void BuildDispatcher()
 	{
@@ -104,7 +105,7 @@ internal sealed class FocusRefsEnv : IDisposable
 	/// <summary>A restarted daemon: new attention service and file-access service over the same ledger files.</summary>
 	public void Restart()
 	{
-		Attention = new AttentionService(new AttentionLedgerStore(LedgerRoot), Base.Files);
+		Attention = new AttentionService(new AttentionLedgerStore(LedgerRoot), Base.Files, Clock);
 		Files     = NewFiles(Attention);
 		BuildDispatcher();
 	}

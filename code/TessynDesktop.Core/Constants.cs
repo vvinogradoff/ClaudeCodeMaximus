@@ -395,6 +395,9 @@ SESSION TRANSCRIPT TO COMPACT:
 		public static readonly System.TimeSpan PreviewHandleLifetime = System.TimeSpan.FromHours(1);
 
 		public const int MaxPreviewHandles = 1_000;
+
+		/// <summary>A file reference keeps granting read access this long after its Focus item is closed.</summary>
+		public static readonly System.TimeSpan RefGracePeriod = System.TimeSpan.FromMinutes(10);
 		public const string EncodingUtf8 = "utf8";
 		public const string EncodingBase64 = "base64";
 		public const string DeniedMessage = "That file cannot be read remotely.";

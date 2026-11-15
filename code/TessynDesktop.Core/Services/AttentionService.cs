@@ -255,12 +255,39 @@ public sealed class AttentionService : IAttentionService
 			if (!_fileRefIndex.TryGetValue(refId, out var owner))
 				return null;
 
-			var found = LoadLocked(owner).Items
-				.SelectMany(i => i.Refs)
-				.FirstOrDefault(r => string.Equals(r.RefId, refId, StringComparison.Ordinal));
-			return found == null ? null : (owner, CopyRef(found));
+			var now = _time.GetUtcNow();
+			var holder = LoadLocked(owner).Items.FirstOrDefault(i =>
+				i.Refs.Any(r => string.Equals(r.RefId, refId, StringComparison.Ordinal)));
+			if (holder == null || !GrantsAccess(holder, now))
+			{
+				// The item is gone or closed for good: the handle is dead, so the index forgets it.
+				_fileRefIndex.Remove(refId);
+				return null;
+			}
+
+			var found = holder.Refs.First(r => string.Equals(r.RefId, refId, StringComparison.Ordinal));
+			return (owner, CopyRef(found));
 		}
 	}
+
+	public IReadOnlyList<AttentionRefModel> GetActiveFileRefs(string nodeId)
+	{
+		lock (_lock)
+		{
+			var now = _time.GetUtcNow();
+			return LoadLocked(nodeId).Items
+				.Where(i => GrantsAccess(i, now))
+				.SelectMany(i => i.Refs)
+				.Where(r => r.Kind == Constants.Attention.RefKindFile)
+				.Select(CopyRef)
+				.ToList();
+		}
+	}
+
+	/// <summary>An open item, or one closed within the grace period, still lets clients read its file references.</summary>
+	private static bool GrantsAccess(AttentionItemModel item, DateTimeOffset now) =>
+		item.Status == AttentionStatus.Open
+		|| (item.ClosedUtc is { } closed && now - closed <= Constants.FileAccess.RefGracePeriod);
 
 	private void IndexFileRefsLocked(string nodeId, AttentionItemModel item)
 	{

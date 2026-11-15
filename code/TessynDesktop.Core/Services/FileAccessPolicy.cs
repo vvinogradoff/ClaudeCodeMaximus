@@ -29,8 +29,21 @@ public static class FileAccessPolicy
 
 	private static readonly HashSet<string> DeniedDirectories = new(StringComparer.OrdinalIgnoreCase)
 	{
-		".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker",
+		".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".claude", ".mozilla",
+		// Browser profile folders (Chrome, Edge, Brave, Opera keep cookies and logins below "User Data" or their vendor folder).
+		"User Data", "BraveSoftware", "Opera Software",
 	};
+
+	/// <summary>Credential locations that are named by two consecutive folders.</summary>
+	private static readonly (string Parent, string Child)[] DeniedDirectoryPairs =
+	[
+		(".config", "gh"), (".config", "gcloud"), (".config", "git"),
+		("Microsoft", "Credentials"), ("Microsoft", "Protect"), ("Microsoft", "Vault"),
+		("Mozilla", "Firefox"),
+	];
+
+	/// <summary>The only folder of the data root a relay client may read from (step 3 stores attachments there).</summary>
+	public const string DataRootAttachmentsFolder = "attachments";
 
 	private static readonly HashSet<string> DeniedExtensions = new(StringComparer.OrdinalIgnoreCase)
 	{
@@ -66,14 +79,29 @@ public static class FileAccessPolicy
 	/// </summary>
 	/// <param name="fullPath">A full path; the caller normalises it.</param>
 	/// <param name="dataRoot">The app's data root (<c>%AppData%\TessynDesktop</c>).</param>
-	public static bool IsDenied(string fullPath, string dataRoot)
+	/// <param name="relay">
+	/// True for a relay (web) client: the whole data root is then closed, except its <c>attachments</c> folder. For a loopback client
+	/// only the secret-bearing parts of the data root are.
+	/// </param>
+	public static bool IsDenied(string fullPath, string dataRoot, bool relay = false)
 	{
 		var segments = fullPath.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
 		if (segments.Length == 0)
 			return true;
 
-		if (segments.Take(segments.Length - 1).Any(DeniedDirectories.Contains))
+		var folders = segments.Take(segments.Length - 1).ToArray();
+		if (folders.Any(DeniedDirectories.Contains))
 			return true;
+
+		for (var i = 0; i + 1 < folders.Length; i++)
+		{
+			foreach (var (parent, child) in DeniedDirectoryPairs)
+			{
+				if (string.Equals(folders[i], parent, StringComparison.OrdinalIgnoreCase)
+				    && string.Equals(folders[i + 1], child, StringComparison.OrdinalIgnoreCase))
+					return true;
+			}
+		}
 
 		var name = segments[^1];
 		if (DeniedNames.Contains(name) || DeniedExtensions.Contains(Path.GetExtension(name)))
@@ -89,6 +117,9 @@ public static class FileAccessPolicy
 		if (root.Length > 0 && fullPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
 		{
 			var inner = fullPath[(root.Length + 1)..].Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+			if (relay && !(inner.Length > 1 && string.Equals(inner[0], DataRootAttachmentsFolder, StringComparison.OrdinalIgnoreCase)))
+				return true;
+
 			if (inner.Length == 1 && DeniedDataRootFiles.Contains(inner[0]))
 				return true;
 
@@ -109,8 +140,8 @@ public static class FileAccessPolicy
 		map[".json"]  = (FileTypeClass.Text, "application/json");
 		map[".jsonl"] = (FileTypeClass.Text, "application/x-ndjson");
 		map[".xml"]   = (FileTypeClass.Text, "application/xml");
-		map[".html"]  = (FileTypeClass.Text, "text/html");
-		map[".htm"]   = (FileTypeClass.Text, "text/html");
+		map[".html"]  = (FileTypeClass.Text, "text/plain");   // active content is served as plain text, never as html
+		map[".htm"]   = (FileTypeClass.Text, "text/plain");
 		map[".css"]   = (FileTypeClass.Text, "text/css");
 		map[".yaml"]  = (FileTypeClass.Text, "application/yaml");
 		map[".yml"]   = (FileTypeClass.Text, "application/yaml");
@@ -130,7 +161,7 @@ public static class FileAccessPolicy
 		map[".gif"]  = (FileTypeClass.Image, "image/gif");
 		map[".webp"] = (FileTypeClass.Image, "image/webp");
 		map[".bmp"]  = (FileTypeClass.Image, "image/bmp");
-		map[".svg"]  = (FileTypeClass.Image, "image/svg+xml");
+		map[".svg"]  = (FileTypeClass.Text, "text/plain");   // svg can carry script: text, not an image
 
 		map[".mp4"]  = (FileTypeClass.Video, "video/mp4");
 		map[".m4v"]  = (FileTypeClass.Video, "video/mp4");

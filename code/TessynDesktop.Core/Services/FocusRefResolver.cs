@@ -56,34 +56,33 @@ public sealed class FocusRefResolver : IFocusRefResolver
 		if (string.IsNullOrEmpty(raw))
 			throw new FocusRefException("'path' is required for kind=file.");
 
-		string full;
-		try
-		{
-			full = Path.GetFullPath(Path.IsPathRooted(raw) ? raw : Path.Combine(caller.WorkingDirectory, raw));
-		}
-		catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-		{
-			throw new FocusRefException($"'{Shorten(raw)}' is not a valid path.");
-		}
+		// The lexical gate runs before any filesystem call, so a UNC or device path never reaches the disk or the network.
+		if (!SafeFilePath.TryNormalize(raw, caller.WorkingDirectory, out var full, out var reason))
+			throw new FocusRefException($"'{Shorten(raw)}' cannot be referenced: {reason}.");
 
-		if (!File.Exists(full))
-			throw new FocusRefException($"file '{Shorten(raw)}' does not exist (resolved to {full}) or is not a regular file.");
+		using var opened = SafeFilePath.Open(full)
+			?? throw new FocusRefException($"file '{Shorten(raw)}' does not exist (resolved to {full}) or is not a regular file.");
 
-		if (FileAccessPolicy.IsDenied(full, _dataRoot))
-			throw new FocusRefException($"file '{Shorten(raw)}' cannot be referenced: it is a credential, key or token file.");
+		// Every rule runs on the real path of the open file as well, so a junction, link or short name cannot hide a denied location.
+		if (opened.FinalPath.Length == 0
+		    || FileAccessPolicy.IsDenied(full, _dataRoot, relay: true)
+		    || FileAccessPolicy.IsDenied(opened.FinalPath, _dataRoot, relay: true))
+			throw new FocusRefException($"file '{Shorten(raw)}' cannot be referenced: it is a credential, key or token file, app data, or leads outside the local drives.");
 
-		var info = new FileInfo(full);
+		if (opened.LinkCount > 1)
+			throw new FocusRefException($"file '{Shorten(raw)}' cannot be referenced: it is hard-linked under more than one name.");
+
 		return new AttentionRefModel
 		{
 			Kind         = Constants.Attention.RefKindFile,
 			Label        = Label(request),
 			RefId        = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(),
-			Name         = info.Name,
+			Name         = Path.GetFileName(full),
 			RelativePath = RelativeToWorkingDirectory(caller.WorkingDirectory, full),
 			AbsolutePath = full,
-			Size         = info.Length,
+			Size         = opened.Length,
 			Mime         = FileAccessPolicy.Classify(full).Mime,
-			MtimeUtc     = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero),
+			MtimeUtc     = opened.LastWriteUtc,
 		};
 	}
 
