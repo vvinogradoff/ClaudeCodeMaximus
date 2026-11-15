@@ -20,6 +20,9 @@ public sealed class SessionIndexUpkeepReport
 	/// <summary>Sessions removed because their JSONL no longer exists in any Claude home.</summary>
 	public int Purged { get; set; }
 
+	/// <summary>Sessions without a JSONL that were kept because a tree node still refers to them.</summary>
+	public int KeptForTree { get; set; }
+
 	public bool PurgeSkippedUnsafeScan { get; set; }
 
 	public bool Optimized { get; set; }

@@ -20,6 +20,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	private readonly string _dbPath;
 	private readonly IReadOnlyList<string> _claudeProjectsDirs;
 	private readonly TimeSpan _activeFileQuietPeriod;
+	private readonly ITreeSessionIdSource? _treeSessionIds;
 	private readonly SemaphoreSlim _writeGate = new(1, 1);
 
 	// Searches in flight: VACUUM never starts while this is above zero.
@@ -38,13 +39,15 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		IClaudeAssistService assistService,
 		string? dbPath = null,
 		IReadOnlyList<string>? claudeProjectsDirs = null,
-		TimeSpan? activeFileQuietPeriod = null)
+		TimeSpan? activeFileQuietPeriod = null,
+		ITreeSessionIdSource? treeSessionIds = null)
 	{
 		_importService = importService;
 		_assistService = assistService;
 		_dbPath = dbPath ?? GetDefaultDbPath();
 		_claudeProjectsDirs = claudeProjectsDirs ?? GetDefaultClaudeProjectsDirs();
 		_activeFileQuietPeriod = activeFileQuietPeriod ?? Constants.SessionIndex.ActiveFileQuietPeriod;
+		_treeSessionIds = treeSessionIds;
 
 		Directory.CreateDirectory(Path.GetDirectoryName(_dbPath)!);
 		InitializeSchema();
@@ -386,7 +389,17 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 				known.Add(reader.GetString(0));
 		}
 
-		var orphans = known.Where(id => !scan.SeenIds.Contains(id)).ToList();
+		// Tessyn's own transcripts are the canonical record: a session the tree still refers to (under any id it has
+		// carried) keeps its rows and title even after Claude removed the JSONL.
+		if (_treeSessionIds == null)
+		{
+			_log.Debug("PurgeOrphans: no tree session source configured; purge skipped");
+			return;
+		}
+		var treeIds = _treeSessionIds.GetTreeSessionIds();
+		var missing = known.Where(id => !scan.SeenIds.Contains(id)).ToList();
+		var orphans = missing.Where(id => !treeIds.Contains(id)).ToList();
+		report.KeptForTree = missing.Count - orphans.Count;
 		if (orphans.Count == 0)
 			return;
 
@@ -420,7 +433,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		}
 
 		report.Purged = orphans.Count;
-		_log.Information("PurgeOrphans: removed {Count} sessions whose JSONL no longer exists", orphans.Count);
+		_log.Information("PurgeOrphans: removed {Count} sessions whose JSONL no longer exists and that no tree node refers to ({Kept} tree sessions kept without JSONL)", orphans.Count, report.KeptForTree);
 	}
 
 	/// <summary>Optimize after a large reindex or purge, VACUUM when enough pages are free, then truncate the WAL.</summary>

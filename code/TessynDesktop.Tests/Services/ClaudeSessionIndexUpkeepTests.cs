@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
+using TessynDesktop.Models;
 using TessynDesktop.Services;
 using Xunit;
 
@@ -22,6 +23,7 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 	private readonly string _projectsDir;
 	private readonly string _dbPath;
 	private readonly FakeClaudeAssistService _assist = new();
+	private readonly FakeTreeSessionIds _tree = new();
 
 	public ClaudeSessionIndexUpkeepTests()
 	{
@@ -38,7 +40,7 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 	}
 
 	private ClaudeSessionIndexService NewService(TimeSpan? quiet = null, string? dbPath = null) =>
-		new(new ClaudeSessionImportService(), _assist, dbPath ?? _dbPath, [_projectsDir], quiet ?? TimeSpan.Zero);
+		new(new ClaudeSessionImportService(), _assist, dbPath ?? _dbPath, [_projectsDir], quiet ?? TimeSpan.Zero, _tree);
 
 	private string WriteSession(string slug, string id, params string[] userMessages)
 	{
@@ -332,7 +334,7 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 		var second = Path.Combine(_tempRoot, "profiles", "p1", "projects");
 		Directory.CreateDirectory(Path.Combine(second, "-p-x"));
 		File.Copy(WriteSession("-p-a", "in-first", "lives in the default home"), Path.Combine(second, "-p-x", "in-second.jsonl"));
-		var service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assist, _dbPath, [_projectsDir, second], TimeSpan.Zero);
+		var service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assist, _dbPath, [_projectsDir, second], TimeSpan.Zero, _tree);
 		await service.RunUpkeepAsync();
 		Assert.Equal(2, Scalar("SELECT COUNT(*) FROM sessions;"));
 
@@ -355,6 +357,89 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 		Assert.Equal(0, report.Purged);
 		Assert.True(report.PurgeSkippedUnsafeScan);
 		Assert.Single(await service.SearchAsync("precious"));
+	}
+
+	// ── Purge scope: the tree owns its sessions ─────────────────────────────────
+
+	[Fact]
+	public async Task OrphanPurge_KeepsRowsAndTitleOfATreeSession_WhoseJsonlIsGone()
+	{
+		var treePath = WriteSession("-p-a", "tree-1", "tree session transcript about gizmos");
+		var strayPath = WriteSession("-p-a", "stray-1", "stray session transcript about gizmos");
+		WriteSession("-p-a", "present-1", "still on disk");
+		var service = NewService();
+		await service.RunUpkeepAsync();
+		Exec("UPDATE sessions SET title = 'Kept title' WHERE external_id = 'tree-1';");
+		_tree.Ids.Add("tree-1");
+
+		File.Delete(treePath);
+		File.Delete(strayPath);
+		var report = await service.RunUpkeepAsync();
+
+		Assert.Equal(1, report.Purged);
+		Assert.Equal(1, report.KeptForTree);
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM messages WHERE external_id = 'tree-1';"));
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'tree-1' AND title = 'Kept title';"));
+		Assert.Equal(0, Scalar("SELECT COUNT(*) FROM messages WHERE external_id = 'stray-1';"));
+		Assert.Equal(0, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'stray-1';"));
+		Assert.Single(await service.SearchAsync("tree session transcript"));
+	}
+
+	[Fact]
+	public async Task OrphanPurge_IsSkipped_WhenNoTreeSourceIsConfigured()
+	{
+		var gone = WriteSession("-p-a", "g-1", "needs a tree source before purging");
+		WriteSession("-p-a", "g-2", "stays");
+		var service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assist, _dbPath, [_projectsDir], TimeSpan.Zero);
+		await service.RunUpkeepAsync();
+		File.Delete(gone);
+
+		var report = await service.RunUpkeepAsync();
+
+		Assert.Equal(0, report.Purged);
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'g-1';"));
+	}
+
+	[Fact]
+	public void TreeSessionIdSource_CollectsCurrentExternalAndPriorIdsOfEveryNode_AtAnyDepth()
+	{
+		var settings = new AppSettingsService(Path.Combine(_tempRoot, "settings"));
+		var group = new GroupNodeModel { Name = "g" };
+		group.Sessions.Add(new SessionNodeModel { Name = "n2", FileName = "n2.txt", ClaudeSessionId = "grouped-current" });
+		var inner = new GroupNodeModel { Name = "inner" };
+		inner.Sessions.Add(new SessionNodeModel { Name = "n3", FileName = "n3.txt", ExternalId = "deep-external" });
+		group.Groups.Add(inner);
+		var dir = new DirectoryNodeModel { Path = "C:/x" };
+		dir.Sessions.Add(new SessionNodeModel
+		{
+			Name = "n1", FileName = "n1.txt", ClaudeSessionId = "current-id", PriorClaudeSessionIds = ["prior-a", "prior-b"],
+		});
+		dir.Groups.Add(group);
+		settings.Settings.Tree.Add(dir);
+
+		var ids = new TreeSessionIdSource(settings).GetTreeSessionIds();
+
+		Assert.Equal(new[] { "current-id", "deep-external", "grouped-current", "prior-a", "prior-b" }, ids.OrderBy(i => i).ToArray());
+	}
+
+	[Fact]
+	public async Task OrphanPurge_KeepsTheOldIdsRows_OfANodeWhoseSessionIdChanged()
+	{
+		var oldPath = WriteSession("-p-a", "old-id", "transcript before the clear about doohickeys");
+		WriteSession("-p-a", "new-id", "transcript after the clear");
+		var settings = new AppSettingsService(Path.Combine(_tempRoot, "settings2"));
+		var dir = new DirectoryNodeModel { Path = "C:/x" };
+		dir.Sessions.Add(new SessionNodeModel { Name = "n", FileName = "n.txt", ClaudeSessionId = "new-id", PriorClaudeSessionIds = ["old-id"] });
+		settings.Settings.Tree.Add(dir);
+		var service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assist, _dbPath, [_projectsDir], TimeSpan.Zero, new TreeSessionIdSource(settings));
+		await service.RunUpkeepAsync();
+
+		File.Delete(oldPath);
+		var report = await service.RunUpkeepAsync();
+
+		Assert.Equal(0, report.Purged);
+		Assert.Equal(1, report.KeptForTree);
+		Assert.Single(await service.SearchAsync("doohickeys"));
 	}
 
 	// ── Optimize, vacuum, checkpoint ──────────────────────────────────────────────
@@ -521,6 +606,12 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 		Assert.True(hit.Content.Length >= size - 100);
 		Assert.EndsWith("zzzterminalneedle", hit.Content);
 	}
+}
+
+internal sealed class FakeTreeSessionIds : ITreeSessionIdSource
+{
+	public HashSet<string> Ids { get; } = new();
+	public IReadOnlySet<string> GetTreeSessionIds() => Ids.ToHashSet();
 }
 
 internal static class UpkeepTestExtensions

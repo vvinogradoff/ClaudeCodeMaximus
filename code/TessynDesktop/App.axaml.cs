@@ -225,6 +225,7 @@ public partial class App : Application
 		services.AddSingleton<IOllamaModelService, OllamaModelService>();
 		services.AddSingleton<IClaudeModelService, ClaudeModelService>();
 		services.AddSingleton<IClaudeUsageService, ClaudeUsageService>();
+		services.AddSingleton<ITreeSessionIdSource, TreeSessionIdSource>();
 		services.AddSingleton<IClaudeSessionIndexService, ClaudeSessionIndexService>();
 		services.AddSingleton<ISessionIndexUpdater, SessionIndexUpdater>();
 		services.AddSingleton<ISessionRegistry, SessionRegistry>();
