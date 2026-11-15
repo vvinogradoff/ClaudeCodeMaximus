@@ -33,6 +33,7 @@ public sealed class TurnEngine : ITurnEngine
 	private readonly IAttentionService _attention;
 	private readonly ISessionTagService _tags;
 	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
+	private readonly IProfileSwitchService? _profileSwitch;
 
 	private readonly ConcurrentDictionary<string, TurnNodeContext> _nodes = new();
 
@@ -48,7 +49,8 @@ public sealed class TurnEngine : ITurnEngine
 		IClaudeSessionStatusService sessionStatus,
 		IAttentionService attention,
 		ISessionTagService tags,
-		IEnumerable<ITurnProgressSink>? progressSinks = null)
+		IEnumerable<ITurnProgressSink>? progressSinks = null,
+		IProfileSwitchService? profileSwitch = null)
 	{
 		_files            = files;
 		_registry         = registry;
@@ -62,6 +64,7 @@ public sealed class TurnEngine : ITurnEngine
 		_attention        = attention;
 		_tags             = tags;
 		_progressSinks    = progressSinks?.ToArray() ?? [];
+		_profileSwitch    = profileSwitch;
 	}
 
 	/// <inheritdoc />
@@ -120,10 +123,8 @@ public sealed class TurnEngine : ITurnEngine
 
 			var sessionId = node.ClaudeSessionId;
 
-			// Cross-profile session adoption (FR.11.13): if this session was created under a different profile than the one now
-			// active, move its JSONL into the active profile's store before attempting --resume.
-			if (sessionId != null)
-				_sessionStatus.TryAdoptSessionFromOtherProfile(node.WorkingDirectory, sessionId, settings.ProfileConfigDir);
+			// The cross-profile adoption (FR.11.13) moves the transcript and session folder, so it runs below, under the turn lock:
+			// before it a queued message could move the files from under the turn that is still running.
 
 			var augmentedMessage = request.Message + BuildInstructionBlock(node, request.IsNewBranch, sessionId == null);
 
@@ -169,6 +170,18 @@ public sealed class TurnEngine : ITurnEngine
 
 					lockAcquired = true;
 				}
+
+				// ISSUE.013: the turn runs on the profile of its settings. A session that was on another profile is switched (no
+				// cascade; transcript and session folder move, a live streaming process stops) and the ProfileId pin is recorded - the
+				// one switch path of the Avalonia profile change. Under the turn lock, so no other turn of the node is using its files.
+				_profileSwitch?.ApplyPending(node);
+				_profileSwitch?.RecordTurnProfile(node, settings.ProfileDisplayName);
+
+				// Cross-profile session adoption (FR.11.13): if this session was created under a different profile than the one now
+				// active, move its JSONL into the active profile's store before attempting --resume. Under the turn lock (ISSUE.013 N1).
+				if (sessionId != null)
+					_sessionStatus.TryAdoptSessionFromOtherProfile(node.WorkingDirectory, sessionId, settings.ProfileConfigDir);
+
 				run.SendErrorText = null;
 				context.Active = run;
 				progress.Status(TurnState.Running);

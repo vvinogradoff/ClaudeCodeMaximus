@@ -225,6 +225,10 @@ public partial class App : Application
 		services.AddSingleton<IClaudeSessionIndexService, ClaudeSessionIndexService>();
 		services.AddSingleton<ISessionIndexUpdater, SessionIndexUpdater>();
 		services.AddSingleton<ISessionRegistry, SessionRegistry>();
+		// ISSUE.013: profile pins by ProfileId, the session migration between profile stores and the profile.switch tree operation.
+		services.AddSingleton<IProfileResolver, ProfileResolver>();
+		services.AddSingleton<IClaudeSessionMigrator, ClaudeSessionMigrator>();
+		services.AddSingleton<IProfileSwitchService, ProfileSwitchService>();
 		services.AddSingleton<SessionTreeViewModel>();
 
 		// External MCP Server Registry (FR.20).
@@ -279,6 +283,7 @@ public partial class App : Application
 		services.AddSingleton<IRemoteRpcModule, ClientRpcModule>(); // gets the shared IDaemonRunInfo and IEventLog from DI
 		services.AddSingleton<TdcpDispatcher>();
 		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
+		services.AddTransient<IRemoteRpcModule, ProfileRpcModule>();
 		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
 		services.AddSingleton<IEventLog, EventLog>();
 		services.AddSingleton<IDaemonRunInfo, DaemonRunInfo>();

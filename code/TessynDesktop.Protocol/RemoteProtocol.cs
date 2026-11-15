@@ -63,6 +63,9 @@ public static partial class RemoteProtocol
 
 		/// <summary>Attachments: <c>{ nodeId, sourcePath }</c>, copies a local file into the session's attachments folder.</summary>
 		public const string AttachmentImport = "attachment.import";
+
+		/// <summary>ISSUE.013 R1: switches a session's profile, optionally with its descendants: <c>{ nodeId, profileId, includeDescendants? }</c>.</summary>
+		public const string ProfileSwitch = "profile.switch";
 	}
 
 	/// <summary>Notification names (contract section 4).</summary>

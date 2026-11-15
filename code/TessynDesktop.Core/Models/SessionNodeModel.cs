@@ -89,6 +89,19 @@ public sealed class SessionNodeModel
 	public string? ProfileName { get; set; }
 
 	/// <summary>
+	/// ISSUE.013: the stable pin of the profile this session runs on: <c>"default"</c> or <see cref="ClaudeProfileModel.ProfileId"/>.
+	/// Null = not pinned by id (an old display-name pin in <see cref="ProfileName"/> is migrated on load). A pin that no longer
+	/// resolves is an error, never a silent fallback to Default.
+	/// </summary>
+	public string? ProfileId { get; set; }
+
+	/// <summary>
+	/// ISSUE.013: a profile switch that waits for this session's running turn to end (a running session is never interrupted).
+	/// Applied (files moved, pin written) when the next turn starts; null when none is queued.
+	/// </summary>
+	public string? PendingProfileId { get; set; }
+
+	/// <summary>
 	/// Returns the best available session identity key: ExternalId if available, otherwise FileName.
 	/// Used for cache keying and session restore during the migration period.
 	/// </summary>

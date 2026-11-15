@@ -126,6 +126,9 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	public List<SessionSummaryModel> Summaries { get; } = new();
 	public List<(string nodeId, string prompt, TurnSource source)> RunTurnCalls { get; } = new();
 	public string? AssistantReply { get; set; }
+
+	/// <summary>False simulates a turn that was refused before it ran: nothing is appended to the transcript.</summary>
+	public bool AppendsEntries { get; set; } = true;
 	public TurnResultModel RunResult { get; set; } = new(AssistantText: "ok", SessionId: null);
 	public bool CancelResult { get; set; }
 	public string? LastCancelNodeId { get; private set; }
@@ -175,8 +178,9 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 
 		// Mirrors SessionTurnService.RunTurnAsync's real append order: user prompt first, then the
 		// assistant's reply (if configured), both via the same EntryAppended tap the mirror uses.
-		RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleUser, prompt);
-		if (AssistantReply != null)
+		if (AppendsEntries)
+			RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleUser, prompt);
+		if (AppendsEntries && AssistantReply != null)
 			RaiseEntryAppended(node.FileName, Constants.SessionFile.RoleAssistant, AssistantReply);
 
 		return Task.FromResult(RunResult);
@@ -508,6 +512,45 @@ public sealed partial class TelegramBridgeServiceTests : IDisposable
 		await WaitUntil(() => _daemon.RunTurnCalls.Count > 0);
 
 		Assert.Contains(_daemon.RunTurnCalls, c => c.nodeId == "node-1" && c.prompt == "do the thing");
+	}
+
+	/// <summary>ISSUE.013 P3: a turn refused before it ran writes nothing to the topic: the user gets the usual "Turn failed" message and the echo suppression is cleared.</summary>
+	[Fact]
+	public async Task HandleUpdate_RefusedTurn_SendsTurnFailed_AndClearsTheEchoSuppression()
+	{
+		var node = MakeNode("node-1", "My Session");
+		_daemon.AddNode(node);
+		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-1"] = 42;
+		_daemon.AppendsEntries = false;
+		_daemon.RunResult = new TurnResultModel(string.Empty, null, IsError: true,
+			ErrorMessage: "Session 'My Session' is pinned to profile 'Retired', which no longer exists (removed or renamed).", Refused: true);
+		_client.UpdateBatches.Enqueue(new[] { new TelegramUpdate(1, ChatId: -1001, FromUserId: 555, Text: "do the thing", MessageThreadId: 42) });
+
+		var svc = BuildService();
+		svc.Start();
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+
+		Assert.Single(_client.SentMessages);
+		Assert.StartsWith("\u26a0\ufe0f Turn failed: Session 'My Session' is pinned to profile 'Retired'", _client.SentMessages[0].text);
+		var suppress = (System.Collections.Concurrent.ConcurrentDictionary<string, string>)typeof(TelegramBridgeService)
+			.GetField("_suppressNextUserAppend", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(svc)!;
+		Assert.False(suppress.ContainsKey("node-1"));
+	}
+
+	[Fact]
+	public async Task HandleUpdate_TurnThatRanOnDefaultBecauseTheRecordedProfileIsGone_SaysSo()
+	{
+		var node = MakeNode("node-1", "My Session");
+		_daemon.AddNode(node);
+		_appSettings.Settings.TelegramTopicThreadIdsByNodeId["node-1"] = 42;
+		_daemon.RunResult = new TurnResultModel("ok", null, Note: "the recorded profile 'Retired' no longer exists");
+		_client.UpdateBatches.Enqueue(new[] { new TelegramUpdate(1, ChatId: -1001, FromUserId: 555, Text: "do the thing", MessageThreadId: 42) });
+
+		var svc = BuildService();
+		svc.Start();
+		await WaitUntil(() => _client.SentMessages.Count > 0);
+
+		Assert.Contains("ran on the Default profile: the recorded profile 'Retired' no longer exists", _client.SentMessages[0].text);
 	}
 
 	[Fact]

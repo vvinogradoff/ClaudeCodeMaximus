@@ -128,6 +128,18 @@ public sealed class ProfileController : ReactiveObject
 	private ProfileListItemModel BuildDefaultEntry() =>
 		new($"[Sys] {_defaultProfileDisplayName ?? "Default"}", null, isSystem: true);
 
+	/// <summary>The index of the stored profile with this id in the selector (never the Default or "New..." entry); -1 when none.</summary>
+	private int IndexOfProfileId(string profileId)
+	{
+		for (var i = 1; i < AvailableProfiles.Count - 1; i++)
+		{
+			if (string.Equals(AvailableProfiles[i].ProfileId, profileId, StringComparison.OrdinalIgnoreCase))
+				return i;
+		}
+
+		return -1;
+	}
+
 	/// <summary>Rebuilds the AvailableProfiles list from appsettings. Always ends with "New...".</summary>
 	public void RebuildProfileList()
 	{
@@ -143,8 +155,24 @@ public sealed class ProfileController : ReactiveObject
 	/// Restores profile selection from a session file's last-recorded profile name, bypassing
 	/// directory-model/settings persistence. Pass null when no such entry was found to reset to Default.
 	/// </summary>
-	public void RestoreFromEntry(string? profileName)
+	public void RestoreFromEntry(string? profileName, string? pinnedProfileId = null)
 	{
+		// ISSUE.013 P6: the session's ProfileId pin wins over the name its last user entry recorded, so a profile switch made
+		// elsewhere (profile.switch, a cascade, migrate) is not undone by the next send of a stale dropdown value.
+		if (!string.IsNullOrEmpty(pinnedProfileId))
+		{
+			var index = string.Equals(pinnedProfileId, Constants.ProfileSwitch.DefaultProfileId, StringComparison.OrdinalIgnoreCase)
+				? 0
+				: IndexOfProfileId(pinnedProfileId);
+			if (index >= 0)
+			{
+				_selectedProfileIndex = index;
+				RepublishSelection();
+				this.RaisePropertyChanged(nameof(CanManageSelectedProfile));
+				return;
+			}
+		}
+
 		if (profileName != null)
 		{
 			var found = false;

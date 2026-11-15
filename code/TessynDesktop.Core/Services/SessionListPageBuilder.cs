@@ -221,6 +221,8 @@ public sealed partial class SessionListPageBuilder
 			Name                = s.Name,
 			LastActivityUtc     = ctx.GetLastActivity(s),
 			IsRunning           = s.IsRunning,
+			ProfileLabel        = s.ProfileLabel,
+			SwitchingToLabel    = s.SwitchingToLabel,
 			IsFavorite          = s.IsFavorite,
 			WorkerCount         = workers.Count,
 			RunningWorkerCount  = workers.Count(w => w.IsRunning),

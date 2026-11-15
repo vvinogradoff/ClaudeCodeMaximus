@@ -171,9 +171,9 @@ public sealed class SessionListFormatterTests
 
 		FormatLines(Page(new[] { plain, full, workerOfYou }), out var lines);
 
-		Assert.Equal("aaaaaaaa  Session  1h", lines[1]);
-		Assert.Equal("aaaaaaaa  Session  1h  running  fav  no-resume  3 workers (2 running)  worker of feedbeef  [Other]  (you)", lines[2]);
-		Assert.Equal("aaaaaaaa  Session  1h  1 worker  worker of you", lines[3]);
+		Assert.Equal("aaaaaaaa  Session  1h  profile=default", lines[1]);
+		Assert.Equal("aaaaaaaa  Session  1h  profile=default  running  fav  no-resume  3 workers (2 running)  worker of feedbeef  [Other]  (you)", lines[2]);
+		Assert.Equal("aaaaaaaa  Session  1h  profile=default  1 worker  worker of you", lines[3]);
 	}
 
 	[Fact]
@@ -196,8 +196,8 @@ public sealed class SessionListFormatterTests
 
 		FormatLines(Page(new[] { Row(name: exact), Row(name: longName) }), out var lines);
 
-		Assert.Equal($"aaaaaaaa  {exact}  1h", lines[1]);
-		Assert.Equal($"aaaaaaaa  {new string('y', Constants.Agent.ListSessionsNameMaxLength - 3)}...  1h", lines[2]);
+		Assert.Equal($"aaaaaaaa  {exact}  1h  profile=default", lines[1]);
+		Assert.Equal($"aaaaaaaa  {new string('y', Constants.Agent.ListSessionsNameMaxLength - 3)}...  1h  profile=default", lines[2]);
 		Assert.Equal(Constants.Agent.ListSessionsNameMaxLength, lines[2].Split("  ")[1].Length);
 
 		// An emoji (surrogate pair) straddling the cut position is dropped whole, never split.
@@ -231,7 +231,7 @@ public sealed class SessionListFormatterTests
 
 		FormatLines(Page(new[] { row }), out var lines);
 
-		Assert.Equal($"aaaaaaaa  Session  {expected}", lines[1]);
+		Assert.Equal($"aaaaaaaa  Session  {expected}  profile=default", lines[1]);
 	}
 
 	[Fact]
@@ -241,7 +241,7 @@ public sealed class SessionListFormatterTests
 
 		FormatLines(Page(new[] { row }), out var lines);
 
-		Assert.Equal("aaaaaaaa  Session  -", lines[1]);
+		Assert.Equal("aaaaaaaa  Session  -  profile=default", lines[1]);
 	}
 
 	[Fact]
@@ -369,9 +369,9 @@ public sealed class SessionListFormatterTests
 
 		Assert.Equal("You: abcd1234 \"Böss\" - top-level session in Téssyn", lines[0]);
 		Assert.Equal("Téssyn (C:\\Pröjects) - 5 top-level sessions, 2 workers", lines[1]);
-		Assert.Equal("aaaaaaaa  PH v4 — post  1h", lines[2]);
-		Assert.Equal("bbbbbbbb  line break  tab x y  1h  [Über]", lines[3]);
-		Assert.Equal("cccccccc  журнал  1h", lines[4]);
+		Assert.Equal("aaaaaaaa  PH v4 — post  1h  profile=default", lines[2]);
+		Assert.Equal("bbbbbbbb  line break  tab x y  1h  profile=default  [Über]", lines[3]);
+		Assert.Equal("cccccccc  журнал  1h  profile=default", lines[4]);
 		Assert.DoesNotContain('\r', text);
 	}
 }

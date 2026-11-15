@@ -74,6 +74,16 @@ public sealed class SchedulerService : ISchedulerService
 		ScheduleChanged?.Invoke(this, EventArgs.Empty);
 	}
 
+	/// <summary>Posts a note about a scheduled turn to the target's supervisor through the mailbox; nothing for a top-level session or for a mailbox delivery itself (no loop).</summary>
+	private void NotifySupervisor(ScheduleModel schedule, SessionNodeModel targetNode, string text)
+	{
+		if (schedule.IsMailboxDelivery || string.IsNullOrEmpty(targetNode.SupervisorNodeId))
+			return;
+
+		try { AddOrMergeMailboxDelivery(targetNode.SupervisorNodeId, targetNode.Name, text); }
+		catch (Exception ex) { _log.Warning(ex, "SchedulerService: could not notify the supervisor of {NodeId}", targetNode.NodeId); }
+	}
+
 	public void AddOrMergeMailboxDelivery(string supervisorNodeId, string workerName, string resultText)
 	{
 		var block = $"{Constants.Agent.WorkerFinishedPrefix} {workerName}\n{resultText}";
@@ -321,7 +331,16 @@ public sealed class SchedulerService : ISchedulerService
 		using var cts = new CancellationTokenSource(Constants.Agent.ScheduledTurnTimeoutMs);
 		try
 		{
-			await _turnService.RunTurnAsync(targetNode, prompt, TurnSource.Scheduled, cts.Token);
+			var result = await _turnService.RunTurnAsync(targetNode, prompt, TurnSource.Scheduled, cts.Token);
+
+			// ISSUE.013: a refused turn (its pinned profile does not exist) is logged and reported to the supervisor's mailbox, not lost.
+			if (result?.Refused == true)
+			{
+				_log.Warning("SchedulerService: turn refused for schedule {Id} on node {NodeId}: {Error}", schedule.ScheduleId, targetNode.NodeId, result.ErrorMessage);
+				NotifySupervisor(schedule, targetNode, $"Scheduled turn was refused: {result.ErrorMessage}");
+			}
+			else if (result?.Note != null)
+				NotifySupervisor(schedule, targetNode, $"Scheduled turn ran on the Default profile: {result.Note}.");
 		}
 		catch (Exception ex)
 		{

@@ -8,9 +8,8 @@ namespace TessynDesktop.Services;
 
 /// <inheritdoc cref="ITurnSettingsResolver" />
 /// <remarks>
-/// The same rules as the private resolution of <see cref="SessionTurnService"/> (model: per-turn, node, directory, app; profile: per-turn,
-/// pinned or last recorded, Default), repeated here because that service's constructor would have to change to share them - a consolidation
-/// for the Architect to approve. Created by Claude.
+/// The model rules repeat those of <see cref="SessionTurnService"/> (per-turn, node, directory, app); the profile comes from the shared
+/// <see cref="IProfileResolver"/> (ISSUE.013). Created by Claude.
 /// </remarks>
 public sealed class TurnSettingsResolver : ITurnSettingsResolver
 {
@@ -19,27 +18,37 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 	private readonly IClaudeProfileService _profiles;
 	private readonly IClaudeModelService _models;
 	private readonly IProfileLabelService _labels;
+	private readonly IProfileResolver _resolver;
 
 	public TurnSettingsResolver(
 		IAppSettingsService appSettings,
 		ISessionTurnService turns,
 		IClaudeProfileService profiles,
 		IClaudeModelService models,
-		IProfileLabelService labels)
+		IProfileLabelService labels,
+		IProfileResolver? resolver = null)
 	{
 		_appSettings = appSettings;
 		_turns       = turns;
 		_profiles    = profiles;
 		_models      = models;
 		_labels      = labels;
+		_resolver    = resolver ?? new ProfileResolver(appSettings, profiles);
 	}
 
 	/// <inheritdoc />
 	public async Task<TurnSettings> ResolveAsync(SessionNodeModel node, TurnOptionsModel? options)
 	{
-		var requestedProfileName = options?.ProfileName ?? _turns.ResolveProfileName(node);
-		var stampedProfileName   = await ResolveStampedProfileNameAsync(requestedProfileName);
-		var profileConfigDir     = ResolveProfileConfigDir(requestedProfileName);
+		// ISSUE.013: read-only. A switch queued for this session is applied only under its turn lock (TurnEngine), never here: the
+		// session may still be running its previous turn. The settings already name the queued target so the turn launches on it.
+		// A pinned profile that does not resolve is an error, never Default.
+		var pending = options?.ProfileName == null && !string.IsNullOrEmpty(node.PendingProfileId) ? _resolver.FindById(node.PendingProfileId) : null;
+		var profile = pending ?? _resolver.Resolve(node, _turns.ResolveProfileName(node), options?.ProfileName);
+		if (!profile.IsResolved)
+			throw new TdcpException(profile.Error!);
+
+		var stampedProfileName = profile.IsDefault ? await _labels.GetDefaultLabelAsync() : profile.DisplayName;
+		var profileConfigDir   = profile.ConfigDir;
 
 		var modelId   = ResolveTurnModel(node, options);
 		var effort    = NormalizeEffort(options?.Effort);
@@ -82,41 +91,4 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 		string.IsNullOrWhiteSpace(effort) || string.Equals(effort, Constants.Remote.DefaultOptionId, StringComparison.OrdinalIgnoreCase)
 			? null
 			: effort;
-
-	/// <summary>The stored profile's display name, otherwise the Default profile's "[Sys] ..." label (what the desktop stamps for Default).</summary>
-	private async Task<string> ResolveStampedProfileNameAsync(string? profileName)
-	{
-		if (!string.IsNullOrEmpty(profileName))
-		{
-			var stored = FindStoredProfile(profileName);
-			if (stored != null)
-				return stored.DisplayName;
-		}
-
-		return await _labels.GetDefaultLabelAsync();
-	}
-
-	private ClaudeProfileModel? FindStoredProfile(string profileName)
-	{
-		lock (_appSettings.SyncRoot)
-		{
-			return _appSettings.Settings.Profiles.FirstOrDefault(p => string.Equals(p.DisplayName, profileName, StringComparison.OrdinalIgnoreCase));
-		}
-	}
-
-	/// <summary>The credential store of the named profile; null (= Default) for no name or a profile that no longer exists.</summary>
-	private string? ResolveProfileConfigDir(string? name)
-	{
-		if (string.IsNullOrEmpty(name))
-			return null;
-
-		var profiles = _appSettings.Settings.Profiles;
-		for (var i = 0; i < profiles.Count; i++)
-		{
-			if (string.Equals(profiles[i].DisplayName, name, StringComparison.OrdinalIgnoreCase))
-				return _profiles.GetConfigDirForProfile(i + 1, profiles);
-		}
-
-		return null;
-	}
 }

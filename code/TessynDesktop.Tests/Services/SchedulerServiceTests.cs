@@ -18,6 +18,9 @@ internal sealed class FakeTurnService : ISessionTurnService
     public List<(string nodeId, string prompt)> Calls { get; } = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    /// <summary>What every turn returns.</summary>
+    public TurnResultModel Result { get; set; } = new(AssistantText: "ok", SessionId: null);
+
     /// <summary>The single turn lock every node shares; tests hold it to simulate a turn in progress.</summary>
     public SemaphoreSlim TurnLock => _lock;
 
@@ -27,7 +30,7 @@ internal sealed class FakeTurnService : ISessionTurnService
         TurnSource source, CancellationToken cancellationToken = default)
     {
         lock (Calls) Calls.Add((node.NodeId, prompt));
-        return Task.FromResult(new TurnResultModel(AssistantText: "ok", SessionId: null));
+        return Task.FromResult(Result);
     }
 
     public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt,
@@ -426,6 +429,56 @@ public sealed class SchedulerServiceTests : IDisposable
         var all = string.Join("\n", _appSettings.Settings.Schedules.Select(s => s.Prompt));
         for (var i = 0; i < n; i++)
             Assert.Equal(1, CountOccurrences(all, $"[Worker finished] W{i}\ntext-{i}"));
+    }
+
+    /// <summary>ISSUE.013 P3: a refused scheduled turn is not lost - the supervisor gets a mailbox note.</summary>
+    [Fact]
+    public async Task ScheduledTurnRefused_NotifiesTheSupervisorThroughTheMailbox()
+    {
+        var supervisor = MakeNode("sup-1");
+        var worker = MakeNode("worker-1");
+        worker.SupervisorNodeId = "sup-1";
+        _registry.AddNode(supervisor);
+        _registry.AddNode(worker);
+        _turnService.Result = new TurnResultModel(string.Empty, null, IsError: true, ErrorMessage: "Session 'Node-worker-1' is pinned to profile 'Retired', which no longer exists.", Refused: true);
+        var svc = BuildService();
+        _appSettings.Settings.Schedules.Add(new ScheduleModel
+        {
+            ScheduleId = "due", TargetNodeId = "worker-1", Kind = ScheduleKind.At,
+            FireAtUtc = DateTimeOffset.UtcNow.AddMinutes(-5), Prompt = "do something", MissedFirePolicy = MissedFirePolicy.FireOnce,
+        });
+
+        svc.Start();
+        // The note is either still a pending mailbox delivery or, once Poll fired it, the prompt of the supervisor's turn.
+        string? mail = null;
+        await WaitForAsync(() =>
+        {
+            mail = _appSettings.Settings.Schedules.ToList().FirstOrDefault(s => s.IsMailboxDelivery && s.TargetNodeId == "sup-1")?.Prompt
+                   ?? _turnService.Calls.ToList().Where(c => c.nodeId == "sup-1").Select(c => c.prompt).FirstOrDefault();
+            return mail != null;
+        });
+
+        Assert.Contains("Scheduled turn was refused", mail);
+        Assert.Contains("'Retired'", mail);
+    }
+
+    [Fact]
+    public async Task ScheduledTurnRefused_ForATopLevelSession_IsOnlyLogged_NoMailboxNote()
+    {
+        _registry.AddNode(MakeNode("top-1"));
+        _turnService.Result = new TurnResultModel(string.Empty, null, IsError: true, ErrorMessage: "refused", Refused: true);
+        var svc = BuildService();
+        _appSettings.Settings.Schedules.Add(new ScheduleModel
+        {
+            ScheduleId = "due", TargetNodeId = "top-1", Kind = ScheduleKind.At,
+            FireAtUtc = DateTimeOffset.UtcNow.AddMinutes(-5), Prompt = "x", MissedFirePolicy = MissedFirePolicy.FireOnce,
+        });
+
+        svc.Start();
+        await WaitForAsync(() => _turnService.Calls.Count > 0);
+        await Task.Delay(100);
+
+        Assert.DoesNotContain(_appSettings.Settings.Schedules, s => s.IsMailboxDelivery);
     }
 
     [Fact]

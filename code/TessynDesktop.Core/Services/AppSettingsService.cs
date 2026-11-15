@@ -69,6 +69,7 @@ public sealed class AppSettingsService : IAppSettingsService
 
 			var json = File.ReadAllText(_settingsFilePath);
 			Settings = JsonSerializer.Deserialize<AppSettingsModel>(json, SerializerOptions) ?? new AppSettingsModel();
+			new ProfilePinMigration().Migrate(Settings); // ISSUE.013: display-name pins become ProfileId pins
 			EnsureSessionFilesRoot();
 			MigrateFileAccessMode(Settings);
 		}

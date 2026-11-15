@@ -26,6 +26,8 @@ public sealed class SessionListFormatter
 	private const string MonthsUnit        = "mo";
 	private const string YearsUnit         = "y";
 	private const string YouPrefix         = "You: ";
+	private const string ProfileField       = "profile=";
+	private const string SwitchingField     = "switching-to=";
 	private const string RunningFlag       = "running";
 	private const string FavoriteFlag      = "fav";
 	private const string NoResumeFlag      = "no-resume";
@@ -116,6 +118,11 @@ public sealed class SessionListFormatter
 			sb.Append(IndentUnit);
 
 		sb.Append(row.ShortId).Append(Separator).Append(_text.FormatName(row.Name)).Append(Separator).Append(FormatAge(row.LastActivityUtc, nowUtc));
+
+		// ISSUE.013 R5: the profile every session runs on, and a queued switch of a running one.
+		sb.Append(Separator).Append(ProfileField).Append(_text.FormatName(row.ProfileLabel)); // capped like a session name
+		if (row.SwitchingToLabel is not null)
+			sb.Append(Separator).Append(SwitchingField).Append(_text.FormatName(row.SwitchingToLabel));
 
 		if (row.IsRunning)
 			sb.Append(Separator).Append(RunningFlag);

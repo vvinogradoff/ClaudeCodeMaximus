@@ -93,67 +93,10 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 		return results;
 	}
 
-	public bool TryAdoptSessionFromOtherProfile(string workingDirectory, string claudeSessionId, string? activeProfileConfigDir)
-	{
-		if (string.IsNullOrEmpty(workingDirectory) || string.IsNullOrEmpty(claudeSessionId))
-			return false;
-
-		try
-		{
-			var slug     = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
-			var fileName = claudeSessionId + Constants.ClaudeSessions.SessionFileExtension;
-
-			var activeRoot = ResolveProfileRoot(activeProfileConfigDir);
-			var activePath = Path.Combine(activeRoot, Constants.ClaudeSessions.ProjectsFolderName, slug, fileName);
-			if (File.Exists(activePath))
-				return true;
-
-			foreach (var candidateRoot in EnumerateOtherProfileRoots(activeRoot))
-			{
-				var candidatePath = Path.Combine(candidateRoot, Constants.ClaudeSessions.ProjectsFolderName, slug, fileName);
-				if (!File.Exists(candidatePath))
-					continue;
-
-				Directory.CreateDirectory(Path.GetDirectoryName(activePath)!);
-				File.Move(candidatePath, activePath);
-				_log.Information(
-					"Adopted Claude session {SessionId} (slug {Slug}) from {Source} into active profile store {Target}",
-					claudeSessionId, slug, candidatePath, activePath);
-				return true;
-			}
-
-			return false;
-		}
-		catch (Exception ex)
-		{
-			_log.Warning(ex, "Error adopting session {SessionId} across profiles", claudeSessionId);
-			return false;
-		}
-	}
-
-	private static string ResolveProfileRoot(string? profileConfigDir)
-	{
-		if (!string.IsNullOrEmpty(profileConfigDir))
-			return profileConfigDir;
-
-		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		return Path.Combine(userProfile, Constants.ClaudeSessions.ClaudeHomeFolderName);
-	}
-
-	private IEnumerable<string> EnumerateOtherProfileRoots(string activeRoot)
-	{
-		var defaultRoot = ResolveProfileRoot(null);
-		if (!string.Equals(defaultRoot, activeRoot, StringComparison.OrdinalIgnoreCase))
-			yield return defaultRoot;
-
-		var profilesRoot = _profileService.ProfilesRootDirectory;
-		if (!Directory.Exists(profilesRoot))
-			yield break;
-
-		foreach (var dir in Directory.GetDirectories(profilesRoot))
-		{
-			if (!string.Equals(dir, activeRoot, StringComparison.OrdinalIgnoreCase))
-				yield return dir;
-		}
-	}
+	/// <summary>
+	/// FR.11.13 / ISSUE.013 R3: the transcript and its sibling session folder are moved into the active profile's store by the shared
+	/// <see cref="ClaudeSessionMigrator"/>; true when the session is (now) there.
+	/// </summary>
+	public bool TryAdoptSessionFromOtherProfile(string workingDirectory, string claudeSessionId, string? activeProfileConfigDir) =>
+		new ClaudeSessionMigrator(_profileService).Migrate(workingDirectory, claudeSessionId, activeProfileConfigDir, skipWhenTargetExists: true).Found;
 }

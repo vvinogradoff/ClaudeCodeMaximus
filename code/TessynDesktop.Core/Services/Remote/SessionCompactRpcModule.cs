@@ -23,6 +23,7 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 	private readonly IAppSettingsService       _appSettings;
 	private readonly IClaudeModelService       _models;
 	private readonly IClaudeProfileService     _profiles;
+	private readonly IProfileResolver          _profileResolver;
 	private readonly ITurnOptionsResolver      _optionsResolver;
 
 	public SessionCompactRpcModule(
@@ -33,7 +34,8 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		IAppSettingsService appSettings,
 		IClaudeModelService models,
 		IClaudeProfileService profiles,
-		ITurnOptionsResolver optionsResolver)
+		ITurnOptionsResolver optionsResolver,
+		IProfileResolver? profileResolver = null)
 	{
 		_registry        = registry;
 		_compaction      = compaction;
@@ -42,6 +44,7 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		_appSettings     = appSettings;
 		_models          = models;
 		_profiles        = profiles;
+		_profileResolver = profileResolver ?? new ProfileResolver(appSettings, profiles);
 		_optionsResolver = optionsResolver;
 	}
 
@@ -68,16 +71,19 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 	private SessionCompactionOptionsModel ResolveOptions(SessionNodeModel node, TurnOptionsModel? requested)
 	{
 		// May read the session file, so it is resolved before the settings lock is taken.
-		var profileName = requested?.ProfileName ?? _turnService.ResolveProfileName(node);
+		var recordedName = _turnService.ResolveProfileName(node);
+
+		// ISSUE.013: a pinned profile that does not resolve is an error, never a silent Default.
+		var profile = _profileResolver.Resolve(node, recordedName, requested?.ProfileName);
+		if (!profile.IsResolved)
+			throw new TdcpException(profile.Error!);
 
 		string? effectiveModelId;
-		string? profileConfigDir;
+		var profileConfigDir = profile.ConfigDir;
 		lock (_appSettings.SyncRoot)
 		{
 			effectiveModelId = requested?.ModelId == null ? ResolveEffectiveModel(node)
 				: requested.ModelId == Constants.Remote.DefaultOptionId ? null : requested.ModelId;
-
-			profileConfigDir = ResolveProfileConfigDir(profileName);
 		}
 
 		var modelInfo = string.IsNullOrEmpty(effectiveModelId)
@@ -100,22 +106,6 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 			return directory.SelectedModelId;
 
 		return string.IsNullOrEmpty(_appSettings.Settings.SelectedModelId) ? null : _appSettings.Settings.SelectedModelId;
-	}
-
-	/// <summary>Caller holds the settings lock. A name that matches no stored profile (the Default label, a deleted profile) means the Default profile.</summary>
-	private string? ResolveProfileConfigDir(string? profileName)
-	{
-		if (string.IsNullOrEmpty(profileName))
-			return null;
-
-		IReadOnlyList<ClaudeProfileModel> profiles = _appSettings.Settings.Profiles;
-		for (var i = 0; i < profiles.Count; i++)
-		{
-			if (string.Equals(profiles[i].DisplayName, profileName, StringComparison.OrdinalIgnoreCase))
-				return _profiles.GetConfigDirForProfile(i + 1, profiles);
-		}
-
-		return null;
 	}
 
 	private async Task RunAsync(SessionNodeModel node, SessionCompactionOptionsModel options)
