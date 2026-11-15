@@ -44,7 +44,7 @@ public sealed class ProfileViewTests
 	[Fact]
 	public async Task TheViewsBindWithoutBindingErrors_AndTheBadgeIsOnSessionRows()
 	{
-		var client = new FakeTessynClient();
+		var client = new FakeTessynClient().AnnouncingProfileAdmin();
 		client.Profiles = [new("default", "[Sys] a@b.c", true, "a@b.c", ProfileAuthState.Unknown, true), new("p1", "Work", false, null, ProfileAuthState.LoggedOut, false)];
 		client.Directories = [new TreeDirectoryDto("d1", "Repo", false, [], [new TreeSessionDto("s1", "Session", 0, null, new SessionStateDto("s1", false, false, null, false, null, null, false, "Work", true))])];
 		var ui = new ImmediateUiDispatcher();
@@ -53,20 +53,17 @@ public sealed class ProfileViewTests
 		await flyout.AttachAsync(client);
 		var tree = new TreeViewModel(client, ui, NullLogger<TreeViewModel>.Instance, TimeSpan.Zero);
 		await tree.LoadAsync();
-		var banner = new AuthBannerViewModel(flyout);
-		banner.AttachTree(tree);
 		tree.SelectNodeById("s1");
 		var commands = new ShellCommands(new ClientSettingsStore(new NoState(), NullLogger<ClientSettingsStore>.Instance), NullLogger<ShellCommands>.Instance);
 		var slots = new ShellSlots();
 		var context = new TreeContext { Current = tree };
 		var switcher = new ProfileSwitchViewModel(new DialogService(presenter, ui), context, ui, NullLogger<ProfileSwitchViewModel>.Instance);
 		var connection = new ConnectionViewModel(new ScriptedLocator(), new FixedClientFactory(client), ui, NullLogger<ConnectionViewModel>.Instance, TimeSpan.FromMilliseconds(5));
-		var main = new MainViewModel(connection, _ => tree, _ => throw new NotSupportedException(), new NoState(), NullLogger<MainViewModel>.Instance);
-		var host = new ProfileHost(connection, main, flyout, switcher, banner);
+		var host = new ProfileHost(connection, flyout, switcher);
 		new ProfileShellModule(host).Register(slots, commands);
 
 		Assert.Single(slots.For(Constants.Slots.StatusBarItems));
-		Assert.Single(slots.For(Constants.Slots.ComposerAccessory));
+		Assert.Empty(slots.For(Constants.Slots.ComposerAccessory));   // the auth banner is W1b's ComposerNotices, not W5's
 		Assert.Single(slots.For(Constants.Slots.TreeFooter));
 		Assert.NotNull(commands.Find(Constants.Profiles.SwitchCommandId));
 
@@ -81,8 +78,7 @@ public sealed class ProfileViewTests
 				var views = new FrameworkElement[]
 				{
 					new ProfileFlyout { DataContext = flyout },
-					new AuthBanner { DataContext = banner },
-					new ProfileSwitchButton(commands) { DataContext = tree },
+					new ProfileSwitchButton(commands, switcher) { DataContext = tree },
 					new TreePanel { DataContext = tree },
 				};
 				foreach (var element in views)
@@ -92,7 +88,6 @@ public sealed class ProfileViewTests
 					element.UpdateLayout();
 				}
 
-				Assert.True(banner.IsVisible);
 			}
 			finally
 			{

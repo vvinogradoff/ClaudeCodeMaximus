@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
@@ -51,7 +51,7 @@ public sealed class WpfProfilesE2ETests : IDisposable
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
 		var mutation = new TreeMutationService(_env.Registry, _env.Settings, new FakeDirectoryLabelService(), new FakeDirectoryGitOrigins());
 		_host = new ClientTestHost((run, log) => new TdcpDispatcher([
-			new ClientRpcModule(runInfo: run, eventLog: log, treeMutation: mutation), _env.Module, tree, new TreeMutationRpcModule(mutation), _profiles]));
+			new ClientRpcModule(runInfo: run, eventLog: log, treeMutation: mutation, profileAdmin: new AnnouncingProfileAdmin()), _env.Module, tree, new TreeMutationRpcModule(mutation), _profiles]));
 
 		var tokens = new TdcpTokenStore(Path.Combine(_root, "tdcp-token.dat"));
 		tokens.Save(ClientTestHost.Token);

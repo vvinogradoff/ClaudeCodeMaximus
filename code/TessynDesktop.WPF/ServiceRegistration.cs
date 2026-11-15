@@ -103,7 +103,6 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IShellModule, TurnLoopShellModule>();
 		services.AddSingleton<ProfileViewModel>();
 		services.AddSingleton<ProfileSwitchViewModel>();
-		services.AddSingleton<AuthBannerViewModel>();
 		services.AddSingleton<ProfileHost>();
 		services.AddSingleton<IShellModule, ProfileShellModule>();
 		services.AddSingleton<WindowPlacementClamper>();

@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -20,6 +20,8 @@ public sealed partial class ProfileViewModel : ObservableObject, IDisposable
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<ProfileViewModel> _logger;
 	private ITessynClient? _client;
+	private int _refreshGeneration;
+	private bool _statusIsRefreshError;
 
 	[ObservableProperty]
 	private bool _isOpen;
@@ -30,6 +32,9 @@ public sealed partial class ProfileViewModel : ObservableObject, IDisposable
 
 	[ObservableProperty]
 	private bool _isAvailable;
+
+	/// <summary>True when the connected daemon announces <c>profiles.admin</c>.</summary>
+	public bool IsSupported { get; private set; }
 
 	public ProfileViewModel(IDialogService dialogs, IUiDispatcher ui, ILogger<ProfileViewModel> logger)
 	{
@@ -50,6 +55,15 @@ public sealed partial class ProfileViewModel : ObservableObject, IDisposable
 
 		_client = client;
 		client.NotificationReceived += OnNotification;
+
+		// Only a daemon that announces profiles.admin serves profile.*: an older one, or a relay, would answer every call with an error.
+		IsSupported = client.ServerInfo?.Capabilities.Contains(RemoteProtocol.ProfilesAdmin.Capability) == true;
+		if (!IsSupported)
+		{
+			IsAvailable = false;
+			return Task.CompletedTask;
+		}
+
 		return RefreshAsync();
 	}
 
@@ -58,14 +72,25 @@ public sealed partial class ProfileViewModel : ObservableObject, IDisposable
 	public async Task RefreshAsync()
 	{
 		var client = _client;
-		if (client == null)
+		if (client == null || !IsSupported)
 			return;
 
+		// A burst of profiles.changed starts overlapping reads: only the newest one may apply its answer.
+		var generation = Interlocked.Increment(ref _refreshGeneration);
 		try
 		{
 			var result = await client.ProfileListAsync();
 			_ui.Post(() =>
 			{
+				if (generation != Volatile.Read(ref _refreshGeneration))
+					return;
+
+				if (_statusIsRefreshError)
+				{
+					StatusText = null;
+					_statusIsRefreshError = false;
+				}
+
 				Profiles.Clear();
 				foreach (var profile in result.Profiles)
 					Profiles.Add(new ProfileRowViewModel(profile));
@@ -76,7 +101,14 @@ public sealed partial class ProfileViewModel : ObservableObject, IDisposable
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "Reading the profile list failed");
-			_ui.Post(() => StatusText = ex.Message);
+			_ui.Post(() =>
+			{
+				if (generation != Volatile.Read(ref _refreshGeneration))
+					return;
+
+				StatusText = ex.Message;
+				_statusIsRefreshError = true;
+			});
 		}
 	}
 
@@ -166,7 +198,11 @@ public sealed partial class ProfileViewModel : ObservableObject, IDisposable
 		if (client == null)
 			return;
 
-		_ui.Post(() => StatusText = null);
+		_ui.Post(() =>
+		{
+			StatusText = null;
+			_statusIsRefreshError = false;
+		});
 		try
 		{
 			await call(client);

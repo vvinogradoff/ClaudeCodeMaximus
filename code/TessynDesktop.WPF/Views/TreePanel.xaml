@@ -90,8 +90,10 @@
                                TextTrimming="CharacterEllipsis" MaxWidth="140" Visibility="{Binding HasGitOrigin, Converter={StaticResource BoolToVis}}" />
                     <!-- ISSUE.013 R5: the profile the session runs on; a caution mark when a worker runs on another one. -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,8,0" ToolTip="{Binding ProfileToolTip}" AutomationProperties.Name="Profile badge"
-                                Visibility="{Binding HasProfile, Converter={StaticResource BoolToVis}}">
+                                Visibility="{Binding ShowProfileBadge, Converter={StaticResource BoolToVis}}">
                         <TextBlock Text="{Binding ProfileName}" FontSize="11" MaxWidth="110" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="{Binding SwitchingToProfileName, StringFormat=→ {0}}" FontSize="11" MaxWidth="110" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" Visibility="{Binding HasSwitching, Converter={StaticResource BoolToVis}}" />
                         <TextBlock Style="{StaticResource IconText}" FontSize="11" Margin="3,0,0,0" Text="{StaticResource GlyphWarning}"
                                    Foreground="{DynamicResource SystemFillColorCautionBrush}" Visibility="{Binding HasProfileMismatch, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>

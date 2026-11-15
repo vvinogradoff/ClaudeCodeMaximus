@@ -12,14 +12,11 @@ public static partial class Constants
 		public const int SwitchMenuOrder = 91;
 		public const int FlyoutOrder = 10;
 		public const int SwitchButtonOrder = 10;
-		public const int AuthBannerOrder = 10;
 
 		/// <summary>Automation names the E2E tests find the controls by.</summary>
 		public const string FlyoutButtonName = "Profiles";
 		public const string SwitchButtonName = "Switch profile";
 		public const string AddButtonName = "Add profile";
-		public const string ReauthenticateButtonName = "Re-authenticate";
-		public const string RemoveAuthButtonName = "Remove profile";
 
 		/// <summary>Id of the "switch the session and its descendants" answer of the cascade dialog.</summary>
 		public const string CascadeAllId = "all";
@@ -62,8 +59,12 @@ public static partial class Constants
 		public const string ResultOldPaths = "{0} path(s) in the moved transcripts still name the old profile folder.";
 		public const string ResultOk = "OK";
 
-		public const string AuthBannerText = "This session's profile is not signed in (authentication error).";
 		public const string BadgeMismatchTip = "Some workers of this session are on a different profile.";
 		public const string BadgeTip = "Profile: {0}";
+		public const string BadgeSwitchingTip = "switching to {0} when its turn ends";
+		public const string ResultNothingChanged = "Nothing changed: \"{0}\" and its selected workers are already on \"{1}\".";
+		public const string DescendantsAtLeast = "at least {0}";
+		public const string DefaultProfileLabel = "default";
+		public const string DefaultProfileId = "default";
 	}
 }

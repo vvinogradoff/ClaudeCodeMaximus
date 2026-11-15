@@ -10,7 +10,7 @@ namespace TessynDesktop.WPF.Tests;
 /// <remarks>Created by Claude</remarks>
 public sealed class ProfileViewModelTests
 {
-	private readonly FakeTessynClient _client = new();
+	private readonly FakeTessynClient _client = new FakeTessynClient().AnnouncingProfileAdmin();
 	private readonly FakeDialogPresenter _presenter = new();
 	private readonly ProfileViewModel _flyout;
 
@@ -163,55 +163,6 @@ public sealed class ProfileViewModelTests
 
 	private static TreeSessionDto Session(string id, string profile, bool authError = false, int workers = 0) =>
 		new(id, id, workers, null, new SessionStateDto(id, false, false, null, false, null, null, false, profile, authError));
-
-	[Fact]
-	public async Task TheAuthBanner_FollowsTheSelectedSession_AndRoutesToItsProfile()
-	{
-		await _flyout.AttachAsync(_client);
-		_client.Directories = [new TreeDirectoryDto("d1", "Repo", false, [], [Session("ok", "Work"), Session("bad", "Spare", authError: true)])];
-		var tree = new TreeViewModel(_client, new ImmediateUiDispatcher(), NullLogger<TreeViewModel>.Instance, TimeSpan.Zero);
-		await tree.LoadAsync();
-		var banner = new AuthBannerViewModel(_flyout);
-		banner.AttachTree(tree);
-
-		tree.SelectNodeById("ok");
-		Assert.False(banner.IsVisible);
-
-		tree.SelectNodeById("bad");
-		Assert.True(banner.IsVisible);
-		Assert.Equal("Spare", banner.ProfileName);
-		Assert.True(banner.ReauthenticateCommand.CanExecute(null));
-
-		await banner.ReauthenticateCommand.ExecuteAsync(null);
-		Assert.Contains("profile.authenticate:profile_2", _client.Calls);
-
-		// The daemon clears the flag after the login: the banner goes away without a new selection.
-		var node = tree.FindNode("bad")!;
-		node.State = node.State! with { AuthError = false };
-		Assert.False(banner.IsVisible);
-
-		node.State = node.State with { AuthError = true };
-		Answer("accept");
-		await banner.RemoveCommand.ExecuteAsync(null);
-		Assert.Contains("profile.remove:profile_2", _client.Calls);
-	}
-
-	[Fact]
-	public async Task TheAuthBanner_CannotAct_OnAProfileTheListDoesNotKnow()
-	{
-		await _flyout.AttachAsync(_client);
-		_client.Directories = [new TreeDirectoryDto("d1", "Repo", false, [], [Session("bad", "Unknown name", authError: true)])];
-		var tree = new TreeViewModel(_client, new ImmediateUiDispatcher(), NullLogger<TreeViewModel>.Instance, TimeSpan.Zero);
-		await tree.LoadAsync();
-		var banner = new AuthBannerViewModel(_flyout);
-		banner.AttachTree(tree);
-
-		tree.SelectNodeById("bad");
-
-		Assert.True(banner.IsVisible);
-		Assert.False(banner.ReauthenticateCommand.CanExecute(null));
-		Assert.False(banner.RemoveCommand.CanExecute(null));
-	}
 
 	[Fact]
 	public async Task TheTreeBadge_ShowsTheProfile_OnSessionsOnly_AndWarnsWhenAWorkerRunsOnAnother()

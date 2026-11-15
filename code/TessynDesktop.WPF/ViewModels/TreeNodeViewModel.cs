@@ -17,7 +17,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	private bool _isExpanded;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(ProfileName), nameof(HasProfile), nameof(HasProfileMismatch), nameof(ProfileToolTip))]
+	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(ProfileName), nameof(HasProfile), nameof(SwitchingToProfileName), nameof(HasSwitching), nameof(ShowProfileBadge), nameof(HasProfileMismatch), nameof(ProfileToolTip))]
 	private SessionStateDto? _state;
 
 	[ObservableProperty]
@@ -93,17 +93,35 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
 	public bool HasAttention => AttentionCount > 0;
 
-	/// <summary>The display name of the profile the session last ran on (ISSUE.013 R5); empty for directories and groups and while unknown.</summary>
-	public string ProfileName => IsSessionLike ? State?.ProfileName ?? string.Empty : string.Empty;
+	/// <summary>
+	/// The display name of the profile the session is pinned to (ISSUE.013 R5); without a pin (an older daemon, or a session that never ran) the profile stamped on
+	/// its last user entry. Empty for directories and groups and while unknown.
+	/// </summary>
+	public string ProfileName => IsSessionLike ? State?.PinnedProfileName ?? State?.ProfileName ?? string.Empty : string.Empty;
 
 	public bool HasProfile => ProfileName.Length > 0;
+
+	/// <summary>The profile a queued switch moves the session to when its turn ends; empty when none is queued.</summary>
+	public string SwitchingToProfileName => IsSessionLike ? State?.SwitchingToProfileName ?? string.Empty : string.Empty;
+
+	public bool HasSwitching => SwitchingToProfileName.Length > 0;
+
+	public bool ShowProfileBadge => HasProfile || HasSwitching;
 
 	/// <summary>True when a loaded worker runs on another profile than this session (ISSUE.013 R5: warn when a supervisor and its workers differ).</summary>
 	public bool HasProfileMismatch => HasProfile && Children.Any(c => c.HasProfile && !string.Equals(c.ProfileName, ProfileName, StringComparison.OrdinalIgnoreCase));
 
-	public string ProfileToolTip => HasProfileMismatch
-		? string.Format(Constants.Profiles.BadgeTip, ProfileName) + " - " + Constants.Profiles.BadgeMismatchTip
-		: string.Format(Constants.Profiles.BadgeTip, ProfileName);
+	public string ProfileToolTip
+	{
+		get
+		{
+			var tip = string.Format(Constants.Profiles.BadgeTip, ProfileName);
+			if (HasSwitching)
+				tip += " - " + string.Format(Constants.Profiles.BadgeSwitchingTip, SwitchingToProfileName);
+
+			return HasProfileMismatch ? tip + " - " + Constants.Profiles.BadgeMismatchTip : tip;
+		}
+	}
 
 	/// <summary>Re-evaluates the expander after the worker count or the loaded children changed.</summary>
 	public void RefreshExpander()
@@ -119,9 +137,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 		OnPropertyChanged(nameof(ProfileToolTip));
 	}
 
-	partial void OnStateChanged(SessionStateDto? value)
+	partial void OnStateChanged(SessionStateDto? oldValue, SessionStateDto? newValue)
 	{
 		OnPropertyChanged(nameof(CanExpand));
-		Parent?.RefreshProfileMismatch();
+
+		// The supervisor's warning depends only on the profile of its workers: a running flag or an activity time changes nothing there.
+		if (ProfileKey(oldValue) != ProfileKey(newValue))
+			Parent?.RefreshProfileMismatch();
 	}
+
+	private static string ProfileKey(SessionStateDto? state) => state?.PinnedProfileName ?? state?.ProfileName ?? string.Empty;
 }

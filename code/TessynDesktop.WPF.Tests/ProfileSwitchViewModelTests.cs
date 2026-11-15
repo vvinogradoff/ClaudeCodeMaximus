@@ -10,7 +10,7 @@ namespace TessynDesktop.WPF.Tests;
 /// <remarks>Created by Claude</remarks>
 public sealed class ProfileSwitchViewModelTests
 {
-	private readonly FakeTessynClient _client = new();
+	private readonly FakeTessynClient _client = new FakeTessynClient().AnnouncingProfileAdmin();
 	private readonly FakeDialogPresenter _presenter = new();
 	private readonly TreeContext _context = new();
 	private readonly ProfileSwitchViewModel _switch;
@@ -246,10 +246,8 @@ public sealed class ProfileSwitchViewModelTests
 	{
 		var dialogs = new DialogService(_presenter, new ImmediateUiDispatcher());
 		var flyout = new ProfileViewModel(dialogs, new ImmediateUiDispatcher(), NullLogger<ProfileViewModel>.Instance);
-		var banner = new AuthBannerViewModel(flyout);
 		var connection = new ConnectionViewModel(new ScriptedLocator(), new FixedClientFactory(_client), new ImmediateUiDispatcher(), NullLogger<ConnectionViewModel>.Instance, TimeSpan.FromMilliseconds(5));
-		var main = new MainViewModel(connection, _ => _tree, _ => throw new NotSupportedException(), new NoState(), NullLogger<MainViewModel>.Instance);
-		return new ProfileHost(connection, main, flyout, _switch, banner);
+		return new ProfileHost(connection, flyout, _switch);
 	}
 
 	private sealed class NoState : State.IClientStateStore

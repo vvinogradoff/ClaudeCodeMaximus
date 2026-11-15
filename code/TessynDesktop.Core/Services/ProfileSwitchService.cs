@@ -170,7 +170,7 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 		{
 			_log.Warning("Queued profile switch of session {NodeId} dropped: the profile no longer exists", node.NodeId);
 			node.PendingProfileId = null;
-			_appSettings.Save();
+			Persist([node]); // the queued switch is gone: open clients drop its "switching to" mark
 			return false;
 		}
 
@@ -198,7 +198,7 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 		if (node.ProfileId != target.ProfileId)
 		{
 			Pin(node, target);
-			_appSettings.Save();
+			Persist([node]); // a changed pin is part of the session state: publish it
 		}
 	}
 
