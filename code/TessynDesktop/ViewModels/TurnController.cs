@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Turns;
 using TessynDesktop.Services;
 using ReactiveUI;
 using Serilog;
@@ -15,36 +15,34 @@ namespace TessynDesktop.ViewModels;
 /// <summary>
 /// Owns turn sending (interactive send + streaming), the thinking timer, mid-run corrections,
 /// compaction, and JSONL detach for a single session (FR.11.2, FR.11.6-11.10, FR.11.12, FR.14.3).
-/// Deliberately drives <see cref="IClaudeProcessManager"/> directly for live token streaming rather
-/// than <c>IDaemonClient.RunTurnAsync</c> (the headless/orchestration path) — the two coordinate only
-/// via the shared <see cref="IDaemonClient.GetTurnLock"/>. Extracted from SessionViewModel (Stage 7).
+/// A thin adapter (P1.I): the turn itself runs in the Core <see cref="ITurnEngine"/> (launch, stream parsing, transcript writes,
+/// running flag, retries, cancellation, TurnCompleted), and this class renders the engine's progress through its
+/// <see cref="ITurnObserver"/> (see TurnController.Observer.cs) and keeps the UI-only state: busy flag, thinking timer, completion
+/// sound, input clearing, toggles. The headless path (<c>IDaemonClient.RunTurnAsync</c>) coordinates with it only via the shared
+/// turn lock. Extracted from SessionViewModel (Stage 7).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class TurnController : ReactiveObject, IDisposable
+public sealed partial class TurnController : ReactiveObject, IDisposable
 {
 	private static readonly ILogger _log = Log.ForContext<TurnController>();
 
 	private readonly SessionNodeViewModel _node;
 	private readonly ISessionFileService _fileService;
 	private readonly IDraftService _draftService;
-	private readonly IClaudeProcessManager _processManager;
+	private readonly ITurnEngine _engine;
 	private readonly IClaudeStreamingSessionManager _streamingManager;
 	private readonly IAppSettingsService _appSettings;
-	private readonly IAgentMcpServer _mcpServer;
 	private readonly IDaemonClient _daemonClient;
-	private readonly ITelegramBridgeService _telegramBridge;
-	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly ISessionSoundService _soundService;
 	private readonly ISessionCompactionService _compaction;
 	private readonly SessionContentViewModel _content;
 	private readonly ModelSelectionController _models;
 	private readonly ProfileController _profiles;
-	private readonly SessionPromptComposer _composer;
 
-	private string? _pendingModelLabel;       // UI thread only (first assistant VM)
-	private string? _pendingFileModelId;      // cross-thread; use Interlocked
-	private string? _pendingFileEffort;       // cross-thread; use Interlocked
 	private bool _isBusy;
+
+	/// <summary>The observer of the latest send: released from the engine on dispose, so the singleton engine does not keep this view alive.</summary>
+	private ITurnObserver? _lastObserver;
 	private bool _isNodeRunning;
 	private string _thinkingDuration = string.Empty;
 	private DispatcherTimer? _thinkingTimer;
@@ -52,20 +50,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 	/// <summary>Subscription on the (long-lived) tree node; must be disposed or the node keeps this controller alive.</summary>
 	private IDisposable? _nodeRunningSubscription;
 	private DateTimeOffset _thinkingStartedAt;
-	private int _busyCount;
 
-	// True while this controller holds one running activity in the daemon's reference-counted running flag
-	// (so a desktop-interactive turn shows as running to remote clients). Opened at the first queued send, closed at idle.
-	private bool _daemonRunningOpen;
-	private bool _needsContextRetry;
-	private bool _needsAuthRaceRetry;
-
-	// FR.21.22 — error-result text of the send currently holding the turn lock, reported via
-	// ISessionFileService.NotifyTurnCompleted. Only written by HandleStreamEvent while a send holds
-	// the lock (sends are serialized per node), reset when a send acquires it and on every retry.
-	private string? _sendErrorText;
-	private readonly object _ctsLock = new();
-	private readonly List<CancellationTokenSource> _activeCts = new();
 	private bool _isNewBranch;
 	private bool _isAutoCompact;
 	private bool _midRunAutoCompactState;
@@ -250,36 +235,28 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		SessionNodeViewModel node,
 		ISessionFileService fileService,
 		IDraftService draftService,
-		IClaudeProcessManager processManager,
+		ITurnEngine engine,
 		IClaudeStreamingSessionManager streamingManager,
 		IAppSettingsService appSettings,
-		IAgentMcpServer mcpServer,
 		IDaemonClient daemonClient,
-		ITelegramBridgeService telegramBridge,
-		IClaudeSessionStatusService sessionStatus,
 		ISessionSoundService soundService,
 		ISessionCompactionService compaction,
 		SessionContentViewModel content,
 		ModelSelectionController models,
-		ProfileController profiles,
-		SessionPromptComposer composer)
+		ProfileController profiles)
 	{
 		_node             = node;
 		_fileService      = fileService;
 		_draftService     = draftService;
-		_processManager   = processManager;
+		_engine           = engine;
 		_streamingManager = streamingManager;
 		_appSettings      = appSettings;
-		_mcpServer        = mcpServer;
 		_daemonClient     = daemonClient;
-		_telegramBridge   = telegramBridge;
-		_sessionStatus    = sessionStatus;
 		_soundService     = soundService;
 		_compaction       = compaction;
 		_content          = content;
 		_models           = models;
 		_profiles         = profiles;
-		_composer         = composer;
 
 		_nodeRunningSubscription = node.WhenAnyValue(x => x.IsRunning).Subscribe(running => IsNodeRunning = running);
 		_streamingManager.ProcessExited += OnStreamingProcessExited;
@@ -296,18 +273,14 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_nodeRunningSubscription?.Dispose();
 		_nodeRunningSubscription = null;
 		_streamingManager.ProcessExited -= OnStreamingProcessExited;
+		if (_lastObserver != null)
+			_engine.ReleaseObserver(_node.Model.NodeId, _lastObserver);
 		if (_thinkingTimer != null)
 		{
 			_thinkingTimer.Tick -= OnThinkingTimerTick;
 			_thinkingTimer.Stop();
 			_thinkingTimer = null;
 		}
-
-		lock (_ctsLock) { foreach (var c in _activeCts) c.Dispose(); _activeCts.Clear(); }
-
-		// Release this controller's share of the daemon's reference-counted running flag, so a view disposed
-		// mid-turn cannot leave the session marked as running for remote clients.
-		CloseDaemonRunning();
 	}
 
 	/// <summary>
@@ -331,14 +304,14 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		}
 		else if (IsBusy)
 		{
-			List<CancellationTokenSource> snapshot;
-			lock (_ctsLock) snapshot = [.._activeCts];
-			foreach (var c in snapshot) c.Cancel();
+			_engine.CancelRuns(_node.Model.NodeId);
 			_log.Information("Stop requested for session {FileName}", _node.FileName);
 		}
 		else if (IsNodeRunning)
 		{
+			// A headless (orchestrated) turn, or a turn the daemon's engine runs for a remote client.
 			_daemonClient.CancelTurn(_node.Model.NodeId);
+			_engine.CancelRuns(_node.Model.NodeId);
 			_log.Information("Stop requested for orchestrated turn on node {NodeId}", _node.Model.NodeId);
 		}
 	}
@@ -391,26 +364,6 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		_log.Information("Delayed send scheduled for session {FileName}: fires at {FireAt}", _node.FileName, fireAtUtc);
 	}
 
-	private void OpenDaemonRunning()
-	{
-		var nodeId = _node.Model.NodeId;
-		if (_daemonRunningOpen || string.IsNullOrEmpty(nodeId))
-			return;
-
-		_daemonRunningOpen = true;
-		_daemonClient.SetSessionRunning(nodeId, true);
-	}
-
-	private void CloseDaemonRunning()
-	{
-		var nodeId = _node.Model.NodeId;
-		if (!_daemonRunningOpen || string.IsNullOrEmpty(nodeId))
-			return;
-
-		_daemonRunningOpen = false;
-		_daemonClient.SetSessionRunning(nodeId, false);
-	}
-
 	private async Task SendAsyncCore(string message, bool preserveInput)
 	{
 		if (!preserveInput)
@@ -439,13 +392,8 @@ public sealed class TurnController : ReactiveObject, IDisposable
 		// Reset one-shot toggles immediately
 		if (wasNewBranch) IsNewBranch = false;
 
-		_busyCount++;
 		IsBusy = true;
 		_node.IsRunning = true;
-
-		// FR.21.2 — lazily ensure a Telegram topic exists for this session on its first interactive
-		// activity since the bridge was enabled. Fire-and-forget: never throws, never delays the turn.
-		_ = _telegramBridge.EnsureTopicForSessionAsync(_node.Model);
 
 		// Start timer only for the first concurrent send; subsequent sends keep the running clock
 		if (_thinkingTimer == null)
@@ -458,465 +406,24 @@ public sealed class TurnController : ReactiveObject, IDisposable
 			_thinkingTimer.Start();
 		}
 
-		// Store only the clean user message in file and UI (FR.11.2)
-		var profileName = _profiles.SelectedProfileDisplayName;
-		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message, profileName: profileName);
-		var now = DateTimeOffset.UtcNow;
-		_content.Messages.Add(new MessageEntryViewModel
-		{
-			Role        = Constants.SessionFile.RoleUser,
-			Content     = message,
-			Timestamp   = now,
-			ProfileName = profileName,
-		});
-		_pendingModelLabel = SessionPromptComposer.BuildModelLabel(_models.SelectedModelId, _models.SelectedEffort);
-		Interlocked.Exchange(ref _pendingFileModelId, _models.SelectedModelId ?? "default");
-		Interlocked.Exchange(ref _pendingFileEffort,  _models.SelectedEffort  ?? "default");
-		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-		_node.LastPromptTimestamp = now;
-		_node.ProfileName = profileName;
-
-		_content.Messages.Add(new MessageEntryViewModel
-		{
-			Role       = Constants.SessionFile.RoleSystem,
-			Content    = "Claude is thinking...",
-			Timestamp  = DateTimeOffset.UtcNow,
-			IsProgress = true,
-		});
-
-		// Build augmented message with hidden instructions (FR.11.2, FR.11.9). IsNewSession reflects
-		// whether this turn is about to start a fresh claude process (no ClaudeSessionId yet).
-		var sessionId = _node.Model.ClaudeSessionId;
-
-		// Cross-profile session adoption (FR.11.13): if this session was created under a different
-		// profile than the one now active, locate and move its JSONL into the active profile's
-		// store before attempting --resume, rather than falling straight to text reconstruction.
-		if (sessionId != null)
-			_sessionStatus.TryAdoptSessionFromOtherProfile(_node.Model.WorkingDirectory, sessionId, _profiles.SelectedProfileConfigDir);
-
-		var instructionBlock = _composer.BuildInstructionBlock(IsAutoCommit, wasNewBranch, IsAutoDocument, sessionId == null, _node.Model.IsStreamingMode);
-		var augmentedMessage = message + instructionBlock;
-
-		// Proactive context reload (FR.11.10): if file has history but no session ID, wrap with context
-		var messageToSend = augmentedMessage;
-		if (sessionId == null)
-		{
-			var entries = _fileService.ReadEntries(_node.FileName);
-			var priorEntries = entries
-				.Where(e => e.Role is Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant)
-				.ToList();
-			if (priorEntries.Count > 1) // More than just the current prompt
-			{
-				messageToSend = _composer.BuildContextPreamble(augmentedMessage);
-				_log.Information("Proactive context reload for session {FileName}", _node.FileName);
-			}
-		}
-
-		var cts = new CancellationTokenSource();
-		lock (_ctsLock) _activeCts.Add(cts);
-		var ct = cts.Token;
-
-		// Local Tool Profile (FR.12.21): a tool-capable local Ollama model gets the directory's
-		// curated --tools list plus a filtered, --strict-mcp-config'd --mcp-config instead of the
-		// unrestricted Anthropic default. LocalToolProfileResolver is the single source of truth
-		// shared with the headless SessionTurnService path.
-		var localProfile = LocalToolProfileResolver.Resolve(_models.SelectedModelInfo, _models.DirectoryModel);
-
-		string? mcpConfigPath = null;
-		var strictMcpConfig = false;
-		LocalToolSpec? localToolSpec = null;
-
-		if (localProfile != null)
-		{
-			strictMcpConfig = true;
-			localToolSpec   = localProfile.ToolSpec;
-			mcpConfigPath   = await _mcpServer.EnsureConfigFileAsync(
-				_node.Model.NodeId, _node.Model.AgentToken, localProfile.IncludeCmxMcp, localProfile.IncludedExternalMcpServerIds);
-		}
-		// FR.14.3 / FR.14.11 — ensure the per-node MCP config file exists so the claude process
-		// receives --mcp-config and can reach the host scheduling/orchestration tools.
-		// MCP tools are a separate mechanism from the built-in --tools flag — the CLI still sends
-		// them to the model even when --tools "" is set — so skip --mcp-config entirely for models
-		// that don't support tool calling (e.g. tool-incapable local Ollama models).
-		else if (_appSettings.Settings.AgentToolsEnabled && !_models.SelectedModelDisablesTools)
-			mcpConfigPath = await _mcpServer.EnsureConfigFileAsync(_node.Model.NodeId, _node.Model.AgentToken);
-
-		// Serialize only the CLI dispatch, not the UI updates above. This preserves the
-		// ability to queue a follow-up prompt while a previous turn is still in flight —
-		// the input clears and the message appears in the pane immediately, and this
-		// send's CLI spawn waits behind the in-flight one to avoid concurrent --resume.
-		var nodeId   = _node.Model.NodeId;
-		var turnLock = string.IsNullOrEmpty(nodeId) ? null : _daemonClient.GetTurnLock(nodeId);
-		bool lockAcquired = false;
-		var sendCancelled = false;
-		string? sendErrorText = null;
-
-		// Opened right before the try whose finally closes it, so nothing that throws in between can leak the share.
-		OpenDaemonRunning();
-		try
-		{
-			if (turnLock != null)
-			{
-				await turnLock.WaitAsync(ct);
-				lockAcquired = true;
-			}
-			_sendErrorText = null;
-
-			if (_node.Model.IsStreamingMode)
-			{
-				// Streaming Session Mode (FR.19): no --resume "No conversation found" retry path —
-				// the same open process carries the conversation, so context-retry doesn't apply.
-				await SendViaStreamingAsync(sessionId, messageToSend, mcpConfigPath, localToolSpec, strictMcpConfig, ct);
-			}
-			else
-			{
-				await _processManager.SendMessageAsync(
-					workingDirectory: _node.Model.WorkingDirectory,
-					claudePath:       _appSettings.Settings.ClaudePath,
-					sessionId:        sessionId,
-					userMessage:      messageToSend,
-					onEvent:          HandleStreamEvent,
-					model:            _models.SelectedModelId,
-					profileConfigDir: _profiles.SelectedProfileConfigDir,
-					effort:           _models.SelectedEffort,
-					mcpConfigPath:    mcpConfigPath,
-					ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
-					disableTools:     _models.SelectedModelDisablesTools,
-					chrome:           _models.IsChromeEnabled,
-					disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
-					localToolSpec:    localToolSpec,
-					strictMcpConfig:  strictMcpConfig,
-					cancellationToken: ct);
-
-				if (_needsAuthRaceRetry)
-				{
-					_needsAuthRaceRetry = false;
-					_log.Information("Retrying turn after transient OAuth refresh race for session {FileName}", _node.FileName);
-					await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
-
-					await _processManager.SendMessageAsync(
-						workingDirectory: _node.Model.WorkingDirectory,
-						claudePath:       _appSettings.Settings.ClaudePath,
-						sessionId:        sessionId,
-						userMessage:      messageToSend,
-						onEvent:          HandleStreamEvent,
-						model:            _models.SelectedModelId,
-						profileConfigDir: _profiles.SelectedProfileConfigDir,
-						effort:           _models.SelectedEffort,
-						mcpConfigPath:    mcpConfigPath,
-						ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
-						disableTools:     _models.SelectedModelDisablesTools,
-						chrome:           _models.IsChromeEnabled,
-						disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
-						localToolSpec:    localToolSpec,
-						strictMcpConfig:  strictMcpConfig,
-						cancellationToken: ct);
-				}
-
-				if (_needsContextRetry)
-				{
-					_needsContextRetry = false;
-					var enrichedMessage = _composer.BuildContextPreamble(augmentedMessage);
-
-					Dispatcher.UIThread.Post(() =>
-					{
-						var last = _content.Messages.Count > 0 ? _content.Messages[^1] : null;
-						if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-							last.Content = "Resuming session with conversation history...";
-						else
-							_content.Messages.Add(new MessageEntryViewModel
-							{
-								Role       = Constants.SessionFile.RoleSystem,
-								Content    = "Resuming session with conversation history...",
-								Timestamp  = DateTimeOffset.UtcNow,
-								IsProgress = true,
-							});
-					});
-
-					await _processManager.SendMessageAsync(
-						workingDirectory: _node.Model.WorkingDirectory,
-						claudePath:       _appSettings.Settings.ClaudePath,
-						sessionId:        null,
-						userMessage:      enrichedMessage,
-						onEvent:          HandleStreamEvent,
-						model:            _models.SelectedModelId,
-						profileConfigDir: _profiles.SelectedProfileConfigDir,
-						effort:           _models.SelectedEffort,
-						mcpConfigPath:    mcpConfigPath,
-						ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
-						disableTools:     _models.SelectedModelDisablesTools,
-						chrome:           _models.IsChromeEnabled,
-						disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
-						localToolSpec:    localToolSpec,
-						strictMcpConfig:  strictMcpConfig,
-						cancellationToken: ct);
-				}
-			}
-
-			// Post-response: handle Auto-Compact (FR.11.6)
-			// Use _midRunAutoCompactState which reflects any mid-run toggle changes
-			if (_midRunAutoCompactState)
-			{
-				// Runs inside the send flow, which still holds the node's turn lock until its finally block.
-				await SendCompactionPromptAsync(turnLockHeld: true);
-				IsAutoCompact = false;
-			}
-		}
-		catch (OperationCanceledException)
-		{
-			_anyCancelledInBatch = true;
-			sendCancelled = true;
-			_log.Information("Send interrupted by user for session {FileName}", _node.FileName);
-			_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, "[Interrupted by user]");
-			_content.Messages.Add(new MessageEntryViewModel
-			{
-				Role      = Constants.SessionFile.RoleSystem,
-				Content   = "[Interrupted by user]",
-				Timestamp = DateTimeOffset.UtcNow,
-			});
-		}
-		finally
-		{
-			// FR.21.22 — once per send that actually ran, after its last entry is appended and before
-			// the lock is released (the next queued send resets _sendErrorText as soon as it acquires
-			// the lock). A send stopped while still queued behind another turn never ran one, so it
-			// reports nothing — reporting it cancelled would drop the running turn's pending answer.
-			if (lockAcquired || turnLock == null)
-			{
-				sendErrorText = sendCancelled ? null : _sendErrorText;
-				try
-				{
-					_fileService.NotifyTurnCompleted(_node.FileName, sendCancelled, sendErrorText);
-				}
-				catch (Exception ex)
-				{
-					_log.Warning(ex, "TurnCompleted handler failed for session {FileName}", _node.FileName);
-				}
-			}
-
-			if (lockAcquired) turnLock?.Release();
-			lock (_ctsLock) _activeCts.Remove(cts);
-			cts.Dispose();
-
-			_busyCount = Math.Max(0, _busyCount - 1);
-			if (_busyCount == 0)
-			{
-				// Update JSONL entry count before IsBusy goes false, so the watcher
-				// doesn't re-detect entries we already processed during this send cycle.
-				// The parse runs off the UI thread; IsBusy stays true (watcher suppressed) while we await it.
-				await _content.RefreshJsonlEntryCountAsync();
-			}
-
-			// A send that started during the await owns the idle transition now (its own finally runs it).
-			if (_busyCount == 0)
-			{
-				var t = _thinkingTimer;
-				_thinkingTimer = null;
-				t?.Stop();
-				ThinkingDuration = string.Empty;
-				IsBusy = false;
-				_node.IsRunning = false;
-				CloseDaemonRunning();
-
-				// FR.22.1: only on natural completion of the whole batch, never after user Stop.
-				if (!_anyCancelledInBatch && _node.Model.PlayCompletionSound)
-					_soundService.PlayCompletionSound(_node.Model.NodeId);
-			}
-		}
+		// The engine writes the user entry (its observer callback adds the rows, synchronously, as the controller did), runs the turn and
+		// returns once it was reported complete. The idle transition (JSONL refresh, IsBusy=false, sound) runs in the observer's
+		// BeforeIdleAsync/Idle, called by the engine in the controller's old order and before the running flag is released.
+		_lastObserver = new RunObserver(this, message);
+		await _engine.RunAsync(new TurnRequest(_node.Model, message, BuildTurnSettings(), wasNewBranch), _lastObserver);
 	}
 
-	/// <summary>
-	/// Sends one turn via Streaming Session Mode (FR.19): ensures the session's persistent process
-	/// is running (spawning it with the current model/profile/effort/mcp config if this is the
-	/// first turn), then writes the turn to its open stdin and awaits the next result event.
-	/// <see cref="HandleStreamEvent"/> is reused unchanged — it processes a <see cref="ClaudeStreamEvent"/>
-	/// the same way regardless of whether it came from a one-shot or a streaming process.
-	/// </summary>
-	private async Task SendViaStreamingAsync(string? sessionId, string messageToSend, string? mcpConfigPath,
-		LocalToolSpec? localToolSpec, bool strictMcpConfig, CancellationToken ct)
-	{
-		var nodeId = _node.Model.NodeId;
-		var spawnParams = new StreamingSpawnParams(
-			WorkingDirectory: _node.Model.WorkingDirectory,
-			ClaudePath:       _appSettings.Settings.ClaudePath,
-			SessionId:        sessionId,
-			ProfileConfigDir: _profiles.SelectedProfileConfigDir,
-			Model:            _models.SelectedModelId,
-			Effort:           _models.SelectedEffort,
-			McpConfigPath:    mcpConfigPath,
-			OllamaBaseUrl:    _models.SelectedLocalBaseUrl,
-			DisableTools:     _models.SelectedModelDisablesTools,
-			Chrome:           _models.IsChromeEnabled,
-			LocalToolSpec:    localToolSpec,
-			StrictMcpConfig:  strictMcpConfig);
-
-		var justStarted = _streamingManager.EnsureStarted(nodeId, spawnParams, HandleStreamEvent);
-		if (justStarted)
-			Dispatcher.UIThread.Post(NotifyStreamingStateChanged);
-
-		await _streamingManager.SendTurnAsync(nodeId, messageToSend, ct);
-
-		if (_needsAuthRaceRetry)
-		{
-			// ISSUE.010 — same transient cross-process OAuth refresh race as the one-shot path;
-			// the streaming process is still alive, so retrying just writes the turn again.
-			_needsAuthRaceRetry = false;
-			_log.Information("Retrying streaming turn after transient OAuth refresh race for session {FileName}", _node.FileName);
-			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
-			await _streamingManager.SendTurnAsync(nodeId, messageToSend, ct);
-		}
-	}
-
-	private void HandleStreamEvent(ClaudeStreamEvent evt)
-	{
-		switch (evt.Type)
-		{
-			case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
-				var fileModelId = Interlocked.Exchange(ref _pendingFileModelId, null);
-				var fileEffort  = Interlocked.Exchange(ref _pendingFileEffort, null);
-				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleAssistant, evt.Content,
-					modelId: fileModelId, effort: fileEffort);
-				break;
-			case "system" when evt.Subtype is "compact":
-				_fileService.AppendCompactionSeparator(_node.FileName);
-				break;
-			case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-				// When context retry or an auth-race retry is pending, suppress stderr-based errors
-				// (they echo the same error the result event already handled).
-				if (_needsContextRetry || _needsAuthRaceRetry)
-					return;
-				if (evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase))
-				{
-					_log.Information("No conversation found (system error) for session {FileName} — will retry with context", _node.FileName);
-					_node.Model.ClaudeSessionId = null;
-					_appSettings.Save();
-					_needsContextRetry = true;
-					_sendErrorText = null;
-					return;
-				}
-				if (evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase))
-				{
-					_log.Information("OAuth refresh race (system error) for session {FileName} — will retry once", _node.FileName);
-					_needsAuthRaceRetry = true;
-					_sendErrorText = null;
-					return;
-				}
-				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
-				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
-					Dispatcher.UIThread.Post(() => _profiles.HasAuthError = true);
-				break;
-			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
-				&& evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase):
-				// "No conversation found" — transient infrastructure error.
-				// Set flag for auto-retry with context preamble; skip file write and UI post.
-				_log.Information("No conversation found for session {FileName} — will retry with context", _node.FileName);
-				_node.Model.ClaudeSessionId = null;
-				_appSettings.Save();
-				_needsContextRetry = true;
-				_sendErrorText = null;
-				return;
-			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
-				&& evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase):
-				// ISSUE.010 — transient cross-process OAuth refresh-token race, not a real auth
-				// failure (see Constants.Auth.OAuthRefreshRaceMarker). Set flag for a single silent
-				// auto-retry; skip file write and UI post so it never reads as a real failure.
-				_log.Information("OAuth refresh race for session {FileName} — will retry once", _node.FileName);
-				_needsAuthRaceRetry = true;
-				_sendErrorText = null;
-				return;
-			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-				_log.Warning("Claude result error: {Error}", evt.Content);
-				_sendErrorText = evt.Content;
-				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
-				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
-					Dispatcher.UIThread.Post(() => _profiles.HasAuthError = true);
-				break;
-			case "result" when !evt.IsError && evt.SessionId is not null:
-				Dispatcher.UIThread.Post(() => _profiles.HasAuthError = false);
-				_node.Model.ClaudeSessionId = evt.SessionId;
-				_appSettings.Save();
-				Dispatcher.UIThread.Post(() =>
-				{
-					this.RaisePropertyChanged(nameof(CanClear));
-					_content.NotifyClaudeSessionChanged();
-				});
-				break;
-		}
-
-		Dispatcher.UIThread.Post(() =>
-		{
-			switch (evt.Type)
-			{
-				case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
-					var pendingLabel = _pendingModelLabel;
-					_pendingModelLabel = null;
-					_content.Messages.Add(new MessageEntryViewModel
-					{
-						Role       = Constants.SessionFile.RoleAssistant,
-						Content    = evt.Content,
-						Timestamp  = evt.Timestamp,
-						ModelLabel = pendingLabel,
-					});
-					_node.LastResponseTimestamp = evt.Timestamp;
-					break;
-
-				case "system" when evt.Subtype is "compact":
-					_content.Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleCompaction,
-						Content   = string.Empty,
-						Timestamp = evt.Timestamp,
-					});
-					break;
-
-				case "system" when evt.Subtype is "task_progress" or "task_started"
-				                   && !string.IsNullOrWhiteSpace(evt.Content):
-					var last = _content.Messages.Count > 0 ? _content.Messages[^1] : null;
-					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-						last.Content = evt.Content;
-					else
-						_content.Messages.Add(new MessageEntryViewModel
-						{
-							Role       = Constants.SessionFile.RoleSystem,
-							Content    = evt.Content,
-							Timestamp  = evt.Timestamp,
-							IsProgress = true,
-						});
-					break;
-
-				case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-					_content.Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleSystem,
-						Content   = evt.Content,
-						Timestamp = evt.Timestamp,
-					});
-					break;
-
-				case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-					for (var i = _content.Messages.Count - 1; i >= 0; i--)
-					{
-						if (_content.Messages[i].IsProgress)
-							_content.Messages.RemoveAt(i);
-					}
-					_content.Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleSystem,
-						Content   = evt.Content,
-						Timestamp = evt.Timestamp,
-					});
-					break;
-
-				case "result":
-					for (var i = _content.Messages.Count - 1; i >= 0; i--)
-					{
-						if (_content.Messages[i].IsProgress)
-							_content.Messages.RemoveAt(i);
-					}
-					break;
-			}
-		});
-	}
+	/// <summary>The command bar's current choices as the launch settings of a turn (or a correction).</summary>
+	private TurnSettings BuildTurnSettings() => new(
+		_models.SelectedModelId,
+		_models.SelectedEffort,
+		_profiles.SelectedProfileConfigDir,
+		_profiles.SelectedProfileDisplayName,
+		_models.SelectedLocalBaseUrl,
+		_models.SelectedModelDisablesTools,
+		_models.IsChromeEnabled,
+		_models.SelectedModelInfo,
+		_models.DirectoryModel);
 
 	private void OnThinkingTimerTick(object? sender, EventArgs e)
 	{
@@ -1054,34 +561,7 @@ public sealed class TurnController : ReactiveObject, IDisposable
 
 		_log.Information("Mid-run {Toggle} toggle: {State}, sending correction prompt", toggleName, label);
 
-		// Note: like headless turns (FR.19.11), a mid-run correction always spawns a one-shot
-		// --resume process against ClaudeSessionId regardless of whether the session is in
-		// Streaming Session Mode — if a streaming process is also holding that same session ID
-		// open, this is the same class of known v1 limitation, not solved here.
-		// Local Tool Profile (FR.12.21) applies here too — see SendCompactionPromptAsync's comment.
-		var correctionLocalProfile = LocalToolProfileResolver.Resolve(_models.SelectedModelInfo, _models.DirectoryModel);
-
-		_ = _processManager.SendMessageAsync(
-			workingDirectory: _node.Model.WorkingDirectory,
-			claudePath:       _appSettings.Settings.ClaudePath,
-			sessionId:        _node.Model.ClaudeSessionId,
-			userMessage:      prompt,
-			model:            _models.SelectedModelId,
-			profileConfigDir: _profiles.SelectedProfileConfigDir,
-			effort:           _models.SelectedEffort,
-			ollamaBaseUrl:    _models.SelectedLocalBaseUrl,
-			disableTools:     _models.SelectedModelDisablesTools,
-			disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
-			localToolSpec:    correctionLocalProfile?.ToolSpec,
-			strictMcpConfig:  correctionLocalProfile != null,
-			onEvent:          evt =>
-			{
-				// Capture session ID updates but don't write to file or UI
-				if (evt.Type == "result" && !evt.IsError && evt.SessionId is not null)
-				{
-					_node.Model.ClaudeSessionId = evt.SessionId;
-					_appSettings.Save();
-				}
-			});
+		// The engine spawns the one-shot --resume process (also in Streaming Session Mode, FR.19.11) and keeps only its session id.
+		_engine.SendCorrection(_node.Model, BuildTurnSettings(), prompt);
 	}
 }

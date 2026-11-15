@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -108,8 +109,7 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 
 					_log.Debug("stdout: {Line}", line);
 
-					var evt = TryParseEvent(line);
-					if (evt != null)
+					foreach (var evt in ParseEvents(line))
 						onEvent(evt);
 				}
 
@@ -270,5 +270,5 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		return args;
 	}
 
-	private static ClaudeStreamEvent? TryParseEvent(string line) => ClaudeStreamEventParser.TryParseEvent(line);
+	private static IReadOnlyList<ClaudeStreamEvent> ParseEvents(string line) => ClaudeStreamEventParser.ParseEvents(line);
 }

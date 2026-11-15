@@ -237,6 +237,7 @@ public partial class App : Application
 		// Lazy<T> registrations break the circular dependency between ISessionTurnService ↔ IAgentMcpServer.
 		services.AddSingleton<ISessionTurnService, SessionTurnService>();
 		services.AddSingleton<ISessionCompactionService, SessionCompactionService>();
+		services.AddSingleton<ITurnEngine, TurnEngine>();
 		services.AddSingleton<IAgentMcpServer, AgentMcpServer>();
 		services.AddSingleton<ISchedulerService, SchedulerService>();
 		services.AddSingleton<ISkillProvisioningService, SkillProvisioningService>();
@@ -304,6 +305,11 @@ public partial class App : Application
 		services.AddSingleton<ISessionContentStore, SessionContentStore>();
 		services.AddSingleton<ISessionEntryReader, SessionEntryReader>();
 		services.AddSingleton<ISessionSendService, SessionSendService>();
+		// P1.I: the interactive turn stream. The publisher and the send service hold per-turn / per-node state, so they are singletons.
+		services.AddSingleton<ITurnProgressSink, TurnEventPublisher>();
+		services.AddSingleton<ITurnSendService, TurnSendService>();
+		services.AddTransient<ITurnSettingsResolver, TurnSettingsResolver>();
+		services.AddTransient<IRemoteRpcModule, TurnRpcModule>();
 		services.AddSingleton<IClaudeUsageFetcher, ClaudeUsageFetcher>();
 		services.AddSingleton<IRemoteUsageService, RemoteUsageService>();
 		services.AddTransient<ITurnOptionsResolver, TurnOptionsResolver>();

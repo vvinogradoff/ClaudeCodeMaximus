@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Remote;
 using Serilog;
 
 namespace TessynDesktop.Services;
@@ -28,6 +30,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly IAttentionService               _attention;
 	private readonly ISessionTagService              _tags;
 	private readonly IProfileLabelService            _profileLabels;
+	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
 	private readonly ConcurrentDictionary<string, SemaphoreSlim> _turnLocks = new();
@@ -48,7 +51,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		IClaudeStreamingSessionManager streamingManager,
 		IAttentionService attention,
 		ISessionTagService tags,
-		IProfileLabelService profileLabels)
+		IProfileLabelService profileLabels,
+		IEnumerable<ITurnProgressSink>? progressSinks = null)
 	{
 		_processManager   = processManager;
 		_fileService      = fileService;
@@ -63,6 +67,7 @@ public sealed class SessionTurnService : ISessionTurnService
 		_attention        = attention;
 		_tags             = tags;
 		_profileLabels    = profileLabels;
+		_progressSinks    = progressSinks?.ToArray() ?? [];
 	}
 
 	/// <summary>
@@ -114,8 +119,27 @@ public sealed class SessionTurnService : ISessionTurnService
 		TurnOptionsModel? turnOptions,
 		CancellationToken cancellationToken = default)
 	{
+		// P1.I: the same progress notifications as an engine turn (the sinks decide who sees them).
+		var turnId   = Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
+		var progress = new TurnProgressTracker(node.NodeId, turnId, _progressSinks);
+		progress.Started(null);
+
 		var turnLock = GetTurnLock(node.NodeId);
-		await turnLock.WaitAsync(cancellationToken);
+		if (turnLock.CurrentCount == 0)
+			progress.Status(TurnState.Queued);
+
+		try
+		{
+			await turnLock.WaitAsync(cancellationToken);
+		}
+		catch (Exception ex)
+		{
+			// Stopped while queued: the turn never ran, so the progress sink reports its end.
+			progress.Finished(ex is OperationCanceledException, ex is OperationCanceledException ? null : ex.Message, ran: false);
+			throw;
+		}
+
+		progress.Status(TurnState.Running);
 
 		// Register a per-node CTS so CancelTurn can interrupt this turn.
 		var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -160,7 +184,7 @@ public sealed class SessionTurnService : ISessionTurnService
 				if (turnOptions != null && (turnOptions.ModelId != null || turnOptions.Effort != null || turnOptions.ProfileName != null))
 					_log.Information("Turn for node {NodeId} is redirected into the live streaming process: per-turn model/effort/profile options are ignored", node.NodeId);
 
-				var streamed  = await RunTurnViaStreamingAsync(node, prompt, source, ct);
+				var streamed  = await RunTurnViaStreamingAsync(node, prompt, source, progress, ct);
 				turnErrorText = streamed.IsError ? streamed.ErrorMessage : null;
 				return streamed;
 			}
@@ -268,9 +292,13 @@ public sealed class SessionTurnService : ISessionTurnService
 				claudePath:       _appSettings.Settings.ClaudePath,
 				sessionId:        sessionId,
 				userMessage:      messageToSend,
-				onEvent:          evt => HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
-				                                     ref inputTokens, ref outputTokens, ref costUsd,
-				                                     ref firstAssistant, ref needsAuthRaceRetry, pendingModelId, pendingEffort),
+				onEvent:          evt =>
+				{
+					HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
+					            ref inputTokens, ref outputTokens, ref costUsd,
+					            ref firstAssistant, ref needsAuthRaceRetry, pendingModelId, pendingEffort);
+					progress.Observe(evt);
+				},
 				model:            effectiveModelId,
 				profileConfigDir: profileConfigDir,
 				effort:           effort,
@@ -287,17 +315,23 @@ public sealed class SessionTurnService : ISessionTurnService
 				// ISSUE.010 — transient cross-process OAuth refresh-token race, not a real auth
 				// failure (see Constants.Auth.OAuthRefreshRaceMarker). Retry once, silently.
 				needsAuthRaceRetry = false;
+				progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryAuth);
 				_log.Information("OAuth refresh race for node {NodeId} — retrying turn once", node.NodeId);
 				await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+				progress.Status(TurnState.Running);
 
 				await _processManager.SendMessageAsync(
 					workingDirectory: node.WorkingDirectory,
 					claudePath:       _appSettings.Settings.ClaudePath,
 					sessionId:        sessionId,
 					userMessage:      messageToSend,
-					onEvent:          evt => HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
-					                                     ref inputTokens, ref outputTokens, ref costUsd,
-					                                     ref firstAssistant, ref needsAuthRaceRetry, pendingModelId, pendingEffort),
+					onEvent:          evt =>
+					{
+						HandleEvent(evt, node, resultText, ref isError, ref errorMessage,
+						            ref inputTokens, ref outputTokens, ref costUsd,
+						            ref firstAssistant, ref needsAuthRaceRetry, pendingModelId, pendingEffort);
+						progress.Observe(evt);
+					},
 					model:            effectiveModelId,
 					profileConfigDir: profileConfigDir,
 					effort:           effort,
@@ -333,10 +367,13 @@ public sealed class SessionTurnService : ISessionTurnService
 		}
 		finally
 		{
+			// The progress sinks flush first, so a turn's last notifications precede its turn.completed.
+			progress.Finished(turnCancelled, turnErrorText, ran: true);
+
 			// FR.21.22 — before the turn lock is released, so the event stays ordered ahead of the next turn.
 			try
 			{
-				_fileService.NotifyTurnCompleted(node.FileName, turnCancelled, turnErrorText);
+				_fileService.NotifyTurnCompleted(node.FileName, turnCancelled, turnErrorText, turnId);
 			}
 			catch (Exception ex)
 			{
@@ -361,7 +398,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	/// method only observes the same events, additively, to build the TurnResultModel this headless
 	/// caller needs to return — see IClaudeStreamingSessionManager.SendTurnAsync's onTurnEvent param.
 	/// </summary>
-	private async Task<TurnResultModel> RunTurnViaStreamingAsync(SessionNodeModel node, string prompt, TurnSource source, CancellationToken ct)
+	private async Task<TurnResultModel> RunTurnViaStreamingAsync(SessionNodeModel node, string prompt, TurnSource source, TurnProgressTracker progress, CancellationToken ct)
 	{
 		var tagGuidanceDue = TakeTagGuidanceDueFor(node);
 		var options = new InstructionOptionsModel(
@@ -382,6 +419,8 @@ public sealed class SessionTurnService : ISessionTurnService
 
 		void ObserveEvent(ClaudeStreamEvent evt)
 		{
+			progress.Observe(evt);
+
 			switch (evt.Type)
 			{
 				case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
@@ -411,8 +450,10 @@ public sealed class SessionTurnService : ISessionTurnService
 		if (needsAuthRaceRetry)
 		{
 			needsAuthRaceRetry = false;
+			progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryAuth);
 			_log.Information("OAuth refresh race for node {NodeId} (streaming) — retrying turn once", node.NodeId);
 			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+			progress.Status(TurnState.Running);
 			await _streamingManager.SendTurnAsync(node.NodeId, augmentedPrompt, ct, ObserveEvent);
 		}
 

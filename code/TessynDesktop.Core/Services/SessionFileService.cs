@@ -28,11 +28,15 @@ public sealed class SessionFileService : ISessionFileService
 		SessionFileRewritten?.Invoke(this, new SessionFileRewrittenEventArgs { FileName = fileName });
 
 	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText) =>
+		NotifyTurnCompleted(fileName, cancelled, errorText, turnId: null);
+
+	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText, string? turnId) =>
 		TurnCompleted?.Invoke(this, new SessionTurnCompletedEventArgs
 		{
 			FileName  = fileName,
 			Cancelled = cancelled,
 			ErrorText = errorText,
+			TurnId    = turnId,
 		});
 
 	public string CreateSessionFile()

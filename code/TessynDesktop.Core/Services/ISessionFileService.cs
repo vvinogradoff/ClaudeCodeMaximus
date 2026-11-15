@@ -29,6 +29,13 @@ public interface ISessionFileService
 	/// </summary>
 	void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText);
 
+	/// <summary>
+	/// <see cref="NotifyTurnCompleted(string, bool, string?)"/> for a turn that has an id (P1.I); the id travels with the
+	/// <see cref="TurnCompleted"/> event. The default forwards without it, so an implementation that does not track ids keeps working.
+	/// </summary>
+	void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText, string? turnId) =>
+		NotifyTurnCompleted(fileName, cancelled, errorText);
+
 	/// <summary>Creates a new session file and returns its bare file name.</summary>
 	string CreateSessionFile();
 

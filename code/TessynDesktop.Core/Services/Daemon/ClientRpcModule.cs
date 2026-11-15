@@ -19,14 +19,16 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly TimeProvider    _time;
 	private readonly IDaemonRunInfo  _runInfo;
 	private readonly IEventLog?      _eventLog;
+	private readonly ITurnEngine?    _turnEngine;
 	private readonly bool           _hasContentStore;
 	private readonly string          _daemonVersion;
 
-	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null)
+	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null)
 	{
 		_time          = time ?? TimeProvider.System;
 		_runInfo       = runInfo ?? new DaemonRunInfo();
 		_eventLog      = eventLog;
+		_turnEngine    = turnEngine;
 		_hasContentStore = contentStore != null;
 		_daemonVersion = ReadDaemonVersion();
 	}
@@ -68,6 +70,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		{
 			capabilities.Add(Constants.Remote.Capabilities.EventsLocal);
 			capabilities.Add(Constants.Remote.Capabilities.EventsResume);
+
+			// The interactive turn stream (P1.I) needs the engine that publishes it and the log that carries it.
+			if (_turnEngine != null)
+				capabilities.Add(RemoteProtocol.TurnStream.Capability);
 		}
 
 		// P1.F: entry ids need the content store.

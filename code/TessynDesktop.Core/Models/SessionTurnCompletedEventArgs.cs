@@ -24,4 +24,7 @@ public sealed class SessionTurnCompletedEventArgs : EventArgs
 	/// the ISSUE.010 OAuth refresh race) are never reported here.
 	/// </summary>
 	public string? ErrorText { get; init; }
+
+	/// <summary>The id of the turn that ended (P1.I), when the turn path that reported it has one; null for a path that does not.</summary>
+	public string? TurnId { get; init; }
 }
