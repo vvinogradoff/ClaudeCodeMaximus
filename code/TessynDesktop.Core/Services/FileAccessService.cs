@@ -154,8 +154,10 @@ public sealed class FileAccessService : IFileAccessService
 		if (reason == null)
 			return;
 
-		if (transport == TdcpTransport.Relay)
-			_log.Warning("Relay file.{Operation} refused: {Reason} (node {NodeId}, {Path})", operation, reason, nodeId, fullPath);
+		if (transport == TdcpTransport.Relay && operation == "preview")
+			_log.Warning("Relay file.preview refused: {Reason} (node {NodeId}, {Path})", reason, nodeId, fullPath);
+		else if (transport == TdcpTransport.Relay)
+			_log.Warning("Relay file.read refused: {Reason} (node {NodeId}, {Path})", reason, nodeId, fullPath);
 
 		throw new TdcpException(Constants.FileAccess.DeniedMessage + " " + reason);
 	}
@@ -270,8 +272,8 @@ public sealed class FileAccessService : IFileAccessService
 		if (start + end < fileLength && end > skip)
 		{
 			var cut = TrimPartialCharacter(buffer, skip, end);
-			if (cut > skip)
-				end = cut;
+			// A chunk smaller than its first character still returns that whole character, so a client always makes progress.
+			end = cut > skip ? cut : Math.Min(read, skip + CharacterLength(buffer[skip]));
 		}
 
 		return (Encoding.UTF8.GetString(buffer, skip, end - skip), start + skip, end - skip);
@@ -288,8 +290,8 @@ public sealed class FileAccessService : IFileAccessService
 			back++;
 		}
 
-		var lead = buffer[i];
-		var needed = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1;
-		return end - i < needed ? i : end;
+		return end - i < CharacterLength(buffer[i]) ? i : end;
 	}
+
+	private static int CharacterLength(byte lead) => lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1;
 }
