@@ -624,6 +624,16 @@ The Default profile cannot be removed (the Remove button never appears while Def
 - The adoption of a transcript from another profile (FR.11.13) runs under the turn lock and moves the `<id>\` folder too, so a queued message with another profile cannot move files under a running turn.
 - Not built (ISSUE.013 stays open): R4 shared project memory, R6 connector diff, the R1 cascade dialog and the R5 tree badge in WPF. The WPF profile dropdown should read `ProfileId` from the node.
 
+**FR.12.29 — Collapsible input area:** The input area (the text box, the side button and, when shown, the command bar of FR.12.2) can be collapsed to save vertical space. Use cases: [UC.IC.01](/docs/usecases/UC.IC.01-Input-Collapse.md). Test cases: [TC.IC.01](/docs/testcases/TC.IC.01-Input-Collapse.md).
+- **Two states.** *Expanded* is the layout of FR.12.1/FR.12.2. *Collapsed* shows the **command bar only** when it is visible (FR.12.11), and **one line of the input text** when the command bar is hidden. The text is still editable, and a long text scrolls inside the one line.
+- **Side button.** In both states the side column shows **one** button: **Send** by default, or **Stop** when the full (expanded) view would show Stop (a turn is running and Stop is available). It is never both. The settings toggle (FR.12.1) stays reachable in the expanded state; in the collapsed state it is not shown, so the command bar's visibility is changed only from the expanded state.
+- **Toggle.** A double click on the splitter that sets the input area's height (the horizontal splitter above the input area) toggles collapsed and expanded. Dragging the splitter keeps its current meaning; a drag out of the collapsed state expands the area first. The height an expanded area had is remembered for the session and used when it expands again.
+- **Defaults.** The state is **not persisted**. A **Session view** (FR.23.12) always starts **expanded**. A **Focus view** always starts **collapsed**.
+- **Reset on switching.** Selecting a different session resets the state to the default of the view the session lands in: collapsed for Focus, expanded for Session. Returning to the first session resets it the same way; nothing is carried over. Switching between the Session view and the Focus view of the same session also applies the default of the view entered.
+- **Not affected.** Draft text, the command bar's visibility (FR.12.11), the selected model, profile and effort, and a running turn.
+
+**Open point for the Architect:** which client builds FR.12.29 first (Avalonia or WPF) is undecided. The requirement above is client-neutral. The Focus view's layout differs between the clients (FR.23.12: Avalonia replaces the output area; WPF shows a column beside the transcript), so for WPF "a Focus view" means the Focus column being shown, to be confirmed.
+
 ---
 
 ### FR.13 — Session Import
@@ -1420,6 +1430,18 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 - **Web contract.** `file.read`, `file.preview`, `session.entries` with `aroundEntryId` and `attachment.list` are open on the relay; the web contract is 24 methods (`docs/refactoring/tdcp-spec.md` section 9.8). The FR.25 text is not amended by this change.
 - **Attachment handles** (FR.31.5) are built.
 - **Not built yet.** In WPF: the Closed history and the collapsed Decisions expander of FR.23.14 (Decided items show in the single list, styled grey), a cross-session Focus list, a Settings screen for the media allowlist, The WPF attach UI (FR.31.2) is built. The Avalonia client gets none of this (decision A9).
+
+**FR.23.19 — Reply drafts (kept across restarts):** The unsent text in a Focus card's reply box is a draft, kept like the session's composer draft, so closing the app does not lose it.
+- **Key.** One draft per (session, item id). The item id is the Attention Item id (FR.23.2, e.g. `a12`, compared case-insensitively). A session's composer draft and its reply drafts are independent; none overwrites another.
+- **Storage.** The daemon keeps reply drafts in the drafts store, next to the composer drafts, one file per (session, item). No database or ledger schema changes. Empty text means no draft (the file is removed). A reply draft is never part of the item (FR.23.2) and never appears in the session file.
+- **Save.** Typing in a reply box saves the text on change, debounced (about 500 ms), and every pending save is flushed when the app closes, through the same close path as the composer drafts.
+- **Restore.** When a card shows again, including after a restart, its reply box holds the saved text. A change made by another client reaches this one through `draft.changed` and follows the same conflict rule as the composer draft.
+- **Delete.** The reply draft is deleted when its reply is sent (Reply, or "Send answers" for every box it sent, FR.23.15), when the item closes (`Answered`, `Resolved` or `Dismissed`, from any client or from the session through `resolve_attention`), and when the session is deleted, as composer drafts are. A draft whose item no longer exists or is no longer `Open` is removed when the session's items are loaded.
+- **Remote API (additive).** `draft.get`, `draft.set` and `draft.delete` take an optional `itemId`. Without it they address the composer draft, exactly as before, so older callers are unchanged. With it they address that item's reply draft; an unknown or closed item is rejected with `-32602`. `draft.changed` carries `itemId` only for a reply draft. The methods, the event and the `drafts` capability follow the composer drafts' exposure (loopback and the local stream; not relayed to the web). Revisions are computed as for the composer draft.
+- **Unchanged.** "Send answers" and Reply do not touch the composer draft (FR.23.15). A session's `hasDraft` marker (FR.1) reflects the composer draft only.
+- **Clients.** Avalonia and WPF both keep reply drafts. The Avalonia client is built first (data-loss fix); WPF follows through the API.
+
+**FR.23.19 coverage:** use cases [UC.FD.01](/docs/usecases/UC.FD.01-Focus-Reply-Drafts.md), test cases [TC.FD.01](/docs/testcases/TC.FD.01-Focus-Reply-Drafts.md).
 
 **Out of scope for FR.23:**
 - A cross-session Attention list in the left panel, and a badge on Recent-tab rows (tree and recent-dropdown rows have one, FR.23.17).
