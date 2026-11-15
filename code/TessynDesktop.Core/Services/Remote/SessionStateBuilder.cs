@@ -13,6 +13,7 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 	private readonly ISessionActivityService _activity;
 	private readonly ISessionAuthErrorTracker? _authErrors;
 	private readonly ISchedulerService? _scheduler;
+	private readonly IProfileResolver? _profiles;
 
 	public SessionStateBuilder(
 		ISessionRegistry registry,
@@ -20,8 +21,10 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 		IAttentionService attention,
 		ISessionActivityService activity,
 		ISessionAuthErrorTracker? authErrors = null,
-		ISchedulerService? scheduler = null)
+		ISchedulerService? scheduler = null,
+		IProfileResolver? profiles = null)
 	{
+		_profiles  = profiles;
 		_scheduler = scheduler;
 		_registry  = registry;
 		_streaming = streaming;
@@ -42,6 +45,8 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 			? new RowAttentionDto(summary.AllOpenCount, summary.AllOpenTopKind.Value)
 			: null;
 
+		var (pinnedId, pinnedName, switchingTo) = DescribeProfile(node);
+
 		return new SessionStateDto(
 			Id:              nodeId,
 			Running:         _registry.IsSessionRunning(nodeId),
@@ -53,6 +58,25 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 			HasDraft:        activity.HasDraft,
 			ProfileName:     activity.LastPromptProfileName,
 			AuthError:       _authErrors?.Has(nodeId) ?? false,
-			HasSchedules:    _scheduler?.GetSchedules(nodeId).Count > 0);
+			HasSchedules:    _scheduler?.GetSchedules(nodeId).Count > 0,
+			PinnedProfileId:        pinnedId,
+			PinnedProfileName:      pinnedName,
+			SwitchingToProfileName: switchingTo);
+	}
+
+	/// <summary>The pin and the queued switch of a session, labelled as <c>list_sessions</c> labels them (ISSUE.013 R5). All null without a resolver or a pin.</summary>
+	private (string? PinnedId, string? PinnedName, string? SwitchingTo) DescribeProfile(SessionNodeModel node)
+	{
+		if (_profiles == null)
+			return (null, null, null);
+
+		var pin = _profiles.DescribePin(node);
+		var pinnedName = pin == null ? null : pin.IsResolved ? pin.DisplayName : pin.DisplayName + Constants.ProfileSwitch.MissingProfileSuffix;
+
+		string? switchingTo = null;
+		if (!string.IsNullOrEmpty(node.PendingProfileId))
+			switchingTo = _profiles.FindById(node.PendingProfileId)?.DisplayName ?? node.PendingProfileId + Constants.ProfileSwitch.MissingProfileSuffix;
+
+		return (pin?.ProfileId, pinnedName, switchingTo);
 	}
 }

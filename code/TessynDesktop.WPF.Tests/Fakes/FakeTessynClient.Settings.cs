@@ -1,4 +1,4 @@
-using TessynDesktop.Models.Remote;
+﻿using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.WPF.Tests.Fakes;
 
@@ -70,11 +70,21 @@ public sealed partial class FakeTessynClient
 		return Task.FromResult(new SettingsUpdateResult(version));
 	}
 
-	public Task<ProfileListResult> ProfileListAsync(CancellationToken cancellationToken = default)
+	/// <summary>When set, <see cref="ProfileListAsync"/> awaits it (with the 1-based call number) after it read the list, so a test can make an older answer arrive last.</summary>
+	public Func<int, Task>? ProfileListDelay { get; set; }
+
+	private int _profileListCalls;
+
+	public async Task<ProfileListResult> ProfileListAsync(CancellationToken cancellationToken = default)
 	{
 		Record("profile.list");
 		ThrowIfProfileFails();
-		return Task.FromResult(new ProfileListResult([.. Profiles]));
+		var answer = new ProfileListResult([.. Profiles]);
+		var call = Interlocked.Increment(ref _profileListCalls);
+		if (ProfileListDelay != null)
+			await ProfileListDelay(call);
+
+		return answer;
 	}
 
 	public Task<ProfileDto> ProfileAddAsync(string displayName, CancellationToken cancellationToken = default)

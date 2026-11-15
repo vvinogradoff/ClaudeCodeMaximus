@@ -1,0 +1,52 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.ProfileFlyout"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <Style x:Key="FlyoutLink" TargetType="Button">
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+    </UserControl.Resources>
+    <Grid Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVis}}">
+        <ToggleButton x:Name="Toggle" Margin="8,2" Padding="8,2" FontSize="12" Content="Profiles" AutomationProperties.Name="Profiles" ToolTip="Profiles and sign-in"
+                      IsChecked="{Binding IsOpen, Mode=TwoWay}" />
+        <Popup PlacementTarget="{Binding ElementName=Toggle}" Placement="Top" StaysOpen="False" IsOpen="{Binding IsOpen, Mode=TwoWay}">
+            <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="1"
+                    Padding="8" MinWidth="380" MaxHeight="420">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Profiles" Margin="0,0,0,6" />
+                    <TextBlock DockPanel.Dock="Bottom" Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding StatusText}" AutomationProperties.Name="Profile status"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}" />
+                    <Button DockPanel.Dock="Bottom" Margin="0,6,0,0" HorizontalAlignment="Left" Padding="10,4" Content="Add profile…" Command="{Binding AddCommand}"
+                            AutomationProperties.Name="Add profile" />
+                    <ListBox ItemsSource="{Binding Profiles}" BorderThickness="0" Background="Transparent" AutomationProperties.Name="Profile list">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,2" AutomationProperties.Name="{Binding AutomationName}">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Style="{StaticResource FlyoutLink}" Content="Re-authenticate" AutomationProperties.Name="{Binding DisplayName, StringFormat=Re-authenticate {0}}"
+                                                Command="{Binding DataContext.AuthenticateCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" />
+                                        <Button Style="{StaticResource FlyoutLink}" Content="Rename" Visibility="{Binding CanEdit, Converter={StaticResource BoolToVis}}"
+                                                AutomationProperties.Name="{Binding DisplayName, StringFormat=Rename {0}}"
+                                                Command="{Binding DataContext.RenameCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" />
+                                        <Button Style="{StaticResource FlyoutLink}" Content="Remove" Visibility="{Binding CanEdit, Converter={StaticResource BoolToVis}}"
+                                                AutomationProperties.Name="{Binding DisplayName, StringFormat=Remove {0}}"
+                                                Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                                            <Run Text="{Binding AuthText, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Email, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>
