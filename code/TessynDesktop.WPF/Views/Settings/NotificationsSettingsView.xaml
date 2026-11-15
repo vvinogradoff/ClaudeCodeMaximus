@@ -1,0 +1,36 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.NotificationsSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16,4,16,16" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding UnavailableText}" Visibility="{Binding IsAvailable, Converter={StaticResource InvertedBoolToVis}}" />
+            <StackPanel Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Desktop notifications" />
+                <CheckBox Content="Show a desktop notification when a session asks for you" IsChecked="{Binding NotificationsEnabled}" AutomationProperties.Name="Desktop notifications" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="A Windows toast shows the same messages that ping Telegram when a session calls notify_user. Turn completion is never announced." />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Session completion sound" />
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Test" Command="{Binding TestSoundCommand}" AutomationProperties.Name="Test sound" />
+                    <ComboBox IsEditable="True" ItemsSource="{Binding Sounds}" Text="{Binding SoundFile, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Completion sound file" />
+                </DockPanel>
+                <TextBlock Style="{StaticResource SettingsError}" Text="{Binding SoundTestText}" />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Seconds between sounds (per session)" />
+                <TextBox Width="120" HorizontalAlignment="Left" Text="{Binding ThrottleText, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Sound throttle seconds" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="Plays through the bell toggle of the command bar (per session) when a turn finishes thinking naturally, not when stopped. The test plays on the machine that runs the daemon." />
+
+                <s:SectionMessages Margin="0,8,0,0" />
+                <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Reload" Command="{Binding ReloadCommand}" AutomationProperties.Name="Reload Notifications" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

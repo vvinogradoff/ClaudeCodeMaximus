@@ -1,0 +1,48 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.GeneralSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16,4,16,16" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding UnavailableText}" Visibility="{Binding IsAvailable, Converter={StaticResource InvertedBoolToVis}}" />
+            <StackPanel Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Session files directory" />
+                <TextBox Text="{Binding SessionFilesRoot, Mode=OneWay}" IsReadOnly="True" AutomationProperties.Name="Session files directory" />
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Claude CLI path" />
+                <TextBox Text="{Binding ClaudePath, Mode=OneWay}" IsReadOnly="True" AutomationProperties.Name="Claude CLI path" />
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Source codes location" />
+                <TextBox Text="{Binding SourceCodesLocation, Mode=OneWay}" IsReadOnly="True" AutomationProperties.Name="Source codes location" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="These three are shown for information: the daemon does not let a client change them over the API. Edit them in appsettings.json." />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="HTTPS proxy" />
+                <TextBox Text="{Binding HttpsProxy, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="HTTPS proxy" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="e.g. http://127.0.0.1:8080. When set, routes Claude CLI traffic through this proxy and disables TLS verification on the spawned process." />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Ollama address" />
+                <TextBox Text="{Binding OllamaBaseUrl, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Ollama address" />
+
+                <CheckBox Margin="0,12,0,0" Content="Give agents the Tessyn tools (cmx)" IsChecked="{Binding AgentToolsEnabled}" AutomationProperties.Name="Agent tools" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="Takes effect the next time the daemon starts." />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="File access for remote clients" />
+                <ComboBox ItemsSource="{Binding FileAccessModes}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding FileAccessMode}"
+                          AutomationProperties.Name="File access mode" />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Media preview hosts" />
+                <TextBox Text="{Binding MediaHostsText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" MinLines="4" MaxLines="8" VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.Name="Media preview hosts" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="One host per line (*.example.com allows subdomains). Images and videos from these hosts may be previewed inline." />
+
+                <s:SectionMessages Margin="0,8,0,0" />
+                <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Reload" Command="{Binding ReloadCommand}" AutomationProperties.Name="Reload General" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

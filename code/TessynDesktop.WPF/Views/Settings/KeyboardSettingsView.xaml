@@ -1,0 +1,38 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.KeyboardSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <DockPanel Margin="16,4,16,16">
+        <TextBlock DockPanel.Dock="Top" Style="{StaticResource SettingsHint}" Margin="0,8,0,8"
+                   Text="Key combinations in the form Ctrl+Shift+N, F2 or Ctrl+OemComma (the same notation as the Avalonia client, so imported values stay valid). Leave a box empty to remove the shortcut." />
+        <s:SectionMessages DockPanel.Dock="Bottom" Margin="0,8,0,0" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Rows}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,0,0,6" AutomationProperties.Name="{Binding Title}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                            <TextBox Grid.Column="1" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" TextChanged="OnTextChanged" AutomationProperties.Name="{Binding AutomationName}" />
+                            <Button Grid.Column="2" Margin="6,0,0,0" Padding="8,2" Content="Default" ToolTip="{Binding DefaultText}"
+                                    Command="{Binding DataContext.ResetRowCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                            <TextBlock Grid.Column="3" Margin="8,0,0,0" VerticalAlignment="Center" Style="{StaticResource SettingsError}" Text="{Binding Problem}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

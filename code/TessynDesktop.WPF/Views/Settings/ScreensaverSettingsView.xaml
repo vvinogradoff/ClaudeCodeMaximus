@@ -1,0 +1,33 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.ScreensaverSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16,4,16,16" MaxWidth="560" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource SettingsLabel}" Text="Inactivity timeout (seconds)" />
+            <TextBox Width="120" HorizontalAlignment="Left" Text="{Binding TimeoutText, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Screensaver timeout" />
+            <TextBlock Style="{StaticResource SettingsHint}" Text="Set to 0 to turn the screensaver off." />
+
+            <TextBlock Style="{StaticResource SettingsLabel}" Text="Images folder" />
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Clear" Command="{Binding ClearDirectoryCommand}" />
+                <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Browse…" Command="{Binding BrowseCommand}" AutomationProperties.Name="Browse screensaver folder" />
+                <TextBox Text="{Binding Directory, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Screensaver folder" />
+            </DockPanel>
+            <TextBlock Style="{StaticResource SettingsHint}" Text="PNG, JPG, JPEG, BMP, GIF and WEBP. With no folder the screen goes black." />
+
+            <TextBlock Style="{StaticResource SettingsLabel}" Text="Seconds per image" />
+            <TextBox Width="120" HorizontalAlignment="Left" Text="{Binding IntervalText, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Slideshow interval" />
+            <TextBlock Style="{StaticResource SettingsHint}" Text="Time between image transitions, at least 1 second." />
+
+            <s:SectionMessages Margin="0,8,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

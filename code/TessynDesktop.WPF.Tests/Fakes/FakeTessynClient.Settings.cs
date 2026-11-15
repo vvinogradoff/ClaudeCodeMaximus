@@ -20,7 +20,10 @@ public sealed partial class FakeTessynClient
 	/// <summary>Every update the client sent: section, patch and base version.</summary>
 	public List<(string Section, object Patch, long BaseVersion)> SettingsUpdates { get; } = [];
 
-	/// <summary>When set, <see cref="SettingsUpdateAsync{TPatch}"/> throws it (for example a stale-version <c>TessynRpcException</c>).</summary>
+	/// <summary>When set, called after each accepted update with the section and the patch; the DTO it returns becomes the section's values (so a later <c>settings.get</c> shows the change).</summary>
+	public Func<string, object, object?>? SettingsPatchApplier { get; set; }
+
+	/// <summary>When set, <see cref="SettingsUpdateAsync{TPatch}"/> throws it once (for example a stale-version <c>TessynRpcException</c>) and clears it.</summary>
 	public Exception? SettingsUpdateException { get; set; }
 
 	/// <summary>The profiles <see cref="ProfileListAsync"/> answers; the Default profile first.</summary>
@@ -62,12 +65,21 @@ public sealed partial class FakeTessynClient
 	{
 		Record($"settings.update:{section}:{baseVersion}");
 		if (SettingsUpdateException != null)
-			throw SettingsUpdateException;
+		{
+			var failure = SettingsUpdateException;
+			SettingsUpdateException = null;
+			throw failure;
+		}
+
 		if (section == RemoteProtocol.SettingsApi.AvaloniaUiSection)
 			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, $"Settings section '{section}' is read-only");
 
 		lock (SettingsUpdates)
 			SettingsUpdates.Add((section, patch, baseVersion));
+		var applied = SettingsPatchApplier?.Invoke(section, patch);
+		if (applied != null)
+			SettingsValues[section] = applied;
+
 		var version = SettingsVersions.GetValueOrDefault(section, 1) + 1;
 		SettingsVersions[section] = version;
 		return Task.FromResult(new SettingsUpdateResult(version));

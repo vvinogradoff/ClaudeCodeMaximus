@@ -1,0 +1,17 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.SectionMessages"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <StackPanel>
+        <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding StatusText}"
+                   Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}" />
+        <TextBlock Style="{StaticResource SettingsError}" Text="{Binding ErrorText}"
+                   Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
+    </StackPanel>
+</UserControl>

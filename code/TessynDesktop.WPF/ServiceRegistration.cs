@@ -10,6 +10,7 @@ using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Switch;
 using TessynDesktop.WPF.Transcript;
 using TessynDesktop.WPF.ViewModels;
+using TessynDesktop.WPF.ViewModels.Settings;
 using TessynDesktop.WPF.Views;
 
 namespace TessynDesktop.WPF;
@@ -114,6 +115,15 @@ public sealed class ServiceRegistration
 		services.AddSingleton<ProfileHost>();
 		services.AddSingleton<IShellModule, ProfileShellModule>();
 		services.AddSingleton<IShellModule, ComposerShellModule>();
+
+		// W6: the Settings window. The editor window of an MCP server is shown by its own presenter, a test window has no folder dialog to click either.
+		services.AddSingleton<IMcpServerEditorPresenter, WpfMcpServerEditorPresenter>();
+		services.AddSingleton<Func<ITessynClient, SettingsViewModel>>(sp => client => new SettingsViewModel(
+			client, sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(), sp.GetRequiredService<IDialogService>(),
+			sp.GetRequiredService<IFolderPicker>(), sp.GetRequiredService<IMcpServerEditorPresenter>(), sp.GetRequiredService<ProfileViewModel>(),
+			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILoggerFactory>()));
+		services.AddSingleton<SettingsHost>();
+		services.AddSingleton<IShellModule, SettingsShellModule>();
 
 		// W1b: the completion sound. A test window never plays one (the sound is the one thing an off-screen window cannot hide).
 		if (options.TestWindow)

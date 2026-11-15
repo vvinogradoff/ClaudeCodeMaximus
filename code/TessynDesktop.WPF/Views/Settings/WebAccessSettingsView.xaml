@@ -1,0 +1,37 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.WebAccessSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16,4,16,16" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding UnavailableText}" Visibility="{Binding IsAvailable, Converter={StaticResource InvertedBoolToVis}}" />
+            <StackPanel Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVis}}">
+                <CheckBox Margin="0,12,0,0" Content="Enable web access" IsChecked="{Binding Enabled}" AutomationProperties.Name="Enable web access" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="Lets the Tessyn web client reach this desktop. The desktop connects out to the web server; nothing listens for incoming connections. Saved at once by the Save button below, no restart needed." />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Web server URL" />
+                <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Web server URL" />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Link token" />
+                <PasswordBox s:PasswordBinder.Secret="{Binding LinkTokenInput, Mode=TwoWay}" AutomationProperties.Name="Link token" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding TokenText}" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="Leave the field empty to keep the stored token. When the URL moves to another server, paste the token again." />
+
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button Style="{StaticResource SettingsButton}" Content="Save" Command="{Binding SaveCommand}" AutomationProperties.Name="Save web access" />
+                    <Button Style="{StaticResource SettingsButton}" Content="Refresh" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh web access" />
+                </StackPanel>
+                <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding StateText}" />
+                <TextBlock Style="{StaticResource SettingsError}" Text="{Binding LastError}" />
+                <s:SectionMessages Margin="0,4,0,0" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
