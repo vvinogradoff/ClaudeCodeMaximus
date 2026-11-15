@@ -85,7 +85,8 @@ public sealed class SessionPaneNavigationTests : IDisposable
 
 		await _pane.BackCommand.ExecuteAsync(null);
 
-		Assert.Equal("load:a:50", _surface.Calls[^1]);
+		Assert.Equal("load:a:50", _surface.Calls[^2]);
+		Assert.Equal("live:none", _surface.Calls[^1]);   // the load cleared the page's live row: it is sent again (L6)
 		Assert.True(_surface.LastLoadToBottom);
 	}
 

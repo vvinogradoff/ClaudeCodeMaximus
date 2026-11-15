@@ -294,11 +294,17 @@ public sealed class TurnEngine : ITurnEngine
 		var progress = new TurnProgressTracker(node.NodeId, turnId, _progressSinks);
 		progress.Started(request.ClientRequestId);
 
+		// The engine takes the node's turn lock itself (the service then runs with it held), so it knows whether the compaction ever ran: a Stop
+		// that arrives while the run still waits behind another turn is reported as "never ran", like a queued ordinary send (R3).
+		var turnLock = _turns.GetTurnLock(node.NodeId);
+		var lockAcquired = false;
 		var cancelled = false;
 		string? error = null;
 		try
 		{
-			var result = await CompactAsync(node, request.Settings, observer, turnLockHeld: false, cts.Token);
+			await turnLock.WaitAsync(cts.Token);
+			lockAcquired = true;
+			var result = await CompactAsync(node, request.Settings, observer, turnLockHeld: true, cts.Token);
 			if (result is { Outcome: SessionCompactionOutcome.Failed })
 			{
 				error = result.Error ?? result.SystemMessage;
@@ -319,15 +325,22 @@ public sealed class TurnEngine : ITurnEngine
 		finally
 		{
 			context.Remove(cts);
-			progress.Finished(cancelled, error, ran: true);
-			try
+			if (lockAcquired)
 			{
-				_files.NotifyTurnCompleted(node.FileName, cancelled, error, turnId);
+				progress.Finished(cancelled, error, ran: true);
+				try
+				{
+					_files.NotifyTurnCompleted(node.FileName, cancelled, error, turnId);
+				}
+				catch (Exception ex)
+				{
+					_log.Warning(ex, "TurnCompleted handler failed for session {FileName}", node.FileName);
+				}
+
+				turnLock.Release();
 			}
-			catch (Exception ex)
-			{
-				_log.Warning(ex, "TurnCompleted handler failed for session {FileName}", node.FileName);
-			}
+			else
+				progress.Finished(cancelled, error, ran: false);
 		}
 
 		return new TurnOutcome(turnId, cancelled, error);

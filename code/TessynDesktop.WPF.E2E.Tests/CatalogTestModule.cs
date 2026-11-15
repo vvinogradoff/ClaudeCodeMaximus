@@ -9,11 +9,14 @@ internal sealed class CatalogTestModule : IRemoteRpcModule
 {
 	private readonly IReadOnlyList<string> _mediaHosts;
 
-	public CatalogTestModule(IReadOnlyList<string> mediaHosts)
+	private readonly CatalogResult? _catalog;
+
+	public CatalogTestModule(IReadOnlyList<string> mediaHosts, CatalogResult? catalog = null)
 	{
 		_mediaHosts = mediaHosts;
+		_catalog = catalog;
 	}
 
 	public void Register(TdcpMethodRegistry registry) =>
-		registry.AddSync("catalog.get", _ => new CatalogResult([], [], []) { MediaPreviewHosts = _mediaHosts }, remoteCallable: true);
+		registry.AddSync("catalog.get", _ => (_catalog ?? new CatalogResult([], [], [])) with { MediaPreviewHosts = _mediaHosts }, remoteCallable: true);
 }

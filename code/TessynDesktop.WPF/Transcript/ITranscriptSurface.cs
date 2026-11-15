@@ -23,6 +23,12 @@ public interface ITranscriptSurface
 	/// <summary>Replaces one entry (e.g. its full content after a truncated one was expanded).</summary>
 	void Replace(TranscriptEntryView entry);
 
+	/// <summary>
+	/// Shows (or, with null, removes) the live row of the in-flight turn below the last entry. A <see cref="Load"/> removes it, so the owner
+	/// sends it again after loading. Follows the view when it is scrolled to the bottom.
+	/// </summary>
+	void SetLive(TranscriptLiveView? live);
+
 	/// <summary>Highlights <paramref name="term"/> in the rendered entries and jumps to a match; <paramref name="matchingIndexes"/> are the entries containing it.</summary>
 	void Find(string term, IReadOnlyList<int> matchingIndexes);
 
