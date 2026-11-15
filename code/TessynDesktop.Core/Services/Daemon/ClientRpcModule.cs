@@ -25,6 +25,7 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool           _hasCodeIndex;
 	private readonly bool           _hasAuthErrors;
 	private readonly IClientPresenceRegistry? _presence;
+	private readonly INotificationAckBook? _acks;
 	private readonly bool            _hasSettings;
 	private readonly bool            _hasProfileAdmin;
 	private readonly bool            _hasSound;
@@ -33,9 +34,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
 		ISettingsSectionService? settingsSections = null, IProfileAdminService? profileAdmin = null, ISessionSoundService? sounds = null,
 		IDraftService? drafts = null, ICodeIndexService? codeIndex = null, ISessionAuthErrorTracker? authErrors = null,
-		IClientPresenceRegistry? presence = null)
+		IClientPresenceRegistry? presence = null, INotificationAckBook? acks = null)
 	{
 		_presence      = presence;
+		_acks          = acks;
 		_hasDrafts     = drafts != null;
 		_hasCodeIndex  = codeIndex != null;
 		_hasAuthErrors = authErrors != null;
@@ -58,6 +60,9 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		// Package J2: only a local client can present notifications, so the relay cannot register (-32601).
 		if (_presence != null)
 			registry.AddSync(RemoteProtocol.Notifications.RegisterMethod, RegisterClient, remoteCallable: false);
+
+		if (_presence != null && _acks != null)
+			registry.AddSync(RemoteProtocol.Notifications.AckMethod, AcknowledgeNotification, remoteCallable: false);
 	}
 
 	private ClientRegisterResult RegisterClient(JsonNode? @params)
@@ -67,6 +72,20 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 
 		_presence!.Register(clientId, presents);
 		return new ClientRegisterResult(true);
+	}
+
+	private NotificationAckResult AcknowledgeNotification(JsonNode? @params)
+	{
+		var notificationId = TdcpParams.OptionalString(@params, "notificationId");
+		var nodeId         = TdcpParams.OptionalString(@params, "nodeId");
+		if (string.IsNullOrEmpty(notificationId) == string.IsNullOrEmpty(nodeId))
+			throw new TdcpInvalidParamsException("exactly one of 'notificationId' (a toast) and 'nodeId' (the completion sound) is required");
+
+		if (!string.IsNullOrEmpty(notificationId))
+			return new NotificationAckResult(_acks!.AcknowledgeToast(notificationId));
+
+		_acks!.AcknowledgeSound(nodeId!);
+		return new NotificationAckResult(true);
 	}
 
 	private static string? ReadClientId(JsonNode? @params, bool required)

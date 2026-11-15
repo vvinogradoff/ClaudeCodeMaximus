@@ -20,6 +20,9 @@ public static partial class Constants
 		/// <summary>How often idle autocomplete index leases are looked for.</summary>
 		public static readonly TimeSpan AutocompleteLeaseSweepInterval = TimeSpan.FromMinutes(1);
 
+		/// <summary>How long the host waits for a presenting client's <c>notification.ack</c> before it shows the toast or plays the sound itself (V3).</summary>
+		public static readonly TimeSpan NotificationAckTimeout = TimeSpan.FromSeconds(3);
+
 		/// <summary>Longest <c>clientId</c> of <c>client.register</c> / <c>client.hello</c>.</summary>
 		public const int MaxClientIdLength = 64;
 

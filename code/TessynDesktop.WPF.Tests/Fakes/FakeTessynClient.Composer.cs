@@ -90,6 +90,26 @@ public sealed partial class FakeTessynClient
 		return Task.FromResult(new ClientRegisterResult(true));
 	}
 
+	/// <summary>The ids passed to <see cref="NotificationAckAsync"/>, in order.</summary>
+	public List<string> AckedNotifications { get; } = [];
+
+	/// <summary>The session ids passed to <see cref="NotificationSoundAckAsync"/>, in order.</summary>
+	public List<string> AckedSounds { get; } = [];
+
+	public Task<NotificationAckResult> NotificationAckAsync(string notificationId, CancellationToken cancellationToken = default)
+	{
+		Record("notification.ack:" + notificationId);
+		AckedNotifications.Add(notificationId);
+		return Task.FromResult(new NotificationAckResult(true));
+	}
+
+	public Task<NotificationAckResult> NotificationSoundAckAsync(string nodeId, CancellationToken cancellationToken = default)
+	{
+		Record("notification.ack.sound:" + nodeId);
+		AckedSounds.Add(nodeId);
+		return Task.FromResult(new NotificationAckResult(true));
+	}
+
 	/// <summary>Delivers a <c>notification.raised</c> as the daemon would publish it.</summary>
 	public void RaiseNotification(string title, string message, string? nodeId = null, string notificationId = "notification-1") =>
 		RaiseNotification(

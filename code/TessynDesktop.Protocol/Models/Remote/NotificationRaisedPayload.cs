@@ -6,6 +6,10 @@ namespace TessynDesktop.Models.Remote;
 /// <param name="Title">Toast title.</param>
 /// <param name="Message">Message text, not truncated.</param>
 /// <param name="Kind">See <see cref="RemoteProtocol.Notifications.UserNotificationKind"/>.</param>
-/// <param name="RaisedUtc">When the daemon raised it: a client drops a notification that is much older than the moment it receives it (a replay).</param>
+/// <param name="RaisedUtc">When the daemon raised it: a client drops a notification older than <see cref="RemoteProtocol.Notifications.MaxReplayAge"/> (30 s) when it receives it (a replay after a reconnect).</param>
 /// <remarks>Created by Claude</remarks>
-public sealed record NotificationRaisedPayload(string NotificationId, string? NodeId, string Title, string Message, string Kind, DateTimeOffset RaisedUtc);
+public sealed record NotificationRaisedPayload(string NotificationId, string? NodeId, string Title, string Message, string Kind, DateTimeOffset RaisedUtc)
+{
+	/// <summary>True when this is a replay a client must drop: raised more than <see cref="RemoteProtocol.Notifications.MaxReplayAge"/> before <paramref name="now"/>.</summary>
+	public bool IsReplay(DateTimeOffset now) => now - RaisedUtc > RemoteProtocol.Notifications.MaxReplayAge;
+}

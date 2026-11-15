@@ -253,12 +253,13 @@ public partial class App : Application
 		// (notifications.local). The presence registry is a singleton: registrations and open streams must be one shared state.
 		services.AddSingleton<IClientPresenceRegistry, ClientPresenceRegistry>();
 		services.AddSingleton<WindowsNotificationService>();
+		services.AddSingleton<INotificationAckBook, NotificationAckBook>();
 		services.AddSingleton<INotificationService>(sp => new NotificationFanOut(
 			sp.GetRequiredService<WindowsNotificationService>(), sp.GetRequiredService<IClientPresenceRegistry>(),
-			sp.GetRequiredService<IRemoteEventBus>(), sp.GetRequiredService<IAppSettingsService>()));
+			sp.GetRequiredService<IRemoteEventBus>(), sp.GetRequiredService<IAppSettingsService>(), sp.GetRequiredService<INotificationAckBook>()));
 		services.AddSingleton<SessionSoundService>();
 		services.AddSingleton<ISessionSoundService>(sp => new PresenceAwareSessionSoundService(
-			sp.GetRequiredService<SessionSoundService>(), sp.GetRequiredService<IClientPresenceRegistry>()));
+			sp.GetRequiredService<SessionSoundService>(), sp.GetRequiredService<IClientPresenceRegistry>(), sp.GetRequiredService<INotificationAckBook>()));
 		services.AddSingleton(sp => new Lazy<ISessionTurnService>(sp.GetRequiredService<ISessionTurnService>));
 		services.AddSingleton(sp => new Lazy<IAgentMcpServer>(sp.GetRequiredService<IAgentMcpServer>));
 		services.AddSingleton(sp => new Lazy<ISchedulerService>(sp.GetRequiredService<ISchedulerService>));

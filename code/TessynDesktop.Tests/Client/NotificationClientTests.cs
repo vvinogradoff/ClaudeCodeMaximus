@@ -37,8 +37,18 @@ public sealed class NotificationClientTests : IDisposable
 
 		Assert.Contains("notifications.local", client.ServerInfo!.Capabilities);
 		Assert.True(await BecomesAsync(() => _env.Presence.IsPresented("toast"), true));
-		_env.Toasts.ShowUserNotification("n", "silent", "x");
+
+		// The client shows the toast and acknowledges it, and acknowledges the sound it played: the host stays silent.
+		var probe = new ClientProbe(client);
+		var shown = Task.Run(() => _env.Toasts.ShowUserNotification("n", "silent", "x"));
+		NotificationRaisedPayload? raised = null;
+		while (raised == null)
+			(await probe.NextNotificationAsync()).TryGetNotificationRaised(out raised);
+		Assert.True((await client.NotificationAckAsync(raised.NotificationId)).Acknowledged);
+		await client.NotificationSoundAckAsync("n");
 		_env.Sounds.PlayCompletionSound("n");
+		Assert.True(await shown.WaitAsync(TimeSpan.FromSeconds(10)));
+		await Task.Delay(NotificationWireEnv.AckTimeout * 2);
 		Assert.Equal(0, _env.Host.ToastCount);
 		Assert.Equal(0, _env.Host.SoundCount);
 

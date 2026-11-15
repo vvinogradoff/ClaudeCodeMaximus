@@ -15,6 +15,14 @@ public sealed partial class TessynClient
 	}
 
 	/// <inheritdoc />
+	public Task<NotificationAckResult> NotificationAckAsync(string notificationId, CancellationToken cancellationToken = default) =>
+		CallAsync<NotificationAckResult>(RemoteProtocol.Notifications.AckMethod, Params(("notificationId", Node(notificationId))), cancellationToken);
+
+	/// <inheritdoc />
+	public Task<NotificationAckResult> NotificationSoundAckAsync(string nodeId, CancellationToken cancellationToken = default) =>
+		CallAsync<NotificationAckResult>(RemoteProtocol.Notifications.AckMethod, Params(("nodeId", Node(nodeId))), cancellationToken);
+
+	/// <inheritdoc />
 	public async Task<ClientRegisterResult> ClientRegisterAsync(IReadOnlyList<string> presents, CancellationToken cancellationToken = default)
 	{
 		if (string.IsNullOrEmpty(_options.ClientId))

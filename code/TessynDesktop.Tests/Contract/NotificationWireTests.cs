@@ -134,20 +134,56 @@ public sealed class NotificationWireTests : IDisposable
 	// -- Silent host, resume, no double -------------------------------------------------------------------------------------------
 
 	[Fact]
-	public async Task WhileARegisteredClientIsConnected_TheHostIsSilent_AndTheClientGetsTheNotificationOnce()
+	public async Task WhileARegisteredClientIsConnected_AndAcknowledges_TheHostIsSilent_AndTheClientGetsTheNotificationOnce()
 	{
 		await _env.Server.CallAsync("client.register", Register("wpf", "toast", "sound"));
 		using var stream = await OpenStreamAsync("wpf");
 		Assert.True(await BecomesAsync(() => _env.Presence.IsPresented("toast"), true));
 
-		_env.Toasts.ShowUserNotification("node-1", "Build done", "All green");
+		var shown = Task.Run(() => _env.Toasts.ShowUserNotification("node-1", "Build done", "All green"));
+		var frame = await NextRaisedAsync(stream);
+		var ack = await _env.Server.CallAsync("notification.ack", new JsonObject { ["notificationId"] = frame.Params!["notificationId"]!.GetValue<string>() });
+		await _env.Server.CallAsync("notification.ack", new JsonObject { ["nodeId"] = "node-1" }); // the client played the completion sound
 		_env.Sounds.PlayCompletionSound("node-1");
 
-		var frame = await NextRaisedAsync(stream);
-		Assert.Equal("Build done", frame.Params!["title"]!.GetValue<string>());
+		Assert.True(await shown.WaitAsync(TimeSpan.FromSeconds(10)));
+		Assert.True(ack["result"]!["acknowledged"]!.GetValue<bool>());
+		Assert.Equal("Build done", frame.Params["title"]!.GetValue<string>());
+		await Task.Delay(NotificationWireEnv.AckTimeout * 2);
 		Assert.Equal(0, _env.Host.ToastCount);
 		Assert.Equal(0, _env.Host.SoundCount);
 		await Assert.ThrowsAsync<TimeoutException>(() => stream.NextAsync(TimeSpan.FromMilliseconds(400)));
+	}
+
+	[Fact]
+	public async Task AConnectedClientThatNeverAcknowledges_DoesNotLoseTheToastOrTheSound_TheHostShowsThemAfterTheTimeout()
+	{
+		await _env.Server.CallAsync("client.register", Register("wpf", "toast", "sound"));
+		using var stream = await OpenStreamAsync("wpf"); // connected on the wire, but hung
+		Assert.True(await BecomesAsync(() => _env.Presence.IsPresented("toast"), true));
+
+		var shown = await Task.Run(() => _env.Toasts.ShowUserNotification("node-1", "Build done", "All green"));
+		_env.Sounds.PlayCompletionSound("node-1");
+
+		Assert.True(shown);
+		Assert.Equal(1, _env.Host.ToastCount);
+		Assert.True(await BecomesAsync(() => _env.Host.SoundCount == 1, true));
+	}
+
+	[Fact]
+	public async Task NotificationAck_Validation_AndTheRelayCannotSendIt()
+	{
+		var neither = await _env.Server.CallAsync("notification.ack", new JsonObject());
+		var both    = await _env.Server.CallAsync("notification.ack", new JsonObject { ["notificationId"] = "a", ["nodeId"] = "n" });
+		var unknown = await _env.Server.CallAsync("notification.ack", new JsonObject { ["notificationId"] = "nobody-waits" });
+		var body = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = 1, ["method"] = "notification.ack", ["params"] = new JsonObject { ["nodeId"] = "n" } }.ToJsonString();
+		var relay = await _env.Dispatcher.HandleTextAsync(body, TdcpTransport.Relay, CancellationToken.None);
+
+		Assert.Equal(-32602, ErrorCode(neither));
+		Assert.Equal(-32602, ErrorCode(both));
+		Assert.False(unknown["result"]!["acknowledged"]!.GetValue<bool>());
+		Assert.Equal(-32601, ErrorCode(relay!));
+		Assert.False(_env.Acks.TryConsumeSoundAck("n", DateTimeOffset.UtcNow.AddMinutes(-1)));
 	}
 
 	[Fact]
@@ -162,7 +198,7 @@ public sealed class NotificationWireTests : IDisposable
 		Assert.True(await BecomesAsync(() => _env.Presence.IsPresented("toast"), false), "the dead stream still silences the host");
 		_env.Toasts.ShowUserNotification("node-1", "After", "x");
 		_env.Sounds.PlayCompletionSound("node-1");
-		Assert.Equal(1, _env.Host.ToastCount);
+		Assert.Equal(1, _env.Host.ToastCount); // no client presents: the host does not wait
 		Assert.Equal(1, _env.Host.SoundCount);
 	}
 

@@ -15,7 +15,11 @@ internal sealed class NotificationWireEnv : IDisposable
 {
 	private readonly string _dir = Path.Combine(Path.GetTempPath(), "notification-wire-tests-" + Guid.NewGuid().ToString("N"));
 
+	/// <summary>The wait for a client's acknowledgement, short so that a test of a silent client is quick.</summary>
+	public static readonly TimeSpan AckTimeout = TimeSpan.FromMilliseconds(400);
+
 	public ClientPresenceRegistry Presence { get; } = new();
+	public NotificationAckBook Acks { get; } = new();
 	public RemoteEventBus Bus { get; } = new();
 	public RecordingHostNotifications Host { get; } = new();
 	public NotificationFanOut Toasts { get; }
@@ -27,12 +31,12 @@ internal sealed class NotificationWireEnv : IDisposable
 	{
 		Directory.CreateDirectory(_dir);
 		var settings = new AppSettingsService(_dir);
-		Toasts = new NotificationFanOut(Host, Presence, Bus, settings);
-		Sounds = new PresenceAwareSessionSoundService(Host, Presence);
+		Toasts = new NotificationFanOut(Host, Presence, Bus, settings, Acks, ackTimeout: AckTimeout);
+		Sounds = new PresenceAwareSessionSoundService(Host, Presence, Acks, ackTimeout: AckTimeout);
 
 		var runInfo  = new DaemonRunInfo();
 		var eventLog = new EventLog(Bus);
-		Dispatcher = new TdcpDispatcher([new ClientRpcModule(runInfo: runInfo, eventLog: eventLog, presence: withPresence ? Presence : null)]);
+		Dispatcher = new TdcpDispatcher([new ClientRpcModule(runInfo: runInfo, eventLog: eventLog, presence: withPresence ? Presence : null, acks: withPresence ? Acks : null)]);
 		Server = new TdcpTestHost(Dispatcher, bus: Bus, runInfo: runInfo, presence: Presence, keepAlive: TimeSpan.FromMilliseconds(100));
 	}
 

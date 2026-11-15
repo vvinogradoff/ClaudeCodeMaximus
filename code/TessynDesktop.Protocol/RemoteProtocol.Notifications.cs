@@ -15,8 +15,26 @@ public static partial class RemoteProtocol
 		/// <summary><c>client.register { clientId, presents[] }</c> answers <c>{ ok }</c>. An empty <c>presents</c> unregisters. Loopback only.</summary>
 		public const string RegisterMethod = "client.register";
 
-		/// <summary>Notification <c>{ notificationId, nodeId?, title, message, kind, raisedUtc }</c>, published beside every desktop notification the host would show. Local stream only.</summary>
+		/// <summary>
+		/// Notification <c>{ notificationId, nodeId?, title, message, kind, raisedUtc }</c>, published beside every desktop notification the host would show. Local
+		/// stream only. A client that presents <c>toast</c> shows it, then acknowledges it (<see cref="AckMethod"/>); it drops a replayed one older than
+		/// <see cref="MaxReplayAge"/>.
+		/// </summary>
 		public const string RaisedEvent = "notification.raised";
+
+		/// <summary>
+		/// <c>notification.ack { notificationId }</c> or <c>{ nodeId }</c> answers <c>{ acknowledged }</c>. A client that presents <c>toast</c> sends the first after
+		/// it showed a <c>notification.raised</c>; a client that presents <c>sound</c> sends the second after it played the completion sound of that session.
+		/// The host waits about 3 s for it and shows the toast or plays the sound itself when none came, so an unresponsive client never loses a notification.
+		/// Loopback only.
+		/// </summary>
+		public const string AckMethod = "notification.ack";
+
+		/// <summary>
+		/// The replay rule: the event log replays <c>notification.raised</c> after a reconnect, so a client drops one whose <c>raisedUtc</c> is older than this
+		/// when it receives it (and shows each <c>notificationId</c> once). Use <see cref="NotificationRaisedPayload.IsReplay"/>.
+		/// </summary>
+		public static readonly TimeSpan MaxReplayAge = TimeSpan.FromSeconds(30);
 
 		/// <summary>Query parameter of the SSE request that names the stream's client; a registration is effective only while a stream with its <c>clientId</c> is open.</summary>
 		public const string ClientIdQuery = "clientId";
