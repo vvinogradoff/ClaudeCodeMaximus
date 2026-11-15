@@ -461,7 +461,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// leave the input box and its draft alone (FR.23.15). The main Send button has no enable rule, so Send
 		// answers only needs a non-empty reply box (FR.23.14).
 		FocusVm = new FocusViewModel(node.Model.NodeId, daemonClient, uiDispatcher,
-			prompt => _turn.SendAsync(prompt, preserveInput: true));
+			prompt => _turn.SendAsync(prompt, preserveInput: true), draftService, node.FileName);
 
 		TagsVm = new SessionTagsViewModel(node.Model.NodeId, daemonClient, uiDispatcher, new SessionTagLauncher(),
 			node.WhenAnyValue(x => x.Name));

@@ -82,6 +82,39 @@ public sealed class ComposerPublisherTests : IDisposable
 		Assert.Equal(_revisions.Of("hello"), notification.Params["revision"]!.GetValue<string>());
 	}
 
+	// FR.23.19: the notification of a Focus reply draft carries the itemId; the composer draft's notification has no such field (additive).
+	[Fact]
+	public void AFocusReplyDraft_PublishesDraftChangedWithItsItemId_AndNoSessionStateRefresh()
+	{
+		_drafts.SaveItemDraft(_node.FileName, "A1", "reply");
+
+		var notification = Assert.Single(WaitFor("draft.changed", 1));
+		Assert.Equal("node-1", notification.Params["nodeId"]!.GetValue<string>());
+		Assert.Equal("A1", notification.Params["itemId"]!.GetValue<string>());
+		Assert.Equal(_revisions.Of("reply"), notification.Params["revision"]!.GetValue<string>());
+		Thread.Sleep(400);
+		Assert.Empty(Received("session.changed"));
+	}
+
+	[Fact]
+	public void TheComposerDraftNotification_HasNoItemIdField()
+	{
+		_drafts.SaveDraft(_node.FileName, "hello");
+
+		var notification = Assert.Single(WaitFor("draft.changed", 1));
+		Assert.False(((System.Text.Json.Nodes.JsonObject)notification.Params).ContainsKey("itemId"));
+	}
+
+	[Fact]
+	public void ReplyDraftsOfTwoItems_AreNotCoalescedIntoOne()
+	{
+		_drafts.SaveItemDraft(_node.FileName, "A1", "one");
+		_drafts.SaveItemDraft(_node.FileName, "A2", "two");
+
+		var all = WaitFor("draft.changed", 2);
+		Assert.Equal(["A1", "A2"], all.Select(n => n.Params["itemId"]!.GetValue<string>()).Order().ToArray());
+	}
+
 	[Fact]
 	public void ADeletedDraft_PublishesTheEmptyRevision()
 	{

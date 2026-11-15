@@ -21,7 +21,7 @@ public static partial class RemoteProtocol
 		/// <summary><c>autocomplete.suggest</c>.</summary>
 		public const string AutocompleteCapability = "autocomplete";
 
-		/// <summary><c>draft.get { nodeId }</c> answers <c>{ text, revision }</c>.</summary>
+		/// <summary><c>draft.get { nodeId, itemId? }</c> answers <c>{ text, revision }</c>. With <c>itemId</c> (FR.23.19) it is the reply draft of that Focus item; without it, the session's composer draft. The same holds for <c>draft.set</c> and <c>draft.delete</c>.</summary>
 		public const string DraftGetMethod = "draft.get";
 
 		/// <summary><c>draft.set { nodeId, text, baseRevision? }</c> answers <c>{ revision }</c>; an empty text deletes the draft; a stale <c>baseRevision</c> is error -32000 "Draft changed".</summary>
@@ -30,7 +30,7 @@ public static partial class RemoteProtocol
 		/// <summary><c>draft.delete { nodeId }</c> answers <c>{ deleted }</c>.</summary>
 		public const string DraftDeleteMethod = "draft.delete";
 
-		/// <summary>Notification <c>{ nodeId, revision }</c>: the draft changed (any writer, this client included). Local stream only, coalesced.</summary>
+		/// <summary>Notification <c>{ nodeId, revision, itemId? }</c> (<c>itemId</c> only for the reply draft of a Focus item): the draft changed (any writer, this client included). Local stream only, coalesced.</summary>
 		public const string DraftChangedEvent = "draft.changed";
 
 		/// <summary><c>autocomplete.suggest { nodeId, text, caret }</c> answers <c>{ mode, triggerStart, triggerLength, indexReady, items[] }</c>.</summary>

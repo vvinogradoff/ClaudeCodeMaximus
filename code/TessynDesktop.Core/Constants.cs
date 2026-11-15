@@ -13,6 +13,12 @@ public static partial class Constants
 	public const string DraftsFolderName = "drafts";
 	public const string ProfilesFolderName = "profiles";
 	public const string DraftFileExtension = ".draft";
+
+	/// <summary>Between the session file name and the item id in the file name of a Focus reply draft (FR.23.19): <c>{session file}.focus-{item id}.draft</c>.</summary>
+	public const string ItemDraftInfix = ".focus-";
+
+	/// <summary>Longest Focus item id accepted by the draft store.</summary>
+	public const int MaxItemIdLength = 64;
 	public const int DraftDebounceMilliseconds = 500;
 	public const int AutocompleteDebounceMilliseconds = 150;
 	public const string SessionFileExtension = ".txt";

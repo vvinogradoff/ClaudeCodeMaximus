@@ -79,6 +79,16 @@ public partial class App : Application
 		if (appSettings.Settings.TelegramEnabled)
 			Services.GetRequiredService<ITelegramBridgeService>().Start();
 
+		// FR.23.19: Focus reply drafts follow the ledger and the session files. Never allowed to break start-up.
+		try
+		{
+			Services.GetRequiredService<FocusDraftLifecycle>().Start();
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Could not start the Focus draft lifecycle");
+		}
+
 		// Remote API (web client): publish the daemon's events as remote notifications. Never allowed to break start-up.
 		try
 		{
@@ -210,6 +220,7 @@ public partial class App : Application
 		services.AddSingleton<SessionTagStore>();
 		services.AddSingleton<ISessionTagService, SessionTagService>();
 		services.AddSingleton<IDraftService, DraftService>();
+		services.AddSingleton<FocusDraftLifecycle>(); // FR.23.19: removes a Focus reply draft when its item closes or its session is deleted
 		services.AddSingleton<ClaudeProcessLauncher>();
 		services.AddSingleton<IClaudeProcessManager, ClaudeProcessManager>();
 		services.AddSingleton<IClaudeStreamingSessionManager, ClaudeStreamingSessionManager>();

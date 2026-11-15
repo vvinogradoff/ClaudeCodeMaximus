@@ -14,14 +14,14 @@ namespace TessynDesktop.ViewModels;
 /// <remarks>Created by Claude</remarks>
 public sealed class FocusItemViewModel : ViewModelBase
 {
-	private readonly Action _replyChanged;
+	private readonly Action<FocusItemViewModel> _replyChanged;
 	private readonly Action<FocusItemViewModel> _close;
 	private readonly Action<FocusItemViewModel> _reply;
 	private AttentionItemModel _model;
 	private string _replyText = string.Empty;
 	private bool _isBodyExpanded;
 
-	public FocusItemViewModel(AttentionItemModel model, Action replyChanged, Action<FocusItemViewModel> close, Action<FocusItemViewModel> reply)
+	public FocusItemViewModel(AttentionItemModel model, Action<FocusItemViewModel> replyChanged, Action<FocusItemViewModel> close, Action<FocusItemViewModel> reply)
 	{
 		_model = model;
 		_replyChanged = replyChanged;
@@ -113,7 +113,7 @@ public sealed class FocusItemViewModel : ViewModelBase
 
 			this.RaiseAndSetIfChanged(ref _replyText, next);
 			this.RaisePropertyChanged(nameof(HasReply));
-			_replyChanged();
+			_replyChanged(this);
 		}
 	}
 
