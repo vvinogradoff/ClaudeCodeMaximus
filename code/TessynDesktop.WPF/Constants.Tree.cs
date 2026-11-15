@@ -9,6 +9,7 @@ public static partial class Constants
 	{
 		public const string AddDirectory = "tree.addDirectory";
 		public const string AddGroup = "tree.addGroup";
+		public const string AddSession = "tree.addSession";
 		public const string Rename = "tree.rename";
 		public const string Delete = "tree.delete";
 		public const string MoveTo = "tree.moveTo";
@@ -20,6 +21,7 @@ public static partial class Constants
 	{
 		public const string AddDirectory = "Add directory";
 		public const string AddGroup = "New group";
+		public const string AddSession = "New session";
 		public const string Rename = "Rename";
 		public const string Delete = "Delete";
 		public const string MoveTo = "Move to";
@@ -41,6 +43,14 @@ public static partial class Constants
 		public const string NewGroupTitle = "New group";
 		public const string NewGroupPrompt = "Name of the new group:";
 		public const string NewGroupFailed = "Cannot add the group";
+		public const string NewSessionTitle = "New session";
+		public const string NewSessionPrompt = "Name of the new session:";
+		public const string NewSessionDefaultName = "New session";
+		public const string NewSessionFailed = "Cannot add the session";
+		public const string NodeGone = "That item was removed meanwhile (by another window or client). The tree has been refreshed.";
+		public const string MoveNotDone = "The session was not moved.";
+		public const string ConfirmDeleteDirectory = "Remove the directory \"{0}\" from the tree? This removes its entry and the settings Tessyn keeps for it (such as its local tool profile). The folder and its files on disk are not touched.";
+		public const string ConfirmDeleteGroup = "Delete the group \"{0}\"? Only an empty group can be deleted; its entry in the tree is removed.";
 		public const string RenameTitle = "Rename";
 		public const string RenamePrompt = "New name:";
 		public const string RenameFailed = "Cannot rename";

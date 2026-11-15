@@ -31,6 +31,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 	private bool _expansionSeeded;
 	private bool _rebuilding;
 	private string? _selectedId;
+	private bool _selectedIsWorker;
 	private long _version = -1;
 
 	private CancellationTokenSource? _searchCts;
@@ -86,6 +87,12 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 
 	/// <summary>Raised on the UI thread when the user (or a restore) selects a node.</summary>
 	public event EventHandler<TreeNodeViewModel>? SelectionChanged;
+
+	/// <summary>
+	/// Raised when the selected node is gone from the tree (deleted here or by another client); the argument is its id. The selection is cleared first.
+	/// A selected worker whose supervisor is not expanded is not counted as gone: workers are only in the tree while loaded.
+	/// </summary>
+	public event EventHandler<string>? SelectionLost;
 
 	/// <summary>Raised when the set of expanded nodes changed (for persistence).</summary>
 	public event EventHandler? ExpansionChanged;
@@ -266,6 +273,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 			return;
 
 		_selectedId = value.Id;
+		_selectedIsWorker = value.Kind == TreeNodeKind.Worker;
 		SelectionChanged?.Invoke(this, value);
 	}
 
@@ -537,6 +545,12 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		finally
 		{
 			_rebuilding = false;
+		}
+
+		if (keep != null && !_selectedIsWorker && !_byId.ContainsKey(keep))
+		{
+			_selectedId = null;
+			SelectionLost?.Invoke(this, keep);
 		}
 	}
 

@@ -17,6 +17,8 @@
     <WrapPanel Margin="8,6,8,0">
         <Button Style="{StaticResource ToolbarButton}" Content="Add directory" Command="{Binding AddDirectoryCommand}"
                 AutomationProperties.Name="Add directory" ToolTip="Add a folder to the tree" />
+        <Button Style="{StaticResource ToolbarButton}" Content="New session" Command="{Binding AddSessionCommand}"
+                AutomationProperties.Name="New session" ToolTip="New session in the selected directory or group" />
         <Button Style="{StaticResource ToolbarButton}" Content="New group" Command="{Binding AddGroupCommand}"
                 AutomationProperties.Name="New group" ToolTip="New group under the selected directory or group" />
         <Button Style="{StaticResource ToolbarButton}" Content="Rename" Command="{Binding RenameCommand}"

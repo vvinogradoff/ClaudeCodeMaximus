@@ -59,6 +59,7 @@ public sealed partial class MainViewModel : ObservableObject
 			tree = _treeFactory(client);
 			tree.PropertyChanged += (_, _) => UpdateStatus();
 			tree.SelectionChanged += OnTreeSelectionChanged;
+			tree.SelectionLost += OnTreeSelectionLost;
 			tree.ExpansionChanged += (_, _) => _stateStore.Update(state => state.ExpandedNodeIds = tree.ExpandedNodeIds.ToList());
 			tree.RestoreExpansion(_stateStore.State.ExpandedNodeIds);
 		}
@@ -116,6 +117,16 @@ public sealed partial class MainViewModel : ObservableObject
 			return;
 
 		_ = Session.OpenAsync(node.Id, node.Label);
+	}
+
+	/// <summary>The selected session was deleted (here or by another client): the pane stops showing it, as Avalonia clears its selected session.</summary>
+	private void OnTreeSelectionLost(object? sender, string nodeId)
+	{
+		if (Session?.NodeId == nodeId)
+			Session.Close();
+
+		if (_stateStore.State.LastSelectedNodeId == nodeId)
+			_stateStore.Update(state => state.LastSelectedNodeId = null);
 	}
 
 	private void UpdateStatus()

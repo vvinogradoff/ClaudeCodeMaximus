@@ -31,6 +31,13 @@ public sealed class TreeShellModule : IShellModule
 		});
 		commands.Register(new ShellCommand
 		{
+			Id = TreeCommands.AddSession,
+			Title = "New session…",
+			CanExecute = node => Operations != null && TreeOperations.ContainerOf(node as TreeNodeViewModel) != null,
+			ExecuteAsync = node => Operations!.AddSessionAsync(node as TreeNodeViewModel),
+		});
+		commands.Register(new ShellCommand
+		{
 			Id = TreeCommands.AddGroup,
 			Title = "New group…",
 			CanExecute = node => Operations != null && TreeOperations.ContainerOf(node as TreeNodeViewModel) != null,
@@ -41,6 +48,7 @@ public sealed class TreeShellModule : IShellModule
 			Id = TreeCommands.Rename,
 			Title = "Rename…",
 			DefaultGesture = "F2",
+			IgnoreRepeat = true,
 			CanExecute = node => Operations != null && TreeOperations.CanRename(node as TreeNodeViewModel),
 			ExecuteAsync = node => Operations!.RenameAsync(node as TreeNodeViewModel),
 			ResolveParameter = SelectedNodeWhenTreeHasFocus,
@@ -50,6 +58,7 @@ public sealed class TreeShellModule : IShellModule
 			Id = TreeCommands.Delete,
 			Title = "Delete…",
 			DefaultGesture = "Delete",
+			IgnoreRepeat = true,
 			CanExecute = node => Operations != null && node is TreeNodeViewModel,
 			ExecuteAsync = node => Operations!.DeleteAsync(node as TreeNodeViewModel),
 			ResolveParameter = SelectedNodeWhenTreeHasFocus,
@@ -69,6 +78,7 @@ public sealed class TreeShellModule : IShellModule
 			ExecuteAsync = _ => Operations!.RefreshGitOriginsAsync(),
 		});
 
+		commands.AddMenuEntry(Menus.TreeNode, TreeCommands.AddSession, order: 9, group: "add");
 		commands.AddMenuEntry(Menus.TreeNode, TreeCommands.AddGroup, order: 10, group: "add");
 		commands.AddMenuEntry(Menus.TreeNode, TreeCommands.AddDirectory, order: 11, group: "add");
 		commands.AddMenuEntry(Menus.TreeNode, TreeCommands.Rename, order: 20, group: "edit");

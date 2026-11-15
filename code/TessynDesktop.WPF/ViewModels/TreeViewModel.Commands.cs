@@ -8,6 +8,7 @@ public sealed partial class TreeViewModel
 {
 	partial void OnSelectedNodeChanged(TreeNodeViewModel? value)
 	{
+		AddSessionCommand.NotifyCanExecuteChanged();
 		AddGroupCommand.NotifyCanExecuteChanged();
 		RenameCommand.NotifyCanExecuteChanged();
 		DeleteCommand.NotifyCanExecuteChanged();
@@ -17,6 +18,9 @@ public sealed partial class TreeViewModel
 
 	[RelayCommand(CanExecute = nameof(HasOperations))]
 	private Task AddDirectoryAsync() => Operations!.AddDirectoryAsync();
+
+	[RelayCommand(CanExecute = nameof(CanAddGroup))]
+	private Task AddSessionAsync() => Operations!.AddSessionAsync(SelectedNode);
 
 	[RelayCommand(CanExecute = nameof(CanAddGroup))]
 	private Task AddGroupAsync() => Operations!.AddGroupAsync(SelectedNode);

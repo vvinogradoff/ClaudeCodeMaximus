@@ -7,8 +7,8 @@ using TessynDesktop.WPF.ViewModels;
 namespace TessynDesktop.WPF.Views;
 
 /// <summary>
-/// Drag and drop of a session onto a directory or group in the tree list. The rules are the view model's (<see cref="TreeOperations"/>): when the pointer goes
-/// down on a session the daemon is asked where it may go (<c>tree.moveTargets</c>), so by the time it travels the feedback is ready: the row under the
+/// Drag and drop of a session onto a directory or group in the tree list. The rules are the view model's (<see cref="TreeOperations"/>): when a press on a
+/// session turns into a drag (past the system drag threshold, so a plain click costs no call) the daemon is asked where it may go (<c>tree.moveTargets</c>); the row under the
 /// pointer lights up as a target, or as refused (with the reason in the status line, and the "no" cursor). A drop on a refused row never happens.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -35,6 +35,12 @@ public sealed class TreeDragDrop
 		list.PreviewMouseLeftButtonDown += OnMouseDown;
 		list.PreviewMouseMove += OnMouseMove;
 		list.PreviewMouseLeftButtonUp += (_, _) => _pressed = null;
+		list.LostMouseCapture += (_, _) => _pressed = null;
+		list.MouseLeave += (_, e) =>
+		{
+			if (e.LeftButton != MouseButtonState.Pressed)
+				_pressed = null;
+		};
 		list.DragOver += OnDragOver;
 		list.DragLeave += (_, _) => ClearFeedback();
 		list.Drop += OnDrop;
@@ -44,15 +50,19 @@ public sealed class TreeDragDrop
 	{
 		_pressed = NodeAt(e.OriginalSource as DependencyObject);
 		_pressedAt = e.GetPosition(_list);
-		var operations = _tree()?.Operations;
-		if (_pressed != null && operations != null && TreeOperations.IsMovable(_pressed))
-			_ = operations.BeginDrag(_pressed);
 	}
 
 	private void OnMouseMove(object sender, MouseEventArgs e)
 	{
-		if (_pressed == null || e.LeftButton != MouseButtonState.Pressed)
+		if (_pressed == null)
 			return;
+
+		// The button was released somewhere the list did not see (outside it, or over a dialog): the press is over.
+		if (e.LeftButton != MouseButtonState.Pressed)
+		{
+			_pressed = null;
+			return;
+		}
 
 		var delta = e.GetPosition(_list) - _pressedAt;
 		if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
@@ -66,6 +76,8 @@ public sealed class TreeDragDrop
 
 		try
 		{
+			// Only now is it a drag (past the system threshold), not a click: ask where the session may go.
+			_ = operations.BeginDrag(node!);
 			DragDrop.DoDragDrop(_list, new DataObject(DataFormat, node), DragDropEffects.Move);
 		}
 		finally

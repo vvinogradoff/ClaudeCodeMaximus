@@ -20,6 +20,7 @@ public sealed class TreeOperations
 	private readonly ILogger<TreeOperations> _logger;
 	private TreeViewModel? _tree;
 
+	private int _busy;
 	private string? _dragSourceId;
 	private Task<HashSet<string>>? _dragTargets;
 
@@ -48,7 +49,25 @@ public sealed class TreeOperations
 	/// <summary>Renaming is for sessions and groups (the daemon refuses a directory).</summary>
 	public static bool CanRename(TreeNodeViewModel? node) => node is { Kind: not TreeNodeKind.Directory };
 
-	public async Task AddDirectoryAsync()
+	/// <summary>Runs one operation at a time: a second request (a double click, a held key) while one is in flight is dropped, not queued.</summary>
+	private async Task ExclusiveAsync(Func<Task> operation)
+	{
+		if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
+			return;
+
+		try
+		{
+			await operation();
+		}
+		finally
+		{
+			Interlocked.Exchange(ref _busy, 0);
+		}
+	}
+
+	public Task AddDirectoryAsync() => ExclusiveAsync(AddDirectoryCoreAsync);
+
+	private async Task AddDirectoryCoreAsync()
 	{
 		var path = await _folders.PickAsync(TreeTexts.AddDirectoryTitle);
 		if (string.IsNullOrWhiteSpace(path))
@@ -62,7 +81,9 @@ public sealed class TreeOperations
 		});
 	}
 
-	public async Task AddGroupAsync(TreeNodeViewModel? near)
+	public Task AddGroupAsync(TreeNodeViewModel? near) => ExclusiveAsync(() => AddGroupCoreAsync(near));
+
+	private async Task AddGroupCoreAsync(TreeNodeViewModel? near)
 	{
 		var container = ContainerOf(near);
 		if (container == null)
@@ -80,7 +101,30 @@ public sealed class TreeOperations
 		});
 	}
 
-	public async Task RenameAsync(TreeNodeViewModel? node)
+	/// <summary>Creates a session under the directory or group (or beside the session) the node stands for, then selects it, which opens it.</summary>
+	public Task AddSessionAsync(TreeNodeViewModel? near) => ExclusiveAsync(() => AddSessionCoreAsync(near));
+
+	private async Task AddSessionCoreAsync(TreeNodeViewModel? near)
+	{
+		var container = ContainerOf(near);
+		if (container == null)
+			return;
+
+		var name = await _dialogs.InputAsync(new InputDialogRequest(TreeTexts.NewSessionTitle, TreeTexts.NewSessionPrompt, TreeTexts.NewSessionDefaultName, Validate: RequireName));
+		if (name == null)
+			return;
+
+		await RunAsync(TreeTexts.NewSessionFailed, async () =>
+		{
+			var created = await _client.TreeCreateSessionAsync(container.Id, name.Trim());
+			await RefreshAsync();
+			_tree?.SelectNodeById(created.Session.Id);
+		});
+	}
+
+	public Task RenameAsync(TreeNodeViewModel? node) => ExclusiveAsync(() => RenameCoreAsync(node));
+
+	private async Task RenameCoreAsync(TreeNodeViewModel? node)
 	{
 		if (!CanRename(node))
 			return;
@@ -100,10 +144,20 @@ public sealed class TreeOperations
 	/// Deletes a node. The daemon is asked without force first: it only deletes what holds nothing. When it refuses because the session has a transcript file or
 	/// workers, the user is asked with that reason and the delete is repeated with force; a running or non-empty node is only explained.
 	/// </summary>
-	public async Task DeleteAsync(TreeNodeViewModel? node)
+	public Task DeleteAsync(TreeNodeViewModel? node) => ExclusiveAsync(() => DeleteCoreAsync(node));
+
+	private async Task DeleteCoreAsync(TreeNodeViewModel? node)
 	{
 		if (node == null)
 			return;
+
+		// A directory or a group is always confirmed, even an empty one (one key press must not remove it). An empty session without a transcript goes without a question.
+		if (node.Kind is TreeNodeKind.Directory or TreeNodeKind.Group)
+		{
+			var prompt = node.Kind == TreeNodeKind.Directory ? TreeTexts.ConfirmDeleteDirectory : TreeTexts.ConfirmDeleteGroup;
+			if (!await _dialogs.ConfirmAsync(new ConfirmDialogRequest(TreeTexts.DeleteTitle, string.Format(prompt, node.Label), TreeTexts.DeleteButton, IsDestructive: true)))
+				return;
+		}
 
 		await RunAsync(TreeTexts.DeleteFailed, async () =>
 		{
@@ -138,7 +192,9 @@ public sealed class TreeOperations
 	}
 
 	/// <summary>"Move to…": lists the places the daemon allows (the git-origin rule) and moves the session to the chosen one.</summary>
-	public async Task MoveToAsync(TreeNodeViewModel? node)
+	public Task MoveToAsync(TreeNodeViewModel? node) => ExclusiveAsync(() => MoveToCoreAsync(node));
+
+	private async Task MoveToCoreAsync(TreeNodeViewModel? node)
 	{
 		if (!IsMovable(node) || _tree == null)
 			return;
@@ -160,17 +216,21 @@ public sealed class TreeOperations
 
 			var chosen = await _dialogs.ChoiceAsync(new ChoiceDialogRequest(TreeTexts.MoveTitle, string.Format(TreeTexts.MoveMessage, node.Label), choices));
 			if (chosen != null)
-				await MoveAsync(node, chosen);
+				await MoveAsync(node, chosen, EndIndex(_tree.FindNode(chosen), node));
 		});
 	}
 
-	/// <summary>Moves a session into a directory or group (to the first position there), then shows it in its new place.</summary>
-	public async Task MoveAsync(TreeNodeViewModel source, string targetId)
+	/// <summary>The position "at the end" of a container: the number of its top-level sessions other than the moved one (the daemon counts after the session left).</summary>
+	private static int EndIndex(TreeNodeViewModel? container, TreeNodeViewModel source) =>
+		container?.Children.Count(c => c.Kind == TreeNodeKind.Session && c.Id != source.Id) ?? int.MaxValue;
+
+	/// <summary>Moves a session into a directory or group at <paramref name="index"/> among its top-level sessions, then shows it in its new place.</summary>
+	private async Task MoveAsync(TreeNodeViewModel source, string targetId, int index)
 	{
-		var moved = await _client.TreeMoveNodeAsync(source.Id, targetId);
+		var moved = await _client.TreeMoveNodeAsync(source.Id, targetId, index);
 		if (!moved.Moved)
 		{
-			await ShowAsync(TreeTexts.MoveFailed, TreeTexts.MoveFailed);
+			await ShowAsync(TreeTexts.MoveFailed, TreeTexts.MoveNotDone);
 			return;
 		}
 
@@ -179,7 +239,9 @@ public sealed class TreeOperations
 	}
 
 	/// <summary>Starts the daemon's background git-origin scan; the labels follow when it reports <c>tree.changed</c>.</summary>
-	public async Task RefreshGitOriginsAsync()
+	public Task RefreshGitOriginsAsync() => ExclusiveAsync(RefreshGitOriginsCoreAsync);
+
+	private async Task RefreshGitOriginsCoreAsync()
 	{
 		await RunAsync(TreeTexts.RefreshFailed, async () =>
 		{
@@ -257,7 +319,9 @@ public sealed class TreeOperations
 	}
 
 	/// <summary>Drops a session: moves it when the rule allows, does nothing when it is already there, otherwise tells the user why not.</summary>
-	public async Task DropAsync(TreeNodeViewModel source, TreeNodeViewModel? over)
+	public Task DropAsync(TreeNodeViewModel source, TreeNodeViewModel? over) => ExclusiveAsync(() => DropCoreAsync(source, over));
+
+	private async Task DropCoreAsync(TreeNodeViewModel source, TreeNodeViewModel? over)
 	{
 		var decision = Evaluate(source, over);
 		EndDrag();
@@ -268,10 +332,14 @@ public sealed class TreeOperations
 			return;
 		}
 
-		if (decision.Target == source.Parent)
+		if (ReferenceEquals(over, source))
 			return;
 
-		await RunAsync(TreeTexts.MoveFailed, () => MoveAsync(source, decision.Target!.Id));
+		// A drop on a session puts the moved one at that session's place (before it); on a container, at the end.
+		var target = decision.Target!;
+		var siblings = target.Children.Where(c => c.Kind == TreeNodeKind.Session && c.Id != source.Id).ToList();
+		var index = over is { Kind: TreeNodeKind.Session } ? Math.Max(0, siblings.FindIndex(c => c.Id == over.Id)) : siblings.Count;
+		await RunAsync(TreeTexts.MoveFailed, () => MoveAsync(source, target.Id, index));
 	}
 
 	/// <summary>"Directory / Group / Subgroup": where a container sits, so two groups of the same name can be told apart.</summary>
@@ -284,6 +352,10 @@ public sealed class TreeOperations
 		parts.Reverse();
 		return string.Join(" / ", parts);
 	}
+
+	/// <summary>The daemon's reason; a missing node is explained in words (somebody else removed it).</summary>
+	private static string Explain(Exception ex) =>
+		ex is TessynRpcException && ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? TreeTexts.NodeGone : ex.Message;
 
 	private static string? RequireName(string text) => string.IsNullOrWhiteSpace(text) ? TreeTexts.NameRequired : null;
 
@@ -302,7 +374,17 @@ public sealed class TreeOperations
 		catch (Exception ex) when (ex is not OperationCanceledException)
 		{
 			_logger.LogWarning(ex, "{Operation} failed", title);
-			await ShowAsync(title, ex.Message);
+			await ShowAsync(title, Explain(ex));
+
+			// The tree on screen may be what went wrong (the node was removed by another window): show the daemon's.
+			try
+			{
+				await RefreshAsync();
+			}
+			catch (Exception refreshFailure) when (refreshFailure is not OperationCanceledException)
+			{
+				_logger.LogWarning(refreshFailure, "Refreshing the tree after a failed operation failed");
+			}
 		}
 	}
 }

@@ -211,6 +211,27 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 	}
 
 	[Fact]
+	public async Task NewSession_creates_a_session_in_the_daemon_selects_it_and_opens_it_in_the_pane()
+	{
+		using var process = await StartAsync(Dialogs("text:Brand new session"));
+		try
+		{
+			await SelectAsync(process, "No transcript");
+			await PressAsync(process, "New session");
+
+			await AssertRowAsync(process, "Brand new session", shouldExist: true);
+			await WaitForAsync(() => AllSessions().Any(s => s.Name == "Brand new session"), "The daemon has no new session");
+			var created = AllSessions().Single(s => s.Name == "Brand new session");
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, $"Session {created.NodeId} opened"), "The new session was not opened in the pane. Log:\n" + _app.ReadLog());
+			AssertNoErrors();
+		}
+		finally
+		{
+			_app.Stop(process);
+		}
+	}
+
+	[Fact]
 	public async Task NewGroup_and_MoveTo_create_a_group_and_move_a_session_into_it()
 	{
 		using var process = await StartAsync(Dialogs("text:Fresh group", $"choice:{_archive.NodeId}"));

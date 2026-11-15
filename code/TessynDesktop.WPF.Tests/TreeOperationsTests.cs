@@ -232,12 +232,18 @@ public sealed class TreeOperationsTests
 	{
 		var tree = await LoadedTreeAsync();
 		_client.DeleteNodeHandler = (_, _) => new TreeDeleteResult(false, blockedBy);
-		Answer(d => d.CancelCommand.Execute(null));
+		Answer(d =>
+		{
+			if (d.IsDestructive)
+				Accept(d);   // the group itself is always confirmed first
+			else
+				d.CancelCommand.Execute(null);
+		});
 
 		await tree.Operations!.DeleteAsync(tree.FindNode("g1"));
 
 		Assert.Equal(["tree.deleteNode:g1:False"], _client.Calls.Where(c => c.StartsWith("tree.deleteNode", StringComparison.Ordinal)));
-		Assert.Contains(reasonText, Assert.Single(_presenter.Shown).Message);
+		Assert.Contains(reasonText, _presenter.Shown.Last().Message);
 	}
 
 	// ---------------------------------------------------------------- add
@@ -340,7 +346,7 @@ public sealed class TreeOperationsTests
 		await tree.Operations!.MoveToAsync(tree.FindNode("s4"));
 
 		Assert.Contains("tree.moveTargets:s4", _client.Calls);
-		Assert.Contains("tree.moveNode:s4:g1:", _client.Calls);
+		Assert.Contains("tree.moveNode:s4:g1:1", _client.Calls);   // appended: after the one session already in the group
 	}
 
 	[Fact]
@@ -478,7 +484,7 @@ public sealed class TreeOperationsTests
 
 		await ops.DropAsync(source, tree.FindNode("g1"));
 
-		Assert.Contains("tree.moveNode:s4:g1:", _client.Calls);
+		Assert.Contains("tree.moveNode:s4:g1:1", _client.Calls);
 		Assert.Equal(["d1", "g1", "s4", "s2", "s1", "d2"], tree.Rows.Select(r => r.Id));
 		Assert.Equal("g1", tree.FindNode("s4")!.Parent!.Id);
 	}
@@ -499,7 +505,7 @@ public sealed class TreeOperationsTests
 	}
 
 	[Fact]
-	public async Task Drop_OnTheCurrentContainer_IsANoOp()
+	public async Task Drop_OnASiblingSession_ReordersToThatSessionsPlace()
 	{
 		var tree = await LoadedTreeAsync();
 		_client.MoveTargetsHandler = _ => new TreeMoveTargetsResult(["d1", "g1"]);
@@ -507,9 +513,9 @@ public sealed class TreeOperationsTests
 		var source = tree.FindNode("s4")!;
 		await ops.BeginDrag(source);
 
-		await ops.DropAsync(source, tree.FindNode("s1"));   // a sibling: the container is where it already is
+		await ops.DropAsync(source, tree.FindNode("s1"));   // a sibling: s4 goes before it, i.e. to index 0 of the others
 
-		Assert.DoesNotContain(_client.Calls, c => c.StartsWith("tree.moveNode", StringComparison.Ordinal));
+		Assert.Contains("tree.moveNode:s4:d1:0", _client.Calls);
 	}
 
 	[Fact]

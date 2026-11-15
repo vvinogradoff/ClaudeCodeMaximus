@@ -79,7 +79,7 @@ public sealed class TreeShellModuleTests
 		Assert.Equal("Delete", _commands.GetGesture(Constants.TreeCommands.Delete));
 		Assert.Single(_slots.For(Constants.Slots.TreeToolbar));
 		Assert.Equal(
-			[Constants.TreeCommands.AddGroup, Constants.TreeCommands.AddDirectory, Constants.TreeCommands.Rename, Constants.TreeCommands.MoveTo, Constants.TreeCommands.Delete, Constants.TreeCommands.RefreshGitOrigins],
+			[Constants.TreeCommands.AddSession, Constants.TreeCommands.AddGroup, Constants.TreeCommands.AddDirectory, Constants.TreeCommands.Rename, Constants.TreeCommands.MoveTo, Constants.TreeCommands.Delete, Constants.TreeCommands.RefreshGitOrigins],
 			Menu(tree.FindNode("s1")).Select(i => i.CommandId));
 	}
 
@@ -207,7 +207,7 @@ public sealed class TreeShellModuleTests
 
 				Collect(toolbar);
 				Assert.Equal(
-					[Constants.TreeAutomation.AddDirectory, Constants.TreeAutomation.AddGroup, Constants.TreeAutomation.Rename, Constants.TreeAutomation.Delete, Constants.TreeAutomation.MoveTo, Constants.TreeAutomation.RefreshGitOrigins],
+					[Constants.TreeAutomation.AddDirectory, Constants.TreeAutomation.AddSession, Constants.TreeAutomation.AddGroup, Constants.TreeAutomation.Rename, Constants.TreeAutomation.Delete, Constants.TreeAutomation.MoveTo, Constants.TreeAutomation.RefreshGitOrigins],
 					names);
 			}
 			finally
