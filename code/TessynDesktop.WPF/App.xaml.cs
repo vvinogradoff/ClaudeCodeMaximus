@@ -20,6 +20,7 @@ public partial class App : Application
 
 	private IHost? _host;
 	private SingleInstanceGuard? _singleInstance;
+	private bool _activationPending;
 
 	/// <summary>The application's service provider (set once the host is built).</summary>
 	public IServiceProvider Services => _host!.Services;
@@ -67,6 +68,8 @@ public partial class App : Application
 		var windowCreated = startup.ElapsedMilliseconds;
 		MainWindow = window;
 		window.Show();
+		if (_activationPending)
+			ActivateMainWindow(options); // a second start arrived while this one was still starting
 		logger.LogInformation("Startup: host built {Host} ms, state loaded {State} ms, window created {Created} ms, shown {Shown} ms",
 			hostBuilt, stateLoaded, windowCreated, startup.ElapsedMilliseconds);
 	}
@@ -75,6 +78,9 @@ public partial class App : Application
 	{
 		if (_host != null)
 		{
+			// A dialog still waiting for an answer would hold its caller forever.
+			_host.Services.GetService<IDialogService>()?.CancelPending();
+
 			// Never block the UI thread on work that may need it: run the shutdown on the thread pool with a bounded wait.
 			var host = _host;
 			var shutdown = Task.Run(async () =>
@@ -99,15 +105,32 @@ public partial class App : Application
 		base.OnExit(e);
 	}
 
-	/// <summary>A second start asked for this instance: restore and raise the window. A test window must never take focus, so it ignores the request.</summary>
+	/// <summary>
+	/// A second start asked for this instance: show, restore and raise the window. A test window must never take focus, so it ignores the request.
+	/// A request that comes before the window exists is remembered and applied once it is shown.
+	/// </summary>
 	private void ActivateMainWindow(StartupOptions options)
 	{
-		if (options.TestWindow || MainWindow == null)
+		if (options.TestWindow)
 			return;
 
-		if (MainWindow.WindowState == WindowState.Minimized)
-			MainWindow.WindowState = WindowState.Normal;
+		if (MainWindow is not { IsLoaded: true } window)
+		{
+			_activationPending = true;
+			return;
+		}
 
-		MainWindow.Activate();
+		_activationPending = false;
+		if (window.Visibility != Visibility.Visible)
+			window.Show();
+
+		if (window.WindowState == WindowState.Minimized)
+			window.WindowState = WindowState.Normal;
+
+		// Activate alone often only flashes the taskbar button; toggling Topmost reliably raises the window.
+		window.Activate();
+		window.Topmost = true;
+		window.Topmost = false;
+		window.Focus();
 	}
 }

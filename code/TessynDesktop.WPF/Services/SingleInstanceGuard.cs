@@ -19,14 +19,40 @@ public sealed class SingleInstanceGuard : IDisposable
 		_name = name;
 	}
 
-	/// <summary>True when this is the first instance. Otherwise the first instance has been asked to activate itself.</summary>
+	/// <summary>True when this is the first instance. Otherwise the first instance has been asked to activate itself (or could not be reached: it runs elevated).</summary>
 	public bool TryAcquire()
 	{
-		_mutex = new Mutex(initiallyOwned: true, _name, out var createdNew);
-		_activate = new EventWaitHandle(initialState: false, EventResetMode.AutoReset, _name + ActivateSuffix);
+		bool createdNew;
+		try
+		{
+			_mutex = new Mutex(initiallyOwned: true, _name, out createdNew);
+		}
+		catch (UnauthorizedAccessException)
+		{
+			// The name belongs to an instance of another integrity level (elevated): treat it as running.
+			return false;
+		}
+
+		try
+		{
+			_activate = new EventWaitHandle(initialState: false, EventResetMode.AutoReset, _name + ActivateSuffix);
+		}
+		catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
+		{
+			_activate = null;
+			if (createdNew)
+				return true; // first instance, only without the activation channel
+
+			_mutex.Dispose();
+			_mutex = null;
+			return false;
+		}
+
 		if (createdNew)
 			return true;
 
+		// The second process owns the foreground right; hand it to the first so it can raise its window.
+		AllowSetForegroundWindow(AllowAnyProcess);
 		_activate.Set();
 		_mutex.Dispose();
 		_mutex = null;
@@ -34,6 +60,12 @@ public sealed class SingleInstanceGuard : IDisposable
 		_activate = null;
 		return false;
 	}
+
+	private const uint AllowAnyProcess = uint.MaxValue;
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	[return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+	private static extern bool AllowSetForegroundWindow(uint processId);
 
 	/// <summary>Runs <paramref name="onActivate"/> (on a thread-pool thread) each time another instance was started.</summary>
 	public void ListenForActivation(Action onActivate)

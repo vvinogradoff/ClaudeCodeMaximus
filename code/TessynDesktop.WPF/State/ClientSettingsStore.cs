@@ -24,7 +24,26 @@ public sealed class ClientSettingsStore : IClientSettingsStore
 	public T Get<T>() where T : class, new()
 	{
 		var section = Describe<T>();
-		if (!_state.State.Sections.TryGetValue(section.Name, out var stored))
+		return _state.Read(state => Resolve<T>(section, state.Sections));
+	}
+
+	public void Update<T>(Action<T> change) where T : class, new()
+	{
+		var section = Describe<T>();
+
+		// Read, change and write inside one state lock: two concurrent updates of a section cannot lose each other's change.
+		_state.Update(state =>
+		{
+			var value = Resolve<T>(section, state.Sections);
+			change(value);
+			state.Sections[section.Name] = new ClientSectionModel { Version = section.Version, Data = JsonSerializer.SerializeToElement(value, Json) };
+		});
+		Changed?.Invoke(this, new ClientSettingsChangedEventArgs(section.Name));
+	}
+
+	private T Resolve<T>(ClientSettingsSectionAttribute section, Dictionary<string, ClientSectionModel> sections) where T : class, new()
+	{
+		if (!sections.TryGetValue(section.Name, out var stored) || stored is null)
 			return new T();
 
 		if (stored.Version > section.Version)
@@ -33,25 +52,18 @@ public sealed class ClientSettingsStore : IClientSettingsStore
 			return new T();
 		}
 
+		if (stored.Data.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+			return new T();
+
 		try
 		{
 			return stored.Data.Deserialize<T>(Json) ?? new T();
 		}
-		catch (JsonException ex)
+		catch (Exception ex) when (ex is JsonException or InvalidOperationException)
 		{
 			_logger.LogWarning(ex, "Settings section {Section} is unreadable; using defaults", section.Name);
 			return new T();
 		}
-	}
-
-	public void Update<T>(Action<T> change) where T : class, new()
-	{
-		var section = Describe<T>();
-		var value = Get<T>();
-		change(value);
-		var model = new ClientSectionModel { Version = section.Version, Data = JsonSerializer.SerializeToElement(value, Json) };
-		_state.Update(state => state.Sections[section.Name] = model);
-		Changed?.Invoke(this, new ClientSettingsChangedEventArgs(section.Name));
 	}
 
 	private static ClientSettingsSectionAttribute Describe<T>() =>

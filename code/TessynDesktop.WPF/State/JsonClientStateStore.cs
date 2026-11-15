@@ -77,6 +77,12 @@ public sealed class JsonClientStateStore : IClientStateStore
 		}
 	}
 
+	public T Read<T>(Func<ClientStateModel, T> read)
+	{
+		lock (_gate)
+			return read(State);
+	}
+
 	public void Update(Action<ClientStateModel> change)
 	{
 		lock (_gate)

@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.State;
@@ -14,12 +15,26 @@ public sealed class ShellCommands : IShellCommands
 	private readonly object _gate = new();
 	private readonly Dictionary<string, ShellCommand> _commands = new(StringComparer.Ordinal);
 	private readonly List<ShellMenuEntryModel> _entries = [];
+	private GestureTable? _table;
 
 	public ShellCommands(IClientSettingsStore settings, ILogger<ShellCommands> logger)
 	{
 		_settings = settings;
 		_logger = logger;
+		_settings.Changed += OnSettingsChanged;
 	}
+
+	/// <summary>The resolved gestures: parsed once, rebuilt when a command is registered or the key binding settings change.</summary>
+	private sealed record GestureTable(Dictionary<(Key Key, ModifierKeys Modifiers), ShellCommand> Winners, IReadOnlyList<GestureConflict> Conflicts);
+
+	private void OnSettingsChanged(object? sender, ClientSettingsChangedEventArgs e)
+	{
+		if (e.Section == KeyBindingSection)
+			lock (_gate)
+				_table = null;
+	}
+
+	private static readonly string KeyBindingSection = typeof(KeyBindingSettings).GetCustomAttribute<ClientSettingsSectionAttribute>()!.Name;
 
 	public void Register(ShellCommand command)
 	{
@@ -27,6 +42,8 @@ public sealed class ShellCommands : IShellCommands
 		{
 			if (!_commands.TryAdd(command.Id, command))
 				throw new InvalidOperationException($"A command with the id '{command.Id}' is already registered");
+
+			_table = null;
 		}
 	}
 
@@ -84,24 +101,75 @@ public sealed class ShellCommands : IShellCommands
 		return command.DefaultGesture;
 	}
 
-	public ShellCommand? FindByGesture(Key key, ModifierKeys modifiers)
+	public ShellCommand? FindByGesture(Key key, ModifierKeys modifiers) =>
+		GetTable().Winners.GetValueOrDefault((key, modifiers));
+
+	public IReadOnlyList<GestureConflict> GetConflicts() => GetTable().Conflicts;
+
+	public bool TryExecuteGesture(Key key, ModifierKeys modifiers, bool textInputFocused)
 	{
-		List<ShellCommand> all;
-		lock (_gate)
-			all = _commands.Values.ToList();
+		var command = FindByGesture(key, modifiers);
+		if (command == null || ShellKeyPolicy.Blocks(command, key, modifiers, textInputFocused))
+			return false;
 
-		var overrides = _settings.Get<KeyBindingSettings>().Gestures;
-		foreach (var command in all)
+		object? parameter;
+		try
 		{
-			var text = overrides.TryGetValue(command.Id, out var custom) ? custom : command.DefaultGesture;
-			if (string.IsNullOrWhiteSpace(text))
-				continue;
-
-			if (TryParse(command.Id, text, out var gesture) && gesture.Key == key && gesture.Modifiers == modifiers)
-				return command;
+			parameter = command.ResolveParameter?.Invoke();
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Resolving the parameter of command {CommandId} failed", command.Id);
+			return false;
 		}
 
-		return null;
+		if (!CanExecute(command, parameter))
+			return false;
+
+		_ = ExecuteAsync(command.Id, parameter);
+		return true;
+	}
+
+	private GestureTable GetTable()
+	{
+		lock (_gate)
+		{
+			if (_table != null)
+				return _table;
+
+			var overrides = _settings.Get<KeyBindingSettings>().Gestures;
+			var claims = new Dictionary<(Key, ModifierKeys), List<(ShellCommand Command, bool IsOverride)>>();
+			foreach (var command in _commands.Values)
+			{
+				var isOverride = overrides.TryGetValue(command.Id, out var custom);
+				var text = isOverride ? custom : command.DefaultGesture;
+				if (string.IsNullOrWhiteSpace(text) || !TryParse(command.Id, text, out var gesture))
+					continue;
+
+				var slot = (gesture.Key, gesture.Modifiers);
+				if (!claims.TryGetValue(slot, out var list))
+					claims[slot] = list = [];
+
+				list.Add((command, isOverride));
+			}
+
+			var winners = new Dictionary<(Key Key, ModifierKeys Modifiers), ShellCommand>();
+			var conflicts = new List<GestureConflict>();
+			foreach (var ((key, modifiers), list) in claims)
+			{
+				// The user's choice beats a default; otherwise the first registered stays (the dictionary keeps insertion order here).
+				var ordered = list.OrderByDescending(c => c.IsOverride).ToList();
+				winners[(key, modifiers)] = ordered[0].Command;
+				if (ordered.Count > 1)
+				{
+					var losers = ordered.Skip(1).Select(c => c.Command.Id).ToList();
+					conflicts.Add(new GestureConflict(key, modifiers, ordered[0].Command.Id, losers));
+					_logger.LogWarning("Gesture {Modifiers}+{Key} is claimed by several commands; {Winner} wins over {Losers}", modifiers, key, ordered[0].Command.Id, string.Join(", ", losers));
+				}
+			}
+
+			return _table = new GestureTable(winners, conflicts);
+		}
 	}
 
 	public async Task<bool> ExecuteAsync(string commandId, object? parameter)

@@ -13,9 +13,21 @@ public sealed class ShellCommand
 	/// <summary>Default key gesture in WPF notation (<c>Ctrl+Shift+N</c>, <c>F2</c>); null = no key.</summary>
 	public string? DefaultGesture { get; init; }
 
-	/// <summary>Runs the command; the parameter is what the caller offers (a tree node for the tree menu, null for a key).</summary>
+	/// <summary>Runs the command; the parameter is what the caller offers (a tree node for the tree menu; for a key, <see cref="ResolveParameter"/>, else null).</summary>
 	public required Func<object?, Task> ExecuteAsync { get; init; }
 
 	/// <summary>Whether the command applies to the parameter; null = always.</summary>
 	public Func<object?, bool>? CanExecute { get; init; }
+
+	/// <summary>
+	/// Supplies the parameter when the command is run from its key gesture (e.g. the selected tree node), so a command bound to both a
+	/// menu and a key sees the same kind of parameter. Null = the key passes null, and the command has to cope with that.
+	/// </summary>
+	public Func<object?>? ResolveParameter { get; init; }
+
+	/// <summary>
+	/// Whether the gesture also fires while a text input has the focus. Default false: then a gesture without Ctrl/Alt, or one that
+	/// is a text-editing shortcut (Ctrl+C/V/X/A/Z/Y, Ctrl+Backspace/Delete), is left to the text box.
+	/// </summary>
+	public bool AllowInTextInput { get; init; }
 }
