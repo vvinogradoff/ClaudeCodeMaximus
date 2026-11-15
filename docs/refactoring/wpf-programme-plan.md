@@ -433,3 +433,39 @@ Pre-merge master tip: `a14e05cee5646d96f3b9fe5ddf94c40b398df1e1`. Merge commit `
 3. **Source rollback**: `git revert -m 1 <M>` (creates one revert commit; history kept, review-friendly), then `dotnet build code/TessynDesktop.sln` (no `-o`), restart; the new build is newer, so self-update copies it into `[Publish]`. If the merge is local only and nothing is built on it, `git reset --hard a14e05c` is the alternative (destructive; Architect's decision).
 4. Do not revert a single stage commit (`43f290a` alone): later commits (`f1b0ec4`, `507cffd`) modify the same adapter files and `ITurnEngine` consumers; revert the whole merge.
 5. After rolling back, confirm: build 0 errors, app starts, steps 1-3 of the smoke pass, `client.hello` no longer lists `turn.stream`; the web client is unaffected either way (its 23 methods, including `file.read`/`file.preview`, are unchanged).
+
+## Appendix C — Rollout 3 (attachments, ISSUE.013, index upkeep): smoke checklist and rollback
+
+Rollout 3 is master at `f57d404` or later. It is built in the main tree only **after** rollout 2 has passed B.1 (Focus item A15), so each restart tests one rollout. Its desktop-relevant merges are:
+- `98fa1f4`: attachments, FR.31. Daemon storage and methods, the A11 working-directory default with the one-time `ModeRevision` migration, and `mediaPreviewHosts`.
+- `9fa7cd6`: ISSUE.013 daemon side. ProfileId pins migrated at load (the A18 rule for legacy labels), `migrate: true`, `profile.switch`, R3, R7, R9.
+- `f57d404`: index upkeep, A5. Rowid map and migration, a purge that keeps tree sessions (A17), optimize and vacuum, a throttled startup pass.
+
+`b59b14f` (web refs UI) changes only the SPA. It goes live with the web deploy (A19), not with the desktop restart.
+
+### C.1 Smoke checklist, right after the restart (about 5 minutes)
+
+Before the restart, close Tessyn and back up the run folder: `robocopy "C:\Projects\Personal\Tessyn\[Publish]" "C:\Projects\Personal\Tessyn\[Publish].bak3" /MIR`.
+
+1. **Startup.** The app opens and the tree loads. The newest log shows, once each:
+   - the `ProfilePinMigration` summary (about 1,901 pinned by id, 317 legacy labels, 344 `[Sys]`);
+   - `FileAccess mode moved from ReferencedOnly to WorkingDirectory`, if the rollout-2 build had saved the old default;
+   - the index upkeep line (on a copy of the data: about 657 purged, 1,492 kept for the tree, one missing home with rows, about 12 s).
+
+   No `Unable to resolve`, `SqliteException` or unhandled exception.
+2. **A normal send** in an existing session works as in B.1 step 2.
+3. **Orchestration.** A supervisor's `send_to_session` to a worker answers, and its result ends with `[profile=...]`. `list_sessions` rows show `profile=`.
+4. **Search.** Tree search and Global Search still find an old tree session whose `.jsonl` Claude has removed. Search "deploy" or a word you remember.
+5. **Idle.** After the upkeep pass (under a minute), idle CPU and memory are back to the rollout-2 level.
+6. **Phone.** The web client still works. It is the old SPA until A19, talking to the new daemon (additive).
+
+### C.2 Rollback
+
+Data stays compatible:
+- An older build ignores the new settings fields (`ProfileId`, `PendingProfileId`, `ModeRevision`). On the way back up, the migrations rerun and are idempotent.
+- The index stays usable by an older build, which ignores `session_rows`. On the way back up, the map audit (X2) rebuilds a stale map.
+- Profile moves and attachments stay on disk. The older turn path adopts transcripts on demand.
+
+Steps:
+1. **Fast:** close the app, then `robocopy "C:\Projects\Personal\Tessyn\[Publish].bak3" "C:\Projects\Personal\Tessyn\[Publish]" /MIR`. Self-update would bring the newer build back, so also do step 2, or delete the newer `bin\Debug\net*` output.
+2. **Source:** `git revert -m 1 f57d404 9fa7cd6 98fa1f4`, in that order, one revert commit each. Then build and restart. Revert only the merge that misbehaves if the log makes the culprit clear: index upkeep, profiles or attachments.
