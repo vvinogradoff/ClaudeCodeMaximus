@@ -965,7 +965,25 @@ public sealed class SessionTurnServiceTests : IDisposable
 
 	/// <summary>ISSUE.013 R2: a pinned profile that no longer resolves is an error naming it, never a silent fallback to Default.</summary>
 	[Fact]
-	public async Task RunTurnAsync_PinnedProfileThatNoLongerExists_IsAnErrorAndNeverRunsOnDefault()
+	public async Task RunTurnAsync_IdPinnedProfileThatNoLongerExists_IsARefusedTurnAndNeverRunsOnDefault()
+	{
+		EmitOneAnswer();
+		var node = MakeNode();
+		node.ProfileId   = "p9";
+		node.ProfileName = "Gone";
+
+		var result = await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.True(result.IsError);
+		Assert.True(result.Refused);
+		Assert.Contains("'Gone'", result.ErrorMessage);
+		Assert.Empty(_processManager.Calls);
+		Assert.Empty(_fileService.AppendDetails);
+	}
+
+	/// <summary>Supervisor decision (P2): a legacy name-only record that matches nothing runs on Default as before, with a note on the result.</summary>
+	[Fact]
+	public async Task RunTurnAsync_LegacyNameThatMatchesNoProfile_RunsOnDefault_AndTheResultStatesIt()
 	{
 		EmitOneAnswer();
 		var node = MakeNode();
@@ -973,10 +991,27 @@ public sealed class SessionTurnServiceTests : IDisposable
 
 		var result = await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
 
-		Assert.True(result.IsError);
-		Assert.Contains("'Gone'", result.ErrorMessage);
-		Assert.Empty(_processManager.Calls);
-		Assert.Empty(_fileService.AppendDetails);
+		Assert.False(result.IsError);
+		Assert.False(result.Refused);
+		Assert.Equal("the recorded profile 'Gone' no longer exists", result.Note);
+		Assert.Null(_processManager.Spawns[0].profileConfigDir);
+		Assert.Equal("[Sys] me@example.com", UserEntry().profileName);
+	}
+
+	[Fact]
+	public async Task RunTurnAsync_HistoryDerivedNameThatMatchesNoProfile_RunsOnDefault_AndTheResultStatesIt()
+	{
+		EmitOneAnswer();
+		_fileService.ReadEntriesResult =
+		[
+			new SessionEntryModel { Timestamp = DateTimeOffset.UtcNow, Role = Constants.SessionFile.RoleUser, Content = "old", ProfileName = "Retired account" },
+		];
+
+		var result = await _sut.RunTurnAsync(MakeNode(), "hello", TurnSource.Telegram);
+
+		Assert.False(result.IsError);
+		Assert.Contains("'Retired account'", result.Note);
+		Assert.Null(_processManager.Spawns[0].profileConfigDir);
 	}
 
 	[Fact]

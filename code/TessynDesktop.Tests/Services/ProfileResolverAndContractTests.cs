@@ -45,17 +45,36 @@ public sealed class ProfileResolverAndContractTests : IDisposable
 	}
 
 	[Fact]
-	public void Resolve_PinnedProfileThatDoesNotResolve_IsAnError_ForIdAndForNamePins()
+	public void Resolve_AnIdPinOrAnExplicitChoiceThatDoesNotResolve_IsAnError()
 	{
 		var byId = _env.AddSession("ById", profileId: "p9");
 		byId.ProfileName = "Gone";
-		var byName = _env.AddSession("ByName");
-		byName.ProfileName = "Also gone";
 
-		Assert.False(_env.Resolver.Resolve(byId, byId.ProfileName).IsResolved);
-		var error = _env.Resolver.Resolve(byName, byName.ProfileName).Error;
-		Assert.Contains("'Also gone'", error);
+		var error = _env.Resolver.Resolve(byId, byId.ProfileName).Error;
+		Assert.Contains("'Gone'", error);
 		Assert.Contains("does not fall back to the Default profile", error);
+		Assert.False(_env.Resolver.Resolve(_env.AddSession("Other"), null, "Not a profile").IsResolved);
+	}
+
+	/// <summary>Supervisor decision (P2): a legacy name-only record is no real pin - Default as before, but never silent.</summary>
+	[Fact]
+	public void Resolve_ALegacyNameOnlyRecordThatMatchesNoProfile_RunsOnDefaultAndStatesIt_ForHistoryAndNodeNames()
+	{
+		var fromHistory = _env.AddSession("FromHistory");
+		var onNode = _env.AddSession("OnNode");
+		onNode.ProfileName = "Also gone";
+
+		var a = _env.Resolver.Resolve(fromHistory, "Name only in the history");
+		var b = _env.Resolver.Resolve(onNode, onNode.ProfileName);
+
+		Assert.True(a.IsResolved);
+		Assert.True(a.IsDefault);
+		Assert.Equal("the recorded profile 'Name only in the history' no longer exists", a.Note);
+		Assert.True(b.IsResolved);
+		Assert.True(b.IsDefault);
+		Assert.Contains("'Also gone'", b.Note);
+		Assert.Null(_env.Resolver.Resolve(fromHistory, null).Note);                   // nothing recorded: no note
+		Assert.Null(_env.Resolver.Resolve(fromHistory, "[Sys] me@example.com").Note); // the Default label: no note
 	}
 
 	[Fact]
@@ -68,6 +87,7 @@ public sealed class ProfileResolverAndContractTests : IDisposable
 		Assert.True(fromHistory.IsResolved);
 		Assert.True(fromHistory.IsDefault);
 		Assert.False(fromHistory.IsPinned);
+		Assert.NotNull(fromHistory.Note);
 		Assert.Equal(_p1, _env.Resolver.Resolve(node, "account a").ConfigDir); // case-insensitive, as before
 	}
 
@@ -109,9 +129,9 @@ public sealed class ProfileResolverAndContractTests : IDisposable
 		var inGroup = _env.Registry.AddSessionToGroup(group, "InGroup");
 		inGroup.ProfileName = "Account B";
 
-		var migrated = new ProfilePinMigration().Migrate(_env.Settings.Settings);
+		var summary = new ProfilePinMigration().Migrate(_env.Settings.Settings);
 
-		Assert.Equal(2, migrated);
+		Assert.Equal(new ProfilePinMigrationSummary(Migrated: 2, Unmatched: 1, SystemLabels: 1), summary);
 		Assert.Equal("p1", matched.ProfileId);
 		Assert.Equal("p2", inGroup.ProfileId);
 		Assert.Null(unmatched.ProfileId);
@@ -154,19 +174,25 @@ public sealed class ProfileResolverAndContractTests : IDisposable
 	}
 
 	[Fact]
-	public async Task TurnSettingsResolver_AppliesAQueuedSwitchFirst()
+	public async Task TurnSettingsResolver_RunningNodeWithAQueuedSwitch_IsReadOnly_NothingMovesNothingStops()
 	{
 		var node = _env.AddSession("N", profileId: "p1");
 		_env.WriteSession(_p1, node);
 		node.PendingProfileId = "p2";
+		_env.Registry.SetSessionRunning(node.NodeId, true);
+		_env.Streaming.Alive.Add(node.NodeId);
 		var resolver = new TurnSettingsResolver(_env.Settings, _env.Turns, _env.ProfileService, new FakeModelServiceForTurnService(),
-			new ProfileLabelService(_env.ProfileService, _env.Settings), _env.Resolver, _env.Switch);
+			new ProfileLabelService(_env.ProfileService, _env.Settings), _env.Resolver);
 
 		var settings = await resolver.ResolveAsync(node, null);
 
-		Assert.Equal("Account B", settings.ProfileDisplayName);
-		Assert.Equal("p2", node.ProfileId);
-		Assert.True(File.Exists(_env.TranscriptIn(Path.Combine(_env.ProfilesRoot, "p2"), node)));
+		Assert.Equal("Account B", settings.ProfileDisplayName);           // the turn will launch on the queued target...
+		Assert.Equal(Path.Combine(_env.ProfilesRoot, "p2"), settings.ProfileConfigDir);
+		Assert.Equal("p1", node.ProfileId);                               // ...but nothing was applied here
+		Assert.Equal("p2", node.PendingProfileId);
+		Assert.True(File.Exists(_env.TranscriptIn(_p1, node)));
+		Assert.False(File.Exists(_env.TranscriptIn(Path.Combine(_env.ProfilesRoot, "p2"), node)));
+		Assert.Empty(_env.Streaming.Stopped);
 	}
 
 	// ── profile.switch (TDCP, loopback only) ─────────────────────────────────────────────────
@@ -212,7 +238,7 @@ public sealed class ProfileResolverAndContractTests : IDisposable
 		var result = response["result"]!;
 
 		Assert.Null(response["error"]);
-		Assert.Equal(["profileId", "profileName", "nodeMoved", "moved", "queued", "oldConfigPaths"], result.AsObject().Select(p => p.Key));
+		Assert.Equal(["profileId", "profileName", "nodeMoved", "moved", "queued", "oldConfigPaths", "failed"], result.AsObject().Select(p => p.Key));
 		Assert.Equal("p2", result["profileId"]!.GetValue<string>());
 		Assert.Equal("Account B", result["profileName"]!.GetValue<string>());
 		Assert.True(result["nodeMoved"]!.GetValue<bool>());
@@ -220,6 +246,7 @@ public sealed class ProfileResolverAndContractTests : IDisposable
 		Assert.Equal(["nodeId", "name", "fromProfileId", "fromProfileName"], result["moved"]![0]!.AsObject().Select(p => p.Key));
 		Assert.Equal([running.NodeId], result["queued"]!.AsArray().Select(m => m!["nodeId"]!.GetValue<string>()));
 		Assert.Empty(result["oldConfigPaths"]!.AsArray());
+		Assert.Empty(result["failed"]!.AsArray());
 	}
 
 	[Fact]

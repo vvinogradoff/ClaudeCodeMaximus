@@ -79,15 +79,15 @@ public sealed class Issue013ReproductionTests : IDisposable
 	// Before the fix these two turns ran on Default with no error (the pre-fix commit records that). Since ISSUE.013 R2 they are errors.
 
 	[Fact]
-	public async Task ChildPinnedByNameToARenamedProfile_IsAnError_AndNeverRunsOnDefault()
+	public async Task ChildWithALegacyNameOfARenamedProfile_RunsOnDefault_ButStatesIt()
 	{
 		_appSettings.Settings.Profiles.Add(new ClaudeProfileModel { ProfileId = "p1", DisplayName = "Account A (renamed)" });
 
 		var result = await _sut.RunTurnAsync(Child("Account A"), "continue", TurnSource.Orchestrated);
 
-		Assert.True(result.IsError);
-		Assert.Contains("'Account A'", result.ErrorMessage);
-		Assert.Empty(_processManager.Spawns);
+		Assert.False(result.IsError);
+		Assert.Contains("'Account A'", result.Note);
+		Assert.Null(_processManager.Spawns.Single().profileConfigDir);
 	}
 
 	[Fact]
