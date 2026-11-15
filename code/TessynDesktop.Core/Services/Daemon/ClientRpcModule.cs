@@ -24,11 +24,14 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool           _hasDrafts;
 	private readonly bool           _hasCodeIndex;
 	private readonly bool           _hasAuthErrors;
+	private readonly IClientPresenceRegistry? _presence;
 	private readonly string          _daemonVersion;
 
 	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
-		IDraftService? drafts = null, ICodeIndexService? codeIndex = null, ISessionAuthErrorTracker? authErrors = null)
+		IDraftService? drafts = null, ICodeIndexService? codeIndex = null, ISessionAuthErrorTracker? authErrors = null,
+		IClientPresenceRegistry? presence = null)
 	{
+		_presence      = presence;
 		_hasDrafts     = drafts != null;
 		_hasCodeIndex  = codeIndex != null;
 		_hasAuthErrors = authErrors != null;
@@ -41,8 +44,52 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	}
 
 	/// <inheritdoc />
-	public void Register(TdcpMethodRegistry registry) =>
+	public void Register(TdcpMethodRegistry registry)
+	{
 		registry.AddSync(Constants.Remote.Methods.ClientHello, Hello, remoteCallable: true);
+
+		// Package J2: only a local client can present notifications, so the relay cannot register (-32601).
+		if (_presence != null)
+			registry.AddSync(RemoteProtocol.Notifications.RegisterMethod, RegisterClient, remoteCallable: false);
+	}
+
+	private ClientRegisterResult RegisterClient(JsonNode? @params)
+	{
+		var clientId = ReadClientId(@params, required: true)!;
+		var presents = ReadPresents(@params) ?? throw new TdcpInvalidParamsException("'presents' is required");
+
+		_presence!.Register(clientId, presents);
+		return new ClientRegisterResult(true);
+	}
+
+	private static string? ReadClientId(JsonNode? @params, bool required)
+	{
+		var clientId = required ? TdcpParams.RequireString(@params, "clientId") : TdcpParams.OptionalString(@params, "clientId");
+		if (clientId != null && (string.IsNullOrWhiteSpace(clientId) || clientId.Length > Constants.Composer.MaxClientIdLength))
+			throw new TdcpInvalidParamsException($"'clientId' must be 1 to {Constants.Composer.MaxClientIdLength} characters");
+		return clientId;
+	}
+
+	private static List<string>? ReadPresents(JsonNode? @params)
+	{
+		var node = TdcpParams.Find(@params, "presents");
+		if (node == null)
+			return null;
+
+		if (node is not JsonArray array)
+			throw new TdcpInvalidParamsException("'presents' must be an array of strings");
+
+		var channels = new List<string>();
+		foreach (var item in array)
+		{
+			if (item is not JsonValue value || !value.TryGetValue<string>(out var channel) || !RemoteProtocol.Notifications.Channels.Contains(channel))
+				throw new TdcpInvalidParamsException($"'presents' may only contain: {string.Join(", ", RemoteProtocol.Notifications.Channels)}");
+			if (!channels.Contains(channel))
+				channels.Add(channel);
+		}
+
+		return channels;
+	}
 
 	private HelloResult Hello(JsonNode? @params)
 	{
@@ -54,6 +101,17 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		if (clientProtocol is { } version && version < Constants.Remote.MinProtocolVersion)
 			throw new TdcpInvalidParamsException(
 				$"protocolVersion {version} is no longer supported (minimum {Constants.Remote.MinProtocolVersion})");
+
+		// Package J2: optional registration with the hello. Over the relay it is ignored: a remote client cannot present toasts on this machine.
+		if (_presence != null && TdcpCallContext.Transport == TdcpTransport.Loopback)
+		{
+			var helloClientId = ReadClientId(@params, required: false);
+			var helloPresents = ReadPresents(@params);
+			if (helloClientId != null && helloPresents != null)
+				_presence.Register(helloClientId, helloPresents);
+			else if (helloPresents != null)
+				throw new TdcpInvalidParamsException("'presents' needs a 'clientId'");
+		}
 
 		if (clientName != null)
 			_log.Debug("client.hello from {ClientName} {ClientVersion} (protocol {Protocol})", clientName, clientVersion, clientProtocol);
@@ -91,6 +149,8 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 				capabilities.Add(RemoteProtocol.Composer.DraftsCapability);
 			if (_hasCodeIndex)
 				capabilities.Add(RemoteProtocol.Composer.AutocompleteCapability);
+			if (_presence != null)
+				capabilities.Add(RemoteProtocol.Notifications.Capability);
 		}
 
 		// P1.F: entry ids need the content store.

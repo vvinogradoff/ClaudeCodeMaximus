@@ -79,4 +79,20 @@ public sealed partial class FakeTessynClient
 		Record($"autocomplete.suggest:{nodeId}:{caret}");
 		return Task.FromResult(AutocompleteAnswer);
 	}
+
+	/// <summary>The channels last registered with <see cref="ClientRegisterAsync"/> (empty: unregistered).</summary>
+	public IReadOnlyList<string> RegisteredPresents { get; private set; } = [];
+
+	public Task<ClientRegisterResult> ClientRegisterAsync(IReadOnlyList<string> presents, CancellationToken cancellationToken = default)
+	{
+		Record("client.register:" + string.Join(",", presents));
+		RegisteredPresents = [.. presents];
+		return Task.FromResult(new ClientRegisterResult(true));
+	}
+
+	/// <summary>Delivers a <c>notification.raised</c> as the daemon would publish it.</summary>
+	public void RaiseNotification(string title, string message, string? nodeId = null, string notificationId = "notification-1") =>
+		RaiseNotification(
+			RemoteProtocol.Notifications.RaisedEvent,
+			new NotificationRaisedPayload(notificationId, nodeId, title, message, RemoteProtocol.Notifications.UserNotificationKind, DateTimeOffset.UtcNow));
 }

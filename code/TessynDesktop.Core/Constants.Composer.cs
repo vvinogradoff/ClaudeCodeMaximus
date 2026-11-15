@@ -20,6 +20,15 @@ public static partial class Constants
 		/// <summary>How often idle autocomplete index leases are looked for.</summary>
 		public static readonly TimeSpan AutocompleteLeaseSweepInterval = TimeSpan.FromMinutes(1);
 
+		/// <summary>Longest <c>clientId</c> of <c>client.register</c> / <c>client.hello</c>.</summary>
+		public const int MaxClientIdLength = 64;
+
+		/// <summary>
+		/// How often a local SSE stream writes a comment line when it has nothing else to say. A stream whose client is gone fails on such a write, so its
+		/// notification registration ends within about this time instead of keeping the host silent.
+		/// </summary>
+		public static readonly TimeSpan SseKeepAliveInterval = TimeSpan.FromSeconds(15);
+
 		/// <summary>Kind of a file suggestion (path and file modes).</summary>
 		public const string FileKind = "file";
 

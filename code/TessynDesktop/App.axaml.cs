@@ -249,8 +249,16 @@ public partial class App : Application
 		services.AddSingleton<IAgentMcpServer, AgentMcpServer>();
 		services.AddSingleton<ISchedulerService, SchedulerService>();
 		services.AddSingleton<ISkillProvisioningService, SkillProvisioningService>();
-		services.AddSingleton<INotificationService, WindowsNotificationService>();
-		services.AddSingleton<ISessionSoundService, SessionSoundService>();
+		// Package J2: the host's toast and completion sound stay silent while a connected client has registered to present them
+		// (notifications.local). The presence registry is a singleton: registrations and open streams must be one shared state.
+		services.AddSingleton<IClientPresenceRegistry, ClientPresenceRegistry>();
+		services.AddSingleton<WindowsNotificationService>();
+		services.AddSingleton<INotificationService>(sp => new NotificationFanOut(
+			sp.GetRequiredService<WindowsNotificationService>(), sp.GetRequiredService<IClientPresenceRegistry>(),
+			sp.GetRequiredService<IRemoteEventBus>(), sp.GetRequiredService<IAppSettingsService>()));
+		services.AddSingleton<SessionSoundService>();
+		services.AddSingleton<ISessionSoundService>(sp => new PresenceAwareSessionSoundService(
+			sp.GetRequiredService<SessionSoundService>(), sp.GetRequiredService<IClientPresenceRegistry>()));
 		services.AddSingleton(sp => new Lazy<ISessionTurnService>(sp.GetRequiredService<ISessionTurnService>));
 		services.AddSingleton(sp => new Lazy<IAgentMcpServer>(sp.GetRequiredService<IAgentMcpServer>));
 		services.AddSingleton(sp => new Lazy<ISchedulerService>(sp.GetRequiredService<ISchedulerService>));
@@ -275,7 +283,7 @@ public partial class App : Application
 		{
 			var token = TdcpTokenProvider.GetOrCreate(sp.GetRequiredService<ITdcpTokenStore>(), sp.GetRequiredService<IAppSettingsService>());
 			return new TdcpServer(sp.GetRequiredService<IDaemonClient>(), sp.GetRequiredService<TdcpDispatcher>(), token,
-				sp.GetRequiredService<IEventLog>(), sp.GetRequiredService<IDaemonRunInfo>());
+				sp.GetRequiredService<IEventLog>(), sp.GetRequiredService<IDaemonRunInfo>(), sp.GetRequiredService<IClientPresenceRegistry>());
 		});
 
 		// Remote API foundation (web client). Singletons, each because it owns state that must be shared and survive the call:

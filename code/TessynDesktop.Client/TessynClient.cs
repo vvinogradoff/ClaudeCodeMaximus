@@ -359,9 +359,12 @@ public sealed partial class TessynClient : ITessynClient
 		}
 
 		var resume = HasCapability(RemoteProtocol.Capabilities.EventsResume);
-		var url = runId != null && resume
-			? $"{_endpoint}?{RemoteProtocol.Sse.RunIdQuery}={Uri.EscapeDataString(runId)}"
-			: _endpoint.ToString();
+		var query = new List<string>();
+		if (runId != null && resume)
+			query.Add($"{RemoteProtocol.Sse.RunIdQuery}={Uri.EscapeDataString(runId)}");
+		if (!string.IsNullOrEmpty(_options.ClientId))
+			query.Add($"{RemoteProtocol.Notifications.ClientIdQuery}={Uri.EscapeDataString(_options.ClientId)}");
+		var url = query.Count > 0 ? $"{_endpoint}?{string.Join('&', query)}" : _endpoint.ToString();
 
 		using var request = new HttpRequestMessage(HttpMethod.Get, url);
 		request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(EventStreamContentType));
@@ -573,7 +576,9 @@ public sealed partial class TessynClient : ITessynClient
 				("protocolVersion", Node(RemoteProtocol.ProtocolVersion)),
 				("capabilities", new JsonArray(
 					JsonValue.Create(RemoteProtocol.Capabilities.EventsLocal),
-					JsonValue.Create(RemoteProtocol.Capabilities.EventsResume)))),
+					JsonValue.Create(RemoteProtocol.Capabilities.EventsResume))),
+				("clientId", Node(HelloPresents().Count > 0 ? _options.ClientId : null)),
+				("presents", HelloPresents().Count > 0 ? new JsonArray([.. HelloPresents().Select(p => (JsonNode?)JsonValue.Create(p))]) : null)),
 			cancellationToken);
 
 	/// <inheritdoc />

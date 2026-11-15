@@ -1,0 +1,39 @@
+namespace TessynDesktop.Models.Remote;
+
+public static partial class RemoteProtocol
+{
+	/// <summary>
+	/// Local notifications of package J2: a client that can present toasts and sounds registers for them (<c>client.register</c>, or the optional
+	/// <c>clientId</c> / <c>presents</c> params of <c>client.hello</c>); while one is registered and connected the desktop host stays silent for that
+	/// channel and the daemon publishes each notification as <c>notification.raised</c> on the local stream. Loopback only: the relay cannot register.
+	/// </summary>
+	public static class Notifications
+	{
+		/// <summary>The daemon knows presenting clients: <c>client.register</c> and <c>notification.raised</c>.</summary>
+		public const string Capability = "notifications.local";
+
+		/// <summary><c>client.register { clientId, presents[] }</c> answers <c>{ ok }</c>. An empty <c>presents</c> unregisters. Loopback only.</summary>
+		public const string RegisterMethod = "client.register";
+
+		/// <summary>Notification <c>{ notificationId, nodeId?, title, message, kind, raisedUtc }</c>, published beside every desktop notification the host would show. Local stream only.</summary>
+		public const string RaisedEvent = "notification.raised";
+
+		/// <summary>Query parameter of the SSE request that names the stream's client; a registration is effective only while a stream with its <c>clientId</c> is open.</summary>
+		public const string ClientIdQuery = "clientId";
+
+		/// <summary>Channel: the client shows the toast (the host does not).</summary>
+		public const string ToastChannel = "toast";
+
+		/// <summary>Channel: the client plays the sounds (the host does not): the session completion sound.</summary>
+		public const string SoundChannel = "sound";
+
+		/// <summary>Kind of the toast of a <c>notify_user</c> message (FR.21.5).</summary>
+		public const string UserNotificationKind = "userNotification";
+
+		/// <summary>The channels a client may register for.</summary>
+		public static readonly IReadOnlyList<string> Channels = [ToastChannel, SoundChannel];
+
+		/// <summary>The notifications that only the local stream carries (the relay filters them out).</summary>
+		public static readonly IReadOnlyList<string> LocalOnlyEvents = [RaisedEvent];
+	}
+}

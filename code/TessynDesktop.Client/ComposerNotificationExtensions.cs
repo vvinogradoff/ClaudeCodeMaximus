@@ -25,4 +25,25 @@ public static class ComposerNotificationExtensions
 			return false;
 		}
 	}
+
+	/// <summary>
+	/// A notification the host would have shown as a toast (package J2, <c>notifications.local</c>). Show it once per <see cref="NotificationRaisedPayload.NotificationId"/>
+	/// and drop it when <see cref="NotificationRaisedPayload.RaisedUtc"/> is much older than now (a replay after a reconnect).
+	/// </summary>
+	public static bool TryGetNotificationRaised(this RemoteNotification notification, [NotNullWhen(true)] out NotificationRaisedPayload? payload)
+	{
+		payload = null;
+		if (notification.Method != RemoteProtocol.Notifications.RaisedEvent)
+			return false;
+
+		try
+		{
+			payload = notification.Params.Deserialize<NotificationRaisedPayload>(TdcpJsonOptions.Default);
+			return payload != null;
+		}
+		catch (JsonException)
+		{
+			return false;
+		}
+	}
 }
