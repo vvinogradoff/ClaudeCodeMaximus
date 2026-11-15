@@ -1,0 +1,14 @@
+{
+  "id": "mcp4",
+  "displayName": "Search",
+  "enabled": true,
+  "transport": "http",
+  "url": "https://search.example.com/mcp",
+  "urlHasQuery": true,
+  "hasArguments": false,
+  "authType": "staticHeader",
+  "staticHeaderName": "X-Api-Key",
+  "hasStaticHeaderValue": true,
+  "authorized": false,
+  "status": "notApplicable"
+}

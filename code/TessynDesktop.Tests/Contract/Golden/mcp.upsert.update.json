@@ -1,0 +1,22 @@
+{
+  "id": "mcp2",
+  "displayName": "Tracker 2",
+  "enabled": true,
+  "transport": "http",
+  "url": "https://tracker.example.com/mcp",
+  "urlHasQuery": false,
+  "hasArguments": false,
+  "authType": "oauth2",
+  "hasStaticHeaderValue": false,
+  "oauth": {
+    "authorizationEndpoint": "https://auth.example.com/authorize",
+    "tokenEndpoint": "https://auth.example.com/token",
+    "clientId": "client-123",
+    "hasClientSecret": true,
+    "scopes": "read",
+    "discoveryCompleted": true
+  },
+  "authorized": true,
+  "status": "connected",
+  "connectedIdentity": "Alex Example"
+}

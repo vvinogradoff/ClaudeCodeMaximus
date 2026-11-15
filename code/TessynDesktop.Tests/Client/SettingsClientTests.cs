@@ -47,7 +47,7 @@ public sealed class SettingsClientTests : IDisposable
 
 		var sections = await client.SettingsSectionsAsync();
 
-		Assert.Equal([("general", 1L), ("notifications", 1L), ("telegram", 1L)], sections.Sections.Select(s => (s.Name, s.Version)));
+		Assert.Equal([("general", 1L), ("notifications", 1L), ("telegram", 1L), ("avalonia-ui", 1L)], sections.Sections.Select(s => (s.Name, s.Version)));
 	}
 
 	[Fact]

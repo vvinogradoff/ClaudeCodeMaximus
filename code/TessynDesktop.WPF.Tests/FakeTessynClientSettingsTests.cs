@@ -19,7 +19,7 @@ public sealed class FakeTessynClientSettingsTests
 		var before = await client.SettingsGetAsync<NotificationsSettingsDto>("notifications");
 		var updated = await client.SettingsUpdateAsync("notifications", new NotificationsSettingsPatch(NotificationsEnabled: false), before.Version);
 
-		Assert.Equal(3, sections.Sections.Count);
+		Assert.Equal(4, sections.Sections.Count);
 		Assert.Equal(30, before.Values.SessionCompletionSoundThrottleSeconds);
 		Assert.Equal(before.Version + 1, updated.Version);
 		Assert.Equal([("notifications", before.Version)], fake.SettingsUpdates.Select(u => (u.Section, u.BaseVersion)));
