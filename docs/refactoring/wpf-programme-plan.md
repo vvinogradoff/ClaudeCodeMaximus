@@ -55,6 +55,24 @@ failures documented in `docs/business-analysis/Local-Models_Agentic-Coding-Findi
 `/api/chat` with a JSON schema in `format` is light and needs no new package (HttpClient and
 System.Text.Json).
 
+## 2b. Architect decisions of 2026-11-15 (Focus answers A2–A14)
+
+| Item | Decision |
+|---|---|
+| A2 | Ship rollout 2 (the turn engine) now, with the spinner fix, in one restart. |
+| A3 | ISSUE.013: all six proposed answers in §9 accepted. |
+| A4 | Transcript selection: leave as is (about 1.5 screens either side of the viewport). |
+| A5 | Search index upkeep approved, including the schema change. Do **not** cap indexed tool output. |
+| A6 | Phase 4 daemon runs as a per-user background process started at logon, not as a Windows service. |
+| A7 | Second-screen layout to be decided when we get there. It will show Linear tickets, GitHub PRs, photos, videos and the .md documents sessions use or produce. |
+| A8 | Parity: **keep** the screensaver (used daily) and the Recent tab. **Drop** the JSONL view toggle, the macOS shortcuts, the unused `InputDialog` and the editable colour palette (revisit theming in WPF later). |
+| A9 | New desktop UI (Focus references, attachments, previews) goes into **WPF only**. Avalonia is being sunset. |
+| A10 | The documentation changes in §10 are approved; apply them now and leave the other session's FR.25 drafts untouched. |
+| A11 | Web file access: option 2. Explicitly referenced files and attachments, plus files inside the session's working directory. No TOTP. |
+| A12 | Attachments are stored per profile in app data. |
+| A13 | https media previews auto-load from an allowlist; other hosts are click-to-load. |
+| A14 | A queued send keeps the model, profile and effort that were selected when Send was pressed. |
+
 ## 3. Why the current UI slows down
 
 Verified in code on 2026-11-03. Detail in `.wpf-intel/03-perf-session-switching.md`; filed as ISSUE.016
