@@ -4,6 +4,7 @@ using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Automation.Provider;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -440,6 +441,76 @@ public sealed class SessionTagAreaViewTests
 			Press(Named(f.Area, "Root"), 1);
 			Press(Named(f.Area, "Root"), 2);
 			Assert.False(f.Model.IsExpanded);
+		});
+	}
+
+	[Fact]
+	public void A_triple_click_on_empty_space_in_mini_ends_expanded()
+	{
+		Run(() =>
+		{
+			var f = Create(60);
+
+			Press(Named(f.Area, "Root"), 1);
+			var second = Press(Named(f.Area, "Root"), 2);
+			var third = Press(Named(f.Area, "Root"), 3);
+
+			Assert.True(f.Model.IsExpanded);
+			Assert.True(second.Handled);
+			Assert.True(third.Handled);
+		});
+	}
+
+	[Fact]
+	public void A_double_click_on_the_scrollbar_neither_collapses_nor_swallows_the_press()
+	{
+		Run(() =>
+		{
+			var f = Create(60, expanded: true);
+			var scrollBar = Descendants<ScrollBar>(f.Area).Single(s => s.Orientation == Orientation.Vertical);
+
+			var first = Press(scrollBar, 1);
+			var second = Press(scrollBar, 2);
+
+			Assert.True(f.Model.IsExpanded);
+			Assert.False(first.Handled);
+			Assert.False(second.Handled, "the scrollbar must still receive the second press");
+		});
+	}
+
+	[Fact]
+	public void The_plus_hint_never_covers_a_chip_of_the_line()
+	{
+		Run(() =>
+		{
+			var f = Create(60);
+			var hint = Named(f.Area, "HiddenHint");
+			Assert.Equal(Visibility.Visible, hint.Visibility);
+			var hintLeft = hint.TranslatePoint(default, f.Area).X;
+
+			var panel = Descendants<WrapPanel>(f.Area).Single();
+			var firstLine = panel.Children.Cast<FrameworkElement>().Where(c => c.TranslatePoint(default, panel).Y < 1).ToList();
+			Assert.NotEmpty(firstLine);
+			foreach (var chip in firstLine)
+			{
+				var right = chip.TranslatePoint(new Point(chip.ActualWidth, 0), f.Area).X;
+				Assert.True(right <= hintLeft + 0.5, $"chip ends at {right}, hint starts at {hintLeft}");
+			}
+		});
+	}
+
+	[Fact]
+	public void Expand_through_automation_without_tags_changes_nothing()
+	{
+		Run(() =>
+		{
+			var f = Create(0);
+			var provider = (IExpandCollapseProvider)UIElementAutomationPeer.CreatePeerForElement(f.Area).GetPattern(PatternInterface.ExpandCollapse)!;
+
+			provider.Expand();
+
+			Assert.False(f.Model.IsExpanded);
+			Assert.False(f.State.State.TagAreaExpanded);
 		});
 	}
 

@@ -132,6 +132,16 @@ public sealed class TagAreaViewModelTests
 			await second.LoadAsync();
 
 			Assert.True(new TagAreaViewModel(Tags(1), second).IsExpanded);
+
+			// The mode is really in wpf.json, and collapsing it is persisted as well.
+			Assert.Contains("\"tagAreaExpanded\": true", File.ReadAllText(paths.ClientStateFilePath));
+			var model = new TagAreaViewModel(Tags(1), second);
+			model.ToggleCommand.Execute(null);
+			await second.FlushAsync();
+			Assert.Contains("\"tagAreaExpanded\": false", File.ReadAllText(paths.ClientStateFilePath));
+			var third = new JsonClientStateStore(paths, NullLogger<JsonClientStateStore>.Instance, TimeSpan.Zero);
+			await third.LoadAsync();
+			Assert.False(new TagAreaViewModel(Tags(1), third).IsExpanded);
 		}
 		finally
 		{

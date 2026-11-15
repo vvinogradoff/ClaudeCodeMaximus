@@ -52,7 +52,8 @@ public partial class SessionTagArea : UserControl
 
 	public void Expand()
 	{
-		if (_model != null)
+		// Without tags there is nothing to expand, and the global mode must not be changed (and persisted) by a stray automation call.
+		if (_model != null && HasTags)
 			_model.IsExpanded = true;
 	}
 
@@ -166,6 +167,18 @@ public partial class SessionTagArea : UserControl
 		var hintVisibility = hidden > 0 ? Visibility.Visible : Visibility.Collapsed;
 		if (HiddenHint.Visibility != hintVisibility)
 			HiddenHint.Visibility = hintVisibility;
+
+		// Reserve the hint's width at the right end of the line so it never covers a chip. Narrowing the line can only hide more chips, never
+		// fewer, so reserving once the hint is needed cannot flip the layout back and forth.
+		var reserved = 0.0;
+		if (hidden > 0)
+		{
+			HiddenHint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+			reserved = Math.Ceiling(HiddenHint.DesiredSize.Width);
+		}
+
+		if (Math.Abs(Scroller.Margin.Right - reserved) > 0.01)
+			Scroller.Margin = new Thickness(0, 0, reserved, 0);
 	}
 
 	private static bool SameHeight(double current, double wanted) =>
@@ -195,15 +208,21 @@ public partial class SessionTagArea : UserControl
 		if (_model == null || !HasTags)
 			return;
 
+		// The vertical scrollbar belongs to the scrolling, not to the mode gestures: a quick double-click on its arrow or track must scroll.
+		if (IsInScrollBar(e.OriginalSource as DependencyObject))
+			return;
+
 		if (e.ClickCount >= 2)
 		{
-			// The second press of the click that just expanded the area is part of that gesture, not a request to fold it again.
-			if (_expandedByThisClick || IsExpanded)
+			// Every further press of the click that just expanded the area (second, third, ...) is part of that gesture, not a request to
+			// fold it again; the flag is cleared only by the next first press.
+			if (_expandedByThisClick)
 			{
-				var swallow = _expandedByThisClick;
-				_expandedByThisClick = false;
-				if (!swallow)
-					_model.IsExpanded = false;
+				e.Handled = true;
+			}
+			else if (IsExpanded)
+			{
+				_model.IsExpanded = false;
 				e.Handled = true;
 			}
 
@@ -216,6 +235,19 @@ public partial class SessionTagArea : UserControl
 			_model.IsExpanded = true;
 			_expandedByThisClick = true;
 		}
+	}
+
+	private bool IsInScrollBar(DependencyObject? source)
+	{
+		while (source != null && !ReferenceEquals(source, this))
+		{
+			if (source is ScrollBar)
+				return true;
+
+			source = source is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(source) : LogicalTreeHelper.GetParent(source);
+		}
+
+		return false;
 	}
 
 	private bool IsOnChip(DependencyObject? source)
