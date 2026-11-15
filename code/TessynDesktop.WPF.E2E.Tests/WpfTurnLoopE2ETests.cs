@@ -155,9 +155,9 @@ public sealed class WpfTurnLoopE2ETests : IDisposable
 
 			var send = Assert.Single(_turns.Sends);
 			Assert.Equal(_main, send.NodeId);
-			// Restored from the session's lastUsed (the effort of its last answer), then sent with the turn. The test daemon's model and profile
-			// services know no "opus" model and no "work" profile, so lastUsed names the default ones: the selectors show those.
-			Assert.Equal(("default", "high", "default"), (send.Model, send.Effort, send.Profile));
+			// The selectors show what the session was last used with, but the user picked nothing, so the turn carries no model, effort or profile
+			// (tdcp-spec 9.8): the daemon resolves them and the session is not pinned to the restored values.
+			Assert.Equal((null, null, null), (send.Model, send.Effort, send.Profile));
 			AssertNoErrors();
 		}
 		finally
