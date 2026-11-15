@@ -1,3 +1,5 @@
+using System;
+
 namespace TessynDesktop;
 
 /// <summary>Limits and refusal texts of the J4 methods: import, global search, schedules, the attention list and the daemon health. One file per package keeps the shared constants file free of merge conflicts.</summary>
@@ -63,6 +65,7 @@ public static partial class Constants
 
 		public const int SnippetMaxChars = 240;
 		public const int QueryMaxChars = 500;
+		public const int SlugMaxChars = 300;
 
 		public const string QueryRequired = "'query' must not be blank";
 		public const string QueryTooLong  = "'query' is too long";
@@ -75,6 +78,9 @@ public static partial class Constants
 		public const int NoteMaxChars = 500;
 		public const int CronMaxChars = 200;
 		public const int MaxFiresLimit = 10_000;
+
+		/// <summary>Window in which schedule.changed notifications are merged.</summary>
+		public static readonly TimeSpan ChangedWindow = TimeSpan.FromMilliseconds(250);
 
 		/// <summary>A one-shot schedule may not be set further ahead than this.</summary>
 		public const int MaxYearsAhead = 10;

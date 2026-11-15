@@ -11,7 +11,7 @@ using Serilog;
 namespace TessynDesktop.Services;
 
 /// <remarks>Created by Claude</remarks>
-public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
+public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService, ISessionIndexActivity
 {
 	private static readonly ILogger _log = Log.ForContext<ClaudeSessionIndexService>();
 
@@ -43,6 +43,16 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	/// <summary>Deferred passes run so far (observable by tests).</summary>
 	internal int DeferredPassesRun => Volatile.Read(ref _deferredPassesRun);
 	private int _deferredPassesRun;
+
+	// Package J4: what daemon.health and search.reindex read (ISessionIndexActivity).
+	private int _activeScans;
+	private long _lastScanFinishedTicks;
+
+	/// <inheritdoc />
+	public int ActiveScans => Volatile.Read(ref _activeScans);
+
+	/// <inheritdoc />
+	public DateTimeOffset? LastScanFinishedUtc => Volatile.Read(ref _lastScanFinishedTicks) is var ticks and > 0 ? new DateTimeOffset(ticks, TimeSpan.Zero) : null;
 
 	public ClaudeSessionIndexService(
 		IClaudeSessionImportService importService,
@@ -294,9 +304,12 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	/// <summary>Same as <see cref="ReindexAsync"/> but reports everything the run did.</summary>
 	internal Task<SessionIndexUpkeepReport> RunUpkeepAsync(CancellationToken cancellationToken = default)
 	{
+		Interlocked.Increment(ref _activeScans);
 		var task = RunOnUpkeepThread(() => RunUpkeep(cancellationToken), cancellationToken);
 		return task.ContinueWith(t =>
 		{
+			Volatile.Write(ref _lastScanFinishedTicks, DateTimeOffset.UtcNow.UtcTicks);
+			Interlocked.Decrement(ref _activeScans);
 			if (t.IsCompletedSuccessfully && t.Result.Deferred > 0)
 				ScheduleDeferredPasses();
 			return t;

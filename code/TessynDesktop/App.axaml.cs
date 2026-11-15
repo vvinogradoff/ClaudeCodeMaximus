@@ -308,6 +308,17 @@ public partial class App : Application
 		services.AddTransient<IRemoteRpcModule, SettingsRpcModule>();
 		services.AddTransient<IRemoteRpcModule, ProfileAdminRpcModule>();
 		services.AddTransient<IRemoteRpcModule, SoundRpcModule>();
+		// Package J4: global search, session import (the service is the one registered with the Claude session services above), schedules, the attention
+		// list of all sessions and the daemon health; every module is loopback only. The search and health services hold state (a running rescan, the start time).
+		services.AddSingleton<ISessionIndexActivity>(sp => (ClaudeSessionIndexService)sp.GetRequiredService<IClaudeSessionIndexService>());
+		services.AddSingleton<IGlobalSearchService, GlobalSearchService>();
+		services.AddTransient<IScheduleApiService, ScheduleApiService>();
+		services.AddTransient<IAttentionOverviewService, AttentionOverviewService>();
+		services.AddSingleton<IDaemonHealthService, DaemonHealthService>();
+		services.AddTransient<IRemoteRpcModule, ImportRpcModule>();
+		services.AddTransient<IRemoteRpcModule, SearchRpcModule>();
+		services.AddTransient<IRemoteRpcModule, ScheduleRpcModule>();
+		services.AddTransient<IRemoteRpcModule, DaemonHealthRpcModule>();
 		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
 		services.AddSingleton<IEventLog, EventLog>();
 		services.AddSingleton<IDaemonRunInfo, DaemonRunInfo>();

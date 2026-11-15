@@ -32,13 +32,20 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool            _hasTreeMutation;
 	private readonly bool            _hasSessionOptions;
 	private readonly bool            _hasLocalTools;
+	private readonly bool            _hasImport;
+	private readonly bool            _hasSearch;
+	private readonly bool            _hasSchedules;
+	private readonly bool            _hasAttentionAll;
+	private readonly bool            _hasHealth;
 	private readonly string          _daemonVersion;
 
 	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
 		ISettingsSectionService? settingsSections = null, IProfileAdminService? profileAdmin = null, ISessionSoundService? sounds = null,
 		IDraftService? drafts = null, ICodeIndexService? codeIndex = null, ISessionAuthErrorTracker? authErrors = null,
 		IClientPresenceRegistry? presence = null, INotificationAckBook? acks = null,
-		ITreeMutationService? treeMutation = null, ISessionOptionsService? sessionOptions = null, ILocalToolsService? localTools = null)
+		ITreeMutationService? treeMutation = null, ISessionOptionsService? sessionOptions = null, ILocalToolsService? localTools = null,
+		IImportService? import = null, IGlobalSearchService? search = null, IScheduleApiService? schedules = null,
+		IAttentionOverviewService? attentionOverview = null, IDaemonHealthService? health = null)
 	{
 		_presence      = presence;
 		_acks          = acks;
@@ -56,6 +63,11 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		_hasTreeMutation   = treeMutation != null;
 		_hasSessionOptions = sessionOptions != null;
 		_hasLocalTools     = localTools != null;
+		_hasImport         = import != null;
+		_hasSearch         = search != null;
+		_hasSchedules      = schedules != null;
+		_hasAttentionAll   = attentionOverview != null;
+		_hasHealth         = health != null;
 		_daemonVersion = ReadDaemonVersion();
 	}
 
@@ -223,6 +235,18 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 
 		if (_hasLocalTools)
 			capabilities.Add(RemoteProtocol.LocalTools.Capability);
+
+		// Package J4: search, import, schedules (with schedule.changed and hasSchedules), the attention list of all sessions, the health.
+		if (_hasSearch)
+			capabilities.Add(RemoteProtocol.Search.Capability);
+		if (_hasImport)
+			capabilities.Add(RemoteProtocol.Import.Capability);
+		if (_hasSchedules)
+			capabilities.Add(RemoteProtocol.Schedules.Capability);
+		if (_hasAttentionAll)
+			capabilities.Add(RemoteProtocol.AttentionAll.Capability);
+		if (_hasHealth)
+			capabilities.Add(RemoteProtocol.Health.Capability);
 
 		return capabilities;
 	}

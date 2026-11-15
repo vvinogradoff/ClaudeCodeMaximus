@@ -12,14 +12,17 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 	private readonly IAttentionService _attention;
 	private readonly ISessionActivityService _activity;
 	private readonly ISessionAuthErrorTracker? _authErrors;
+	private readonly ISchedulerService? _scheduler;
 
 	public SessionStateBuilder(
 		ISessionRegistry registry,
 		IClaudeStreamingSessionManager streaming,
 		IAttentionService attention,
 		ISessionActivityService activity,
-		ISessionAuthErrorTracker? authErrors = null)
+		ISessionAuthErrorTracker? authErrors = null,
+		ISchedulerService? scheduler = null)
 	{
+		_scheduler = scheduler;
 		_registry  = registry;
 		_streaming = streaming;
 		_attention = attention;
@@ -49,6 +52,7 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 			LastPromptUtc:   activity.LastPromptUtc,
 			HasDraft:        activity.HasDraft,
 			ProfileName:     activity.LastPromptProfileName,
-			AuthError:       _authErrors?.Has(nodeId) ?? false);
+			AuthError:       _authErrors?.Has(nodeId) ?? false,
+			HasSchedules:    _scheduler?.GetSchedules(nodeId).Count > 0);
 	}
 }

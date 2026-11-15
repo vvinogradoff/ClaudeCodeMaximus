@@ -20,6 +20,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 
 	private const string TreeKey = "tree";
 	private const string IndexKey = "index";
+	private const string ScheduleKey = "schedules";
 	private const string NodeKeyPrefix = "node:";
 	private const string FileKeyPrefix = "file:";
 	private const string AllNodesKey = "*";
@@ -32,6 +33,9 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	private readonly ISessionStateBuilder _states;
 	private readonly ISessionAuthErrorTracker? _authErrors;
 	private readonly IDraftService? _drafts;
+	private readonly ISchedulerService? _scheduler;
+	private readonly object _scheduleGate = new();
+	private HashSet<string> _scheduledNodes = new(StringComparer.Ordinal);
 	private readonly DraftRevisions _revisions = new();
 
 	private readonly object _gate = new();
@@ -56,8 +60,10 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		ISessionStateBuilder states,
 		ISessionContentStore? store = null,
 		ISessionAuthErrorTracker? authErrors = null,
-		IDraftService? drafts = null)
+		IDraftService? drafts = null,
+		ISchedulerService? scheduler = null)
 	{
+		_scheduler   = scheduler;
 		_authErrors  = authErrors;
 		_drafts      = drafts;
 		_daemon      = daemon;
@@ -90,6 +96,12 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 				_files.SessionFileRewritten    += OnSessionFileRewritten;
 				if (_authErrors != null) _authErrors.Changed += OnAuthErrorChanged;
 				if (_drafts != null) _drafts.DraftChanged += OnDraftChanged;
+				if (_scheduler != null)
+				{
+					lock (_scheduleGate)
+						_scheduledNodes = ScheduledNodes();
+					_daemon.ScheduleChanged += OnScheduleChanged;
+				}
 			}
 		}
 		catch (Exception ex)
@@ -117,6 +129,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			_files.SessionFileRewritten    -= OnSessionFileRewritten;
 			if (_authErrors != null) _authErrors.Changed -= OnAuthErrorChanged;
 			if (_drafts != null) _drafts.DraftChanged -= OnDraftChanged;
+			if (_scheduler != null) _daemon.ScheduleChanged -= OnScheduleChanged;
 		}
 	}
 
@@ -250,6 +263,33 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		var node = _daemon.FindSessionByFileName(fileName);
 		return node == null || _drafts == null ? null : new DraftChangedPayload(node.NodeId, _revisions.Of(_drafts.LoadDraft(fileName)));
 	}
+
+	// schedule.changed is local-stream only (the relay filters it). The scheduler's event does not say which session, so the set of scheduled sessions is
+	// compared when the window ends: a session whose HasSchedules moved gets its session.changed, and the payload names the session when exactly one moved.
+	private void OnScheduleChanged(object? sender, EventArgs e) => Guard(() =>
+		_bus.PublishCoalesced(
+			RemoteProtocol.Schedules.ChangedEvent, ScheduleKey,
+			BuildScheduleChangedPayload,
+			Constants.ScheduleApi.ChangedWindow));
+
+	private ScheduleChangedPayload BuildScheduleChangedPayload()
+	{
+		var now = ScheduledNodes();
+		HashSet<string> moved;
+		lock (_scheduleGate)
+		{
+			moved = [.. _scheduledNodes.Except(now), .. now.Except(_scheduledNodes)];
+			_scheduledNodes = now;
+		}
+
+		foreach (var nodeId in moved)
+			PublishSessionChangedByNode(nodeId);
+
+		return new ScheduleChangedPayload(moved.Count == 1 ? moved.First() : null);
+	}
+
+	private HashSet<string> ScheduledNodes() =>
+		_scheduler!.GetSchedules().Select(s => s.TargetNodeId).ToHashSet(StringComparer.Ordinal);
 
 	private void OnSessionFileRewritten(object? sender, SessionFileRewrittenEventArgs e) => Guard(() =>
 	{
