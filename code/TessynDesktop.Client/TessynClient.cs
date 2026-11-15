@@ -466,7 +466,7 @@ public sealed partial class TessynClient : ITessynClient
 
 	// ── JSON-RPC ──────────────────────────────────────────────────────────────────
 
-	private async Task<T> CallAsync<T>(string method, JsonObject? parameters, CancellationToken cancellationToken)
+	private async Task<T> CallAsync<T>(string method, JsonObject? parameters, CancellationToken cancellationToken, TimeSpan? requestTimeout = null)
 	{
 		ObjectDisposedException.ThrowIf(IsDisposed, this);
 
@@ -487,7 +487,8 @@ public sealed partial class TessynClient : ITessynClient
 		request.Headers.Add(RemoteProtocol.TokenHeader, _token);
 
 		using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-		timeout.CancelAfter(_options.RequestTimeout);
+		var limit = requestTimeout ?? _options.RequestTimeout;
+		timeout.CancelAfter(limit);
 
 		string body;
 		HttpStatusCode status;
@@ -500,7 +501,7 @@ public sealed partial class TessynClient : ITessynClient
 		}
 		catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
 		{
-			throw new TimeoutException($"{method} did not answer within {_options.RequestTimeout.TotalSeconds:0} s.");
+			throw new TimeoutException($"{method} did not answer within {limit.TotalSeconds:0.##} s.");
 		}
 
 		return ParseResponse<T>(method, status, body);
@@ -749,7 +750,8 @@ public sealed partial class TessynClient : ITessynClient
 		CallAsync<AttachmentDto>(
 			RemoteProtocol.LoopbackMethods.AttachmentImport,
 			Params(("nodeId", Node(nodeId)), ("sourcePath", Node(sourcePath))),
-			cancellationToken);
+			cancellationToken,
+			_options.AttachmentImportTimeout);
 
 	/// <inheritdoc />
 	public Task<AttachmentListResult> AttachmentListAsync(string nodeId, CancellationToken cancellationToken = default) =>

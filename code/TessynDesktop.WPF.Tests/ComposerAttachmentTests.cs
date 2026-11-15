@@ -217,7 +217,8 @@ public sealed class ComposerAttachmentTests : IDisposable
 		release.SetResult();
 		await task;
 
-		Assert.Equal(@"Attached file: C:\att\f.txtAB typed more", pane.InputText);
+		// Pinned by C4: the lines go on their own line at the end; the old offset is not trusted.
+		Assert.Equal("AB typed more" + Environment.NewLine + @"Attached file: C:\att\f.txt", pane.InputText);
 	}
 
 	[Fact]

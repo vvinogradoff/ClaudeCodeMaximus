@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.ViewModels;
 
@@ -16,7 +15,6 @@ public partial class SessionPane : UserControl
 	private SessionPaneViewModel? _subscribed;
 	private double _sideWidth = Constants.Limits.DefaultSidePaneWidth;
 	private readonly FileDropReader _fileDrops = new();
-	private IReadOnlyList<string> _testDrop = [];
 
 	public SessionPane()
 	{
@@ -29,7 +27,6 @@ public partial class SessionPane : UserControl
 	private async void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		Loaded -= OnLoaded;
-		_testDrop = ((App)Application.Current).Services.GetRequiredService<StartupOptions>().TestDropPaths;
 		var surface = ((App)Application.Current).Services.GetRequiredService<WebView2TranscriptSurface>();
 		surface.BrowserLost += (_, _) => Dispatcher.BeginInvoke(() => _ = RecreateAsync(surface));
 		TryTestDrop();
@@ -145,7 +142,7 @@ public partial class SessionPane : UserControl
 	/// <summary>Only a real file list (<see cref="DataFormats.FileDrop"/>) is taken over; any other drag keeps the text box's own behaviour.</summary>
 	private void OnInputDragOver(object sender, DragEventArgs e)
 	{
-		if (_subscribed == null || _fileDrops.Read(e.Data).Count == 0)
+		if (_subscribed == null || !e.Data.GetDataPresent(DataFormats.FileDrop))   // presence only: the list is read on Drop, not on every DragOver
 			return;
 
 		e.Effects = DragDropEffects.Copy;
@@ -179,17 +176,18 @@ public partial class SessionPane : UserControl
 	private void OnInputCaretRequested(object? sender, int caret)
 	{
 		InputBox.CaretIndex = Math.Min(caret, InputBox.Text.Length);
-		InputBox.Focus();
+		if (IsKeyboardFocusWithin || InputBox.IsKeyboardFocused)   // never pull focus away from another control or window
+			InputBox.Focus();
 	}
 
-	/// <summary>The <c>--test-drop</c> seam (see <see cref="StartupOptions.TestDropPaths"/>): hands the paths over once, when the first session is shown.</summary>
+	/// <summary>The <c>--test-drop</c> seam (see <see cref="SessionPaneViewModel.TestDropPaths"/>): hands the paths over once, when the first session is shown.</summary>
 	private void TryTestDrop()
 	{
-		if (_testDrop.Count == 0 || _subscribed is not { HasSession: true, IsLoading: false })
+		if (_subscribed is not { HasSession: true, IsLoading: false })
 			return;
 
-		var paths = _testDrop;
-		_testDrop = [];
-		_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
+		var paths = _subscribed.TakeTestDropPaths();
+		if (paths.Count > 0)
+			_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
 	}
 }

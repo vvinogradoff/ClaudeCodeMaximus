@@ -46,6 +46,9 @@ public static partial class Constants
 		public const string AttachBusy = "Files are still being attached. Wait for them or cancel.";
 		public const string AttachCancelled = "Attaching cancelled.";
 		public const string AttachFailedHeading = "Could not attach:";
+		public const string InsertFailedHeading = "Could not insert:";
+		public const string HiddenCharactersRefused = "the name contains control or invisible characters";
+		public const string StoredPathRefused = "the stored path contains control or invisible characters, so it was not inserted";
 	}
 
 	/// <summary>

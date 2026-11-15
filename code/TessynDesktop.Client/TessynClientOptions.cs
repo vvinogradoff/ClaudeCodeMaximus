@@ -13,6 +13,9 @@ public sealed record TessynClientOptions
 	/// <summary>Per-call timeout of a JSON-RPC request.</summary>
 	public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
+	/// <summary>Timeout of <c>attachment.import</c>: the daemon copies up to 200 MB in one synchronous call, so it gets far longer than <see cref="RequestTimeout"/>.</summary>
+	public TimeSpan AttachmentImportTimeout { get; init; } = TimeSpan.FromMinutes(10);
+
 	/// <summary>First reconnect delay; doubles per failed attempt up to <see cref="MaxBackoff"/>.</summary>
 	public TimeSpan InitialBackoff { get; init; } = TimeSpan.FromMilliseconds(250);
 

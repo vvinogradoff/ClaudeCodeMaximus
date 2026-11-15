@@ -50,6 +50,19 @@ public sealed class StartupOptionsTests
 	}
 
 	[Fact]
+	public void Parse_ADanglingTestDropAsTheLastArgumentGivesAnEmptyList()
+	{
+		Assert.Empty(StartupOptions.Parse(["--test-window", "--test-drop"]).TestDropPaths);
+		Assert.Empty(StartupOptions.Parse(["--test-window", "--data-root", @"C:\r", "--test-drop"]).TestDropPaths);
+	}
+
+	[Fact]
+	public void Parse_TestDropWithoutTheTestWindowSwitchGivesAnEmptyListEvenWithSeveralPaths()
+	{
+		Assert.Empty(StartupOptions.Parse(["--test-drop", @"C:\a.txt", "--test-drop", @"C:\b.txt"]).TestDropPaths);
+	}
+
+	[Fact]
 	public void Parse_TestDropPaths_AreHonouredOnlyTogetherWithTheTestWindowSwitch()
 	{
 		var withWindow = StartupOptions.Parse(["--test-window", "--test-drop", @"C:.txt", "--test-drop", @"C:.txt"]);

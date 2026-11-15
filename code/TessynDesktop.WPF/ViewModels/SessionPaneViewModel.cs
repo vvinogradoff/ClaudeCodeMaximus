@@ -197,11 +197,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private async Task<bool> OpenCoreAsync(string nodeId, string? title, JumpTarget? target, SessionEntriesResult? preloaded, Action? shown)
 	{
 		var wasShown = false;
+		if (nodeId != NodeId)
+			AbandonImport();   // first: a copy that ends at once still adds to the text this switch is about to save
 		if (NodeId != null)
 			_drafts[NodeId] = InputText;
-
-		if (nodeId != NodeId)
-			_importCts?.Cancel();   // a copy in flight belongs to the session the user just left
 
 		var token = ++_openToken;
 		_switchTracker.Begin(nodeId);
@@ -799,6 +798,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 	public void Dispose()
 	{
+		_importCts?.Cancel();
 		_client.NotificationReceived -= OnNotification;
 		_client.Resynced -= OnResynced;
 		_surface.Painted -= OnPainted;

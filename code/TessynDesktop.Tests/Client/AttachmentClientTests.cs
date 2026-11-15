@@ -67,4 +67,20 @@ public sealed class AttachmentClientTests : IDisposable
 
 		Assert.Empty((await client.AttachmentListAsync(_env.Session.NodeId)).Attachments);
 	}
+
+	[Fact]
+	public async Task Import_has_its_own_longer_timeout_than_ordinary_calls()
+	{
+		using var slow = new ClientTestHost((run, log) => new TdcpDispatcher([new ClientRpcModule(runInfo: run, eventLog: log), new SlowAttachmentModule(TimeSpan.FromSeconds(1.5))]));
+		var options = new TessynClientOptions { RequestTimeout = TimeSpan.FromMilliseconds(400), AttachmentImportTimeout = TimeSpan.FromSeconds(30) };
+		await using var client = new TessynClient(slow.Endpoint, ClientTestHost.Token, options);
+		await client.ConnectAsync();
+
+		// The import answers after 1.5 s: more than the default timeout (0.4 s), well within its own.
+		var imported = await client.AttachmentImportAsync("n", Path.Combine(Path.GetTempPath(), "big.bin"));
+		Assert.Equal("att.slow", imported.AttachmentId);
+
+		// An ordinary call with the same delay still times out on the default.
+		await Assert.ThrowsAsync<TimeoutException>(() => client.AttachmentListAsync("n"));
+	}
 }
