@@ -38,15 +38,17 @@ public sealed partial class McpRegistryService : IMcpRegistryService
 	private readonly IMcpOAuthService _oauth;
 	private readonly IRemoteEventBus? _bus;
 	private readonly TimeSpan _discoverTimeout;
+	private readonly TimeSpan _authorizeTimeout;
 	private readonly ConcurrentDictionary<string, byte> _authorizing = new(StringComparer.Ordinal);
 
-	public McpRegistryService(IAppSettingsService settings, IMcpTokenStore tokens, IMcpOAuthService oauth, IRemoteEventBus? bus = null, TimeSpan? discoverTimeout = null)
+	public McpRegistryService(IAppSettingsService settings, IMcpTokenStore tokens, IMcpOAuthService oauth, IRemoteEventBus? bus = null, TimeSpan? discoverTimeout = null, TimeSpan? authorizeTimeout = null)
 	{
 		_settings        = settings;
 		_tokens          = tokens;
 		_oauth           = oauth;
 		_bus             = bus;
 		_discoverTimeout = discoverTimeout ?? Constants.IntegrationsApi.McpDiscoverTimeout;
+		_authorizeTimeout = authorizeTimeout ?? Constants.IntegrationsApi.McpAuthorizeTimeout;
 	}
 
 	/// <inheritdoc />
@@ -118,6 +120,18 @@ public sealed partial class McpRegistryService : IMcpRegistryService
 
 			_tokens.Delete(id);
 			_settings.Settings.ExternalMcpServers = [.. servers.Where(s => s.Id != id)];
+
+			// Directories that included this server in their local tool profile must not include a later server of the same (client-chosen) id.
+			var pruned = new System.Collections.Generic.List<(LocalToolProfileModel Profile, System.Collections.Generic.List<string> Before)>();
+			foreach (var profile in _settings.Settings.Tree.Select(d => d.LocalToolProfile))
+			{
+				if (profile == null || !profile.IncludedExternalMcpServerIds.Contains(id))
+					continue;
+
+				pruned.Add((profile, profile.IncludedExternalMcpServerIds));
+				profile.IncludedExternalMcpServerIds = [.. profile.IncludedExternalMcpServerIds.Where(i => i != id)];
+			}
+
 			try
 			{
 				_settings.Save();
@@ -125,6 +139,8 @@ public sealed partial class McpRegistryService : IMcpRegistryService
 			catch
 			{
 				_settings.Settings.ExternalMcpServers = servers;
+				foreach (var (profile, before) in pruned)
+					profile.IncludedExternalMcpServerIds = before;
 				throw;
 			}
 		}
@@ -215,14 +231,35 @@ public sealed partial class McpRegistryService : IMcpRegistryService
 		try
 		{
 			// The live model: the flow records what it learns (a registered client id, the discovery flag) on it and saves.
-			var result = await _oauth.AuthorizeInteractiveAsync(server, cancellationToken);
+			// The whole flow is capped, not only the browser wait: discovery, client registration and the token exchange run under the shared HTTP client's own
+			// (long) timeout. Like DiscoverAsync, this returns even when the flow ignores its token, and the guard is released in the finally below.
+			using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+			linked.CancelAfter(_authorizeTimeout);
+			var flow = _oauth.AuthorizeInteractiveAsync(server, linked.Token);
+			McpAuthorizeResult result;
+			try
+			{
+				result = await flow.WaitAsync(_authorizeTimeout, cancellationToken);
+			}
+			catch (Exception ex) when (ex is TimeoutException || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+			{
+				linked.Cancel();
+				_ = flow.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+				return new McpAuthorizeResultDto(false, "The authorization took too long and was stopped.");
+			}
 
-			bool stillRegistered;
+			bool stillRegistered, idTaken;
 			lock (_settings.SyncRoot)
+			{
 				stillRegistered = _settings.Settings.ExternalMcpServers.Any(s => ReferenceEquals(s, server));
+				idTaken         = _settings.Settings.ExternalMcpServers.Any(s => s.Id == id);
+			}
+
 			if (!stillRegistered)
 			{
-				_tokens.Delete(id); // the server was removed while the browser was open
+				// The server was removed while the browser was open: its token goes too, unless a server of the same id was created since (that one's token is not ours to delete).
+				if (!idTaken)
+					_tokens.Delete(id);
 				return new McpAuthorizeResultDto(false, "The server was removed during the authorization.");
 			}
 
@@ -367,7 +404,8 @@ public sealed partial class McpRegistryService : IMcpRegistryService
 	private static void BindSecretsToOrigin(ExternalMcpServerModel m, McpServerUpsertRequest r, string? oldUrlOrigin, string? oldTokenOrigin, McpServerAuthType oldAuth, bool hadHeader, ref bool revokeToken)
 	{
 		var urlMoved   = oldUrlOrigin != null && SafeUrl.Origin(m.Url) != oldUrlOrigin;
-		var tokenMoved = oldTokenOrigin != null && SafeUrl.Origin(m.OAuth?.TokenEndpoint) != oldTokenOrigin;
+		// null counts as a value: a token endpoint that appears where there was none is a move too (a secret stored before discovery must not follow it)
+		var tokenMoved = SafeUrl.Origin(m.OAuth?.TokenEndpoint) != oldTokenOrigin;
 
 		if (urlMoved && oldAuth == McpServerAuthType.StaticHeader && m.AuthType == McpServerAuthType.StaticHeader && hadHeader && r.StaticHeaderValue == null)
 			throw new TdcpInvalidParamsException("The URL moves to another host: send 'staticHeaderValue' again, a stored header value is not sent to a new origin");
@@ -521,6 +559,11 @@ public sealed partial class McpRegistryService : IMcpRegistryService
 	/// <summary>Writes every member of <paramref name="source"/> into the live <paramref name="target"/> (the Avalonia rows hold the live object).</summary>
 	private static void CopyInto(ExternalMcpServerModel target, ExternalMcpServerModel source)
 	{
+		// The turn path reads the live object without a lock, field by field. So the secrets go first (cleared), then everything else, then the new secrets:
+		// a reader can see a server without its secret, never a new URL with an old secret.
+		target.StaticHeaderValue = string.Empty;
+		if (target.OAuth != null)
+			target.OAuth.ClientSecret = null;   // not the object itself: a reader may hold it between its null check and its use
 		target.DisplayName       = source.DisplayName;
 		target.Enabled           = source.Enabled;
 		target.Transport         = source.Transport;

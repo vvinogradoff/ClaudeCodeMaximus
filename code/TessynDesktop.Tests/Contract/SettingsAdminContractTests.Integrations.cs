@@ -24,6 +24,8 @@ public sealed partial class SettingsAdminContractTests
 	[InlineData("mcp.upsert", """{"displayName":"x","url":"https://user:pw@a.example.com/"}""")]                                                       // user info
 	[InlineData("mcp.upsert", """{"id":"..\\evil","displayName":"x","url":"https://a.example.com"}""")]                                                  // the id is a file name
 	[InlineData("mcp.upsert", """{"id":"a/b","displayName":"x","url":"https://a.example.com"}""")]
+	[InlineData("mcp.upsert", """{"id":"x\n","displayName":"x","url":"https://a.example.com"}""")]                                                    // a trailing line break: `$` would have matched it
+	[InlineData("mcp.upsert", """{"id":"x\r\n","displayName":"x","url":"https://a.example.com"}""")]
 	[InlineData("mcp.upsert", """{"displayName":"x","url":"https://a.example.com","bogus":1}""")]                                                       // outside the request
 	[InlineData("mcp.upsert", """{"displayName":"x","url":"https://a.example.com","transport":"carrier"}""")]
 	[InlineData("mcp.upsert", """{"displayName":"x","url":"https://a.example.com","authType":"staticHeader"}""")]                                      // no header name

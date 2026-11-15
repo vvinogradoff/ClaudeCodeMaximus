@@ -40,6 +40,9 @@ public sealed class McpTokenStore : IMcpTokenStore
 
 	public McpTokenRecord? Load(string serverId)
 	{
+		if (!IsValidId(serverId))
+			return null;
+
 		var path = GetPath(serverId);
 		if (!File.Exists(path))
 			return null;
@@ -72,11 +75,20 @@ public sealed class McpTokenStore : IMcpTokenStore
 
 	public void Delete(string serverId)
 	{
+		if (!IsValidId(serverId))
+			return;
+
 		var path = GetPath(serverId);
 		if (File.Exists(path))
 			File.Delete(path);
 	}
 
+	/// <summary>The id is a file name: only the registry's own charset is accepted (defence in depth; the registry checks it too).</summary>
+	private static bool IsValidId(string serverId) =>
+		System.Text.RegularExpressions.Regex.IsMatch(serverId, Constants.IntegrationsApi.McpIdPattern);
+
 	private string GetPath(string serverId) =>
-		Path.Combine(_tokensDir, serverId + Constants.ExternalMcp.TokenFileExtension);
+		IsValidId(serverId)
+			? Path.Combine(_tokensDir, serverId + Constants.ExternalMcp.TokenFileExtension)
+			: throw new ArgumentException("An MCP server id is 1 to 64 letters, digits, '-' or '_'.", nameof(serverId));
 }

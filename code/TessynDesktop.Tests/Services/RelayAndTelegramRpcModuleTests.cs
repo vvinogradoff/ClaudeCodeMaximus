@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
@@ -192,5 +193,19 @@ public sealed class RelayAndTelegramRpcModuleTests : IDisposable
 
 		Assert.Equal(("Telegram answered with error 429", true), (status["lastError"]!.GetValue<string>(), status["hasToken"]!.GetValue<bool>()));
 		Assert.DoesNotContain("555666777", status.ToJsonString());
+	}
+
+	[Fact]
+	public async Task L7_QuickConfigureCalls_RestartTheConnectorOneAfterTheOther()
+	{
+		_connector.OnRestart = () => Thread.Sleep(150);                    // a restart waits for the running link to stop
+		await CallAsync("relay.configure", """{"enabled":true,"url":"https://web.example.com","linkToken":"token-0001"}""");
+
+		await Task.WhenAll(Enumerable.Range(0, 6).Select(i => CallAsync("relay.configure", $$"""{"enabled":{{(i % 2 == 0 ? "true" : "false")}}}""")));
+		for (var i = 0; i < 7; i++)
+			Assert.True(await _connector.RestartSignal.WaitAsync(TimeSpan.FromSeconds(10)));
+
+		Assert.Equal(7, _connector.Restarts);
+		Assert.Equal(1, _connector.MaxConcurrentRestarts);
 	}
 }

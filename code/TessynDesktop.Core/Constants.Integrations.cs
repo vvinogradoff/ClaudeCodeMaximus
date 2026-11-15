@@ -28,12 +28,18 @@ public static partial class Constants
 		public const int MaxMcpServers = 200;
 
 		/// <summary>The shape of a Telegram bot token: <c>123456:ABC-DEF...</c>. It goes into a URL path, so nothing else is accepted.</summary>
-		public const string TelegramTokenPattern = @"^[0-9]{1,20}:[A-Za-z0-9_-]{10,120}$";
+		public const string TelegramTokenPattern = @"\A[0-9]{1,20}:[A-Za-z0-9_-]{10,120}\z";
 
 		/// <summary>The characters of a header name (RFC 9110 token).</summary>
-		public const string HeaderNamePattern = @"^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,100}$";
+		public const string HeaderNamePattern = @"\A[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,100}\z";
 
-		/// <summary>The characters of an MCP server id.</summary>
-		public const string McpIdPattern = @"^[A-Za-z0-9_-]{1,64}$";
+		/// <summary>The shape of a relay link token: printable ASCII without spaces. <c>\A</c> and <c>\z</c>, because <c>$</c> also matches before a final line break.</summary>
+		public const string LinkTokenPattern = @"\A[!-~]{1,4096}\z";
+
+		/// <summary>How long the whole interactive authorization of an MCP server may take (the browser wait is 120 s, the HTTP calls around it are not bounded by it).</summary>
+		public static readonly System.TimeSpan McpAuthorizeTimeout = System.TimeSpan.FromSeconds(150);
+
+		/// <summary>The characters of an MCP server id (it is a file name). <c>\A</c> and <c>\z</c>, because <c>$</c> also matches before a final line break.</summary>
+		public const string McpIdPattern = @"\A[A-Za-z0-9_-]{1,64}\z";
 	}
 }

@@ -104,4 +104,44 @@ public sealed class ClaudeModelServiceRefreshTests : IDisposable
 
 		Assert.Same(before, _service.GetCachedModels());
 	}
+
+	[Fact]
+	public async Task L5_ACancelledRefresh_NeverBecomesTheOncePerLaunchTask()
+	{
+		using var cts = new CancellationTokenSource();
+		_ollama.Answer = (_, _) =>
+		{
+			cts.Cancel();
+			return Task.FromResult<IReadOnlyList<ClaudeModelInfo>>([]);
+		};
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.RefreshAsync(cts.Token));
+		_ollama.Answer = (_, _) => Task.FromResult<IReadOnlyList<ClaudeModelInfo>>([Local("gemma4:26b")]);
+
+		await _service.EnsureModelsLoadedAsync();                         // completes normally, and really asks
+
+		Assert.Equal(2, _ollama.Asked.Count);
+		Assert.Contains(_service.GetCachedModels(), m => m.Id == "gemma4:26b");
+	}
+
+	[Fact]
+	public async Task L5_AFaultedRefresh_NeverBecomesTheOncePerLaunchTask()
+	{
+		_ollama.Answer = (_, _) => throw new InvalidOperationException("Ollama blew up");
+		await Assert.ThrowsAsync<InvalidOperationException>(() => _service.RefreshAsync());
+		_ollama.Answer = (_, _) => Task.FromResult<IReadOnlyList<ClaudeModelInfo>>([]);
+
+		await _service.EnsureModelsLoadedAsync();
+
+		Assert.Equal(2, _ollama.Asked.Count);
+	}
+
+	[Fact]
+	public async Task L5_ASuccessfulRefresh_SatisfiesTheOncePerLaunchLoad()
+	{
+		await _service.RefreshAsync();
+
+		await _service.EnsureModelsLoadedAsync();
+
+		Assert.Single(_ollama.Asked);
+	}
 }

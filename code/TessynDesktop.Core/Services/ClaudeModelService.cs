@@ -62,12 +62,13 @@ public sealed class ClaudeModelService : IClaudeModelService
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         // Not the once-per-launch task: ask again now, so a model pulled since the launch, or a changed Ollama URL, shows up.
-        var discovery = DiscoverOllamaAndMergeAsync(cancellationToken);
+        // The once-per-launch task is only satisfied by a refresh that worked: a cancelled or faulted one must not become the task that every later
+        // EnsureModelsLoadedAsync returns.
+        await DiscoverOllamaAndMergeAsync(cancellationToken);
         lock (this)
         {
-            _fetchTask = discovery;
+            _fetchTask = Task.CompletedTask;
         }
-        await discovery;
     }
 
     private async Task DiscoverOllamaAndMergeAsync(CancellationToken cancellationToken = default)

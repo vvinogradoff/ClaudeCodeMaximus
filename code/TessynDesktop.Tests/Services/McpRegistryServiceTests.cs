@@ -37,7 +37,7 @@ public sealed class McpRegistryServiceTests : IDisposable
 		_real     = new AppSettingsService(_dir);
 		_settings = new ThrowingSaveAppSettings(_real);
 		_oauth    = new ScriptedMcpOAuth(_tokens);
-		_service  = new McpRegistryService(_settings, _tokens, _oauth, _bus, discoverTimeout: TimeSpan.FromMilliseconds(300));
+		_service  = new McpRegistryService(_settings, _tokens, _oauth, _bus, discoverTimeout: TimeSpan.FromMilliseconds(300), authorizeTimeout: TimeSpan.FromMilliseconds(400));
 		_bus.Published += n =>
 		{
 			if (n.Method == RemoteProtocol.McpApi.ChangedEvent)
@@ -497,5 +497,189 @@ public sealed class McpRegistryServiceTests : IDisposable
 		Stored("o1").OAuth!.NeedsReauthorization = false;
 		_tokens.Delete("o1");
 		Assert.Equal(McpServerStatusDto.NotConnected, _service.List().Single().Status);
+	}
+
+	// ── Review fixes (447) ───────────────────────────────────────────────────────────────────
+
+	[Theory]
+	[InlineData("x\n")]
+	[InlineData("x\r\n")]
+	[InlineData("\nx")]
+	[InlineData("x y")]
+	[InlineData("")]
+	public void M1_AnIdWithALineBreakOrAnyOtherStrayCharacter_IsRefused_AndNothingIsStored(string id)
+	{
+		Assert.Throws<TdcpInvalidParamsException>(() => _service.Upsert(new McpServerUpsertRequest(Id: id, DisplayName: "x", Url: "https://a.example.com/mcp")));
+
+		Assert.Empty(_settings.Settings.ExternalMcpServers);
+	}
+
+	[Fact]
+	public void M1_ThePatternsOfAFileNameAHeaderAndATokenUseAnchorsThatDoNotAcceptATrailingLineBreak()
+	{
+		Assert.False(System.Text.RegularExpressions.Regex.IsMatch("x\n", Constants.IntegrationsApi.McpIdPattern));
+		Assert.False(System.Text.RegularExpressions.Regex.IsMatch("X-Api-Key\n", Constants.IntegrationsApi.HeaderNamePattern));
+		Assert.False(System.Text.RegularExpressions.Regex.IsMatch("123456789:AAEtokenForTheTest_0123456789ab\n", Constants.IntegrationsApi.TelegramTokenPattern));
+		Assert.False(System.Text.RegularExpressions.Regex.IsMatch("link-token-0001\n", Constants.IntegrationsApi.LinkTokenPattern));
+		Assert.True(System.Text.RegularExpressions.Regex.IsMatch("x_1-Z", Constants.IntegrationsApi.McpIdPattern));          // and the good ones still match
+		Assert.True(System.Text.RegularExpressions.Regex.IsMatch("X-Api-Key", Constants.IntegrationsApi.HeaderNamePattern));
+		Assert.True(System.Text.RegularExpressions.Regex.IsMatch("123456789:AAEtokenForTheTest_0123456789ab", Constants.IntegrationsApi.TelegramTokenPattern));
+		Assert.True(System.Text.RegularExpressions.Regex.IsMatch("link-token-0001", Constants.IntegrationsApi.LinkTokenPattern));
+	}
+
+	[Fact]
+	public void M2_ATokenEndpointThatAppearsWhereThereWasNone_DropsTheStoredClientSecret()
+	{
+		_service.Upsert(new McpServerUpsertRequest(Id: "o2", DisplayName: "No endpoint yet", Url: "https://tracker.example.com/mcp", AuthType: McpAuthTypeDto.Oauth2,
+			Oauth: new McpOAuthPatch(ClientId: "c1", ClientSecret: ClientSecret)));
+		Assert.Equal(string.Empty, Stored("o2").OAuth!.TokenEndpoint);                // the Avalonia dialog saves before discovery completes
+
+		_service.Upsert(new McpServerUpsertRequest(Id: "o2", Oauth: new McpOAuthPatch(TokenEndpoint: "https://attacker.example.com/token")));
+
+		Assert.Null(Stored("o2").OAuth!.ClientSecret);
+		Assert.Equal("https://attacker.example.com/token", Stored("o2").OAuth!.TokenEndpoint);
+	}
+
+	[Fact]
+	public void M2_AndKeepsTheSecretOnlyWhenANewOneComesInTheSameCall_OrNothingMoved()
+	{
+		_service.Upsert(new McpServerUpsertRequest(Id: "o2", DisplayName: "No endpoint yet", Url: "https://tracker.example.com/mcp", AuthType: McpAuthTypeDto.Oauth2,
+			Oauth: new McpOAuthPatch(ClientId: "c1", ClientSecret: ClientSecret)));
+
+		_service.Upsert(new McpServerUpsertRequest(Id: "o2", Oauth: new McpOAuthPatch(Scopes: "read")));             // no endpoint on either side: nothing moved
+		Assert.Equal(ClientSecret, Stored("o2").OAuth!.ClientSecret);
+
+		_service.Upsert(new McpServerUpsertRequest(Id: "o2", Oauth: new McpOAuthPatch(TokenEndpoint: "https://auth.example.com/token", ClientSecret: "fresh-secret")));
+		Assert.Equal("fresh-secret", Stored("o2").OAuth!.ClientSecret);
+	}
+
+	[Fact]
+	public async Task L2_AnAuthorizationThatNeverEnds_IsStoppedAfterTheCap_AndTheGuardIsReleased()
+	{
+		AddOAuthServer();
+		var sawCancel = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		_oauth.OnAuthorize = async (_, ct) =>
+		{
+			try { await Task.Delay(Timeout.Infinite, ct); }
+			catch (OperationCanceledException) { sawCancel.TrySetResult(); throw; }
+			return new McpAuthorizeResult(true, "never");
+		};
+		var watch = System.Diagnostics.Stopwatch.StartNew();
+
+		var first = await _service.AuthorizeAsync("o1", CancellationToken.None);
+
+		Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), $"took {watch.Elapsed}");
+		Assert.False(first.Authorized);
+		Assert.Contains("too long", first.Error);
+		Assert.True(await Task.WhenAny(sawCancel.Task, Task.Delay(3000)) == sawCancel.Task);   // the abandoned flow was told to stop
+		_oauth.OnAuthorize = null;
+		Assert.True((await _service.AuthorizeAsync("o1", CancellationToken.None)).Authorized); // a retry is not met by "already running"
+	}
+
+	[Fact]
+	public async Task L2_AFlowThatIgnoresItsToken_IsStoppedToo()
+	{
+		AddOAuthServer();
+		_oauth.OnAuthorize = (_, _) => new TaskCompletionSource<McpAuthorizeResult>().Task;
+
+		var result = await _service.AuthorizeAsync("o1", CancellationToken.None);
+
+		Assert.Contains("too long", result.Error);
+	}
+
+	[Fact]
+	public async Task L2_ACallerThatCancels_IsNotToldItTimedOut()
+	{
+		AddOAuthServer();
+		_oauth.OnAuthorize = (_, _) => new TaskCompletionSource<McpAuthorizeResult>().Task;
+		using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.AuthorizeAsync("o1", cts.Token));
+	}
+
+	[Fact]
+	public async Task L2_AServerRemovedAndRecreatedDuringTheFlow_KeepsTheTokenOfTheNewOne()
+	{
+		AddOAuthServer();
+		_oauth.OnAuthorize = (server, _) =>
+		{
+			_service.Remove(server.Id);
+			AddOAuthServer(server.Id);                                       // same id, a new server, with its own token
+			_tokens.Save(server.Id, new McpTokenRecord { AccessToken = "token-of-the-new-server" });
+			return Task.FromResult(new McpAuthorizeResult(true, "Authorized."));
+		};
+
+		var result = await _service.AuthorizeAsync("o1", CancellationToken.None);
+
+		Assert.False(result.Authorized);
+		Assert.Equal("token-of-the-new-server", _tokens.Load("o1")!.AccessToken);
+	}
+
+	[Fact]
+	public void L4_AReaderOfTheLiveObject_NeverSeesANewUrlWithTheOldSecret()
+	{
+		const string urlA = "https://a.example.com/mcp", urlB = "https://b.example.com/mcp";
+		_service.Upsert(new McpServerUpsertRequest(Id: "live", DisplayName: "Live", Url: urlA, AuthType: McpAuthTypeDto.StaticHeader, StaticHeaderName: "X-Key", StaticHeaderValue: "value-for-a"));
+		var live = Stored("live");
+		var stop = false;
+		var wrong = 0;
+		var reader = new Thread(() =>
+		{
+			// What the turn path does, without the lock: read the value, the URL, the value again; only a value that did not change across the URL read counts.
+			while (!Volatile.Read(ref stop))
+			{
+				var before = live.StaticHeaderValue;
+				var url = live.Url;
+				var after = live.StaticHeaderValue;
+				if (before == after && ((url == urlB && before == "value-for-a") || (url == urlA && before == "value-for-b")))
+					Interlocked.Increment(ref wrong);
+			}
+		}) { IsBackground = true };
+		reader.Start();
+
+		for (var i = 0; i < 1500; i++)
+		{
+			var toB = i % 2 == 0;
+			_service.Upsert(new McpServerUpsertRequest(Id: "live", Url: toB ? urlB : urlA, StaticHeaderValue: toB ? "value-for-b" : "value-for-a"));
+		}
+
+		Volatile.Write(ref stop, true);
+		reader.Join();
+		Assert.Equal(0, wrong);
+	}
+
+	[Fact]
+	public void L6_RemovingAServer_PrunesItFromTheLocalToolProfilesOfTheDirectories()
+	{
+		AddHeaderServer("keep");
+		AddHeaderServer("gone");
+		var a = new DirectoryNodeModel { Path = @"C:\a", LocalToolProfile = new LocalToolProfileModel { IncludedExternalMcpServerIds = ["keep", "gone"] } };
+		var b = new DirectoryNodeModel { Path = @"C:\b", LocalToolProfile = new LocalToolProfileModel { IncludedExternalMcpServerIds = ["gone"] } };
+		var c = new DirectoryNodeModel { Path = @"C:\c" };                                  // no profile at all
+		_settings.Settings.Tree.AddRange([a, b, c]);
+
+		_service.Remove("gone");
+		_service.Upsert(new McpServerUpsertRequest(Id: "gone", DisplayName: "A different server, same id", Url: "https://other.example.com/mcp"));
+
+		Assert.Equal(["keep"], a.LocalToolProfile!.IncludedExternalMcpServerIds);
+		Assert.Empty(b.LocalToolProfile!.IncludedExternalMcpServerIds);
+		Assert.Null(c.LocalToolProfile);
+		var reloaded = new AppSettingsService(_dir);
+		reloaded.Load();
+		Assert.Equal(["keep"], reloaded.Settings.Tree[0].LocalToolProfile!.IncludedExternalMcpServerIds);   // saved
+	}
+
+	[Fact]
+	public void L6_AFailingSave_PutsTheIncludedIdsBack()
+	{
+		AddHeaderServer("gone");
+		var dir = new DirectoryNodeModel { Path = @"C:\a", LocalToolProfile = new LocalToolProfileModel { IncludedExternalMcpServerIds = ["gone"] } };
+		_settings.Settings.Tree.Add(dir);
+		_settings.FailSaves = true;
+
+		Assert.Throws<IOException>(() => _service.Remove("gone"));
+
+		Assert.Equal(["gone"], dir.LocalToolProfile!.IncludedExternalMcpServerIds);
+		Assert.Single(_settings.Settings.ExternalMcpServers);
 	}
 }

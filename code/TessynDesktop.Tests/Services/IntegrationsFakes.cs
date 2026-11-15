@@ -145,10 +145,28 @@ internal sealed class RecordingRelayConnector : IRelayConnectorService
 	public void Start() { }
 	public void Stop() { }
 
+	/// <summary>Runs inside <see cref="Restart"/> (a slow restart, for the test that two restarts never overlap).</summary>
+	public Action? OnRestart { get; set; }
+
+	/// <summary>The most restarts that were running at the same moment.</summary>
+	public int MaxConcurrentRestarts { get; private set; }
+
+	private int _running;
+
 	public void Restart()
 	{
-		Interlocked.Increment(ref _restarts);
-		RestartSignal.Release();
+		var now = Interlocked.Increment(ref _running);
+		lock (this) MaxConcurrentRestarts = Math.Max(MaxConcurrentRestarts, now);
+		try
+		{
+			OnRestart?.Invoke();
+		}
+		finally
+		{
+			Interlocked.Decrement(ref _running);
+			Interlocked.Increment(ref _restarts);
+			RestartSignal.Release();
+		}
 	}
 }
 

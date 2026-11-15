@@ -16,12 +16,13 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public sealed partial class RelaySettingsRpcModule : IRemoteRpcModule
 {
-	[GeneratedRegex(@"^[\x21-\x7E]{1,4096}$")]
+	[GeneratedRegex(Constants.IntegrationsApi.LinkTokenPattern)]
 	private static partial Regex LinkTokenPattern();
 
 	private readonly IRelayConfigStore _store;
 	private readonly Lazy<IRelayConnectorService> _connector;
 	private readonly object _gate = new();
+	private readonly object _restartGate = new();
 
 	/// <param name="store">The relay link configuration.</param>
 	/// <param name="connector">
@@ -77,7 +78,12 @@ public sealed partial class RelaySettingsRpcModule : IRemoteRpcModule
 		}
 
 		// As the Avalonia Settings window does: the restart waits for the running link to stop, so it is not done on the request.
-		_ = Task.Run(() => _connector.Value.Restart());
+		// Restarts run one after the other: two quick calls must not interleave a Stop with the other call's Start.
+		_ = Task.Run(() =>
+		{
+			lock (_restartGate)
+				_connector.Value.Restart();
+		});
 		return Status();
 	}
 
