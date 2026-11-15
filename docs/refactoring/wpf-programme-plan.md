@@ -205,10 +205,12 @@ Exit:
   - the A10 docs, merge `5d12bff`;
   - the TDCP spec's local-client section renumbered to §9 in `2c0c38c`, because the pending FR.25 draft owns §8.
 - **Waiting for the Architect:** a restart into rollout 2 and the B.1 stop-ship checks (Focus item A15). The rollout-1 build is backed up in `[Publish].bak`.
-- **In review or fixing:**
-  - **Attachments** (daemon and web server, `feat/attachments`, worker 300). Review 310 found no critical defects; the F1 import deny rules and the F3 junction escape are being fixed.
-  - **Web refs UI** (SPA, `feat/web-refs-ui`, worker 290). Review 311's W1: transcript markdown must not load remote media under the widened CSP. Being fixed.
-  - Both ship together and need the Architect's go to deploy, including the nginx upload limit for `/api/attachments`.
+- **Merged after review (afternoon):**
+  - attachments, daemon and web server: merge `98fa1f4`; reviews 310 and 310b, SHIP;
+  - web refs UI (SPA): merge `b59b14f`; reviews 311 and 311b, SHIP.
+  - Verified in a separate worktree, because the main tree's build output must stay at rollout 2 until the Architect restarts: 2,556 + 131 + 24 + 146 + 3 tests, SPA build, 99 vitest.
+  - The web deploy waits for A19. It needs the nginx `/api/attachments` block; the unit already has `PrivateTmp`.
+- **Rollout 3** (one more restart after A15): the attachments daemon side, plus ISSUE.013 (320, review 313 fixes in progress) and index upkeep (330, review 314 fixes in progress) once they pass. Then the web deploy.
 - **Supervisor decision:** the A11 default (WorkingDirectory) comes with a one-time settings migration (`FileAccess.ModeRevision`). A stored ReferencedOnly that was only the old default moves once; there was never a way to choose it.
 - **Running:**
   - 320: ISSUE.013 daemon side (A3): ProfileId pins, no silent Default fallback, `migrate: true`, R3 migration, `profile.switch`, R7, R9.
