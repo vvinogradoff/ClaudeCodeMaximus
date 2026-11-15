@@ -232,6 +232,13 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			RemoteProtocol.Composer.DraftChangedEvent, FileKeyPrefix + fileName,
 			() => BuildDraftChangedPayload(fileName),
 			Constants.Composer.DraftChangedWindow);
+
+		// HasDraft is part of the session state (and moves the last-activity time), so the row state is refreshed too. The activity service
+		// caches the draft by its file stamp, so the state read when the window ends already sees the write.
+		_bus.PublishCoalesced(
+			Constants.Remote.Events.SessionChanged, FileKeyPrefix + fileName,
+			() => BuildSessionChangedPayload(_daemon.FindSessionByFileName(fileName)),
+			Constants.Remote.Timings.SessionChangedWindow);
 	});
 
 	private DraftChangedPayload? BuildDraftChangedPayload(string fileName)

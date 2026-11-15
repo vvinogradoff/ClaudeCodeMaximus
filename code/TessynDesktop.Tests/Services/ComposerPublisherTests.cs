@@ -134,6 +134,26 @@ public sealed class ComposerPublisherTests : IDisposable
 	}
 
 	[Fact]
+	public void ADraftWrite_AlsoRefreshesTheSessionState_BecauseHasDraftMayHaveFlipped()
+	{
+		_drafts.SaveDraft(_node.FileName, "hello");
+		Assert.Single(WaitFor("session.changed", 1));
+
+		_drafts.DeleteDraft(_node.FileName);
+
+		Assert.Equal("node-1", WaitFor("session.changed", 1)[0].Params["state"]!["id"]!.GetValue<string>());
+	}
+
+	[Fact]
+	public void ADraftOfAnUnknownSessionFile_RefreshesNoState()
+	{
+		_drafts.SaveDraft("orphan.txt", "x");
+
+		Thread.Sleep(600);
+		Assert.Empty(Received("session.changed"));
+	}
+
+	[Fact]
 	public void AnAuthErrorChange_PublishesSessionChanged()
 	{
 		_authErrors.Set("node-1", true);
