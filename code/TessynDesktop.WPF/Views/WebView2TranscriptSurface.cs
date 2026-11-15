@@ -32,6 +32,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private readonly MediaPreviewPolicy _media;
 	private readonly ILogger<WebView2TranscriptSurface> _logger;
 	private readonly List<string> _pending = new();
+	private string? _pendingLive;
 
 	private readonly TranscriptMediaBroker _broker;
 	private readonly WebRequestPolicy _requests;
@@ -162,6 +163,25 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		Post(() => JsonSerializer.Serialize(new { cmd = "replace", tok = token, entry = ToPage(entry) }, Json));
 	}
 
+	public void SetLive(TranscriptLiveView? live)
+	{
+		// Only the newest live state matters: a queued older one is replaced, never replayed.
+		Post(() => JsonSerializer.Serialize(new { cmd = "live", live = live == null ? null : ToPage(live) }, Json), isLive: true);
+	}
+
+	private static object ToPage(TranscriptLiveView live) =>
+		new
+		{
+			status = live.Status,
+			text = live.Text,
+			thinking = live.Thinking,
+			tools = live.Tools.Select(t => new { id = t.Id, name = t.Name, summary = t.Summary, done = t.Done, isError = t.IsError }),
+			queued = live.Queued,
+			startedAt = live.StartedAtUnixMs,
+			error = live.Error,
+			usage = live.Usage,
+		};
+
 	public void Find(string term, IReadOnlyList<int> matchingIndexes)
 	{
 		var snapshot = matchingIndexes.ToList();
@@ -199,15 +219,15 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	/// Queues a message. The JSON is built on a thread-pool thread (a warm switch can carry thousands of entries), and the messages
 	/// are posted to the page on the UI thread in the order they were queued.
 	/// </summary>
-	private void Post(Func<string> build, bool replacesQueue = false)
+	private void Post(Func<string> build, bool replacesQueue = false, bool isLive = false)
 	{
 		var generation = _generation;
 		var previous = _sendTail;
 		var built = Task.Run(build);
-		_sendTail = PostInOrderAsync(previous, built, generation, replacesQueue);
+		_sendTail = PostInOrderAsync(previous, built, generation, replacesQueue, isLive);
 	}
 
-	private async Task PostInOrderAsync(Task previous, Task<string> built, int generation, bool replacesQueue)
+	private async Task PostInOrderAsync(Task previous, Task<string> built, int generation, bool replacesQueue, bool isLive)
 	{
 		await previous.ConfigureAwait(true);
 		string json;
@@ -227,8 +247,15 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		if (!_ready || _control?.CoreWebView2 == null)
 		{
 			if (replacesQueue)
+			{
 				_pending.Clear();
-			_pending.Add(json);
+				_pendingLive = null;
+			}
+
+			if (isLive)
+				_pendingLive = json;
+			else
+				_pending.Add(json);
 			return;
 		}
 
@@ -340,6 +367,10 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 					if (root.GetProperty("href").GetString() is { } href && _policy.IsAllowed(href))
 						LinkClicked?.Invoke(this, href);
 					break;
+				case "liveShown":
+					_logger.LogInformation("Live row shown by the page: {Status}, {Chars} chars, {Tools} tool(s), {Queued} queued",
+						root.GetProperty("status").GetString(), root.GetProperty("chars").GetInt32(), root.GetProperty("tools").GetInt32(), root.GetProperty("queued").GetInt32());
+					break;
 				case "findRequested":
 					FindRequested?.Invoke(this, EventArgs.Empty);
 					break;
@@ -436,6 +467,11 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		_pending.Clear();
 		foreach (var json in queued)
 			_control!.CoreWebView2.PostWebMessageAsJson(json);
+
+		if (_pendingLive != null)
+			_control!.CoreWebView2.PostWebMessageAsJson(_pendingLive);
+
+		_pendingLive = null;
 
 		// A "ready" after the first one means the page was reloaded or recovered and is empty: ask the owner to replay.
 		if (restarted && queued.Count == 0)

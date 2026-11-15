@@ -102,7 +102,7 @@ public sealed class ComposerWireTests : IDisposable
 		Assert.True(sent["result"]!["accepted"]!.GetValue<bool>());
 		Assert.False(sent["result"]!["queued"]!.GetValue<bool>());
 		await Waits.Until(() => _env.Compaction.Calls.Count == 1);
-		Assert.Equal("compact", _env.Compaction.Calls[0].Variant);
+		Assert.Equal("compactHeld", _env.Compaction.Calls[0].Variant); // the engine took the lock itself
 		Assert.Empty(_env.Process.Calls);
 	}
 
@@ -172,6 +172,24 @@ public sealed class ComposerWireTests : IDisposable
 
 		Assert.True(stopped["result"]!["stopped"]!.GetValue<bool>());
 		Assert.True(frames[^1].Params!["cancelled"]!.GetValue<bool>());
+	}
+
+	[Fact]
+	public async Task CompactionOnly_StoppedWhileItWaitsForTheLock_CompletesAsNeverRan()
+	{
+		var turnLock = _env.Turns.GetTurnLock(_env.NodeId);
+		await turnLock.WaitAsync(); // another turn holds the node
+		using var sse = await _env.Host.OpenStreamAsync();
+		var sent = await CallAsync("turn.send", P(("text", ""), ("autoCompact", true)));
+		await Task.Delay(150);
+
+		await CallAsync("turn.stop", P());
+		var frames = await TurnWireEnv.ReadUntilCompletedAsync(sse, sent["result"]!["turnId"]!.GetValue<string>());
+		turnLock.Release();
+
+		var completed = frames[^1].Params!;
+		Assert.True(completed["neverRan"]!.GetValue<bool>());
+		Assert.Empty(_env.Compaction.Calls);
 	}
 
 	[Fact]

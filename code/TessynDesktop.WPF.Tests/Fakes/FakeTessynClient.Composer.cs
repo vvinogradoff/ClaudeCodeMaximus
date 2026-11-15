@@ -3,22 +3,10 @@ using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.WPF.Tests.Fakes;
 
-/// <summary>The package J2 part of <see cref="FakeTessynClient"/>: turn options, drafts and autocomplete. Records its calls like the rest.</summary>
+/// <summary>The package J2 part of <see cref="FakeTessynClient"/>: drafts and autocomplete (turn.send with its J2 flags lives in the main part). Records its calls like the rest.</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class FakeTessynClient
 {
-	/// <summary>One <c>turn.send</c> as the fake received it.</summary>
-	public sealed record TurnSendCall(string NodeId, string Text, string? ModelId, string? Effort, string? ProfileId, string? ClientRequestId, bool NewBranch, bool AutoCompact);
-
-	/// <summary>Every <c>turn.send</c>, in order.</summary>
-	public List<TurnSendCall> TurnSends { get; } = [];
-
-	/// <summary>What <see cref="TurnSendAsync"/> answers.</summary>
-	public TurnSendResult TurnSendAnswer { get; set; } = new("turn-1", Accepted: true, Queued: false);
-
-	/// <summary>When set, <see cref="TurnSendAsync"/> throws it.</summary>
-	public Exception? TurnSendException { get; set; }
-
 	/// <summary>The drafts of the fake daemon, by session.</summary>
 	public Dictionary<string, string> DraftTexts { get; } = [];
 
@@ -34,15 +22,6 @@ public sealed partial class FakeTessynClient
 	/// <summary>The revision the fake reports for a draft text: stable for equal text, <see cref="RemoteProtocol.Composer.EmptyDraftRevision"/> for none.</summary>
 	public static string RevisionOf(string? text) =>
 		string.IsNullOrEmpty(text) ? RemoteProtocol.Composer.EmptyDraftRevision : "rev-" + text.Length + "-" + text.GetHashCode();
-
-	public Task<TurnSendResult> TurnSendAsync(string nodeId, string text, string? modelId = null, string? effort = null, string? profileId = null, string? clientRequestId = null, bool newBranch = false, bool autoCompact = false, CancellationToken cancellationToken = default)
-	{
-		Record($"turn.send:{nodeId}");
-		TurnSends.Add(new TurnSendCall(nodeId, text, modelId, effort, profileId, clientRequestId, newBranch, autoCompact));
-		if (TurnSendException != null)
-			throw TurnSendException;
-		return Task.FromResult(TurnSendAnswer);
-	}
 
 	public Task<DraftGetResult> DraftGetAsync(string nodeId, CancellationToken cancellationToken = default)
 	{

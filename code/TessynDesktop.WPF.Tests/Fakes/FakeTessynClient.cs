@@ -48,7 +48,7 @@ public sealed partial class FakeTessynClient : ITessynClient
 	/// <summary>When set, <see cref="TreeSnapshotAsync"/> throws it.</summary>
 	public Exception? TreeSnapshotException { get; set; }
 
-	public int SendCount => Calls.Count(c => c.StartsWith("session.send:", StringComparison.Ordinal));
+	public int SendCount => Calls.Count(c => c.StartsWith("turn.send:", StringComparison.Ordinal));
 
 	public void SetState(TessynClientState state)
 	{
@@ -63,6 +63,9 @@ public sealed partial class FakeTessynClient : ITessynClient
 		NotificationReceived?.Invoke(this, new RemoteNotification(method, node));
 	}
 
+	/// <summary>Delivers a notification from its wire JSON, as the daemon wrote it (golden frames).</summary>
+	public void RaiseRaw(string method, string json) => NotificationReceived?.Invoke(this, new RemoteNotification(method, System.Text.Json.Nodes.JsonNode.Parse(json)!));
+
 	public void RaiseResync(string reason = RemoteProtocol.ResyncReasons.Gap) => Resynced?.Invoke(this, new ResyncedEventArgs(reason, 0));
 
 	public Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -73,7 +76,55 @@ public sealed partial class FakeTessynClient : ITessynClient
 		return Task.CompletedTask;
 	}
 
-	public Task<SessionStopResult> TurnStopAsync(string nodeId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	/// <summary>Every <c>turn.send</c> in order, with the model, effort, profile and request id it carried.</summary>
+	public List<FakeTurnSend> TurnSends { get; } = [];
+
+	/// <summary>The answer of the next <c>turn.send</c>; null = accepted and not queued, with a fresh turn id.</summary>
+	public Func<FakeTurnSend, TurnSendResult>? TurnSendHandler { get; set; }
+
+	/// <summary>When set, <c>turn.send</c> throws it.</summary>
+	public Exception? TurnSendException { get; set; }
+
+	/// <summary>When set, <c>turn.send</c> waits for it after recording the call (a round trip in flight).</summary>
+	public TaskCompletionSource? TurnSendGate { get; set; }
+
+	public async Task<TurnSendResult> TurnSendAsync(string nodeId, string text, string? modelId = null, string? effort = null, string? profileId = null, string? clientRequestId = null, bool newBranch = false, bool autoCompact = false, CancellationToken cancellationToken = default)
+	{
+		var send = new FakeTurnSend(nodeId, text, modelId, effort, profileId, clientRequestId, newBranch, autoCompact);
+		TurnSends.Add(send);
+		Record($"turn.send:{nodeId}:{text}");
+		if (TurnSendException != null)
+			throw TurnSendException;
+
+		if (TurnSendGate != null)
+			await TurnSendGate.Task;
+
+		return TurnSendHandler?.Invoke(send) ?? new TurnSendResult("turn-" + TurnSends.Count, true, false);
+	}
+
+	public Exception? TurnStopException { get; set; }
+
+	public Task<SessionStopResult> TurnStopAsync(string nodeId, CancellationToken cancellationToken = default)
+	{
+		Record($"turn.stop:{nodeId}");
+		if (TurnStopException != null)
+			throw TurnStopException;
+
+		return Task.FromResult(new SessionStopResult(true));
+	}
+
+	public void RaiseTurnStarted(string nodeId, string turnId, string? clientRequestId = null) => RaiseNotification(RemoteProtocol.TurnStream.StartedEvent, new TurnStartedPayload(nodeId, turnId, clientRequestId));
+
+	public void RaiseTurnStatus(string nodeId, string turnId, TurnState state, string? detail = null) => RaiseNotification(RemoteProtocol.TurnStream.StatusEvent, new TurnStatusPayload(nodeId, turnId, state, detail));
+
+	public void RaiseTurnDelta(string nodeId, string turnId, long seq, string text, TurnDeltaKind kind = TurnDeltaKind.Text) => RaiseNotification(RemoteProtocol.TurnStream.DeltaEvent, new TurnDeltaPayload(nodeId, turnId, seq, kind, text));
+
+	public void RaiseTurnTool(string nodeId, string turnId, string toolUseId, string name, TurnToolStatus status, string? summary = null, bool? isError = null) =>
+		RaiseNotification(RemoteProtocol.TurnStream.ToolEvent, new TurnToolPayload(nodeId, turnId, toolUseId, name, status, summary, isError));
+
+	public void RaiseTurnUsage(string nodeId, string turnId, int input, int output, double cost) => RaiseNotification(RemoteProtocol.TurnStream.UsageEvent, new TurnUsagePayload(nodeId, turnId, input, output, cost));
+
+	public void RaiseTurnCompleted(string nodeId, string turnId, bool cancelled = false, string? error = null) => RaiseNotification(RemoteProtocol.Events.TurnCompleted, new TurnCompletedPayload(nodeId, cancelled, error, turnId));
 	public Task<HelloResult> HelloAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
 	public Task<TreeSnapshotResult> TreeSnapshotAsync(long? sinceVersion = null, CancellationToken cancellationToken = default)
@@ -116,7 +167,7 @@ public sealed partial class FakeTessynClient : ITessynClient
 		var session = Sessions[nodeId];
 		return new SessionDetailDto(
 			nodeId, session.Name, "dir", null, null!, null, session.State(nodeId), session.Tags,
-			new AttentionSummaryDto(), null!, false, session.Entries.Count, session.Epoch);
+			new AttentionSummaryDto(), session.LastUsed, false, session.Entries.Count, session.Epoch);
 	}
 
 	public async Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, int? beforeIndex = null, int? afterIndex = null, int? limit = null, CancellationToken cancellationToken = default)

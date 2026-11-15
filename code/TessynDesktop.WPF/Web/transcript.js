@@ -3,6 +3,7 @@
 // links are never navigated by the page itself - a click is posted to the host, which validates the scheme and opens
 // the system browser. This is the only channel to the host (no host objects exist).
 'use strict';
+const liveBox = document.getElementById('live');
 const vp = document.getElementById('vp'), padTop = document.getElementById('padTop'), items = document.getElementById('items'), padBot = document.getElementById('padBot');
 const BUF = 1.5;            // viewports of buffer above and below the visible area
 const NEAR_TOP_PX = 300;    // scroll distance from the top that requests an older page
@@ -17,6 +18,8 @@ let F = null;               // { term, idx[], cur }
 let H = null;               // reference highlight: { i, quote } (entry jump from a Focus reference)
 let ALLOW = [];             // hosts whose media previews load without a click (from the host; media-gate.js applies it)
 let viewTimer = 0;
+let liveSeen = { st: '', len: 0, queued: 0 };   // what the host was last told about the live row (diagnostics)
+let liveTimer = 0;          // ticks the elapsed time of the live row once a second
 
 function post(o) { chrome.webview.postMessage(o); }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -178,6 +181,7 @@ function stepFind(dir) { if (!F || !F.idx.length) return; F.cur = (F.cur + dir +
 
 // ---- host commands ----
 function onLoad(m) {
+  showLive(null);
   S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, hasNewer: !!m.hasNewer, loaded: new Map() };
   olderPending = false; NG = PagingGate.create(); F = null; H = null; recomputeOff(); items.replaceChildren();
   padTop.style.height = '0px'; padBot.style.height = S.off[S.items.length] + 'px';
@@ -207,6 +211,27 @@ function onAppend(m) {
   recomputeOff();
   if (follow) render('bottom'); else { padBot.style.height = (S.off[S.items.length] - S.off[S.b]) + 'px'; render(null); }
   checkNewer();
+}
+// ---- live row of a turn in flight (live.js) ----
+// The row is created once and updated in place (so a selection in the streamed text survives); a one-second ticker keeps its timer.
+const liveView = LiveView.create(document);
+liveBox.appendChild(liveView.el);
+function showLive(live) {
+  const follow = atBottom();
+  const shown = liveView.update(live, Date.now());
+  if (shown && liveView.startAt != null) { if (!liveTimer) liveTimer = setInterval(() => { const t = liveBox.querySelector('.lt'); if (t) t.textContent = liveView.tickText(Date.now()); }, 1000); }
+  else { clearInterval(liveTimer); liveTimer = 0; }
+  if (follow) vp.scrollTop = vp.scrollHeight;
+  reportLive(shown ? live : null);
+}
+// Tells the host what the page now shows (for its log and the end-to-end tests): on a change of status and after each further 1000 characters of text.
+function reportLive(live) {
+  const len = live && live.text ? live.text.length : 0, st = live ? (live.status || (live.error ? 'error' : '')) : '';
+  const queued = live && live.queued ? live.queued.length : 0;
+  if (len < liveSeen.len) liveSeen.len = 0;
+  if (st === liveSeen.st && queued === liveSeen.queued && len < liveSeen.len + 1000) return;
+  liveSeen = { st: st, len: len, queued: queued };
+  post({ ev: 'liveShown', status: st, chars: len, tools: live && live.tools ? live.tools.length : 0, queued: queued });
 }
 function onReplace(m) {
   if (!S || m.tok !== S.tok) return;
@@ -276,6 +301,7 @@ chrome.webview.addEventListener('message', e => {
     case 'prepend': onPrepend(m); break;
     case 'append': onAppend(m); break;
     case 'replace': onReplace(m); break;
+    case 'live': showLive(m.live); break;
     case 'find': if (S) doFind(m); break;
     case 'findStep': stepFind(m.dir); break;
     case 'clearFind': clearFind(); break;

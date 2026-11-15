@@ -59,7 +59,7 @@ public sealed class ComposerClientTests : IDisposable
 
 		Assert.True(sent.Accepted);
 		await Waits.Until(() => _env.Compaction.Calls.Count == 1);
-		Assert.Equal("compact", _env.Compaction.Calls[0].Variant);
+		Assert.Equal("compactHeld", _env.Compaction.Calls[0].Variant); // the engine took the lock itself
 		Assert.Empty(_env.Process.Calls);
 	}
 
