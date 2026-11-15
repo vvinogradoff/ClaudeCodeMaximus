@@ -199,6 +199,27 @@ Exit:
 - **Rollout 2** is P1.I alone, the turn engine under the Avalonia send path. Nobody could run it live, because a second Avalonia instance cannot be isolated from the live one. It ships after a final review, with the smoke checklist in `.wpf-work/180-p1i-turn-engine.md` §8, and a one-commit revert if anything misbehaves.
 - **Behaviour change in rollout 2** (supervisor decision, the Architect may veto): a queued send uses the model, effort and profile selected when Send was pressed, not whatever is selected when the turn starts.
 
+**Status 2026-11-15, midday.**
+- **On master:**
+  - rollout 2, merge `fd21b58`, pre-merge tip `a14e05c`;
+  - the A10 docs, merge `5d12bff`;
+  - the TDCP spec's local-client section renumbered to §9 in `2c0c38c`, because the pending FR.25 draft owns §8.
+- **Waiting for the Architect:** a restart into rollout 2 and the B.1 stop-ship checks (Focus item A15). The rollout-1 build is backed up in `[Publish].bak`.
+- **In review or fixing:**
+  - **Attachments** (daemon and web server, `feat/attachments`, worker 300). Review 310 found no critical defects; the F1 import deny rules and the F3 junction escape are being fixed.
+  - **Web refs UI** (SPA, `feat/web-refs-ui`, worker 290). Review 311's W1: transcript markdown must not load remote media under the widened CSP. Being fixed.
+  - Both ship together and need the Architect's go to deploy, including the nginx upload limit for `/api/attachments`.
+- **Supervisor decision:** the A11 default (WorkingDirectory) comes with a one-time settings migration (`FileAccess.ModeRevision`). A stored ReferencedOnly that was only the old default moves once; there was never a way to choose it.
+- **Running:**
+  - 320: ISSUE.013 daemon side (A3): ProfileId pins, no silent Default fallback, `migrate: true`, R3 migration, `profile.switch`, R7, R9.
+  - 330: search-index upkeep (A5): indexed delete, migration, orphan purge, optimize and vacuum, throttled reindex, no tool-output cap.
+  - 340: WPF Focus view with refs, the preview pane, and transcript previews (A9, A13).
+- **Next:**
+  - WPF drag-and-drop with file mode (after attachments merge);
+  - R4 shared project memory: a design and a dry-run summary to approve before anything is applied;
+  - R6 connector diff;
+  - P1.J/K.
+
 ### Phase 2 — WPF MVP beside Avalonia (M–L)
 
 **Status 2026-11-14 (later):**
