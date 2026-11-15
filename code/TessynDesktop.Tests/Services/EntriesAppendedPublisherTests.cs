@@ -229,14 +229,31 @@ public sealed class EntriesAppendedPublisherTests : IDisposable
 		Append(Constants.SessionFile.RoleUser, "x");
 		WaitFor(Constants.Remote.Events.EntriesAppended, 1);
 
+		var published = (System.Collections.IDictionary)Field("_publishedSeq");
+		var waiting = (System.Collections.IDictionary)Field("_pendingAppends");
+		Assert.True(Count(published) > 0, "the first publication left its watermark: emptiness below can only come from the drop");
+
 		_fake.ByFileName.Clear();
 		Append(Constants.SessionFile.RoleUser, "y");
-		Thread.Sleep(Constants.Remote.Timings.SessionAppendedWindow * 3);
 
-		var gate = typeof(RemoteNotificationPublisher).GetField("_publishedSeq", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-		var pending = typeof(RemoteNotificationPublisher).GetField("_pendingAppends", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-		Assert.Empty((System.Collections.IDictionary)gate.GetValue(_sut)!);
-		Assert.Empty((System.Collections.IDictionary)pending.GetValue(_sut)!);
+		// The bookkeeping is dropped when the coalesced publication for the gone session is built, one window plus scheduling after the append: wait for
+		// that (bounded), not for a fixed number of windows, which a loaded machine overruns.
+		var sw = Stopwatch.StartNew();
+		while (sw.Elapsed < Wait && (Count(published) > 0 || Count(waiting) > 0))
+			Thread.Sleep(10);
+
+		Assert.Equal(0, Count(published));
+		Assert.Equal(0, Count(waiting));
+	}
+
+	private object Field(string name) =>
+		typeof(RemoteNotificationPublisher).GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(_sut)!;
+
+	/// <summary>Counts under the publisher's own lock, as the publisher reads and writes these maps.</summary>
+	private int Count(System.Collections.IDictionary dictionary)
+	{
+		lock (Field("_entriesGate"))
+			return dictionary.Count;
 	}
 
 	[Fact]
