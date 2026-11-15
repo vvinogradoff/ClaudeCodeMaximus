@@ -1,3 +1,4 @@
+using System.Linq;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
 
@@ -24,8 +25,28 @@ public static class RemoteDtoMapping
 			CreatedUtc     = model.CreatedUtc,
 			UpdatedUtc     = model.UpdatedUtc,
 			ClosedUtc      = model.ClosedUtc,
+			Refs           = model.Refs.Count == 0 ? null : [.. model.Refs.Select(r => r.ToDto())],
 		};
 	}
+
+	/// <summary>The wire form of a reference: no absolute path.</summary>
+	public static AttentionRefDto ToDto(this AttentionRefModel model) => new()
+	{
+		Kind     = model.Kind,
+		Label    = model.Label,
+		NodeId   = model.NodeId,
+		FileId   = model.FileId,
+		EntryId  = model.EntryId,
+		Offset   = model.Offset,
+		Length   = model.Length,
+		RefId    = model.RefId,
+		Name     = model.Name,
+		Path     = model.RelativePath,
+		Size     = model.Size,
+		Mime     = model.Mime,
+		MtimeUtc = model.MtimeUtc,
+		Url      = model.Url,
+	};
 
 	public static AttentionSummaryDto ToDto(this AttentionSummaryModel model)
 	{

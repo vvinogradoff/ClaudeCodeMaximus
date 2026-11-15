@@ -310,6 +310,10 @@ public partial class App : Application
 		services.AddTransient<IAttentionReplyService, AttentionReplyService>();
 		services.AddTransient<IRemoteRpcModule, SessionRpcModule>();
 		services.AddTransient<IRemoteRpcModule, AttentionRpcModule>();
+		// Focus references (step 1): quote and file resolution at post time, handle-based file reads for clients.
+		services.AddSingleton<IFocusRefResolver, FocusRefResolver>();
+		services.AddSingleton<IFileAccessService, FileAccessService>();
+		services.AddTransient<IRemoteRpcModule, FileRpcModule>();
 		services.AddTransient<IRemoteRpcModule, CatalogRpcModule>();
 		services.AddTransient<IRemoteRpcModule, UsageRpcModule>();
 

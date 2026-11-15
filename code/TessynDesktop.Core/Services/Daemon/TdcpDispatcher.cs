@@ -105,7 +105,17 @@ public sealed class TdcpDispatcher
 			if (!_registry.TryGet(method, out var entry) || (transport == TdcpTransport.Relay && !entry.RemoteCallable))
 				throw new TdcpMethodNotFoundException(method);
 
-			var result = await entry.Handler(@params, ct).ConfigureAwait(false);
+			TdcpCallContext.Set(transport);
+			object? result;
+			try
+			{
+				result = await entry.Handler(@params, ct).ConfigureAwait(false);
+			}
+			finally
+			{
+				TdcpCallContext.Clear();
+			}
+
 			return Result(id, Serialize(result));
 		}
 		catch (TdcpMethodNotFoundException ex)
