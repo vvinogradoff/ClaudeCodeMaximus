@@ -44,8 +44,8 @@ public sealed class ScheduleRpcModule : IRemoteRpcModule
 		if (text == null)
 			return null;
 
-		return DateTimeOffset.TryParse(text, null, System.Globalization.DateTimeStyles.RoundtripKind, out var at)
-			? at.ToUniversalTime()
+		return DateTimeOffset.TryParse(text, null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var at)
+			? at
 			: throw new TdcpInvalidParamsException("'fireAtUtc' must be an ISO 8601 date and time");
 	}
 }

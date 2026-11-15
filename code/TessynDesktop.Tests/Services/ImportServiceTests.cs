@@ -399,6 +399,31 @@ public sealed class ImportServiceTests : IDisposable
 	}
 
 	[Fact]
+	public async Task TwoRunsForTheSameSession_ImportItOnce()
+	{
+		var directory = _env.AddDirectory("proj");
+		var path = _env.WriteClaudeSession(Constants.ClaudeSessions.BuildProjectSlug(directory.Path), "same", "once");
+		_env.Index.SummariesResult = [_env.SummaryOf(path)];
+
+		var runs = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => _env.Service.RunAsync(directory.NodeId, [new ImportRequestDto("same")])));
+
+		Assert.Single(directory.Sessions);
+		Assert.Equal(1, runs.Sum(r => r.Imported.Count));
+		Assert.Equal(7, runs.Sum(r => r.Failed.Count(f => f.Reason == "Already imported")));
+	}
+
+	[Theory]
+	[InlineData("c--Projects-x", @"c:\Projects\x")]
+	[InlineData("0abc-def", "0abc-def")]
+	public void New_ALowerCaseDriveSlug_RoundTrips_AndADigitSlugIsLeftAsIs(string slug, string expected)
+	{
+		var path = _env.Service.ResolveOriginalProjectPath(slug, null);
+
+		Assert.Equal(expected, path);
+		Assert.Equal(slug, Constants.ClaudeSessions.BuildProjectSlug(path));
+	}
+
+	[Fact]
 	public async Task Run_RefusesAnUnknownTarget_ABadId_ALongName_AndTooManyItems()
 	{
 		var directory = _env.AddDirectory("proj");

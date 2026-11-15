@@ -103,8 +103,10 @@ public sealed class ScheduleApiServiceTests : IDisposable
 		{ "past", new("n", "p", "at", new DateTimeOffset(2026, 11, 4, 11, 0, 0, TimeSpan.Zero), null, null, null, null) },
 		{ "too far ahead", new("n", "p", "at", new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero), null, null, null, null) },
 		{ "unknown missed-fire policy", new("n", "p", "at", new DateTimeOffset(2026, 11, 5, 0, 0, 0, TimeSpan.Zero), null, "retry", null, null) },
-		{ "negative limit", new("n", "p", "cron", null, "* * * * *", null, null, -1) },
-		{ "huge limit", new("n", "p", "cron", null, "* * * * *", null, null, 10_001) },
+		{ "negative limit", new("n", "p", "cron", null, "*/5 * * * *", null, null, -1) },
+		{ "huge limit", new("n", "p", "cron", null, "*/5 * * * *", null, null, 10_001) },
+		{ "every minute", new("n", "p", "cron", null, "* * * * *", null, null, null) },
+		{ "two fires a minute apart", new("n", "p", "cron", null, "0,1 * * * *", null, null, null) },
 	};
 
 	[Theory]
@@ -127,6 +129,47 @@ public sealed class ScheduleApiServiceTests : IDisposable
 
 		Assert.DoesNotContain(_env.Root, error.Message);
 		Assert.Empty(_scheduler.GetSchedules());
+	}
+
+	[Theory]
+	[InlineData("*/2 * * * *")]
+	[InlineData("*/5 * * * *")]
+	[InlineData("0 0 31 2 *")]   // valid, never matches: parked
+	public void ACronAtLeastTwoMinutesApart_IsAccepted(string cron)
+	{
+		var added = _sut.Add(new ScheduleAddRequestModel(_session.NodeId, "tick", "cron", null, cron, null, null, null));
+
+		Assert.Equal(cron, added.Cron);
+	}
+
+	[Fact]
+	public void ASessionHasAtMostOneHundredSchedules_AndMailboxDeliveriesDoNotCount()
+	{
+		_scheduler.AddOrMergeMailboxDelivery(_session.NodeId, "worker", "done");
+		for (var i = 0; i < Constants.ScheduleApi.MaxPerSession; i++)
+			_sut.Add(At(Later(TimeSpan.FromHours(1 + i))));
+
+		var error = Assert.Throws<TdcpInvalidParamsException>(() => _sut.Add(At(Later(TimeSpan.FromHours(500)))));
+
+		Assert.Contains("too many", error.Message);
+		_sut.Add(At(Later(TimeSpan.FromHours(500))) with { NodeId = _other.NodeId });   // another session is not affected
+	}
+
+	[Fact]
+	public void ThereAreAtMostOneThousandSchedulesInAll()
+	{
+		var directory = _env.AddDirectory("many");
+		var sessions = Enumerable.Range(0, 10).Select(i => _env.Registry.AddSession(directory, "S" + i)).ToList();
+		foreach (var session in sessions)
+		{
+			for (var i = 0; i < Constants.ScheduleApi.MaxPerSession; i++)
+				_scheduler.AddSchedule(new ScheduleModel { ScheduleId = Guid.NewGuid().ToString("N")[..8], TargetNodeId = session.NodeId, Prompt = "p", Kind = ScheduleKind.At, FireAtUtc = Later(TimeSpan.FromHours(1)) });
+		}
+
+		var error = Assert.Throws<TdcpInvalidParamsException>(() => _sut.Add(At(Later(TimeSpan.FromHours(2)))));
+
+		Assert.Contains("too many", error.Message);
+		Assert.Equal(Constants.ScheduleApi.MaxTotal, _scheduler.GetSchedules().Count);
 	}
 
 	[Fact]

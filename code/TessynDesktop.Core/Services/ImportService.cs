@@ -30,6 +30,8 @@ public sealed partial class ImportService : IImportService
 	private readonly IReadOnlyList<string>? _projectsDirsOverride;
 
 	/// <summary>Ids whose title is being generated now, so a poll does not start the same work twice.</summary>
+	private readonly SemaphoreSlim _runGate = new(1, 1);
+
 	private readonly ConcurrentDictionary<string, byte> _titleWork = new(StringComparer.Ordinal);
 
 	/// <summary>Ids that ended a generation without a title (unknown to the index, no prompt, a failure), with when: they are not tried again for a while, so a poll can reach 0 pending.</summary>
@@ -376,10 +378,19 @@ public sealed partial class ImportService : IImportService
 		if (directory == null && group == null)
 			throw new TdcpException(Constants.Import.TargetNotFound);
 
-		var indexed = (await _index.GetSessionSummariesAsync([.. items.Select(i => i.ExternalId).Distinct(StringComparer.Ordinal)], cancellationToken).ConfigureAwait(false))
-			.ToDictionary(s => s.SessionId, StringComparer.Ordinal);
+		// One run at a time: the imported ids are read inside the gate, so two runs (or two clients) asking for the same session cannot both pass the check.
+		await _runGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+		try
+		{
+			var indexed = (await _index.GetSessionSummariesAsync([.. items.Select(i => i.ExternalId).Distinct(StringComparer.Ordinal)], cancellationToken).ConfigureAwait(false))
+				.ToDictionary(s => s.SessionId, StringComparer.Ordinal);
 
-		return await Task.Run(() => Run(directory, group, items, indexed), cancellationToken).ConfigureAwait(false);
+			return await Task.Run(() => Run(directory, group, items, indexed), cancellationToken).ConfigureAwait(false);
+		}
+		finally
+		{
+			_runGate.Release();
+		}
 	}
 
 	private ImportRunResult Run(DirectoryNodeModel? directory, GroupNodeModel? group, IReadOnlyList<ImportRequestDto> items, IReadOnlyDictionary<string, ClaudeSessionSummaryModel> indexed)

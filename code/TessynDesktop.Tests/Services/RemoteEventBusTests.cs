@@ -50,6 +50,25 @@ public sealed class RemoteEventBusTests : IDisposable
 	}
 
 	[Fact]
+	public void ACoalescedPayloadBuilder_MayPublishAndSchedule_BecauseItRunsOutsideTheBusLock()
+	{
+		// J4 review K1: a builder that publishes (immediately and coalesced) must not deadlock or lose either notification.
+		_bus.PublishCoalesced("outer", "k", () =>
+		{
+			_bus.Publish("inner.now", new SamplePayload("a", null, 1));
+			_bus.PublishCoalesced("inner.later", "k", () => new SamplePayload("b", null, 2), Window);
+			_bus.FlushPending("inner.later", "other");
+			return new SamplePayload("c", null, 3);
+		}, Window);
+
+		var deadline = DateTime.UtcNow + Wait;
+		while (DateTime.UtcNow < deadline && Snapshot().Count < 3)
+			Thread.Sleep(20);
+
+		Assert.Equal(["inner.later", "inner.now", "outer"], Snapshot().Select(n => n.Method).Order(StringComparer.Ordinal));
+	}
+
+	[Fact]
 	public void Publish_WithoutSubscribers_DoesNotThrow()
 	{
 		using var lonely = new RemoteEventBus();

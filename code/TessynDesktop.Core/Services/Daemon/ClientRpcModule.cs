@@ -215,6 +215,11 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		if (_hasContentStore)
 			capabilities.Add(Constants.Remote.Capabilities.EntriesIds);
 
+		// The flags of J3, J1 and J4 name loopback-only methods (the relay answers -32601 for every one), so a relay client must not be told about them:
+		// a web client that detects features by capability would show UI that cannot work.
+		if (TdcpCallContext.Transport != TdcpTransport.Loopback)
+			return capabilities;
+
 		// Package J3: each flag needs the service behind its methods.
 		if (_hasSettings)
 			capabilities.Add(RemoteProtocol.SettingsApi.Capability);

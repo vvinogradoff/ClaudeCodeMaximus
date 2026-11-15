@@ -85,6 +85,18 @@ public static partial class Constants
 		public const int CronMaxChars = 200;
 		public const int MaxFiresLimit = 10_000;
 
+		/// <summary>The most schedules one session may have (mailbox deliveries do not count).</summary>
+		public const int MaxPerSession = 100;
+
+		/// <summary>The most schedules in all.</summary>
+		public const int MaxTotal = 1000;
+
+		/// <summary>A cron schedule must not fire more often than this (fire times are whole minutes, so every minute is the refused case).</summary>
+		public const int MinCronIntervalMinutes = 2;
+
+		/// <summary>How many consecutive fire gaps of a cron expression are checked.</summary>
+		public const int CronGapsChecked = 3;
+
 		/// <summary>Window in which schedule.changed notifications are merged.</summary>
 		public static readonly TimeSpan ChangedWindow = TimeSpan.FromMilliseconds(250);
 
@@ -108,6 +120,9 @@ public static partial class Constants
 		public const string FireAtNotAllowed  = "'fireAtUtc' is not for a cron schedule";
 		public const string UnknownMissedFire = "'missedFire' must be fireOnce or skip";
 		public const string BadMaxFires       = "'maxFires' is out of range";
+		public const string TooManyForSession = "This session has too many schedules; remove some first";
+		public const string TooManyInTotal    = "There are too many schedules; remove some first";
+		public const string CronTooFrequent   = "'cron' fires too often; the interval must be at least 2 minutes";
 	}
 
 	public static class AttentionAll

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Serilog;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
@@ -35,7 +36,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	private readonly IDraftService? _drafts;
 	private readonly ISchedulerService? _scheduler;
 	private readonly object _scheduleGate = new();
-	private HashSet<string> _scheduledNodes = new(StringComparer.Ordinal);
+	private Dictionary<string, string> _scheduleOwners = new(StringComparer.Ordinal);
 	private readonly DraftRevisions _revisions = new();
 
 	private readonly object _gate = new();
@@ -99,7 +100,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 				if (_scheduler != null)
 				{
 					lock (_scheduleGate)
-						_scheduledNodes = ScheduledNodes();
+						_scheduleOwners = ScheduleOwners();
 					_daemon.ScheduleChanged += OnScheduleChanged;
 				}
 			}
@@ -264,32 +265,55 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		return node == null || _drafts == null ? null : new DraftChangedPayload(node.NodeId, _revisions.Of(_drafts.LoadDraft(fileName)));
 	}
 
-	// schedule.changed is local-stream only (the relay filters it). The scheduler's event does not say which session, so the set of scheduled sessions is
-	// compared when the window ends: a session whose HasSchedules moved gets its session.changed, and the payload names the session when exactly one moved.
+	// schedule.changed is local-stream only (the relay filters it). The scheduler event does not say what changed, so when the window ends the schedule ids
+	// are compared with the last ones seen: nothing added or removed (a schedule only fired) publishes nothing; otherwise the payload names the session when
+	// exactly one is touched. A session whose HasSchedules moved gets its session.changed, published from the thread pool and not from this builder.
 	private void OnScheduleChanged(object? sender, EventArgs e) => Guard(() =>
 		_bus.PublishCoalesced(
 			RemoteProtocol.Schedules.ChangedEvent, ScheduleKey,
 			BuildScheduleChangedPayload,
 			Constants.ScheduleApi.ChangedWindow));
 
-	private ScheduleChangedPayload BuildScheduleChangedPayload()
+	private ScheduleChangedPayload? BuildScheduleChangedPayload()
 	{
-		var now = ScheduledNodes();
-		HashSet<string> moved;
+		var now = ScheduleOwners();
+		Dictionary<string, string> before;
 		lock (_scheduleGate)
 		{
-			moved = [.. _scheduledNodes.Except(now), .. now.Except(_scheduledNodes)];
-			_scheduledNodes = now;
+			before = _scheduleOwners;
+			_scheduleOwners = now;
 		}
 
-		foreach (var nodeId in moved)
-			PublishSessionChangedByNode(nodeId);
+		var touched = new HashSet<string>(StringComparer.Ordinal);
+		foreach (var (id, node) in before)
+		{
+			if (!now.ContainsKey(id))
+				touched.Add(node);
+		}
 
-		return new ScheduleChangedPayload(moved.Count == 1 ? moved.First() : null);
+		foreach (var (id, node) in now)
+		{
+			if (!before.ContainsKey(id))
+				touched.Add(node);
+		}
+
+		if (touched.Count == 0)
+			return null;
+
+		var moved = touched.Where(node => before.ContainsValue(node) != now.ContainsValue(node)).ToList();
+		if (moved.Count > 0)
+			ThreadPool.QueueUserWorkItem(_ => Guard(() => moved.ForEach(PublishSessionChangedByNode)));
+
+		return new ScheduleChangedPayload(touched.Count == 1 ? touched.First() : null);
 	}
 
-	private HashSet<string> ScheduledNodes() =>
-		_scheduler!.GetSchedules().Select(s => s.TargetNodeId).ToHashSet(StringComparer.Ordinal);
+	private Dictionary<string, string> ScheduleOwners()
+	{
+		var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+		foreach (var schedule in _scheduler!.GetSchedules())
+			owners.TryAdd(schedule.ScheduleId, schedule.TargetNodeId);
+		return owners;
+	}
 
 	private void OnSessionFileRewritten(object? sender, SessionFileRewrittenEventArgs e) => Guard(() =>
 	{

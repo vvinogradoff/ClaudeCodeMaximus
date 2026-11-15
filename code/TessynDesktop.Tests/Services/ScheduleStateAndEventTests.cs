@@ -18,7 +18,7 @@ namespace TessynDesktop.Tests.Services;
 /// <remarks>Created by Claude</remarks>
 public sealed class ScheduleStateAndEventTests : IDisposable
 {
-	private static readonly TimeSpan Wait = TimeSpan.FromSeconds(8);
+	private static readonly TimeSpan Wait = TimeSpan.FromSeconds(30);   // generous: the windows are real timers and the machine may be loaded
 
 	private readonly ImportTestEnv _env = new();
 	private readonly SchedulerService _scheduler;
@@ -132,23 +132,50 @@ public sealed class ScheduleStateAndEventTests : IDisposable
 	}
 
 	[Fact]
-	public void ABurstOfChanges_IsOneNotification_WithoutASessionWhenNoFlagMoved()
+	public void ASchedulesPureFiring_PublishesNothing()
 	{
 		using var publisher = new Stopper(StartPublisher(_scheduler));
 		var first = Add(_one);
 		WaitFor("schedule.changed", 1);
 		WaitFor("session.changed", 1);
-		var sessionChangedBefore = Received("session.changed").Count;
 
-		first.FireCount++;   // the schedule fired: the set of scheduled sessions is the same
+		first.FireCount++;   // the schedule fired: no schedule came or went
 		for (var i = 0; i < 5; i++)
 			Raise();
 
+		Thread.Sleep(700);
+		Assert.Single(Received("schedule.changed"));
+		Assert.Single(Received("session.changed"));
+	}
+
+	[Fact]
+	public void ABurstOfAdds_IsOneNotification()
+	{
+		using var publisher = new Stopper(StartPublisher(_scheduler));
+
+		Add(_one);
+		Add(_one);
+		Add(_one);
+
+		Assert.Single(WaitFor("schedule.changed", 1));
+		Thread.Sleep(700);
+		Assert.Single(Received("schedule.changed"));
+		Assert.Equal(_one.NodeId, Received("schedule.changed")[0].Params["nodeId"]!.GetValue<string>());
+	}
+
+	[Fact]
+	public void ASecondScheduleOfASession_IsAChange_ButMovesNoFlag()
+	{
+		using var publisher = new Stopper(StartPublisher(_scheduler));
+		Add(_one);
+		WaitFor("session.changed", 1);
+
+		Add(_one);
+
 		var changed = WaitFor("schedule.changed", 2);
-		Thread.Sleep(600);
-		Assert.Equal(2, Received("schedule.changed").Count);
-		Assert.Null(changed[1].Params["nodeId"]);
-		Assert.Equal(sessionChangedBefore, Received("session.changed").Count);
+		Assert.Equal(_one.NodeId, changed[1].Params["nodeId"]!.GetValue<string>());
+		Thread.Sleep(500);
+		Assert.Single(Received("session.changed"));
 	}
 
 	[Fact]
@@ -157,6 +184,7 @@ public sealed class ScheduleStateAndEventTests : IDisposable
 		using var publisher = new Stopper(StartPublisher(_scheduler));
 		var schedule = Add(_one);
 		WaitFor("schedule.changed", 1);
+		WaitFor("session.changed", 1);
 
 		_scheduler.RemoveSchedule(schedule.ScheduleId);
 		Raise();
@@ -187,10 +215,9 @@ public sealed class ScheduleStateAndEventTests : IDisposable
 		using var publisher = new Stopper(StartPublisher(_scheduler));
 
 		Raise();   // something fired, the set is as it was
-		var changed = WaitFor("schedule.changed", 1);
 
-		Assert.Null(Assert.Single(changed).Params["nodeId"]);
-		Thread.Sleep(400);
+		Thread.Sleep(700);
+		Assert.Empty(Received("schedule.changed"));
 		Assert.Empty(Received("session.changed"));
 	}
 

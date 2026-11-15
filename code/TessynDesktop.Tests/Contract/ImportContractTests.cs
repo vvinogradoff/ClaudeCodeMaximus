@@ -95,6 +95,30 @@ public sealed class ImportContractTests : IDisposable
 	}
 
 	[Fact]
+	public async Task Hello_OverTheRelay_AnnouncesNoCapabilityOfALoopbackOnlyPackage()
+	{
+		var request = """{"jsonrpc":"2.0","id":1,"method":"client.hello","params":{}}""";
+
+		var relay = await _env.Dispatcher.HandleTextAsync(request, TdcpTransport.Relay, CancellationToken.None);
+		var loopback = await _env.Dispatcher.HandleTextAsync(request, TdcpTransport.Loopback, CancellationToken.None);
+
+		var relayCaps = relay!["result"]!["capabilities"]!.AsArray().Select(c => c!.GetValue<string>()).ToArray();
+		var loopbackCaps = loopback!["result"]!["capabilities"]!.AsArray().Select(c => c!.GetValue<string>()).ToArray();
+		Assert.Equal(["events.local", "events.resume"], relayCaps);
+		Assert.Contains("import", loopbackCaps);
+	}
+
+	[Fact]
+	public async Task AFireTimeWithoutAnOffset_IsReadAsUtc()
+	{
+		var added = await ResultAsync("schedules.add", Args(("nodeId", _env.Session.NodeId), ("prompt", "p"), ("kind", "at"), ("fireAtUtc", "2026-11-05T09:00:00")));
+		var withOffset = await ResultAsync("schedules.add", Args(("nodeId", _env.Session.NodeId), ("prompt", "p"), ("kind", "at"), ("fireAtUtc", "2026-11-05T11:00:00+02:00")));
+
+		Assert.Equal(FireAt, added["fireAtUtc"]!.GetValue<DateTimeOffset>());
+		Assert.Equal(FireAt, withOffset["fireAtUtc"]!.GetValue<DateTimeOffset>());
+	}
+
+	[Fact]
 	public async Task Hello_AnnouncesNoJ4Capability_WithoutTheServices()
 	{
 		using var bare = new ImportWireEnv(withServices: false);

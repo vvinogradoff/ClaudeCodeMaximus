@@ -51,6 +51,8 @@ public sealed class ScheduleApiService : IScheduleApiService
 				throw new TdcpInvalidParamsException(Constants.ScheduleApi.CronRequired);
 			if (request.Cron.Length > Constants.ScheduleApi.CronMaxChars)
 				throw new TdcpInvalidParamsException(Constants.ScheduleApi.CronInvalid);
+
+			CheckCronInterval(request.Cron);
 		}
 		else
 		{
@@ -65,6 +67,7 @@ public sealed class ScheduleApiService : IScheduleApiService
 
 		// The session is looked up last, so a malformed request is answered as one whether or not the session exists.
 		var target = _registry.FindModelByNodeId(request.NodeId) ?? throw new TdcpException(Constants.ScheduleApi.NodeNotFound);
+		CheckCapacity(target.NodeId);
 
 		var schedule = new ScheduleModel
 		{
@@ -93,6 +96,38 @@ public sealed class ScheduleApiService : IScheduleApiService
 
 	/// <inheritdoc />
 	public SchedulesRemoveResult Remove(string scheduleId) => new(_scheduler.RemoveSchedule(scheduleId));
+
+	/// <summary>A runaway client must not fill the settings file: schedules are persisted with their prompt.</summary>
+	private void CheckCapacity(string nodeId)
+	{
+		var all = _scheduler.GetSchedules().Where(s => !s.IsMailboxDelivery).ToList();
+		if (all.Count >= Constants.ScheduleApi.MaxTotal)
+			throw new TdcpInvalidParamsException(Constants.ScheduleApi.TooManyInTotal);
+		if (all.Count(s => s.TargetNodeId == nodeId) >= Constants.ScheduleApi.MaxPerSession)
+			throw new TdcpInvalidParamsException(Constants.ScheduleApi.TooManyForSession);
+	}
+
+	/// <summary>The first fire gaps of the expression must all be at least the minimum; an invalid expression is refused here too.</summary>
+	private void CheckCronInterval(string cron)
+	{
+		try
+		{
+			var at = _time.GetUtcNow();
+			for (var i = 0; i <= Constants.ScheduleApi.CronGapsChecked; i++)
+			{
+				var next = CronHelper.TryGetNextOccurrence(cron, at);
+				if (next == null)
+					return;   // valid but never matches: parked, as the scheduler does
+				if (i > 0 && next.Value - at < TimeSpan.FromMinutes(Constants.ScheduleApi.MinCronIntervalMinutes))
+					throw new TdcpInvalidParamsException(Constants.ScheduleApi.CronTooFrequent);
+				at = next.Value;
+			}
+		}
+		catch (ArgumentException)
+		{
+			throw new TdcpInvalidParamsException(Constants.ScheduleApi.CronInvalid);
+		}
+	}
 
 	private void CheckFireAt(DateTimeOffset fireAt)
 	{
