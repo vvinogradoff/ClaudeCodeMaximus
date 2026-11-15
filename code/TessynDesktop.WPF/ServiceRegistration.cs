@@ -29,8 +29,22 @@ public sealed class ServiceRegistration
 		services.AddSingleton<ITessynClientFactory, TessynClientFactory>();
 		services.AddSingleton<ConnectionViewModel>();
 
-		services.AddSingleton<Func<ITessynClient, TreeViewModel>>(sp => client => new TreeViewModel(
-			client, sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<TreeViewModel>>()));
+		services.AddSingleton<TreeContext>();
+		services.AddSingleton<IShellModule, TreeShellModule>();
+		if (options.TestWindow)
+			services.AddSingleton<IFolderPicker>(sp => new ScriptedFolderPicker(options.TestFolderAnswers, sp.GetRequiredService<ILogger<ScriptedFolderPicker>>()));
+		else
+			services.AddSingleton<IFolderPicker, WpfFolderPicker>();
+
+		services.AddSingleton<Func<ITessynClient, TreeViewModel>>(sp => client =>
+		{
+			var tree = new TreeViewModel(
+				client, sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<TreeViewModel>>(), Constants.Timeouts.SearchDebounce,
+				new TreeOperations(client, sp.GetRequiredService<IDialogService>(), sp.GetRequiredService<IFolderPicker>(), sp.GetRequiredService<ILogger<TreeOperations>>()),
+				new TreeNodeInfoLoader(client, sp.GetRequiredService<ILogger<TreeNodeInfoLoader>>()));
+			sp.GetRequiredService<TreeContext>().Current = tree;
+			return tree;
+		});
 		services.AddSingleton<UrlPolicy>();
 		services.AddSingleton<IUrlLauncher, SystemUrlLauncher>();
 		services.AddSingleton<MediaPreviewPolicy>();

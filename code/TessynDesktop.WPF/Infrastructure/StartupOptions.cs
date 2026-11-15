@@ -14,6 +14,7 @@ public sealed class StartupOptions
 	public const string TestWindowArgument = "--test-window";
 	public const string TestDropArgument = "--test-drop";
 	public const string TestDialogArgument = "--test-dialog";
+	public const string TestFolderArgument = "--test-folder";
 
 	public string? DaemonFile { get; init; }
 
@@ -38,6 +39,9 @@ public sealed class StartupOptions
 	/// </summary>
 	public IReadOnlyList<string> TestDialogAnswers { get; init; } = [];
 
+	/// <summary>Test seam (only with <c>--test-window</c>; repeatable <c>--test-folder &lt;path&gt;</c>): the folder dialog opens no window and answers with these folders in order (see <c>ScriptedFolderPicker</c>).</summary>
+	public IReadOnlyList<string> TestFolderAnswers { get; init; } = [];
+
 	/// <summary>The single-instance mutex name for this run.</summary>
 	public string MutexName => DataRoot == null
 		? Constants.Identity.SingleInstanceMutexName
@@ -49,6 +53,7 @@ public sealed class StartupOptions
 		string? dataRoot = null;
 		var testDrops = new List<string>();
 		var testDialogs = new List<string>();
+		var testFolders = new List<string>();
 		for (var i = 0; i < args.Count - 1; i++)
 		{
 			if (string.Equals(args[i], DaemonFileArgument, StringComparison.OrdinalIgnoreCase))
@@ -59,9 +64,11 @@ public sealed class StartupOptions
 				testDrops.Add(args[++i]);
 			else if (string.Equals(args[i], TestDialogArgument, StringComparison.OrdinalIgnoreCase))
 				testDialogs.Add(args[++i]);
+			else if (string.Equals(args[i], TestFolderArgument, StringComparison.OrdinalIgnoreCase))
+				testFolders.Add(args[++i]);
 		}
 
 		var testWindow = args.Any(a => string.Equals(a, TestWindowArgument, StringComparison.OrdinalIgnoreCase));
-		return new StartupOptions { DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [], TestDialogAnswers = testWindow ? testDialogs : [] };
+		return new StartupOptions { DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [], TestDialogAnswers = testWindow ? testDialogs : [], TestFolderAnswers = testWindow ? testFolders : [] };
 	}
 }

@@ -26,11 +26,25 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	[ObservableProperty]
 	private string? _matchSummary;
 
+	/// <summary>The git remote origin of the directory that owns the node, from <c>tree.nodeInfo</c>; null when unknown or none.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(GitOriginLabel), nameof(HasGitOrigin))]
+	private string? _gitOrigin;
+
+	/// <summary>The tooltip: the label until <c>tree.nodeInfo</c> answered, then the path on disk and the origin.</summary>
+	[ObservableProperty]
+	private string _toolTipText;
+
+	/// <summary>Feedback while a session is dragged over this row.</summary>
+	[ObservableProperty]
+	private DropFeedback _dropFeedback;
+
 	public TreeNodeViewModel(string id, TreeNodeKind kind, string label, TreeNodeViewModel? parent, int workerCount = 0)
 	{
 		Id = id;
 		Kind = kind;
 		_label = label;
+		_toolTipText = label;
 		Parent = parent;
 		Depth = parent == null ? 0 : parent.Depth + 1;
 		WorkerCount = workerCount;
@@ -62,6 +76,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
 	/// <summary>Whether the row shows an expander.</summary>
 	public bool CanExpand => IsSessionLike ? WorkerCount > 0 : Children.Count > 0;
+
+	/// <summary>True once <c>tree.nodeInfo</c> answered for this node (so a tooltip needs no second call).</summary>
+	public bool InfoLoaded { get; set; }
+
+	public bool HasGitOrigin => !string.IsNullOrEmpty(GitOrigin);
+
+	/// <summary>The short form of the git origin shown beside a directory (<c>owner/repo</c>); empty without one.</summary>
+	public string GitOriginLabel => GitOrigin == null ? string.Empty : GitOriginText.Short(GitOrigin);
 
 	public bool IsRunning => State?.Running == true;
 

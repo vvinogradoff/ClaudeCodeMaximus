@@ -10,6 +10,8 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
+        <!-- UI Automation (and screen readers) name a row by its label. -->
+        <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">

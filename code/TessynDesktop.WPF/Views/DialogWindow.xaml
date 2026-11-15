@@ -14,7 +14,8 @@
                  Visibility="{Binding IsInput, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Dialog input" />
         <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding Error}" Foreground="{DynamicResource SystemFillColorCriticalBrush}"
                    Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Dialog error" />
-        <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding Choices}" Visibility="{Binding IsChoice, Converter={StaticResource BoolToVis}}">
+        <ScrollViewer Margin="0,12,0,0" MaxHeight="360" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsChoice, Converter={StaticResource BoolToVis}}">
+        <ItemsControl ItemsSource="{Binding Choices}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <Button Content="{Binding Label}" Margin="0,0,0,6" Padding="10,6" HorizontalContentAlignment="Left"
@@ -22,6 +23,7 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
+        </ScrollViewer>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button x:Name="AcceptButton" Content="{Binding ConfirmText}" Command="{Binding AcceptCommand}" MinWidth="88" Margin="0,0,8,0"
                     Style="{DynamicResource AccentButtonStyle}" Visibility="{Binding IsChoice, Converter={StaticResource InvertedBoolToVis}}" />

@@ -42,13 +42,30 @@
             </Setter>
         </Style>
         <DataTemplate DataType="{x:Type vm:TreeNodeViewModel}">
-            <Grid Height="30">
+            <Grid Height="30" ToolTip="{Binding ToolTipText}" Background="Transparent">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="20" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <!-- Drag feedback: a session over a row that may take it lights up in the accent colour, over one that may not in the critical colour. -->
+                <Border Grid.ColumnSpan="4" CornerRadius="4" IsHitTestVisible="False" Opacity="0.3" Visibility="Collapsed">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding DropFeedback}" Value="Allowed">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DropFeedback}" Value="Refused">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
                 <Border Width="{Binding IndentWidth}" />
                 <Button Grid.Column="1" Style="{StaticResource ExpanderButton}"
                         Visibility="{Binding CanExpand, Converter={StaticResource BoolToVis}}"
@@ -69,6 +86,8 @@
                     </TextBlock.Style>
                 </TextBlock>
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding GitOriginLabel}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" Margin="0,0,8,0"
+                               TextTrimming="CharacterEllipsis" MaxWidth="140" Visibility="{Binding HasGitOrigin, Converter={StaticResource BoolToVis}}" />
                     <TextBlock Text="{Binding MatchSummary}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,8,0" />
                     <TextBlock Text="{Binding WorkerCount, StringFormat={}{0}w}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,8,0">
                         <TextBlock.Style>
@@ -112,7 +131,9 @@
                  ItemContainerStyle="{StaticResource TreeRowItem}"
                  BorderThickness="0" Background="Transparent"
                  v:CommandMenu.Menu="tree.node"
+                 x:Name="RowList"
                  PreviewKeyDown="OnTreeKeyDown"
+                 ToolTipOpening="OnRowToolTipOpening"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling"
                  ScrollViewer.CanContentScroll="True"

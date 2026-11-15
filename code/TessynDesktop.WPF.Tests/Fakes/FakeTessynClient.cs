@@ -151,7 +151,22 @@ public sealed partial class FakeTessynClient : ITessynClient
 		return Task.FromResult(SearchHandler?.Invoke(query) ?? new TreeSearchResult(query, false, false, false, []));
 	}
 
-	public Task<CreateSessionResult> TreeCreateSessionAsync(string anchorId, string name, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Func<string, string, CreateSessionResult>? CreateSessionHandler { get; set; }
+
+	public Task<CreateSessionResult> TreeCreateSessionAsync(string anchorId, string name, CancellationToken cancellationToken = default)
+	{
+		lock (_gate)
+			Calls.Add($"tree.createSession:{anchorId}:{name}");
+
+		try
+		{
+			return Task.FromResult(CreateSessionHandler?.Invoke(anchorId, name) ?? throw new NotImplementedException());
+		}
+		catch (Exception ex)
+		{
+			return Task.FromException<CreateSessionResult>(ex);
+		}
+	}
 
 	public Task<RecentListResult> RecentListAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 

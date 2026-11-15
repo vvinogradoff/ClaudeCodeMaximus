@@ -93,7 +93,7 @@ public partial class MainWindow : Window
 			return;
 
 		var key = e.Key == Key.System ? e.SystemKey : e.Key;
-		if (_commands.TryExecuteGesture(key, Keyboard.Modifiers, ShellKeyPolicy.IsTextInput(Keyboard.FocusedElement)))
+		if (_commands.TryExecuteGesture(key, Keyboard.Modifiers, ShellKeyPolicy.IsTextInput(Keyboard.FocusedElement), e.IsRepeat))
 			e.Handled = true;
 	}
 

@@ -30,4 +30,10 @@ public sealed class ShellCommand
 	/// is a text-editing shortcut (Ctrl+C/V/X/A/Z/Y, Ctrl+Backspace/Delete), is left to the text box.
 	/// </summary>
 	public bool AllowInTextInput { get; init; }
+
+	/// <summary>
+	/// True for a command that must run once per key press (a destructive one such as Delete): the auto-repeat of a held key is swallowed.
+	/// Default false: a held key repeats the command (Find next, for instance).
+	/// </summary>
+	public bool IgnoreRepeat { get; init; }
 }
