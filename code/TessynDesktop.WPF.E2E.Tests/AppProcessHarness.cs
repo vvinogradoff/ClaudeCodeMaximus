@@ -16,10 +16,15 @@ public sealed class AppProcessHarness
 		_daemonFile = daemonFile;
 	}
 
-	public Process Start(params string[] extraArguments)
+	public Process Start(params string[] extraArguments) => Start(new Dictionary<string, string>(), extraArguments);
+
+	/// <summary>Starts the app with extra environment variables (for example the WebView2 debugging port, see <see cref="CdpPage"/>).</summary>
+	public Process Start(IReadOnlyDictionary<string, string> environment, params string[] extraArguments)
 	{
 		var exe = new BuiltAppLocator().FindExe();
 		var info = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
+		foreach (var (name, value) in environment)
+			info.Environment[name] = value;
 		info.ArgumentList.Add("--test-window");
 		info.ArgumentList.Add("--data-root");
 		info.ArgumentList.Add(_root);

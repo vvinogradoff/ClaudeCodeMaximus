@@ -66,6 +66,8 @@ export interface SessionDetailDto {
 }
 
 export type EntryRole = 'user' | 'assistant' | 'system' | 'compaction';
+/** What produced a user entry; omitted for the desktop user. */
+export type EntrySource = 'scheduled' | 'orchestrated' | 'telegram' | 'web';
 export interface SessionEntryDto {
 	index: number;
 	timestamp: string;
@@ -76,6 +78,8 @@ export interface SessionEntryDto {
 	profileName?: string;
 	modelId?: string;
 	effort?: string;
+	/** Set on a user entry that was not typed on the desktop; scheduled and orchestrated ones are shown teal. */
+	source?: EntrySource;
 	/** Stable id `{fileId}:{ordinal}`; omitted when the daemon has no content store. */
 	entryId?: string;
 }

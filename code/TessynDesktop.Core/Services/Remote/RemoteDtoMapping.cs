@@ -83,6 +83,7 @@ public static class RemoteDtoMapping
 			ProfileName = model.ProfileName,
 			ModelId     = model.ModelId,
 			Effort      = model.Effort,
+			Source      = model.Source,
 			Content     = cut ? model.Content[..maxContentChars] : model.Content,
 			Truncated   = cut ? true : null,
 			FullLength  = cut ? model.Content.Length : null,

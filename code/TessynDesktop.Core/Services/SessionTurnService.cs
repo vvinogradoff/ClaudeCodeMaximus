@@ -188,7 +188,8 @@ public sealed class SessionTurnService : ISessionTurnService
 			// Stamped with the profile display name actually used, as the desktop does, so that
 			// "last used profile" restores correctly afterwards.
 			var stampedProfileName = profile.IsDefault ? await _profileLabels.GetDefaultLabelAsync() : profile.DisplayName;
-			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt, profileName: stampedProfileName);
+			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt, profileName: stampedProfileName,
+				source: EntrySources.FromTurnSource(source));
 
 			// FR.19.13 — if a Streaming Session Mode process is already alive for this node (started
 			// by the interactive desktop path), route this headless turn into it instead of spawning

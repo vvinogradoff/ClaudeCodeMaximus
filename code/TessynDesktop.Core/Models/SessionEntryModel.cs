@@ -25,5 +25,11 @@ public sealed class SessionEntryModel
 	/// <summary>Effort level stored in the header for ASSISTANT entries.</summary>
 	public string? Effort { get; init; }
 
+	/// <summary>
+	/// What produced a USER entry (<see cref="EntrySources"/>): "scheduled", "orchestrated", "telegram" or "web"; null for the
+	/// desktop user and for every other role. A legacy "[Scheduled]" entry is reported as "scheduled".
+	/// </summary>
+	public string? Source { get; init; }
+
 	public bool IsCompaction => Role == Constants.SessionFile.RoleCompaction;
 }

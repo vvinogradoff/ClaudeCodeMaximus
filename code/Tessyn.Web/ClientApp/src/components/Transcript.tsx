@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { SessionEntryDto } from '../api/types';
 import { formatElapsed, formatSmartTime } from '../lib/format';
 import { findQuoteRange, quoteOf } from '../lib/highlight';
+import { inputLabel, isAutomatedInput } from '../lib/inputSource';
 import { visibleEntries } from '../lib/transcript';
 import { nowMs } from '../state/appState';
 import type { FocusEntry } from '../state/appState';
@@ -24,7 +25,7 @@ function MarkedText({ text, mark }: { text: string; mark?: FocusEntry }) {
 	return <>{text.slice(0, mark.offset)}<mark className="ref-mark" data-testid="ref-mark">{q}</mark>{text.slice(mark.offset + q.length)}</>;
 }
 
-function EntryView({ e, now, onFull, focus }: { e: SessionEntryDto; now: number; onFull: (e: SessionEntryDto) => void; focus?: FocusEntry }) {
+export function EntryView({ e, now, onFull, focus }: { e: SessionEntryDto; now: number; onFull: (e: SessionEntryDto) => void; focus?: FocusEntry }) {
 	const time = formatSmartTime(e.timestamp, now);
 	const body = useRef<HTMLDivElement>(null);
 	const marked = !!focus?.mark;
@@ -48,9 +49,9 @@ function EntryView({ e, now, onFull, focus }: { e: SessionEntryDto; now: number;
 	const more = e.truncated ? <button type="button" className="link-btn" onClick={() => onFull(e)}>Show full message</button> : null;
 	if (e.role === 'user') {
 		return (
-			<div className={`msg user${marked ? ' hl-entry' : ''}`} data-index={e.index} data-entry-id={e.entryId}>
+			<div className={`msg user${isAutomatedInput(e.source) ? ' auto' : ''}${marked ? ' hl-entry' : ''}`} data-index={e.index} data-entry-id={e.entryId}>
 				<div className="bubble">
-					<div className="meta"><span>You</span>{e.profileName && <span className="prof">{e.profileName}</span>}<span className="time">{time}</span></div>
+					<div className="meta"><span>{inputLabel(e.source)}</span>{e.profileName && <span className="prof">{e.profileName}</span>}<span className="time">{time}</span></div>
 					<div className="text"><MarkedText text={e.content} mark={focus} /></div>
 					{more}
 				</div>

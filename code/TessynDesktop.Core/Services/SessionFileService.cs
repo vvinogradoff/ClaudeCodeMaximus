@@ -49,10 +49,10 @@ public sealed class SessionFileService : ISessionFileService
 		return fileName;
 	}
 
-	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null)
+	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null, string? source = null)
 	{
 		var timestamp = DateTimeOffset.UtcNow;
-		var entry = BuildEntryText(timestamp, role, content, profileName, modelId, effort);
+		var entry = BuildEntryText(timestamp, role, content, profileName, modelId, effort, source);
 		AppendToFile(fileName, entry);
 
 		EntryAppended?.Invoke(this, new SessionEntryAppendedEventArgs
@@ -66,6 +66,7 @@ public sealed class SessionFileService : ISessionFileService
 				ProfileName = profileName,
 				ModelId = modelId,
 				Effort = effort,
+				Source = EntrySources.Resolve(role, source, content),
 			},
 		});
 	}
@@ -233,7 +234,7 @@ public sealed class SessionFileService : ISessionFileService
 			}
 			else
 			{
-				sb.AppendLine(FormatHeader(entry.Timestamp, entry.Role, entry.ProfileName, entry.ModelId, entry.Effort));
+				sb.AppendLine(FormatHeader(entry.Timestamp, entry.Role, entry.ProfileName, entry.ModelId, entry.Effort, entry.Source));
 				sb.AppendLine(entry.Content);
 				sb.AppendLine();
 			}
@@ -306,16 +307,16 @@ public sealed class SessionFileService : ISessionFileService
 		stream.Flush(flushToDisk: true);
 	}
 
-	private static string BuildEntryText(DateTimeOffset timestamp, string role, string content, string? profileName = null, string? modelId = null, string? effort = null)
+	private static string BuildEntryText(DateTimeOffset timestamp, string role, string content, string? profileName = null, string? modelId = null, string? effort = null, string? source = null)
 	{
 		var sb = new StringBuilder();
-		sb.AppendLine(FormatHeader(timestamp, role, profileName, modelId, effort));
+		sb.AppendLine(FormatHeader(timestamp, role, profileName, modelId, effort, source));
 		sb.AppendLine(content);
 		sb.AppendLine();
 		return sb.ToString();
 	}
 
-	private static string FormatHeader(DateTimeOffset timestamp, string role, string? profileName = null, string? modelId = null, string? effort = null)
+	private static string FormatHeader(DateTimeOffset timestamp, string role, string? profileName = null, string? modelId = null, string? effort = null, string? source = null)
 	{
 		var sb = new StringBuilder($"[{timestamp.ToString(Constants.SessionFile.TimestampFormat)}] {role}");
 		if (profileName != null)
@@ -324,6 +325,8 @@ public sealed class SessionFileService : ISessionFileService
 			sb.Append($" model=\"{EscapeMetaValue(modelId)}\"");
 		if (effort != null)
 			sb.Append($" effort=\"{EscapeMetaValue(effort)}\"");
+		if (source != null)
+			sb.Append($" {Constants.SessionFile.MetaKeySource}=\"{EscapeMetaValue(source)}\"");
 		return sb.ToString();
 	}
 
@@ -359,6 +362,7 @@ public sealed class SessionFileService : ISessionFileService
 			meta.TryGetValue("profile", out var profileName);
 			meta.TryGetValue("model", out var modelId);
 			meta.TryGetValue("effort", out var effort);
+			meta.TryGetValue(Constants.SessionFile.MetaKeySource, out var storedSource);
 
 			var contentLines = new List<string>();
 			while (i < lines.Length && !TryParseHeader(lines[i], out _, out _, out _))
@@ -371,14 +375,16 @@ public sealed class SessionFileService : ISessionFileService
 			while (contentLines.Count > 0 && string.IsNullOrEmpty(contentLines[^1]))
 				contentLines.RemoveAt(contentLines.Count - 1);
 
+			var content = string.Join(Environment.NewLine, contentLines);
 			entries.Add(new SessionEntryModel
 			{
 				Timestamp   = timestamp,
 				Role        = role,
-				Content     = string.Join(Environment.NewLine, contentLines),
+				Content     = content,
 				ProfileName = profileName,
 				ModelId     = modelId,
 				Effort      = effort,
+				Source      = EntrySources.Resolve(role, storedSource, content),
 			});
 		}
 

@@ -1,0 +1,23 @@
+{
+  "nodeId": "<id1>",
+  "fileId": "<id2>",
+  "fromSeq": 1,
+  "toSeq": 3,
+  "entries": [
+    {
+      "index": 1,
+      "timestamp": "2026-11-14T08:01:00+00:00",
+      "role": "user",
+      "content": "tick",
+      "source": "scheduled",
+      "entryId": "<id2>:1"
+    },
+    {
+      "index": 2,
+      "timestamp": "2026-11-14T08:02:00+00:00",
+      "role": "user",
+      "content": "Next",
+      "entryId": "<id2>:2"
+    }
+  ]
+}

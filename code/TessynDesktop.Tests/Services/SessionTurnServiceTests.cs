@@ -86,6 +86,7 @@ internal sealed class FakeFileServiceForTurnService : ISessionFileService
 
 	/// <summary>Every appended message with its header attributes, parallel to <see cref="AppendCalls"/>.</summary>
 	public List<(string role, string content, string? profileName, string? modelId, string? effort)> AppendDetails { get; } = new();
+	public List<(string role, string? source)> AppendSources { get; } = new();
 	public IReadOnlyList<SessionEntryModel> ReadEntriesResult { get; set; } = Array.Empty<SessionEntryModel>();
 
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
@@ -99,10 +100,11 @@ internal sealed class FakeFileServiceForTurnService : ISessionFileService
 
 	public string CreateSessionFile() => throw new NotImplementedException();
 
-	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null)
+	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null, string? source = null)
 	{
 		AppendCalls.Add((fileName, role, content));
 		AppendDetails.Add((role, content, profileName, modelId, effort));
+		AppendSources.Add((role, source));
 	}
 
 	public void AppendCompactionSeparator(string fileName) => throw new NotImplementedException();
@@ -889,6 +891,24 @@ public sealed class SessionTurnServiceTests : IDisposable
 
 		Assert.Null(_processManager.Spawns[0].effort);
 		Assert.Equal("default", FirstAssistant().effort);
+	}
+
+	// ── Source recorded on the USER entry (input sources: scheduled/supervisor inputs shown apart) ──
+
+	[Theory]
+	[InlineData(TurnSource.User, null)]
+	[InlineData(TurnSource.Scheduled, "scheduled")]
+	[InlineData(TurnSource.Orchestrated, "orchestrated")]
+	[InlineData(TurnSource.Telegram, "telegram")]
+	[InlineData(TurnSource.Web, "web")]
+	public async Task RunTurnAsync_RecordsTheTurnSourceOnTheUserEntryOnly(TurnSource source, string? expected)
+	{
+		EmitOneAnswer();
+
+		await _sut.RunTurnAsync(MakeNode(), "hello", source);
+
+		Assert.Equal(expected, _fileService.AppendSources.First(d => d.role == Constants.SessionFile.RoleUser).source);
+		Assert.All(_fileService.AppendSources.Where(d => d.role != Constants.SessionFile.RoleUser), d => Assert.Null(d.source));
 	}
 
 	// ── Profile stamping on the USER entry ────────────────────────────────────────

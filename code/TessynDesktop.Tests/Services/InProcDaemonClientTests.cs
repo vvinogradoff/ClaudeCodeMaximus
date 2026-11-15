@@ -284,7 +284,7 @@ internal sealed class InProcFakeFileService : ISessionFileService
     public string GetFullPath(string fileName) { LastGetFullPathFile = fileName; return GetFullPathResult; }
 
     public string CreateSessionFile() => throw new NotImplementedException();
-    public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null) { }
+    public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null, string? source = null) { }
     public void AppendCompactionSeparator(string fileName) { }
     public void DeleteSessionFile(string fileName) { }
     public void RewriteSessionFile(string fileName, string content) { }

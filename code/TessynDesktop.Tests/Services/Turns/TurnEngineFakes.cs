@@ -173,7 +173,7 @@ internal sealed class InMemorySessionFileService : ISessionFileService
 		get { lock (_gate) return [.. _entries]; }
 	}
 
-	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null)
+	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null, string? source = null)
 	{
 		lock (_gate)
 		{
