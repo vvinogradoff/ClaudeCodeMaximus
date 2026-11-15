@@ -312,6 +312,20 @@ public sealed class SessionFileServiceRemoteTests : IDisposable
 	}
 
 	[Fact]
+	public void RepairCorruptedCompactions_LeavesCrlfAndWhitespaceOnlyFilesAlone()
+	{
+		var crlf = WriteRaw(Header(0, "USER") + "\r\n" + "fine" + "\r\n" + Header(1, "ASSISTANT") + "\r\n" + "ok" + "\r\n");
+		var blank = WriteRaw("  \r\n \n");
+		var names = CollectRewrites();
+
+		var repaired = _sut.RepairCorruptedCompactions();
+
+		Assert.Equal(0, repaired);
+		Assert.DoesNotContain(crlf, names);
+		Assert.DoesNotContain(blank, names);
+	}
+
+	[Fact]
 	public void AppendMessage_DoesNotRaiseSessionFileRewritten()
 	{
 		var fileName = _sut.CreateSessionFile();

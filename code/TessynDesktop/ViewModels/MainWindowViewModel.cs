@@ -297,12 +297,24 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_usageService.UsageUpdated += (_, _) =>
 			Dispatcher.UIThread.Post(() => UpdateStatusBarUsage(_usageService.CachedUsage));
 
-		// Repair session files corrupted by the auto-compaction bug (one-time on startup)
-		int repaired;
-		using (_timer.Measure(Constants.Diagnostics.Operation.RepairCompactions, Constants.Diagnostics.WarnThresholds.UiLoadMs))
-			repaired = fileService.RepairCorruptedCompactions();
-		if (repaired > 0)
-			Serilog.Log.Information("Repaired {Count} session file(s) with corrupted compaction format", repaired);
+		// Repair session files corrupted by the auto-compaction bug (one-time on startup). It reads every session
+		// file (15-30 s cold, ISSUE.016), so it runs off the UI thread; a repaired file only had zero parseable
+		// entries, and SessionFileRewritten may fire on any thread.
+		_ = Task.Run(() =>
+		{
+			try
+			{
+				int repaired;
+				using (_timer.Measure(Constants.Diagnostics.Operation.RepairCompactions, Constants.Diagnostics.WarnThresholds.UiLoadMs))
+					repaired = fileService.RepairCorruptedCompactions();
+				if (repaired > 0)
+					Serilog.Log.Information("Repaired {Count} session file(s) with corrupted compaction format", repaired);
+			}
+			catch (Exception ex)
+			{
+				Serilog.Log.Warning(ex, "Session file compaction repair failed");
+			}
+		});
 
 		// React to session selection changes
 		this.WhenAnyValue(x => x.SessionTree.SelectedSession)
