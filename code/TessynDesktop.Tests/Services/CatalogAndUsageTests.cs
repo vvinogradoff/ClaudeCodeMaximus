@@ -56,6 +56,17 @@ public sealed class CatalogRpcModuleTests : IDisposable
 	}
 
 	[Fact]
+	public async Task MediaPreviewHosts_AreTheSettingsListWithTheDefaultsAndAreNormalised()
+	{
+		var defaults = await Get();
+		_settings.Settings.MediaPreviewHosts = ["  CDN.Example.test ", "", "*.images.test"];
+		var custom = await Get();
+
+		Assert.Equal(["annielartens.online", "*.githubusercontent.com"], defaults["mediaPreviewHosts"]!.AsArray().Select(h => (string)h!));
+		Assert.Equal(["cdn.example.test", "*.images.test"], custom["mediaPreviewHosts"]!.AsArray().Select(h => (string)h!));
+	}
+
+	[Fact]
 	public async Task Efforts_AreTheSharedList()
 	{
 		var json = await Get();

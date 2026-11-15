@@ -347,6 +347,7 @@ public sealed class FocusRefsSecurityTests : IDisposable
 	[Fact]
 	public async Task F7_a_closed_item_no_longer_makes_its_file_a_referenced_path_for_preview()
 	{
+		_env.Base.Settings.Settings.FileAccess.Mode = FileAccessMode.ReferencedOnly;
 		var full = _env.WriteFile("plan.md", "plan");
 		_env.WriteBodies("u", "plan at " + full);
 		await PostFileRef("plan.md");

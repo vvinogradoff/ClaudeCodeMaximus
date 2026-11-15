@@ -32,6 +32,7 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 		"session.get", "session.entries", "session.entry", "session.send", "session.stop", "session.setFavorite", "session.setStreaming", "session.compact",
 		"attention.list", "attention.reply", "attention.dismiss",
 		"file.read", "file.preview",   // Focus references step 1: additive, FR.25 amendment
+		"attachment.list", "attachment.fetch",   // Attachments: additive; fetch is called by the web server only (not on the browser allowlist)
 		"catalog.get",
 		"usage.get",
 	];
@@ -69,7 +70,7 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 	};
 
 	[Fact]
-	public void The_remote_method_names_are_the_23_of_the_web_contract()
+	public void The_remote_method_names_are_the_25_of_the_web_contract_and_attachments()
 	{
 		var names = typeof(Constants.Remote.Methods)
 			.GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -79,7 +80,7 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 			.ToArray();
 
 		Assert.Equal(ExpectedRemoteMethods.OrderBy(n => n, StringComparer.Ordinal), names);
-		Assert.Equal(23, names.Length);
+		Assert.Equal(25, names.Length);
 	}
 
 	[Theory]

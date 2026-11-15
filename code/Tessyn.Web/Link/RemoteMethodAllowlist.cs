@@ -29,6 +29,7 @@ public sealed class RemoteMethodAllowlist
 		Constants.Remote.Methods.UsageGet,
 		Constants.Remote.Methods.FileRead,
 		Constants.Remote.Methods.FilePreview,
+		Constants.Remote.Methods.AttachmentList,
 	];
 
 	private static readonly string[] LongMethods =

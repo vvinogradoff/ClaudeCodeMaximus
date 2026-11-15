@@ -214,6 +214,7 @@ public static class Constants
 			public const string UsageGet = "usage.get";
 			public const string FileRead = "file.read";
 			public const string FilePreview = "file.preview";
+			public const string AttachmentList = "attachment.list";
 			public const string AttachmentFetch = "attachment.fetch";
 		}
 	}

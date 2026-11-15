@@ -288,7 +288,9 @@ public sealed class AttachmentService : IAttachmentService
 	/// <summary>A name that is safe on Windows: no path parts, no invalid or control characters, no reserved device names, bounded length.</summary>
 	public static string SafeFileName(string? requested)
 	{
-		var name = Path.GetFileName((requested ?? string.Empty).Replace('\\', '/'));
+		// Not Path.GetFileName: it would read "a:b.txt" as a drive and drop "a:".
+		var text = requested ?? string.Empty;
+		var name = text[(text.LastIndexOfAny(['/', '\\']) + 1)..];
 		var invalid = Path.GetInvalidFileNameChars();
 		var cleaned = new string([.. name.Select(c => c < ' ' || invalid.Contains(c) ? Constants.Attachments.FallbackNameChar : c)]).Trim().TrimEnd('.', ' ');
 		if (cleaned.Length == 0 || cleaned.All(c => c == Constants.Attachments.FallbackNameChar))
