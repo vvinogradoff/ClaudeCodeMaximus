@@ -1,0 +1,7 @@
+{
+  "options": {
+    "autoCommit": true,
+    "autoDocument": true,
+    "playCompletionSound": false
+  }
+}
