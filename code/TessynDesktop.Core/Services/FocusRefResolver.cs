@@ -16,14 +16,17 @@ public sealed class FocusRefResolver : IFocusRefResolver
 	private readonly ISessionRegistry _registry;
 	private readonly ISessionContentStore? _store;
 	private readonly string _dataRoot;
-	private readonly string _userProfile;
+	private readonly string[] _dataRoots;
+	private readonly string[] _userProfiles;
 
 	public FocusRefResolver(ISessionRegistry registry, ISessionContentStore? store = null, string? dataRoot = null, string? userProfile = null)
 	{
-		_userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		var profile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 		_registry = registry;
 		_store    = store;
 		_dataRoot = dataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.AppDataFolderName);
+		_userProfiles = FileAccessPolicy.WithCanonical(profile);
+		_dataRoots    = FileAccessPolicy.WithCanonical(_dataRoot);
 	}
 
 	/// <inheritdoc />
@@ -62,12 +65,15 @@ public sealed class FocusRefResolver : IFocusRefResolver
 		if (!SafeFilePath.TryNormalize(raw, caller.WorkingDirectory, out var full, out var reason))
 			throw new FocusRefException($"'{Shorten(raw)}' cannot be referenced: {reason}.");
 
+		if (SafeFilePath.HasNonLocalLink(full))
+			throw new FocusRefException($"'{Shorten(raw)}' cannot be referenced: a link on the path leads outside the local drives.");
+
 		using var opened = SafeFilePath.Open(full)
 			?? throw new FocusRefException($"file '{Shorten(raw)}' does not exist (resolved to {full}) or is not a regular file.");
 
 		// Every rule runs on the real path of the open file as well, so a junction, link or short name cannot hide a denied location.
 		if (opened.FinalPath.Length == 0
-		    || FileAccessPolicy.IsDeniedOpened(full, opened.FinalPath, opened.LinkCount, referenced: true, _dataRoot, _userProfile, relay: true))
+		    || FileAccessPolicy.IsDeniedOpened(full, opened.FinalPath, opened.LinkCount, referenced: true, _dataRoots, _userProfiles, relay: true))
 			throw new FocusRefException($"file '{Shorten(raw)}' cannot be referenced: it is a credential, key or token file, app data, or leads outside the local drives.");
 
 		if (opened.LinkCount > 1)

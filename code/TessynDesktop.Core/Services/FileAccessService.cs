@@ -26,7 +26,8 @@ public sealed class FileAccessService : IFileAccessService
 	private readonly ISessionEntryReader _entries;
 	private readonly IAppSettingsService _settings;
 	private readonly string _dataRoot;
-	private readonly string _userProfile;
+	private readonly string[] _dataRoots;
+	private readonly string[] _userProfiles;
 	private readonly TimeProvider _time;
 
 	private readonly ConcurrentDictionary<string, PreviewHandle> _previews = new(StringComparer.Ordinal);
@@ -43,12 +44,14 @@ public sealed class FileAccessService : IFileAccessService
 		ILogger? log = null,
 		string? userProfile = null)
 	{
-		_userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		var profile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 		_registry  = registry;
 		_attention = attention;
 		_entries   = entries;
 		_settings  = settings;
 		_dataRoot  = dataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.AppDataFolderName);
+		_userProfiles = FileAccessPolicy.WithCanonical(profile);
+		_dataRoots    = FileAccessPolicy.WithCanonical(_dataRoot);
 		_time      = time ?? TimeProvider.System;
 		_log       = log ?? Log.ForContext<FileAccessService>();
 	}
@@ -73,6 +76,9 @@ public sealed class FileAccessService : IFileAccessService
 		// The lexical gate comes before the first filesystem call: a UNC path must never be touched, not even to see if it exists.
 		if (!SafeFilePath.TryNormalize(wanted, node.WorkingDirectory, out var full, out var reason))
 			throw new TdcpException($"Not a usable path: {reason}");
+
+		if (SafeFilePath.HasNonLocalLink(full))
+			throw new TdcpException("Not a usable path: a link on the path leads outside the local drives");
 
 		using var opened = SafeFilePath.Open(full) ?? throw new TdcpException("File not found");
 		Authorize(full, opened, node.NodeId, node.WorkingDirectory, transport, grantedByRef: false, "preview");
@@ -105,6 +111,10 @@ public sealed class FileAccessService : IFileAccessService
 		// A path from a ledger written by an older version is checked like any other before it touches the disk.
 		if (!SafeFilePath.TryNormalize(storedPath, null, out var fullPath, out var reason))
 			throw RefuseBeforeOpen(nodeId, storedPath, reason, transport);
+
+		// A link that leads off the local drives is refused before anything is opened (an open would start the network connection).
+		if (SafeFilePath.HasNonLocalLink(fullPath))
+			throw RefuseBeforeOpen(nodeId, fullPath, "A link on the path leads outside the local drives.", transport);
 
 		// One open: the policy, the size and the bytes all come from this handle.
 		using var opened = SafeFilePath.Open(fullPath) ?? throw new TdcpException("File not found");
@@ -182,7 +192,7 @@ public sealed class FileAccessService : IFileAccessService
 			return "It leads outside the local drives.";
 
 		var referenced = grantedByRef || IsReferenced(nodeId, fullPath, opened.FinalPath);
-		if (FileAccessPolicy.IsDeniedOpened(fullPath, opened.FinalPath, opened.LinkCount, referenced, _dataRoot, _userProfile, relay))
+		if (FileAccessPolicy.IsDeniedOpened(fullPath, opened.FinalPath, opened.LinkCount, referenced, _dataRoots, _userProfiles, relay))
 			return relay ? "It is a credential, key or token file, or app data." : "It is a credential, key or token file.";
 
 		if (!relay)

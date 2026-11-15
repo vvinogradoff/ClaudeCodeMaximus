@@ -83,7 +83,11 @@ public static class FileAccessPolicy
 	/// True for a relay (web) client: the whole data root is then closed, except its <c>attachments</c> folder. For a loopback client
 	/// only the secret-bearing parts of the data root are.
 	/// </param>
-	public static bool IsDenied(string fullPath, string dataRoot, bool relay = false)
+	public static bool IsDenied(string fullPath, string dataRoot, bool relay = false) => IsDenied(fullPath, [dataRoot], relay);
+
+	/// <inheritdoc cref="IsDenied(string, string, bool)" />
+	/// <param name="dataRoots">The data root in every form it is known by (configured and canonical, see <see cref="WithCanonical"/>).</param>
+	public static bool IsDenied(string fullPath, IReadOnlyList<string> dataRoots, bool relay)
 	{
 		var segments = fullPath.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
 		if (segments.Length == 0)
@@ -106,6 +110,17 @@ public static class FileAccessPolicy
 		if (NameDenied(segments[^1]))
 			return true;
 
+		foreach (var dataRoot in dataRoots)
+		{
+			if (DataRootDenied(fullPath, dataRoot, relay))
+				return true;
+		}
+
+		return false;
+	}
+
+	private static bool DataRootDenied(string fullPath, string dataRoot, bool relay)
+	{
 		var root = dataRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 		if (root.Length > 0 && fullPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
 		{
@@ -123,26 +138,43 @@ public static class FileAccessPolicy
 		return false;
 	}
 
+	/// <summary>
+	/// The directory in every form the rules must know it by: as configured, and its canonical final path (links, junctions and short
+	/// names resolved through a directory handle). Done once at startup; a directory that does not exist yet keeps only its configured form.
+	/// </summary>
+	public static string[] WithCanonical(string directory)
+	{
+		var canonical = SafeFilePath.CanonicalDirectory(directory);
+		return canonical == null || string.Equals(canonical, directory.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)
+			? [directory]
+			: [directory, canonical];
+	}
+
 	private static bool NameDenied(string name) =>
 		DeniedNames.Contains(name)
 		|| DeniedExtensions.Contains(Path.GetExtension(name))
 		|| name.StartsWith(".env.", StringComparison.OrdinalIgnoreCase)
 		|| name.Contains("credentials", StringComparison.OrdinalIgnoreCase)
 		|| name.StartsWith("id_rsa", StringComparison.OrdinalIgnoreCase)
-		|| name.StartsWith("id_ed25519", StringComparison.OrdinalIgnoreCase);
+		|| name.StartsWith("id_ed25519", StringComparison.OrdinalIgnoreCase)
+		// Claude Code global state (.claude.json, .claude.json.backup, ...): account data and MCP server configs that can hold keys.
+		|| name.StartsWith(".claude.json", StringComparison.OrdinalIgnoreCase);
 
 	/// <summary>
 	/// True for a Markdown file directly inside a plans folder of a Claude config directory: <c>&lt;user profile&gt;\.claude\plans</c> or
 	/// <c>&lt;data root&gt;\profiles\&lt;id&gt;\plans</c>, no subfolders. This is where plan mode writes the plans a user approves.
 	/// </summary>
 	/// <param name="finalPath">The real path of the open file.</param>
-	public static bool IsPlanFile(string finalPath, string dataRoot, string userProfile)
+	public static bool IsPlanFile(string finalPath, string dataRoot, string userProfile) => IsPlanFile(finalPath, [dataRoot], [userProfile]);
+
+	/// <inheritdoc cref="IsPlanFile(string, string, string)" />
+	public static bool IsPlanFile(string finalPath, IReadOnlyList<string> dataRoots, IReadOnlyList<string> userProfiles)
 	{
 		if (!string.Equals(Path.GetExtension(finalPath), ".md", StringComparison.OrdinalIgnoreCase))
 			return false;
 
-		return DirectlyIn(finalPath, Path.Combine(userProfile, ".claude", "plans"))
-		       || IsProfilePlan(finalPath, dataRoot);
+		return userProfiles.Any(profile => DirectlyIn(finalPath, Path.Combine(profile, ".claude", "plans")))
+		       || dataRoots.Any(root => IsProfilePlan(finalPath, root));
 	}
 
 	private static bool DirectlyIn(string path, string folder)
@@ -169,14 +201,18 @@ public static class FileAccessPolicy
 	/// The deny decision for an open file. One exception to the folder rules: a referenced, single-link Markdown file that lies directly in
 	/// a plans folder (<see cref="IsPlanFile"/>) and was reached without a link (the path as named is the real path). Name rules still apply.
 	/// </summary>
-	public static bool IsDeniedOpened(string namedPath, string finalPath, int linkCount, bool referenced, string dataRoot, string userProfile, bool relay)
+	public static bool IsDeniedOpened(string namedPath, string finalPath, int linkCount, bool referenced, string dataRoot, string userProfile, bool relay) =>
+		IsDeniedOpened(namedPath, finalPath, linkCount, referenced, [dataRoot], [userProfile], relay);
+
+	/// <inheritdoc cref="IsDeniedOpened(string, string, int, bool, string, string, bool)" />
+	public static bool IsDeniedOpened(string namedPath, string finalPath, int linkCount, bool referenced, IReadOnlyList<string> dataRoots, IReadOnlyList<string> userProfiles, bool relay)
 	{
 		if (referenced && linkCount == 1
 		    && string.Equals(namedPath, finalPath, StringComparison.OrdinalIgnoreCase)
-		    && IsPlanFile(finalPath, dataRoot, userProfile))
+		    && IsPlanFile(finalPath, dataRoots, userProfiles))
 			return NameDenied(Path.GetFileName(finalPath));
 
-		return IsDenied(namedPath, dataRoot, relay) || IsDenied(finalPath, dataRoot, relay);
+		return IsDenied(namedPath, dataRoots, relay) || IsDenied(finalPath, dataRoots, relay);
 	}
 
 	private static Dictionary<string, (FileTypeClass, string)> BuildTypes()

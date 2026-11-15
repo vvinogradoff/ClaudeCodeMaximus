@@ -1937,7 +1937,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 										"quote":      { "type": "string", "maxLength": 300, "description": "entry: text copied exactly from the entry (whitespace is normalised, nothing else); it must occur exactly once in the entry. Quote a distinctive part, not the whole entry." },
 										"session":    { "type": "string", "description": "entry: short id or node id of the session the entry belongs to. Default: this session." },
 										"occurrence": { "type": "string", "enum": ["last", "first"], "description": "entry: which entry to pick when several hold the quote - the newest (last, default) or the oldest (first)." },
-										"path":       { "type": "string", "description": "file: absolute path, or relative to this session's working directory. The file must exist." },
+										"path":       { "type": "string", "description": "file: absolute path, or relative to this session's working directory (a relative path must stay inside it, otherwise give an absolute path). The file must exist." },
 										"url":        { "type": "string", "description": "url: an http or https URL." },
 										"label":      { "type": "string", "maxLength": 100, "description": "Short text the user sees for the reference." }
 									},

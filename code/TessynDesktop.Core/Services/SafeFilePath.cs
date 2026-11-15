@@ -168,6 +168,10 @@ public static class SafeFilePath
 	/// </summary>
 	public static OpenedFile? Open(string normalizedPath)
 	{
+		// Never open through a link that leads off the local drives: the open itself would start the network connection.
+		if (HasNonLocalLink(normalizedPath))
+			return null;
+
 		FileStream stream;
 		try
 		{
@@ -192,6 +196,91 @@ public static class SafeFilePath
 			throw;
 		}
 	}
+
+	private const int MaxLinkDepth = 8;
+
+	/// <summary>
+	/// True when the file or any of its parent directories is a reparse point (symlink, junction) whose target is not a plain local drive
+	/// path, or a chain of links gets too long. The link target is read from the local reparse data only; nothing the link points to is
+	/// opened, so a link to a network share never starts a connection. Checked component by component from the drive root, so no path
+	/// beyond an unchecked link is ever touched.
+	/// </summary>
+	/// <param name="normalizedPath">A path accepted by <see cref="TryNormalize"/>.</param>
+	public static bool HasNonLocalLink(string normalizedPath) => HasNonLocalLink(normalizedPath, 0);
+
+	private static bool HasNonLocalLink(string path, int depth)
+	{
+		if (depth > MaxLinkDepth)
+			return true;
+
+		var parts = path.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+		var current = parts[0] + '\\';
+		for (var i = 1; i < parts.Length; i++)
+		{
+			var parent = current;
+			current = Path.Combine(current, parts[i]);
+			FileSystemInfo info = i == parts.Length - 1 ? new FileInfo(current) : new DirectoryInfo(current);
+			try
+			{
+				if (!info.Exists && !Directory.Exists(current) && !File.Exists(current))
+					return false;   // nothing further to open; the open will report it
+
+				if ((info.Attributes & FileAttributes.ReparsePoint) == 0)
+					continue;
+
+				var target = info.LinkTarget;
+				if (target == null)
+					continue;   // not a symlink or junction (a cloud placeholder, for example); the final-path check covers it
+
+				if (!TryLocalTarget(target, parent, out var resolved) || HasNonLocalLink(resolved, depth + 1))
+					return true;
+			}
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>A link target as text: a plain drive path (also with the <c>\??\</c> NT prefix) or a path relative to the link's folder. UNC and device targets are not local.</summary>
+	internal static bool TryLocalTarget(string target, string linkFolder, out string resolved)
+	{
+		resolved = string.Empty;
+		var ntPrefixed = target.StartsWith(@"\??\", StringComparison.Ordinal);
+		var text = ntPrefixed ? target[4..] : target;
+		if (ntPrefixed && !(text.Length >= 2 && char.IsAsciiLetter(text[0]) && text[1] == ':'))
+			return false;   // \??\UNC\..., volume GUID and other device targets
+
+		if (text.StartsWith(@"\\", StringComparison.Ordinal) || text.StartsWith("//", StringComparison.Ordinal))
+			return false;
+
+		if (text.Length >= 2 && char.IsAsciiLetter(text[0]) && text[1] == ':')
+			return TryNormalize(text, null, out resolved, out _);
+
+		if (text.Length > 0 && text[0] is '\\' or '/')
+			return false;   // rooted on the current drive: not a plain drive path
+
+		return TryNormalize(Path.Combine(linkFolder, text), null, out resolved, out _);
+	}
+
+	/// <summary>The final path of a directory (links and short names resolved) as a plain drive path, or null when it does not exist or is not one.</summary>
+	public static string? CanonicalDirectory(string directory)
+	{
+		if (!OperatingSystem.IsWindows() || !Directory.Exists(directory))
+			return null;
+
+		using var handle = CreateFileW(directory, 0, 7 /* share all */, IntPtr.Zero, 3 /* open existing */, 0x02000000 /* backup semantics: allows directories */, IntPtr.Zero);
+		if (handle.IsInvalid)
+			return null;
+
+		var path = FinalPathOf(handle);
+		return path.Length == 0 ? null : path.TrimEnd('\\');
+	}
+
+	[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+	private static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
 
 	/// <summary>True for a plain local drive path as <see cref="TryNormalize"/> would accept it unchanged (the final path of an open file).</summary>
 	public static bool IsPlainDrivePath(string path) =>
