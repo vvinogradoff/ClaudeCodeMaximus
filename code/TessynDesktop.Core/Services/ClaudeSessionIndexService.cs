@@ -23,6 +23,9 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	private readonly ITreeSessionIdSource? _treeSessionIds;
 	private readonly SemaphoreSlim _writeGate = new(1, 1);
 
+	/// <summary>The single-writer gate, exposed so tests can hold it.</summary>
+	internal SemaphoreSlim WriteGate => _writeGate;
+
 	// Searches in flight: VACUUM never starts while this is above zero.
 	private readonly object _searchSync = new();
 	private int _activeSearches;
@@ -509,16 +512,17 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 				storedPaths[reader.GetString(0)] = reader.GetString(1);
 		}
 
-		// A configured home that is missing now but still has rows under it may be an unmounted drive or a moved folder.
+		// A configured home that is missing now but still has rows under it (an unmounted drive, a profile whose
+		// projects folder is gone) does not stop the purge: the per-id check below keeps exactly those rows, because
+		// their stored home was not listed in this scan. It is counted and logged so it stays visible.
 		foreach (var home in scan.MissingHomes)
 		{
 			var prefix = Path.TrimEndingDirectorySeparator(home) + Path.DirectorySeparatorChar;
-			if (storedPaths.Values.Any(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
-			{
-				report.PurgeSkippedUnsafeScan = true;
-				_log.Warning("PurgeOrphans: configured home {Home} is missing but the index still has sessions under it; purge skipped", home);
-				return;
-			}
+			var rows = storedPaths.Values.Count(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+			if (rows == 0)
+				continue;
+			report.MissingHomesWithRows++;
+			_log.Warning("PurgeOrphans: configured home {Home} is missing but the index holds {Rows} sessions under it; they are kept", home, rows);
 		}
 
 		var orphans = new List<string>();
@@ -601,6 +605,15 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 				if (report.Vacuumed)
 					report.Checkpointed = TryCheckpoint(conn, Constants.SqlQueries.CheckpointTruncate);
 			}
+			finally { _writeGate.Release(); }
+		}
+
+		// A heavy pass (the optimize rewrote much of the index, or a big purge/reindex fed it) leaves a large WAL behind:
+		// truncate it under the gate as after a VACUUM, so the file ends bounded.
+		if (report.Optimized && !report.Checkpointed)
+		{
+			_writeGate.Wait(cancellationToken);
+			try { report.Checkpointed = TryCheckpoint(conn, Constants.SqlQueries.CheckpointTruncate); }
 			finally { _writeGate.Release(); }
 		}
 
@@ -1155,12 +1168,14 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		// Persist each batch as it lands (so a cancelled/interrupted run keeps partial progress),
 		// and forward progress to the caller.
 		var persisted = new HashSet<string>();
+		var pendingWrites = new List<Task>();
 		void OnAssistBatchComplete(Dictionary<string, string> titlesSoFar)
 		{
 			var newOnes = titlesSoFar.Where(kv => !persisted.Contains(kv.Key)).ToList();
 			if (newOnes.Count > 0)
 			{
-				PersistTitles(missing, newOnes.ToDictionary(kv => kv.Key, kv => kv.Value));
+				// The callback is synchronous; the write is queued behind the gate instead of blocking this thread.
+				pendingWrites.Add(PersistTitlesAsync(missing, newOnes.ToDictionary(kv => kv.Key, kv => kv.Value)));
 				foreach (var kv in newOnes)
 					persisted.Add(kv.Key);
 			}
@@ -1172,7 +1187,8 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 		var finalNew = generated.Where(kv => !persisted.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
 		if (finalNew.Count > 0)
-			PersistTitles(missing, finalNew);
+			pendingWrites.Add(PersistTitlesAsync(missing, finalNew));
+		await Task.WhenAll(pendingWrites).ConfigureAwait(false);
 
 		foreach (var (sessionId, title) in generated)
 			result[sessionId] = title;
@@ -1231,14 +1247,11 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		return result as string;
 	}
 
-	private void PersistTitles(List<ClaudeSessionSummaryModel> summaries, Dictionary<string, string> generated)
+	/// <summary>Title batches are serialised with the upkeep writer (single writer) without blocking a thread on the gate.</summary>
+	private async Task PersistTitlesAsync(List<ClaudeSessionSummaryModel> summaries, Dictionary<string, string> generated)
 	{
-		// Serialised with the upkeep writer (single writer), and IMMEDIATE like every write here.
-		_writeGate.Wait();
-		try
-		{
-			PersistTitlesLocked(summaries, generated);
-		}
+		await _writeGate.WaitAsync().ConfigureAwait(false);
+		try { PersistTitlesLocked(summaries, generated); }
 		finally { _writeGate.Release(); }
 	}
 

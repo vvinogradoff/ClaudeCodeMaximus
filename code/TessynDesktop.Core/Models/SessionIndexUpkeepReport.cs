@@ -29,6 +29,9 @@ public sealed class SessionIndexUpkeepReport
 	/// <summary>Orphans left alone because their stored JSONL home was not listed in this scan.</summary>
 	public int PurgeSkippedUnlisted { get; set; }
 
+	/// <summary>Configured homes that do not exist but still hold indexed sessions; their sessions are kept.</summary>
+	public int MissingHomesWithRows { get; set; }
+
 	public bool PurgeSkippedUnsafeScan { get; set; }
 
 	/// <summary>The rowid map disagreed with the FTS table and was rebuilt.</summary>

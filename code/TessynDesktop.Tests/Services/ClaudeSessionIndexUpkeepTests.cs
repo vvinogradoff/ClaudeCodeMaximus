@@ -525,7 +525,7 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 	}
 
 	[Fact]
-	public async Task X3_ConfiguredHomeThatIsMissingButStillHasRows_BlocksThePurge()
+	public async Task N1_AMissingHomeWithRows_DoesNotBlockThePurge_ItsOwnRowsAreKept()
 	{
 		var second = Path.Combine(_tempRoot, "profiles", "p9", "projects");
 		Directory.CreateDirectory(Path.Combine(second, "-p-x"));
@@ -540,10 +540,91 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 		File.Delete(Path.Combine(_projectsDir, "-p-a", "gone-a.jsonl"));
 		var report = await service.RunUpkeepAsync();
 
-		Assert.Equal(0, report.Purged);
-		Assert.True(report.PurgeSkippedUnsafeScan);
+		Assert.Equal(1, report.Purged);
+		Assert.Equal(1, report.MissingHomesWithRows);
 		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'in-b';"));
-		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'gone-a';"));
+		Assert.Equal(0, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'gone-a';"));
+	}
+
+	[Fact]
+	public async Task N1_RealDataShape_OneMissingHomeWithRows_OthersArePurged_OnlyThatHomesIdsAreSkipped()
+	{
+		string Home(string name) => Path.Combine(_tempRoot, "profiles", name, "projects");
+		var homes = new[] { _projectsDir, Home("p1"), Home("p2"), Home("p3-missing"), Home("p4-never-ran") };
+		void Put(string home, string id, string text)
+		{
+			var dir = Path.Combine(home, "-p-s");
+			Directory.CreateDirectory(dir);
+			File.WriteAllLines(Path.Combine(dir, id + ".jsonl"), [
+				"{\"type\":\"user\",\"timestamp\":\"2026-01-01T00:00:00Z\",\"message\":{\"role\":\"user\",\"content\":\"" + text + "\"}}"]);
+		}
+		for (var i = 0; i < 8; i++) Put(_projectsDir, "default-" + i, "default session " + i);
+		Put(Home("p1"), "p1-gone", "p1 session about to vanish");
+		Put(Home("p1"), "p1-stay", "p1 session stays");
+		Put(Home("p2"), "p2-gone", "p2 session about to vanish");
+		Put(Home("p3-missing"), "m-1", "missing home session one");
+		Put(Home("p3-missing"), "m-2", "missing home session two");
+		var service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assist, _dbPath, homes, TimeSpan.Zero, _tree);
+		await service.RunUpkeepAsync();
+		Assert.Equal(13, Scalar("SELECT COUNT(*) FROM sessions;"));
+
+		Directory.Delete(Home("p3-missing"), recursive: true);
+		File.Delete(Path.Combine(Home("p1"), "-p-s", "p1-gone.jsonl"));
+		File.Delete(Path.Combine(Home("p2"), "-p-s", "p2-gone.jsonl"));
+		var report = await service.RunUpkeepAsync();
+
+		Assert.Equal(2, report.Purged);
+		Assert.Equal(2, report.PurgeSkippedUnlisted); // exactly the missing home's two ids
+		Assert.Equal(1, report.MissingHomesWithRows);
+		Assert.False(report.PurgeSkippedUnsafeScan);
+		Assert.Equal(2, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id LIKE 'm-%';"));
+		Assert.Equal(0, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id LIKE '%-gone';"));
+		Assert.Equal(2, (await service.SearchAsync("missing home session")).Count);
+	}
+
+	[Fact]
+	public async Task N2_AfterAHeavyPass_TheWalEndsBounded()
+	{
+		for (var i = 0; i < 230; i++)
+			WriteSession("-p-w", "w-" + i, new string('x', 200) + " wal candidate " + i);
+		var service = NewService();
+
+		var report = await service.RunUpkeepAsync(); // optimize ran: the heavy-pass rule
+
+		Assert.True(report.Optimized);
+		Assert.True(report.Checkpointed);
+		var wal = new FileInfo(_dbPath + "-wal");
+		Assert.True(!wal.Exists || wal.Length < 64 * 1024, $"WAL is {(wal.Exists ? wal.Length : 0)} bytes");
+	}
+
+	[Fact]
+	public async Task N3_TitleWrites_QueueBehindALongGateHolder_WithoutBlockingTheCaller()
+	{
+		WriteSession("-p-a", "t-1", "a session that gets a title");
+		var service = NewService();
+		await service.RunUpkeepAsync();
+		var summary = new ClaudeSessionSummaryModel
+		{
+			SessionId = "t-1", JsonlPath = Path.Combine(_projectsDir, "-p-a", "t-1.jsonl"), MessageCount = 1, ProjectSlug = "-p-a",
+		};
+		_assist.TitlesToReturn["t-1"] = "Queued title";
+
+		await service.WriteGate.WaitAsync(); // a long VACUUM, say
+		Task<IReadOnlyDictionary<string, string>> ensure;
+		try
+		{
+			var started = Task.Factory.StartNew(() => service.EnsureTitlesAsync([summary])); // not unwrapped: completes when the call returns
+			Assert.Same(started, await Task.WhenAny(started, Task.Delay(TimeSpan.FromSeconds(5)))); // the call returned: no thread parked on the gate
+			ensure = await started;
+			await Task.Delay(300);
+			Assert.False(ensure.IsCompleted); // still waiting for the gate
+			Assert.Equal(0, Scalar("SELECT COUNT(*) FROM sessions WHERE title IS NOT NULL;"));
+		}
+		finally { service.WriteGate.Release(); }
+
+		var titles = await ensure.WaitAsync(TimeSpan.FromSeconds(10));
+		Assert.Equal("Queued title", titles["t-1"]);
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE title = 'Queued title';"));
 	}
 
 	[Fact]
