@@ -355,6 +355,8 @@ public sealed class ImportServiceTests : IDisposable
 		_env.Service.GetTitles(["ghost"]);
 
 		Assert.True(SpinUntil(() => _env.Service.GetTitles(["ghost"]).Pending == 0));
+		Assert.Equal(0, _env.Service.GetTitles(["ghost"]).Pending);   // and it stays 0: the id is not tried again at every poll
+		Assert.Empty(_env.Service.GetTitles(["ghost"]).Titles);
 	}
 
 	[Fact]

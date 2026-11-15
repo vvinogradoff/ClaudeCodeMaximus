@@ -32,6 +32,9 @@ public sealed partial class ImportService : IImportService
 	/// <summary>Ids whose title is being generated now, so a poll does not start the same work twice.</summary>
 	private readonly ConcurrentDictionary<string, byte> _titleWork = new(StringComparer.Ordinal);
 
+	/// <summary>Ids that ended a generation without a title (unknown to the index, no prompt, a failure), with when: they are not tried again for a while, so a poll can reach 0 pending.</summary>
+	private readonly ConcurrentDictionary<string, DateTimeOffset> _titleGaveUp = new(StringComparer.Ordinal);
+
 	public ImportService(
 		IClaudeSessionImportService importer,
 		IClaudeSessionIndexService index,
@@ -289,11 +292,12 @@ public sealed partial class ImportService : IImportService
 				missing.Add(id);
 		}
 
-		var started = missing.Where(id => _titleWork.TryAdd(id, 0)).ToList();
+		var retryable = missing.Where(id => !GaveUpRecently(id)).ToList();
+		var started   = retryable.Where(id => _titleWork.TryAdd(id, 0)).ToList();
 		if (started.Count > 0)
 			_ = Task.Run(() => GenerateTitlesAsync(started));
 
-		return new ImportTitlesResult(titles, missing.Count(_titleWork.ContainsKey));
+		return new ImportTitlesResult(titles, retryable.Count(_titleWork.ContainsKey));
 	}
 
 	/// <summary>Looks the sessions up in the index and asks it for their titles (a persisted title costs nothing; a new one is generated); every title lands in the import cache.</summary>
@@ -317,8 +321,23 @@ public sealed partial class ImportService : IImportService
 		finally
 		{
 			foreach (var id in ids)
+			{
+				if (_importer.GetCachedTitle(id) == null)
+					GiveUp(id);
 				_titleWork.TryRemove(id, out _);
+			}
 		}
+	}
+
+	private bool GaveUpRecently(string id) =>
+		_titleGaveUp.TryGetValue(id, out var at) && DateTimeOffset.UtcNow - at < TimeSpan.FromMinutes(Constants.Import.TitleRetryMinutes);
+
+	private void GiveUp(string id)
+	{
+		if (_titleGaveUp.Count >= Constants.Import.TitleGaveUpMax)
+			_titleGaveUp.Clear();
+
+		_titleGaveUp[id] = DateTimeOffset.UtcNow;
 	}
 
 	private void OnBatch(IReadOnlyDictionary<string, string> titles)

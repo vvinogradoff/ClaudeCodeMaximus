@@ -339,6 +339,7 @@ public sealed class ImportContractTests : IDisposable
 	private string Normalize(JsonNode result)
 	{
 		var node = result.DeepClone();
+		MaskNextCronFireTimes(node);
 		foreach (var key in new[] { "workingSetMb", "gen2Count", "runId" })
 		{
 			if (node is JsonObject obj && obj.ContainsKey(key))
@@ -357,6 +358,29 @@ public sealed class ImportContractTests : IDisposable
 			return placeholder;
 		});
 		return JsonNode.Parse(json)!.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+	}
+
+	/// <summary>The first fire time of a cron schedule is the next match of the real clock, so a golden file cannot hold it; the test checks that it is at 09:00 in the future instead.</summary>
+	private static void MaskNextCronFireTimes(JsonNode? node)
+	{
+		switch (node)
+		{
+			case JsonObject obj:
+				if (obj["kind"]?.GetValue<string>() == "cron" && obj["fireAtUtc"] != null)
+				{
+					var next = obj["fireAtUtc"]!.GetValue<DateTimeOffset>();
+					Assert.True(next > DateTimeOffset.UtcNow && next.Hour == 9 && next.Minute == 0, "the next cron fire is the next 09:00");
+					obj["fireAtUtc"] = "<next cron time>";
+				}
+
+				foreach (var child in obj.Select(p => p.Value).ToList())
+					MaskNextCronFireTimes(child);
+				break;
+			case JsonArray array:
+				foreach (var child in array)
+					MaskNextCronFireTimes(child);
+				break;
+		}
 	}
 
 	private static string GoldenPath(string name, [CallerFilePath] string thisFile = "") =>

@@ -14,6 +14,12 @@ public static partial class Constants
 		/// <summary>The most ids one <c>import.titles</c> call accepts.</summary>
 		public const int TitlesMaxIds = 200;
 
+		/// <summary>A session that got no title is not tried again for this many minutes.</summary>
+		public const int TitleRetryMinutes = 5;
+
+		/// <summary>The most sessions remembered as "no title".</summary>
+		public const int TitleGaveUpMax = 5000;
+
 		/// <summary>The most sessions one <c>import.run</c> call accepts.</summary>
 		public const int RunMaxItems = 100;
 
