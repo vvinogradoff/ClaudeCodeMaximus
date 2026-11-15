@@ -296,7 +296,9 @@ public partial class App : Application
 		services.AddSingleton<IRelayConfigStore, RelayConfigStore>();
 		services.AddSingleton<IRelayHttpClientFactory, RelayHttpClientFactory>();
 		services.AddSingleton<IRelayConnectorService, RelayConnectorService>();
-		services.AddSingleton<IRelayBlobClient>(sp => (RelayConnectorService)sp.GetRequiredService<IRelayConnectorService>());
+		// The connector hands its live connection to the gateway; attachment.fetch downloads through it (no dependency cycle with the dispatcher).
+		services.AddSingleton<RelayBlobGateway>();
+		services.AddSingleton<IRelayBlobClient>(sp => sp.GetRequiredService<RelayBlobGateway>());
 
 		// Remote session, attention, catalog and usage methods (web client). Singletons only where state must be shared: the
 		// Default profile label (its cached resolution), the parsed-entry cache, the pending-send counters and the per-profile

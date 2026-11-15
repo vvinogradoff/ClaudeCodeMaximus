@@ -155,6 +155,25 @@ public sealed class DaemonHarness : IDisposable
 		s.AddTransient<IAttentionReplyService, AttentionReplyService>();
 		s.AddTransient<IRemoteRpcModule, SessionRpcModule>();
 		s.AddTransient<IRemoteRpcModule, AttentionRpcModule>();
+		s.AddSingleton<RelayBlobGateway>();
+		s.AddSingleton<IRelayBlobClient>(sp => sp.GetRequiredService<RelayBlobGateway>());
+		s.AddSingleton<IAttachmentService>(sp => new AttachmentService(
+			sp.GetRequiredService<ISessionRegistry>(),
+			sp.GetRequiredService<IAppSettingsService>(),
+			node => sp.GetRequiredService<ISessionTurnService>().ResolveProfileName(node),
+			sp.GetRequiredService<IRelayBlobClient>(),
+			dataRoot: root,
+			userProfile: Path.Combine(root, "home")));
+		s.AddSingleton<IFileAccessService>(sp => new FileAccessService(
+			sp.GetRequiredService<ISessionRegistry>(),
+			sp.GetRequiredService<IAttentionService>(),
+			sp.GetRequiredService<ISessionEntryReader>(),
+			sp.GetRequiredService<IAppSettingsService>(),
+			dataRoot: root,
+			userProfile: Path.Combine(root, "home"),
+			attachments: sp.GetRequiredService<IAttachmentService>()));
+		s.AddTransient<IRemoteRpcModule, FileRpcModule>();
+		s.AddTransient<IRemoteRpcModule, AttachmentRpcModule>();
 		s.AddTransient<IRemoteRpcModule, CatalogRpcModule>();
 		s.AddTransient<IRemoteRpcModule, UsageRpcModule>();
 	}

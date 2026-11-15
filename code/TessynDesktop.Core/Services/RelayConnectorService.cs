@@ -22,7 +22,7 @@ namespace TessynDesktop.Services;
 /// <see cref="RelayState.Error"/> state plus a backed-off retry. Never logs tokens or payloads.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class RelayConnectorService : IRelayConnectorService, IRelayBlobClient
+public sealed class RelayConnectorService : IRelayConnectorService
 {
 	private static readonly ILogger _log = Log.ForContext<RelayConnectorService>();
 
@@ -34,16 +34,12 @@ public sealed class RelayConnectorService : IRelayConnectorService, IRelayBlobCl
 	private readonly IEventLog? _eventLog;
 	private readonly IRelayHttpClientFactory _httpFactory;
 	private readonly RelayConnectorTimings _timings;
+	private readonly RelayBlobGateway? _blobGateway;
 
 	private readonly object _gate = new();
 	private readonly object _statusGate = new();
 	private CancellationTokenSource? _cts;
 	private Task? _loop;
-	/// <summary>The client and base URL of the live connection (null between connections); the blob download reuses its auth.</summary>
-	private volatile BlobLink? _blobLink;
-
-	private sealed record BlobLink(HttpClient Client, string BaseUrl);
-
 	private RelayStatusModel _status = new(RelayState.Disabled, DateTimeOffset.UtcNow);
 
 	public RelayConnectorService(
@@ -52,8 +48,10 @@ public sealed class RelayConnectorService : IRelayConnectorService, IRelayBlobCl
 		IRemoteEventBus bus,
 		IRelayHttpClientFactory httpFactory,
 		RelayConnectorTimings? timings = null,
-		IEventLog? eventLog = null)
+		IEventLog? eventLog = null,
+		RelayBlobGateway? blobGateway = null)
 	{
+		_blobGateway = blobGateway;
 		_store = store;
 		_dispatcher = dispatcher;
 		_bus = bus;
@@ -200,7 +198,6 @@ public sealed class RelayConnectorService : IRelayConnectorService, IRelayBlobCl
 		var baseUrl = config.Url.Trim().TrimEnd('/');
 		var elapsed = new Stopwatch();
 		using var client = _httpFactory.Create();
-		var blobLink = new BlobLink(client, baseUrl);
 		client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", config.Token.Trim());
 		client.DefaultRequestHeaders.TryAddWithoutValidation(Constants.Remote.Link.DaemonHeader, Environment.MachineName);
 		client.DefaultRequestHeaders.TryAddWithoutValidation(Constants.Remote.Link.ProtocolHeader, Constants.Remote.Link.ProtocolHeaderValue);
@@ -226,7 +223,7 @@ public sealed class RelayConnectorService : IRelayConnectorService, IRelayBlobCl
 
 			SetStatus(RelayState.Connected);
 			elapsed.Start();
-			_blobLink = blobLink;
+			_blobGateway?.Attach(client, baseUrl);
 
 			requests = Channel.CreateUnbounded<JsonNode>(new UnboundedChannelOptions { SingleWriter = true });
 			events = Channel.CreateBounded<RemoteNotification>(new BoundedChannelOptions(Constants.Remote.Link.EventQueueCapacity)
@@ -274,7 +271,7 @@ public sealed class RelayConnectorService : IRelayConnectorService, IRelayBlobCl
 		}
 		finally
 		{
-			Interlocked.CompareExchange(ref _blobLink, null, blobLink);
+			_blobGateway?.Detach(client);
 			if (handler is not null)
 			{
 				if (_eventLog is not null)
@@ -444,36 +441,6 @@ public sealed class RelayConnectorService : IRelayConnectorService, IRelayBlobCl
 		catch (Exception ex)
 		{
 			_log.Warning(ex, "RelayConnectorService: event pump stopped");
-		}
-	}
-
-	/// <inheritdoc />
-	public async Task DownloadBlobAsync(string blobId, System.IO.Stream destination, CancellationToken cancellationToken)
-	{
-		var link = _blobLink ?? throw new TdcpException(Constants.Attachments.NotConnectedMessage);
-		var url  = link.BaseUrl + Constants.Remote.Link.BlobPath + Uri.EscapeDataString(blobId);
-
-		HttpResponseMessage response;
-		try
-		{
-			response = await link.Client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-		}
-		catch (HttpRequestException ex)
-		{
-			throw new TdcpException("Could not reach the web server: " + ex.Message);
-		}
-
-		using (response)
-		{
-			if (response.StatusCode == HttpStatusCode.NotFound)
-				throw new TdcpException("The upload is no longer available on the web server");
-			if (response.StatusCode == HttpStatusCode.Unauthorized)
-				throw new TdcpException(Constants.Remote.Link.TokenRejectedMessage);
-			if (!response.IsSuccessStatusCode)
-				throw new TdcpException($"The web server answered {(int)response.StatusCode} for the upload");
-
-			await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
-			await source.CopyToAsync(destination, Constants.Attachments.CopyBufferBytes, cancellationToken);
 		}
 	}
 

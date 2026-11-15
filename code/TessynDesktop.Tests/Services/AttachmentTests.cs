@@ -351,6 +351,16 @@ public sealed class AttachmentTests : IDisposable
 		AssertNothingStored();
 	}
 
+	[Fact]
+	public async Task The_blob_gateway_without_a_connection_says_the_link_is_not_connected()
+	{
+		var gateway = new RelayBlobGateway();
+
+		var ex = await Assert.ThrowsAsync<TdcpException>(() => gateway.DownloadBlobAsync("b", new MemoryStream(), CancellationToken.None));
+
+		Assert.Equal("The web link is not connected", ex.Message);
+	}
+
 	private void AssertNothingStored() =>
 		Assert.False(Directory.Exists(Root) && Directory.GetFiles(Root, "*", SearchOption.AllDirectories).Length > 0);
 
