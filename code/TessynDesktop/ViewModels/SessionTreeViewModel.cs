@@ -1714,42 +1714,121 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	// --- Last prompt time ---
 
+	/// <summary>Files per hand-over of the startup last-prompt scan (newest first); a chunk also ends after <see cref="LastActivityChunkInterval"/>.</summary>
+	private const int LastActivityChunkFiles = 100;
+	private static readonly TimeSpan LastActivityChunkInterval = TimeSpan.FromMilliseconds(250);
+
 	/// <summary>Completes once the startup last-prompt scan has been applied to the view models (never faults).</summary>
 	public Task LastPromptScanTask { get; }
 
 	/// <summary>
 	/// Reloads last-prompt, last-response, profile and draft timestamps for every session. The session-file and
-	/// draft reads run on a background thread over a snapshot of the nodes; the results are applied to the view
-	/// models in one UI-thread pass (ISSUE.016).
+	/// draft reads run on a background thread over a snapshot of the nodes, newest file first; the results are applied
+	/// to the view models on the UI thread chunk by chunk (ISSUE.016).
 	/// </summary>
-	private async Task RefreshLastPromptTimesAsync()
+	private Task RefreshLastPromptTimesAsync()
+	{
+		lock (_lastPromptGate)
+		{
+			// A scan is already reading every file: never start a second one beside it (ISSUE.016). Ask it to run
+			// once more when it ends, so a reload still gets fresh values; any number of requests collapse into one rerun.
+			if (_lastPromptRunning)
+			{
+				_lastPromptRerunRequested = true;
+				return _lastPromptRun!;
+			}
+
+			_lastPromptRunning = true;
+			return _lastPromptRun = RunLastPromptRefreshLoopAsync();
+		}
+	}
+
+	/// <summary>Cancels the background last-prompt scan (application shutdown); it neither applies further chunks nor reruns.</summary>
+	public void CancelBackgroundWork() => _shutdownCts.Cancel();
+
+	private readonly object _lastPromptGate = new();
+	private readonly CancellationTokenSource _shutdownCts = new();
+	private Task? _lastPromptRun;
+	private bool _lastPromptRunning;
+	private bool _lastPromptRerunRequested;
+
+	private async Task RunLastPromptRefreshLoopAsync()
+	{
+		while (true)
+		{
+			await RefreshLastPromptTimesOnceAsync(_shutdownCts.Token).ConfigureAwait(false);
+
+			lock (_lastPromptGate)
+			{
+				if (!_lastPromptRerunRequested || _shutdownCts.IsCancellationRequested)
+				{
+					_lastPromptRerunRequested = false;
+					_lastPromptRunning = false;
+					return;
+				}
+
+				_lastPromptRerunRequested = false;
+			}
+		}
+	}
+
+	private async Task RefreshLastPromptTimesOnceAsync(CancellationToken cancellationToken)
 	{
 		try
 		{
-			var sessions = new List<SessionNodeViewModel>();
-			foreach (var dir in Directories)
-				CollectSessionsWithSubSessions(dir.Children, sessions);
+			// The node snapshot is taken on the UI thread (the first run starts there; a rerun resumes on the pool).
+			var sessions = Dispatcher.UIThread.CheckAccess()
+				? CollectAllSessions()
+				: await Dispatcher.UIThread.InvokeAsync(CollectAllSessions);
 
-			var fileNames = sessions.Select(s => s.FileName).ToList();
+			var byFileName = sessions.ToLookup(s => s.FileName);
+			var fileNames = byFileName.Select(g => g.Key).ToList();
 
 			// Measured inside the task so the scope runs on the pool thread (timed, but not published as the current UI operation).
-			var results = await Task.Run(() =>
+			// Newest files first, handed over in small chunks, so the rows people look at first fill in within a second or two
+			// instead of after the whole scan.
+			await Task.Run(() =>
 			{
 				using var scanScope = _timer.Measure(Constants.Diagnostics.Operation.ScanLastPromptTimes, Constants.Diagnostics.WarnThresholds.UiLoadMs);
-				return _lastActivityScanner.Scan(fileNames);
-			}).ConfigureAwait(false);
+				_lastActivityScanner.ScanNewestFirst(fileNames, LastActivityChunkFiles, LastActivityChunkInterval, chunk =>
+				{
+					// Hand-over at background priority: the scan waits for each apply (no queue build-up) and input stays ahead of it.
+					// The wait ends on shutdown, so a stopped dispatcher cannot park this thread or leave the scan task unfinished.
+					var apply = Dispatcher.UIThread.InvokeAsync(() =>
+					{
+						using var applyScope = _timer.Measure(Constants.Diagnostics.Operation.RefreshLastPromptTimes, Constants.Diagnostics.WarnThresholds.UiLoadMs);
+						foreach (var scanned in chunk)
+							foreach (var session in byFileName[scanned.FileName])
+								ApplyLastActivity(session, scanned);
+					}, DispatcherPriority.Background);
 
-			await Dispatcher.UIThread.InvokeAsync(() =>
-			{
-				using var applyScope = _timer.Measure(Constants.Diagnostics.Operation.RefreshLastPromptTimes, Constants.Diagnostics.WarnThresholds.UiLoadMs);
-				for (var i = 0; i < sessions.Count; i++)
-					ApplyLastActivity(sessions[i], results[i]);
-			});
+					try
+					{
+						apply.GetTask().Wait(cancellationToken);
+					}
+					catch (OperationCanceledException)
+					{
+						apply.Abort();
+					}
+					catch (AggregateException ex) when (ex.InnerException is TaskCanceledException)
+					{
+						// Dispatcher shut down while the chunk was queued.
+					}
+				}, cancellationToken);
+			}).ConfigureAwait(false);
 		}
 		catch (Exception ex)
 		{
 			_log.Warning(ex, "Last prompt time refresh failed");
 		}
+	}
+
+	private List<SessionNodeViewModel> CollectAllSessions()
+	{
+		var sessions = new List<SessionNodeViewModel>();
+		foreach (var dir in Directories)
+			CollectSessionsWithSubSessions(dir.Children, sessions);
+		return sessions;
 	}
 
 	/// <summary>Collects each session followed by its direct sub-sessions, in tree order.</summary>
