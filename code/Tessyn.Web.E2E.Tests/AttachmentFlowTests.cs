@@ -144,7 +144,8 @@ public sealed class AttachmentFlowTests
 	{
 		await using var stack = await WebStack.StartAsync();
 		var browser = await stack.LoginAsync();
-		var source = Path.Combine(stack.Daemon.Root, "source.md");
+		// Outside the data root: the data root is closed to import (it would be readable by the relay once copied).
+		var source = Path.Combine(Path.GetTempPath(), "tessyn-e2e-source-" + Guid.NewGuid().ToString("N") + ".md");
 		await File.WriteAllTextAsync(source, "# from the desktop");
 		var request = new JsonObject
 		{

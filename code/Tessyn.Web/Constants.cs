@@ -145,6 +145,12 @@ public static class Constants
 		public const int NodeIdMaxLength = 128;
 		public const int BlobIdHexLength = 32;
 		public const int CopyBufferBytes = 81920;
+		public const int MaxConcurrentUploads = 2;
+		public const long MaxBlobDirectoryBytes = 1024L * 1024 * 1024;
+		public const int DiskFullWin = 0x70;
+		public const int HandleDiskFullWin = 0x27;
+		public const int DiskFullUnix = 28;
+		public const int HResultCodeMask = 0xFFFF;
 	}
 
 	public static class JsonRpc
@@ -179,6 +185,8 @@ public static class Constants
 		public const string BadUploadMessage = "The upload could not be read";
 		public const string DaemonRefusedPrefix = "The desktop refused the file: ";
 		public const string BadReplyMessage = "The desktop sent an unexpected reply";
+		public const string BusyMessage = "Too many uploads are running right now. Try again in a moment.";
+		public const string StorageFullMessage = "The server has no room for the upload right now. Try again later.";
 	}
 
 	public static class Notifications

@@ -135,6 +135,66 @@ public sealed class AppSettingsServiceTests
 	}
 
 	[Fact]
+	public void Load_AnExplicitWorkingDirectoryWithoutARevision_Stays()
+	{
+		var tempDir = CreateTempDir();
+		try
+		{
+			File.WriteAllText(Path.Combine(tempDir, Constants.SettingsFileName), """{"FileAccess":{"Mode":1}}""");
+			var service = new AppSettingsService(tempDir);
+
+			service.Load();
+
+			Assert.Equal(FileAccessMode.WorkingDirectory, service.Settings.FileAccess.Mode);
+			Assert.Equal(Constants.FileAccess.ModeRevision, service.Settings.FileAccess.ModeRevision);
+		}
+		finally
+		{
+			Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
+	public void Load_ANullFileAccessSection_GetsTheDefaultsAndTheRevision()
+	{
+		var tempDir = CreateTempDir();
+		try
+		{
+			File.WriteAllText(Path.Combine(tempDir, Constants.SettingsFileName), """{"FileAccess":null}""");
+			var service = new AppSettingsService(tempDir);
+
+			service.Load();
+
+			Assert.NotNull(service.Settings.FileAccess);
+			Assert.Equal(FileAccessMode.WorkingDirectory, service.Settings.FileAccess.Mode);
+			Assert.Equal(Constants.FileAccess.ModeRevision, service.Settings.FileAccess.ModeRevision);
+		}
+		finally
+		{
+			Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
+	public void Load_ReferencedOnlyWithTheCurrentRevision_IsAnExplicitChoiceAndStays()
+	{
+		var tempDir = CreateTempDir();
+		try
+		{
+			File.WriteAllText(Path.Combine(tempDir, Constants.SettingsFileName), """{"FileAccess":{"Mode":0,"ModeRevision":1}}""");
+			var service = new AppSettingsService(tempDir);
+
+			service.Load();
+
+			Assert.Equal(FileAccessMode.ReferencedOnly, service.Settings.FileAccess.Mode);
+		}
+		finally
+		{
+			Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
 	public void Load_WhenNoFileExists_MarksTheModeRevision_SoALaterExplicitReferencedOnlyStays()
 	{
 		var tempDir = CreateTempDir();

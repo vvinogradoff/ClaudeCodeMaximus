@@ -108,7 +108,7 @@ public sealed class FileAccessService : IFileAccessService
 		if (length is < 1)
 			throw new TdcpInvalidParamsException("'length' must be at least 1");
 
-		var (nodeId, storedPath, grantedByRef) = ResolveHandle(handle);
+		var (nodeId, storedPath, grantedByRef, isAttachment) = ResolveHandle(handle);
 		var workingDirectory = _registry.FindModelByNodeId(nodeId)?.WorkingDirectory ?? string.Empty;
 
 		// A path from a ledger written by an older version is checked like any other before it touches the disk.
@@ -121,6 +121,8 @@ public sealed class FileAccessService : IFileAccessService
 
 		// One open: the policy, the size and the bytes all come from this handle.
 		using var opened = SafeFilePath.Open(fullPath) ?? throw new TdcpException("File not found");
+		if (isAttachment)
+			RequireStoredAttachment(opened, nodeId, fullPath, transport);
 		Authorize(fullPath, opened, nodeId, workingDirectory, transport, grantedByRef, "read");
 
 		var settings = _settings.Settings.FileAccess;
@@ -145,25 +147,46 @@ public sealed class FileAccessService : IFileAccessService
 			data, eof);
 	}
 
-	private (string NodeId, string FullPath, bool GrantedByRef) ResolveHandle(string handle)
+	private (string NodeId, string FullPath, bool GrantedByRef, bool IsAttachment) ResolveHandle(string handle)
 	{
 		if (_previews.TryGetValue(handle, out var preview))
 		{
 			if (preview.ExpiresUtc > _time.GetUtcNow())
-				return (preview.NodeId, preview.FullPath, false);
+				return (preview.NodeId, preview.FullPath, false, false);
 
 			_previews.TryRemove(handle, out _);
 		}
 
 		// An attachment is granted like a referenced file: the session's own upload, in the attachments folder of the data root.
 		if (_attachments != null && _attachments.TryResolve(handle, out var attachmentNode, out var attachmentPath))
-			return (attachmentNode, attachmentPath, true);
+			return (attachmentNode, attachmentPath, true, true);
 
 		var reference = _attention.FindFileRef(handle);
 		if (reference is { Ref.AbsolutePath: { Length: > 0 } path })
-			return (reference.Value.NodeId, path, true);
+			return (reference.Value.NodeId, path, true, false);
 
 		throw new TdcpException(Constants.FileAccess.UnknownHandleMessage);
+	}
+
+	/// <summary>
+	/// An attachment handle grants access without the mode check, so the open file must really be the stored attachment: its real path lies
+	/// directly in <c>attachments\&lt;profile&gt;\&lt;node&gt;\</c> (a junction or symlink there leads elsewhere) and it has no second name.
+	/// </summary>
+	private void RequireStoredAttachment(OpenedFile opened, string nodeId, string fullPath, TdcpTransport transport)
+	{
+		string? reason = null;
+		if (opened.LinkCount > 1)
+			reason = "It is hard-linked under more than one name.";
+		else if (_attachments == null || !_attachments.IsStoredAttachment(opened.FinalPath, nodeId))
+			reason = "It is not stored in the attachments folder of its session.";
+
+		if (reason == null)
+			return;
+
+		if (transport == TdcpTransport.Relay)
+			_log.Warning("Relay file.read refused: {Reason} (node {NodeId}, {Path})", reason, nodeId, fullPath);
+
+		throw new TdcpException(Constants.FileAccess.DeniedMessage + " " + reason);
 	}
 
 	private TdcpException RefuseBeforeOpen(string nodeId, string path, string reason, TdcpTransport transport)

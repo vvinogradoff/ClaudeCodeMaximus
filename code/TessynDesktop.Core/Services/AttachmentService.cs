@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -29,6 +30,7 @@ public sealed class AttachmentService : IAttachmentService
 	private readonly string[] _dataRoots;
 	private readonly string[] _userProfiles;
 	private readonly TimeProvider _time;
+	private readonly TimeSpan _fetchTimeout;
 
 	public AttachmentService(
 		ISessionRegistry registry,
@@ -48,8 +50,10 @@ public sealed class AttachmentService : IAttachmentService
 		string? dataRoot = null,
 		TimeProvider? time = null,
 		ILogger? log = null,
-		string? userProfile = null)
+		string? userProfile = null,
+		TimeSpan? fetchTimeout = null)
 	{
+		_fetchTimeout = fetchTimeout ?? Constants.Attachments.FetchTimeout;
 		_registry     = registry;
 		_settings     = settings;
 		_profileName  = profileName;
@@ -77,10 +81,24 @@ public sealed class AttachmentService : IAttachmentService
 
 		using var opened = SafeFilePath.Open(full) ?? throw new TdcpException("File not found");
 
-		// The same deny list as a loopback file.read: import must not copy credentials to where the relay can read them.
+		// The relay's deny rules, not the loopback's: the copy lands where the relay can read, so the whole data root stays closed
+		// (transcripts, logs, ledgers, ...) besides every credential, key and token name rule.
 		if (opened.FinalPath.Length == 0
-		    || FileAccessPolicy.IsDeniedOpened(full, opened.FinalPath, opened.LinkCount, referenced: false, _dataRoots, _userProfiles, relay: false))
-			throw new TdcpException(Constants.FileAccess.DeniedMessage + " It is a credential, key or token file.");
+		    || FileAccessPolicy.IsDeniedOpened(full, opened.FinalPath, opened.LinkCount, referenced: false, _dataRoots, _userProfiles, relay: true))
+			throw new TdcpException(Constants.FileAccess.DeniedMessage + " It is a credential, key or token file, or app data.");
+
+		// The attachments folder is the one part of the data root the relay may read, so only a session's own attachments may be re-imported.
+		var ownNode = SafeSegment(node.NodeId);
+		if ((TryParseStored(opened.FinalPath, out _, out var ownerNode) && ownerNode != ownNode)
+		    || (TryParseStored(full, out _, out var namedOwner) && namedOwner != ownNode))
+			throw new TdcpException("That file is an attachment of another session");
+
+		// A second name for the same file defeats the named-path rules above (a hard link to app data, named innocently).
+		if (opened.LinkCount > 1)
+			throw new TdcpException(Constants.FileAccess.DeniedMessage + " It is hard-linked under more than one name.");
+
+		if (opened.Length > Constants.Attachments.MaxFetchBytes)
+			throw new TdcpException(Constants.Attachments.TooLargeMessage);
 
 		var folder = EnsureFolder(node);
 		var temp   = TempPath(folder);
@@ -106,7 +124,7 @@ public sealed class AttachmentService : IAttachmentService
 	{
 		var node = RemoteSessionLookup.Require(_registry, nodeId);
 		if (size < 0 || size > Constants.Attachments.MaxFetchBytes)
-			throw new TdcpException($"The file is larger than the {Constants.Attachments.MaxFetchBytes / (1024 * 1024)} MB limit");
+			throw new TdcpException(Constants.Attachments.TooLargeMessage);
 		if (sha256.Length != Constants.Attachments.Sha256HexLength || !sha256.All(Uri.IsHexDigit))
 			throw new TdcpInvalidParamsException("'sha256' must be 64 hex characters");
 		if (_blobs == null)
@@ -117,7 +135,7 @@ public sealed class AttachmentService : IAttachmentService
 		try
 		{
 			using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-			timeout.CancelAfter(Constants.Attachments.FetchTimeout);
+			timeout.CancelAfter(_fetchTimeout);
 
 			string actualHash;
 			long written;
@@ -130,7 +148,7 @@ public sealed class AttachmentService : IAttachmentService
 				}
 				catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
 				{
-					throw new TdcpException("The download from the web server timed out");
+					throw new TdcpTimeoutException("The download from the web server timed out");
 				}
 
 				written    = limited.Written;
@@ -212,6 +230,32 @@ public sealed class AttachmentService : IAttachmentService
 		return true;
 	}
 
+	/// <inheritdoc />
+	public bool IsStoredAttachment(string finalPath, string nodeId) =>
+		TryParseStored(finalPath, out _, out var node) && string.Equals(node, SafeSegment(nodeId), StringComparison.Ordinal);
+
+	/// <summary>True for a file directly inside the attachments folder, <c>profile\node\file</c>, in any known form of the data root.</summary>
+	private bool TryParseStored(string path, out string profileKey, out string nodeSegment)
+	{
+		profileKey = nodeSegment = string.Empty;
+		foreach (var root in _dataRoots)
+		{
+			var prefix = Path.Combine(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), Constants.Attachments.FolderName) + Path.DirectorySeparatorChar;
+			if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+				continue;
+
+			var inner = path[prefix.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+			if (inner.Length != 3)
+				continue;
+
+			profileKey  = inner[0];
+			nodeSegment = inner[1];
+			return true;
+		}
+
+		return false;
+	}
+
 	private static string MakeId(string profileKey, string nodeSegment, string fileName) =>
 		Constants.Attachments.IdPrefix + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{profileKey}/{nodeSegment}/{fileName}"))
 			.TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -260,6 +304,8 @@ public sealed class AttachmentService : IAttachmentService
 		{
 			var fileName = suffix == 1 ? $"{stamp}-{safe}" : $"{stamp}-{stem}-{suffix}{extension}";
 			var target   = Path.Combine(folder, fileName);
+			if (target.Length > Constants.Attachments.MaxPathLength)
+				throw new TdcpException("The attachment's path would be too long for Windows; shorten the file name");
 			try
 			{
 				File.Move(tempPath, target, overwrite: false);
@@ -292,13 +338,16 @@ public sealed class AttachmentService : IAttachmentService
 		var text = requested ?? string.Empty;
 		var name = text[(text.LastIndexOfAny(['/', '\\']) + 1)..];
 		var invalid = Path.GetInvalidFileNameChars();
-		var cleaned = new string([.. name.Select(c => c < ' ' || invalid.Contains(c) ? Constants.Attachments.FallbackNameChar : c)]).Trim().TrimEnd('.', ' ');
+		// Control and format characters (bidi overrides, zero-width) are dropped: a name must display as it is spelled.
+		var visible = name.Where(c => !char.IsControl(c) && char.GetUnicodeCategory(c) != UnicodeCategory.Format);
+		var cleaned = new string([.. visible.Select(c => invalid.Contains(c) ? Constants.Attachments.FallbackNameChar : c)]).Trim().TrimEnd('.', ' ');
 		if (cleaned.Length == 0 || cleaned.All(c => c == Constants.Attachments.FallbackNameChar))
 			cleaned = Constants.Attachments.FallbackName;
 
 		var extension = Path.GetExtension(cleaned);
 		var stem      = Path.GetFileNameWithoutExtension(cleaned);
-		if (stem.Length == 0)
+		// Whatever follows the last dot is an extension only when it is short; "a. very long text" is one name.
+		if (stem.Length == 0 || extension.Length > Constants.Attachments.MaxExtensionLength)
 		{
 			stem      = cleaned;
 			extension = string.Empty;
@@ -309,7 +358,9 @@ public sealed class AttachmentService : IAttachmentService
 		if (stem.Length + extension.Length > Constants.Attachments.MaxNameLength)
 			stem = stem[..Math.Max(1, Constants.Attachments.MaxNameLength - extension.Length)];
 
-		return stem + extension;
+		// A cut can leave a dot or space at the end of a name without an extension, which Windows would strip again.
+		stem = stem.TrimEnd('.', ' ');
+		return stem.Length + extension.Length == 0 ? Constants.Attachments.FallbackName : stem + extension;
 	}
 
 	private static bool IsReservedDeviceName(string stem)
@@ -322,6 +373,9 @@ public sealed class AttachmentService : IAttachmentService
 	/// <summary>A folder name made from an id: characters that are not safe in a path are replaced.</summary>
 	private static string SafeSegment(string value)
 	{
+		if (value is "." or "..")
+			return new string(Constants.Attachments.FallbackNameChar, value.Length);
+
 		var invalid = Path.GetInvalidFileNameChars();
 		return new string([.. value.Select(c => c < ' ' || invalid.Contains(c) || c == '/' || c == '\\' ? Constants.Attachments.FallbackNameChar : c)]);
 	}

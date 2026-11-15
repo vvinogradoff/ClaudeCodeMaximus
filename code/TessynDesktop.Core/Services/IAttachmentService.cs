@@ -23,6 +23,9 @@ public interface IAttachmentService
 	/// <summary>The attachments of the session, newest first.</summary>
 	AttachmentListResult List(string nodeId);
 
+	/// <summary>True when <paramref name="finalPath"/> (the real path of an open file) lies directly in the attachments folder of the session.</summary>
+	bool IsStoredAttachment(string finalPath, string nodeId);
+
 	/// <summary>The session and full path behind an attachment id; false when the id is malformed or the file is gone.</summary>
 	bool TryResolve(string attachmentId, out string nodeId, out string fullPath);
 }

@@ -27,6 +27,7 @@ public static class AttachmentEndpoints
 		HttpContext context,
 		DaemonLinkHub hub,
 		BlobStore blobs,
+		UploadLimiter limiter,
 		WireJson json,
 		IOptions<TessynWebOptions> options,
 		ILoggerFactory loggers)
@@ -40,6 +41,9 @@ public static class AttachmentEndpoints
 		// The browser would otherwise push up to 200 MB before it learns that nothing can take the file.
 		if (!hub.IsOnline)
 			return Error(StatusCodes.Status503ServiceUnavailable, Constants.Attachments.DaemonOfflineMessage);
+
+		if (!limiter.TryEnter())
+			return Error(StatusCodes.Status429TooManyRequests, Constants.Attachments.BusyMessage);
 
 		var cancellation = context.RequestAborted;
 		StoredBlob? blob = null;
@@ -91,6 +95,11 @@ public static class AttachmentEndpoints
 		{
 			return Error(StatusCodes.Status413PayloadTooLarge, Constants.Attachments.TooLargeMessage);
 		}
+		catch (BlobStorageFullException ex)
+		{
+			logger.LogWarning(ex, "Attachment upload refused: no room for the blob");
+			return Error(StatusCodes.Status507InsufficientStorage, Constants.Attachments.StorageFullMessage);
+		}
 		catch (Exception ex) when (!cancellation.IsCancellationRequested && ex is InvalidDataException or IOException or BadHttpRequestException)
 		{
 			// A body over the limit, a cut multipart stream, a malformed part.
@@ -103,6 +112,7 @@ public static class AttachmentEndpoints
 		}
 		finally
 		{
+			limiter.Exit();
 			if (blob != null)
 				blobs.Delete(blob.Id);
 		}

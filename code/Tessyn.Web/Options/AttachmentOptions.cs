@@ -13,6 +13,12 @@ public sealed class AttachmentOptions
 	/// <summary>How long the server waits for the daemon to fetch and store a blob.</summary>
 	public double FetchTimeoutSeconds { get; set; } = Constants.Defaults.AttachmentFetchTimeoutSeconds;
 
+	/// <summary>Uploads that may run at the same time; the next one is answered 429. Each occupies one daemon dispatch worker while the daemon downloads.</summary>
+	public int MaxConcurrentUploads { get; set; } = Constants.Limits.MaxConcurrentUploads;
+
+	/// <summary>Most bytes the blob folder may hold (blobs waiting for the daemon); an upload that would exceed it is answered 507.</summary>
+	public long MaxBlobDirectoryBytes { get; set; } = Constants.Limits.MaxBlobDirectoryBytes;
+
 	/// <summary>A blob nobody fetched is deleted after this long (checked at start-up and on each upload).</summary>
 	public double BlobTtlMinutes { get; set; } = Constants.Defaults.BlobTtlMinutes;
 }

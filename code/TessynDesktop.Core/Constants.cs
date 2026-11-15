@@ -434,7 +434,11 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// <summary>The cap the web server enforces for an upload (decision A12); the daemon checks the same bound on a fetch.</summary>
 		public const long MaxFetchBytes = 200L * 1024 * 1024;
 		public const int CopyBufferBytes = 81920;
-		public static readonly System.TimeSpan FetchTimeout = System.TimeSpan.FromMinutes(5);
+		/// <summary>Well below the web server's wait (300 s), so the daemon reports the timeout and the browser never gets a 504 for a stored file.</summary>
+		public static readonly System.TimeSpan FetchTimeout = System.TimeSpan.FromSeconds(240);
+		public const int MaxPathLength = 259;
+		public const int MaxExtensionLength = 16;
+		public const string TooLargeMessage = "The file is larger than the 200 MB limit";
 		public const string NotConnectedMessage = "The web link is not connected";
 		public const string UnknownAttachmentMessage = "Unknown attachment";
 	}

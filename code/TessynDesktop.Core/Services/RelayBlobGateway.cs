@@ -36,18 +36,10 @@ public sealed class RelayBlobGateway : IRelayBlobClient
 		var link = _link ?? throw new TdcpException(Constants.Attachments.NotConnectedMessage);
 		var url  = link.BaseUrl + Constants.Remote.Link.BlobPath + Uri.EscapeDataString(blobId);
 
-		HttpResponseMessage response;
+		const string Unreachable = "Could not reach the web server: ";
 		try
 		{
-			response = await link.Client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-		}
-		catch (HttpRequestException ex)
-		{
-			throw new TdcpException("Could not reach the web server: " + ex.Message);
-		}
-
-		using (response)
-		{
+			using var response = await link.Client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
 			if (response.StatusCode == HttpStatusCode.NotFound)
 				throw new TdcpException("The upload is no longer available on the web server");
 			if (response.StatusCode == HttpStatusCode.Unauthorized)
@@ -56,7 +48,34 @@ public sealed class RelayBlobGateway : IRelayBlobClient
 				throw new TdcpException($"The web server answered {(int)response.StatusCode} for the upload");
 
 			await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-			await source.CopyToAsync(destination, Constants.Attachments.CopyBufferBytes, cancellationToken).ConfigureAwait(false);
+			var buffer = new byte[Constants.Attachments.CopyBufferBytes];
+			while (true)
+			{
+				var read = await ReadAsync(source, buffer, cancellationToken, Unreachable).ConfigureAwait(false);
+				if (read == 0)
+					break;
+
+				// A failed write is the daemon's own (disk), not the link's, so it is not mapped to "could not reach".
+				await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+			}
+		}
+		catch (Exception ex) when (ex is HttpRequestException or ObjectDisposedException)
+		{
+			// A refused connection, or a client disposed by a reconnect.
+			throw new TdcpException(Unreachable + ex.Message);
+		}
+	}
+
+	/// <summary>Reads from the link; a drop in the middle of the body is the link's failure.</summary>
+	private static async Task<int> ReadAsync(Stream source, byte[] buffer, CancellationToken cancellationToken, string message)
+	{
+		try
+		{
+			return await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+		}
+		catch (Exception ex) when (ex is IOException or HttpRequestException or ObjectDisposedException)
+		{
+			throw new TdcpException(message + ex.Message);
 		}
 	}
 }
