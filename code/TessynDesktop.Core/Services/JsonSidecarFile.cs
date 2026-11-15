@@ -24,8 +24,12 @@ public sealed class JsonSidecarFile
 	};
 
 	/// <summary>Reads <paramref name="path"/>. Returns null when the file is missing (nothing is created) or was unreadable (moved aside).</summary>
-	public T? Read<T>(string path) where T : class
+	public T? Read<T>(string path) where T : class => Read<T>(path, out _);
+
+	/// <summary>Like <see cref="Read{T}(string)"/>; <paramref name="unreadable"/> tells a file that was there but could not be read (and was moved aside) from a missing one.</summary>
+	public T? Read<T>(string path, out bool unreadable) where T : class
 	{
+		unreadable = false;
 		if (!File.Exists(path))
 			return null;
 
@@ -36,6 +40,7 @@ public sealed class JsonSidecarFile
 		}
 		catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
 		{
+			unreadable = true;
 			var badPath = MoveAside(path);
 			_log.Warning(ex, "JsonSidecarFile: unreadable file {Path}, moved to {BadPath}", path, badPath);
 			return null;

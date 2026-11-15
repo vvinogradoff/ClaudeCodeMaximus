@@ -33,6 +33,12 @@ public interface IAttentionService
 	/// <summary>All items of the node, any status, in FR.23.2 order. Returns copies.</summary>
 	IReadOnlyList<AttentionItemModel> GetItems(string nodeId);
 
+	/// <summary>
+	/// False when the node's ledger file was unreadable the last time it was loaded, so <see cref="GetItems"/> answers with an empty list that does not mean
+	/// "no items". Anything that deletes data because an item is missing (the Focus reply drafts, FR.23.19) must not act then.
+	/// </summary>
+	bool IsLedgerReadable(string nodeId) => true;
+
 	/// <summary>Open-item count (Decided excluded) and most severe open kind (FR.23.13), plus both over every open item (Decided included) for session-row badges.</summary>
 	AttentionSummaryModel GetSummary(string nodeId);
 

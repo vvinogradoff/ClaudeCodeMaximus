@@ -52,7 +52,7 @@ public sealed class DraftService : IDraftService
 		var ids = new List<string>();
 		foreach (var path in Directory.EnumerateFiles(_draftsDirectory, prefix + "*" + Constants.DraftFileExtension))
 		{
-			var name = System.IO.Path.GetFileName(path);
+			var name = Path.GetFileName(path);
 			var id = name[prefix.Length..^Constants.DraftFileExtension.Length];
 			if (IsValidItemId(id))
 				ids.Add(id);
@@ -157,19 +157,19 @@ public sealed class DraftService : IDraftService
 	}
 
 	private string GetDraftPath(string sessionFileName)
-		=> System.IO.Path.Combine(_draftsDirectory, sessionFileName + Constants.DraftFileExtension);
+		=> Path.Combine(_draftsDirectory, sessionFileName + Constants.DraftFileExtension);
 
 	private string GetItemDraftPath(string sessionFileName, string itemId)
 	{
 		if (!IsValidItemId(itemId))
 			throw new ArgumentException("Not a valid Focus item id", nameof(itemId));
 
-		return System.IO.Path.Combine(_draftsDirectory, sessionFileName + Constants.ItemDraftInfix + itemId + Constants.DraftFileExtension);
+		return Path.Combine(_draftsDirectory, sessionFileName + Constants.ItemDraftInfix + itemId + Constants.DraftFileExtension);
 	}
 
 	private static string GetDefaultDraftsDir()
 	{
 		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return System.IO.Path.Combine(appData, Constants.AppDataFolderName, Constants.DraftsFolderName);
+		return Path.Combine(appData, Constants.AppDataFolderName, Constants.DraftsFolderName);
 	}
 }

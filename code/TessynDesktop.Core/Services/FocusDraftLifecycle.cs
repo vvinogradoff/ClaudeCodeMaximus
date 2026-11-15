@@ -58,6 +58,10 @@ public sealed class FocusDraftLifecycle : IDisposable
 			if (node == null)
 				return;
 
+			// An unreadable ledger answers with no items; that must not delete every reply draft of the session.
+			if (!_attention.IsLedgerReadable(e.NodeId))
+				return;
+
 			var draftIds = _drafts.ListItemDraftIds(node.FileName);
 			if (draftIds.Count == 0)
 				return;

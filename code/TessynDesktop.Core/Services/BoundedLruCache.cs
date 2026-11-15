@@ -66,6 +66,9 @@ public sealed class BoundedLruCache<TKey, TValue> where TKey : notnull
 		return true;
 	}
 
+	/// <summary>The cached values, most recently used first; does not change the recency.</summary>
+	public IReadOnlyList<TValue> Snapshot() => _order.Select(pair => pair.Value).ToList();
+
 	/// <summary>
 	/// Evicts least-recently-used entries until at most <c>capacity</c> remain. <paramref name="keep"/> and pinned entries are
 	/// skipped, so the cache can stay above capacity while many entries are pinned. Returns the evicted values for the caller to dispose.

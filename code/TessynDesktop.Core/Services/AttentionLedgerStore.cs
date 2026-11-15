@@ -35,12 +35,14 @@ public sealed class AttentionLedgerStore
 
 	/// <summary>
 	/// Loads the ledger of <paramref name="nodeId"/>. A missing file is an empty ledger (nothing is created);
-	/// an unreadable one is moved aside to <c>&lt;NodeId&gt;.json.bad-&lt;yyyyMMddHHmmss&gt;</c> and an empty ledger returned.
+	/// an unreadable one is moved aside to <c>&lt;NodeId&gt;.json.bad-&lt;yyyyMMddHHmmss&gt;</c> and an empty ledger returned, marked
+	/// <see cref="AttentionLedgerModel.WasUnreadable"/>.
 	/// </summary>
 	public AttentionLedgerModel Load(string nodeId)
 	{
-		var ledger = _file.Read<AttentionLedgerModel>(GetPath(nodeId)) ?? new AttentionLedgerModel();
+		var ledger = _file.Read<AttentionLedgerModel>(GetPath(nodeId), out var unreadable) ?? new AttentionLedgerModel();
 		ledger.NodeId = nodeId;
+		ledger.WasUnreadable = unreadable;
 		return ledger;
 	}
 

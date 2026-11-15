@@ -113,6 +113,10 @@ public sealed partial class SessionPaneViewModel
 
 	private void OnDraftChanged(DraftChangedPayload payload)
 	{
+		// FR.23.19: the reply draft of a Focus item has its own revision and is not the composer text; it must not trigger a reconcile or drop the cache.
+		if (payload.ItemId != null)
+			return;
+
 		if (DraftSync.IsKnownRevision(payload.NodeId, payload.Revision))
 			return;   // our own write
 

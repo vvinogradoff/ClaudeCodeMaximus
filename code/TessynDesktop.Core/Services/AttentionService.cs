@@ -139,6 +139,12 @@ public sealed class AttentionService : IAttentionService
 			return AttentionOrdering.Sort(LoadLocked(nodeId).Items).Select(Copy).ToList();
 	}
 
+	public bool IsLedgerReadable(string nodeId)
+	{
+		lock (_lock)
+			return !LoadLocked(nodeId).WasUnreadable;
+	}
+
 	public AttentionSummaryModel GetSummary(string nodeId)
 	{
 		lock (_lock)
@@ -316,6 +322,7 @@ public sealed class AttentionService : IAttentionService
 		try
 		{
 			_store.Save(ledger);
+			ledger.WasUnreadable = false; // what is on disk now is a readable file
 		}
 		catch
 		{

@@ -67,6 +67,19 @@ public sealed class FocusDraftTests : IDisposable
 	}
 
 	[Fact]
+	public void ItemIdsThatDifferOnlyInCase_AddressOneDraft()
+	{
+		_store.SaveItemDraft("s.txt", "A3", "x");
+
+		Assert.Equal("x", _store.LoadItemDraft("s.txt", "a3"));
+		_store.SaveItemDraft("s.txt", "a3", "y");
+		Assert.Equal("y", _store.LoadItemDraft("s.txt", "A3"));
+		Assert.Single(_store.ListItemDraftIds("s.txt"));
+		_store.DeleteItemDraft("s.txt", "A3");
+		Assert.Null(_store.LoadItemDraft("s.txt", "a3"));
+	}
+
+	[Fact]
 	public void DeleteItemDrafts_RemovesEveryReplyDraftOfTheSession_AndKeepsTheOthers()
 	{
 		_store.SaveDraft("s.txt", "composer");
@@ -192,6 +205,167 @@ public sealed class FocusDraftTests : IDisposable
 		drafts.Prune(["a1"]);
 
 		Assert.Equal(["A1"], _store.ListItemDraftIds("s.txt").ToArray());
+	}
+
+	// -- H1: the exit path flushes every pending draft ---------------------------------------------------------------------------------
+
+	private sealed class CountingFlushable(Action onFlush) : IFlushesDrafts
+	{
+		public void FlushDrafts() => onFlush();
+	}
+
+	[Fact]
+	public void DraftFlusher_FlushesEveryItem_EvenWhenOneFails_AndCountsTheFailures()
+	{
+		var flushed = new List<string>();
+		IFlushesDrafts[] items =
+		[
+			new CountingFlushable(() => flushed.Add("first")),
+			new CountingFlushable(() => throw new IOException("disk")),
+			new CountingFlushable(() => flushed.Add("third")),
+		];
+
+		var failed = DraftFlusher.FlushAll(items);
+
+		Assert.Equal(1, failed);
+		Assert.Equal(["first", "third"], flushed);
+	}
+
+	[Fact]
+	public void TheExitFlush_WritesTheRepliesOfEverySession_WithoutDisposingThem()
+	{
+		// Two sessions, each with a reply still inside its debounce: what closing the app within 500 ms of the last keystroke leaves behind.
+		var first  = new FocusReplyDrafts(_store, "one.txt", TimeSpan.FromMinutes(5));
+		var second = new FocusReplyDrafts(_store, "two.txt", TimeSpan.FromMinutes(5));
+		first.Queue("A1", "typed in one");
+		second.Queue("A1", "typed in two");
+		Assert.Null(_store.LoadItemDraft("one.txt", "A1"));
+
+		var failed = DraftFlusher.FlushAll([first, second]);
+
+		Assert.Equal(0, failed);
+		Assert.Equal("typed in one", _store.LoadItemDraft("one.txt", "A1"));
+		Assert.Equal("typed in two", _store.LoadItemDraft("two.txt", "A1"));
+
+		// Still usable afterwards: a flush is not a dispose.
+		first.Queue("A1", "more");
+		first.Flush();
+		Assert.Equal("more", _store.LoadItemDraft("one.txt", "A1"));
+		first.Dispose();
+		second.Dispose();
+	}
+
+	[Fact]
+	public void BoundedLruCache_Snapshot_ListsTheCachedValues_WithoutChangingTheirRecency()
+	{
+		var cache = new BoundedLruCache<string, string>(2);
+		cache.Set("a", "va");
+		cache.Set("b", "vb");
+
+		Assert.Equal(["vb", "va"], cache.Snapshot().ToArray());
+		cache.Set("c", "vc");
+		Assert.Equal(["va"], cache.Trim());   // "a" was still the least recently used
+	}
+
+	// -- M2: a discard racing a flush ----------------------------------------------------------------------------------------------------
+
+	private sealed class GatedDraftService(IDraftService inner) : IDraftService
+	{
+		public ManualResetEventSlim SaveEntered { get; } = new(false);
+		public ManualResetEventSlim ReleaseSave { get; } = new(false);
+
+		public string? LoadDraft(string f) => inner.LoadDraft(f);
+		public void SaveDraft(string f, string t) => inner.SaveDraft(f, t);
+		public void DeleteDraft(string f) => inner.DeleteDraft(f);
+		public SessionFileStampModel? GetDraftStamp(string f) => inner.GetDraftStamp(f);
+		public DateTimeOffset? GetDraftTimestamp(string f) => inner.GetDraftTimestamp(f);
+		public string? LoadItemDraft(string f, string i) => inner.LoadItemDraft(f, i);
+		public void DeleteItemDraft(string f, string i) => inner.DeleteItemDraft(f, i);
+		public IReadOnlyList<string> ListItemDraftIds(string f) => inner.ListItemDraftIds(f);
+
+		public void SaveItemDraft(string f, string i, string t)
+		{
+			SaveEntered.Set();
+			ReleaseSave.Wait(TimeSpan.FromSeconds(10));
+			inner.SaveItemDraft(f, i, t);
+		}
+	}
+
+	[Fact]
+	public void ADiscard_ThatArrivesWhileAFlushIsWriting_NeverLetsTheDeletedDraftComeBack()
+	{
+		var gated = new GatedDraftService(_store);
+		using var drafts = new FocusReplyDrafts(gated, "s.txt", TimeSpan.FromMinutes(5));
+		drafts.Queue("A1", "the reply being sent");
+
+		// The timer thread has taken its snapshot and is about to write it...
+		var flush = Task.Run(drafts.Flush);
+		Assert.True(gated.SaveEntered.Wait(TimeSpan.FromSeconds(5)));
+
+		// ...when the user hits Send: the UI thread discards the draft.
+		var discard = Task.Run(() => drafts.Discard("A1"));
+		Thread.Sleep(100);
+		gated.ReleaseSave.Set();
+		Task.WaitAll([flush, discard], TimeSpan.FromSeconds(10));
+
+		Assert.Null(_store.LoadItemDraft("s.txt", "A1"));
+	}
+
+	// -- M3: an unreadable ledger is not an empty one -------------------------------------------------------------------------------------
+
+	[Fact]
+	public void Prune_WhenTheLedgerWasNotReadable_DeletesNothing_AndWhenItWas_DeletesTheClosedOnes()
+	{
+		_store.SaveItemDraft("s.txt", "A1", "one");
+		_store.SaveItemDraft("s.txt", "A2", "two");
+		using var drafts = new FocusReplyDrafts(_store, "s.txt", TimeSpan.FromMinutes(5));
+
+		drafts.Prune([], ledgerReadable: false);
+		Assert.Equal(2, _store.ListItemDraftIds("s.txt").Count);
+
+		drafts.Prune([], ledgerReadable: true);
+		Assert.Empty(_store.ListItemDraftIds("s.txt"));
+	}
+
+	[Fact]
+	public void ACorruptLedgerFile_IsReportedUnreadable_UntilItIsWrittenAgain()
+	{
+		using var env = new AttentionTestEnv();
+		var node = AttentionTestEnv.Node("corrupt-node");
+		Directory.CreateDirectory(env.Root);
+		File.WriteAllText(Path.Combine(env.Root, node.NodeId + Constants.Attention.LedgerFileExtension), "{ this is not json");
+
+		Assert.Empty(env.Service.GetItems(node.NodeId));
+		Assert.False(env.Service.IsLedgerReadable(node.NodeId));
+
+		env.Service.Post(node, [AttentionTestEnv.Req("fresh")]);
+		Assert.True(env.Service.IsLedgerReadable(node.NodeId));
+	}
+
+	[Fact]
+	public void AMissingLedgerFile_IsReadable_ItReallyHasNoItems()
+	{
+		using var env = new AttentionTestEnv();
+
+		Assert.Empty(env.Service.GetItems("never-had-one"));
+		Assert.True(env.Service.IsLedgerReadable("never-had-one"));
+	}
+
+	[Fact]
+	public void TheLifecycle_KeepsEveryReplyDraft_WhileTheLedgerIsUnreadable_AndCleansOnceItIsReadable()
+	{
+		using var env = new LifecycleEnv();
+		var fake = new FakeAttentionService { LedgerReadable = false };
+		using var sut = new FocusDraftLifecycle(env.Drafts, fake, env.Files, env.Registry);
+		sut.Start();
+		env.Drafts.SaveItemDraft(env.Session.FileName, "A1", "precious");
+
+		fake.Raise(env.Session.NodeId);
+		Assert.Equal("precious", env.Drafts.LoadItemDraft(env.Session.FileName, "A1"));
+
+		fake.LedgerReadable = true;
+		fake.Raise(env.Session.NodeId);
+		Assert.Null(env.Drafts.LoadItemDraft(env.Session.FileName, "A1"));
 	}
 
 	[Fact]

@@ -544,6 +544,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 	public int ActiveSessionCount => _processManager.ActiveProcessCount;
 
+	/// <summary>Writes every cached session's pending composer and Focus reply drafts; called when the app exits (FR.23.19). Returns how many sessions failed.</summary>
+	public int FlushAllDrafts() => DraftFlusher.FlushAll(_sessionCache.Snapshot());
+
 	public void TerminateAllSessions()
 	{
 		_processManager.TerminateAll();

@@ -20,7 +20,7 @@ namespace TessynDesktop.ViewModels;
 /// restored when the card is created, deleted when the reply is sent or the item closes.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class FocusViewModel : ViewModelBase, IDisposable
+public sealed class FocusViewModel : ViewModelBase, IDisposable, IFlushesDrafts
 {
 	private static readonly ILogger _log = Log.ForContext<FocusViewModel>();
 
@@ -164,6 +164,9 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 	/// <summary>Switches to the Session view (used by Enter in the output search box, FR.23.12).</summary>
 	public void SelectSession() => SetSelection(false);
 
+	/// <summary>Writes the reply texts still waiting for their pause (the exit path, FR.23.19).</summary>
+	public void FlushDrafts() => _replyDrafts?.Flush();
+
 	/// <summary>Stops listening and writes the reply texts still waiting for their pause (the close path, FR.23.19).</summary>
 	public void Dispose()
 	{
@@ -220,7 +223,8 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable
 				open.Add(card);
 		}
 
-		if (!_prunedDrafts)
+		// Only a ledger that was read: an unreadable one answers with no items, and that must not delete every draft. Tried again on the next refresh.
+		if (!_prunedDrafts && _daemonClient.IsAttentionLedgerReadable(_nodeId))
 		{
 			_prunedDrafts = true;
 			_replyDrafts?.Prune(items.Where(i => i.Status == AttentionStatus.Open).Select(i => i.Id));

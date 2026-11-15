@@ -124,6 +124,15 @@ public partial class App : Application
 
 			desktop.Exit += (_, _) =>
 			{
+				// FR.23.19: the last moments of typing sit in debounce timers that die with the process.
+				try
+				{
+					mainVm.FlushAllDrafts();
+				}
+				catch (Exception ex)
+				{
+					Log.Error(ex, "Could not flush the drafts on exit");
+				}
 				if (diagnosticsSettings.Enabled)
 				{
 					Services.GetRequiredService<IUiHangWatchdog>().Dispose();

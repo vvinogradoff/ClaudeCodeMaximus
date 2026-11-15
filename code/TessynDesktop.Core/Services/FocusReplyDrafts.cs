@@ -12,7 +12,7 @@ namespace TessynDesktop.Services;
 /// reply is sent or the item closes. A client creates one per session it shows and calls it from its Focus view model.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class FocusReplyDrafts : IDisposable
+public sealed class FocusReplyDrafts : IDisposable, IFlushesDrafts
 {
 	private static readonly ILogger _log = Log.ForContext<FocusReplyDrafts>();
 
@@ -22,6 +22,10 @@ public sealed class FocusReplyDrafts : IDisposable
 
 	// Texts not yet written (null = delete), by item id. Written by the timer (a pool thread) and by Dispose, so guarded.
 	private readonly object _gate = new();
+
+	// Held across a whole flush and a whole discard, so a discard can never slip between a flush taking its snapshot and writing it (that would bring a
+	// deleted draft back). Lock order: _ioGate, then _gate.
+	private readonly object _ioGate = new();
 	private readonly Dictionary<string, string?> _pending = new(StringComparer.OrdinalIgnoreCase);
 	private Timer? _timer;
 	private bool _disposed;
@@ -65,32 +69,44 @@ public sealed class FocusReplyDrafts : IDisposable
 	/// <summary>Writes the queued texts now.</summary>
 	public void Flush()
 	{
-		KeyValuePair<string, string?>[] pending;
-		lock (_gate)
+		lock (_ioGate)
 		{
-			pending = _pending.ToArray();
-			_pending.Clear();
-		}
-
-		foreach (var (itemId, text) in pending)
-		{
-			try
+			KeyValuePair<string, string?>[] pending;
+			lock (_gate)
 			{
-				if (text == null)
-					_drafts.DeleteItemDraft(_sessionFileName, itemId);
-				else
-					_drafts.SaveItemDraft(_sessionFileName, itemId, text);
+				pending = _pending.ToArray();
+				_pending.Clear();
 			}
-			catch (Exception ex)
+
+			foreach (var (itemId, text) in pending)
 			{
-				_log.Warning(ex, "FocusReplyDrafts: writing the reply draft of item {ItemId} of {FileName} failed", itemId, _sessionFileName);
+				try
+				{
+					if (text == null)
+						_drafts.DeleteItemDraft(_sessionFileName, itemId);
+					else
+						_drafts.SaveItemDraft(_sessionFileName, itemId, text);
+				}
+				catch (Exception ex)
+				{
+					_log.Warning(ex, "FocusReplyDrafts: writing the reply draft of item {ItemId} of {FileName} failed", itemId, _sessionFileName);
+				}
 			}
 		}
 	}
 
-	/// <summary>Deletes the stored drafts of items that are not among <paramref name="openItemIds"/> (an item that closed or vanished while the client was away).</summary>
-	public void Prune(IEnumerable<string> openItemIds)
+	/// <inheritdoc />
+	public void FlushDrafts() => Flush();
+
+	/// <summary>
+	/// Deletes the stored drafts of items that are not among <paramref name="openItemIds"/> (an item that closed or vanished while the client was away).
+	/// Does nothing when <paramref name="ledgerReadable"/> is false: an empty list from an unreadable ledger must not delete anything.
+	/// </summary>
+	public void Prune(IEnumerable<string> openItemIds, bool ledgerReadable = true)
 	{
+		if (!ledgerReadable)
+			return;
+
 		try
 		{
 			var open = openItemIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -106,16 +122,19 @@ public sealed class FocusReplyDrafts : IDisposable
 	/// <summary>The reply was sent or the item closed: forgets a queued text and deletes the stored draft now.</summary>
 	public void Discard(string itemId)
 	{
-		lock (_gate)
-			_pending.Remove(itemId);
+		lock (_ioGate)
+		{
+			lock (_gate)
+				_pending.Remove(itemId);
 
-		try
-		{
-			_drafts.DeleteItemDraft(_sessionFileName, itemId);
-		}
-		catch (Exception ex)
-		{
-			_log.Warning(ex, "FocusReplyDrafts: deleting the reply draft of item {ItemId} of {FileName} failed", itemId, _sessionFileName);
+			try
+			{
+				_drafts.DeleteItemDraft(_sessionFileName, itemId);
+			}
+			catch (Exception ex)
+			{
+				_log.Warning(ex, "FocusReplyDrafts: deleting the reply draft of item {ItemId} of {FileName} failed", itemId, _sessionFileName);
+			}
 		}
 	}
 

@@ -193,6 +193,8 @@ public sealed class InProcDaemonClient : IDaemonClient, IDisposable
 
 	public IReadOnlyList<AttentionItemModel> GetAttentionItems(string nodeId) => _attention.GetItems(nodeId);
 
+	public bool IsAttentionLedgerReadable(string nodeId) => _attention.IsLedgerReadable(nodeId);
+
 	public AttentionSummaryModel GetAttentionSummary(string nodeId) => _attention.GetSummary(nodeId);
 
 	public void MarkAttentionAnswered(string nodeId, IReadOnlyList<AttentionAnswerModel> answers)
