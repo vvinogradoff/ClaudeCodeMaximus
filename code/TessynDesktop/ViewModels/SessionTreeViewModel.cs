@@ -30,6 +30,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly ISessionSearchService _searchService;
 	private readonly IGitOriginService _gitOriginService;
 	private readonly IGitOriginScanner _gitOriginScanner;
+	private readonly TreeMoveRules _moveRules = new();
 	private readonly ISessionLastActivityScanner _lastActivityScanner;
 	private readonly IDraftService _draftService;
 	private readonly IOperationTimer _timer;
@@ -245,9 +246,62 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			case TreeChangeKind.SessionIsRunningChanged when e.Session != null:
 				Dispatcher.UIThread.Post(() => HandleRegistryIsRunningChanged(e.Session));
 				break;
+			// A remote client (the WPF client) changed the structure: the view models were not updated, so project the models again.
+			case TreeChangeKind.DaemonMutation:
+				QueueTreeReload();
+				break;
 			// SettingsModified: VM was already updated surgically by SessionTreeViewModel methods.
 			// Reloaded: handled by the constructor's LoadFromSettings() call.
 		}
+	}
+
+	private int _treeReloadQueued;
+
+	/// <summary>Posts one reload of the tree view models; several mutations in a row cost one reload.</summary>
+	private void QueueTreeReload()
+	{
+		if (Interlocked.Exchange(ref _treeReloadQueued, 1) != 0)
+			return;
+
+		Dispatcher.UIThread.Post(() =>
+		{
+			Volatile.Write(ref _treeReloadQueued, 0);
+			ReloadTreeFromModels();
+		});
+	}
+
+	/// <summary>
+	/// Rebuilds the tree view models from the models after a daemon-side mutation (add, rename, delete, move by a remote client). The same
+	/// per-session information the constructor applies is applied again; the selected session is selected again by its NodeId.
+	/// </summary>
+	private void ReloadTreeFromModels()
+	{
+		// A move in progress holds view model references that a reload would orphan; the next mutation or restart brings the tree in line.
+		if (IsMoveModeActive)
+			return;
+
+		var selectedId = SelectedSession?.Model.NodeId;
+
+		Directories.Clear();
+		LoadFromSettings();
+
+		var all = new List<(SessionNodeViewModel Vm, ObservableCollection<ViewModelBase> Container)>();
+		foreach (var dir in Directories)
+		{
+			ApplyAttentionSummaries(dir.Children);
+			CollectAllSessions(dir.Children, all);
+		}
+
+		foreach (var (vm, _) in all)
+			vm.IsRunning = _daemon.IsSessionRunning(vm.Model.NodeId);
+
+		_ = RefreshGitOriginsAsync();
+		_ = RefreshSessionResumabilityAsync();
+		_ = RefreshLastPromptTimesAsync();
+		ApplySearchFilterIfActive();
+
+		if (selectedId != null)
+			SelectedSession = FindNodeVmByNodeId(selectedId);
 	}
 
 	/// <summary>A daemon method (the web client) changed a session's favourite flag or hidden-from-Recent time: refresh its row.</summary>
@@ -713,19 +767,11 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// </summary>
 	public bool CanMoveSessionTo(string? sourceGitOrigin, ViewModelBase target)
 	{
-		// No git origin on source → unrestricted
-		if (sourceGitOrigin is null)
-			return target is DirectoryNodeViewModel or GroupNodeViewModel;
-
 		if (target is not DirectoryNodeViewModel and not GroupNodeViewModel)
 			return false;
 
-		var targetOrigin = GetGitOriginForNode(target);
-		// Target has no git origin → cannot accept git-origined sessions
-		if (targetOrigin is null)
-			return false;
-
-		return string.Equals(sourceGitOrigin, targetOrigin, System.StringComparison.OrdinalIgnoreCase);
+		// The git-origin rule itself lives in Core (TreeMoveRules), shared with the daemon's tree.moveNode.
+		return _moveRules.CanMove(sourceGitOrigin, GetGitOriginForNode(target));
 	}
 
 	// --- Move operations ---

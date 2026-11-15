@@ -29,12 +29,16 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool            _hasSettings;
 	private readonly bool            _hasProfileAdmin;
 	private readonly bool            _hasSound;
+	private readonly bool            _hasTreeMutation;
+	private readonly bool            _hasSessionOptions;
+	private readonly bool            _hasLocalTools;
 	private readonly string          _daemonVersion;
 
 	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
 		ISettingsSectionService? settingsSections = null, IProfileAdminService? profileAdmin = null, ISessionSoundService? sounds = null,
 		IDraftService? drafts = null, ICodeIndexService? codeIndex = null, ISessionAuthErrorTracker? authErrors = null,
-		IClientPresenceRegistry? presence = null, INotificationAckBook? acks = null)
+		IClientPresenceRegistry? presence = null, INotificationAckBook? acks = null,
+		ITreeMutationService? treeMutation = null, ISessionOptionsService? sessionOptions = null, ILocalToolsService? localTools = null)
 	{
 		_presence      = presence;
 		_acks          = acks;
@@ -49,6 +53,9 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		_hasSettings     = settingsSections != null;
 		_hasProfileAdmin = profileAdmin != null;
 		_hasSound        = sounds != null;
+		_hasTreeMutation   = treeMutation != null;
+		_hasSessionOptions = sessionOptions != null;
+		_hasLocalTools     = localTools != null;
 		_daemonVersion = ReadDaemonVersion();
 	}
 
@@ -203,6 +210,19 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 			capabilities.Add(RemoteProtocol.ProfilesAdmin.Capability);
 		if (_hasSound)
 			capabilities.Add(RemoteProtocol.SoundApi.Capability);
+
+		// P1.J1: the tree mutation, session option and local tool methods need their services.
+		if (_hasTreeMutation)
+		{
+			capabilities.Add(RemoteProtocol.TreeMutation.Capability);
+			capabilities.Add(RemoteProtocol.TreeMutation.InfoCapability);
+		}
+
+		if (_hasSessionOptions)
+			capabilities.Add(RemoteProtocol.SessionOptions.Capability);
+
+		if (_hasLocalTools)
+			capabilities.Add(RemoteProtocol.LocalTools.Capability);
 
 		return capabilities;
 	}

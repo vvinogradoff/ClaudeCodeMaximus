@@ -140,12 +140,13 @@ public sealed class SessionRegistry : ISessionRegistry
 
     public DirectoryNodeModel AddDirectory(string path)
     {
-        var normalised = Path.GetFullPath(path);
+        // No trailing separator (except a drive root): "C:\proj\" and "C:\proj" are one directory.
+        var normalised = TrimTrailingSeparator(Path.GetFullPath(path));
 
         lock (_appSettings.SyncRoot)
         {
             var existing = _appSettings.Settings.Tree.FirstOrDefault(d =>
-                string.Equals(d.Path, normalised, StringComparison.OrdinalIgnoreCase));
+                string.Equals(TrimTrailingSeparator(d.Path), normalised, StringComparison.OrdinalIgnoreCase));
             if (existing != null) return existing;
 
             var model = new DirectoryNodeModel { Path = normalised, NodeId = NewNodeId() };
@@ -517,6 +518,56 @@ public sealed class SessionRegistry : ISessionRegistry
         }
 
         Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.SettingsModified });
+    }
+
+    public bool MoveSession(SessionNodeModel session, DirectoryNodeModel targetDirectory, GroupNodeModel? targetGroup, int index)
+    {
+        lock (_appSettings.SyncRoot)
+        {
+            // The target may have been deleted since the caller looked it up: moving into a detached node would lose the session.
+            if (!_appSettings.Settings.Tree.Contains(targetDirectory) || (targetGroup != null && !ContainsGroup(targetDirectory.Groups, targetGroup)))
+                return false;
+
+            var removed = false;
+            foreach (var dir in _appSettings.Settings.Tree)
+            {
+                if (dir.Sessions.Remove(session) || RemoveSessionFromGroupModel(dir.Groups, session))
+                {
+                    removed = true;
+                    break;
+                }
+            }
+
+            if (!removed)
+                return false;
+
+            var list = targetGroup?.Sessions ?? targetDirectory.Sessions;
+            list.Insert(Math.Clamp(index, 0, list.Count), session);
+            session.WorkingDirectory = targetGroup?.WorkingDirectory ?? targetDirectory.Path;
+            _appSettings.Save();
+        }
+
+        Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.SettingsModified });
+        return true;
+    }
+
+    public void RaiseTreeModified() => Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.SettingsModified });
+
+    public void RaiseDaemonTreeMutation() => Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.DaemonMutation });
+
+    private static bool ContainsGroup(List<GroupNodeModel> groups, GroupNodeModel target)
+    {
+        foreach (var g in groups)
+        {
+            if (ReferenceEquals(g, target) || ContainsGroup(g.Groups, target)) return true;
+        }
+        return false;
+    }
+
+    private static string TrimTrailingSeparator(string path)
+    {
+        var root = Path.GetPathRoot(path) ?? string.Empty;
+        return path.Length > root.Length ? path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : path;
     }
 
     // ── Orchestration helpers ─────────────────────────────────────────────────

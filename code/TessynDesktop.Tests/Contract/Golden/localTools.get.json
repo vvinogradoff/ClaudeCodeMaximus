@@ -1,0 +1,33 @@
+{
+  "enabled": true,
+  "nativeTools": [
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Glob",
+    "Grep",
+    "LS"
+  ],
+  "includeCmxMcp": false,
+  "includedMcpServerIds": [],
+  "availableNativeTools": [
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Glob",
+    "Grep",
+    "LS",
+    "WebFetch",
+    "WebSearch",
+    "NotebookEdit",
+    "TodoWrite"
+  ],
+  "availableMcpServers": [
+    {
+      "id": "mcp-1",
+      "displayName": "Linear"
+    }
+  ]
+}

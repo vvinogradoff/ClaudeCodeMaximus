@@ -216,6 +216,9 @@ internal sealed class FakeDaemonClientForTelegram : IDaemonClient
 	public DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session) => throw new NotImplementedException();
 	public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index) => throw new NotImplementedException();
 	public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotImplementedException();
+	public bool MoveSession(SessionNodeModel session, DirectoryNodeModel targetDirectory, GroupNodeModel? targetGroup, int index) => throw new System.NotSupportedException();
+	public void RaiseTreeModified() { }
+	public void RaiseDaemonTreeMutation() { }
 
 	public List<SessionSummaryModel> BuildAgentSessionSummaries() => Summaries;
 
