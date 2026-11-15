@@ -322,6 +322,10 @@ public partial class App : Application
 		services.AddSingleton<ITurnSendService, TurnSendService>();
 		services.AddTransient<ITurnSettingsResolver, TurnSettingsResolver>();
 		services.AddTransient<IRemoteRpcModule, TurnRpcModule>();
+		// Package J2: the per-session auth error (singleton: the engine writes it, the state builder and the publisher read it), drafts, autocomplete.
+		services.AddSingleton<ISessionAuthErrorTracker, SessionAuthErrorTracker>();
+		services.AddTransient<IRemoteRpcModule, DraftRpcModule>();
+		services.AddTransient<IRemoteRpcModule, AutocompleteRpcModule>();
 		services.AddSingleton<IClaudeUsageFetcher, ClaudeUsageFetcher>();
 		services.AddSingleton<IRemoteUsageService, RemoteUsageService>();
 		services.AddTransient<ITurnOptionsResolver, TurnOptionsResolver>();

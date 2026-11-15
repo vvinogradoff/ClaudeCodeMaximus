@@ -10,6 +10,13 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public interface IDraftService
 {
+	/// <summary>Raised after a draft was written or deleted (by any writer), with the session file's name. May be raised on any thread; never raised for a delete of a missing draft.</summary>
+	event EventHandler<DraftChangedEventArgs>? DraftChanged
+	{
+		add { }
+		remove { }
+	}
+
 	/// <summary>Loads the saved draft for a session, or null if none exists.</summary>
 	string? LoadDraft(string sessionFileName);
 

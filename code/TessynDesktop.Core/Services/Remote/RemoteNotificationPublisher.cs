@@ -30,6 +30,9 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	private readonly ITreeVersionTracker _treeVersion;
 	private readonly ISessionEpochTracker _epochs;
 	private readonly ISessionStateBuilder _states;
+	private readonly ISessionAuthErrorTracker? _authErrors;
+	private readonly IDraftService? _drafts;
+	private readonly DraftRevisions _revisions = new();
 
 	private readonly object _gate = new();
 	private bool _started;
@@ -51,8 +54,12 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		ITreeVersionTracker treeVersion,
 		ISessionEpochTracker epochs,
 		ISessionStateBuilder states,
-		ISessionContentStore? store = null)
+		ISessionContentStore? store = null,
+		ISessionAuthErrorTracker? authErrors = null,
+		IDraftService? drafts = null)
 	{
+		_authErrors  = authErrors;
+		_drafts      = drafts;
 		_daemon      = daemon;
 		_files       = files;
 		_bus         = bus;
@@ -81,6 +88,8 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 				_daemon.SessionIndexed         += OnSessionIndexed;
 				_daemon.SessionSettingsChanged += OnSessionSettingsChanged;
 				_files.SessionFileRewritten    += OnSessionFileRewritten;
+				if (_authErrors != null) _authErrors.Changed += OnAuthErrorChanged;
+				if (_drafts != null) _drafts.DraftChanged += OnDraftChanged;
 			}
 		}
 		catch (Exception ex)
@@ -106,6 +115,8 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			_daemon.SessionIndexed         -= OnSessionIndexed;
 			_daemon.SessionSettingsChanged -= OnSessionSettingsChanged;
 			_files.SessionFileRewritten    -= OnSessionFileRewritten;
+			if (_authErrors != null) _authErrors.Changed -= OnAuthErrorChanged;
+			if (_drafts != null) _drafts.DraftChanged -= OnDraftChanged;
 		}
 	}
 
@@ -209,6 +220,25 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 
 	private void OnSessionSettingsChanged(object? sender, SessionSettingsChangedEventArgs e) =>
 		Guard(() => PublishSessionChangedByNode(e.NodeId));
+
+	// The auth error is part of the session state, so a change publishes session.changed like a running-flag change does.
+	private void OnAuthErrorChanged(string nodeId) => Guard(() => PublishSessionChangedByNode(nodeId));
+
+	// draft.changed is local-stream only (the relay filters it). The revision is read when the window ends, so a burst of keystrokes saves announces the last text only.
+	private void OnDraftChanged(object? sender, DraftChangedEventArgs e) => Guard(() =>
+	{
+		var fileName = e.FileName;
+		_bus.PublishCoalesced(
+			RemoteProtocol.Composer.DraftChangedEvent, FileKeyPrefix + fileName,
+			() => BuildDraftChangedPayload(fileName),
+			Constants.Composer.DraftChangedWindow);
+	});
+
+	private DraftChangedPayload? BuildDraftChangedPayload(string fileName)
+	{
+		var node = _daemon.FindSessionByFileName(fileName);
+		return node == null || _drafts == null ? null : new DraftChangedPayload(node.NodeId, _revisions.Of(_drafts.LoadDraft(fileName)));
+	}
 
 	private void OnSessionFileRewritten(object? sender, SessionFileRewrittenEventArgs e) => Guard(() =>
 	{

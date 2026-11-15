@@ -1,0 +1,16 @@
+{
+  "mode": "symbol",
+  "triggerStart": 0,
+  "triggerLength": 3,
+  "indexReady": true,
+  "items": [
+    {
+      "label": "Foo",
+      "insertText": "My.Space.Foo",
+      "kind": "class",
+      "detail": "My.Space",
+      "matchStart": 0,
+      "matchLength": 2
+    }
+  ]
+}

@@ -10,6 +10,9 @@ public sealed class DraftService : IDraftService
 {
 	private readonly string _draftsDirectory;
 
+	/// <inheritdoc />
+	public event EventHandler<DraftChangedEventArgs>? DraftChanged;
+
 	public DraftService() : this(GetDefaultDraftsDir())
 	{
 	}
@@ -35,13 +38,17 @@ public sealed class DraftService : IDraftService
 	{
 		var path = GetDraftPath(sessionFileName);
 		File.WriteAllText(path, text, Encoding.UTF8);
+		DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
 	}
 
 	public void DeleteDraft(string sessionFileName)
 	{
 		var path = GetDraftPath(sessionFileName);
-		if (File.Exists(path))
-			File.Delete(path);
+		if (!File.Exists(path))
+			return;
+
+		File.Delete(path);
+		DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
 	}
 
 	public DateTimeOffset? GetDraftTimestamp(string sessionFileName)
