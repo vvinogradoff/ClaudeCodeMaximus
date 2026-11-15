@@ -403,6 +403,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	/// <summary>The working directory this view model holds a code-index reference for, or null when it holds none.</summary>
 	private string? _indexedDirectory;
+	private bool _codeIndexRequested;
 
 	public SessionViewModel(
 		SessionNodeViewModel node,
@@ -413,6 +414,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
+		IProfileAdminService profileAdmin,
 		IClaudeSessionImportService importService,
 		IClaudeModelService modelService,
 		IDaemonClient daemonClient,
@@ -440,7 +442,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_content = new SessionContentViewModel(fileService, importService, node, () => turn?.IsBusy ?? false,
 			() => daemonClient.IsSessionRunning(node.Model.NodeId), _timer);
 		_models = new ModelSelectionController(modelService, appSettings, _directoryModel);
-		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
+		_profiles = new ProfileController(profileService, profileAdmin, appSettings, _directoryModel, _content);
 		_turn = new TurnController(node, fileService, draftService, turnEngine, streamingManager, appSettings, daemonClient,
 			soundService, _content, _models, _profiles);
 		turn = _turn;
@@ -479,23 +481,36 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_daemonClient.SessionSettingsChanged += OnSessionSettingsChanged;
 		RefreshScheduleState();
 
-		// Start background indexing for this session's working directory
+		// The code index is built lazily on the first # / ## autocomplete (EnsureCodeIndex): a large tree costs
+		// hundreds of MB and the GC pauses that come with it (ISSUE.016), and most sessions never use it.
 		_codeIndexService = codeIndexService;
-		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
-		{
-			_indexedDirectory = WorkingDirectory;
-			_ = AcquireCodeIndexAsync(WorkingDirectory);
-		}
 
 		_log.Debug("SessionViewModel created: ExternalId={ExternalId}", _node.ExternalId);
 	}
 
+	/// <summary>
+	/// Starts building this session's code index on the first file or symbol autocomplete; later calls do nothing.
+	/// <paramref name="onReady"/> runs once the index is built, so the caller can refresh suggestions typed meanwhile.
+	/// </summary>
+	public void EnsureCodeIndex(Action onReady)
+	{
+		if (_codeIndexRequested || string.IsNullOrWhiteSpace(WorkingDirectory))
+			return;
+
+		_codeIndexRequested = true;
+		_indexedDirectory = WorkingDirectory;
+		_ = AcquireCodeIndexAsync(WorkingDirectory, onReady);
+	}
+
 	/// <summary>Takes the index reference; if the build failed nothing is held, so the later release must be skipped.</summary>
-	private async Task AcquireCodeIndexAsync(string directory)
+	private async Task AcquireCodeIndexAsync(string directory, Action onReady)
 	{
 		var acquired = await _codeIndexService.GetOrCreateIndexAsync(directory);
 		if (!acquired && _indexedDirectory == directory)
 			_indexedDirectory = null;
+
+		if (acquired && _indexedDirectory == directory)
+			onReady();
 	}
 
 	private void OnScheduleChanged(object? sender, EventArgs e) =>
@@ -608,7 +623,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_daemonClient.ScheduleChanged -= OnScheduleChanged;
 		_daemonClient.SessionSettingsChanged -= OnSessionSettingsChanged;
 
-		// Give back the reference taken at construction; the index (watcher, file and symbol tables) is freed with the last one.
+		// Give back the reference taken on the first autocomplete; the index (watcher, file and symbol tables) is freed with the last one.
 		if (_indexedDirectory != null)
 		{
 			_codeIndexService.ReleaseIndex(_indexedDirectory);

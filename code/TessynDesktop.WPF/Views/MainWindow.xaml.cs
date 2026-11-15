@@ -1,7 +1,9 @@
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using System.Windows.Input;
 using TessynDesktop.WPF.Infrastructure;
+using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.ViewModels;
 
@@ -17,12 +19,14 @@ public partial class MainWindow : Window
 	private readonly IClientStateStore _stateStore;
 	private readonly Win32WindowPlacement _placement;
 	private readonly WindowPlacementClamper _clamper;
+	private readonly IShellCommands _commands;
 	private readonly bool _testWindow;
 	private readonly CancellationTokenSource _lifetime = new();
 	private readonly DispatcherTimer _placementTimer;
 
-	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options)
+	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands)
 	{
+		_commands = commands;
 		_testWindow = options.TestWindow;
 		_viewModel = viewModel;
 		_stateStore = stateStore;
@@ -75,6 +79,18 @@ public partial class MainWindow : Window
 	private void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		_ = _viewModel.StartAsync(_lifetime.Token);
+	}
+
+	/// <summary>Runs the command bound to the pressed key combination, if any (a registered command's gesture, with the user's overrides).</summary>
+	protected override void OnPreviewKeyDown(KeyEventArgs e)
+	{
+		base.OnPreviewKeyDown(e);
+		if (e.Handled)
+			return;
+
+		var key = e.Key == Key.System ? e.SystemKey : e.Key;
+		if (_commands.TryExecuteGesture(key, Keyboard.Modifiers, ShellKeyPolicy.IsTextInput(Keyboard.FocusedElement)))
+			e.Handled = true;
 	}
 
 	private void RestartPlacementTimer()

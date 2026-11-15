@@ -49,6 +49,7 @@ public sealed class JsonClientStateStore : IClientStateStore
 			if (loaded != null)
 			{
 				loaded.TreeWidth = ClampTreeWidth(loaded.TreeWidth);
+				loaded.Sections ??= new();
 				State = loaded;
 			}
 		}
@@ -74,6 +75,12 @@ public sealed class JsonClientStateStore : IClientStateStore
 		{
 			// Nothing more to do: the next save replaces the file.
 		}
+	}
+
+	public T Read<T>(Func<ClientStateModel, T> read)
+	{
+		lock (_gate)
+			return read(State);
 	}
 
 	public void Update(Action<ClientStateModel> change)

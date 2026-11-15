@@ -25,9 +25,13 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool           _hasCodeIndex;
 	private readonly bool           _hasAuthErrors;
 	private readonly IClientPresenceRegistry? _presence;
+	private readonly bool            _hasSettings;
+	private readonly bool            _hasProfileAdmin;
+	private readonly bool            _hasSound;
 	private readonly string          _daemonVersion;
 
 	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
+		ISettingsSectionService? settingsSections = null, IProfileAdminService? profileAdmin = null, ISessionSoundService? sounds = null,
 		IDraftService? drafts = null, ICodeIndexService? codeIndex = null, ISessionAuthErrorTracker? authErrors = null,
 		IClientPresenceRegistry? presence = null)
 	{
@@ -40,6 +44,9 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		_eventLog      = eventLog;
 		_turnEngine    = turnEngine;
 		_hasContentStore = contentStore != null;
+		_hasSettings     = settingsSections != null;
+		_hasProfileAdmin = profileAdmin != null;
+		_hasSound        = sounds != null;
 		_daemonVersion = ReadDaemonVersion();
 	}
 
@@ -156,6 +163,14 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		// P1.F: entry ids need the content store.
 		if (_hasContentStore)
 			capabilities.Add(Constants.Remote.Capabilities.EntriesIds);
+
+		// Package J3: each flag needs the service behind its methods.
+		if (_hasSettings)
+			capabilities.Add(RemoteProtocol.SettingsApi.Capability);
+		if (_hasProfileAdmin)
+			capabilities.Add(RemoteProtocol.ProfilesAdmin.Capability);
+		if (_hasSound)
+			capabilities.Add(RemoteProtocol.SoundApi.Capability);
 
 		return capabilities;
 	}

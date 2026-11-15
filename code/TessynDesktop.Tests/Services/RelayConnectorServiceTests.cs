@@ -302,6 +302,28 @@ public sealed class RelayConnectorServiceTests : IDisposable
 	}
 
 	[Fact]
+	public async Task TheLocalOnlyAdminEvents_AreNeverRelayed_ButTreeChangedStillIs()
+	{
+		var service = await StartConnectedAsync();
+		try
+		{
+			_bus.Publish("settings.changed", new { section = "general", version = 2 });
+			_bus.Publish("profiles.changed", new { });
+			_bus.Publish("tree.changed", new { version = 1 });
+
+			await WaitUntilAsync(() => !_server.Events.IsEmpty, "event POST");
+			await Task.Delay(300);
+
+			var methods = _server.Events.SelectMany(b => JsonNode.Parse(b)!["events"]!.AsArray()).Select(e => e!["method"]!.GetValue<string>()).ToList();
+			Assert.Equal(["tree.changed"], methods);
+		}
+		finally
+		{
+			service.Stop();
+		}
+	}
+
+	[Fact]
 	public async Task EventsPublishedWhileNotConnected_AreDropped()
 	{
 		Configure();

@@ -51,6 +51,14 @@
                         </TextBlock>
                     </StackPanel>
                 </Button>
+                <!-- Slot: buttons at the right of the header -->
+                <v:SlotHost DockPanel.Dock="Right" SlotId="session.headerToolbar">
+                    <v:SlotHost.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </v:SlotHost.ItemsPanel>
+                </v:SlotHost>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding Title}" Style="{DynamicResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding StateText}" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -157,6 +165,9 @@
 
         <!-- Input -->
         <StackPanel Grid.Row="3" Margin="16,8,16,12">
+        <!-- Slots: instruction toggles above the prompt box, accessories (autocomplete hints, draft and auth notices) right above it -->
+        <v:SlotHost SlotId="session.instructionToolbar" />
+        <v:SlotHost SlotId="session.composerAccessory" />
         <!-- Progress of a file-mode drop: one copy per file, cancellable -->
         <Border Margin="0,0,0,6" Padding="10,6" CornerRadius="4" Background="{DynamicResource SubtleFillColorSecondaryBrush}"
                 Visibility="{Binding IsImporting, Converter={StaticResource BoolToVis}}">
@@ -205,6 +216,8 @@
                 </Button>
             </StackPanel>
         </Grid>
+        <!-- Slot: command bar below the prompt box (model, effort and profile selectors, toggles) -->
+        <v:SlotHost SlotId="session.commandBar" />
         </StackPanel>
     </Grid>
 </UserControl>

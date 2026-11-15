@@ -19,9 +19,27 @@
                 <TextBlock Text="{Binding Connection.Detail, StringFormat=  ({0})}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             </StackPanel>
         </Border>
+        <!-- Slot: toolbar row between the banner and the content (filled through IShellSlots, never edited here) -->
+        <v:SlotHost DockPanel.Dock="Top" SlotId="main.titleBarToolbar">
+            <v:SlotHost.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </v:SlotHost.ItemsPanel>
+        </v:SlotHost>
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem Content="{Binding StatusText}" />
             <StatusBarItem Content="{Binding ErrorText}" Foreground="{DynamicResource SystemFillColorCriticalBrush}" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
+            <!-- Slot: items at the right of the status bar -->
+            <StatusBarItem DockPanel.Dock="Right">
+                <v:SlotHost SlotId="main.statusBarItems">
+                    <v:SlotHost.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </v:SlotHost.ItemsPanel>
+                </v:SlotHost>
+            </StatusBarItem>
         </StatusBar>
         <Grid x:Name="ContentGrid">
             <Grid.ColumnDefinitions>
@@ -29,7 +47,12 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" MinWidth="320" />
             </Grid.ColumnDefinitions>
-            <v:TreePanel Grid.Column="0" DataContext="{Binding Tree}" />
+            <!-- Left panel: the Tree tab, plus the tabs later packages contribute (Recent, Tags); the tab strip stays hidden until one exists -->
+            <v:SlotTabControl Grid.Column="0" x:Name="LeftTabs" SlotId="main.leftPanelTabs" Padding="0" BorderThickness="0" Background="Transparent">
+                <TabItem Header="Tree">
+                    <v:TreePanel DataContext="{Binding Tree}" />
+                </TabItem>
+            </v:SlotTabControl>
             <GridSplitter x:Name="Splitter" Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" />
             <v:SessionPane Grid.Column="2" DataContext="{Binding Session}" />
         </Grid>

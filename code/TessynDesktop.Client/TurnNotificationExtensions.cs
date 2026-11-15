@@ -30,7 +30,8 @@ public static class TurnNotificationExtensions
 	public static bool TryGetTurnCompleted(this RemoteNotification notification, [NotNullWhen(true)] out TurnCompletedPayload? payload) =>
 		TryRead(notification, RemoteProtocol.Events.TurnCompleted, out payload);
 
-	private static bool TryRead<T>(RemoteNotification notification, string method, [NotNullWhen(true)] out T? payload)
+	/// <summary>Reads a notification's params as <typeparamref name="T"/> when it is <paramref name="method"/>; shared with the other typed notification readers.</summary>
+	internal static bool TryRead<T>(this RemoteNotification notification, string method, [NotNullWhen(true)] out T? payload)
 		where T : class
 	{
 		payload = null;

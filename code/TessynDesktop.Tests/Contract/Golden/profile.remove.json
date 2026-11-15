@@ -1,0 +1,10 @@
+{
+  "profile": {
+    "id": "p2",
+    "displayName": "second@example.com",
+    "isSystem": false,
+    "authState": "unknown",
+    "isDefault": false
+  },
+  "pinnedSessionCount": 0
+}

@@ -26,6 +26,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IDraftService _draftService;
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
+	private readonly IProfileAdminService _profileAdmin;
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeModelService _modelService;
 	private readonly IClaudeUsageService _usageService;
@@ -247,6 +248,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
+		IProfileAdminService profileAdmin,
 		IClaudeSessionImportService importService,
 		IClaudeModelService modelService,
 		IClaudeUsageService usageService,
@@ -268,6 +270,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_draftService     = draftService;
 		_codeIndexService = codeIndexService;
 		_profileService   = profileService;
+		_profileAdmin     = profileAdmin;
 		_importService    = importService;
 		_modelService     = modelService;
 		_usageService     = usageService;
@@ -297,12 +300,24 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_usageService.UsageUpdated += (_, _) =>
 			Dispatcher.UIThread.Post(() => UpdateStatusBarUsage(_usageService.CachedUsage));
 
-		// Repair session files corrupted by the auto-compaction bug (one-time on startup)
-		int repaired;
-		using (_timer.Measure(Constants.Diagnostics.Operation.RepairCompactions, Constants.Diagnostics.WarnThresholds.UiLoadMs))
-			repaired = fileService.RepairCorruptedCompactions();
-		if (repaired > 0)
-			Serilog.Log.Information("Repaired {Count} session file(s) with corrupted compaction format", repaired);
+		// Repair session files corrupted by the auto-compaction bug (one-time on startup). It reads every session
+		// file (15-30 s cold, ISSUE.016), so it runs off the UI thread; a repaired file only had zero parseable
+		// entries, and SessionFileRewritten may fire on any thread.
+		_ = Task.Run(() =>
+		{
+			try
+			{
+				int repaired;
+				using (_timer.Measure(Constants.Diagnostics.Operation.RepairCompactions, Constants.Diagnostics.WarnThresholds.UiLoadMs))
+					repaired = fileService.RepairCorruptedCompactions();
+				if (repaired > 0)
+					Serilog.Log.Information("Repaired {Count} session file(s) with corrupted compaction format", repaired);
+			}
+			catch (Exception ex)
+			{
+				Serilog.Log.Warning(ex, "Session file compaction repair failed");
+			}
+		});
 
 		// React to session selection changes
 		this.WhenAnyValue(x => x.SessionTree.SelectedSession)
@@ -389,7 +404,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _turnEngine, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _daemonClient, _soundService, _compaction, _uiDispatcher);
+				vm = new SessionViewModel(node, _fileService, _turnEngine, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _profileAdmin, _importService, _modelService, _daemonClient, _soundService, _compaction, _uiDispatcher);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache.Set(cacheKey, vm);

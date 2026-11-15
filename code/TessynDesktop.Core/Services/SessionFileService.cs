@@ -257,11 +257,13 @@ public sealed class SessionFileService : ISessionFileService
 		{
 			try
 			{
-				var content = File.ReadAllText(filePath, Encoding.UTF8).Trim();
+				// One read per file: this scans every session file at startup.
+				var raw = File.ReadAllText(filePath, Encoding.UTF8);
+				var content = raw.Trim();
 				if (string.IsNullOrEmpty(content))
 					continue;
 
-				var lines = File.ReadAllLines(filePath, Encoding.UTF8);
+				var lines = raw.ReplaceLineEndings("\n").Split('\n');
 				var entries = ParseEntries(lines);
 
 				// If the file has content but zero parseable entries, it's corrupted
