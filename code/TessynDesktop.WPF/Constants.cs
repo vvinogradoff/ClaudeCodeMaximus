@@ -16,6 +16,63 @@ public static partial class Constants
 		public const string WebAssetsFolder = "Web";
 		public const string BadFileSuffix = ".bad";
 		public const string TranscriptPageFileName = "transcript.html";
+		public const string PreviewPageFileName = "preview.html";
+		public const string PreviewCacheFolder = "preview-cache";
+	}
+
+	/// <summary>Hosts the pages are served from (virtual host mappings).</summary>
+	public static class Hosts
+	{
+		public const string AppHost = "app.local";
+		public const string PreviewHost = "preview.local";
+
+		/// <summary>The transcript page's only image host: a virtual name the host answers itself (the media proxy); it is never resolved.</summary>
+		public const string MediaHost = "media.local";
+	}
+
+	/// <summary>Texts the Focus view and the preview pane show; tests refer to them too.</summary>
+	public static class Texts
+	{
+		public const string NoOpenItems = "Nothing needs your attention in this session.";
+		public const string AcceptedRecommendation = "Accepted your recommendation: ";
+		public const string EntryGone = "The referenced entry no longer exists in that session.";
+		public const string PreviewTooLarge = "This file is too large to preview";
+		public const string PreviewUnsupported = "This file type has no preview.";
+		public const string PreviewTruncated = "Showing the first part of a large file.";
+		public const string PdfHint = "PDF files open in your default PDF app.";
+	}
+
+	/// <summary>
+	/// File types by what the client may do with them. A preview only ever displays content; nothing listed here is executed.
+	/// </summary>
+	public static class FileTypes
+	{
+		public static readonly IReadOnlySet<string> Markdown = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown" };
+
+		public static readonly IReadOnlySet<string> Image = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" };
+
+		public static readonly IReadOnlySet<string> Video = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".webm", ".mov", ".m4v", ".ogv" };
+
+		public static readonly IReadOnlySet<string> Pdf = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf" };
+
+		/// <summary>Shown as monospace text, markup and script types included (svg, html, ps1, ...): displayed, never rendered or run.</summary>
+		public static readonly IReadOnlySet<string> Text = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+		{
+			".txt", ".log", ".json", ".jsonl", ".xml", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".config", ".csv", ".tsv",
+			".cs", ".csproj", ".sln", ".props", ".targets", ".xaml", ".axaml", ".razor", ".cshtml",
+			".js", ".mjs", ".ts", ".tsx", ".jsx", ".css", ".scss", ".html", ".htm", ".svg",
+			".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift", ".c", ".h", ".cpp", ".hpp", ".php", ".sql", ".sh", ".ps1", ".psm1", ".bat", ".cmd",
+			".diff", ".patch",
+		};
+
+		/// <summary>The only types that may be opened in the default app: documents and media. Executables and scripts never leave the preview.</summary>
+		public static readonly IReadOnlySet<string> ExternallyOpenable = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+		{
+			".md", ".markdown", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".pdf",
+		};
+
+		/// <summary>Remote media links by extension (FR.26.4); svg is left out on purpose.</summary>
+		public static readonly IReadOnlySet<string> RemoteImage = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif" };
 	}
 
 	/// <summary>Sizes and counts.</summary>
@@ -33,6 +90,26 @@ public static partial class Constants
 		public const double MinTreeWidth = 160;
 		public const double OffScreenCoordinate = -32000;
 		public const double MaxTreeWidth = 2000;
+		public const double DefaultSidePaneWidth = 400;
+		public const double MinSidePaneWidth = 280;
+		public const int PreviewChunkBytes = 512 * 1024;
+		public const long MaxPreviewTextBytes = 2L * 1024 * 1024;
+		public const long MaxPreviewImageBytes = 25L * 1024 * 1024;
+		public const long MaxPreviewVideoBytes = 500L * 1024 * 1024;
+		public const long MaxPreviewPdfBytes = 100L * 1024 * 1024;
+		public const int MaxMediaPreviewsPerEntry = 6;
+		public const int MaxPathChipsPerEntry = 8;
+		public const int MaxPathChipLength = 400;
+		public const int MaxMediaRedirects = 3;
+		public const long MaxRemoteImageBytes = 10L * 1024 * 1024;
+		public const long MaxRemoteVideoBytes = 200L * 1024 * 1024;
+		public const int MaxCachedRemoteImages = 24;
+		public const long MaxImageCacheBytes = 100L * 1024 * 1024;
+		public const long MaxVideoBytesPerLoad = 1024L * 1024 * 1024;
+		public const int MaxConcurrentVideoDownloads = 2;
+		public const int MaxMarkdownChars = 200_000;
+		public const int MaxPreviewChunks = 4096;
+		public const int MaxCatchUpPages = 2;
 	}
 
 	/// <summary>Durations.</summary>
@@ -44,6 +121,9 @@ public static partial class Constants
 		public static readonly TimeSpan WatchdogPoll = TimeSpan.FromMilliseconds(100);
 		public static readonly TimeSpan UiStallThreshold = TimeSpan.FromMilliseconds(250);
 		public static readonly TimeSpan WebViewReady = TimeSpan.FromSeconds(30);
+		public static readonly TimeSpan RemoteImage = TimeSpan.FromSeconds(20);
+		public static readonly TimeSpan RemoteVideo = TimeSpan.FromMinutes(5);
+		public static readonly TimeSpan RemoteConnect = TimeSpan.FromSeconds(10);
 	}
 
 	/// <summary>Process-wide identities.</summary>

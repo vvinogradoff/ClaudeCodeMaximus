@@ -8,5 +8,16 @@ namespace TessynDesktop.WPF.Rendering;
 /// <param name="Truncated">The daemon cut the content; the page offers "show full entry".</param>
 /// <param name="FullLength">Length of the uncut content when <paramref name="Truncated"/>.</param>
 /// <param name="EstimatedHeight">Initial height guess in pixels, replaced by the measured height.</param>
+/// <param name="Media">https media links of an assistant entry (FR.26.4), at most six; the page decides per link whether it loads at once or after a click.</param>
+/// <param name="Paths">Absolute local file paths of an assistant entry (FR.26.5); the page shows each as a chip.</param>
 /// <remarks>Created by Claude</remarks>
-public sealed record TranscriptEntryView(int Index, string Role, string Timestamp, string Html, bool Truncated, int FullLength, int EstimatedHeight);
+public sealed record TranscriptEntryView(
+	int Index,
+	string Role,
+	string Timestamp,
+	string Html,
+	bool Truncated,
+	int FullLength,
+	int EstimatedHeight,
+	IReadOnlyList<string>? Media = null,
+	IReadOnlyList<string>? Paths = null);

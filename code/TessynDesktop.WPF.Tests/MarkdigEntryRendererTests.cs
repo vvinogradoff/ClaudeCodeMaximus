@@ -69,7 +69,8 @@ public sealed class MarkdigEntryRendererTests
 
 		Assert.DoesNotContain("<img", html, StringComparison.OrdinalIgnoreCase);
 		Assert.DoesNotContain("pixel.png", html);
-		Assert.Contains("[image]", html);
+		Assert.Contains("alt", html);          // the alt text stays, the address does not
+		Assert.DoesNotContain("tracker.example", html);
 	}
 
 	[Fact]

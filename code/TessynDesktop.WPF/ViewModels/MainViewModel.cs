@@ -71,6 +71,10 @@ public sealed partial class MainViewModel : ObservableObject
 		try
 		{
 			Session = _sessionFactory(client);
+
+			// A jump to another session's entry (or Back) opens it in the pane; the tree follows without reopening it.
+			Session.Navigated += (_, nodeId) => Tree?.SelectNodeById(nodeId);
+			_ = Session.InitializeAsync();
 		}
 		catch (Exception ex)
 		{

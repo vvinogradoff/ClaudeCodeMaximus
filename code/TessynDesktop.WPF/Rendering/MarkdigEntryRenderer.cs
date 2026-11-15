@@ -14,23 +14,29 @@ namespace TessynDesktop.WPF.Rendering;
 /// Content-Security-Policy this keeps transcript text from running anything.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class MarkdigEntryRenderer : IEntryRenderer
+public sealed class MarkdigEntryRenderer : IEntryRenderer, IMarkdownRenderer
 {
 	private const string BlockedLinkClass = "blocked";
 	private const string BlockedLinkTarget = "#";
 	private const string ImagePlaceholder = "[image]";
+	private const string AssistantRole = "assistant";
 
 	private readonly MarkdownPipeline _pipeline;
 	private readonly UrlPolicy _urlPolicy;
+	private readonly MediaLinkDetector? _media;
+	private readonly LocalPathDetector? _paths;
+	private readonly HtmlAllowlistSanitizer _sanitizer;
 
-	public MarkdigEntryRenderer(UrlPolicy urlPolicy)
+	public MarkdigEntryRenderer(UrlPolicy urlPolicy, MediaLinkDetector? media = null, LocalPathDetector? paths = null)
 	{
 		_urlPolicy = urlPolicy;
+		_media = media;
+		_paths = paths;
+		_sanitizer = new HtmlAllowlistSanitizer(urlPolicy);
 		_pipeline = new MarkdownPipelineBuilder()
 			.DisableHtml()
 			.UsePipeTables()
 			.UseEmphasisExtras()
-			.UseTaskLists()
 			.UseAutoLinks()
 			.Build();
 	}
@@ -38,6 +44,7 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer
 	public TranscriptEntryView Render(SessionEntryDto entry)
 	{
 		var truncated = entry.Truncated == true;
+		var assistant = entry.Role == AssistantRole;
 		return new TranscriptEntryView(
 			entry.Index,
 			RoleCode(entry.Role),
@@ -45,20 +52,34 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer
 			RenderMarkdown(entry.Content),
 			truncated,
 			entry.FullLength ?? entry.Content.Length,
-			EstimateHeight(entry.Content));
+			EstimateHeight(entry.Content),
+			assistant ? _media?.Detect(entry.Content) : null,
+			assistant ? _paths?.Detect(entry.Content) : null);
 	}
 
 	/// <summary>Markdown to sanitized HTML.</summary>
 	public string RenderMarkdown(string markdown)
 	{
-		var document = Markdown.Parse(markdown, _pipeline);
-		Sanitize(document);
 		using var writer = new StringWriter();
-		var renderer = new HtmlRenderer(writer);
-		_pipeline.Setup(renderer);
-		renderer.Render(document);
-		writer.Flush();
-		return writer.ToString();
+		try
+		{
+			var document = Markdown.Parse(markdown, _pipeline);
+			Sanitize(document);
+			var renderer = new HtmlRenderer(writer);
+			_pipeline.Setup(renderer);
+			renderer.Render(document);
+			writer.Flush();
+		}
+		catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or InsufficientExecutionStackException)
+		{
+			// Pathological nesting makes Markdig throw: the entry must still show, as plain text (V6).
+			writer.GetStringBuilder().Clear();
+			writer.Write("<pre>" + System.Net.WebUtility.HtmlEncode(markdown) + "</pre>");
+		}
+
+		// The AST is already clean (no image elements, no titles); the allowlist sanitizer is the second, independent layer: it parses the
+		// output with a real HTML parser and writes back only allowed tags and attributes, so nothing that can load a resource gets out.
+		return _sanitizer.Sanitize(writer.ToString());
 	}
 
 	private void Sanitize(MarkdownDocument document)
@@ -67,12 +88,18 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer
 		{
 			if (link.IsImage)
 			{
-				link.ReplaceBy(new LiteralInline(ImagePlaceholder));
+				// Never an <img>: the alt text stays, the address is dropped (a remote URL here would be a no-click leak channel).
+				var alt = string.Concat(link.Descendants<LiteralInline>().Select(l => l.Content.ToString())).Trim();
+				link.ReplaceBy(new LiteralInline(alt.Length > 0 ? alt : ImagePlaceholder));
 			}
-			else if (!_urlPolicy.IsAllowed(link.Url))
+			else
 			{
-				link.Url = BlockedLinkTarget;
-				link.GetAttributes().AddClass(BlockedLinkClass);
+				link.Title = null; // a title is attacker text inside an attribute: the cause of V1, so it never reaches the HTML
+				if (!_urlPolicy.IsAllowed(link.Url))
+				{
+					link.Url = BlockedLinkTarget;
+					link.GetAttributes().AddClass(BlockedLinkClass);
+				}
 			}
 		}
 

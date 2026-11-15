@@ -3,6 +3,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.Client;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
@@ -31,6 +32,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private readonly ILogger<SessionPaneViewModel> _logger;
 	private readonly TranscriptCache _cache;
 	private readonly Dictionary<string, string> _drafts = new();
+	private readonly MediaPreviewPolicy? _media;
+	private readonly LocalPathDetector _pathDetector = new();
+	private int _viewTop = -1;
+	private bool _viewAtBottom = true;
 
 	private TranscriptModel? _current;
 	private int _openToken;
@@ -45,6 +50,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private Task _reloadTask = Task.CompletedTask;
 	private Task _expandTask = Task.CompletedTask;
 	private Task _findTask = Task.CompletedTask;
+	private Task _newerTask = Task.CompletedTask;
+	private bool _newerRunning;
 
 	[ObservableProperty]
 	private string? _nodeId;
@@ -101,7 +108,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		IUiDispatcher ui,
 		SwitchLatencyTracker switchTracker,
 		ILogger<SessionPaneViewModel> logger,
-		int cacheCapacity)
+		int cacheCapacity,
+		FocusViewModel? focus = null,
+		FilePreviewViewModel? preview = null,
+		MediaPreviewPolicy? media = null)
 	{
 		_client = client;
 		_surface = surface;
@@ -111,11 +121,21 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_switchTracker = switchTracker;
 		_logger = logger;
 		_cache = new TranscriptCache(cacheCapacity);
+		_media = media;
+		Focus = focus ?? new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance);
+		Preview = preview;
+		Focus.RefActivated += OnRefActivated;
+		Focus.PropertyChanged += OnSideContentChanged;
+		if (Preview != null)
+			Preview.PropertyChanged += OnSideContentChanged;
+		_surface.ViewChanged += OnViewChanged;
+		_surface.PathClicked += OnPathClicked;
 
 		_client.NotificationReceived += OnNotification;
 		_client.Resynced += OnResynced;
 		_surface.Painted += OnPainted;
 		_surface.OlderRequested += OnOlderRequested;
+		_surface.NewerRequested += OnNewerRequested;
 		_surface.ExpandRequested += OnExpandRequested;
 		_surface.LinkClicked += OnLinkClicked;
 		_surface.FindRequested += OnFindRequested;
@@ -138,9 +158,11 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	{
 		await _appendTask;
 		await _olderTask;
+		await _newerTask;
 		await _reloadTask;
 		await _expandTask;
 		await _findTask;
+		await _appendTask;   // an on-demand page can start a catch-up append while it completes
 	}
 
 	/// <summary>Shows a session: from the cache when loaded before (then catches up), otherwise its newest page.</summary>
@@ -151,6 +173,27 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		if (nodeId == NodeId && _current != null)
 			return;
 
+		// A plain selection (tree click, restored state) starts a fresh trail and drops a preview of another session's file.
+		if (nodeId != NodeId)
+		{
+			_back.Clear();
+			NotifyBack();
+			Preview?.CloseCommand.Execute(null);
+		}
+
+		await OpenCoreAsync(nodeId, title, target: null, preloaded: null, shown: null);
+	}
+
+	/// <summary>
+	/// Opens <paramref name="nodeId"/>. With <paramref name="target"/> the view starts at that entry (from <paramref name="preloaded"/>,
+	/// the page <c>session.entries</c> returned around it) and highlights the quote; without it the newest page shows, scrolled to the bottom.
+	/// <paramref name="shown"/> is called once, right after the page was handed the entries and only if this open is still the current one
+	/// (so a caller can announce the navigation without racing a later selection). Returns whether that happened. No newer pages are
+	/// loaded here: after a jump they come on demand when the user scrolls down (<see cref="OnNewerRequested"/>).
+	/// </summary>
+	private async Task<bool> OpenCoreAsync(string nodeId, string? title, JumpTarget? target, SessionEntriesResult? preloaded, Action? shown)
+	{
+		var wasShown = false;
 		if (NodeId != null)
 			_drafts[NodeId] = InputText;
 
@@ -171,43 +214,52 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_current = null;
 		_missedAppend = false;
 		_olderRunning = false;
+		NewerFailed = false;
+		_ = Focus.SetSessionAsync(nodeId);
 
 		try
 		{
 			var detailTask = _client.SessionGetAsync(nodeId);
 			_ = detailTask.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); // observed even when the switch is superseded
-			var warm = _cache.TryGet(nodeId, out var cached);
+			// A cached model that stops short of the newest entries (left by a jump) is not a bottom view: reload the newest page instead.
+			var warm = preloaded == null && _cache.TryGet(nodeId, out var cached0) && (target == null ? !cached0.HasNewer : cached0.Entries.Any(e => e.EntryId == target.EntryId));
 			_switchTracker.MarkWarm(nodeId, warm);
 			TranscriptModel model;
 			if (warm)
 			{
-				model = cached;
+				_cache.TryGet(nodeId, out model!);
 			}
 			else
 			{
-				var page = await _client.SessionEntriesAsync(nodeId, limit: Constants.Limits.EntriesPageSize);
+				var page = preloaded ?? await _client.SessionEntriesAsync(nodeId, limit: Constants.Limits.EntriesPageSize);
 				if (token != _openToken)
-					return;
+					return wasShown;
 
 				model = await BuildModelAsync(nodeId, page);
 				if (token != _openToken)
-					return;
+					return wasShown;
 
 				_cache.Put(model);
 			}
 
 			_current = model;
-			_surface.Load(nodeId, model.Views, model.HasOlder, toBottom: true);
+			_viewTop = -1;
+			_viewAtBottom = target == null;
+			_surface.Load(nodeId, model.Views, model.HasOlder, toBottom: target == null, hasNewer: model.HasNewer);
+			if (target != null)
+				ScrollToTarget(model, target);
+			wasShown = true;
+			shown?.Invoke();
 			_logger.LogInformation("Session {NodeId} opened: {Loaded} of {Total} entries loaded ({Kind})", nodeId, model.Entries.Count, model.Total, warm ? "warm" : "cold");
 
 			var detail = await detailTask;
 			if (token != _openToken)
-				return;
+				return wasShown;
 
 			ApplyDetail(detail);
 			if (detail.Epoch != model.Epoch)
 				await ReloadCoreAsync(token);
-			else if (warm || _missedAppend || detail.EntryCount > model.LastIndex + 1)
+			else if (!model.HasNewer && (warm || _missedAppend || detail.EntryCount > model.LastIndex + 1))
 				await RequestAppend();
 		}
 		catch (OperationCanceledException)
@@ -224,6 +276,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			if (token == _openToken)
 				IsLoading = false;
 		}
+
+		return wasShown;
 	}
 
 	/// <summary>Stops showing a session (e.g. when it was deleted).</summary>
@@ -238,6 +292,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_current = null;
 		Title = string.Empty;
 		Tags.Clear();
+		_back.Clear();
+		NotifyBack();
+		Focus.Clear();
+		Preview?.CloseCommand.Execute(null);
 		_surface.Load(string.Empty, [], hasOlder: false, toBottom: true);
 	}
 
@@ -512,13 +570,15 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 		_cache.Put(model);
 		_current = model;
-		_surface.Load(id, model.Views, model.HasOlder, toBottom: true);
+		_viewAtBottom = true;
+		_viewTop = -1;
+		_surface.Load(id, model.Views, model.HasOlder, toBottom: true, hasNewer: model.HasNewer);
 	}
 
 	private async Task AppendNewCoreAsync(int token)
 	{
 		var model = _current;
-		if (model == null)
+		if (model == null || model.HasNewer)   // a model that stops short of the newest entries (after a jump) grows only on demand
 			return;
 
 		while (true)
@@ -552,6 +612,83 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			_surface.Append(views);
 			if (page.Entries.Count < Constants.Limits.EntriesPageSize)
 				return;
+		}
+	}
+
+	private void OnNewerRequested(object? sender, EventArgs e) => _ui.Post(StartLoadNewer);
+
+	private void StartLoadNewer()
+	{
+		if (_newerRunning)
+			return;
+
+		_newerRunning = true;
+		NewerFailed = false;
+		_newerTask = LoadNewerAsync();
+	}
+
+	/// <summary>The last on-demand page failed; the page does not ask again until the user scrolls, and this command asks at once.</summary>
+	[ObservableProperty]
+	private bool _newerFailed;
+
+	[RelayCommand]
+	private void RetryNewer() => StartLoadNewer();
+
+	/// <summary>One page of entries after the loaded ones, when the user scrolled to the end of a view that started at a jump target.</summary>
+	private async Task LoadNewerAsync()
+	{
+		var token = _openToken;
+		var model = _current;
+		try
+		{
+			if (model == null || !model.HasNewer)
+			{
+				_surface.Append([], hasNewer: false);
+				return;
+			}
+
+			var page = await _client.SessionEntriesAsync(model.NodeId, afterIndex: model.LastIndex, limit: Constants.Limits.EntriesPageSize);
+			if (token != _openToken || model != _current)
+				return;
+
+			if (page.Epoch != model.Epoch)
+			{
+				await ReloadCoreAsync(token);
+				return;
+			}
+
+			var fresh = page.Entries.Where(e => e.Index > model.LastIndex).ToList();
+			if (fresh.Count == 0)
+			{
+				model.UpdateTotal(model.LastIndex + 1);   // nothing newer after all
+				_surface.Append([], hasNewer: false);
+				return;
+			}
+
+			var views = await RenderAsync(fresh);
+			if (token != _openToken || model != _current)
+				return;
+
+			model.Append(fresh, views, page.Total);
+			_surface.Append(views, model.HasNewer);
+
+			// Live appends were ignored while the model stopped short; an entry that arrived during this last page would otherwise wait for the next event (N4).
+			if (!model.HasNewer)
+				_ = RequestAppend();
+		}
+		catch (Exception ex)
+		{
+			// No Append and no automatic retry (N3): the page keeps its request marked as pending until the user scrolls, and Retry asks at once.
+			_logger.LogWarning(ex, "Loading newer entries failed");
+			if (token == _openToken)
+			{
+				NewerFailed = true;
+				_surface.NewerLoadFailed();
+			}
+		}
+		finally
+		{
+			_newerRunning = false;
 		}
 	}
 
@@ -638,7 +775,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	{
 		var model = _current;
 		if (model != null)
-			_surface.Load(model.NodeId, model.Views, model.HasOlder, toBottom: true);
+			_surface.Load(model.NodeId, model.Views, model.HasOlder, toBottom: true, hasNewer: model.HasNewer);
 	});
 
 	private void OnLinkClicked(object? sender, string url) => _ui.Post(() => _launcher.TryOpen(url));
@@ -660,11 +797,20 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_client.Resynced -= OnResynced;
 		_surface.Painted -= OnPainted;
 		_surface.OlderRequested -= OnOlderRequested;
+		_surface.NewerRequested -= OnNewerRequested;
 		_surface.ExpandRequested -= OnExpandRequested;
 		_surface.LinkClicked -= OnLinkClicked;
 		_surface.FindRequested -= OnFindRequested;
 		_surface.FindStepRequested -= OnFindStepRequested;
 		_surface.FindStatusChanged -= OnFindStatusChanged;
 		_surface.PageRestarted -= OnPageRestarted;
+		_surface.ViewChanged -= OnViewChanged;
+		_surface.PathClicked -= OnPathClicked;
+		Focus.RefActivated -= OnRefActivated;
+		Focus.PropertyChanged -= OnSideContentChanged;
+		if (Preview != null)
+			Preview.PropertyChanged -= OnSideContentChanged;
+		Focus.Dispose();
+		Preview?.Dispose();
 	}
 }

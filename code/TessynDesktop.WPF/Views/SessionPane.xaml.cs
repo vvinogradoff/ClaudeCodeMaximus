@@ -12,6 +12,7 @@ namespace TessynDesktop.WPF.Views;
 public partial class SessionPane : UserControl
 {
 	private SessionPaneViewModel? _subscribed;
+	private double _sideWidth = Constants.Limits.DefaultSidePaneWidth;
 
 	public SessionPane()
 	{
@@ -54,11 +55,48 @@ public partial class SessionPane : UserControl
 	private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
 	{
 		if (_subscribed != null)
+		{
 			_subscribed.FindFocusRequested -= OnFindFocusRequested;
+			_subscribed.PropertyChanged -= OnViewModelPropertyChanged;
+		}
 
 		_subscribed = e.NewValue as SessionPaneViewModel;
 		if (_subscribed != null)
+		{
 			_subscribed.FindFocusRequested += OnFindFocusRequested;
+			_subscribed.PropertyChanged += OnViewModelPropertyChanged;
+		}
+
+		ApplySidePane();
+	}
+
+	private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(SessionPaneViewModel.IsSidePaneVisible))
+			ApplySidePane();
+	}
+
+	/// <summary>Opens or closes the side column; the width the user dragged it to is kept while the pane is hidden.</summary>
+	private void ApplySidePane()
+	{
+		var visible = _subscribed?.IsSidePaneVisible == true;
+		if (visible == (SidePane.Visibility == Visibility.Visible))
+			return;
+
+		SidePane.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+		SideSplitter.Visibility = SidePane.Visibility;
+		if (visible)
+		{
+			SideColumn.MinWidth = Constants.Limits.MinSidePaneWidth;
+			SideColumn.Width = new GridLength(_sideWidth);
+		}
+		else
+		{
+			if (SideColumn.ActualWidth > 0)
+				_sideWidth = SideColumn.ActualWidth;
+			SideColumn.MinWidth = 0;
+			SideColumn.Width = new GridLength(0);
+		}
 	}
 
 	private void OnFindFocusRequested(object? sender, EventArgs e)
