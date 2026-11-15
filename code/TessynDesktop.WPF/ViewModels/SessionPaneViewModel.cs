@@ -3,6 +3,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.Client;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
@@ -31,6 +32,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private readonly ILogger<SessionPaneViewModel> _logger;
 	private readonly TranscriptCache _cache;
 	private readonly Dictionary<string, string> _drafts = new();
+	private readonly MediaPreviewPolicy? _media;
+	private readonly LocalPathDetector _pathDetector = new();
+	private int _viewTop = -1;
+	private bool _viewAtBottom = true;
 
 	private TranscriptModel? _current;
 	private int _openToken;
@@ -101,7 +106,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		IUiDispatcher ui,
 		SwitchLatencyTracker switchTracker,
 		ILogger<SessionPaneViewModel> logger,
-		int cacheCapacity)
+		int cacheCapacity,
+		FocusViewModel? focus = null,
+		FilePreviewViewModel? preview = null,
+		MediaPreviewPolicy? media = null)
 	{
 		_client = client;
 		_surface = surface;
@@ -111,6 +119,15 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_switchTracker = switchTracker;
 		_logger = logger;
 		_cache = new TranscriptCache(cacheCapacity);
+		_media = media;
+		Focus = focus ?? new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance);
+		Preview = preview;
+		Focus.RefActivated += OnRefActivated;
+		Focus.PropertyChanged += OnSideContentChanged;
+		if (Preview != null)
+			Preview.PropertyChanged += OnSideContentChanged;
+		_surface.ViewChanged += OnViewChanged;
+		_surface.PathClicked += OnPathClicked;
 
 		_client.NotificationReceived += OnNotification;
 		_client.Resynced += OnResynced;
@@ -151,6 +168,23 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		if (nodeId == NodeId && _current != null)
 			return;
 
+		// A plain selection (tree click, restored state) starts a fresh trail and drops a preview of another session's file.
+		if (nodeId != NodeId)
+		{
+			_back.Clear();
+			NotifyBack();
+			Preview?.CloseCommand.Execute(null);
+		}
+
+		await OpenCoreAsync(nodeId, title, target: null, preloaded: null);
+	}
+
+	/// <summary>
+	/// Opens <paramref name="nodeId"/>. With <paramref name="target"/> the view starts at that entry (from <paramref name="preloaded"/>,
+	/// the page <c>session.entries</c> returned around it) and highlights the quote; without it the newest page shows, scrolled to the bottom.
+	/// </summary>
+	private async Task OpenCoreAsync(string nodeId, string? title, JumpTarget? target, SessionEntriesResult? preloaded)
+	{
 		if (NodeId != null)
 			_drafts[NodeId] = InputText;
 
@@ -171,21 +205,22 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_current = null;
 		_missedAppend = false;
 		_olderRunning = false;
+		_ = Focus.SetSessionAsync(nodeId);
 
 		try
 		{
 			var detailTask = _client.SessionGetAsync(nodeId);
 			_ = detailTask.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); // observed even when the switch is superseded
-			var warm = _cache.TryGet(nodeId, out var cached);
+			var warm = preloaded == null && _cache.TryGet(nodeId, out var cached0) && (target == null || cached0.Entries.Any(e => e.EntryId == target.EntryId));
 			_switchTracker.MarkWarm(nodeId, warm);
 			TranscriptModel model;
 			if (warm)
 			{
-				model = cached;
+				_cache.TryGet(nodeId, out model!);
 			}
 			else
 			{
-				var page = await _client.SessionEntriesAsync(nodeId, limit: Constants.Limits.EntriesPageSize);
+				var page = preloaded ?? await _client.SessionEntriesAsync(nodeId, limit: Constants.Limits.EntriesPageSize);
 				if (token != _openToken)
 					return;
 
@@ -197,7 +232,11 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			}
 
 			_current = model;
-			_surface.Load(nodeId, model.Views, model.HasOlder, toBottom: true);
+			_viewTop = -1;
+			_viewAtBottom = target == null;
+			_surface.Load(nodeId, model.Views, model.HasOlder, toBottom: target == null);
+			if (target != null)
+				ScrollToTarget(model, target);
 			_logger.LogInformation("Session {NodeId} opened: {Loaded} of {Total} entries loaded ({Kind})", nodeId, model.Entries.Count, model.Total, warm ? "warm" : "cold");
 
 			var detail = await detailTask;
@@ -238,6 +277,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_current = null;
 		Title = string.Empty;
 		Tags.Clear();
+		_back.Clear();
+		NotifyBack();
+		Focus.Clear();
+		Preview?.CloseCommand.Execute(null);
 		_surface.Load(string.Empty, [], hasOlder: false, toBottom: true);
 	}
 
@@ -512,6 +555,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 		_cache.Put(model);
 		_current = model;
+		_viewAtBottom = true;
+		_viewTop = -1;
 		_surface.Load(id, model.Views, model.HasOlder, toBottom: true);
 	}
 
@@ -666,5 +711,13 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_surface.FindStepRequested -= OnFindStepRequested;
 		_surface.FindStatusChanged -= OnFindStatusChanged;
 		_surface.PageRestarted -= OnPageRestarted;
+		_surface.ViewChanged -= OnViewChanged;
+		_surface.PathClicked -= OnPathClicked;
+		Focus.RefActivated -= OnRefActivated;
+		Focus.PropertyChanged -= OnSideContentChanged;
+		if (Preview != null)
+			Preview.PropertyChanged -= OnSideContentChanged;
+		Focus.Dispose();
+		Preview?.Dispose();
 	}
 }

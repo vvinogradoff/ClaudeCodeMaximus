@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TessynDesktop.Client;
+using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
 
@@ -173,26 +174,127 @@ public sealed class FakeTessynClient : ITessynClient
 
 	public Task<SetStreamingResult> SessionSetStreamingAsync(string nodeId, bool enabled, bool? force = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-	public Task<AttentionListResult> AttentionListAsync(string nodeId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	/// <summary>The Focus items per session, as the daemon's ledger would list them.</summary>
+	public Dictionary<string, List<AttentionItemDto>> Attention { get; } = [];
 
-	public Task<AttentionReplyResult> AttentionReplyAsync(string nodeId, IReadOnlyList<AttentionAnswerParams> answers, string? modelId = null, string? effort = null, string? profileId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	/// <summary>When set, <see cref="AttentionListAsync"/> throws it.</summary>
+	public Exception? AttentionListException { get; set; }
 
-	public Task<AttentionDismissResult> AttentionDismissAsync(string nodeId, string itemId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Task<AttentionListResult> AttentionListAsync(string nodeId, CancellationToken cancellationToken = default)
+	{
+		Record($"attention.list:{nodeId}");
+		if (AttentionListException != null)
+			throw AttentionListException;
+		Attention.TryGetValue(nodeId, out var items);
+		return Task.FromResult(new AttentionListResult(nodeId, new AttentionSummaryDto(), [.. items ?? []]));
+	}
 
-	public Task<CatalogResult> CatalogGetAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Task<AttentionReplyResult> AttentionReplyAsync(string nodeId, IReadOnlyList<AttentionAnswerParams> answers, string? modelId = null, string? effort = null, string? profileId = null, CancellationToken cancellationToken = default)
+	{
+		Record($"attention.reply:{nodeId}:{string.Join("|", answers.Select(a => a.ItemId + "=" + a.Text))}");
+		var answered = new List<string>();
+		var skipped = new List<string>();
+		var items = Attention.GetValueOrDefault(nodeId) ?? [];
+		foreach (var answer in answers)
+		{
+			var index = items.FindIndex(i => i.Id == answer.ItemId && i.Status == AttentionStatus.Open);
+			if (index < 0 || string.IsNullOrWhiteSpace(answer.Text))
+			{
+				skipped.Add(answer.ItemId);
+				continue;
+			}
+
+			items[index] = items[index] with { Status = AttentionStatus.Answered, Answer = answer.Text };
+			answered.Add(answer.ItemId);
+		}
+
+		return Task.FromResult(new AttentionReplyResult(answered, skipped, answered.Count > 0));
+	}
+
+	public Task<AttentionDismissResult> AttentionDismissAsync(string nodeId, string itemId, CancellationToken cancellationToken = default)
+	{
+		Record($"attention.dismiss:{nodeId}:{itemId}");
+		var items = Attention.GetValueOrDefault(nodeId) ?? [];
+		var index = items.FindIndex(i => i.Id == itemId && i.Status == AttentionStatus.Open);
+		if (index >= 0)
+			items[index] = items[index] with { Status = AttentionStatus.Dismissed };
+		return Task.FromResult(new AttentionDismissResult(index >= 0));
+	}
+
+	/// <summary>The answer of <see cref="CatalogGetAsync"/>.</summary>
+	public CatalogResult Catalog { get; set; } = new([], [], []);
+
+	/// <summary>When set, <see cref="CatalogGetAsync"/> throws it.</summary>
+	public Exception? CatalogException { get; set; }
+
+	public Task<CatalogResult> CatalogGetAsync(CancellationToken cancellationToken = default)
+	{
+		Record("catalog.get");
+		if (CatalogException != null)
+			throw CatalogException;
+		return Task.FromResult(Catalog);
+	}
 
 	public Task<UsageResult> UsageGetAsync(string? profileId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
 	// P1.F / P1.G additions to ITessynClient; the WPF client does not use them yet.
-	public Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, SessionEntriesQuery query, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, SessionEntriesQuery query, CancellationToken cancellationToken = default)
+	{
+		Record($"session.entries.query:{nodeId}:around={query.AroundEntryId ?? "-"}");
+		var session = Sessions[nodeId];
+		var total = session.Entries.Count;
+		var max = query.Limit ?? 100;
+		if (query.AroundEntryId == null)
+			throw new NotImplementedException("The fake only serves AroundEntryId.");
+
+		var at = session.Entries.FindIndex(e => e.EntryId == query.AroundEntryId);
+		if (at < 0)
+			return Task.FromResult(new SessionEntriesResult(nodeId, session.Epoch, total, []));
+
+		var start = Math.Clamp(at - max / 2, 0, Math.Max(0, total - max));
+		return Task.FromResult(new SessionEntriesResult(nodeId, session.Epoch, total, session.Entries.Skip(start).Take(max).ToList()));
+	}
 
 	public Task<SessionEntryDto> SessionEntryByIdAsync(string nodeId, string entryId, EntryRangeParams? range = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
 	public Task<SessionHeadersResult> SessionHeadersAsync(IReadOnlyList<string> nodeIds, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-	public Task<FileReadResult> FileReadAsync(string handle, long? offset = null, int? length = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	/// <summary>Files by handle for <see cref="FileReadAsync"/>: name, MIME type and bytes.</summary>
+	public Dictionary<string, (string Name, string Mime, byte[] Bytes)> Files { get; } = [];
 
-	public Task<FilePreviewResult> FilePreviewAsync(string nodeId, string entryId, string path, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	/// <summary>Handles <see cref="FilePreviewAsync"/> issues, by "nodeId|entryId|path".</summary>
+	public Dictionary<string, string> PreviewHandles { get; } = [];
+
+	/// <summary>When set, every <see cref="FileReadAsync"/> call after the first waits for it (to cancel a load in flight).</summary>
+	public TaskCompletionSource? FileReadGate { get; set; }
+
+	public async Task<FileReadResult> FileReadAsync(string handle, long? offset = null, int? length = null, CancellationToken cancellationToken = default)
+	{
+		Record($"file.read:{handle}:{offset ?? 0}:{length?.ToString() ?? "-"}");
+		cancellationToken.ThrowIfCancellationRequested();
+		if (!Files.TryGetValue(handle, out var file))
+			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, "Unknown file handle");
+
+		var start = (int)(offset ?? 0);
+		if (start > 0 && FileReadGate != null)
+			await FileReadGate.Task.WaitAsync(cancellationToken);
+
+		var count = Math.Min(length ?? file.Bytes.Length, file.Bytes.Length - start);
+		var slice = file.Bytes.AsSpan(start, count).ToArray();
+		var isText = file.Mime.StartsWith("text/", StringComparison.Ordinal);
+		return new FileReadResult(file.Name, file.Mime, file.Bytes.Length, DateTimeOffset.UnixEpoch, start, count, isText ? "utf8" : "base64",
+			isText ? System.Text.Encoding.UTF8.GetString(slice) : Convert.ToBase64String(slice), start + count >= file.Bytes.Length);
+	}
+
+	public Task<FilePreviewResult> FilePreviewAsync(string nodeId, string entryId, string path, CancellationToken cancellationToken = default)
+	{
+		Record($"file.preview:{nodeId}:{entryId}:{path}");
+		if (!PreviewHandles.TryGetValue($"{nodeId}|{entryId}|{path}", out var handle))
+			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, "The path does not occur in this entry");
+
+		var file = Files[handle];
+		return Task.FromResult(new FilePreviewResult(handle, file.Name, file.Mime, file.Bytes.Length, DateTimeOffset.UnixEpoch));
+	}
 
 	public ValueTask DisposeAsync()
 	{

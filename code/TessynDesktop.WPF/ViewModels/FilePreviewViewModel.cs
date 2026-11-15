@@ -154,6 +154,7 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 	{
 		Title = loaded.Name;
 		Kind = loaded.Kind;
+		_logger.LogInformation("Preview opened: {Name} ({Kind}, {Size} bytes){Refused}", loaded.Name, loaded.Kind, loaded.Size, loaded.Refusal == null ? string.Empty : " refused");
 		_cachedPath = loaded.FilePath;
 		CanOpenExternally = _openPolicy.IsAllowed(loaded.Name) && loaded.Refusal == null;
 		if (loaded.Refusal != null)

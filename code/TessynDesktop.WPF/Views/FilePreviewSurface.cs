@@ -144,6 +144,7 @@ public sealed class FilePreviewSurface : IPreviewSurface
 						LinkClicked?.Invoke(this, href);
 					break;
 				case "rendered":
+					_logger.LogInformation("Preview page rendered {Kind}: {Ok}", root.GetProperty("kind").GetString(), root.GetProperty("ok").GetBoolean());
 					Rendered?.Invoke(this, new PreviewRenderedEventArgs(root.GetProperty("kind").GetString() ?? string.Empty, root.GetProperty("ok").GetBoolean()));
 					break;
 			}

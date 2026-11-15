@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using TessynDesktop.WPF.Infrastructure;
+using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.ViewModels;
 using TessynDesktop.WPF.Views;
@@ -50,6 +51,7 @@ public partial class App : Application
 		var hostBuilt = startup.ElapsedMilliseconds;
 		_host.Services.GetRequiredService<GlobalExceptionLogger>().Attach(this);
 		logger.LogInformation("TessynDesktop.WPF starting");
+		_host.Services.GetRequiredService<PreviewFileStore>().Clean(); // files of earlier previews
 
 		// The WebView2 environment takes a second or more to create; start it now so it overlaps with the rest of the startup.
 		_ = _host.Services.GetRequiredService<WebViewEnvironmentProvider>().GetAsync();
