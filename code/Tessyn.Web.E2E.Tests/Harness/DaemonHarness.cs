@@ -120,7 +120,8 @@ public sealed class DaemonHarness : IDisposable
 			sp.GetRequiredService<IClaudeSessionImportService>(),
 			sp.GetRequiredService<IClaudeAssistService>(),
 			Path.Combine(root, "index.db"),
-			[projectsDir]));
+			[projectsDir],
+			TimeSpan.Zero));
 		s.AddSingleton<ISessionRegistry, SessionRegistry>();
 		s.AddSingleton<ISessionTurnService, SessionTurnService>();
 		s.AddSingleton<ISessionCompactionService, SessionCompactionService>();

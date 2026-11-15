@@ -140,7 +140,10 @@ public partial class App : Application
 			};
 
 			// Build/refresh the cross-project session search index in the background (Stage 6).
-			_ = Task.Run(() => Services.GetRequiredService<IDaemonClient>().ReindexSessionsAsync());
+			// Runs the throttled upkeep (migrate, reindex, purge, optimize); any failure is logged, never left unobserved.
+			_ = Services.GetRequiredService<IDaemonClient>().ReindexSessionsAsync().ContinueWith(
+				t => Log.Error(t.Exception!.GetBaseException(), "Session index upkeep failed at startup"),
+				System.Threading.CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
 			Services.GetRequiredService<ISessionIndexUpdater>().Start();
 		}
 

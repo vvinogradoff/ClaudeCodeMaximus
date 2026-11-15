@@ -19,18 +19,28 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	private readonly IClaudeAssistService _assistService;
 	private readonly string _dbPath;
 	private readonly IReadOnlyList<string> _claudeProjectsDirs;
+	private readonly TimeSpan _activeFileQuietPeriod;
 	private readonly SemaphoreSlim _writeGate = new(1, 1);
+
+	// Searches in flight: VACUUM never starts while this is above zero.
+	private readonly object _searchSync = new();
+	private int _activeSearches;
+
+	// False until the rowid map is known to exist for the whole index (set under the write gate).
+	private volatile bool _schemaMigrated;
 
 	public ClaudeSessionIndexService(
 		IClaudeSessionImportService importService,
 		IClaudeAssistService assistService,
 		string? dbPath = null,
-		IReadOnlyList<string>? claudeProjectsDirs = null)
+		IReadOnlyList<string>? claudeProjectsDirs = null,
+		TimeSpan? activeFileQuietPeriod = null)
 	{
 		_importService = importService;
 		_assistService = assistService;
 		_dbPath = dbPath ?? GetDefaultDbPath();
 		_claudeProjectsDirs = claudeProjectsDirs ?? GetDefaultClaudeProjectsDirs();
+		_activeFileQuietPeriod = activeFileQuietPeriod ?? Constants.SessionIndex.ActiveFileQuietPeriod;
 
 		Directory.CreateDirectory(Path.GetDirectoryName(_dbPath)!);
 		InitializeSchema();
@@ -51,99 +61,232 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 	private string ConnectionString => $"Data Source={_dbPath}";
 
-	/// <summary>
-	/// Bump whenever a change widens or alters what <see cref="IndexSession"/> extracts from a
-	/// JSONL file (e.g. indexing tool_result content, version 2). Forces every already-indexed
-	/// session to be rebuilt on the next <see cref="ReindexAsync"/> pass, since the per-file mtime
-	/// check alone can't detect "the same file now yields richer content".
-	/// </summary>
-	private const int IndexContentVersion = 2;
-
-	private void InitializeSchema()
+	/// <summary>Opens a connection with an explicit busy timeout, so a competing writer or checkpoint waits instead of failing with SQLITE_BUSY.</summary>
+	private SqliteConnection OpenConnection()
 	{
-		using var conn = new SqliteConnection(ConnectionString);
+		var conn = new SqliteConnection(ConnectionString);
 		conn.Open();
-		using (var cmd = conn.CreateCommand())
-		{
-			cmd.CommandText = """
-				PRAGMA journal_mode=WAL;
-
-				CREATE TABLE IF NOT EXISTS sessions (
-					external_id TEXT PRIMARY KEY,
-					project_slug TEXT NOT NULL,
-					jsonl_path TEXT NOT NULL,
-					mtime_ticks INTEGER NOT NULL,
-					title TEXT,
-					title_generated_at_ticks INTEGER,
-					first_user_prompt TEXT,
-					message_count INTEGER NOT NULL,
-					created_ticks INTEGER NOT NULL,
-					last_used_ticks INTEGER NOT NULL
-				);
-
-				CREATE VIRTUAL TABLE IF NOT EXISTS messages USING fts5(
-					content,
-					role UNINDEXED,
-					external_id UNINDEXED,
-					project_slug UNINDEXED,
-					message_index UNINDEXED,
-					timestamp_ticks UNINDEXED
-				);
-				""";
-			cmd.ExecuteNonQuery();
-		}
-
-		int storedVersion;
-		using (var cmd = conn.CreateCommand())
-		{
-			cmd.CommandText = "PRAGMA user_version;";
-			storedVersion = Convert.ToInt32(cmd.ExecuteScalar());
-		}
-
-		if (storedVersion < IndexContentVersion)
-		{
-			using (var cmd = conn.CreateCommand())
-			{
-				// mtime_ticks = 0 never matches a real file's last-write-time, so ReindexAsync's
-				// incremental check treats every stored session as stale and rebuilds it.
-				cmd.CommandText = "UPDATE sessions SET mtime_ticks = 0;";
-				cmd.ExecuteNonQuery();
-			}
-			using (var cmd = conn.CreateCommand())
-			{
-				cmd.CommandText = $"PRAGMA user_version = {IndexContentVersion};";
-				cmd.ExecuteNonQuery();
-			}
-			_log.Information("InitializeSchema: index content version {Old} -> {New}, all sessions marked stale for rebuild",
-				storedVersion, IndexContentVersion);
-		}
+		using var cmd = conn.CreateCommand();
+		cmd.CommandText = $"PRAGMA busy_timeout = {(int)Constants.SessionIndex.BusyTimeout.TotalMilliseconds};";
+		cmd.ExecuteNonQuery();
+		return conn;
 	}
 
-	// ── Reindex ───────────────────────────────────────────────────────────────────
+	/// <summary>
+	/// Cheap, startup-safe schema work: creates the tables, handles the content version (marks every session
+	/// stale when the extracted content widened) and notes whether the rowid map still has to be built.
+	/// The map itself is built later, off the caller's thread, by <see cref="EnsureSchemaMigrated"/>.
+	/// <c>PRAGMA user_version</c> is the single marker: below <see cref="Constants.SessionIndex.ContentVersion"/> means
+	/// stale content, below <see cref="Constants.SessionIndex.SchemaVersion"/> means the rowid map is missing.
+	/// </summary>
+	private void InitializeSchema()
+	{
+		using var conn = OpenConnection();
+		Exec(conn, Constants.SqlQueries.EnableWal);
+
+		var existing = TableExists(conn, "sessions") || TableExists(conn, "messages");
+		Exec(conn, Constants.SqlQueries.CreateSchema);
+
+		if (!existing)
+		{
+			// Brand-new database: nothing to migrate, nothing stale.
+			Exec(conn, $"PRAGMA user_version = {Constants.SessionIndex.SchemaVersion};");
+			_schemaMigrated = true;
+			return;
+		}
+
+		var storedVersion = ReadUserVersion(conn);
+		if (storedVersion < Constants.SessionIndex.ContentVersion)
+		{
+			// mtime_ticks = 0 never matches a real file's last-write-time, so ReindexAsync's
+			// incremental check treats every stored session as stale and rebuilds it.
+			using var tx = conn.BeginTransaction();
+			Exec(conn, Constants.SqlQueries.MarkAllSessionsStale, tx);
+			Exec(conn, $"PRAGMA user_version = {Constants.SessionIndex.ContentVersion};", tx);
+			tx.Commit();
+			storedVersion = Constants.SessionIndex.ContentVersion;
+			_log.Information("InitializeSchema: index content version -> {New}, all sessions marked stale for rebuild",
+				Constants.SessionIndex.ContentVersion);
+		}
+
+		_schemaMigrated = storedVersion >= Constants.SessionIndex.SchemaVersion;
+		if (!_schemaMigrated)
+			_log.Information("InitializeSchema: index schema {Old} -> {New} pending (session rowid map is built on the first upkeep run)",
+				storedVersion, Constants.SessionIndex.SchemaVersion);
+	}
+
+	/// <summary>
+	/// Builds the session -> FTS rowid map for an index created before it existed. Metadata only: the FTS table is
+	/// not touched, so search keeps returning the same results throughout. One transaction (map rows and the version
+	/// bump commit together), so closing the app midway rolls it back and the next run starts it again.
+	/// Returns the elapsed time, or null when nothing needed doing.
+	/// </summary>
+	private TimeSpan? EnsureSchemaMigrated(SqliteConnection conn, CancellationToken cancellationToken)
+	{
+		if (_schemaMigrated)
+			return null;
+
+		_writeGate.Wait(cancellationToken);
+		try
+		{
+			if (_schemaMigrated)
+				return null;
+			if (ReadUserVersion(conn) >= Constants.SessionIndex.SchemaVersion)
+			{
+				_schemaMigrated = true;
+				return null;
+			}
+
+			var started = System.Diagnostics.Stopwatch.StartNew();
+			using var tx = conn.BeginTransaction();
+			Exec(conn, Constants.SqlQueries.BuildRowMap, tx);
+			Exec(conn, $"PRAGMA user_version = {Constants.SessionIndex.SchemaVersion};", tx);
+			tx.Commit();
+			_schemaMigrated = true;
+			_log.Information("EnsureSchemaMigrated: session rowid map built in {Elapsed} ms", (long)started.Elapsed.TotalMilliseconds);
+			return started.Elapsed;
+		}
+		finally { _writeGate.Release(); }
+	}
+
+	private static void Exec(SqliteConnection conn, string sql, SqliteTransaction? tx = null)
+	{
+		using var cmd = conn.CreateCommand();
+		cmd.Transaction = tx;
+		cmd.CommandText = sql;
+		cmd.ExecuteNonQuery();
+	}
+
+	private static long ScalarLong(SqliteConnection conn, string sql)
+	{
+		using var cmd = conn.CreateCommand();
+		cmd.CommandText = sql;
+		return Convert.ToInt64(cmd.ExecuteScalar());
+	}
+
+	private static int ReadUserVersion(SqliteConnection conn) => (int)ScalarLong(conn, Constants.SqlQueries.SelectUserVersion);
+
+	private static bool TableExists(SqliteConnection conn, string name)
+	{
+		using var cmd = conn.CreateCommand();
+		cmd.CommandText = Constants.SqlQueries.TableExists;
+		cmd.Parameters.AddWithValue("@name", name);
+		return cmd.ExecuteScalar() != null;
+	}
+
+	// ── Reindex and upkeep ──────────────────────────────────────────────────────────
 
 	public event EventHandler<SessionIndexedEventArgs>? SessionIndexed;
 
+	/// <summary>
+	/// One upkeep run: schema migration if due, a throttled reindex, orphan purge, then optimize / vacuum / checkpoint
+	/// as the policy asks. Runs on a dedicated below-normal-priority thread. Returns the number of sessions (re)indexed.
+	/// Files still being written are deferred and retried in the background; a failure is logged and rethrown.
+	/// </summary>
 	public Task<int> ReindexAsync(CancellationToken cancellationToken = default) =>
-		Task.Run(() => ReindexCore(cancellationToken), cancellationToken);
+		RunUpkeepAsync(cancellationToken).ContinueWith(t => t.Result.Indexed,
+			CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
-	private int ReindexCore(CancellationToken cancellationToken)
+	/// <summary>Same as <see cref="ReindexAsync"/> but reports everything the run did.</summary>
+	internal Task<SessionIndexUpkeepReport> RunUpkeepAsync(CancellationToken cancellationToken = default)
 	{
-		int indexed;
-		_writeGate.Wait(cancellationToken);
-		try { indexed = ReindexLocked(cancellationToken); }
-		finally { _writeGate.Release(); }
-
-		if (indexed > 0)
-			SessionIndexed?.Invoke(this, new SessionIndexedEventArgs());
-		return indexed;
+		var task = RunOnUpkeepThread(() => RunUpkeep(cancellationToken), cancellationToken);
+		return task.ContinueWith(t =>
+		{
+			if (t.IsCompletedSuccessfully && t.Result.Deferred > 0)
+				ScheduleDeferredPasses();
+			return t;
+		}, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default).Unwrap();
 	}
 
-	private int ReindexLocked(CancellationToken cancellationToken)
+	private Task<T> RunOnUpkeepThread<T>(Func<T> work, CancellationToken cancellationToken)
 	{
-		using var conn = new SqliteConnection(ConnectionString);
-		conn.Open();
+		var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+		var thread = new Thread(() =>
+		{
+			try
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				tcs.SetResult(work());
+			}
+			catch (OperationCanceledException)
+			{
+				tcs.TrySetCanceled(cancellationToken);
+			}
+			catch (Exception ex)
+			{
+				_log.Error(ex, "Session index upkeep failed");
+				tcs.TrySetException(ex);
+			}
+		})
+		{
+			IsBackground = true,
+			Priority = ThreadPriority.BelowNormal,
+			Name = Constants.SessionIndex.BackgroundThreadName,
+		};
+		thread.Start();
+		return tcs.Task;
+	}
 
-		var indexed = 0;
+	/// <summary>
+	/// Files skipped as "being written right now" get further passes, each a quiet period later. Detached and
+	/// observed: any failure is logged, nothing is left unobserved.
+	/// </summary>
+	private void ScheduleDeferredPasses()
+	{
+		_ = Task.Run(async () =>
+		{
+			try
+			{
+				for (var attempt = 0; attempt < Constants.SessionIndex.DeferredPassLimit; attempt++)
+				{
+					await Task.Delay(_activeFileQuietPeriod + _activeFileQuietPeriod).ConfigureAwait(false);
+					var report = await RunOnUpkeepThread(() => RunUpkeep(CancellationToken.None), CancellationToken.None)
+						.ConfigureAwait(false);
+					if (report.Deferred == 0)
+						return;
+				}
+			}
+			catch (Exception ex)
+			{
+				_log.Error(ex, "Deferred session index pass failed");
+			}
+		});
+	}
+
+	private SessionIndexUpkeepReport RunUpkeep(CancellationToken cancellationToken)
+	{
+		var report = new SessionIndexUpkeepReport();
+		using var conn = OpenConnection();
+
+		var migration = EnsureSchemaMigrated(conn, cancellationToken);
+		if (migration != null)
+		{
+			report.SchemaMigrated = true;
+			report.MigrationDuration = migration.Value;
+		}
+
+		var scan = ReindexPass(conn, report, cancellationToken);
+		_log.Information("ReindexAsync: (re)indexed {Count} sessions, {Deferred} deferred (being written)", report.Indexed, report.Deferred);
+
+		PurgeOrphans(conn, scan, report, cancellationToken);
+		RunMaintenance(conn, report, cancellationToken);
+
+		if (report.Indexed > 0)
+			SessionIndexed?.Invoke(this, new SessionIndexedEventArgs());
+		return report;
+	}
+
+	/// <summary>The external ids found on disk and whether every configured projects folder that exists was listed in full.</summary>
+	private sealed record DiskScan(HashSet<string> SeenIds, bool Complete);
+
+	private DiskScan ReindexPass(SqliteConnection conn, SessionIndexUpkeepReport report, CancellationToken cancellationToken)
+	{
+		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var complete = true;
+		var anyDir = false;
+		var sinceYield = 0;
+
 		foreach (var claudeProjectsDir in _claudeProjectsDirs)
 		{
 			if (!Directory.Exists(claudeProjectsDir))
@@ -152,34 +295,237 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 				continue;
 			}
 
-			foreach (var slugDir in Directory.GetDirectories(claudeProjectsDir))
+			anyDir = true;
+			string[] slugDirs;
+			try { slugDirs = Directory.GetDirectories(claudeProjectsDir); }
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+			{
+				_log.Warning(ex, "ReindexAsync: could not list {Dir}", claudeProjectsDir);
+				complete = false;
+				continue;
+			}
+
+			foreach (var slugDir in slugDirs)
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 				var slug = Path.GetFileName(slugDir);
 
-				foreach (var jsonlPath in Directory.GetFiles(slugDir, "*" + Constants.ClaudeSessions.SessionFileExtension))
+				string[] files;
+				try { files = Directory.GetFiles(slugDir, "*" + Constants.ClaudeSessions.SessionFileExtension); }
+				catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+				{
+					_log.Warning(ex, "ReindexAsync: could not list {Dir}", slugDir);
+					complete = false;
+					continue;
+				}
+
+				foreach (var jsonlPath in files)
 				{
 					cancellationToken.ThrowIfCancellationRequested();
 
 					var externalId = Path.GetFileNameWithoutExtension(jsonlPath);
 					if (string.IsNullOrEmpty(externalId))
 						continue;
+					seen.Add(externalId);
 
-					long mtimeTicks;
-					try { mtimeTicks = File.GetLastWriteTimeUtc(jsonlPath).Ticks; }
+					DateTime lastWriteUtc;
+					try { lastWriteUtc = File.GetLastWriteTimeUtc(jsonlPath); }
 					catch (IOException) { continue; } // file removed mid-scan
+					var mtimeTicks = lastWriteUtc.Ticks;
 
-					if (GetStoredMtime(conn, externalId) == mtimeTicks)
+					if (GetIndexedMtime(conn, externalId) == mtimeTicks)
 						continue; // unchanged since last index
 
-					if (IndexSession(conn, externalId, slug, jsonlPath, mtimeTicks))
-						indexed++;
+					if (DateTime.UtcNow - lastWriteUtc < _activeFileQuietPeriod)
+					{
+						report.Deferred++; // a live session: indexing it now would be redone on the next write
+						continue;
+					}
+
+					var prepared = PrepareSession(externalId, slug, jsonlPath, mtimeTicks);
+					if (prepared == null)
+						continue;
+
+					_writeGate.Wait(cancellationToken);
+					try { WriteSession(conn, prepared); }
+					finally { _writeGate.Release(); }
+					report.Indexed++;
+
+					if (++sinceYield >= Constants.SessionIndex.ReindexBatchSize)
+					{
+						sinceYield = 0;
+						// Searches and other writers get the database between batches.
+						cancellationToken.WaitHandle.WaitOne(Constants.SessionIndex.ReindexYieldDelay);
+					}
 				}
 			}
 		}
 
-		_log.Information("ReindexAsync: (re)indexed {Count} sessions", indexed);
-		return indexed;
+		return new DiskScan(seen, complete && anyDir);
+	}
+
+	/// <summary>
+	/// Removes sessions whose JSONL no longer exists in any Claude home. Only after a complete scan that found
+	/// at least one file: an unreadable or missing projects folder must never empty the index (it also holds the title cache).
+	/// </summary>
+	private void PurgeOrphans(SqliteConnection conn, DiskScan scan, SessionIndexUpkeepReport report, CancellationToken cancellationToken)
+	{
+		if (!scan.Complete)
+			return;
+
+		var known = new List<string>();
+		using (var cmd = conn.CreateCommand())
+		{
+			cmd.CommandText = Constants.SqlQueries.SelectAllKnownIds;
+			using var reader = cmd.ExecuteReader();
+			while (reader.Read())
+				known.Add(reader.GetString(0));
+		}
+
+		var orphans = known.Where(id => !scan.SeenIds.Contains(id)).ToList();
+		if (orphans.Count == 0)
+			return;
+
+		if (scan.SeenIds.Count == 0)
+		{
+			report.PurgeSkippedUnsafeScan = true;
+			_log.Warning("PurgeOrphans: scan saw no JSONL at all but the index holds {Count} sessions; purge skipped", orphans.Count);
+			return;
+		}
+
+		foreach (var chunk in orphans.Chunk(Constants.SessionIndex.ReindexBatchSize))
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			_writeGate.Wait(cancellationToken);
+			try
+			{
+				using var tx = conn.BeginTransaction();
+				foreach (var id in chunk)
+				{
+					DeleteSessionRows(conn, tx, id);
+					using var del = conn.CreateCommand();
+					del.Transaction = tx;
+					del.CommandText = Constants.SqlQueries.DeleteSession;
+					del.Parameters.AddWithValue("@externalId", id);
+					del.ExecuteNonQuery();
+				}
+				tx.Commit();
+			}
+			finally { _writeGate.Release(); }
+			cancellationToken.WaitHandle.WaitOne(Constants.SessionIndex.ReindexYieldDelay);
+		}
+
+		report.Purged = orphans.Count;
+		_log.Information("PurgeOrphans: removed {Count} sessions whose JSONL no longer exists", orphans.Count);
+	}
+
+	/// <summary>Optimize after a large reindex or purge, VACUUM when enough pages are free, then truncate the WAL.</summary>
+	private void RunMaintenance(SqliteConnection conn, SessionIndexUpkeepReport report, CancellationToken cancellationToken)
+	{
+		var worked = report.Indexed > 0 || report.Purged > 0 || report.SchemaMigrated;
+
+		if (report.Indexed + report.Purged >= Constants.SessionIndex.OptimizeMinIndexedSessions)
+		{
+			_writeGate.Wait(cancellationToken);
+			try
+			{
+				var started = System.Diagnostics.Stopwatch.StartNew();
+				Exec(conn, Constants.SqlQueries.OptimizeFts);
+				report.Optimized = true;
+				_log.Information("RunMaintenance: FTS5 optimize took {Elapsed} ms", (long)started.Elapsed.TotalMilliseconds);
+			}
+			finally { _writeGate.Release(); }
+		}
+
+		if (VacuumIsDue(conn, out var freeBytes))
+		{
+			_writeGate.Wait(cancellationToken);
+			try { TryVacuum(conn, freeBytes, report); }
+			finally { _writeGate.Release(); }
+		}
+
+		if (worked || report.Vacuumed)
+		{
+			try
+			{
+				Exec(conn, Constants.SqlQueries.CheckpointTruncate);
+				report.Checkpointed = true;
+			}
+			catch (SqliteException ex)
+			{
+				_log.Warning(ex, "RunMaintenance: WAL checkpoint(TRUNCATE) did not complete");
+			}
+		}
+	}
+
+	/// <summary>Free pages at or above both the ratio and the absolute size threshold.</summary>
+	private bool VacuumIsDue(SqliteConnection conn, out long freeBytes)
+	{
+		var pageSize = ScalarLong(conn, Constants.SqlQueries.PageSize);
+		var pages = ScalarLong(conn, Constants.SqlQueries.PageCount);
+		var free = ScalarLong(conn, Constants.SqlQueries.FreelistCount);
+		freeBytes = free * pageSize;
+		return pages > 0
+			&& freeBytes >= Constants.SessionIndex.VacuumMinFreeBytes
+			&& (double)free / pages >= Constants.SessionIndex.VacuumMinFreeRatio;
+	}
+
+	/// <summary>
+	/// VACUUM runs only on the upkeep thread, never while a search is in flight and only with disk room for the
+	/// rewrite (WAL mode writes the new file through the log). A skipped vacuum is retried by the next run.
+	/// </summary>
+	private void TryVacuum(SqliteConnection conn, long freeBytes, SessionIndexUpkeepReport report)
+	{
+		lock (_searchSync)
+		{
+			if (_activeSearches > 0)
+			{
+				report.VacuumSkipped = true;
+				_log.Information("RunMaintenance: VACUUM due ({Free} MB free) but a search is in flight; deferred", freeBytes / (1024 * 1024));
+				return;
+			}
+		}
+
+		try
+		{
+			var dbSize = new FileInfo(_dbPath).Length;
+			var root = Path.GetPathRoot(Path.GetFullPath(_dbPath));
+			if (root != null && new DriveInfo(root).AvailableFreeSpace < dbSize * Constants.SessionIndex.VacuumDiskSpaceFactor)
+			{
+				report.VacuumSkipped = true;
+				_log.Warning("RunMaintenance: VACUUM due but the disk has less than {Factor}x the database size free; skipped",
+					Constants.SessionIndex.VacuumDiskSpaceFactor);
+				return;
+			}
+		}
+		catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
+		{
+			_log.Debug(ex, "RunMaintenance: could not read free disk space; vacuuming anyway");
+		}
+
+		var started = System.Diagnostics.Stopwatch.StartNew();
+		var before = new FileInfo(_dbPath).Length;
+		Exec(conn, Constants.SqlQueries.Vacuum);
+		report.Vacuumed = true;
+		_log.Information("RunMaintenance: VACUUM reclaimed {Free} MB (file was {Size} MB) in {Elapsed} ms",
+			freeBytes / (1024 * 1024), before / (1024 * 1024), (long)started.Elapsed.TotalMilliseconds);
+	}
+
+	/// <summary>Marks a search as in flight for the lifetime of the scope (see <see cref="TryVacuum"/>).</summary>
+	private readonly struct SearchScope : IDisposable
+	{
+		private readonly ClaudeSessionIndexService _owner;
+
+		public SearchScope(ClaudeSessionIndexService owner)
+		{
+			_owner = owner;
+			lock (owner._searchSync) owner._activeSearches++;
+		}
+
+		public void Dispose()
+		{
+			lock (_owner._searchSync) _owner._activeSearches--;
+		}
 	}
 
 	/// <summary>
@@ -200,22 +546,21 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		try { mtimeTicks = File.GetLastWriteTimeUtc(jsonlPath).Ticks; }
 		catch (IOException) { return false; }
 
-		bool indexed;
-		_writeGate.Wait(cancellationToken);
-		try
-		{
-			using var conn = new SqliteConnection(ConnectionString);
-			conn.Open();
-			if (GetStoredMtime(conn, externalId) == mtimeTicks)
-				return false;
+		using var conn = OpenConnection();
+		EnsureSchemaMigrated(conn, cancellationToken);
+		if (GetIndexedMtime(conn, externalId) == mtimeTicks)
+			return false;
 
-			indexed = IndexSession(conn, externalId, slug, jsonlPath, mtimeTicks);
-		}
+		var prepared = PrepareSession(externalId, slug, jsonlPath, mtimeTicks);
+		if (prepared == null)
+			return false;
+
+		_writeGate.Wait(cancellationToken);
+		try { WriteSession(conn, prepared); }
 		finally { _writeGate.Release(); }
 
-		if (indexed)
-			SessionIndexed?.Invoke(this, new SessionIndexedEventArgs { ExternalId = externalId });
-		return indexed;
+		SessionIndexed?.Invoke(this, new SessionIndexedEventArgs { ExternalId = externalId });
+		return true;
 	}
 
 	private string? FindSessionJsonl(string slug, string externalId)
@@ -230,90 +575,161 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		return null;
 	}
 
-	private bool IndexSession(SqliteConnection conn, string externalId, string projectSlug, string jsonlPath, long mtimeTicks)
+	/// <summary>A parsed JSONL, ready to be written. Parsing happens outside the write gate; only the write holds it.</summary>
+	private sealed record PreparedSession(
+		string ExternalId, string ProjectSlug, string JsonlPath, long MtimeTicks,
+		IReadOnlyList<SessionEntryModel> Entries, ClaudeSessionSummaryModel Summary);
+
+	private PreparedSession? PrepareSession(string externalId, string projectSlug, string jsonlPath, long mtimeTicks)
 	{
-		IReadOnlyList<SessionEntryModel> entries;
-		ClaudeSessionSummaryModel? summary;
 		try
 		{
-			entries = _importService.ParseJsonlSessionForIndexing(jsonlPath);
-			summary = _importService.ExtractSummary(externalId, jsonlPath);
+			var entries = _importService.ParseJsonlSessionForIndexing(jsonlPath);
+			var summary = _importService.ExtractSummary(externalId, jsonlPath);
+			if (summary == null || summary.MessageCount == 0)
+				return null;
+			return new PreparedSession(externalId, projectSlug, jsonlPath, mtimeTicks, entries, summary);
 		}
 		catch (Exception ex)
 		{
 			_log.Debug("IndexSession: failed to parse {Path}: {Error}", jsonlPath, ex.Message);
-			return false;
+			return null;
 		}
+	}
 
-		if (summary == null || summary.MessageCount == 0)
-			return false;
-
+	/// <summary>Replaces one session's rows. The caller holds the write gate and the rowid map exists.</summary>
+	private void WriteSession(SqliteConnection conn, PreparedSession session)
+	{
 		using var tx = conn.BeginTransaction();
 
-		using (var del = conn.CreateCommand())
+		DeleteSessionRows(conn, tx, session.ExternalId);
+
+		long firstRowId = 0, lastRowId = 0;
+		var messageIndex = 0;
+		using (var insert = conn.CreateCommand())
 		{
-			del.Transaction = tx;
-			del.CommandText = "DELETE FROM messages WHERE external_id = @externalId;";
-			del.Parameters.AddWithValue("@externalId", externalId);
-			del.ExecuteNonQuery();
+			insert.Transaction = tx;
+			insert.CommandText = Constants.SqlQueries.InsertMessage;
+			var content = insert.Parameters.Add("@content", SqliteType.Text);
+			var role = insert.Parameters.Add("@role", SqliteType.Text);
+			var externalId = insert.Parameters.Add("@externalId", SqliteType.Text);
+			var projectSlug = insert.Parameters.Add("@projectSlug", SqliteType.Text);
+			var index = insert.Parameters.Add("@messageIndex", SqliteType.Integer);
+			var timestamp = insert.Parameters.Add("@timestampTicks", SqliteType.Integer);
+			externalId.Value = session.ExternalId;
+			projectSlug.Value = session.ProjectSlug;
+
+			foreach (var entry in session.Entries)
+			{
+				if (string.IsNullOrWhiteSpace(entry.Content))
+					continue;
+
+				// Every message is indexed in full: tool output is deliberately never capped or truncated (decision A5).
+				content.Value = entry.Content;
+				role.Value = entry.Role;
+				index.Value = messageIndex;
+				timestamp.Value = entry.Timestamp.UtcTicks;
+				insert.ExecuteNonQuery();
+				if (messageIndex == 0)
+					firstRowId = ScalarLongIn(conn, tx, "SELECT last_insert_rowid();");
+				messageIndex++;
+			}
+			if (messageIndex > 0)
+				lastRowId = ScalarLongIn(conn, tx, "SELECT last_insert_rowid();");
 		}
 
-		var messageIndex = 0;
-		foreach (var entry in entries)
+		using (var map = conn.CreateCommand())
 		{
-			if (string.IsNullOrWhiteSpace(entry.Content))
-				continue;
-
-			using var insert = conn.CreateCommand();
-			insert.Transaction = tx;
-			insert.CommandText = """
-				INSERT INTO messages (content, role, external_id, project_slug, message_index, timestamp_ticks)
-				VALUES (@content, @role, @externalId, @projectSlug, @messageIndex, @timestampTicks);
-				""";
-			insert.Parameters.AddWithValue("@content", entry.Content);
-			insert.Parameters.AddWithValue("@role", entry.Role);
-			insert.Parameters.AddWithValue("@externalId", externalId);
-			insert.Parameters.AddWithValue("@projectSlug", projectSlug);
-			insert.Parameters.AddWithValue("@messageIndex", messageIndex);
-			insert.Parameters.AddWithValue("@timestampTicks", entry.Timestamp.UtcTicks);
-			insert.ExecuteNonQuery();
-			messageIndex++;
+			map.Transaction = tx;
+			map.CommandText = Constants.SqlQueries.UpsertRowRange;
+			map.Parameters.AddWithValue("@externalId", session.ExternalId);
+			map.Parameters.AddWithValue("@first", firstRowId);
+			map.Parameters.AddWithValue("@last", lastRowId);
+			map.Parameters.AddWithValue("@count", messageIndex);
+			map.ExecuteNonQuery();
 		}
 
 		using (var upsert = conn.CreateCommand())
 		{
 			upsert.Transaction = tx;
-			upsert.CommandText = """
-				INSERT INTO sessions (external_id, project_slug, jsonl_path, mtime_ticks, first_user_prompt, message_count, created_ticks, last_used_ticks)
-				VALUES (@externalId, @projectSlug, @jsonlPath, @mtimeTicks, @firstUserPrompt, @messageCount, @createdTicks, @lastUsedTicks)
-				ON CONFLICT(external_id) DO UPDATE SET
-					project_slug = excluded.project_slug,
-					jsonl_path = excluded.jsonl_path,
-					mtime_ticks = excluded.mtime_ticks,
-					first_user_prompt = excluded.first_user_prompt,
-					message_count = excluded.message_count,
-					created_ticks = excluded.created_ticks,
-					last_used_ticks = excluded.last_used_ticks;
-				""";
-			upsert.Parameters.AddWithValue("@externalId", externalId);
-			upsert.Parameters.AddWithValue("@projectSlug", projectSlug);
-			upsert.Parameters.AddWithValue("@jsonlPath", jsonlPath);
-			upsert.Parameters.AddWithValue("@mtimeTicks", mtimeTicks);
-			upsert.Parameters.AddWithValue("@firstUserPrompt", (object?)summary.FirstUserPrompt ?? DBNull.Value);
-			upsert.Parameters.AddWithValue("@messageCount", summary.MessageCount);
-			upsert.Parameters.AddWithValue("@createdTicks", summary.Created.UtcTicks);
-			upsert.Parameters.AddWithValue("@lastUsedTicks", summary.LastUsed.UtcTicks);
+			upsert.CommandText = Constants.SqlQueries.UpsertSession;
+			upsert.Parameters.AddWithValue("@externalId", session.ExternalId);
+			upsert.Parameters.AddWithValue("@projectSlug", session.ProjectSlug);
+			upsert.Parameters.AddWithValue("@jsonlPath", session.JsonlPath);
+			upsert.Parameters.AddWithValue("@mtimeTicks", session.MtimeTicks);
+			upsert.Parameters.AddWithValue("@firstUserPrompt", (object?)session.Summary.FirstUserPrompt ?? DBNull.Value);
+			upsert.Parameters.AddWithValue("@messageCount", session.Summary.MessageCount);
+			upsert.Parameters.AddWithValue("@createdTicks", session.Summary.Created.UtcTicks);
+			upsert.Parameters.AddWithValue("@lastUsedTicks", session.Summary.LastUsed.UtcTicks);
 			upsert.ExecuteNonQuery();
 		}
 
 		tx.Commit();
-		return true;
 	}
 
-	private static long? GetStoredMtime(SqliteConnection conn, string externalId)
+	private static long ScalarLongIn(SqliteConnection conn, SqliteTransaction tx, string sql)
 	{
 		using var cmd = conn.CreateCommand();
-		cmd.CommandText = "SELECT mtime_ticks FROM sessions WHERE external_id = @externalId;";
+		cmd.Transaction = tx;
+		cmd.CommandText = sql;
+		return Convert.ToInt64(cmd.ExecuteScalar());
+	}
+
+	/// <summary>
+	/// Deletes a session's FTS rows through the rowid map (an index lookup, then a rowid-range delete) instead of
+	/// scanning the whole FTS table. When the range does not account for the recorded row count the map is not
+	/// trustworthy for this session and a scan delete cleans up whatever is left.
+	/// </summary>
+	private void DeleteSessionRows(SqliteConnection conn, SqliteTransaction tx, string externalId)
+	{
+		long first, last, expected;
+		using (var select = conn.CreateCommand())
+		{
+			select.Transaction = tx;
+			select.CommandText = Constants.SqlQueries.SelectRowRange;
+			select.Parameters.AddWithValue("@externalId", externalId);
+			using var reader = select.ExecuteReader();
+			if (!reader.Read())
+				return; // never indexed with rows: nothing to delete
+			first = reader.GetInt64(0);
+			last = reader.GetInt64(1);
+			expected = reader.GetInt64(2);
+		}
+
+		int removed = 0;
+		if (expected > 0)
+		{
+			using var del = conn.CreateCommand();
+			del.Transaction = tx;
+			del.CommandText = Constants.SqlQueries.DeleteMessagesByRange;
+			del.Parameters.AddWithValue("@first", first);
+			del.Parameters.AddWithValue("@last", last);
+			del.Parameters.AddWithValue("@externalId", externalId);
+			removed = del.ExecuteNonQuery();
+		}
+
+		if (removed != expected)
+		{
+			_log.Warning("DeleteSessionRows: {Id} removed {Removed} of {Expected} mapped rows; falling back to a scan delete", externalId, removed, expected);
+			using var scan = conn.CreateCommand();
+			scan.Transaction = tx;
+			scan.CommandText = Constants.SqlQueries.DeleteMessagesByScan;
+			scan.Parameters.AddWithValue("@externalId", externalId);
+			scan.ExecuteNonQuery();
+		}
+
+		using var drop = conn.CreateCommand();
+		drop.Transaction = tx;
+		drop.CommandText = Constants.SqlQueries.DeleteRowRange;
+		drop.Parameters.AddWithValue("@externalId", externalId);
+		drop.ExecuteNonQuery();
+	}
+
+	/// <summary>The stored mtime of an indexed session, or null if it is unknown or has no mapped rows yet.</summary>
+	private static long? GetIndexedMtime(SqliteConnection conn, string externalId)
+	{
+		using var cmd = conn.CreateCommand();
+		cmd.CommandText = Constants.SqlQueries.SelectIndexedMtime;
 		cmd.Parameters.AddWithValue("@externalId", externalId);
 		var result = cmd.ExecuteScalar();
 		return result is long l ? l : null;
@@ -343,13 +759,13 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 	private IReadOnlySet<string> SearchMatchingSessionIdsCore(string query, string? projectSlug)
 	{
+		using var searchScope = new SearchScope(this);
 		var ids = new HashSet<string>();
 		var words = SplitQueryWords(query);
 		if (words.Count == 0)
 			return ids;
 
-		using var conn = new SqliteConnection(ConnectionString);
-		conn.Open();
+		using var conn = OpenConnection();
 
 		using var cmd = conn.CreateCommand();
 		cmd.CommandText = """
@@ -383,12 +799,12 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 	private IReadOnlyList<SessionSearchScoreModel> SearchSessionScoresCore(string query, string? projectSlug)
 	{
+		using var searchScope = new SearchScope(this);
 		var words = SplitQueryWords(query);
 		if (words.Count == 0)
 			return [];
 
-		using var conn = new SqliteConnection(ConnectionString);
-		conn.Open();
+		using var conn = OpenConnection();
 
 		var loose = CountMatchesBySession(conn, BuildLooseQuery(words), projectSlug);
 		if (loose.Count == 0)
@@ -434,12 +850,12 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	private IReadOnlyList<SessionSearchResultModel> SearchCore(
 		string query, string? projectSlug, string? role, int? limit, int? offset)
 	{
+		using var searchScope = new SearchScope(this);
 		var words = SplitQueryWords(query);
 		if (words.Count == 0)
 			return [];
 
-		using var conn = new SqliteConnection(ConnectionString);
-		conn.Open();
+		using var conn = OpenConnection();
 
 		// Prefer exact-phrase matches (adjacent tokens, e.g. "visual studio" as a phrase) — plain
 		// bm25 over an implicit AND-of-terms ranks a document where the terms merely co-occur
@@ -530,9 +946,8 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		var result = new Dictionary<string, string>();
 		var missing = new List<ClaudeSessionSummaryModel>();
 
-		using (var conn = new SqliteConnection(ConnectionString))
+		using (var conn = OpenConnection())
 		{
-			conn.Open();
 			foreach (var summary in summaries)
 			{
 				var cached = GetStoredTitle(conn, summary.SessionId);
@@ -585,8 +1000,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		if (externalIds.Count == 0)
 			return [];
 
-		using var conn = new SqliteConnection(ConnectionString);
-		conn.Open();
+		using var conn = OpenConnection();
 
 		using var cmd = conn.CreateCommand();
 		var paramNames = externalIds.Select((_, i) => $"@id{i}").ToList();
@@ -628,8 +1042,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 	private void PersistTitles(List<ClaudeSessionSummaryModel> summaries, Dictionary<string, string> generated)
 	{
-		using var conn = new SqliteConnection(ConnectionString);
-		conn.Open();
+		using var conn = OpenConnection();
 		using var tx = conn.BeginTransaction();
 
 		var summariesById = summaries.ToDictionary(s => s.SessionId);

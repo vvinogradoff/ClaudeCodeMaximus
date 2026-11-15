@@ -56,7 +56,7 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
         Directory.CreateDirectory(_projectsDir);
         var dbPath = Path.Combine(_tempRoot, "index.db");
 
-        _service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assistService, dbPath, [_projectsDir]);
+        _service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assistService, dbPath, [_projectsDir], TimeSpan.Zero);
     }
 
     public void Dispose()
@@ -149,7 +149,7 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
         var emptyDir = Path.Combine(_tempRoot, "does-not-exist");
         var service = new ClaudeSessionIndexService(
             new ClaudeSessionImportService(), _assistService,
-            Path.Combine(_tempRoot, "other.db"), [emptyDir]);
+            Path.Combine(_tempRoot, "other.db"), [emptyDir], TimeSpan.Zero);
 
         var count = await service.ReindexAsync();
 
@@ -203,7 +203,7 @@ public sealed class ClaudeSessionIndexServiceTests : IDisposable
             versionCmd.ExecuteNonQuery();
         }
 
-        var service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assistService, dbPath, [_projectsDir]);
+        var service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assistService, dbPath, [_projectsDir], TimeSpan.Zero);
         var count = await service.ReindexAsync();
 
         Assert.Equal(1, count); // rebuilt despite matching mtime, because the stored version was behind
