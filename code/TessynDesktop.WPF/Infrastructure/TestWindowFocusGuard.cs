@@ -11,9 +11,14 @@ namespace TessynDesktop.WPF.Infrastructure;
 /// user's typing for the life of the test.
 /// <list type="bullet">
 /// <item>The window gets <c>WS_EX_NOACTIVATE</c> and answers <c>WM_MOUSEACTIVATE</c> with <c>MA_NOACTIVATE</c>.</item>
+/// <item>A thread-local CBT hook on the UI thread vetoes <c>HCBT_ACTIVATE</c>, so the window is not activated in the first place (no
+/// foreground change, no focus flash); the hand-back below remains as the second line for activations that slip through.</item>
 /// <item>A system foreground hook remembers the user's last real (on-screen, foreign) foreground window. The moment one of this
 /// process's windows becomes the foreground window, the foreground is handed straight back to it. Off-screen windows (other test
 /// instances) are never chosen, so test windows cannot pass the focus between themselves.</item>
+/// <item>Every other top-level window of this process that shows up (popups, dialogs, tooltips: WPF clamps a <c>Popup</c> onto a
+/// visible monitor even when its owner is off-screen) is made non-activating, hidden from the taskbar and fully transparent
+/// (layered, alpha 0) and moved off-screen, so nothing is ever drawn on the user's screen. UI Automation still sees it.</item>
 /// </list>
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -24,22 +29,39 @@ public static class TestWindowFocusGuard
 	private const int WmMouseActivate = 0x0021;
 	private const int MaNoActivate = 3;
 	private const uint EventSystemForeground = 0x0003;
+	private const uint EventObjectShow = 0x8002;
+	private const long WsExToolWindow = 0x00000080;
+	private const long WsExLayered = 0x00080000;
+	private const uint GaRoot = 2;
+	private const uint LwaAlpha = 2;
+	private const uint SwpNoSize = 0x0001, SwpNoZOrder = 0x0004, SwpNoActivate = 0x0010;
+	private const int HiddenPosition = -32000;
+	private const int WhCbt = 5;
+	private const int HcbtActivate = 5;
 	private const uint WinEventOutOfContext = 0x0000;
 	private const int OffScreenLimit = -20000;
 	private const int RecheckAttempts = 10;
 	private const int RecheckDelayMs = 50;
 
+	private delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
 	private delegate void WinEventProc(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint eventThread, uint eventTime);
 
 	private static readonly uint OwnProcessId = (uint)Environment.ProcessId;
 	private static WinEventProc? _proc;   // kept alive for the native hook
+	private static WinEventProc? _showProc;
 	private static IntPtr _hook;
+	private static IntPtr _showHook;
+	private static HookProc? _cbtProc;   // kept alive for the native hook
+	private static int _vetoedActivations;
 	private static Thread? _hookThread;
 	private static IntPtr _userForeground;
 	private static int _handBackCount;
 
 	/// <summary>Number of times a window of this process became the foreground and was handed back.</summary>
 	public static int HandBackCount => _handBackCount;
+
+	/// <summary>Number of activations of this process's windows that the CBT hook vetoed.</summary>
+	public static int VetoedActivationCount => _vetoedActivations;
 
 	/// <summary>Remembers the user's foreground window before the test window exists; call it as early as possible at startup.</summary>
 	public static void CaptureForegroundAtStart()
@@ -55,6 +77,13 @@ public static class TestWindowFocusGuard
 		var style = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
 		SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(style | WsExNoActivate));
 		HwndSource.FromHwnd(hwnd)?.AddHook(WndProc);
+
+		if (_cbtProc == null)
+		{
+			_cbtProc = OnCbt;
+			if (SetWindowsHookEx(WhCbt, _cbtProc, IntPtr.Zero, GetCurrentThreadId()) == IntPtr.Zero)
+				Log.Warning("Test window focus guard: the activation veto hook could not be installed");
+		}
 
 		if (_hookThread != null)
 			return;
@@ -75,11 +104,43 @@ public static class TestWindowFocusGuard
 			return;
 		}
 
+		_showProc = OnWindowShown;
+		_showHook = SetWinEventHook(EventObjectShow, EventObjectShow, IntPtr.Zero, _showProc, OwnProcessId, 0, WinEventOutOfContext);
+		if (_showHook == IntPtr.Zero)
+			Log.Warning("Test window focus guard: the window-show hook could not be installed");
+
 		while (GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
 		{
 			TranslateMessage(ref msg);
 			DispatchMessage(ref msg);
 		}
+	}
+
+	/// <summary>A window of this process was shown: any top-level window except the (already off-screen) main window becomes invisible and non-activating.</summary>
+	private static void OnWindowShown(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint eventThread, uint eventTime)
+	{
+		if (hwnd == IntPtr.Zero || idObject != 0 || idChild != 0 || GetAncestor(hwnd, GaRoot) != hwnd)
+			return;
+
+		if (!GetWindowRect(hwnd, out var rect) || (rect.Left <= OffScreenLimit && rect.Top <= OffScreenLimit))
+			return; // the main test window (or an already hidden one)
+
+		var style = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
+		SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(style | WsExNoActivate | WsExToolWindow | WsExLayered));
+		SetLayeredWindowAttributes(hwnd, 0, 0, LwaAlpha);
+		SetWindowPos(hwnd, IntPtr.Zero, HiddenPosition, HiddenPosition, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+		Log.Debug("Test window focus guard: made the top-level window 0x{Handle:X} invisible", hwnd.ToInt64());
+	}
+
+	private static IntPtr OnCbt(int code, IntPtr wParam, IntPtr lParam)
+	{
+		if (code == HcbtActivate)
+		{
+			Interlocked.Increment(ref _vetoedActivations);
+			return new IntPtr(1); // a non-zero result prevents the activation
+		}
+
+		return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
 	}
 
 	private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -183,6 +244,23 @@ public static class TestWindowFocusGuard
 
 	[DllImport("user32.dll")]
 	private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventProc lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
+
+	[DllImport("user32.dll", SetLastError = true)]
+	private static extern IntPtr SetWindowsHookEx(int hookId, HookProc proc, IntPtr module, uint threadId);
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+
+	[DllImport("user32.dll")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint colorKey, byte alpha, uint flags);
+
+	[DllImport("user32.dll")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
 
 	[DllImport("user32.dll")]
 	private static extern IntPtr GetForegroundWindow();
