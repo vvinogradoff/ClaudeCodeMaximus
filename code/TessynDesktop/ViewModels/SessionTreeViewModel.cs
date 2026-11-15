@@ -30,6 +30,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly ISessionSearchService _searchService;
 	private readonly IGitOriginService _gitOriginService;
 	private readonly IGitOriginScanner _gitOriginScanner;
+	private readonly TreeMoveRules _moveRules = new();
 	private readonly ISessionLastActivityScanner _lastActivityScanner;
 	private readonly IDraftService _draftService;
 	private readonly IOperationTimer _timer;
@@ -713,19 +714,11 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	/// </summary>
 	public bool CanMoveSessionTo(string? sourceGitOrigin, ViewModelBase target)
 	{
-		// No git origin on source → unrestricted
-		if (sourceGitOrigin is null)
-			return target is DirectoryNodeViewModel or GroupNodeViewModel;
-
 		if (target is not DirectoryNodeViewModel and not GroupNodeViewModel)
 			return false;
 
-		var targetOrigin = GetGitOriginForNode(target);
-		// Target has no git origin → cannot accept git-origined sessions
-		if (targetOrigin is null)
-			return false;
-
-		return string.Equals(sourceGitOrigin, targetOrigin, System.StringComparison.OrdinalIgnoreCase);
+		// The git-origin rule itself lives in Core (TreeMoveRules), shared with the daemon's tree.moveNode.
+		return _moveRules.CanMove(sourceGitOrigin, GetGitOriginForNode(target));
 	}
 
 	// --- Move operations ---
