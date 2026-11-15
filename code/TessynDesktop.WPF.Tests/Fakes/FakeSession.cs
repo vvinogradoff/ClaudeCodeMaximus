@@ -12,6 +12,9 @@ public sealed class FakeSession
 
 	public bool Running { get; set; }
 
+	/// <summary>What <c>session.get</c> reports as the settings the session was last used with.</summary>
+	public LastUsedSettingsDto LastUsed { get; set; } = new("default", "default", "default", "[Sys] Default");
+
 	public List<SessionEntryDto> Entries { get; set; } = [];
 
 	public Dictionary<int, SessionEntryDto> FullEntries { get; } = [];
