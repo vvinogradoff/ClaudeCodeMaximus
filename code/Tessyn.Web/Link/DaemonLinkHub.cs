@@ -104,7 +104,7 @@ public sealed class DaemonLinkHub
 	}
 
 	/// <summary>Sends a request to the daemon and waits for its reply, honouring the per-method timeout.</summary>
-	public async Task<RpcOutcome> SendAsync(string method, JsonElement? paramsElement, CancellationToken cancellationToken)
+	public async Task<RpcOutcome> SendAsync(string method, JsonElement? paramsElement, CancellationToken cancellationToken, TimeSpan? timeout = null)
 	{
 		PendingRequest pending;
 		lock (_gate)
@@ -127,7 +127,7 @@ public sealed class DaemonLinkHub
 		var seconds = _allowlist.IsLong(method) ? link.LongRequestTimeoutSeconds : link.RequestTimeoutSeconds;
 		try
 		{
-			return await pending.Completion.Task.WaitAsync(TimeSpan.FromSeconds(seconds), cancellationToken).ConfigureAwait(false);
+			return await pending.Completion.Task.WaitAsync(timeout ?? TimeSpan.FromSeconds(seconds), cancellationToken).ConfigureAwait(false);
 		}
 		catch (TimeoutException)
 		{

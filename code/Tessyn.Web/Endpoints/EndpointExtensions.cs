@@ -11,6 +11,7 @@ public static class EndpointExtensions
 		app.MapRpcEndpoints();
 		app.MapEventsEndpoints();
 		app.MapLinkEndpoints();
+		app.MapAttachmentEndpoints();
 		app.MapSpaFallback();
 		return app;
 	}

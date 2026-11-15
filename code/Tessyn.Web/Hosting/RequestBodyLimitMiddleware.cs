@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Options;
 using Tessyn.Web.Link;
 using Tessyn.Web.Models;
+using Tessyn.Web.Options;
 
 namespace Tessyn.Web.Hosting;
 
@@ -10,16 +12,18 @@ public sealed class RequestBodyLimitMiddleware
 {
 	private readonly RequestDelegate _next;
 	private readonly WireJson _json;
+	private readonly long _uploadLimit;
 
-	public RequestBodyLimitMiddleware(RequestDelegate next, WireJson json)
+	public RequestBodyLimitMiddleware(RequestDelegate next, WireJson json, IOptions<TessynWebOptions> options)
 	{
 		_next = next;
 		_json = json;
+		_uploadLimit = options.Value.Attachments.MaxUploadBytes + Constants.Limits.MultipartOverheadBytes;
 	}
 
 	public async Task InvokeAsync(HttpContext context)
 	{
-		var limit = LimitFor(context.Request.Path);
+		var limit = LimitFor(context.Request.Path, _uploadLimit);
 		var feature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
 		if (feature is { IsReadOnly: false })
 			feature.MaxRequestBodySize = limit;
@@ -35,8 +39,12 @@ public sealed class RequestBodyLimitMiddleware
 		await _next(context);
 	}
 
-	public static long LimitFor(PathString path)
+	public static long LimitFor(PathString path) => LimitFor(path, Constants.Limits.MaxUploadBytes + Constants.Limits.MultipartOverheadBytes);
+
+	public static long LimitFor(PathString path, long uploadLimit)
 	{
+		if (path.Equals(Constants.Paths.Attachments, StringComparison.OrdinalIgnoreCase))
+			return uploadLimit;
 		if (path.Equals(Constants.Paths.Login, StringComparison.OrdinalIgnoreCase))
 			return Constants.Limits.LoginBodyBytes;
 		if (path.Equals(Constants.Paths.Rpc, StringComparison.OrdinalIgnoreCase))
