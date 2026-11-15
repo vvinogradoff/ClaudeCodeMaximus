@@ -168,4 +168,70 @@ public sealed class UiAutomationClicker
 			return false;
 		}
 	}
+
+	/// <summary>Waits for a tab item with this name and selects it through its SelectionItemPattern; false on timeout.</summary>
+	public async Task<bool> SelectTabAsync(Process process, string tabName, TimeSpan timeout)
+	{
+		var finder = new AppWindowFinder();
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			var hwnd = finder.Find(process.Id);
+			if (hwnd != IntPtr.Zero && TrySelectTab(hwnd, tabName))
+				return true;
+
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
+
+	private static bool TrySelectTab(IntPtr hwnd, string tabName)
+	{
+		try
+		{
+			var tab = AutomationElement.FromHandle(hwnd).FindFirst(TreeScope.Descendants, new AndCondition(
+				new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.TabItem),
+				new PropertyCondition(AutomationElement.NameProperty, tabName)));
+			if (tab == null || !tab.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var pattern))
+				return false;
+
+			((SelectionItemPattern)pattern).Select();
+			return true;
+		}
+		catch (Exception ex) when (ex is ElementNotAvailableException or ElementNotEnabledException)
+		{
+			return false;
+		}
+	}
+
+	/// <summary>Waits until a button with this name exists; false on timeout.</summary>
+	public async Task<bool> WaitForButtonAsync(Process process, string buttonName, TimeSpan timeout)
+	{
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			if (Exists(process, buttonName))
+				return true;
+
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
+
+	/// <summary>Waits until no button with this name exists any more; false on timeout.</summary>
+	public async Task<bool> WaitForButtonGoneAsync(Process process, string buttonName, TimeSpan timeout)
+	{
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			if (!Exists(process, buttonName))
+				return true;
+
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
 }

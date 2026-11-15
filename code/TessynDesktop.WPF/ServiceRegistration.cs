@@ -98,6 +98,8 @@ public sealed class ServiceRegistration
 			services.AddSingleton<IDialogPresenter, WpfDialogPresenter>();
 
 		services.AddSingleton<IDialogService, DialogService>();
+		services.AddSingleton<SessionListsHost>();
+		services.AddSingleton<IShellModule, SessionListsModule>();
 		services.AddSingleton<IShellModule, TurnLoopShellModule>();
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();

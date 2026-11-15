@@ -149,13 +149,21 @@ public sealed class ShellReviewFixTests
 				var services = new ServiceCollection();
 				services.AddLogging();
 				new ServiceRegistration().Register(services, new AppPaths(root), Dispatcher.CurrentDispatcher, StartupOptions.Parse(["--test-window"]));
-				using var provider = services.BuildServiceProvider();
-				var log = new CapturingLogger<ShellModuleLoader>();
+				// A module may depend on the connection view model, which is IAsyncDisposable only.
+				var provider = services.BuildServiceProvider();
+				try
+				{
+					var log = new CapturingLogger<ShellModuleLoader>();
 
-				var loader = new ShellModuleLoader(provider.GetServices<IShellModule>(), provider.GetRequiredService<IShellSlots>(), provider.GetRequiredService<IShellCommands>(), log);
-				loader.Load();
+					var loader = new ShellModuleLoader(provider.GetServices<IShellModule>(), provider.GetRequiredService<IShellSlots>(), provider.GetRequiredService<IShellCommands>(), log);
+					loader.Load();
 
-				Assert.Empty(log.Messages);
+					Assert.Empty(log.Messages);
+				}
+				finally
+				{
+					provider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+				}
 			});
 		}
 		finally

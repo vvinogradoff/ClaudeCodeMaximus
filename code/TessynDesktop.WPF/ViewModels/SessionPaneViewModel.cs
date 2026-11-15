@@ -209,6 +209,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		HasSession = true;
 		Title = title ?? nodeId;
 		StateText = string.Empty;
+		IsFavoriteKnown = false;
 		ResetRunningForOpen();
 		ResetSelectionForOpen();
 		Error = null;
@@ -376,6 +377,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private void ApplyDetail(SessionDetailDto detail, int stateEventsAtRequest)
 	{
 		Title = detail.Name;
+		ApplyFavorite(detail.State);
 		ApplySelection(detail.LastUsed);
 		if (stateEventsAtRequest == _stateEvents)
 			SetDaemonRunning(detail.State.Running);
@@ -485,6 +487,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		if (state.Id != NodeId)
 			return;
 
+		ApplyFavorite(state);
 		_stateEvents++;
 		SetDaemonRunning(state.Running);
 	}

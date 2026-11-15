@@ -1,0 +1,27 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.FavoriteButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/SessionListStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Button Command="{Binding ToggleFavoriteCommand}" Margin="8,0,0,0" Padding="8,6" ToolTip="Favourite" AutomationProperties.Name="Favourite"
+            IsEnabled="{Binding IsFavoriteKnown}" Visibility="{Binding HasSession, Converter={StaticResource SessionListBoolToVis}}">
+        <TextBlock FontSize="12">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+                    <Setter Property="Text" Value="{StaticResource GlyphStar}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                            <Setter Property="Text" Value="{StaticResource GlyphStarFilled}" />
+                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+    </Button>
+</UserControl>

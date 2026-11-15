@@ -9,6 +9,10 @@ public sealed class TreeBuilder
 	public TreeSessionDto Session(string id, string name = "", int workers = 0, bool running = false, string? supervisor = null) =>
 		new(id, string.IsNullOrEmpty(name) ? id : name, workers, supervisor, new SessionStateDto(id, running, false, null, false, null, null, false, null));
 
+	/// <summary>A top-level session with a given live state.</summary>
+	public TreeSessionDto SessionWith(SessionStateDto state, string name = "") =>
+		new(state.Id, string.IsNullOrEmpty(name) ? state.Id : name, 0, null, state);
+
 	public TreeGroupDto Group(string id, string name, params TreeSessionDto[] sessions) =>
 		new(id, name, false, [], sessions);
 
