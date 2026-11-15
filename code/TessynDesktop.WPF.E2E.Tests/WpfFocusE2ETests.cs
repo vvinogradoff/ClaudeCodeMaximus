@@ -176,7 +176,8 @@ public sealed class WpfFocusE2ETests : IDisposable
 	[Fact]
 	public async Task Transcript_previews_a_local_path_chip_and_loads_a_remote_image_only_after_a_click()
 	{
-		using var process = _app.Start();
+		var port = CdpPage.FreePort();
+		using var process = _app.Start(CdpPage.EnvironmentFor(port));
 		try
 		{
 			Assert.True(await _app.WaitForLogAsync(process, StartTimeout, $"Session {_main} opened"), "The session did not open. Log:\n" + _app.ReadLog());
@@ -189,12 +190,13 @@ public sealed class WpfFocusE2ETests : IDisposable
 			Assert.DoesNotContain("Blocked a request to a foreign host", _app.ReadLog());
 
 			// Not on the allowlist: a "Load preview" button, and nothing was requested (the surface logs every blocked foreign request).
-			Assert.True(await _clicker.ClickAsync(process, "Load preview tracker.example", StepTimeout), "The click-to-load button was not found. Log:\n" + _app.ReadLog());
+			using var page = await CdpPage.ConnectAsync(port, "transcript.html", StepTimeout);
+			Assert.True(await page.ClickButtonAsync("Load preview tracker.example", StepTimeout), "The click-to-load button was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "Media load approved by a click for host tracker.example"), _app.ReadLog());
 			Assert.DoesNotContain("Blocked a request to a foreign host", _app.ReadLog());
 
 			// FR.26.5: the chip asks the daemon for a handle, then the preview pane shows the file.
-			Assert.True(await _clicker.ClickAsync(process, "chip.md", StepTimeout), "The path chip was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await page.ClickButtonAsync("chip.md", StepTimeout), "The path chip was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "Preview opened: chip.md (\"Markdown\",", "Preview page rendered markdown: true"), "The chip did not open the preview. Log:\n" + _app.ReadLog());
 			AssertNoErrors();
 		}

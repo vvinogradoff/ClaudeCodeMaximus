@@ -21,7 +21,7 @@ let viewTimer = 0;
 let liveSeen = { st: '', len: 0, queued: 0 };   // what the host was last told about the live row (diagnostics)
 let liveTimer = 0;          // ticks the elapsed time of the live row once a second
 let SEL = null;             // entry index of the selected input (kept by index across re-renders, appends, replaces and paging)
-let SELAUTO = false;        // whether the selected input is automated (kept beside SEL: the entry may not be loaded)
+let SELAUTO = false;        // the walk mode: set by the click that selected an input (true = it was automated, so the arrows visit every input; false = only mine) and kept while the arrows move on, so a walk that starts on an automated input is not narrowed to mine by its first step. Kept beside SEL: the entry may not be loaded
 let NAV = null;            // an Up/Down move waiting for a page to load: { dir, mineOnly, until }
 const NAV_MARGIN_PX = 24;   // a revealed input sits this far below the top of the view
 const NAV_WAIT_MS = 15000;  // a move still waiting for a page after this long is dropped (a failed page request must not fire later)
@@ -201,7 +201,7 @@ function resumeNav(pageEmpty) {
 // so the position is corrected once they are measured.
 function reveal(k) {
   const i = S.items[k].i;
-  SEL = i; SELAUTO = InputNav.isAuto(S.items[k]);
+  SEL = i;   // SELAUTO stays: the walk mode is the one of the input the user clicked
   for (let pass = 0; pass < 3; pass++) {
     const want = Math.min(InputNav.revealTop(S.off, posOfEntry(i), NAV_MARGIN_PX), Math.max(0, vp.scrollHeight - vp.clientHeight));
     if (pass > 0 && Math.abs(vp.scrollTop - want) < 1) break;

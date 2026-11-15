@@ -79,7 +79,7 @@ public sealed class WpfSettingsE2ETests : IDisposable
 
 	private async Task OpenNotificationsTabAsync(Process process)
 	{
-		Assert.True(await _clicker.ClickAsync(process, "Settings", StepTimeout), "The Settings button was not found. Log:\n" + _app.ReadLog());
+		Assert.True(await _clicker.ClickAsync(process, "Open Settings", StepTimeout), "The Settings button was not found. Log:\n" + _app.ReadLog());
 		Assert.True(await _clicker.SelectTabAsync(process, "Notifications tab", StepTimeout), "The Notifications tab was not found. Log:\n" + _app.ReadLog());
 		Assert.True(await _clicker.WaitForButtonAsync(process, "Reload Notifications", StepTimeout), "The Notifications tab did not load. Log:\n" + _app.ReadLog());
 	}

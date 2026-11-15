@@ -42,7 +42,7 @@ public sealed class SettingsShellModule : IShellModule
 			Padding = new Thickness(10, 2, 10, 2),
 			ToolTip = Constants.Settings.OpenCommandTitle,
 		};
-		System.Windows.Automation.AutomationProperties.SetName(button, Constants.Settings.OpenButtonText);
+		System.Windows.Automation.AutomationProperties.SetName(button, Constants.Settings.OpenButtonAutomationName);
 		button.Click += (_, _) => _ = commands.ExecuteAsync(Constants.Settings.OpenCommandId, null);
 		return button;
 	}

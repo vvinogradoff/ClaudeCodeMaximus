@@ -29,6 +29,13 @@ public class SlotHost : ItemsControl
 		set => SetValue(SlotIdProperty, value);
 	}
 
+	// A contributed element is not its own container: an ItemsControl exposes an item that is its own container to UI Automation only as an
+	// "ItemsControlItem" DataItem with the element's text, without the element's own peer, so a contributed Button had no Invoke pattern and
+	// could not be pressed by an assistive technology (or the E2E tests). In a ContentControl container the element keeps its own peer.
+	protected override bool IsItemItsOwnContainerOverride(object item) => false;
+
+	protected override DependencyObject GetContainerForItemOverride() => new ContentControl { Focusable = false, IsTabStop = false };
+
 	/// <summary>The registry; the running app supplies it, tests set it.</summary>
 	public IShellSlots? Slots { get; set; }
 
