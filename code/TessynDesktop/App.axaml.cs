@@ -337,6 +337,14 @@ public partial class App : Application
 		services.AddTransient<IRemoteRpcModule, AttachmentRpcModule>();
 		services.AddTransient<IRemoteRpcModule, CatalogRpcModule>();
 		services.AddTransient<IRemoteRpcModule, UsageRpcModule>();
+		// P1.J1: tree and node mutation, session options, local tools (loopback only). The git-origin cache is a singleton: it owns the cached origins.
+		services.AddSingleton<IDirectoryGitOrigins, DirectoryGitOrigins>();
+		services.AddTransient<ITreeMutationService, TreeMutationService>();
+		services.AddTransient<ISessionOptionsService, SessionOptionsService>();
+		services.AddTransient<ILocalToolsService, LocalToolsService>();
+		services.AddTransient<IRemoteRpcModule, TreeMutationRpcModule>();
+		services.AddTransient<IRemoteRpcModule, SessionOptionsRpcModule>();
+		services.AddTransient<IRemoteRpcModule, LocalToolsRpcModule>();
 
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();

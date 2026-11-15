@@ -519,6 +519,35 @@ public sealed class SessionRegistry : ISessionRegistry
         Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.SettingsModified });
     }
 
+    public bool MoveSession(SessionNodeModel session, DirectoryNodeModel targetDirectory, GroupNodeModel? targetGroup, int index)
+    {
+        lock (_appSettings.SyncRoot)
+        {
+            var removed = false;
+            foreach (var dir in _appSettings.Settings.Tree)
+            {
+                if (dir.Sessions.Remove(session) || RemoveSessionFromGroupModel(dir.Groups, session))
+                {
+                    removed = true;
+                    break;
+                }
+            }
+
+            if (!removed)
+                return false;
+
+            var list = targetGroup?.Sessions ?? targetDirectory.Sessions;
+            list.Insert(Math.Clamp(index, 0, list.Count), session);
+            session.WorkingDirectory = targetGroup?.WorkingDirectory ?? targetDirectory.Path;
+            _appSettings.Save();
+        }
+
+        Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.SettingsModified });
+        return true;
+    }
+
+    public void RaiseTreeModified() => Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.SettingsModified });
+
     // ── Orchestration helpers ─────────────────────────────────────────────────
 
     /// <summary>

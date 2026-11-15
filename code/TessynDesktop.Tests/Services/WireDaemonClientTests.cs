@@ -221,6 +221,8 @@ internal sealed class WireFakeDaemonClient : IDaemonClient
     public DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session) => throw new NotSupportedException("Fake does not implement RemoveSessionFromModel.");
     public void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index) => throw new NotSupportedException("Fake does not implement InsertSessionIntoDirectory.");
     public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) => throw new NotSupportedException("Fake does not implement InsertSessionIntoGroup.");
+    public bool MoveSession(SessionNodeModel session, DirectoryNodeModel targetDirectory, GroupNodeModel? targetGroup, int index) => throw new System.NotSupportedException();
+    public void RaiseTreeModified() { }
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => throw new NotSupportedException("Fake does not implement BuildAgentSessionSummaries.");
 
     // Session Tags (FR.24) have no TDCP methods either.
