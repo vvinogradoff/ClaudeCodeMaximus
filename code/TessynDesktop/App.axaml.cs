@@ -288,8 +288,16 @@ public partial class App : Application
 		services.AddSingleton<TdcpDispatcher>();
 		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
 		services.AddTransient<IRemoteRpcModule, ProfileRpcModule>();
-		// Package J3: profile administration (the Avalonia profile dropdown and the remote profile.* methods share it).
+		// Package J3: settings sections, profile administration and sounds. The profile service is shared with the Avalonia profile dropdown;
+		// the three modules are loopback only. The section service is a singleton: it owns the per-section versions and the Saved subscription.
 		services.AddSingleton<IProfileAdminService, ProfileAdminService>();
+		services.AddSingleton<ISettingsSection, GeneralSettingsSection>();
+		services.AddSingleton<ISettingsSection, NotificationsSettingsSection>();
+		services.AddSingleton<ISettingsSection, TelegramSettingsSection>();
+		services.AddSingleton<ISettingsSectionService, SettingsSectionService>();
+		services.AddTransient<IRemoteRpcModule, SettingsRpcModule>();
+		services.AddTransient<IRemoteRpcModule, ProfileAdminRpcModule>();
+		services.AddTransient<IRemoteRpcModule, SoundRpcModule>();
 		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
 		services.AddSingleton<IEventLog, EventLog>();
 		services.AddSingleton<IDaemonRunInfo, DaemonRunInfo>();
