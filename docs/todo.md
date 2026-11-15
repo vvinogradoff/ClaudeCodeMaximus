@@ -1080,3 +1080,35 @@ Sessions get the Tags tab's flow: `search_tags` finds tags (FR.24.11 matching an
 - [ ] `list_sessions` `tags` argument: parse, OR filter by top-level carrier, errors (FR.15.13, FR.24.15)
 - [ ] Tests TC.TG.49–TC.TG.53 (FR.24.15, FR.15.13)
 - [ ] Manual TC.TG.54 against the Tags tab after an app restart (FR.24.15)
+
+## Phase 42 — WPF programme (plan: `docs/refactoring/wpf-programme-plan.md`)
+
+Status copied from the plan and the worker reports in `.wpf-work/` as of 2026-11-15. The plan holds the ids (0.x, P1.A-K, 2.x ...) and the decisions P1-P13 and A2-A14; this section only tracks what is done and what is next. Requirements: NR.1, NR.2, NR.4, NR.5 (amended 2026-11-15), FR.23.18, FR.26, FR.31. NR.3 changes when the persistence split (P1.K) is built.
+
+### Done
+- [DONE] Phase 0 relief and baseline: .NET 10 (0.1), logging (0.2), sweep off the UI thread (0.3), bounded session cache (0.4), tail-read on switch (0.5), robustness fixes (0.6), instrumentation (0.7), link fidelity (0.8, FR.26.1), ISSUE.016 (0.9), startup scans (0.10)
+- [DONE] P1.A local SSE push parity; P1.B event log with resume; P1.C hello capabilities, `daemon.json`, DPAPI token, Origin and 401 checks; P1.D contract tests (reports 60, 120-122)
+- [DONE] P1.E content store with persisted entry ids (report 90); P1.F entry ids, `seq`, `entries.appended`; P1.G O(1) `session.get` and loopback `session.headers` (report 170)
+- [DONE] P2.A `TessynDesktop.Protocol` and `TessynDesktop.Client` (report 130)
+- [DONE] WPF MVP on master: shell, virtualized tree, WebView2 transcript, send/stop, client state, `run-wpf.ps1`, WPF E2E project with `--test-window` (reports 140, 220)
+- [DONE] Focus references step 1: refs on Focus items, quote resolution, file handles, `file.read`, `file.preview`, FileAccess policy, `aroundEntryId` (FR.23.18; report 230, review 250)
+- [DONE] Native Windows 11 Fluent look for the WPF client, merged `a2d4698` (report 240)
+- [DONE] Docs applied for decision A10 (this phase section, NR.1/2/4/5, FR.26, FR.31, glossary, `tdcp-spec.md`, `claude.md`)
+
+### In progress
+- [ ] P1.I turn engine in Core (rollout 2): final review SHIP; ships after the Architect validates rollout 1; smoke checklist and rollback in plan Appendix B (reports 180, 210)
+- [ ] Rollout 1 live check by the Architect (restart onto master; try `run-wpf.ps1`)
+
+### Next
+- [ ] P1.H selection as client state (docs only)
+- [ ] P1.J complete the wire: tree mutation, global search and import, profiles incl. ISSUE.013 `profile.switch`, settings sections, schedules, drafts, `attention.listAll`, `daemon.health`
+- [ ] P1.K persistence split (P6, P7): then amend NR.3
+- [ ] ISSUE.013 daemon side (1.8; answers accepted as A3); search index upkeep (1.9; A5: do not cap indexed tool output)
+- [ ] Focus references step 3: attachments, daemon storage and fetch, web upload, WPF drag-and-drop and file mode (FR.31)
+- [ ] Focus references step 4: web UI for refs, file preview sheet, attach button; FR.25 contract amendment for `file.read`, `file.preview`, `aroundEntryId` (FR.23.18)
+- [ ] Output previews: FR.26.4 media previews (A13 allowlist) and FR.26.5 local-file chips, WPF and web only (A9)
+- [ ] WPF Focus view with refs, preview pane and attachments (design step 6)
+- [ ] Phase 2 remainder: prompt input, streaming, drafts, selectors (2.6); own run folder (2.3)
+- [ ] Phase 3 parity (3.1, keeping the screensaver and Recent tab and dropping the items listed in A8), browser pane (3.2), link chips (3.3, FR.26.2-26.3)
+- [ ] Phase 4 daemon out of process, a per-user process at logon (A6); remove Avalonia (4.1-4.5)
+- [ ] Phase 5: multi-screen (A7), output modes, helper LLM, agent-driven browser pane
