@@ -1303,7 +1303,11 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		{
 			var title = string.Format(Constants.Attention.NotifyToastTitleFormat,
 				_labelService.GetLabel(callerNode.WorkingDirectory), callerNode.Name);
-			if (_notifications.ShowUserNotification(callerNode.NodeId, title, message))
+			// The toast service may wait up to 3 s for a presenting client's acknowledgement (V3). This method can still be running on the
+			// accept loop's thread when every earlier await completed synchronously, so the blocking call is moved to the pool: one hung client
+			// must not delay the other MCP and TDCP connections (R1).
+			var nodeId = callerNode.NodeId;
+			if (await Task.Run(() => _notifications.ShowUserNotification(nodeId, title, message)).ConfigureAwait(false))
 				channels.Add(Constants.Attention.ChannelDesktop);
 		}
 		catch (Exception ex)
