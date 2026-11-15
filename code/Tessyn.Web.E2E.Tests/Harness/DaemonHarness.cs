@@ -122,6 +122,9 @@ public sealed class DaemonHarness : IDisposable
 			Path.Combine(root, "index.db"),
 			[projectsDir]));
 		s.AddSingleton<ISessionRegistry, SessionRegistry>();
+		s.AddSingleton<IProfileResolver, ProfileResolver>();
+		s.AddSingleton<IClaudeSessionMigrator>(sp => new ClaudeSessionMigrator(sp.GetRequiredService<IClaudeProfileService>(), Path.Combine(root, "default-claude-home")));
+		s.AddSingleton<IProfileSwitchService, ProfileSwitchService>();
 		s.AddSingleton<ISessionTurnService, SessionTurnService>();
 		s.AddSingleton<ISessionCompactionService, SessionCompactionService>();
 		s.AddSingleton<IAgentMcpServer, FakeAgentMcpServer>();
@@ -136,6 +139,7 @@ public sealed class DaemonHarness : IDisposable
 		s.AddSingleton<IRemoteRpcModule, ClientRpcModule>();
 		s.AddSingleton<TdcpDispatcher>();
 		s.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
+		s.AddTransient<IRemoteRpcModule, ProfileRpcModule>();
 		s.AddSingleton<IRemoteEventBus, RemoteEventBus>();
 		s.AddSingleton<ITreeVersionTracker, TreeVersionTracker>();
 		s.AddSingleton<ISessionEpochTracker, SessionEpochTracker>();

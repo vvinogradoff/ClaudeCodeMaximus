@@ -33,6 +33,7 @@ public sealed class TurnEngine : ITurnEngine
 	private readonly IAttentionService _attention;
 	private readonly ISessionTagService _tags;
 	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
+	private readonly IProfileSwitchService? _profileSwitch;
 
 	private readonly ConcurrentDictionary<string, TurnNodeContext> _nodes = new();
 
@@ -48,7 +49,8 @@ public sealed class TurnEngine : ITurnEngine
 		IClaudeSessionStatusService sessionStatus,
 		IAttentionService attention,
 		ISessionTagService tags,
-		IEnumerable<ITurnProgressSink>? progressSinks = null)
+		IEnumerable<ITurnProgressSink>? progressSinks = null,
+		IProfileSwitchService? profileSwitch = null)
 	{
 		_files            = files;
 		_registry         = registry;
@@ -62,6 +64,7 @@ public sealed class TurnEngine : ITurnEngine
 		_attention        = attention;
 		_tags             = tags;
 		_progressSinks    = progressSinks?.ToArray() ?? [];
+		_profileSwitch    = profileSwitch;
 	}
 
 	/// <inheritdoc />
@@ -169,6 +172,12 @@ public sealed class TurnEngine : ITurnEngine
 
 					lockAcquired = true;
 				}
+
+				// ISSUE.013: the turn runs on the profile of its settings. A session that was on another profile is switched (no
+				// cascade; transcript and session folder move, a live streaming process stops) and the ProfileId pin is recorded - the
+				// one switch path of the Avalonia profile change. Under the turn lock, so no other turn of the node is using its files.
+				_profileSwitch?.RecordTurnProfile(node, settings.ProfileDisplayName);
+
 				run.SendErrorText = null;
 				context.Active = run;
 				progress.Status(TurnState.Running);

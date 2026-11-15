@@ -30,6 +30,8 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly IAttentionService               _attention;
 	private readonly ISessionTagService              _tags;
 	private readonly IProfileLabelService            _profileLabels;
+	private readonly IProfileResolver                _profileResolver;
+	private readonly IProfileSwitchService?          _profileSwitch;
 	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
@@ -52,7 +54,9 @@ public sealed class SessionTurnService : ISessionTurnService
 		IAttentionService attention,
 		ISessionTagService tags,
 		IProfileLabelService profileLabels,
-		IEnumerable<ITurnProgressSink>? progressSinks = null)
+		IEnumerable<ITurnProgressSink>? progressSinks = null,
+		IProfileResolver? profileResolver = null,
+		IProfileSwitchService? profileSwitch = null)
 	{
 		_processManager   = processManager;
 		_fileService      = fileService;
@@ -68,6 +72,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		_tags             = tags;
 		_profileLabels    = profileLabels;
 		_progressSinks    = progressSinks?.ToArray() ?? [];
+		_profileResolver  = profileResolver ?? new ProfileResolver(appSettings, profileService);
+		_profileSwitch    = profileSwitch;
 	}
 
 	/// <summary>
@@ -161,15 +167,27 @@ public sealed class SessionTurnService : ISessionTurnService
 			// Lazy can never leave the node marked running with the turn lock held.
 			_ = _telegramBridge.Value.EnsureTopicForSessionAsync(node);
 
-			// The profile this turn uses: the per-turn choice, else the pinned/last-recorded one, else Default.
-			var requestedProfileName = turnOptions?.ProfileName ?? ResolveProfileName(node);
+			// ISSUE.013: a switch queued while this session was running is applied now (nothing else uses its files).
+			_profileSwitch?.ApplyPending(node);
+
+			// The profile this turn uses: the per-turn choice, else the pinned (ProfileId) / last-recorded one, else Default.
+			// A pinned profile that no longer resolves is an error, never a silent fallback to Default.
+			// A live streaming process ignores the per-turn options (below), so a per-turn profile is not resolved for it.
+			var perTurnProfile = _streamingManager.IsAlive(node.NodeId) ? null : turnOptions?.ProfileName;
+			var profile = _profileResolver.Resolve(node, ResolveProfileName(node), perTurnProfile);
+			if (!profile.IsResolved)
+			{
+				_log.Warning("Turn for node {NodeId} refused: {Error}", node.NodeId, profile.Error);
+				turnErrorText = profile.Error;
+				return new TurnResultModel(string.Empty, node.ClaudeSessionId, IsError: true, ErrorMessage: profile.Error);
+			}
 
 			// Write clean prompt (without instruction block) to the session file. Common to both
 			// branches below — the streaming branch needs it recorded here too, since (unlike the
 			// interactive desktop path) nothing else writes the user's own message for a headless turn.
 			// Stamped with the profile display name actually used, as the desktop does, so that
 			// "last used profile" restores correctly afterwards.
-			var stampedProfileName = await ResolveStampedProfileNameAsync(requestedProfileName);
+			var stampedProfileName = profile.IsDefault ? await _profileLabels.GetDefaultLabelAsync() : profile.DisplayName;
 			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt, profileName: stampedProfileName);
 
 			// FR.19.13 — if a Streaming Session Mode process is already alive for this node (started
@@ -189,7 +207,9 @@ public sealed class SessionTurnService : ISessionTurnService
 				return streamed;
 			}
 
-			var profileConfigDir = ResolveProfileConfigDir(requestedProfileName);
+			// ISSUE.013 R1/R3/R7: a per-turn profile change moves the session (no cascade) and records the ProfileId pin.
+			_profileSwitch?.RecordTurnProfile(node, stampedProfileName);
+			var profileConfigDir = profile.ConfigDir;
 
 			// Resolve effective model for this session (FR.16.5 bug fix):
 			// per-turn choice → node.ModelId → per-directory setting → app-level setting.
@@ -586,50 +606,4 @@ public sealed class SessionTurnService : ISessionTurnService
 		string.IsNullOrWhiteSpace(effort) || string.Equals(effort, Constants.Remote.DefaultOptionId, StringComparison.OrdinalIgnoreCase)
 			? null
 			: effort;
-
-	/// <summary>
-	/// The profile display name to stamp on the turn's USER entry: the stored profile the name resolves to,
-	/// otherwise the Default profile's "[Sys] &lt;email&gt;" label (exactly what the desktop stamps for Default).
-	/// </summary>
-	private async Task<string> ResolveStampedProfileNameAsync(string? profileName)
-	{
-		if (!string.IsNullOrEmpty(profileName))
-		{
-			var stored = FindStoredProfile(profileName);
-			if (stored != null)
-				return stored.DisplayName;
-		}
-
-		return await _profileLabels.GetDefaultLabelAsync();
-	}
-
-	private ClaudeProfileModel? FindStoredProfile(string profileName)
-	{
-		lock (_appSettings.SyncRoot)
-		{
-			return _appSettings.Settings.Profiles.FirstOrDefault(
-				p => string.Equals(p.DisplayName, profileName, StringComparison.OrdinalIgnoreCase));
-		}
-	}
-
-	/// <summary>
-	/// Resolves the profile config dir to use for this turn, mapping the resolved profile name
-	/// (see <see cref="ResolveProfileName"/>) to its credential store. Scheduled/orchestrated turns
-	/// thereby use the same account as interactive turns on the same session, and spawned children
-	/// use their supervisor's account rather than a possibly-revoked Default.
-	/// </summary>
-	private string? ResolveProfileConfigDir(string? name)
-	{
-		if (string.IsNullOrEmpty(name))
-			return null; // No profile recorded → Default
-
-		var profiles = _appSettings.Settings.Profiles;
-		for (var i = 0; i < profiles.Count; i++)
-		{
-			if (string.Equals(profiles[i].DisplayName, name, StringComparison.OrdinalIgnoreCase))
-				return _profileService.GetConfigDirForProfile(i + 1, profiles);
-		}
-
-		return null; // Profile was deleted or renamed → fall back to Default
-	}
 }
