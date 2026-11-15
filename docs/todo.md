@@ -1106,8 +1106,8 @@ Status copied from the plan and the worker reports in `.wpf-work/` as of 2026-11
 ### In progress
 - [ ] Restart into rollout 2 and the B.1 stop-ship checks (Focus item A15); smoke checklist and rollback in plan Appendix B. Rollout 3 (attachments, ISSUE.013, index upkeep) follows in one more restart (plan Appendix C)
 - [DONE] Rollout 1 live check by the Architect (restarted onto rollout 1 on 2026-11-15; works)
-- [ ] WPF drag-and-drop and file mode for attachments (FR.31.2, FR.31.4 desktop part; worker 350): drop inserts full paths, file mode copies through `attachment.import`
-- [ ] Low-findings batch from the reviews (worker 360): small items such as a sampled map audit for the search index; not yet merged
+- [DONE] WPF drag-and-drop and file mode for attachments (FR.31.2, FR.31.4 desktop part; worker 350): drop or paste inserts full paths, file mode copies through `attachment.import` (merge `f139a19`)
+- [DONE] Low-findings batch from the reviews (worker 360, merge `e05a957`), plus AngleSharp 1.5.0 for GHSA-pgww-w46g-26qg (`830c88e`). The web-server and SPA parts go live with the next web deploy
 
 ### Next
 - [ ] P1.H selection as client state (docs only)
