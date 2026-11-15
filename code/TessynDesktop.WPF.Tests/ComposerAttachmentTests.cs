@@ -30,7 +30,7 @@ public sealed class ComposerAttachmentTests : IDisposable
 		foreach (var pane in _panes)
 			pane.Dispose();
 
-		Directory.Delete(_root, recursive: true);
+		TestDirectory.Delete(_root);
 	}
 
 	private JsonClientStateStore NewStore() =>

@@ -65,13 +65,7 @@ public sealed class AvaloniaImportTests : IDisposable
 
 	public void Dispose()
 	{
-		try
-		{
-			Directory.Delete(_root, recursive: true);
-		}
-		catch (IOException)
-		{
-		}
+		TestDirectory.Delete(_root);
 	}
 
 	[Fact]

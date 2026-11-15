@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.State;
+using TessynDesktop.WPF.Tests.Fakes;
 
 namespace TessynDesktop.WPF.Tests;
 
@@ -12,12 +13,33 @@ public sealed class ClientStateStoreTests : IDisposable
 
 	public void Dispose()
 	{
-		if (Directory.Exists(_root))
-			Directory.Delete(_root, recursive: true);
+		TestDirectory.Delete(_root);
 	}
 
 	private JsonClientStateStore Create(int debounceMs = 20) =>
 		new(new AppPaths(_root), NullLogger<JsonClientStateStore>.Instance, TimeSpan.FromMilliseconds(debounceMs));
+
+	[Fact]
+	public async Task AFlush_AfterUpdates_AlwaysLeavesTheLatestStateInTheFile_EvenWhenADebouncedWriteIsStillRunning()
+	{
+		// With no debounce every Update starts a write at once; a flush that races one of them used to write the same wpf.json.tmp at the same time (one of the two
+		// failed with "being used by another process") and could return before the older write had landed, leaving a stale file.
+		var store = Create(debounceMs: 0);
+		await store.LoadAsync();
+		var path = new AppPaths(_root).ClientStateFilePath;
+
+		for (var i = 1; i <= 150; i++)
+		{
+			var id = "node-" + i;
+			store.Update(s => s.LastSelectedNodeId = id);
+			store.Update(s => s.TreeWidth = 300 + i);
+			await store.FlushAsync();
+
+			Assert.Contains("\"" + id + "\"", File.ReadAllText(path));
+		}
+
+		Assert.False(File.Exists(path + ".tmp"), "a temp file was left behind");
+	}
 
 	[Fact]
 	public async Task MissingFile_YieldsDefaults()

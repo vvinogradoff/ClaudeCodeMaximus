@@ -168,8 +168,7 @@ public sealed class ShellReviewFixTests
 		}
 		finally
 		{
-			if (Directory.Exists(root))
-				Directory.Delete(root, recursive: true);
+			TestDirectory.Delete(root);
 		}
 	}
 

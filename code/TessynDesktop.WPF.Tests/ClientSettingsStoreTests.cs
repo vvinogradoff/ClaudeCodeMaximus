@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.State;
+using TessynDesktop.WPF.Tests.Fakes;
 
 namespace TessynDesktop.WPF.Tests;
 
@@ -25,8 +26,7 @@ public sealed class ClientSettingsStoreTests : IDisposable
 
 	public void Dispose()
 	{
-		if (Directory.Exists(_root))
-			Directory.Delete(_root, recursive: true);
+		TestDirectory.Delete(_root);
 	}
 
 	private JsonClientStateStore CreateState() =>

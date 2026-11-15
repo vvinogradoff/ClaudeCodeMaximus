@@ -1,4 +1,5 @@
 using TessynDesktop.WPF.Switch;
+using TessynDesktop.WPF.Tests.Fakes;
 
 namespace TessynDesktop.WPF.Tests;
 
@@ -15,13 +16,7 @@ public sealed class SwitchBuildTests : IDisposable
 
 	public void Dispose()
 	{
-		try
-		{
-			Directory.Delete(_root, recursive: true);
-		}
-		catch (IOException)
-		{
-		}
+		TestDirectory.Delete(_root);
 	}
 
 	private string MakeBuild(string project, string configuration, string tfm, string assembly, DateTime stamp, string? underCode = "code")

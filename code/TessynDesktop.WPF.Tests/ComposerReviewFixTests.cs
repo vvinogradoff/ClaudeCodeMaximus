@@ -28,7 +28,7 @@ public sealed class ComposerReviewFixTests : IDisposable
 		foreach (var pane in _panes)
 			pane.Dispose();
 
-		Directory.Delete(_root, recursive: true);
+		TestDirectory.Delete(_root);
 	}
 
 	private async Task<SessionPaneViewModel> OpenPaneAsync(Func<string, bool>? probe = null, IReadOnlyList<string>? testDrop = null)
@@ -66,8 +66,10 @@ public sealed class ComposerReviewFixTests : IDisposable
 	// ── C2: the old session's draft is never damaged ─────────────────────────
 
 	[Fact]
-	public async Task C2_SwitchingAwayAfterTypingKeepsTheOldDraftAndAddsTheCopiedFileOnANewLine()
+	public Task C2_SwitchingAwayAfterTypingKeepsTheOldDraftAndAddsTheCopiedFileOnANewLine() => UiThread.RunAsync(async () =>
 	{
+		// On one UI-like thread: the copy that ends when the pane leaves the session resumes after the switch step that awaited, as it does under the WPF dispatcher,
+		// instead of racing it on the thread pool (where it could change the box after the draft was saved and the box was replaced).
 		var pane = await OpenPaneAsync();
 		pane.InputText = "SELECTED tail";
 		var first = MakeFile("first.txt");
@@ -91,7 +93,7 @@ public sealed class ComposerReviewFixTests : IDisposable
 		Assert.Null(pane.Notice);   // C5: nothing about A's copy is shown in B
 		await pane.OpenAsync("a");
 		Assert.Equal("SELECTED tail and more typing" + Environment.NewLine + @"Attached file: C:\att\first.txt", pane.InputText);
-	}
+	});
 
 	// ── C3: dispose stops the copy ───────────────────────────────────────────
 
