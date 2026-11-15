@@ -22,6 +22,9 @@ public sealed class SessionLastActivityScanner : ISessionLastActivityScanner
 	private const int ReadParallelism = 4;
 	private const int BatchSize = ReadParallelism * 4;
 
+	/// <summary>Stat calls in flight at once while ordering by last-write time (metadata only, so more than the readers).</summary>
+	private const int StatParallelism = 16;
+
 	private readonly ISessionFileService _sessionFiles;
 	private readonly IDraftService _drafts;
 
@@ -48,7 +51,16 @@ public sealed class SessionLastActivityScanner : ISessionLastActivityScanner
 	{
 		maxChunkFiles = Math.Max(1, maxChunkFiles);
 
-		var ordered = OrderNewestFirst(sessionFileNames);
+		List<string> ordered;
+		try
+		{
+			ordered = OrderNewestFirst(sessionFileNames, cancellationToken);
+		}
+		catch (OperationCanceledException)
+		{
+			return;
+		}
+
 		var chunk = new List<SessionLastActivityModel>(maxChunkFiles);
 		var sinceLastChunk = Stopwatch.StartNew();
 		var options = new ParallelOptions { MaxDegreeOfParallelism = ReadParallelism, CancellationToken = cancellationToken };
@@ -89,19 +101,25 @@ public sealed class SessionLastActivityScanner : ISessionLastActivityScanner
 	}
 
 	/// <summary>Stable order by last-write time, newest first; a missing or unstattable file sorts last.</summary>
-	private List<string> OrderNewestFirst(IReadOnlyList<string> fileNames)
+	/// <remarks>
+	/// The stat calls run in parallel: on a cold file-system cache each one costs milliseconds, and ~3k of them in a
+	/// row would delay the first chunk by the whole pass.
+	/// </remarks>
+	private List<string> OrderNewestFirst(IReadOnlyList<string> fileNames, CancellationToken cancellationToken)
 	{
-		var stamped = new List<(string FileName, DateTimeOffset? WriteTime)>(fileNames.Count);
-		foreach (var fileName in fileNames)
+		var writeTimes = new DateTimeOffset?[fileNames.Count];
+		var options = new ParallelOptions { MaxDegreeOfParallelism = StatParallelism, CancellationToken = cancellationToken };
+		Parallel.For(0, fileNames.Count, options, i =>
 		{
-			DateTimeOffset? writeTime = null;
-			try { writeTime = _sessionFiles.GetLastWriteTimeUtc(fileName); }
+			try { writeTimes[i] = _sessionFiles.GetLastWriteTimeUtc(fileNames[i]); }
 			catch { /* unreadable: sorts last */ }
-			stamped.Add((fileName, writeTime));
-		}
+		});
 
 		// OrderByDescending is stable; null sorts first ascending, so it sorts last descending.
-		return stamped.OrderByDescending(s => s.WriteTime).Select(s => s.FileName).ToList();
+		return Enumerable.Range(0, fileNames.Count)
+			.OrderByDescending(i => writeTimes[i])
+			.Select(i => fileNames[i])
+			.ToList();
 	}
 
 	private SessionLastActivityModel ScanOne(string fileName)

@@ -178,6 +178,67 @@ public sealed class SessionLastActivityScanOrderTests : IDisposable
 		Assert.Equal("P0", flat[^1].ProfileName);
 	}
 
+	[Fact]
+	public void ScanNewestFirst_StatsFilesInParallel_AndStillOrdersNewestFirst()
+	{
+		var fake = new FakeSessionFileService();
+		var names = Enumerable.Range(0, 40).Select(i => $"q{i:D2}.txt").ToList();
+		for (var i = 0; i < names.Count; i++)
+			fake.LastWriteTimes[names[i]] = Base.AddMinutes(i);
+		var current = 0;
+		var peak = 0;
+		fake.OnGetLastWriteTime = _ =>
+		{
+			var now = Interlocked.Increment(ref current);
+			InterlockedMax(ref peak, now);
+			Thread.Sleep(15);
+			Interlocked.Decrement(ref current);
+		};
+		var scanner = new SessionLastActivityScanner(fake, _drafts);
+		var seen = new List<string>();
+
+		scanner.ScanNewestFirst(names, 100, TimeSpan.FromHours(1), chunk => seen.AddRange(chunk.Select(r => r.FileName)));
+
+		Assert.True(peak > 1, "the stat pass should overlap its calls");
+		Assert.Equal(names.AsEnumerable().Reverse(), seen);
+	}
+
+	[Fact]
+	public void ScanNewestFirst_CancelledDuringTheStatPass_DeliversNothingAndDoesNotThrow()
+	{
+		var fake = new FakeSessionFileService();
+		var names = Enumerable.Range(0, 30).Select(i => $"r{i:D2}.txt").ToList();
+		using var cts = new CancellationTokenSource();
+		fake.OnGetLastWriteTime = _ => cts.Cancel();
+		var scanner = new SessionLastActivityScanner(fake, _drafts);
+		var delivered = 0;
+
+		scanner.ScanNewestFirst(names, 1, TimeSpan.Zero, chunk => delivered += chunk.Count, cts.Token);
+
+		Assert.Equal(0, delivered);
+	}
+
+	[Fact]
+	public void ScanNewestFirst_AFailingStat_SortsThatFileLast()
+	{
+		var fake = new FakeSessionFileService();
+		fake.LastWriteTimes["a.txt"] = Base;
+		fake.LastWriteTimes["b.txt"] = Base.AddHours(1);
+		fake.OnGetLastWriteTime = n => { if (n == "b.txt") throw new IOException("locked"); };
+		var scanner = new SessionLastActivityScanner(fake, _drafts);
+		var seen = new List<string>();
+
+		scanner.ScanNewestFirst(["b.txt", "a.txt"], 10, TimeSpan.FromHours(1), chunk => seen.AddRange(chunk.Select(r => r.FileName)));
+
+		Assert.Equal(["a.txt", "b.txt"], seen);
+	}
+
+	private static void InterlockedMax(ref int target, int value)
+	{
+		int seen;
+		while (value > (seen = Volatile.Read(ref target)) && Interlocked.CompareExchange(ref target, value, seen) != seen) { }
+	}
+
 	// --- helpers ---
 
 	private List<List<SessionLastActivityModel>> CollectChunks(IReadOnlyList<string> names, int maxFiles, TimeSpan interval)

@@ -119,6 +119,7 @@ public partial class App : Application
 					Services.GetRequiredService<IUiHangWatchdog>().Dispose();
 					Services.GetRequiredService<IProcessMetricsSampler>().Dispose();
 				}
+				mainVm.SessionTree.CancelBackgroundWork();
 				selfUpdate.CheckAndTriggerUpdate();
 				Services.GetRequiredService<ISessionIndexUpdater>().Stop();
 				if (appSettings.Settings.AgentToolsEnabled)
