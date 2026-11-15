@@ -49,6 +49,18 @@ internal sealed class ScriptedTurnModule : IRemoteRpcModule
 	/// <summary>The sends received, in order: node, text, model, effort, profile.</summary>
 	public ConcurrentQueue<(string NodeId, string Text, string? Model, string? Effort, string? Profile)> Sends { get; } = new();
 
+	/// <summary>Chunks of streamed answer published so far (all turns): the tests wait on it instead of sleeping.</summary>
+	public int ChunksPublished => Volatile.Read(ref _chunks);
+
+	/// <summary>Assistant entries written to the session file (a stopped turn writes none).</summary>
+	public int AnswersAppended => Volatile.Read(ref _answers);
+
+	/// <summary>The turns that ended, with whether each was stopped.</summary>
+	public ConcurrentQueue<(string TurnId, bool Cancelled)> Completions { get; } = new();
+
+	private int _chunks;
+	private int _answers;
+
 	/// <summary>Lets a turn that waits for <see cref="HoldPrefix"/> finish normally.</summary>
 	public void ReleaseHeld() => _held.TrySetResult();
 
@@ -113,11 +125,13 @@ internal sealed class ScriptedTurnModule : IRemoteRpcModule
 			{
 				_bus().Publish(RemoteProtocol.TurnStream.UsageEvent, new TurnUsagePayload(turn.NodeId, turn.TurnId, 120, answer.Length, 0.01));
 				_env.Base.Files.AppendMessage(node.FileName, "ASSISTANT", answer.ToString(), null, turn.Model, turn.Effort);
+				Interlocked.Increment(ref _answers);
 				PublishAppended(node);
 			}
 
 			PublishRunning(turn.NodeId, false);
 			_bus().Publish(RemoteProtocol.Events.TurnCompleted, new TurnCompletedPayload(turn.NodeId, cancelled, null, turn.TurnId));
+			Completions.Enqueue((turn.TurnId, cancelled));
 		}
 		finally
 		{
@@ -153,6 +167,7 @@ internal sealed class ScriptedTurnModule : IRemoteRpcModule
 			{
 				await Task.Delay(ChunkDelay, token);
 				Delta($"[chunk{i}]" + new string((char)('a' + i), ChunkChars - 8));
+				Interlocked.Increment(ref _chunks);
 			}
 
 			return;

@@ -19,9 +19,6 @@ public sealed class TurnLiveState
 
 	public string TurnId { get; }
 
-	/// <summary>The prompt of a turn this client sent (for its queued row); null for a turn started elsewhere.</summary>
-	public string? Prompt { get; set; }
-
 	public TurnState State { get; set; } = TurnState.Queued;
 
 	/// <summary>Why a retry happens (context or auth).</summary>
@@ -39,22 +36,33 @@ public sealed class TurnLiveState
 
 	public string Text => _text.ToString();
 
+	public int TextLength => _text.Length;
+
 	public string Thinking => _thinking.ToString();
 
 	public IReadOnlyList<TranscriptLiveTool> Tools => _tools;
 
 	public bool IsActive => State != TurnState.Queued;
 
-	public void AddDelta(TurnDeltaPayload delta)
+	/// <summary>Adds a delta; false when its sequence number was already seen (a replay), which adds nothing. A jump marks the hole in the text.</summary>
+	public bool AddDelta(TurnDeltaPayload delta)
 	{
-		if (_lastSeq != 0 && delta.Seq != _lastSeq + 1)
-			HasGap = true;
+		if (_lastSeq != 0 && delta.Seq <= _lastSeq)
+			return false;
 
+		var gap = _lastSeq != 0 && delta.Seq != _lastSeq + 1;
 		_lastSeq = delta.Seq;
-		if (delta.Kind == TurnDeltaKind.Thinking)
-			Append(_thinking, delta.Text, Constants.TurnLimits.PreviewThinkingChars);
-		else
-			Append(_text, delta.Text, Constants.TurnLimits.PreviewTextChars);
+		var target = delta.Kind == TurnDeltaKind.Thinking ? _thinking : _text;
+		var max = delta.Kind == TurnDeltaKind.Thinking ? Constants.TurnLimits.PreviewThinkingChars : Constants.TurnLimits.PreviewTextChars;
+		if (gap)
+		{
+			HasGap = true;
+			if (delta.Kind == TurnDeltaKind.Text)
+				Append(target, Constants.TurnTexts.GapMarker, max);   // deltas were dropped: the preview shows where, the final entry is complete
+		}
+
+		Append(target, delta.Text, max);
+		return true;
 	}
 
 	public void ApplyTool(TurnToolPayload tool)

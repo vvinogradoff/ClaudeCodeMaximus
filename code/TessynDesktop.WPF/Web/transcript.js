@@ -213,15 +213,16 @@ function onAppend(m) {
   checkNewer();
 }
 // ---- live row of a turn in flight (live.js) ----
+// The row is created once and updated in place (so a selection in the streamed text survives); a one-second ticker keeps its timer.
+const liveView = LiveView.create(document);
+liveBox.appendChild(liveView.el);
 function showLive(live) {
   const follow = atBottom();
-  clearInterval(liveTimer); liveTimer = 0;
-  const row = LiveView.build(document, live, Date.now());
-  if (row) liveBox.replaceChildren(row); else liveBox.replaceChildren();
-  const t = liveBox.querySelector('.lt');
-  if (t) { const start = parseInt(t.getAttribute('data-start'), 10); liveTimer = setInterval(() => { t.textContent = LiveView.elapsedText(Date.now() - start); }, 1000); }
+  const shown = liveView.update(live, Date.now());
+  if (shown && liveView.startAt != null) { if (!liveTimer) liveTimer = setInterval(() => { const t = liveBox.querySelector('.lt'); if (t) t.textContent = liveView.tickText(Date.now()); }, 1000); }
+  else { clearInterval(liveTimer); liveTimer = 0; }
   if (follow) vp.scrollTop = vp.scrollHeight;
-  reportLive(live);
+  reportLive(shown ? live : null);
 }
 // Tells the host what the page now shows (for its log and the end-to-end tests): on a change of status and after each further 1000 characters of text.
 function reportLive(live) {

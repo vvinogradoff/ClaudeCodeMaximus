@@ -4,8 +4,9 @@ using System.Text.Json;
 namespace TessynDesktop.WPF.Tests;
 
 /// <summary>
-/// The live row of the transcript page (<c>Web/live.js</c>) under node with a minimal fake document: the timer text, the cut of long text and that
-/// streamed model output is only ever set as text. Needs <c>node</c> on PATH, like <see cref="PagingScriptTests"/>.
+/// The live row of the transcript page (<c>Web/live.js</c>) under node with a minimal fake document: the timer text, the cut of long text, that
+/// streamed model output is only ever set as text, and that the row is updated in place (a growing text is appended to its text node, so a
+/// selection survives). Needs <c>node</c> on PATH, like <see cref="PagingScriptTests"/>.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class LiveScriptTests
@@ -13,10 +14,15 @@ public sealed class LiveScriptTests
 	private static readonly string File = Path.Combine(AppContext.BaseDirectory, Constants.Paths.WebAssetsFolder, "live.js");
 
 	private const string FakeDocument = @"
-		const mk = (tag) => ({ tag, className: '', textContent: '', children: [], attrs: {}, appendChild(c) { this.children.push(c); return c; }, setAttribute(k, v) { this.attrs[k] = v; },
-			get html() { return this.innerHTML; }, set innerHTML(v) { throw new Error('innerHTML must never be used'); } });
-		const doc = { createElement: mk, createTextNode: (t) => ({ tag: '#text', textContent: t, children: [] }) };
-		const flat = (n) => [n].concat(...(n.children || []).map(flat));";
+		const mkNode = (tag) => ({ tag, className: '', children: [], style: {}, dataset: {}, _text: '',
+			get firstChild() { return this.children[0] || null; }, get lastChild() { return this.children[this.children.length - 1] || null; },
+			appendChild(c) { this.children.push(c); return c; }, removeChild(c) { this.children.splice(this.children.indexOf(c), 1); }, replaceChildren() { this.children = []; },
+			get textContent() { return this._text !== '' ? this._text : this.children.map(c => c.data !== undefined ? c.data : c.textContent).join(''); },
+			set textContent(v) { this._text = v; this.children = []; },
+			set innerHTML(v) { throw new Error('innerHTML must never be used'); } });
+		const doc = { createElement: mkNode, createTextNode: (t) => ({ tag: '#text', data: t, appends: 0, appendData(s) { this.data += s; this.appends++; } }) };
+		const flat = (n) => [n].concat(...(n.children || []).map(flat));
+		const find = (root, cls) => flat(root).find(n => n.className === cls);";
 
 	private static JsonElement Run(string body)
 	{
@@ -54,46 +60,90 @@ public sealed class LiveScriptTests
 	}
 
 	[Fact]
-	public void Build_WithNothingToShow_ReturnsNull()
+	public void Update_WithNothingToShow_HidesTheRow()
 	{
-		var result = Run("out.push(L.build(doc, null, 0) === null, L.build(doc, { tools: [], queued: [] }, 0) === null);");
-
-		Assert.True(result[0].GetBoolean());
-		Assert.True(result[1].GetBoolean());
-	}
-
-	[Fact]
-	public void Build_ShowsStatusWithTimer_ToolsQueuedTextAndError_AllAsText()
-	{
-		var result = Run(@"
-			const row = L.build(doc, { status: 'Thinking...', startedAt: 1000, usage: '5 in / 6 out', text: '<img src=x onerror=alert(1)>', thinking: 'hmm',
-				tools: [{ id: 'u', name: 'Bash', summary: 'ls', done: true, isError: true }], queued: ['next prompt'], error: 'it failed' }, 8000);
-			const nodes = flat(row);
-			out.push(nodes.find(n => n.className === 'lt').textContent);
-			out.push(nodes.find(n => n.className === 'lt').attrs['data-start']);
-			out.push(nodes.find(n => n.className === 'ltx').textContent);
-			out.push(nodes.find(n => (n.className || '').startsWith('ltool')).textContent);
-			out.push(nodes.find(n => (n.className || '').startsWith('ltool')).className);
-			out.push(nodes.find(n => n.className === 'lq').textContent);
-			out.push(nodes.find(n => n.className === 'lerr').textContent);
-			out.push(nodes.find(n => n.className === 'lk').textContent);");
-
-		var values = result.EnumerateArray().Select(e => e.GetString()).ToArray();
-		Assert.Equal("7s", values[0]);
-		Assert.Equal("1000", values[1]);
-		Assert.Equal("<img src=x onerror=alert(1)>", values[2]);   // text, not markup
-		Assert.Equal("Bash: ls  [failed]", values[3]);
-		Assert.Equal("ltool done err", values[4]);
-		Assert.Equal("Queued: next prompt", values[5]);
-		Assert.Equal("it failed", values[6]);
-		Assert.Equal("hmm", values[7]);
-	}
-
-	[Fact]
-	public void Build_WithoutAStartTime_HasNoTimer()
-	{
-		var result = Run("const row = L.build(doc, { status: 'Waiting in the queue', queued: ['x'] }, 5); out.push(flat(row).some(n => n.className === 'lt'));");
+		var result = Run("const v = L.create(doc); out.push(v.update(null, 0), v.el.style.display, v.update({ tools: [], queued: [] }, 0), v.el.style.display);");
 
 		Assert.False(result[0].GetBoolean());
+		Assert.Equal("none", result[1].GetString());
+		Assert.False(result[2].GetBoolean());
+		Assert.Equal("none", result[3].GetString());
+	}
+
+	[Fact]
+	public void Update_ShowsStatusWithTimer_ToolsQueuedTextAndError_AllAsText()
+	{
+		var result = Run(@"
+			const v = L.create(doc);
+			out.push(v.update({ status: 'Thinking...', startedAt: 1000, usage: '5 in / 6 out', text: '<img src=x onerror=alert(1)>', thinking: 'hmm',
+				tools: [{ id: 'u', name: 'Bash', summary: 'ls', done: true, isError: true }], queued: ['next prompt'], error: 'it failed' }, 8000));
+			out.push(find(v.el, 'lt').textContent, find(v.el, 'ltx').textContent, find(v.el, 'ltool done err').textContent, find(v.el, 'lq').textContent,
+				find(v.el, 'lerr').textContent, find(v.el, 'lk').textContent, find(v.el, 'ls').textContent, v.startAt, v.el.style.display);");
+
+		var values = result.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString()).ToArray();
+		Assert.Equal("True", values[0]);
+		Assert.Equal("7s", values[1]);
+		Assert.Equal("<img src=x onerror=alert(1)>", values[2]);   // text, not markup
+		Assert.Equal("Bash: ls  [failed]", values[3]);
+		Assert.Equal("Queued: next prompt", values[4]);
+		Assert.Equal("it failed", values[5]);
+		Assert.Equal("hmm", values[6]);
+		Assert.Equal("Thinking... - 5 in / 6 out ", values[7]);
+		Assert.Equal("1000", values[8]);
+		Assert.Equal(string.Empty, values[9]);
+	}
+
+	[Fact]
+	public void Update_GrowingText_IsAppendedToTheSameTextNode_SoASelectionSurvives()
+	{
+		var result = Run(@"
+			const v = L.create(doc);
+			v.update({ status: 'Responding...', startedAt: 1, text: 'Hello' }, 2000);
+			const holder = find(v.el, 'ltx'), node = holder.firstChild, row = find(v.el, 'lh');
+			v.update({ status: 'Responding...', startedAt: 1, text: 'Hello world' }, 3000);
+			v.update({ status: 'Responding...', startedAt: 1, text: 'Hello world!!' }, 4000);
+			out.push(holder.firstChild === node, node.data, node.appends, find(v.el, 'lh') === row);
+			v.update({ status: 'Responding...', startedAt: 1, text: 'rewritten' }, 5000);   // not a growth: replaced in place
+			out.push(holder.firstChild === node, node.data);");
+
+		Assert.True(result[0].GetBoolean());
+		Assert.Equal("Hello world!!", result[1].GetString());
+		Assert.Equal(3, result[2].GetInt32());   // every growth is an append to the same node
+		Assert.True(result[3].GetBoolean());
+		Assert.True(result[4].GetBoolean());
+		Assert.Equal("rewritten", result[5].GetString());
+	}
+
+	[Fact]
+	public void Update_ToolRowsAreReusedByPosition_AndShrink()
+	{
+		var result = Run(@"
+			const v = L.create(doc);
+			const tool = (id, done) => ({ id, name: 'Read', summary: id, done, isError: false });
+			v.update({ status: 's', tools: [tool('a', false), tool('b', false)] }, 0);
+			const first = find(v.el, 'ltool');
+			v.update({ status: 's', tools: [tool('a', true), tool('b', false)] }, 0);
+			out.push(find(v.el, 'ltool done') === first, flat(v.el).filter(n => (n.className || '').startsWith('ltool ') || n.className === 'ltool').length);
+			v.update({ status: 's', tools: [tool('a', true)] }, 0);
+			out.push(flat(v.el).filter(n => (n.className || '').startsWith('ltool ') || n.className === 'ltool').length);");
+
+		Assert.True(result[0].GetBoolean());
+		Assert.Equal(2, result[1].GetInt32());
+		Assert.Equal(1, result[2].GetInt32());
+	}
+
+	[Fact]
+	public void Update_WithoutAStartTime_HasNoTimer_AndClearingHidesTheRowAgain()
+	{
+		var result = Run(@"
+			const v = L.create(doc);
+			v.update({ status: 'Waiting in the queue', queued: ['x'] }, 5);
+			out.push(find(v.el, 'lt').style.display, v.startAt === null);
+			out.push(v.update(null, 6), v.el.style.display);");
+
+		Assert.Equal("none", result[0].GetString());
+		Assert.True(result[1].GetBoolean());
+		Assert.False(result[2].GetBoolean());
+		Assert.Equal("none", result[3].GetString());
 	}
 }

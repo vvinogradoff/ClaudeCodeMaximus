@@ -34,7 +34,7 @@ public sealed class SessionTurnsState
 	public TranscriptLiveView? Build(bool daemonRunning, long? genericSinceUnixMs)
 	{
 		var running = Turns.Find(t => t.IsActive);
-		var queued = Turns.Where(t => !t.IsActive).Select(t => Shorten(t.Prompt)).ToList();
+		var queued = Turns.Where(t => !t.IsActive).Select((_, i) => string.Format(Constants.TurnTexts.QueuedRow, i + 1)).ToList();
 		if (running == null && Turns.Count == 0 && daemonRunning)
 			return new TranscriptLiveView(Constants.TurnTexts.Working, string.Empty, string.Empty, [], [], genericSinceUnixMs, Error, null);
 
@@ -56,15 +56,6 @@ public sealed class SessionTurnsState
 				_ => Constants.TurnTexts.Retrying,
 			};
 
-		return turn.Text.Length == 0 ? Constants.TurnTexts.Thinking : Constants.TurnTexts.Responding;
-	}
-
-	private static string Shorten(string? prompt)
-	{
-		var text = (prompt ?? string.Empty).ReplaceLineEndings(" ").Trim();
-		if (text.Length == 0)
-			return "(message from another client)";
-
-		return text.Length <= Constants.TurnLimits.QueuedPromptChars ? text : text[..Constants.TurnLimits.QueuedPromptChars] + Constants.TurnTexts.TruncationMark;
+		return turn.TextLength == 0 ? Constants.TurnTexts.Thinking : Constants.TurnTexts.Responding;
 	}
 }

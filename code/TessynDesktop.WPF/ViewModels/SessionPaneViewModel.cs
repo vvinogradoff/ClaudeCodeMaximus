@@ -165,6 +165,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		await _reloadTask;
 		await _expandTask;
 		await _findTask;
+		await _handoffTask;
 		await _appendTask;   // an on-demand page can start a catch-up append while it completes
 	}
 
@@ -209,6 +210,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		Title = title ?? nodeId;
 		StateText = string.Empty;
 		ResetRunningForOpen();
+		ResetSelectionForOpen();
 		Error = null;
 		Tags.Clear();
 		FindBarVisible = false;
@@ -224,6 +226,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 		try
 		{
+			var stateEventsAtRequest = _stateEvents;
 			var detailTask = _client.SessionGetAsync(nodeId);
 			_ = detailTask.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); // observed even when the switch is superseded
 			// A cached model that stops short of the newest entries (left by a jump) is not a bottom view: reload the newest page instead.
@@ -262,7 +265,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			if (token != _openToken)
 				return wasShown;
 
-			ApplyDetail(detail);
+			ApplyDetail(detail, stateEventsAtRequest);
 			if (detail.Epoch != model.Epoch)
 				await ReloadCoreAsync(token);
 			else if (!model.HasNewer && (warm || _missedAppend || detail.EntryCount > model.LastIndex + 1))
@@ -280,7 +283,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		finally
 		{
 			if (token == _openToken)
+			{
 				IsLoading = false;
+				IsSessionReady = true;   // also after a failed detail: Send must not stay disabled for good
+			}
 		}
 
 		return wasShown;
@@ -366,11 +372,13 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 	// ---- header ----
 
-	private void ApplyDetail(SessionDetailDto detail)
+	/// <param name="stateEventsAtRequest">The state-event counter when the request was sent: a push that arrived since is newer than the answer's running flag.</param>
+	private void ApplyDetail(SessionDetailDto detail, int stateEventsAtRequest)
 	{
 		Title = detail.Name;
 		ApplySelection(detail.LastUsed);
-		SetDaemonRunning(detail.State.Running);
+		if (stateEventsAtRequest == _stateEvents)
+			SetDaemonRunning(detail.State.Running);
 		Tags.Clear();
 		foreach (var tag in detail.Tags)
 			Tags.Add(new SessionTagViewModel(tag, _launcher));
@@ -477,6 +485,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		if (state.Id != NodeId)
 			return;
 
+		_stateEvents++;
 		SetDaemonRunning(state.Running);
 	}
 

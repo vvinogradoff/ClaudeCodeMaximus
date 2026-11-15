@@ -63,6 +63,9 @@ public sealed partial class FakeTessynClient : ITessynClient
 		NotificationReceived?.Invoke(this, new RemoteNotification(method, node));
 	}
 
+	/// <summary>Delivers a notification from its wire JSON, as the daemon wrote it (golden frames).</summary>
+	public void RaiseRaw(string method, string json) => NotificationReceived?.Invoke(this, new RemoteNotification(method, System.Text.Json.Nodes.JsonNode.Parse(json)!));
+
 	public void RaiseResync(string reason = RemoteProtocol.ResyncReasons.Gap) => Resynced?.Invoke(this, new ResyncedEventArgs(reason, 0));
 
 	public Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -82,7 +85,10 @@ public sealed partial class FakeTessynClient : ITessynClient
 	/// <summary>When set, <c>turn.send</c> throws it.</summary>
 	public Exception? TurnSendException { get; set; }
 
-	public Task<TurnSendResult> TurnSendAsync(string nodeId, string text, string? modelId = null, string? effort = null, string? profileId = null, string? clientRequestId = null, CancellationToken cancellationToken = default)
+	/// <summary>When set, <c>turn.send</c> waits for it after recording the call (a round trip in flight).</summary>
+	public TaskCompletionSource? TurnSendGate { get; set; }
+
+	public async Task<TurnSendResult> TurnSendAsync(string nodeId, string text, string? modelId = null, string? effort = null, string? profileId = null, string? clientRequestId = null, CancellationToken cancellationToken = default)
 	{
 		var send = new FakeTurnSend(nodeId, text, modelId, effort, profileId, clientRequestId);
 		TurnSends.Add(send);
@@ -90,7 +96,10 @@ public sealed partial class FakeTessynClient : ITessynClient
 		if (TurnSendException != null)
 			throw TurnSendException;
 
-		return Task.FromResult(TurnSendHandler?.Invoke(send) ?? new TurnSendResult("turn-" + TurnSends.Count, true, false));
+		if (TurnSendGate != null)
+			await TurnSendGate.Task;
+
+		return TurnSendHandler?.Invoke(send) ?? new TurnSendResult("turn-" + TurnSends.Count, true, false);
 	}
 
 	public Exception? TurnStopException { get; set; }

@@ -108,6 +108,7 @@ public sealed partial class SessionPaneViewModel
 
 					_viewAtBottom = true;
 					_surface.Load(origin.NodeId, _current.Views, _current.HasOlder, toBottom: true, hasNewer: false);
+					PushLive();   // a load clears the page's live row
 					return;
 				}
 

@@ -13,8 +13,9 @@ namespace TessynDesktop.WPF.ViewModels;
 /// <remarks>Created by Claude</remarks>
 public sealed partial class SessionPaneViewModel
 {
-	private readonly Dictionary<string, SessionSelection> _selections = new();
+	private readonly Dictionary<string, SessionSelection> _picks = new();
 	private LastUsedSettingsDto? _lastUsed;
+	private string? _lastUsedNodeId;
 	private bool _applyingSelection;
 
 	[ObservableProperty]
@@ -25,6 +26,11 @@ public sealed partial class SessionPaneViewModel
 
 	[ObservableProperty]
 	private SelectorOptionViewModel? _selectedProfile;
+
+	/// <summary>The open session's detail has been applied (its selectors show its own settings); Send waits for it so it can never capture another session's values.</summary>
+	[ObservableProperty]
+	[NotifyCanExecuteChangedFor(nameof(SendCommand))]
+	private bool _isSessionReady;
 
 	public ObservableCollection<SelectorOptionViewModel> Models { get; } = [];
 
@@ -38,14 +44,20 @@ public sealed partial class SessionPaneViewModel
 		try
 		{
 			var catalog = await _client.CatalogGetAsync();
+			_applyingSelection = true;   // refilling the lists makes the combo boxes report an empty selection: that is no pick
 			Fill(Models, catalog.Models.Select(m => new SelectorOptionViewModel(m.Id, m.DisplayName)));
 			Fill(Efforts, catalog.Efforts.Select(e => new SelectorOptionViewModel(e, Capitalize(e))));
 			Fill(Profiles, catalog.Profiles.Select(p => new SelectorOptionViewModel(p.Id, p.DisplayName)));
+			_applyingSelection = false;
 			ApplyCurrentSelection();
 		}
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "Reading the model, effort and profile lists failed");
+		}
+		finally
+		{
+			_applyingSelection = false;
 		}
 	}
 
@@ -58,10 +70,30 @@ public sealed partial class SessionPaneViewModel
 
 	private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
-	/// <summary>A session was opened or its detail re-read: the remembered pick wins, else the settings it was last used with.</summary>
+	/// <summary>A session is being opened: nothing of the previous one may show or be sent, and Send waits for this session's detail.</summary>
+	private void ResetSelectionForOpen()
+	{
+		_lastUsed = null;
+		_lastUsedNodeId = null;
+		IsSessionReady = false;
+		_applyingSelection = true;
+		try
+		{
+			SelectedModel = Pick(Models, Constants.TurnTexts.DefaultOption);
+			SelectedEffort = Pick(Efforts, Constants.TurnTexts.DefaultOption);
+			SelectedProfile = Pick(Profiles, Constants.TurnTexts.DefaultOption);
+		}
+		finally
+		{
+			_applyingSelection = false;
+		}
+	}
+
+	/// <summary>The detail of the open session arrived: its last-used settings are what the selectors show (a pick of the user wins per field).</summary>
 	private void ApplySelection(LastUsedSettingsDto lastUsed)
 	{
 		_lastUsed = lastUsed;
+		_lastUsedNodeId = NodeId;
 		ApplyCurrentSelection();
 	}
 
@@ -71,18 +103,14 @@ public sealed partial class SessionPaneViewModel
 		if (id == null)
 			return;
 
-		var wanted = _selections.TryGetValue(id, out var remembered)
-			? remembered
-			: _lastUsed == null ? null : new SessionSelection(_lastUsed.ModelId, _lastUsed.Effort, _lastUsed.ProfileId);
-		if (wanted == null)
-			return;
-
+		var picks = _picks.GetValueOrDefault(id) ?? new SessionSelection();
+		var last = _lastUsedNodeId == id ? _lastUsed : null;   // never another session's settings
 		_applyingSelection = true;
 		try
 		{
-			SelectedModel = Pick(Models, wanted.ModelId);
-			SelectedEffort = Pick(Efforts, wanted.EffortId);
-			SelectedProfile = Pick(Profiles, wanted.ProfileId);
+			SelectedModel = Pick(Models, picks.ModelId ?? last?.ModelId ?? Constants.TurnTexts.DefaultOption);
+			SelectedEffort = Pick(Efforts, picks.EffortId ?? last?.Effort ?? Constants.TurnTexts.DefaultOption);
+			SelectedProfile = Pick(Profiles, picks.ProfileId ?? last?.ProfileId ?? Constants.TurnTexts.DefaultOption);
 		}
 		finally
 		{
@@ -94,34 +122,35 @@ public sealed partial class SessionPaneViewModel
 	private static SelectorOptionViewModel? Pick(IReadOnlyList<SelectorOptionViewModel> options, string id) =>
 		options.FirstOrDefault(o => o.Id == id) ?? options.FirstOrDefault(o => o.Id == Constants.TurnTexts.DefaultOption);
 
-	private void RememberSelection()
+	/// <summary>The fields the user picked for the open session; what a turn sent now carries (null = not picked, the daemon resolves it).</summary>
+	private SessionSelection PicksOfOpenSession() => NodeId != null && _picks.TryGetValue(NodeId, out var picks) ? picks : new SessionSelection();
+
+	private void RememberPick(SelectorOptionViewModel? value, Func<SessionSelection, SessionSelection> change)
 	{
 		var id = NodeId;
-		if (_applyingSelection || id == null)
+		if (_applyingSelection || id == null || value == null)
 			return;
 
-		_selections[id] = new SessionSelection(
-			SelectedModel?.Id ?? Constants.TurnTexts.DefaultOption,
-			SelectedEffort?.Id ?? Constants.TurnTexts.DefaultOption,
-			SelectedProfile?.Id ?? Constants.TurnTexts.DefaultOption);
+		_picks[id] = change(PicksOfOpenSession());
 	}
 
-	partial void OnSelectedModelChanged(SelectorOptionViewModel? value) => RememberSelection();
+	partial void OnSelectedModelChanged(SelectorOptionViewModel? value) => RememberPick(value, p => p with { ModelId = value!.Id });
 
-	partial void OnSelectedEffortChanged(SelectorOptionViewModel? value) => RememberSelection();
+	partial void OnSelectedEffortChanged(SelectorOptionViewModel? value) => RememberPick(value, p => p with { EffortId = value!.Id });
 
-	partial void OnSelectedProfileChanged(SelectorOptionViewModel? value) => RememberSelection();
+	partial void OnSelectedProfileChanged(SelectorOptionViewModel? value) => RememberPick(value, p => p with { ProfileId = value!.Id });
 
 	/// <summary>Reads the session's header again (after a resync) so its running flag and settings are current.</summary>
 	private async Task RefreshDetailAsync(string nodeId)
 	{
 		try
 		{
+			var stateEventsAtRequest = _stateEvents;
 			var detail = await _client.SessionGetAsync(nodeId);
 			_ui.Post(() =>
 			{
 				if (nodeId == NodeId)
-					ApplyDetail(detail);
+					ApplyDetail(detail, stateEventsAtRequest);
 			});
 		}
 		catch (Exception ex)

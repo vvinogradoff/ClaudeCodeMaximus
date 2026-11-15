@@ -8,7 +8,7 @@ namespace TessynDesktop.WPF.ViewModels;
 
 /// <summary>
 /// The turn loop of the session pane (W1a): Send and Stop go through <c>turn.send</c> / <c>turn.stop</c>, and the <c>turn.*</c> notifications
-/// drive the live row below the transcript (status with timer, streamed text, tools, queued prompts, errors). The live row is a preview: the
+/// drive the live row below the transcript (status with timer, streamed text, tools, queued turns, errors). The live row is a preview: the
 /// persisted entries arrive through <c>session.appended</c> and stay the source of truth. All state changes run on the UI thread, in the order
 /// the notifications arrived; bursts of deltas are merged into one page update per <see cref="LiveFlushInterval"/>.
 /// </summary>
@@ -16,10 +16,14 @@ namespace TessynDesktop.WPF.ViewModels;
 public sealed partial class SessionPaneViewModel
 {
 	private readonly Dictionary<string, SessionTurnsState> _turnStates = new();
-	private readonly Dictionary<string, string> _pendingPrompts = new();
+	private readonly Queue<string> _errorOrder = new();
+	private Task _handoffTask = Task.CompletedTask;
 	private bool _liveFlushScheduled;
 	private bool _daemonRunning;
 	private long? _genericSinceUnixMs;
+
+	/// <summary>Counts the running-state pushes (<c>session.changed</c>, <c>turn.completed</c>) of the open session: an answer to a request that began before one of them has a stale running flag.</summary>
+	private int _stateEvents;
 
 	/// <summary>How long streamed deltas are collected before the page is updated; zero updates it at once (tests).</summary>
 	public TimeSpan LiveFlushInterval { get; set; } = Constants.TurnLimits.LiveFlushInterval;
@@ -27,7 +31,7 @@ public sealed partial class SessionPaneViewModel
 	/// <summary>The clock of the thinking timer and of the generic working row.</summary>
 	public TimeProvider Clock { get; set; } = TimeProvider.System;
 
-	private bool CanSend() => HasSession && !string.IsNullOrWhiteSpace(InputText);
+	private bool CanSend() => HasSession && IsSessionReady && !string.IsNullOrWhiteSpace(InputText);
 
 	partial void OnHasSessionChanged(bool value) => SendCommand.NotifyCanExecuteChanged();
 
@@ -39,35 +43,44 @@ public sealed partial class SessionPaneViewModel
 		if (id == null || text.Length == 0)
 			return;
 
-		// A14: what is selected now travels with this send, so a queued send keeps its model, effort and profile whatever is selected later.
-		var model = SelectedModel?.Id;
-		var effort = SelectedEffort?.Id;
-		var profile = SelectedProfile?.Id;
-		var requestId = Guid.NewGuid().ToString("N");
-		_pendingPrompts[requestId] = text;
+		// A14: what the user picked travels with this send, so a queued send keeps it whatever is picked later. A field the user did not pick is
+		// not sent (tdcp-spec 9.8): the value the selector shows came from lastUsed, and sending it would pin the session to it.
+		var picks = PicksOfOpenSession();
+
+		// The input is taken before the round trip: a second press (or key repeat) finds nothing to send, and text typed meanwhile is kept.
+		InputText = string.Empty;
+		Error = null;
+		ClearTurnError(id);
 		try
 		{
-			Error = null;
-			ClearTurnError(id);
-			var result = await _client.TurnSendAsync(id, text, model, effort, profile, requestId);
+			var result = await _client.TurnSendAsync(id, text, picks.ModelId, picks.EffortId, picks.ProfileId, Guid.NewGuid().ToString("N"));
 			if (!result.Accepted)
 			{
-				_pendingPrompts.Remove(requestId);
+				RestoreInput(id, text);
 				Error = Constants.TurnTexts.NotAccepted;
-				return;
 			}
-
-			if (id == NodeId)
-				InputText = string.Empty;
-			else
-				_drafts.Remove(id);
 		}
 		catch (Exception ex)
 		{
-			_pendingPrompts.Remove(requestId);
+			RestoreInput(id, text);
 			_logger.LogWarning(ex, "turn.send failed for {NodeId}", id);
 			Error = Constants.TurnTexts.SendFailed + ex.Message;
 		}
+	}
+
+	/// <summary>A send that did not happen gives its text back, unless the user already typed something else (or left the session: then it goes to the draft).</summary>
+	private void RestoreInput(string nodeId, string text)
+	{
+		if (nodeId == NodeId)
+		{
+			if (InputText.Length == 0)
+				InputText = text;
+
+			return;
+		}
+
+		if (string.IsNullOrEmpty(_drafts.GetValueOrDefault(nodeId)))
+			_drafts[nodeId] = text;
 	}
 
 	[RelayCommand(CanExecute = nameof(IsRunning))]
@@ -125,10 +138,7 @@ public sealed partial class SessionPaneViewModel
 	private void ApplyStarted(TurnStartedPayload payload)
 	{
 		var state = TurnsOf(payload.NodeId);
-		var turn = state.GetOrAdd(payload.TurnId);
-		if (payload.ClientRequestId != null && _pendingPrompts.Remove(payload.ClientRequestId, out var prompt))
-			turn.Prompt = prompt;
-
+		state.GetOrAdd(payload.TurnId);
 		state.Error = null;
 		AfterTurnChange(payload.NodeId);
 	}
@@ -147,9 +157,8 @@ public sealed partial class SessionPaneViewModel
 	private void ApplyDelta(TurnDeltaPayload payload)
 	{
 		var turn = ActivateOnOutput(payload.NodeId, payload.TurnId);
-		turn.AddDelta(payload);
-		if (turn.HasGap)
-			_logger.LogDebug("Deltas of turn {TurnId} were dropped; the final entry is complete", payload.TurnId);
+		if (!turn.AddDelta(payload))
+			return;   // a repeated delta (a replay) adds nothing
 
 		AfterTurnChange(payload.NodeId);
 	}
@@ -188,22 +197,50 @@ public sealed partial class SessionPaneViewModel
 			state.Turns.Remove(turn);
 
 		if (!string.IsNullOrWhiteSpace(payload.Error))
+		{
 			state.Error = payload.Error;
+			if (payload.NodeId != NodeId)
+				RememberErrorOfOtherSession(payload.NodeId);
+		}
 
 		if (state.IsEmpty)
 			_turnStates.Remove(payload.NodeId);
 
-		if (payload.NodeId == NodeId)
+		if (payload.NodeId != NodeId)
+			return;
+
+		_stateEvents++;
+		// The daemon's own running flag follows in session.changed; until then the generic working row must not flash up.
+		if (state.Turns.Count == 0)
+			_daemonRunning = false;
+
+		RecomputeRunning();
+		_handoffTask = HandOffAsync(payload.NodeId);
+	}
+
+	/// <summary>
+	/// The turn ended: the persisted entries are applied first and only then the live row is cleared, so the answer is never on screen twice
+	/// (preview and entry) and there is no blank gap between them.
+	/// </summary>
+	private async Task HandOffAsync(string nodeId)
+	{
+		if (_current != null)
+			await RequestAppend();
+
+		if (nodeId == NodeId)
+			PushLive();
+	}
+
+	/// <summary>Errors of sessions that are not open stay until their next send; only the newest few are kept.</summary>
+	private void RememberErrorOfOtherSession(string nodeId)
+	{
+		_errorOrder.Enqueue(nodeId);
+		while (_errorOrder.Count > Constants.TurnLimits.RememberedErrorSessions)
 		{
-			// The daemon's own running flag follows in session.changed; until then the generic working row must not flash up.
-			if (state.Turns.Count == 0)
-				_daemonRunning = false;
-
-			if (_current != null)
-				_ = RequestAppend();
+			var oldest = _errorOrder.Dequeue();
+			if (oldest != NodeId && _turnStates.TryGetValue(oldest, out var state) && state.Turns.Count == 0)
+				_turnStates.Remove(oldest);
 		}
-
-		AfterTurnChange(payload.NodeId);
 	}
 
 	private void ClearTurnError(string nodeId)

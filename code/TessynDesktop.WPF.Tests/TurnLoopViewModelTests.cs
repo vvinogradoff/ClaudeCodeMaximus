@@ -77,7 +77,7 @@ public sealed class TurnLoopViewModelTests
 
 		Assert.Equal(["opus", "sonnet"], _client.TurnSends.Select(s => s.ModelId));
 		Assert.Equal(["low", "max"], _client.TurnSends.Select(s => s.Effort));
-		Assert.Equal(["default", "work"], _client.TurnSends.Select(s => s.ProfileId));
+		Assert.Equal([null, "work"], _client.TurnSends.Select(s => s.ProfileId));   // only what the user picked is sent
 	}
 
 	[Fact]
@@ -96,7 +96,7 @@ public sealed class TurnLoopViewModelTests
 		_client.RaiseTurnStatus(Node, "t2", TurnState.Queued);
 
 		var live = _surface.LastLive!;
-		Assert.Equal(["second prompt that waits"], live.Queued);
+		Assert.Equal([string.Format(Constants.TurnTexts.QueuedRow, 1)], live.Queued);   // the prompt itself is the persisted user entry
 		Assert.Equal(Constants.TurnTexts.Thinking, live.Status);
 
 		_client.RaiseTurnCompleted(Node, "t1");
@@ -412,7 +412,7 @@ public sealed class TurnLoopViewModelTests
 		turn.AddDelta(new TurnDeltaPayload(Node, "t", 5, TurnDeltaKind.Text, "!"));
 
 		Assert.Equal(Constants.TurnLimits.PreviewTextChars, turn.Text.Length);
-		Assert.EndsWith("END!", turn.Text);
+		Assert.EndsWith("END" + Constants.TurnTexts.GapMarker + "!", turn.Text);
 		Assert.True(turn.HasGap);
 	}
 

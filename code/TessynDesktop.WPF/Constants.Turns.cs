@@ -16,8 +16,8 @@ public static partial class Constants
 		/// <summary>Most tool calls listed in the live row (the newest).</summary>
 		public const int PreviewTools = 12;
 
-		/// <summary>Characters of a queued prompt shown in its row.</summary>
-		public const int QueuedPromptChars = 80;
+		/// <summary>Sessions that are not open and ended their last turn with an error keep that error row; older ones are dropped.</summary>
+		public const int RememberedErrorSessions = 20;
 
 		/// <summary>Characters of a selector's label shown before its start is cut (the full label is the tooltip).</summary>
 		public const int SelectorLabelChars = 30;
@@ -33,6 +33,8 @@ public static partial class Constants
 		public const string Responding = "Responding...";
 		public const string Working = "Working...";
 		public const string Waiting = "Waiting in the queue";
+		public const string QueuedRow = "Message {0} is waiting for the running turn";
+		public const string GapMarker = " [...] ";
 		public const string ResumingSession = "Resuming session...";
 		public const string RetryingAuth = "Retrying after a sign-in refresh...";
 		public const string Retrying = "Retrying...";
