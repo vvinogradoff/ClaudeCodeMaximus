@@ -10,6 +10,7 @@ namespace TessynDesktop.Models;
 /// <param name="IsPinned">True when the session itself pins the profile (by id or by an old display name).</param>
 /// <param name="Error">Why the pinned profile cannot be used; null when resolved.</param>
 /// <param name="IsLoggedOut">True when the stored profile has no credentials (only computed when asked for).</param>
+/// <param name="Note">Set when the turn runs on Default because a legacy (name-only) recorded profile matches no stored profile; the result must say so.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record ProfileResolution(
 	string ProfileId,
@@ -17,7 +18,8 @@ public sealed record ProfileResolution(
 	string? ConfigDir,
 	bool IsPinned,
 	string? Error = null,
-	bool IsLoggedOut = false)
+	bool IsLoggedOut = false,
+	string? Note = null)
 {
 	/// <summary>True when the turn may run on <see cref="ConfigDir"/>.</summary>
 	public bool IsResolved => Error == null;

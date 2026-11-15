@@ -18,10 +18,8 @@ public static partial class Constants
 		/// <summary>At most this many registered directories are named in the spawn error (R9).</summary>
 		public const int MaxListedDirectories = 12;
 
-		public const string UnpinnedMissingProfileLog =
-			"Session {NodeId} is pinned to profile name '{ProfileName}', which matches no stored profile; the pin is left as it is";
-
-		public const string PinMigratedLog = "Migrated {Count} session profile pin(s) from display name to ProfileId; {Unmatched} left unmatched";
+		public const string PinMigratedLog =
+			"Session profile pins: {Count} pinned by id, {Unmatched} legacy labels match no stored profile (they run on Default with a warning), {SystemLabels} [Sys] labels (Default)";
 
 		public const string SessionMovedLog =
 			"Moved Claude session {SessionId} (slug {Slug}) from {Source} to {Target}: transcript={Transcript}, folder files={FolderFiles}, old-config-dir paths in transcript={PathCount}";
@@ -40,6 +38,9 @@ public static partial class Constants
 
 		/// <summary>Appended to the profile shown for a session pinned to a profile that no longer exists.</summary>
 		public const string MissingProfileSuffix = " (missing)";
+
+		/// <summary>The note a turn result carries when a legacy recorded profile name matched no profile and the turn ran on Default.</summary>
+		public const string LegacyProfileMissingNoteFormat = "the recorded profile '{0}' no longer exists";
 
 		public const string NoRegisteredDirectories = "(none)";
 	}

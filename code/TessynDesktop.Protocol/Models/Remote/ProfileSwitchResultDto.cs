@@ -8,6 +8,7 @@ namespace TessynDesktop.Models.Remote;
 /// <param name="NodeMoved">True when the addressed session itself was moved now; false when it was running and the switch is queued, or it was already on the profile.</param>
 /// <param name="Moved">The descendants moved now (empty unless <c>includeDescendants</c>).</param>
 /// <param name="Queued">Running sessions (descendants, and the addressed session when it is running) whose switch is applied when their turn ends; they are never interrupted.</param>
+/// <param name="Failed">Sessions whose files could not all be moved: not pinned to the new profile, the switch stays queued (retried when their next turn starts).</param>
 /// <param name="OldConfigPaths">Absolute paths under the old config dir found in the moved transcripts; reported, not rewritten.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record ProfileSwitchResultDto(
@@ -16,4 +17,5 @@ public sealed record ProfileSwitchResultDto(
 	bool NodeMoved,
 	IReadOnlyList<ProfileSwitchedSessionDto> Moved,
 	IReadOnlyList<ProfileSwitchedSessionDto> Queued,
-	IReadOnlyList<string> OldConfigPaths);
+	IReadOnlyList<string> OldConfigPaths,
+	IReadOnlyList<ProfileSwitchFailureDto> Failed);

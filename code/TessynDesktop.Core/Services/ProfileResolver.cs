@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Serilog;
 using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
@@ -8,6 +9,8 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public sealed class ProfileResolver : IProfileResolver
 {
+	private static readonly ILogger _log = Log.ForContext<ProfileResolver>();
+
 	private readonly IAppSettingsService _appSettings;
 	private readonly IClaudeProfileService _profileService;
 
@@ -35,8 +38,10 @@ public sealed class ProfileResolver : IProfileResolver
 		if (found != null)
 			return found with { IsPinned = pinnedByName };
 
-		// A name only taken from the file history (not pinned on the node) that matches nothing stays on Default, as before.
-		return pinnedByName ? Missing(node, recordedName, pinned: true) : Default(pinned: false);
+		// A legacy name-only record (no ProfileId pin) that matches no stored profile runs on Default as before, but not silently:
+		// it is logged and the turn result carries a note (ISSUE.013, supervisor decision). Only an id pin or an explicit choice is strict.
+		_log.Warning("Session {NodeId} ({Name}) records profile '{ProfileName}', which matches no stored profile; the turn runs on the Default profile", node.NodeId, node.Name, recordedName);
+		return Default(pinned: false) with { Note = string.Format(Constants.ProfileSwitch.LegacyProfileMissingNoteFormat, recordedName) };
 	}
 
 	/// <inheritdoc />

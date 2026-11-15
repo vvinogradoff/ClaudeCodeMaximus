@@ -179,7 +179,7 @@ public sealed class SessionTurnService : ISessionTurnService
 			{
 				_log.Warning("Turn for node {NodeId} refused: {Error}", node.NodeId, profile.Error);
 				turnErrorText = profile.Error;
-				return new TurnResultModel(string.Empty, node.ClaudeSessionId, IsError: true, ErrorMessage: profile.Error);
+				return new TurnResultModel(string.Empty, node.ClaudeSessionId, IsError: true, ErrorMessage: profile.Error, Refused: true);
 			}
 
 			// Write clean prompt (without instruction block) to the session file. Common to both
@@ -368,7 +368,7 @@ public sealed class SessionTurnService : ISessionTurnService
 			// recorded as an error), so a successful retry reports no error text.
 			turnErrorText = isError ? errorMessage : null;
 			return new TurnResultModel(resultText.ToString(), node.ClaudeSessionId, isError, errorMessage,
-			                           inputTokens, outputTokens, costUsd);
+			                           inputTokens, outputTokens, costUsd, Note: profile.Note);
 		}
 		catch (OperationCanceledException)
 		{

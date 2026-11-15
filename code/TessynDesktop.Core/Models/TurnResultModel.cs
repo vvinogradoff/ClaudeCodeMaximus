@@ -22,4 +22,10 @@ public sealed record TurnResultModel(
 	int OutputTokens = 0,
 
 	/// <summary>Total cost in USD from the result event (FR.17.2). 0 if not captured.</summary>
-	double CostUsd = 0);
+	double CostUsd = 0,
+
+	/// <summary>True when the turn was refused before it ran (e.g. its pinned profile does not exist): nothing was sent to the model (ISSUE.013).</summary>
+	bool Refused = false,
+
+	/// <summary>Something the person reading the result should know, e.g. the session ran on Default because its recorded profile no longer exists (ISSUE.013).</summary>
+	string? Note = null);

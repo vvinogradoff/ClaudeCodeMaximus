@@ -125,7 +125,8 @@ public sealed class TurnEngine : ITurnEngine
 
 			// Cross-profile session adoption (FR.11.13): if this session was created under a different profile than the one now
 			// active, move its JSONL into the active profile's store before attempting --resume.
-			if (sessionId != null)
+			// A queued switch moves the files later, under the turn lock (below); until then they must stay where the running turn writes them.
+			if (sessionId != null && string.IsNullOrEmpty(node.PendingProfileId))
 				_sessionStatus.TryAdoptSessionFromOtherProfile(node.WorkingDirectory, sessionId, settings.ProfileConfigDir);
 
 			var augmentedMessage = request.Message + BuildInstructionBlock(node, request.IsNewBranch, sessionId == null);
@@ -176,6 +177,7 @@ public sealed class TurnEngine : ITurnEngine
 				// ISSUE.013: the turn runs on the profile of its settings. A session that was on another profile is switched (no
 				// cascade; transcript and session folder move, a live streaming process stops) and the ProfileId pin is recorded - the
 				// one switch path of the Avalonia profile change. Under the turn lock, so no other turn of the node is using its files.
+				_profileSwitch?.ApplyPending(node);
 				_profileSwitch?.RecordTurnProfile(node, settings.ProfileDisplayName);
 
 				run.SendErrorText = null;

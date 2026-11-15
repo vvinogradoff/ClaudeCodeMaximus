@@ -685,7 +685,21 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			_suppressNextUserAppend[nodeId] = text;
 			try
 			{
-				await _daemon.RunTurnAsync(node, text, TurnSource.Telegram);
+				var result = await _daemon.RunTurnAsync(node, text, TurnSource.Telegram);
+
+				// ISSUE.013: a turn refused before it ran (its pinned profile does not exist) wrote nothing to the topic: say why, as a thrown failure would.
+				if (result?.Refused == true)
+				{
+					_suppressNextUserAppend.TryRemove(nodeId, out _);
+					_log.Warning("TelegramBridgeService: turn refused for node {NodeId}: {Error}", nodeId, result.ErrorMessage);
+					try { await _client.SendMessageAsync(chatId, $"⚠️ Turn failed: {result.ErrorMessage}", messageThreadId, disableNotification: true); }
+					catch { /* best effort */ }
+				}
+				else if (result?.Note != null)
+				{
+					try { await _client.SendMessageAsync(chatId, $"ℹ️ This turn ran on the Default profile: {result.Note}.", messageThreadId, disableNotification: true); }
+					catch { /* best effort */ }
+				}
 			}
 			catch (Exception ex)
 			{

@@ -27,7 +27,7 @@ public sealed class ClaudeSessionMigrator : IClaudeSessionMigrator
 	}
 
 	/// <inheritdoc />
-	public SessionMigrationReport Migrate(string workingDirectory, string claudeSessionId, string? targetConfigDir)
+	public SessionMigrationReport Migrate(string workingDirectory, string claudeSessionId, string? targetConfigDir, bool skipWhenTargetExists = false)
 	{
 		if (string.IsNullOrEmpty(workingDirectory) || string.IsNullOrEmpty(claudeSessionId))
 			return SessionMigrationReport.NotFound;
@@ -41,10 +41,15 @@ public sealed class ClaudeSessionMigrator : IClaudeSessionMigrator
 			var targetFile = Path.Combine(targetSlug, fileName);
 			var targetDir  = Path.Combine(targetSlug, claudeSessionId);
 
+			// The turn-time adoption (FR.11.13) asks only "is it in the active store": nothing else is scanned when it is.
+			if (skipWhenTargetExists && File.Exists(targetFile))
+				return new SessionMigrationReport(true, false, 0, []);
+
 			var transcriptMoved = false;
 			var folderFiles     = 0;
 			var oldRoots        = new List<string>();
 			var oldPaths        = new List<string>();
+			var failed          = new List<string>();
 
 			foreach (var sourceRoot in EnumerateOtherRoots(targetRoot))
 			{
@@ -55,17 +60,25 @@ public sealed class ClaudeSessionMigrator : IClaudeSessionMigrator
 				var movedHere = false;
 				if (File.Exists(sourceFile) && !File.Exists(targetFile))
 				{
-					Directory.CreateDirectory(targetSlug);
-					File.Move(sourceFile, targetFile);
-					transcriptMoved = true;
-					movedHere       = true;
+					try
+					{
+						Directory.CreateDirectory(targetSlug);
+						File.Move(sourceFile, targetFile);
+						transcriptMoved = true;
+						movedHere       = true;
+					}
+					catch (Exception ex)
+					{
+						failed.Add(sourceFile);
+						_log.Warning(ex, "Could not move the transcript {Source} to {Target}", sourceFile, targetFile);
+					}
 				}
 				else if (File.Exists(sourceFile))
-					_log.Warning("Session {SessionId} has a transcript in both {Source} and {Target}; the target's is kept, the source copy is left in place", claudeSessionId, sourceFile, targetFile);
+					LogConflict(sourceFile, targetFile);
 
 				if (Directory.Exists(sourceDir))
 				{
-					var moved = MergeDirectory(sourceDir, targetDir);
+					var moved = MergeDirectory(sourceDir, targetDir, failed);
 					folderFiles += moved;
 					movedHere   |= moved > 0;
 				}
@@ -86,12 +99,30 @@ public sealed class ClaudeSessionMigrator : IClaudeSessionMigrator
 					_log.Warning("Moved transcript of {SessionId} still names a path under the old config dir: {Path}", claudeSessionId, path);
 			}
 
-			return new SessionMigrationReport(found, transcriptMoved, folderFiles, oldPaths);
+			return new SessionMigrationReport(found, transcriptMoved, folderFiles, oldPaths, failed);
 		}
 		catch (Exception ex)
 		{
 			_log.Warning(ex, "Error moving session {SessionId} between profile stores", claudeSessionId);
-			return SessionMigrationReport.NotFound;
+			return new SessionMigrationReport(false, false, 0, [], [workingDirectory + " / " + claudeSessionId + ": " + ex.Message]);
+		}
+	}
+
+	/// <summary>One line per conflicting source file: which copy is newer and how big each is. Nothing is deleted or overwritten.</summary>
+	private static void LogConflict(string source, string target)
+	{
+		try
+		{
+			var s = new FileInfo(source);
+			var t = new FileInfo(target);
+			var newer = s.LastWriteTimeUtc > t.LastWriteTimeUtc ? "the source copy" : s.LastWriteTimeUtc < t.LastWriteTimeUtc ? "the target copy" : "neither (same time)";
+			_log.Warning(
+				"Both stores hold {File}: kept the target ({TargetSize} bytes, {TargetTime:u}) and left the source in place ({SourceSize} bytes, {SourceTime:u}); {Newer} is newer",
+				Path.GetFileName(source), t.Length, t.LastWriteTimeUtc, s.Length, s.LastWriteTimeUtc, newer);
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Both stores hold {Source}; kept the target's and left the source in place", source);
 		}
 	}
 
@@ -114,27 +145,50 @@ public sealed class ClaudeSessionMigrator : IClaudeSessionMigrator
 	private static bool SamePath(string a, string b) =>
 		string.Equals(Path.TrimEndingDirectorySeparator(a), Path.TrimEndingDirectorySeparator(b), StringComparison.OrdinalIgnoreCase);
 
-	/// <summary>Moves every file of <paramref name="source"/> into <paramref name="target"/>, keeping existing target files; removes emptied source folders. Returns the files moved.</summary>
-	private static int MergeDirectory(string source, string target)
+	/// <summary>
+	/// Moves every file of <paramref name="source"/> into <paramref name="target"/>, keeping existing target files (and logging the
+	/// conflict); a file that cannot be moved is collected in <paramref name="failed"/> and the others still move. Removes emptied
+	/// source folders. Returns the files moved.
+	/// </summary>
+	private static int MergeDirectory(string source, string target, List<string> failed)
 	{
 		var moved = 0;
-		Directory.CreateDirectory(target);
-
-		foreach (var file in Directory.GetFiles(source))
+		try
 		{
-			var destination = Path.Combine(target, Path.GetFileName(file));
-			if (File.Exists(destination))
-				continue;
+			Directory.CreateDirectory(target);
 
-			File.Move(file, destination);
-			moved++;
+			foreach (var file in Directory.GetFiles(source))
+			{
+				var destination = Path.Combine(target, Path.GetFileName(file));
+				if (File.Exists(destination))
+				{
+					LogConflict(file, destination);
+					continue;
+				}
+
+				try
+				{
+					File.Move(file, destination);
+					moved++;
+				}
+				catch (Exception ex)
+				{
+					failed.Add(file);
+					_log.Warning(ex, "Could not move {File} to {Destination}", file, destination);
+				}
+			}
+
+			foreach (var sub in Directory.GetDirectories(source))
+				moved += MergeDirectory(sub, Path.Combine(target, Path.GetFileName(sub)), failed);
+
+			if (!Directory.EnumerateFileSystemEntries(source).Any())
+				Directory.Delete(source);
 		}
-
-		foreach (var sub in Directory.GetDirectories(source))
-			moved += MergeDirectory(sub, Path.Combine(target, Path.GetFileName(sub)));
-
-		if (!Directory.EnumerateFileSystemEntries(source).Any())
-			Directory.Delete(source);
+		catch (Exception ex)
+		{
+			failed.Add(source);
+			_log.Warning(ex, "Could not merge the folder {Source} into {Target}", source, target);
+		}
 
 		return moved;
 	}

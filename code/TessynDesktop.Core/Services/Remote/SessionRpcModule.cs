@@ -113,7 +113,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 			_stateBuilder.Build(node),
 			_tags.GetTags(node.NodeId, name).Select(tag => tag.ToDto()).ToList(),
 			_attention.GetSummary(node.NodeId).ToDto(),
-			content.LastUsed,
+			ApplyPin(content.LastUsed, node, profiles),
 			isStreamingMode,
 			content.EntryCount,
 			epoch,
@@ -217,12 +217,30 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 				content.Seq ?? content.EntryCount,
 				content.FirstTimestamp,
 				content.LastTimestamp,
-				content.LastUsed,
+				ApplyPin(content.LastUsed, node, profiles),
 				content.ContentVersion,
 				content.FileLength));
 		}
 
 		return new SessionHeadersResult(headers, missing);
+	}
+
+	/// <summary>
+	/// ISSUE.013 P6: the profile a client restores as its choice for a session is the session's <c>ProfileId</c> pin, not the name the last user
+	/// entry recorded: after a <c>profile.switch</c> the history still names the old profile until a turn is appended, and a client that
+	/// sent it back as a per-turn choice would silently undo the switch. A queued switch is shown as its target. Unresolvable pins leave the history value.
+	/// </summary>
+	internal static LastUsedSettingsDto ApplyPin(LastUsedSettingsDto lastUsed, SessionNodeModel node, IReadOnlyList<ClaudeProfileModel> profiles)
+	{
+		var pin = string.IsNullOrEmpty(node.PendingProfileId) ? node.ProfileId : node.PendingProfileId;
+		if (string.IsNullOrEmpty(pin))
+			return lastUsed;
+
+		if (string.Equals(pin, Constants.ProfileSwitch.DefaultProfileId, StringComparison.OrdinalIgnoreCase))
+			return lastUsed with { ProfileId = Constants.Remote.DefaultOptionId, ProfileName = lastUsed.ProfileId == Constants.Remote.DefaultOptionId ? lastUsed.ProfileName : Constants.Remote.Profiles.SystemPrefix + Constants.Remote.Profiles.FallbackName };
+
+		var stored = profiles.FirstOrDefault(p => string.Equals(p.ProfileId, pin, StringComparison.OrdinalIgnoreCase));
+		return stored == null ? lastUsed : lastUsed with { ProfileId = stored.ProfileId, ProfileName = stored.DisplayName };
 	}
 
 	/// <summary>The ids of the directory holding <paramref name="node"/> and of its immediate group. The caller holds the settings lock.</summary>

@@ -98,5 +98,5 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 	/// <see cref="ClaudeSessionMigrator"/>; true when the session is (now) there.
 	/// </summary>
 	public bool TryAdoptSessionFromOtherProfile(string workingDirectory, string claudeSessionId, string? activeProfileConfigDir) =>
-		new ClaudeSessionMigrator(_profileService).Migrate(workingDirectory, claudeSessionId, activeProfileConfigDir).Found;
+		new ClaudeSessionMigrator(_profileService).Migrate(workingDirectory, claudeSessionId, activeProfileConfigDir, skipWhenTargetExists: true).Found;
 }

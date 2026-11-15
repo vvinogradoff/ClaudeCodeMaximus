@@ -34,7 +34,8 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		IAppSettingsService appSettings,
 		IClaudeModelService models,
 		IClaudeProfileService profiles,
-		ITurnOptionsResolver optionsResolver)
+		ITurnOptionsResolver optionsResolver,
+		IProfileResolver? profileResolver = null)
 	{
 		_registry        = registry;
 		_compaction      = compaction;
@@ -43,7 +44,7 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		_appSettings     = appSettings;
 		_models          = models;
 		_profiles        = profiles;
-		_profileResolver = new ProfileResolver(appSettings, profiles);
+		_profileResolver = profileResolver ?? new ProfileResolver(appSettings, profiles);
 		_optionsResolver = optionsResolver;
 	}
 

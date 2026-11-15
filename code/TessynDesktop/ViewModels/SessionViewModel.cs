@@ -656,7 +656,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			var last = LastUsedSessionSettingsReader.Read(_fileService, _node.FileName);
 
 			// --- Profile: last user entry that recorded a profile name ---
-			_profiles.RestoreFromEntry(last.ProfileName);
+			_profiles.RestoreFromEntry(last.ProfileName, _node.Model.PendingProfileId ?? _node.Model.ProfileId);
 
 			// --- Model + Effort: last assistant entry that recorded a model ID ---
 			_models.RestoreFromEntry(last.ModelId, last.Effort);

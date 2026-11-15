@@ -932,6 +932,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			return null;
 
 		var migrated = string.Empty;
+		var queued   = false;
 		if (migrate)
 		{
 			if (_profileSwitch == null || !_profileSwitch.IsDescendantOf(target.NodeId, caller.NodeId))
@@ -944,11 +945,20 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			try
 			{
 				var switched = _profileSwitch.Switch(target.NodeId, callerProfile.ProfileId, includeDescendants: false);
+				var failure  = switched.Failed.FirstOrDefault(f => f.NodeId == target.NodeId);
+				if (failure != null)
+					throw new McpToolException(
+						$"Migration of '{target.Name}' to profile '{switched.ProfileName}' failed: {failure.Paths.Count} file(s) could not be moved (e.g. {failure.Paths.FirstOrDefault()}). " +
+						"The session was not run; its switch stays queued and is retried when its next turn starts.");
+
+				queued   = switched.Queued.Any(q => q.NodeId == target.NodeId);
 				migrated = switched.NodeMoved
 					? $"\n[migrated to profile={switched.ProfileName}" + (switched.OldConfigPaths.Count > 0
 						? $"; the transcript still names {switched.OldConfigPaths.Count} path(s) under the old config dir, e.g. {switched.OldConfigPaths[0]}"
 						: string.Empty) + "]"
-					: string.Empty;
+					: queued
+						? $"\n[migration queued: the session is running; it moves to profile={switched.ProfileName} when its turn ends]"
+						: string.Empty;
 			}
 			catch (ProfileSwitchException ex)
 			{
@@ -956,13 +966,18 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			}
 		}
 
-		var profile = _profiles.Resolve(target, _turnService.Value.ResolveProfileName(target), checkLogin: true);
+		// A queued migration fixes the next turn, so the old (possibly dead or logged-out) profile is not checked.
+		var profile = queued && !string.IsNullOrEmpty(target.PendingProfileId)
+			? _profiles.FindById(target.PendingProfileId) ?? _profiles.Resolve(target, _turnService.Value.ResolveProfileName(target))
+			: _profiles.Resolve(target, _turnService.Value.ResolveProfileName(target), checkLogin: true);
 		if (!profile.IsResolved)
 			throw new McpToolException(profile.Error + Constants.ProfileSwitch.MigrateHint);
 		if (profile.IsLoggedOut)
 			throw new McpToolException(string.Format(Constants.ProfileSwitch.PinnedProfileLoggedOutFormat, target.Name, profile.DisplayName) + Constants.ProfileSwitch.MigrateHint);
 
-		return new TargetProfileNote($" on profile={profile.DisplayName}", $"{migrated}\n[profile={profile.DisplayName}]");
+		// A legacy recorded profile that no longer exists: the turn runs on Default, and says so.
+		var label = profile.Note == null ? profile.DisplayName : $"{profile.DisplayName}; {profile.Note}";
+		return new TargetProfileNote($" on profile={label}", $"{migrated}\n[profile={label}]");
 	}
 
 	/// <summary>ISSUE.013 R9: the spawn error for a working dir outside every registered project, listing the registered ones.</summary>

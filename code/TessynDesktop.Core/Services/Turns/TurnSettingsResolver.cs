@@ -19,7 +19,6 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 	private readonly IClaudeModelService _models;
 	private readonly IProfileLabelService _labels;
 	private readonly IProfileResolver _resolver;
-	private readonly IProfileSwitchService? _switch;
 
 	public TurnSettingsResolver(
 		IAppSettingsService appSettings,
@@ -27,8 +26,7 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 		IClaudeProfileService profiles,
 		IClaudeModelService models,
 		IProfileLabelService labels,
-		IProfileResolver? resolver = null,
-		IProfileSwitchService? profileSwitch = null)
+		IProfileResolver? resolver = null)
 	{
 		_appSettings = appSettings;
 		_turns       = turns;
@@ -36,15 +34,16 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 		_models      = models;
 		_labels      = labels;
 		_resolver    = resolver ?? new ProfileResolver(appSettings, profiles);
-		_switch      = profileSwitch;
 	}
 
 	/// <inheritdoc />
 	public async Task<TurnSettings> ResolveAsync(SessionNodeModel node, TurnOptionsModel? options)
 	{
-		// ISSUE.013: a queued switch is applied first; a pinned profile that does not resolve is an error, never Default.
-		_switch?.ApplyPending(node);
-		var profile = _resolver.Resolve(node, _turns.ResolveProfileName(node), options?.ProfileName);
+		// ISSUE.013: read-only. A switch queued for this session is applied only under its turn lock (TurnEngine), never here: the
+		// session may still be running its previous turn. The settings already name the queued target so the turn launches on it.
+		// A pinned profile that does not resolve is an error, never Default.
+		var pending = options?.ProfileName == null && !string.IsNullOrEmpty(node.PendingProfileId) ? _resolver.FindById(node.PendingProfileId) : null;
+		var profile = pending ?? _resolver.Resolve(node, _turns.ResolveProfileName(node), options?.ProfileName);
 		if (!profile.IsResolved)
 			throw new TdcpException(profile.Error!);
 

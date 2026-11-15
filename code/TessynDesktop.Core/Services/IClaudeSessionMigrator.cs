@@ -13,5 +13,6 @@ public interface IClaudeSessionMigrator
 	/// Moves the session from every other profile store into the one at <paramref name="targetConfigDir"/> (null = the Default profile).
 	/// The target's own files win on a name conflict (the source copy is left in place). Never throws: a failure is logged and reported as not moved.
 	/// </summary>
-	SessionMigrationReport Migrate(string workingDirectory, string claudeSessionId, string? targetConfigDir);
+	/// <param name="skipWhenTargetExists">Return at once when the target already holds the transcript (the turn-time check): nothing else is scanned.</param>
+	SessionMigrationReport Migrate(string workingDirectory, string claudeSessionId, string? targetConfigDir, bool skipWhenTargetExists = false);
 }
