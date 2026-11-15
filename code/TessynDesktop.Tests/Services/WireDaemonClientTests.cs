@@ -264,11 +264,27 @@ public sealed class WireDaemonClientTests : IDisposable
     public WireDaemonClientTests()
     {
         _fake  = new WireFakeDaemonClient();
-        var port = FindFreePort();
-        _serverBaseUrl = $"http://127.0.0.1:{port}";
 
-        _server = new TdcpServer(_fake, new TdcpDispatcher([new TdcpLoopbackRpcModule(_fake)]), TestToken);
-        _server.Start(port);
+        // A free port is only known to be free until it is released: a parallel test class may take it before the bind, so try again.
+        TdcpServer? server = null;
+        var port = 0;
+        for (var attempt = 1; server == null; attempt++)
+        {
+            port = FindFreePort();
+            var candidate = new TdcpServer(_fake, new TdcpDispatcher([new TdcpLoopbackRpcModule(_fake)]), TestToken);
+            try
+            {
+                candidate.Start(port);
+                server = candidate;
+            }
+            catch (HttpListenerException) when (attempt < 20)
+            {
+                candidate.Dispose();
+            }
+        }
+
+        _server = server;
+        _serverBaseUrl = $"http://127.0.0.1:{port}";
 
         _client = new WireDaemonClient(_serverBaseUrl, TestToken);
         _client.StartAsync().GetAwaiter().GetResult();

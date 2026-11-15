@@ -13,7 +13,7 @@ namespace TessynDesktop.Client;
 /// token header (never an <c>Origin</c> header), and one SSE stream that resumes with <c>Last-Event-ID</c> after a drop.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class TessynClient : ITessynClient
+public sealed partial class TessynClient : ITessynClient
 {
 	private const string JsonContentType = "application/json";
 	private const string EventStreamContentType = "text/event-stream";

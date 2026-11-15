@@ -157,6 +157,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		var fileName  = e.FileName;
 		var cancelled = e.Cancelled;
 		var error     = e.ErrorText;
+		var turnId    = e.TurnId;
 
 		// Every completion is its own notification (a unique key), but the work is deferred off this thread. The factory first
 		// publishes the session's pending appended/changed notifications, so turn.completed never overtakes the last of them.
@@ -173,7 +174,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 					return null;
 
 				_bus.FlushPending(Constants.Remote.Events.SessionChanged, NodeKeyPrefix + node.NodeId);
-				return new TurnCompletedPayload(node.NodeId, cancelled, error);
+				return new TurnCompletedPayload(node.NodeId, cancelled, error, turnId);
 			},
 			Constants.Remote.Timings.Immediate);
 	});

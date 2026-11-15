@@ -8,7 +8,7 @@ namespace TessynDesktop.Client;
 /// Events are raised on thread-pool threads, never on the caller's context; a UI consumer marshals them itself.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public interface ITessynClient : IAsyncDisposable
+public partial interface ITessynClient : IAsyncDisposable
 {
 	/// <summary>Current connection state.</summary>
 	TessynClientState State { get; }

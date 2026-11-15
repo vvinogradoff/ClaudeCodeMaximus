@@ -28,3 +28,8 @@ When `core.autocrlf=input` is set, `git add` refuses to stage files with CRLF li
 **Fix:** use `git -c core.safecrlf=false add <file>` to stage without the safety check.
 
 **DO NOT** try to convert line endings with PowerShell via bash — backtick escaping in `-replace` patterns gets mangled by bash, corrupting file content.
+
+## Editing source files with scripts (Git Bash and PowerShell)
+Large heredocs (`cat > file <<'EOF'`) and `python - <<'PY'` blocks that contain nested quotes, `'''` or C# raw string literals (`"""`) fail with "unexpected EOF while looking for matching quote", and nothing is executed.
+
+**Fix:** write the script or the file with the Write tool (a `.py` file in `%TEMP%`, run with `python <path>`), then run it. Python's text mode reads CRLF files as LF and writes LF back; git normalizes line endings (`core.autocrlf=true` here), so this causes no diff churn. Match tab counts exactly when replacing code (a missed tab fails the `assert old in s` check, which is a good thing).
