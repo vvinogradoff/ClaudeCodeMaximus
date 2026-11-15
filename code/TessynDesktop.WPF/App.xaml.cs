@@ -31,6 +31,9 @@ public partial class App : Application
 
 		var startup = System.Diagnostics.Stopwatch.StartNew();
 		var options = StartupOptions.Parse(e.Args);
+		if (options.TestWindow)
+			TestWindowFocusGuard.CaptureForegroundAtStart();
+
 		_singleInstance = new SingleInstanceGuard(options.MutexName);
 		if (!_singleInstance.TryAcquire())
 		{
