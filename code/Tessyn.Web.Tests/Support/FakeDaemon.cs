@@ -63,6 +63,14 @@ public sealed class FakeDaemon : IAsyncDisposable
 		return await _http.SendAsync(request);
 	}
 
+	public async Task<HttpResponseMessage> GetAsync(string path, string? token = TessynWebFactory.LinkToken)
+	{
+		var request = new HttpRequestMessage(HttpMethod.Get, path);
+		if (token != null)
+			request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+		return await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+	}
+
 	public async ValueTask DisposeAsync()
 	{
 		await _stream.DisposeAsync();

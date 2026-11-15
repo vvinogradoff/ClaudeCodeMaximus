@@ -36,7 +36,8 @@ public sealed class WebStack : IAsyncDisposable
 			daemon.Bus,
 			"http://localhost",
 			token ?? E2EWebFactory.LinkToken,
-			() => new HttpClient(web.Server.CreateHandler()) { Timeout = Timeout.InfiniteTimeSpan });
+			() => new HttpClient(web.Server.CreateHandler()) { Timeout = Timeout.InfiniteTimeSpan },
+			daemon.Get<RelayBlobGateway>());
 		var stack = new WebStack(web, daemon, link);
 		link.Start();
 		if (waitOnline)

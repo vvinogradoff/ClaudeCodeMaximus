@@ -30,9 +30,11 @@ public static class Constants
 		public const string Me = "/api/auth/me";
 		public const string Rpc = "/api/rpc";
 		public const string Events = "/api/events";
+		public const string Attachments = "/api/attachments";
 		public const string LinkStream = "/link/stream";
 		public const string LinkReply = "/link/reply";
 		public const string LinkEvents = "/link/events";
+		public const string LinkBlob = "/link/blob/{blobId}";
 		public const string IndexFile = "index.html";
 		public const string AssetsPrefix = "/assets/";
 	}
@@ -54,7 +56,7 @@ public static class Constants
 
 	public static class HeaderValues
 	{
-		public const string ContentSecurityPolicy = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'; object-src 'none'";
+		public const string ContentSecurityPolicy = "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'; object-src 'none'";
 		public const string NoSniff = "nosniff";
 		public const string NoReferrer = "no-referrer";
 		public const string FrameDeny = "DENY";
@@ -112,6 +114,10 @@ public static class Constants
 		public const double RequestTimeoutSeconds = 30;
 		public const double LongRequestTimeoutSeconds = 60;
 		public const double PingSeconds = 15;
+		public const double AttachmentFetchTimeoutSeconds = 300;
+		public const double BlobTtlMinutes = 60;
+		public const string BlobFolderName = "tessyn-web-blobs";
+		public const string BlobExtension = ".blob";
 		public const int RingBufferEvents = 1000;
 		public const double RingBufferMinutes = 10;
 		public const int PerIpFailures = 5;
@@ -132,6 +138,19 @@ public static class Constants
 		public const int TokenBytes = 32;
 		public const int Sha256HexLength = 64;
 		public const int DaemonNameMaxLength = 64;
+		public const long MaxUploadBytes = 200L * 1024 * 1024;
+
+		/// <summary>Room for the multipart boundaries and the nodeId field around a file of the maximum size.</summary>
+		public const int MultipartOverheadBytes = 1024 * 1024;
+		public const int NodeIdMaxLength = 128;
+		public const int BlobIdHexLength = 32;
+		public const int CopyBufferBytes = 81920;
+		public const int MaxConcurrentUploads = 2;
+		public const long MaxBlobDirectoryBytes = 1024L * 1024 * 1024;
+		public const int DiskFullWin = 0x70;
+		public const int HandleDiskFullWin = 0x27;
+		public const int DiskFullUnix = 28;
+		public const int HResultCodeMask = 0xFFFF;
 	}
 
 	public static class JsonRpc
@@ -149,6 +168,25 @@ public static class Constants
 		public const string InvalidParamsMessage = "Invalid params";
 		public const string DaemonOfflineMessage = "Daemon offline";
 		public const string DaemonTimeoutMessage = "Daemon timeout";
+	}
+
+	public static class Attachments
+	{
+		public const string NodeIdField = "nodeId";
+		public const string FileField = "file";
+		public const string FallbackName = "file";
+		public const string OctetStream = "application/octet-stream";
+		public const string NotMultipartMessage = "Expected a multipart/form-data upload";
+		public const string MissingNodeIdMessage = "Send the nodeId field before the file";
+		public const string MissingFileMessage = "No file in the upload";
+		public const string DaemonOfflineMessage = "The desktop is offline, so the file cannot be stored. Try again when it is connected.";
+		public const string DaemonTimeoutMessage = "The desktop did not finish storing the file in time";
+		public const string TooLargeMessage = "The file is larger than the 200 MB limit";
+		public const string BadUploadMessage = "The upload could not be read";
+		public const string DaemonRefusedPrefix = "The desktop refused the file: ";
+		public const string BadReplyMessage = "The desktop sent an unexpected reply";
+		public const string BusyMessage = "Too many uploads are running right now. Try again in a moment.";
+		public const string StorageFullMessage = "The server has no room for the upload right now. Try again later.";
 	}
 
 	public static class Notifications
@@ -184,6 +222,8 @@ public static class Constants
 			public const string UsageGet = "usage.get";
 			public const string FileRead = "file.read";
 			public const string FilePreview = "file.preview";
+			public const string AttachmentList = "attachment.list";
+			public const string AttachmentFetch = "attachment.fetch";
 		}
 	}
 

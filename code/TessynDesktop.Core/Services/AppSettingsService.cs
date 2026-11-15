@@ -63,13 +63,35 @@ public sealed class AppSettingsService : IAppSettingsService
 			if (!File.Exists(_settingsFilePath))
 			{
 				EnsureSessionFilesRoot();
+				MigrateFileAccessMode(Settings);
 				return;
 			}
 
 			var json = File.ReadAllText(_settingsFilePath);
 			Settings = JsonSerializer.Deserialize<AppSettingsModel>(json, SerializerOptions) ?? new AppSettingsModel();
 			EnsureSessionFilesRoot();
+			MigrateFileAccessMode(Settings);
 		}
+	}
+
+	/// <summary>
+	/// Decision A11 moved the default FileAccess mode from ReferencedOnly to WorkingDirectory. A file written before it holds ReferencedOnly only
+	/// as the old default, so it is moved once; <see cref="FileAccessSettingsModel.ModeRevision"/> records that, and a later explicit ReferencedOnly stays.
+	/// </summary>
+	private void MigrateFileAccessMode(AppSettingsModel settings)
+	{
+		settings.FileAccess ??= new FileAccessSettingsModel();
+		var fileAccess = settings.FileAccess;
+		if (fileAccess.ModeRevision >= Constants.FileAccess.ModeRevision)
+			return;
+
+		if (fileAccess.Mode == FileAccessMode.ReferencedOnly)
+		{
+			fileAccess.Mode = FileAccessMode.WorkingDirectory;
+			_log.Information("FileAccess mode moved from ReferencedOnly to WorkingDirectory (decision A11)");
+		}
+
+		fileAccess.ModeRevision = Constants.FileAccess.ModeRevision;
 	}
 
 	public void Save()

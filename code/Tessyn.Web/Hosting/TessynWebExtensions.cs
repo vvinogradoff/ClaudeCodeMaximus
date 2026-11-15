@@ -36,6 +36,8 @@ public static class TessynWebExtensions
 		services.AddSingleton<WireJson>();
 		services.AddSingleton<RemoteMethodAllowlist>();
 		services.AddSingleton<DaemonLinkHub>();
+		services.AddSingleton<BlobStore>();
+		services.AddSingleton<UploadLimiter>();
 		services.AddSingleton<SseWriter>();
 		services.AddSingleton<PasswordHasher>();
 		services.AddSingleton<LoginThrottle>();

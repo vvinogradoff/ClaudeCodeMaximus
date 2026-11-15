@@ -4,7 +4,14 @@ namespace TessynDesktop.Models;
 /// <remarks>Created by Claude</remarks>
 public sealed class FileAccessSettingsModel
 {
-	public FileAccessMode Mode { get; set; } = FileAccessMode.ReferencedOnly;
+	/// <summary>Decision A11 (option 2): referenced files, attachments and the files inside the session's working directory.</summary>
+	public FileAccessMode Mode { get; set; } = FileAccessMode.WorkingDirectory;
+
+	/// <summary>
+	/// The revision of the <see cref="Mode"/> default that the stored value has been checked against (<c>Constants.FileAccess.ModeRevision</c>).
+	/// Null in files written before decision A11; <c>AppSettingsService.Load</c> sets it.
+	/// </summary>
+	public int? ModeRevision { get; set; }
 
 	/// <summary>Most bytes one relay <c>file.read</c> call returns (before base64).</summary>
 	public int MaxRelayChunkBytes { get; set; } = Constants.FileAccess.DefaultRelayChunkBytes;

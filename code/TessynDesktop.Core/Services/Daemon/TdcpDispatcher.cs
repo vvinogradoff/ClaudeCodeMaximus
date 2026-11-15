@@ -122,6 +122,10 @@ public sealed class TdcpDispatcher
 		{
 			return Error(id, MethodNotFound, $"Method not found: {ex.Message}");
 		}
+		catch (TdcpTimeoutException ex)
+		{
+			return Error(id, TessynDesktop.Models.Remote.RemoteProtocol.ErrorCodes.DaemonTimeout, ex.Message);
+		}
 		catch (TdcpInvalidParamsException ex)
 		{
 			return Error(id, InvalidParams, ex.Message);

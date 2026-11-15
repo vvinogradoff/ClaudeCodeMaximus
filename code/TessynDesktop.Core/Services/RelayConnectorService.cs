@@ -34,6 +34,7 @@ public sealed class RelayConnectorService : IRelayConnectorService
 	private readonly IEventLog? _eventLog;
 	private readonly IRelayHttpClientFactory _httpFactory;
 	private readonly RelayConnectorTimings _timings;
+	private readonly RelayBlobGateway? _blobGateway;
 
 	private readonly object _gate = new();
 	private readonly object _statusGate = new();
@@ -47,8 +48,10 @@ public sealed class RelayConnectorService : IRelayConnectorService
 		IRemoteEventBus bus,
 		IRelayHttpClientFactory httpFactory,
 		RelayConnectorTimings? timings = null,
-		IEventLog? eventLog = null)
+		IEventLog? eventLog = null,
+		RelayBlobGateway? blobGateway = null)
 	{
+		_blobGateway = blobGateway;
 		_store = store;
 		_dispatcher = dispatcher;
 		_bus = bus;
@@ -220,6 +223,7 @@ public sealed class RelayConnectorService : IRelayConnectorService
 
 			SetStatus(RelayState.Connected);
 			elapsed.Start();
+			_blobGateway?.Attach(client, baseUrl);
 
 			requests = Channel.CreateUnbounded<JsonNode>(new UnboundedChannelOptions { SingleWriter = true });
 			events = Channel.CreateBounded<RemoteNotification>(new BoundedChannelOptions(Constants.Remote.Link.EventQueueCapacity)
@@ -268,6 +272,7 @@ public sealed class RelayConnectorService : IRelayConnectorService
 		}
 		finally
 		{
+			_blobGateway?.Detach(client);
 			if (handler is not null)
 			{
 				if (_eventLog is not null)

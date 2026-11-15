@@ -728,11 +728,11 @@ public sealed class FocusReferencesTests : IDisposable
 	}
 
 	[Fact]
-	public void The_default_policy_is_the_strictest()
+	public void The_default_policy_is_the_working_directory_mode_decision_A11()
 	{
 		var settings = new AppSettingsModel().FileAccess;
 
-		Assert.Equal(FileAccessMode.ReferencedOnly, settings.Mode);
+		Assert.Equal(FileAccessMode.WorkingDirectory, settings.Mode);
 		Assert.True(settings.MaxRelayChunkBytes > 0);
 	}
 
@@ -801,8 +801,9 @@ public sealed class FocusReferencesTests : IDisposable
 	}
 
 	[Fact]
-	public async Task Preview_over_the_relay_follows_the_mode_referenced_only_by_default()
+	public async Task Preview_over_the_relay_in_the_referenced_only_mode_allows_only_referenced_files()
 	{
+		_env.Base.Settings.Settings.FileAccess.Mode = FileAccessMode.ReferencedOnly;
 		var plain = _env.WriteFile("plain.md", "plain");
 		var referenced = _env.WriteFile("ref.md", "referenced");
 		_env.WriteBodies("u", $"files: {plain} and {referenced}");
@@ -821,6 +822,7 @@ public sealed class FocusReferencesTests : IDisposable
 	[Fact]
 	public async Task The_working_directory_mode_widens_the_relay_to_files_under_the_session_directory_only()
 	{
+		_env.Base.Settings.Settings.FileAccess.Mode = FileAccessMode.ReferencedOnly;
 		var inside = _env.WriteFile("src/inside.cs", "class A {}");
 		var outside = Path.Combine(_env.Base.Root, "outside.md");
 		File.WriteAllText(outside, "x");

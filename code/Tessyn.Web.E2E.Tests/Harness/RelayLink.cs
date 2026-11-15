@@ -16,10 +16,10 @@ public sealed class RelayLink : IDisposable
 
 	private readonly InMemoryRelayConfigStore _store;
 
-	public RelayLink(TdcpDispatcher dispatcher, IRemoteEventBus bus, string url, string token, Func<HttpClient> clientFactory)
+	public RelayLink(TdcpDispatcher dispatcher, IRemoteEventBus bus, string url, string token, Func<HttpClient> clientFactory, RelayBlobGateway? blobGateway = null)
 	{
 		_store = new InMemoryRelayConfigStore(new RelayConfigModel { Enabled = true, Url = url, Token = token });
-		Connector = new RelayConnectorService(_store, dispatcher, bus, new DelegateHttpClientFactory(clientFactory), FastTimings);
+		Connector = new RelayConnectorService(_store, dispatcher, bus, new DelegateHttpClientFactory(clientFactory), FastTimings, blobGateway: blobGateway);
 	}
 
 	public RelayConnectorService Connector { get; }

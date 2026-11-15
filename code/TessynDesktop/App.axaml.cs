@@ -297,6 +297,9 @@ public partial class App : Application
 		services.AddSingleton<IRelayConfigStore, RelayConfigStore>();
 		services.AddSingleton<IRelayHttpClientFactory, RelayHttpClientFactory>();
 		services.AddSingleton<IRelayConnectorService, RelayConnectorService>();
+		// The connector hands its live connection to the gateway; attachment.fetch downloads through it (no dependency cycle with the dispatcher).
+		services.AddSingleton<RelayBlobGateway>();
+		services.AddSingleton<IRelayBlobClient>(sp => sp.GetRequiredService<RelayBlobGateway>());
 
 		// Remote session, attention, catalog and usage methods (web client). Singletons only where state must be shared: the
 		// Default profile label (its cached resolution), the parsed-entry cache, the pending-send counters and the per-profile
@@ -320,6 +323,9 @@ public partial class App : Application
 		services.AddSingleton<IFocusRefResolver, FocusRefResolver>();
 		services.AddSingleton<IFileAccessService, FileAccessService>();
 		services.AddTransient<IRemoteRpcModule, FileRpcModule>();
+		// Attachments: per-profile storage, import (loopback), fetch from the web server (relay), list; file.read takes attachment ids.
+		services.AddSingleton<IAttachmentService, AttachmentService>();
+		services.AddTransient<IRemoteRpcModule, AttachmentRpcModule>();
 		services.AddTransient<IRemoteRpcModule, CatalogRpcModule>();
 		services.AddTransient<IRemoteRpcModule, UsageRpcModule>();
 
