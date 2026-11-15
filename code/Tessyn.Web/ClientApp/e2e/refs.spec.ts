@@ -309,7 +309,7 @@ test.describe('attachments', () => {
 
 // ---- review fixes (311) ---------------------------------------------------------------------------------------------
 
-type MockHook = { liveId(): string; setOnline(v: boolean): void };
+type MockHook = { liveId(): string; setOnline(v: boolean): void; compactSilently(name: string): void };
 const mockOf = <T,>(page: Page, f: (m: MockHook) => T) => page.evaluate((src) => (new Function('m', `return (${src})(m)`))((window as unknown as { __mock: MockHook }).__mock), f.toString());
 
 test.describe('review fixes', () => {
@@ -401,6 +401,22 @@ test.describe('review fixes', () => {
 		await page.waitForTimeout(600);
 		await expect(page.getByTestId('anchored-bar')).toBeVisible();
 		expect(await highlightedText(page)).toBe('typed JSON-RPC client plus an SSE event stream');
+	});
+
+	test('N1: a compaction while offline drops the stale anchored window on reconnect and shows the latest page with a notice', async ({ page }) => {
+		await login(page);
+		await openByRecent(page, 'Needs your decision');
+		await focusTab(page);
+		await page.getByTestId('focus-card').filter({ hasText: 'Which retry policy' }).getByTestId('ref-entry').click();
+		await expect(page.getByTestId('anchored-bar')).toBeVisible();
+		await mockOf(page, (m) => m.setOnline(false));
+		await expect(page.getByText('Desktop offline')).toBeVisible();
+		await mockOf(page, (m) => m.compactSilently('Web client - SPA design'));
+		await mockOf(page, (m) => m.setOnline(true));
+		await expect(page.getByText('Desktop offline')).toHaveCount(0);
+		await expect(page.getByText('no longer available; showing the latest')).toBeVisible();
+		await expect(page.getByTestId('anchored-bar')).toHaveCount(0);
+		await expect(page.getByText('Summary of the conversation so far')).toBeVisible();
 	});
 
 	test('upload: switching session mid-upload aborts it and inserts nothing anywhere', async ({ page }) => {

@@ -220,7 +220,37 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			rows = r.GetInt64(0);
 			rowMax = r.IsDBNull(1) ? 0 : r.GetInt64(1);
 		}
-		return mapped == rows && mappedMax == rowMax;
+		return mapped == rows && mappedMax == rowMax && SampledRangesMatch(conn);
+	}
+
+	/// <summary>
+	/// A cheap spot check for what the totals cannot see (rows that moved while the row total and the highest rowid stayed the same):
+	/// a few random mapped sessions must each still hold <c>row_count</c> rows inside their mapped range. Each count is bounded by the rowid range.
+	/// </summary>
+	private static bool SampledRangesMatch(SqliteConnection conn)
+	{
+		var sample = new List<(string Id, long First, long Last, long Count)>();
+		using (var cmd = conn.CreateCommand())
+		{
+			cmd.CommandText = Constants.SqlQueries.SampleMap;
+			cmd.Parameters.AddWithValue("@n", Constants.SessionIndex.AuditSampleSize);
+			using var r = cmd.ExecuteReader();
+			while (r.Read())
+				sample.Add((r.GetString(0), r.GetInt64(1), r.GetInt64(2), r.GetInt64(3)));
+		}
+
+		foreach (var (id, first, last, count) in sample)
+		{
+			using var cmd = conn.CreateCommand();
+			cmd.CommandText = Constants.SqlQueries.CountRowsInRange;
+			cmd.Parameters.AddWithValue("@first", first);
+			cmd.Parameters.AddWithValue("@last", last);
+			cmd.Parameters.AddWithValue("@externalId", id);
+			if (Convert.ToInt64(cmd.ExecuteScalar()) != count)
+				return false;
+		}
+
+		return true;
 	}
 
 	private static void Exec(SqliteConnection conn, string sql, SqliteTransaction? tx = null)
@@ -1182,18 +1212,35 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			onBatchComplete?.Invoke(titlesSoFar);
 		}
 
-		var generated = await _assistService.GenerateTitlesAsync(missing, OnAssistBatchComplete, cancellationToken)
-			.ConfigureAwait(false);
+		Dictionary<string, string> generated;
+		try
+		{
+			generated = await _assistService.GenerateTitlesAsync(missing, OnAssistBatchComplete, cancellationToken)
+				.ConfigureAwait(false);
 
-		var finalNew = generated.Where(kv => !persisted.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
-		if (finalNew.Count > 0)
-			pendingWrites.Add(PersistTitlesAsync(missing, finalNew));
-		await Task.WhenAll(pendingWrites).ConfigureAwait(false);
+			var finalNew = generated.Where(kv => !persisted.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+			if (finalNew.Count > 0)
+				pendingWrites.Add(PersistTitlesAsync(missing, finalNew));
+		}
+		finally
+		{
+			// Also on cancellation or a throwing generator: queued writes are awaited, and a failed one is logged, never left unobserved.
+			await DrainTitleWritesAsync(pendingWrites).ConfigureAwait(false);
+		}
 
 		foreach (var (sessionId, title) in generated)
 			result[sessionId] = title;
 
 		return result;
+	}
+
+	private static async Task DrainTitleWritesAsync(List<Task> pendingWrites)
+	{
+		foreach (var write in pendingWrites.ToArray())
+		{
+			try { await write.ConfigureAwait(false); }
+			catch (Exception ex) { _log.Warning(ex, "A queued session-title write failed; the title will be regenerated later"); }
+		}
 	}
 
 	// ── Session summary lookup ───────────────────────────────────────────────────────

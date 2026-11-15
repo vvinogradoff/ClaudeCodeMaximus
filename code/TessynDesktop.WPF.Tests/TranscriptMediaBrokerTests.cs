@@ -119,6 +119,18 @@ public sealed class TranscriptMediaBrokerTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ACacheHit_StillNeedsAnApprovalOrAnAllowlistedHost()
+	{
+		_broker.Offer(1, [Allowlisted]);
+		await Serve(Allowlisted);   // cached, served on the allowlist
+
+		_policy.SetHosts([]);       // the host leaves the allowlist (no click was made)
+
+		await Assert.ThrowsAsync<MediaRefusedException>(() => Serve(Allowlisted));
+		Assert.Single(_http.Requests);
+	}
+
+	[Fact]
 	public async Task ARedirectAwayFromTheAllowlist_IsRefusedAtTheBrokerToo()
 	{
 		var handler = new FakeHttpHandler(_ => FakeHttpHandler.Redirect("https://attacker.example.net/steal.png"));

@@ -100,20 +100,26 @@ public sealed class AttachmentService : IAttachmentService
 		if (opened.Length > Constants.Attachments.MaxFetchBytes)
 			throw new TdcpException(Constants.Attachments.TooLargeMessage);
 
+		// The folder is created only once the checks pass, and a refused import removes it again when nothing was stored.
+		CheckPathLength(FolderPath(node), Path.GetFileName(full));
 		var folder = EnsureFolder(node);
 		var temp   = TempPath(folder);
+		var done   = false;
 		try
 		{
 			using (var target = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
 				opened.Stream.CopyTo(target, Constants.Attachments.CopyBufferBytes);
 
 			var stored = Store(folder, temp, Path.GetFileName(full));
+			done = true;
 			_log.Information("Attachment imported: {Name} ({Size} bytes) for node {NodeId}", stored.Name, stored.Size, node.NodeId);
 			return stored;
 		}
 		finally
 		{
 			TryDelete(temp);
+			if (!done)
+				TryRemoveEmptyFolder(folder);
 		}
 	}
 
@@ -130,8 +136,11 @@ public sealed class AttachmentService : IAttachmentService
 		if (_blobs == null)
 			throw new TdcpException(Constants.Attachments.NotConnectedMessage);
 
+		// The path-length check comes before the download, so a name that cannot be stored wastes no transfer.
+		CheckPathLength(FolderPath(node), name);
 		var folder = EnsureFolder(node);
 		var temp   = TempPath(folder);
+		var done   = false;
 		try
 		{
 			using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -161,12 +170,15 @@ public sealed class AttachmentService : IAttachmentService
 				throw new TdcpException("The downloaded file does not match its SHA-256");
 
 			var stored = Store(folder, temp, name);
+			done = true;
 			_log.Information("Attachment fetched: {Name} ({Size} bytes) for node {NodeId}", stored.Name, stored.Size, node.NodeId);
 			return stored;
 		}
 		finally
 		{
 			TryDelete(temp);
+			if (!done)
+				TryRemoveEmptyFolder(folder);
 		}
 	}
 
@@ -282,11 +294,35 @@ public sealed class AttachmentService : IAttachmentService
 		}
 	}
 
+	private string FolderPath(SessionNodeModel node) => Path.Combine(Root, ProfileKey(node), SafeSegment(node.NodeId));
+
 	private string EnsureFolder(SessionNodeModel node)
 	{
-		var folder = Path.Combine(Root, ProfileKey(node), SafeSegment(node.NodeId));
+		var folder = FolderPath(node);
 		Directory.CreateDirectory(folder);
 		return folder;
+	}
+
+	/// <summary>Refuses a name whose shortest stored path (the first, suffix-free candidate) already exceeds the Windows limit.</summary>
+	private void CheckPathLength(string folder, string requestedName)
+	{
+		var stamp = _time.GetUtcNow().ToString(Constants.Attachments.TimestampFormat);
+		if (Path.Combine(folder, $"{stamp}-{SafeFileName(requestedName)}").Length > Constants.Attachments.MaxPathLength)
+			throw new TdcpException("The attachment's path would be too long for Windows; shorten the file name");
+	}
+
+	/// <summary>Removes the node folder when nothing was stored in it; a folder with content stays.</summary>
+	private static void TryRemoveEmptyFolder(string folder)
+	{
+		try
+		{
+			if (Directory.Exists(folder) && !Directory.EnumerateFileSystemEntries(folder).Any())
+				Directory.Delete(folder);
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		{
+			// Best effort: an empty folder is harmless.
+		}
 	}
 
 	private static string TempPath(string folder) =>

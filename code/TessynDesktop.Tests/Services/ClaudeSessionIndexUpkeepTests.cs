@@ -525,6 +525,28 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 	}
 
 	[Fact]
+	public async Task X2_AMapWhoseTotalsMatchButWhoseRangesAreWrong_IsCaughtByTheSpotCheck_AndRebuilt()
+	{
+		WriteSession("-p-a", "A", "alpha one", "alpha two");
+		WriteSession("-p-a", "B", "beta only");
+		var service = NewService();
+		await service.RunUpkeepAsync();
+		var a = Scalar("SELECT row_count FROM session_rows WHERE external_id = 'A';");
+		var b = Scalar("SELECT row_count FROM session_rows WHERE external_id = 'B';");
+		Assert.NotEqual(a, b);
+
+		// The totals (and the highest rowid) stay the same, so only the per-session check can see it.
+		Exec($"UPDATE session_rows SET row_count = {b} WHERE external_id = 'A';");
+		Exec($"UPDATE session_rows SET row_count = {a} WHERE external_id = 'B';");
+		var report = await service.RunUpkeepAsync();
+
+		Assert.True(report.MapRebuilt);
+		Assert.Equal(a, Scalar("SELECT row_count FROM session_rows WHERE external_id = 'A';"));
+		Assert.Equal(b, Scalar("SELECT row_count FROM session_rows WHERE external_id = 'B';"));
+		Assert.False((await service.RunUpkeepAsync()).MapRebuilt);
+	}
+
+	[Fact]
 	public async Task N1_AMissingHomeWithRows_DoesNotBlockThePurge_ItsOwnRowsAreKept()
 	{
 		var second = Path.Combine(_tempRoot, "profiles", "p9", "projects");
@@ -625,6 +647,33 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 		var titles = await ensure.WaitAsync(TimeSpan.FromSeconds(10));
 		Assert.Equal("Queued title", titles["t-1"]);
 		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE title = 'Queued title';"));
+	}
+
+	[Fact]
+	public async Task N3_ACancelledGenerator_StillAwaitsTheQueuedTitleWrites()
+	{
+		WriteSession("-p-a", "t-1", "a session that gets a title");
+		var service = NewService();
+		await service.RunUpkeepAsync();
+		var summary = new ClaudeSessionSummaryModel
+		{
+			SessionId = "t-1", JsonlPath = Path.Combine(_projectsDir, "-p-a", "t-1.jsonl"), MessageCount = 1, ProjectSlug = "-p-a",
+		};
+		_assist.TitlesToReturn["t-1"] = "Kept despite the cancel";
+		_assist.ThrowAfterBatch = new OperationCanceledException();
+
+		await service.WriteGate.WaitAsync();
+		Task<IReadOnlyDictionary<string, string>> ensure;
+		try
+		{
+			ensure = service.EnsureTitlesAsync([summary]);
+			await Task.Delay(300);
+			Assert.False(ensure.IsCompleted); // the drain waits for the queued write instead of leaving it behind
+		}
+		finally { service.WriteGate.Release(); }
+
+		await Assert.ThrowsAsync<OperationCanceledException>(() => ensure.WaitAsync(TimeSpan.FromSeconds(10)));
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE title = 'Kept despite the cancel';"));
 	}
 
 	[Fact]

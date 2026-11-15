@@ -9,5 +9,6 @@ export function installMock(): void {
 		setOnline: (v: boolean) => daemon.setOnline(v),
 		emit: (m: string, p?: unknown) => daemon.emit(m, p),
 		liveId: () => daemon.liveId,
+		compactSilently: (name: string) => daemon.compactSilently(name),
 	};
 }

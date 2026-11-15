@@ -33,13 +33,17 @@ public sealed class BlobTooLargeException : Exception
 /// <remarks>Created by Claude</remarks>
 public sealed class BlobStore
 {
-	private readonly string _directory;
+	private string _directory;
 	private readonly TimeProvider _time;
 	private readonly TimeSpan _ttl;
 	private readonly ILogger<BlobStore> _logger;
 	private readonly long _quota;
 	private readonly object _gate = new();
 	private readonly HashSet<string> _claimed = new(StringComparer.Ordinal);
+	// Claimed blobs whose delete keeps failing: nobody can claim them again, and every sweep retries the delete.
+	private readonly HashSet<string> _abandoned = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, int> _deleteFailures = new(StringComparer.Ordinal);
+	private const int MaxDeleteFailures = 3;
 
 	public BlobStore(IOptions<TessynWebOptions> options, TimeProvider time, ILogger<BlobStore> logger)
 	{
@@ -64,9 +68,47 @@ public sealed class BlobStore
 			return;
 		}
 
+		// Only a folder this process creates is chmod-ed. One that already exists is used only when it is private (0700) and writable
+		// for us; otherwise (someone else's, or too open) the store works in a private folder of its own and says so, never touching theirs.
 		const UnixFileMode Private = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
-		Directory.CreateDirectory(_directory, Private);
-		File.SetUnixFileMode(_directory, Private);
+		try
+		{
+			if (!Directory.Exists(_directory))
+			{
+				Directory.CreateDirectory(_directory, Private);
+				File.SetUnixFileMode(_directory, Private);
+				return;
+			}
+
+			if (File.GetUnixFileMode(_directory) == Private && CanWriteHere(_directory))
+				return;
+		}
+		catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+		{
+			_logger.LogWarning(ex, "The blob folder {Directory} cannot be used", _directory);
+		}
+
+		var own = Directory.CreateTempSubdirectory(Constants.Defaults.BlobFolderName + "-").FullName;
+		_logger.LogWarning("The blob folder {Directory} is not private to this user; uploads wait in {Own} instead", _directory, own);
+		_directory = own;
+	}
+
+	private static bool CanWriteHere(string directory)
+	{
+		var probe = System.IO.Path.Combine(directory, Guid.NewGuid().ToString("N") + ".probe");
+		try
+		{
+			using (new FileStream(probe, FileMode.CreateNew, FileAccess.Write))
+			{
+			}
+
+			File.Delete(probe);
+			return true;
+		}
+		catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+		{
+			return false;
+		}
 	}
 
 	/// <summary>Bytes the blobs in the folder hold now.</summary>
@@ -162,7 +204,7 @@ public sealed class BlobStore
 		var path = PathFor(id);
 		lock (_gate)
 		{
-			if (!File.Exists(path) || !_claimed.Add(id))
+			if (_abandoned.Contains(id) || !File.Exists(path) || !_claimed.Add(id))
 				return false;
 		}
 
@@ -179,30 +221,67 @@ public sealed class BlobStore
 		// The file goes first: while it is still there (a download holds it open on Windows) the claim stays, so nobody can claim it again.
 		var path = PathFor(id);
 		TryDelete(path);
-		if (!File.Exists(path))
+		lock (_gate)
 		{
-			lock (_gate)
+			if (!File.Exists(path))
+			{
 				_claimed.Remove(id);
+				_deleteFailures.Remove(id);
+			}
+			else if (_claimed.Contains(id))
+			{
+				// A delete that keeps failing must not hold the claim, and its bytes, for good: after a few tries the sweep takes over.
+				_deleteFailures[id] = _deleteFailures.GetValueOrDefault(id) + 1;
+				if (_deleteFailures[id] >= MaxDeleteFailures)
+					Abandon(id, $"its delete failed {MaxDeleteFailures} times");
+			}
 		}
+	}
+
+	/// <summary>Releases the claim of a blob that cannot be deleted; the sweep retries the delete. Call under the gate.</summary>
+	private void Abandon(string id, string reason)
+	{
+		_claimed.Remove(id);
+		_deleteFailures.Remove(id);
+		if (_abandoned.Add(id))
+			_logger.LogWarning("Blob {BlobId} is released from its claim ({Reason}); the sweep keeps retrying the delete", id, reason);
 	}
 
 	/// <summary>Removes blobs older than the time to live; the failures of one file never stop the rest.</summary>
 	public void Sweep()
 	{
 		var cutoff = _time.GetUtcNow().UtcDateTime - _ttl;
+		var claimCutoff = _time.GetUtcNow().UtcDateTime - _ttl * 2;
 		try
 		{
 			foreach (var file in Directory.EnumerateFiles(_directory, "*" + Constants.Defaults.BlobExtension))
 			{
-				if (File.GetLastWriteTimeUtc(file) >= cutoff)
-					continue;
-
-				// A blob the daemon is downloading right now is not abandoned, however old it is.
-				bool inFlight;
+				var id = System.IO.Path.GetFileNameWithoutExtension(file);
+				var written = File.GetLastWriteTimeUtc(file);
+				bool abandoned, inFlight;
 				lock (_gate)
-					inFlight = _claimed.Contains(System.IO.Path.GetFileNameWithoutExtension(file));
-				if (!inFlight)
-					TryDelete(file);
+				{
+					abandoned = _abandoned.Contains(id);
+					inFlight = _claimed.Contains(id);
+					// A claimed blob whose delete already failed and that is still here after twice the time to live is stuck, not in flight:
+					// release it, then delete it. (A claim without a failed delete is a download, however long it takes.)
+					if (inFlight && written < claimCutoff && _deleteFailures.ContainsKey(id))
+					{
+						Abandon(id, "its delete failed and it is still claimed after twice the time to live");
+						abandoned = true;
+						inFlight = false;
+					}
+				}
+
+				if (!abandoned && (written >= cutoff || inFlight))
+					continue;   // young, or a blob the daemon is downloading right now
+
+				TryDelete(file);
+				if (abandoned && !File.Exists(file))
+				{
+					lock (_gate)
+						_abandoned.Remove(id);
+				}
 			}
 		}
 		catch (IOException ex)
@@ -222,7 +301,7 @@ public sealed class BlobStore
 		{
 			File.Delete(path);
 		}
-		catch (IOException ex)
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
 		{
 			_logger.LogWarning(ex, "Could not delete a blob");
 		}

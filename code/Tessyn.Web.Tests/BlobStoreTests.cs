@@ -135,6 +135,82 @@ public sealed class BlobStoreTests : IDisposable
 	}
 
 	[Fact]
+	public async Task N1_A_claimed_blob_whose_delete_keeps_failing_is_released_and_the_sweep_removes_it_once_it_can()
+	{
+		var store = NewStore(o => o.BlobTtlMinutes = 60);
+		var blob = await SaveAsync(store, [1, 2, 3]);
+		Assert.True(store.TryClaim(blob.Id, out _));
+		File.SetAttributes(blob.Path, FileAttributes.ReadOnly);   // File.Delete refuses a read-only file on Windows
+		if (!OperatingSystem.IsWindows())
+		{
+			File.SetAttributes(blob.Path, FileAttributes.Normal);
+			return;   // Unix deletes by the folder's permissions; the failure cannot be produced the same way.
+		}
+
+		store.Delete(blob.Id);
+		store.Delete(blob.Id);
+		store.Delete(blob.Id);   // the third failure releases the claim
+
+		Assert.True(File.Exists(blob.Path));
+		Assert.False(store.TryClaim(blob.Id, out _));   // released, but never claimable again
+		store.Sweep();
+		Assert.True(File.Exists(blob.Path));   // the sweep retries, and the file still resists
+
+		File.SetAttributes(blob.Path, FileAttributes.Normal);
+		store.Sweep();   // young as it is, an abandoned blob goes at the next sweep
+		Assert.False(File.Exists(blob.Path));
+		Assert.Equal(0, store.UsedBytes());
+	}
+
+	[Fact]
+	public async Task N1_A_claim_with_a_failed_delete_is_released_after_twice_the_ttl_and_one_without_stays()
+	{
+		if (!OperatingSystem.IsWindows())
+			return;   // The failed delete is made with a read-only file, which only Windows refuses to delete.
+
+		var store = NewStore(o => o.BlobTtlMinutes = 60);
+		var stuck = await SaveAsync(store, [1, 2, 3]);
+		var downloading = await SaveAsync(store, [4, 5, 6]);
+		Assert.True(store.TryClaim(stuck.Id, out _));
+		Assert.True(store.TryClaim(downloading.Id, out _));
+		File.SetAttributes(stuck.Path, FileAttributes.ReadOnly);
+		store.Delete(stuck.Id);   // one failed delete: not yet three
+		Age(stuck, TimeSpan.FromMinutes(100));
+		Age(downloading, TimeSpan.FromHours(5));
+
+		store.Sweep();
+		Assert.True(File.Exists(stuck.Path));   // past one TTL only
+		Assert.True(File.Exists(downloading.Path));   // no failed delete: a download, however long it takes
+
+		Age(stuck, TimeSpan.FromMinutes(121));
+		store.Sweep();   // released, retried, still read-only
+		Assert.False(store.TryClaim(stuck.Id, out _));
+		File.SetAttributes(stuck.Path, FileAttributes.Normal);
+		store.Sweep();
+		Assert.False(File.Exists(stuck.Path));
+		Assert.True(File.Exists(downloading.Path));
+	}
+
+	[Fact]
+	public void N3_On_Unix_a_blob_folder_that_is_not_private_to_the_user_is_never_chmoded_and_the_store_still_starts()
+	{
+		if (OperatingSystem.IsWindows())
+			return;   // Windows keeps its ACLs; the permission bits do not exist.
+
+		Directory.CreateDirectory(_dir);
+		var open = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+		File.SetUnixFileMode(_dir, open);
+
+		var store = NewStore();   // must not throw
+
+		Assert.Equal(open, File.GetUnixFileMode(_dir));   // the existing folder is left alone
+		var blob = SaveAsync(store, [1]).GetAwaiter().GetResult();
+		Assert.False(blob.Path.StartsWith(_dir, StringComparison.Ordinal));   // the blob waits in the store's own private folder
+		Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(System.IO.Path.GetDirectoryName(blob.Path)!));
+		Directory.Delete(System.IO.Path.GetDirectoryName(blob.Path)!, true);
+	}
+
+	[Fact]
 	public async Task A_stream_over_the_limit_throws_and_leaves_no_file()
 	{
 		var store = NewStore();

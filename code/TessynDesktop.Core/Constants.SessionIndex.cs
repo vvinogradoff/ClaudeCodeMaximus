@@ -20,6 +20,9 @@ public static partial class Constants
 		/// </summary>
 		public const int SchemaVersion = 3;
 
+		/// <summary>How many random mapped sessions the upkeep audit spot-checks against their row_count.</summary>
+		public const int AuditSampleSize = 5;
+
 		/// <summary>How long a connection waits for a competing writer or checkpoint before SQLITE_BUSY.</summary>
 		public static readonly TimeSpan BusyTimeout = TimeSpan.FromSeconds(30);
 

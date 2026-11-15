@@ -79,6 +79,7 @@ public sealed class TranscriptMediaBroker
 		}
 
 		previous.Cancel();
+		previous.Dispose();   // cancelled first, so a link made to its token afterwards is cancelled at once
 		foreach (var video in videos)
 			_store.Delete(video);
 	}
@@ -106,6 +107,12 @@ public sealed class TranscriptMediaBroker
 			return _loadCancellation.Token;
 	}
 
+	private CancellationTokenSource CurrentLoadSource()
+	{
+		lock (_gate)
+			return _loadCancellation;
+	}
+
 	/// <summary>The user clicked "Load preview" for <paramref name="url"/> of entry <paramref name="entryIndex"/>: approved only when the host offered exactly that URL there.</summary>
 	public bool TryApprove(int entryIndex, string url)
 	{
@@ -126,19 +133,27 @@ public sealed class TranscriptMediaBroker
 			throw new MediaRefusedException("Not a media request.");
 
 		bool approved;
+		FetchedMedia? cached;
 		lock (_gate)
 		{
 			if (!_offered.Values.Any(urls => urls.Contains(remote)))
 				throw new MediaRefusedException("The address was not offered by the host.");
 
-			if (_images.TryGetValue(remote, out var cached))
-				return cached;
-
+			_images.TryGetValue(remote, out cached);
 			approved = _approved.Contains(remote);
 		}
 
 		if (!Uri.TryCreate(remote, UriKind.Absolute, out var uri))
 			throw new MediaRefusedException("Invalid address.");
+
+		if (cached != null)
+		{
+			// A cache hit is no way around the rule: it still needs a click or an allowlisted host (the allowlist can change meanwhile).
+			if (!_fetcher.IsPermitted(uri, approved))
+				throw new MediaRefusedException("The image is neither approved nor on the allowlist.");
+
+			return cached;
+		}
 
 		using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, CurrentLoadToken());
 		var image = await _fetcher.FetchImageAsync(uri, approved, linked.Token);
@@ -177,6 +192,7 @@ public sealed class TranscriptMediaBroker
 		if (remaining <= 0)
 			throw new MediaRefusedException("The video download limit for this view is used up.");
 
+		var loadSource = CurrentLoadSource();
 		using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, CurrentLoadToken());
 		await _videoSlots.WaitAsync(linked.Token);   // at most two downloads at a time; a Reset frees the waiting ones
 		string path;
@@ -195,16 +211,23 @@ public sealed class TranscriptMediaBroker
 			_videoSlots.Release();
 		}
 
-		if (linked.IsCancellationRequested)
+		bool stale;
+		lock (_gate)
+		{
+			// Decided under the lock that Reset swaps the view under: a Reset that has swapped but not yet cancelled is caught by the
+			// source check, so the file never lands in the new view's list.
+			stale = linked.IsCancellationRequested || !ReferenceEquals(loadSource, _loadCancellation);
+			if (!stale)
+			{
+				_videoFiles.Add(path);
+				_videoBytes += new FileInfo(path).Length;
+			}
+		}
+
+		if (stale)
 		{
 			_store.Delete(path);   // finished in the race with a Reset: nothing may be left behind
 			throw new OperationCanceledException(linked.Token);
-		}
-
-		lock (_gate)
-		{
-			_videoFiles.Add(path);
-			_videoBytes += new FileInfo(path).Length;
 		}
 
 		_logger.LogInformation("Video from {Host} downloaded to the preview cache", uri.Host);

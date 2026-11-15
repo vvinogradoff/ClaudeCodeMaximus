@@ -8,7 +8,7 @@ import type {
 	AttentionEntryRefDto, AttentionFileRefDto, FilePreviewResult,
 	SessionEntriesResult, SessionEntryDto, SessionSendResult, TreeSnapshotResult, TreeWorkersResult, TurnCompletedParams, TurnOptions,
 } from '../api/types';
-import { indexOfEntryId, planAppended } from '../lib/transcript';
+import { anchorEntryId, emptyTranscript, indexOfEntryId, planAppended, staleAnchor } from '../lib/transcript';
 import { keepNavTarget, takeNavTarget, topFrame } from '../lib/navStack';
 import type { NavFrame } from '../lib/navStack';
 import { clearDrafts, readJson, removeKey, writeJson } from '../lib/storage';
@@ -181,6 +181,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 		} catch (e) { fail(e); }
 	}, [entriesAround, fail, toast]);
 
+	/** An anchored window kept an old epoch through a disconnect: show the same place again, or the latest page when it is gone. */
+	const reanchor = useCallback(async (nodeId: string) => {
+		const sess = stateRef.current.session;
+		const focus = sess?.focusEntry ?? null;
+		const entryId = anchorEntryId(sess?.transcript ?? emptyTranscript, focus?.entryId);
+		if (!entryId) { await reloadEntries(nodeId); return; }
+		const { result, found } = await entriesAround(nodeId, entryId);
+		if (openId() !== nodeId) return;
+		if (found) dispatch({ type: 'transcriptAround', result, focus: focus ? { ...focus, token: focusSeq.current++ } : null });
+		else {
+			dispatch({ type: 'transcriptReplace', result });
+			toast('The part of the output you were reading is no longer available; showing the latest', 'info');
+		}
+	}, [entriesAround, reloadEntries, toast]);
+
 	const loadSession = useCallback(async (id: string) => {
 		dispatch({ type: 'openStart', id });
 		const nav = takeNavTarget(navTarget.current, id, Date.now());
@@ -221,7 +236,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 					dispatch({ type: 'detail', id, detail });
 					dispatch({ type: 'sessionChanged', state: detail.state });
 					const t = stateRef.current.session?.transcript;
-					if (t?.anchored) { /* keep the reading position; "Jump to latest" leaves it */ }
+					if (t && staleAnchor(t, detail.epoch)) await reanchor(id); // compaction or reset while offline: the old window is out of date
+					else if (t?.anchored) { /* keep the reading position; "Jump to latest" leaves it */ }
 					else if (!t || !t.loaded || t.epoch !== detail.epoch) await reloadEntries(id);
 					else await fetchAfter(id);
 					await fetchAttention(id);
@@ -230,7 +246,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 		}
 		dispatch({ type: 'bumpLists' });
 		publishEvent({ method: 'resync' });
-	}, [fail, fetchAfter, fetchAttention, refreshTree, reloadEntries]);
+	}, [fail, fetchAfter, fetchAttention, reanchor, refreshTree, reloadEntries]);
 
 	// ---- events ----------------------------------------------------------------------------------------------
 	const onEvent = useCallback((frame: EventFrame) => {
@@ -256,7 +272,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 				const s = stateRef.current.session;
 				const plan = s ? planAppended(s.transcript, s.id, nodeId, epoch) : 'ignore';
 				if (frame.method === 'session.reset' && plan !== 'ignore') void reloadEntries(nodeId).catch(fail);
-				else if (plan === 'reload' && !s?.transcript.anchored) void reloadEntries(nodeId).catch(fail);
+				else if (plan === 'reload') void (s?.transcript.anchored ? reanchor(nodeId) : reloadEntries(nodeId)).catch(fail);
 				else if (plan === 'fetchAfter') void fetchAfter(nodeId);
 				break;
 			}
@@ -291,7 +307,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 			}
 		}
 		publishEvent(frame);
-	}, [fail, fetchAfter, fetchAttention, refreshTree, reloadEntries, resync, toast]);
+	}, [fail, fetchAfter, fetchAttention, reanchor, refreshTree, reloadEntries, resync, toast]);
 
 	// ---- lifecycle -------------------------------------------------------------------------------------------
 	const syncFromHash = useCallback(() => {

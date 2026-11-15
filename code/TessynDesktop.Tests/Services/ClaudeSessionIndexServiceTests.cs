@@ -31,8 +31,13 @@ internal sealed class FakeClaudeAssistService : IClaudeAssistService
             .Where(s => TitlesToReturn.ContainsKey(s.SessionId))
             .ToDictionary(s => s.SessionId, s => TitlesToReturn[s.SessionId]);
         onBatchComplete?.Invoke(result);
+        if (ThrowAfterBatch != null)
+            throw ThrowAfterBatch;
         return Task.FromResult(result);
     }
+
+    /// <summary>When set, GenerateTitlesAsync throws it after delivering the batch (a cancelled or failed run).</summary>
+    public Exception? ThrowAfterBatch { get; set; }
 
     public Task<List<string>> SearchSessionsAsync(
         List<ClaudeSessionSummaryModel> summaries, string query, CancellationToken cancellationToken = default)
