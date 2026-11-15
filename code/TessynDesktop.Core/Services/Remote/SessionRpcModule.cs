@@ -262,6 +262,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		var afterIndex    = TdcpParams.OptionalInt(@params, "afterIndex");
 		var afterSeq      = TdcpParams.OptionalLong(@params, "afterSeq");
 		var beforeEntryId = TdcpParams.OptionalString(@params, "beforeEntryId");
+		var aroundEntryId = TdcpParams.OptionalString(@params, "aroundEntryId");
 		var fileIdText    = TdcpParams.OptionalString(@params, "fileId");
 		var limit         = TdcpParams.OptionalInt(@params, "limit") ?? Constants.Remote.Limits.EntriesDefaultLimit;
 
@@ -269,9 +270,10 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 			throw new TdcpInvalidParamsException("'beforeIndex' and 'afterIndex' cannot be combined");
 
 		// P1.F: afterSeq and beforeEntryId are alternatives to afterIndex and beforeIndex, not additions.
-		var bounds = (beforeIndex.HasValue ? 1 : 0) + (afterIndex.HasValue ? 1 : 0) + (afterSeq.HasValue ? 1 : 0) + (beforeEntryId != null ? 1 : 0);
+		var bounds = (beforeIndex.HasValue ? 1 : 0) + (afterIndex.HasValue ? 1 : 0) + (afterSeq.HasValue ? 1 : 0) + (beforeEntryId != null ? 1 : 0)
+			+ (aroundEntryId != null ? 1 : 0);
 		if (bounds > 1)
-			throw new TdcpInvalidParamsException("'beforeIndex', 'afterIndex', 'afterSeq' and 'beforeEntryId' cannot be combined");
+			throw new TdcpInvalidParamsException("'beforeIndex', 'afterIndex', 'afterSeq', 'beforeEntryId' and 'aroundEntryId' cannot be combined");
 
 		if (fileIdText != null && !afterSeq.HasValue)
 			throw new TdcpInvalidParamsException("'fileId' is only valid together with 'afterSeq'");
@@ -295,6 +297,24 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 				throw new TdcpInvalidParamsException("'fileId' is not a file id");
 
 			return _entries.GetPage(node.NodeId, node.FileName, null, after, limit, seqFileId);
+		}
+
+		if (aroundEntryId != null)
+		{
+			if (!EntryIds.TryParse(aroundEntryId, out var aroundFileId, out var aroundOrdinal))
+				throw new TdcpInvalidParamsException("'aroundEntryId' is not an entry id");
+
+			// The page is centred on the entry (clamped to the file, so it stays full near either end); the entry's id carries the
+			// content generation, so a rewritten file fails with "Session history changed" instead of centring on another entry.
+			var header = _entries.GetHeader(node.FileName)
+				?? throw new TdcpInvalidParamsException("Entry ids are not available");
+			if (header.Exists && header.FileId != aroundFileId)
+				throw new TdcpException("Session history changed");
+			if (!header.Exists || aroundOrdinal >= header.EntryCount)
+				throw new TdcpException("Entry not found");
+
+			var start = System.Math.Clamp(aroundOrdinal - limit / 2, 0, System.Math.Max(0, header.EntryCount - limit));
+			return _entries.GetPage(node.NodeId, node.FileName, null, start - 1, limit, aroundFileId);
 		}
 
 		if (beforeEntryId != null)

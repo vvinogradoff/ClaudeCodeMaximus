@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
@@ -44,6 +46,19 @@ public sealed class AttentionLedgerStore
 
 	/// <summary>Writes the ledger atomically: temp file in the same folder, then rename over the target.</summary>
 	public void Save(AttentionLedgerModel ledger) => _file.Write(GetPath(ledger.NodeId), ledger);
+
+	/// <summary>The NodeIds that have a ledger file.</summary>
+	public IReadOnlyList<string> EnumerateNodeIds()
+	{
+		if (!Directory.Exists(_rootDir))
+			return [];
+
+		return Directory.EnumerateFiles(_rootDir, "*" + Constants.Attention.LedgerFileExtension)
+			.Select(Path.GetFileNameWithoutExtension)
+			.Where(n => !string.IsNullOrEmpty(n))
+			.Select(n => n!)
+			.ToList();
+	}
 
 	private string GetPath(string nodeId) =>
 		Path.Combine(_rootDir, Path.GetFileName(nodeId) + Constants.Attention.LedgerFileExtension);

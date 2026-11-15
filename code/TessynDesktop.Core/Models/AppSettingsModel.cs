@@ -123,6 +123,12 @@ public sealed class AppSettingsModel
 	public List<ExternalMcpServerModel> ExternalMcpServers { get; set; } = [];
 
 	/// <summary>
+	/// What remote (relay) clients may read with <c>file.read</c> and <c>file.preview</c>. The default is the strictest:
+	/// only files a Focus item references. Loopback clients are not limited by it.
+	/// </summary>
+	public FileAccessSettingsModel FileAccess { get; set; } = new();
+
+	/// <summary>
 	/// Master toggle for the Telegram Notification Bridge (FR.21). When false, the bridge does not
 	/// start and <c>notify_user</c>/<c>ITelegramBridgeService</c> calls are no-ops. The bot token
 	/// itself is never stored here — see the Telegram Token Store (FR.21.6).

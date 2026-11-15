@@ -23,4 +23,7 @@ public sealed record AttentionItemDto
 	public DateTimeOffset CreatedUtc { get; init; }
 	public DateTimeOffset UpdatedUtc { get; init; }
 	public DateTimeOffset? ClosedUtc { get; init; }
+
+	/// <summary>References to entries, files and URLs (FR.23 amendment, additive); omitted when the item has none.</summary>
+	public IReadOnlyList<AttentionRefDto>? Refs { get; init; }
 }

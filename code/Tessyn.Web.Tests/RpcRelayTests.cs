@@ -206,17 +206,17 @@ public sealed class RpcRelayTests
 	}
 
 	[Fact]
-	public async Task Allowlist_is_exactly_the_21_contract_methods()
+	public async Task Allowlist_is_exactly_the_23_contract_methods()
 	{
 		var allowlist = new RemoteMethodAllowlist();
 		var expected = new[]
 		{
 			"client.hello", "tree.snapshot", "tree.workers", "tree.search", "tree.createSession", "recent.list", "recent.hide",
 			"tags.search", "session.get", "session.entries", "session.entry", "session.send", "session.stop", "session.compact",
-			"session.setFavorite", "session.setStreaming", "attention.list", "attention.reply", "attention.dismiss", "catalog.get", "usage.get",
+			"session.setFavorite", "session.setStreaming", "attention.list", "attention.reply", "attention.dismiss", "catalog.get", "usage.get", "file.read", "file.preview",
 		};
 
-		Assert.Equal(21, allowlist.Methods.Count);
+		Assert.Equal(23, allowlist.Methods.Count);
 		Assert.Equal(expected.OrderBy(x => x), allowlist.Methods.OrderBy(x => x));
 		Assert.All(expected, method => Assert.True(allowlist.IsAllowed(method)));
 		Assert.False(allowlist.IsAllowed("tdcp.shutdown"));

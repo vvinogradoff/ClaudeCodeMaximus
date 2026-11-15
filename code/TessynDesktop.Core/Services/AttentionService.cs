@@ -23,6 +23,8 @@ public sealed class AttentionService : IAttentionService
 
 	private readonly object _lock = new();
 	private readonly Dictionary<string, AttentionLedgerModel> _cache = new();
+	private readonly Dictionary<string, string> _fileRefIndex = new(StringComparer.Ordinal);   // refId -> nodeId
+	private bool _allLedgersIndexed;
 
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 
@@ -74,6 +76,11 @@ public sealed class AttentionService : IAttentionService
 				item.Body           = request.Body;
 				item.Options        = request.Options.ToList();
 				item.Recommendation = request.Recommendation;
+				if (request.Refs.Count > 0)
+				{
+					item.Refs = request.Refs.Select(CopyRef).ToList();
+					IndexFileRefsLocked(node.NodeId, item);
+				}
 				if (!string.IsNullOrWhiteSpace(request.Key))
 					item.Key = request.Key;
 				item.UpdatedUtc = now;
@@ -229,6 +236,41 @@ public sealed class AttentionService : IAttentionService
 		}
 	}
 
+	public (string NodeId, AttentionRefModel Ref)? FindFileRef(string refId)
+	{
+		lock (_lock)
+		{
+			if (!_allLedgersIndexed)
+			{
+				// Once: every ledger on disk, so a handle issued before a restart still resolves.
+				foreach (var nodeId in _store.EnumerateNodeIds())
+				{
+					foreach (var item in LoadLocked(nodeId).Items)
+						IndexFileRefsLocked(nodeId, item);
+				}
+
+				_allLedgersIndexed = true;
+			}
+
+			if (!_fileRefIndex.TryGetValue(refId, out var owner))
+				return null;
+
+			var found = LoadLocked(owner).Items
+				.SelectMany(i => i.Refs)
+				.FirstOrDefault(r => string.Equals(r.RefId, refId, StringComparison.Ordinal));
+			return found == null ? null : (owner, CopyRef(found));
+		}
+	}
+
+	private void IndexFileRefsLocked(string nodeId, AttentionItemModel item)
+	{
+		foreach (var r in item.Refs)
+		{
+			if (r.Kind == Constants.Attention.RefKindFile && !string.IsNullOrEmpty(r.RefId))
+				_fileRefIndex[r.RefId] = nodeId;
+		}
+	}
+
 	// ── Helpers ────────────────────────────────────────────────────────────────
 
 	private AttentionLedgerModel LoadLocked(string nodeId)
@@ -345,5 +387,13 @@ public sealed class AttentionService : IAttentionService
 		CreatedUtc            = item.CreatedUtc,
 		UpdatedUtc            = item.UpdatedUtc,
 		ClosedUtc             = item.ClosedUtc,
+		Refs                  = item.Refs.Select(CopyRef).ToList(),
+	};
+
+	private static AttentionRefModel CopyRef(AttentionRefModel r) => new()
+	{
+		Kind = r.Kind, Label = r.Label, NodeId = r.NodeId, FileId = r.FileId, EntryId = r.EntryId, Offset = r.Offset, Length = r.Length,
+		RefId = r.RefId, Name = r.Name, RelativePath = r.RelativePath, AbsolutePath = r.AbsolutePath, Size = r.Size, Mime = r.Mime,
+		MtimeUtc = r.MtimeUtc, Url = r.Url,
 	};
 }

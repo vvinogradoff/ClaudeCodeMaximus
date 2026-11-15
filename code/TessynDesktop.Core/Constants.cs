@@ -165,7 +165,7 @@ public static partial class Constants
 		/// "not a Worker Session". Session policy: how and when to pin items in the user's Focus view.
 		/// </summary>
 		public const string AttentionGuidance =
-			"The user has a Focus view beside this session's output. Pin anything they need there with `mcp__" + Agent.McpServerName + "__post_attention`: `critical` — they must know immediately (it notifies them at once); `ask` — you need their answer, decision or approval; `todo` — something only they can do; `alert` — worth knowing, no reply needed; `decided` — a call you made for them so work isn't blocked, which they may want to override. Write each item so it stands on its own: the user may read it days later without this conversation. Post each item once — it stays pinned until resolved, so don't restate pinned items in later replies; refer to them by id. When the user answers an item in conversation, or it no longer applies, call `mcp__" + Agent.McpServerName + "__resolve_attention`.";
+			"The user has a Focus view beside this session's output. Pin anything they need there with `mcp__" + Agent.McpServerName + "__post_attention`: `critical` — they must know immediately (it notifies them at once); `ask` — you need their answer, decision or approval; `todo` — something only they can do; `alert` — worth knowing, no reply needed; `decided` — a call you made for them so work isn't blocked, which they may want to override. When an item is about bulky output or a file you wrote (a plan, a report), do not paste it into the body: add `refs` — an `entry` ref with an exact `quote` from the output, or a `file` ref with the path — so the user can jump to it or preview it. Write each item so it stands on its own: the user may read it days later without this conversation. Post each item once — it stays pinned until resolved, so don't restate pinned items in later replies; refer to them by id. When the user answers an item in conversation, or it no longer applies, call `mcp__" + Agent.McpServerName + "__resolve_attention`.";
 
 		/// <summary>
 		/// FR.24.6 — Emitted on a top-level session's first turn in each app run (not only fresh sessions, so
@@ -379,6 +379,28 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string SystemPartSeparator = "; ";
 	}
 
+	/// <summary>Constants of the remote file reads (<c>file.read</c>, <c>file.preview</c>; Focus references, step 1).</summary>
+	public static class FileAccess
+	{
+		public const int DefaultRelayChunkBytes = 512 * 1024;
+		public const long DefaultMaxTextFileBytes = 5L * 1024 * 1024;
+		public const long DefaultMaxImageFileBytes = 30L * 1024 * 1024;
+		public const long DefaultMaxPdfFileBytes = 50L * 1024 * 1024;
+		public const long DefaultMaxVideoFileBytes = 500L * 1024 * 1024;
+
+		/// <summary>Most bytes one loopback <c>file.read</c> call returns.</summary>
+		public const int LoopbackChunkBytes = 8 * 1024 * 1024;
+
+		/// <summary>How long a handle issued by <c>file.preview</c> stays valid.</summary>
+		public static readonly System.TimeSpan PreviewHandleLifetime = System.TimeSpan.FromHours(1);
+
+		public const int MaxPreviewHandles = 1_000;
+		public const string EncodingUtf8 = "utf8";
+		public const string EncodingBase64 = "base64";
+		public const string DeniedMessage = "That file cannot be read remotely.";
+		public const string UnknownHandleMessage = "Unknown file handle";
+	}
+
 	/// <summary>Constants for the Attention Ledger and the Focus view (FR.23).</summary>
 	public static class Attention
 	{
@@ -419,13 +441,29 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// <summary>Title given to a captured <c>notify_user</c> message that has no non-empty line (FR.23.7).</summary>
 		public const string NotifyUserFallbackTitle = "Message from the session";
 
+		// ── References on items (FR.23 amendment) ──
+		public const string RefKindEntry = "entry";
+		public const string RefKindFile = "file";
+		public const string RefKindUrl = "url";
+		public const string RefOccurrenceLast = "last";
+		public const string RefOccurrenceFirst = "first";
+		public const int MaxRefsPerItem = 10;
+		public const int MaxRefQuoteLength = 300;
+		public const int MaxRefLabelLength = 100;
+		public const int MaxRefUrlLength = 2_000;
+
+		/// <summary>Entries read per page while a quote is searched for.</summary>
+		public const int RefSearchPageEntries = 100;
+
+		public const string RefsClosingHint = " Fix the reference and call post_attention again; nothing was pinned.";
+
 		// ── Tool names and descriptions (FR.23.4, FR.23.5) ──
 		public const string PostToolName = "post_attention";
 		public const string ResolveToolName = "resolve_attention";
 		public const string ListToolName = "list_attention";
 
 		public const string PostToolDescription =
-			"Pin items in the user's Focus view, next to this session's output, where they stay visible until resolved. Kinds: critical (the user must know immediately — always notifies them), ask (you need their answer or approval), todo (something only they can do), alert (worth knowing, no reply needed), decided (a call you made for them that they may override). Write each body so it stands on its own. Post an item once: re-posting an open item with the same key or title updates it instead of adding a copy. Don't restate pinned items in later replies — refer to them by id (A1, A2, …). Set notify=true to also ping the user's Telegram and desktop, only when they must act soon. Top-level sessions only — a worker's call is refused; report to your supervisor instead.";
+			"Pin items in the user's Focus view, next to this session's output, where they stay visible until resolved. Kinds: critical (the user must know immediately — always notifies them), ask (you need their answer or approval), todo (something only they can do), alert (worth knowing, no reply needed), decided (a call you made for them that they may override). Write each body so it stands on its own. Post an item once: re-posting an open item with the same key or title updates it instead of adding a copy. Don't restate pinned items in later replies — refer to them by id (A1, A2, …). Set notify=true to also ping the user's Telegram and desktop, only when they must act soon. Add `refs` (up to 10 per item) when the item is about bulky output or a file you wrote, instead of pasting it into the body: kind=entry with `quote` (text copied exactly from an entry of this session, or of another session with `session`; up to 300 characters, `occurrence` last or first) lets the user jump to that spot in the output; kind=file with `path` (absolute, or relative to the working directory) lets them preview a file, for example a plan awaiting approval; kind=url links a page. A quote that is not found, or that occurs more than once in the entry, and a file that does not exist fail the whole call with a message naming the reference — fix it and post again. Top-level sessions only — a worker's call is refused; report to your supervisor instead.";
 
 		public const string ResolveToolDescription =
 			"Close a pinned Focus item: status=answered when the user answered it in conversation (note = their answer), status=resolved when it is done or no longer applies (note = why).";

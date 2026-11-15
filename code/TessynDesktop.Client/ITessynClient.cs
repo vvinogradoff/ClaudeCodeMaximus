@@ -111,4 +111,15 @@ public interface ITessynClient : IAsyncDisposable
 
 	/// <summary><c>session.headers</c> (loopback only): O(1) content headers of many sessions at once; at most 500 ids.</summary>
 	Task<SessionHeadersResult> SessionHeadersAsync(IReadOnlyList<string> nodeIds, CancellationToken cancellationToken = default);
+
+	// ── Focus references (additive) ──────────────────────────────────────────────────────────
+
+	/// <summary>
+	/// <c>file.read</c>: one chunk of the file behind a handle (<see cref="AttentionRefDto.RefId"/> or a <see cref="FilePreviewResult.Handle"/>).
+	/// Text comes back as UTF-8, other types as base64; continue at <c>offset + length</c> until <see cref="FileReadResult.Eof"/>.
+	/// </summary>
+	Task<FileReadResult> FileReadAsync(string handle, long? offset = null, int? length = null, CancellationToken cancellationToken = default);
+
+	/// <summary><c>file.preview</c>: a handle for a path that occurs in the text of the given entry.</summary>
+	Task<FilePreviewResult> FilePreviewAsync(string nodeId, string entryId, string path, CancellationToken cancellationToken = default);
 }
