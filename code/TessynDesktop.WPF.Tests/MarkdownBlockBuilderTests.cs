@@ -70,7 +70,7 @@ public sealed class MarkdownBlockBuilderTests
 				}
 		});
 
-		Assert.Contains("[image]", text);
+		Assert.Contains("pic", text);          // the alt text stays
 		Assert.DoesNotContain("evil.example", text);
 		Assert.Equal(["ok", "https://auto.example/z"], hyperlinks.Select(h => h.Text));
 		Assert.Equal(["https://example.com/a", "https://auto.example/z"], clicks);

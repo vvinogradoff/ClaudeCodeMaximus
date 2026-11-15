@@ -66,8 +66,30 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer, IMarkdownRenderer
 		_pipeline.Setup(renderer);
 		renderer.Render(document);
 		writer.Flush();
-		return writer.ToString();
+		return StripResourceMarkup(writer.ToString());
 	}
+
+	/// <summary>
+	/// Last line of defence for the CSP that allows remote images and media on the transcript page (FR.26.4): whatever the parser did, the
+	/// HTML leaving the renderer has no element or attribute that can fetch a resource. Media reach the page only through the gated preview path.
+	/// Escaped text (<c>&amp;lt;img</c>) is not markup and is untouched.
+	/// </summary>
+	private static string StripResourceMarkup(string html)
+	{
+		if (html.IndexOf('<') < 0)
+			return html;
+
+		html = ForbiddenElements.Replace(html, string.Empty);
+		return ForbiddenAttributes.Replace(html, string.Empty);
+	}
+
+	private static readonly System.Text.RegularExpressions.Regex ForbiddenElements = new(
+		@"</?(?:img|video|audio|source|picture|svg|math|object|embed|link|meta|track|iframe|frame|script|style|base|form|input)\b[^>]*>",
+		System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+	private static readonly System.Text.RegularExpressions.Regex ForbiddenAttributes = new(
+		@"(?<=<[^>]*)\s(?:srcset|src|background|poster|ping|data|style)\s*=\s*(?:""[^""]*""|'[^']*'|[^\s>]*)",
+		System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
 
 	private void Sanitize(MarkdownDocument document)
 	{
@@ -75,7 +97,9 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer, IMarkdownRenderer
 		{
 			if (link.IsImage)
 			{
-				link.ReplaceBy(new LiteralInline(ImagePlaceholder));
+				// Never an <img>: the alt text stays, the address is dropped (a remote URL here would be a no-click leak channel).
+				var alt = string.Concat(link.Descendants<LiteralInline>().Select(l => l.Content.ToString())).Trim();
+				link.ReplaceBy(new LiteralInline(alt.Length > 0 ? alt : ImagePlaceholder));
 			}
 			else if (!_urlPolicy.IsAllowed(link.Url))
 			{

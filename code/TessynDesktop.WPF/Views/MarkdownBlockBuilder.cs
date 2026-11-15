@@ -166,9 +166,13 @@ public sealed class MarkdownBlockBuilder
 					break;
 				}
 
-				case LinkInline { IsImage: true }:
-					target.Add(new Run("[image]"));
+				case LinkInline { IsImage: true } image:
+				{
+					var alt = string.Concat(image.Descendants<LiteralInline>().Select(l => l.Content.ToString())).Trim();
+					target.Add(new Run(alt.Length > 0 ? alt : "[image]"));
 					break;
+				}
+
 				case LinkInline link:
 					AddLink(target, link.Url, link, fallbackText: null);
 					break;
