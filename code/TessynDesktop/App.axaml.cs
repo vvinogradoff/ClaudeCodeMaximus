@@ -288,6 +288,8 @@ public partial class App : Application
 		services.AddSingleton<TdcpDispatcher>();
 		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
 		services.AddTransient<IRemoteRpcModule, ProfileRpcModule>();
+		// Package J3: profile administration (the Avalonia profile dropdown and the remote profile.* methods share it).
+		services.AddSingleton<IProfileAdminService, ProfileAdminService>();
 		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
 		services.AddSingleton<IEventLog, EventLog>();
 		services.AddSingleton<IDaemonRunInfo, DaemonRunInfo>();
