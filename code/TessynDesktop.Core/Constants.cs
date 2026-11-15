@@ -34,6 +34,9 @@ public static partial class Constants
 		public const string RoleToolResult = "TOOL_RESULT";
 		public const string TimestampFormat = "yyyy-MM-ddTHH:mm:ssZ";
 
+		/// <summary>Header meta key that records what produced a USER entry; absent for the desktop user (and in files from older builds).</summary>
+		public const string MetaKeySource = "source";
+
 		/// <summary>How many trailing .txt entries the JSONL write-back compares candidates against (ISSUE.014).</summary>
 		public const int WriteBackTailWindow = 20;
 	}

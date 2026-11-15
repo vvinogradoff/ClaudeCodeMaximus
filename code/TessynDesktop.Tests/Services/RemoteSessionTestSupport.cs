@@ -54,7 +54,7 @@ internal sealed class StubFileService : ISessionFileService
 	public IReadOnlyList<SessionEntryModel> ReadEntriesFrom(string fileName, long startOffset) => [];
 	public string CreateSessionFile() => $"stub-{++_created}.txt";
 	public void NotifyTurnCompleted(string fileName, bool cancelled, string? errorText) { }
-	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null) { }
+	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null, string? source = null) { }
 	public void AppendCompactionSeparator(string fileName) { }
 	public bool SessionFileExists(string fileName) => _stamps.ContainsKey(fileName);
 	public DateTimeOffset? GetLastWriteTimeUtc(string fileName) => _stamps.TryGetValue(fileName, out var s) ? s.LastWriteUtc : null;

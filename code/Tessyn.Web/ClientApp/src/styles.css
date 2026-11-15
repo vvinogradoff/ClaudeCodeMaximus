@@ -8,6 +8,8 @@
 	--accent-fg: #ffffff;
 	--bubble-bg: #dbeafe;
 	--bubble-fg: #14213d;
+	--auto-bg: #cdeeea;
+	--auto-fg: #0b3d38;
 	--system-bg: #eceef2;
 	--code-bg: #f0f2f5;
 	--shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
@@ -36,6 +38,8 @@
 		--accent-fg: #0b1220;
 		--bubble-bg: #1e3a5f;
 		--bubble-fg: #e6efff;
+		--auto-bg: #0f4a45;
+		--auto-fg: #d9f5f2;
 		--system-bg: #23272e;
 		--code-bg: #101216;
 		--green-strong: rgba(70, 200, 110, 0.3);
@@ -192,6 +196,7 @@ input, textarea, select { font: inherit; font-size: 16px; color: var(--fg); }
 .msg .meta .time { margin-left: auto; }
 .msg.user { display: flex; justify-content: flex-end; }
 .msg.user .bubble { min-width: 0; max-width: 88%; background: var(--bubble-bg); color: var(--bubble-fg); border-radius: 16px 16px 4px 16px; padding: 8px 12px; }
+.msg.user.auto .bubble { background: var(--auto-bg); color: var(--auto-fg); }
 .msg.user .bubble .meta { color: inherit; opacity: 0.7; }
 .msg.user .text { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .msg.pending { opacity: 0.55; }

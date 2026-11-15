@@ -20,7 +20,7 @@ internal sealed class RecordingSessionFileService : ISessionFileService
 	public event EventHandler<SessionEntryAppendedEventArgs>? EntryAppended { add { } remove { } }
 	public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted { add { } remove { } }
 
-	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null)
+	public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null, string? source = null)
 	{
 		lock (Appended)
 			Appended.Add((fileName, role, content));

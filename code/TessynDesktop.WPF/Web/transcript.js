@@ -20,11 +20,16 @@ let ALLOW = [];             // hosts whose media previews load without a click (
 let viewTimer = 0;
 let liveSeen = { st: '', len: 0, queued: 0 };   // what the host was last told about the live row (diagnostics)
 let liveTimer = 0;          // ticks the elapsed time of the live row once a second
+let SEL = null;             // entry index of the selected input (kept by index across re-renders, appends, replaces and paging)
+let SELAUTO = false;        // whether the selected input is automated (kept beside SEL: the entry may not be loaded)
+let NAV = null;            // an Up/Down move waiting for a page to load: { dir, mineOnly, until }
+const NAV_MARGIN_PX = 24;   // a revealed input sits this far below the top of the view
+const NAV_WAIT_MS = 15000;  // a move still waiting for a page after this long is dropped (a failed page request must not fire later)
 
 function post(o) { chrome.webview.postMessage(o); }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
-function mk(e) { return { i: e.i, r: e.r, ts: e.ts, html: e.html, trunc: e.trunc, full: e.full, h: e.h || 60, m: e.m || [], p: e.p || [] }; }
+function mk(e) { return { i: e.i, r: e.r, ts: e.ts, html: e.html, trunc: e.trunc, full: e.full, s: e.s || '', h: e.h || 60, m: e.m || [], p: e.p || [] }; }
 function recomputeOff() { let y = 0; const n = S.items.length; S.off = new Float64Array(n + 1); for (let k = 0; k < n; k++) { S.off[k] = y; y += S.items[k].h; } S.off[n] = y; }
 function findK(y) { let lo = 0, hi = S.items.length - 1; const off = S.off; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (off[mid] <= y) lo = mid; else hi = mid - 1; } return lo; }
 function posOfEntry(i) { return S.items.length ? Math.min(Math.max(i - S.items[0].i, 0), S.items.length - 1) : 0; }
@@ -33,7 +38,7 @@ function entryHtml(k) {
   const it = S.items[k];
   const more = it.trunc ? '<a class="more" data-i="' + it.i + '">Show full entry (' + it.full + ' chars)</a>' : '';
   const media = it.m.length ? MediaGate.previewHtml(it.m, ALLOW, it.i, S.loaded) : '';
-  return '<div class="e ' + esc(it.r) + '" data-k="' + k + '"><div class="c"><div class="h">' + esc(ROLE[it.r] || it.r) + ' &middot; ' + esc(it.ts) + '</div><div class="b">' + it.html + '</div>' + more + media + chipsHtml(it) + '</div></div>';
+  return '<div class="e ' + esc(it.r) + (InputNav.isAuto(it) ? ' auto' : '') + '" data-k="' + k + '"><div class="c' + (it.i === SEL ? ' sel' : '') + '"><div class="h">' + esc(InputNav.labelOf(it) || ROLE[it.r] || it.r) + ' &middot; ' + esc(it.ts) + '</div><div class="b">' + it.html + '</div>' + more + media + chipsHtml(it) + '</div></div>';
 }
 // Local-file chips (FR.26.5): the path is kept in S.items, the DOM carries only its index and the escaped file name.
 function chipsHtml(it) {
@@ -142,7 +147,68 @@ vp.addEventListener('auxclick', onLinkClick);
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); post({ ev: 'findRequested' }); }
   else if (e.key === 'F3') { e.preventDefault(); post({ ev: 'findStep', dir: e.shiftKey ? -1 : 1 }); }
+  else onNavKey(e);
 });
+
+// ---- input selection and Up/Down navigation (inputnav.js) ----
+// SEL is the selection even when that entry is not in the loaded window (SELAUTO remembers its kind); Up/Down then navigate from it.
+function applySel() {
+  items.querySelectorAll('.c.sel').forEach(c => c.classList.remove('sel'));
+  if (SEL === null || !S) return;
+  const k = posOfEntry(SEL); if (!S.items[k] || S.items[k].i !== SEL || k < S.a || k >= S.b) return;
+  const c = items.children[k - S.a].querySelector('.c'); if (c) c.classList.add('sel');
+}
+function select(it) { SEL = it.i; SELAUTO = InputNav.isAuto(it); NAV = null; applySel(); }
+// A click on an input selects it; a click anywhere else clears the selection. Links, chips and buttons keep their meaning (and leave the
+// selection alone), and so does a drag that selected text.
+function onSelectClick(e) {
+  if (e.button !== 0 || !S) return;
+  const t = e.target;
+  if (t.closest && t.closest('a, button')) return;
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed && vp.contains(sel.anchorNode)) return;
+  const bubble = t.closest && t.closest('.c');   // the margin around a bubble is not the input
+  const row = bubble && bubble.closest('.e');
+  const it = row ? S.items[parseInt(row.getAttribute('data-k'), 10)] : null;
+  if (it && InputNav.isInput(it)) select(it); else { SEL = null; NAV = null; applySel(); }
+}
+vp.addEventListener('click', onSelectClick);
+function onNavKey(e) {
+  const act = InputNav.keyAction(e.key, { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey }, SEL !== null, vp.clientHeight);
+  if (!act) return;
+  e.preventDefault();
+  NAV = null;
+  if (act.type === 'scroll') vp.scrollTop += act.dy;
+  else if (act.type === 'clear') { SEL = null; applySel(); }
+  else if (S) stepNav(act.dir);
+}
+// Moves the selection to the nearest input in the loaded entries; when there is none and more entries can be loaded in that direction,
+// asks the host for the next page and carries on once it arrives (resumeNav).
+function stepNav(dir) {
+  const p = InputNav.plan(S.items, SEL, SELAUTO, dir, S.hasOlder, S.hasNewer);
+  if (p.type === 'reveal') { NAV = null; reveal(p.k); return; }
+  if (p.type === 'none') { NAV = null; return; }
+  NAV = { dir: dir, until: Date.now() + NAV_WAIT_MS };
+  if (dir < 0) { if (!olderPending) { olderPending = true; post({ ev: 'needOlder', tok: S.tok }); } }
+  else if (!NG.pending) { PagingGate.markRequested(NG); post({ ev: 'needNewer', tok: S.tok }); }
+}
+function resumeNav(pageEmpty) {
+  if (!NAV || !S) return;
+  if (!InputNav.shouldResume(NAV, Date.now(), SEL, pageEmpty)) { NAV = null; return; }
+  stepNav(NAV.dir);
+}
+// Selects the input at position k and scrolls it to just below the top of the view. The entries above it may still have estimated heights,
+// so the position is corrected once they are measured.
+function reveal(k) {
+  const i = S.items[k].i;
+  SEL = i; SELAUTO = InputNav.isAuto(S.items[k]);
+  for (let pass = 0; pass < 3; pass++) {
+    const want = Math.min(InputNav.revealTop(S.off, posOfEntry(i), NAV_MARGIN_PX), Math.max(0, vp.scrollHeight - vp.clientHeight));
+    if (pass > 0 && Math.abs(vp.scrollTop - want) < 1) break;
+    vp.scrollTop = want; render(null);
+  }
+  applySel(); reportView();
+}
 
 // ---- find ----
 function hlRange(root) {
@@ -182,8 +248,9 @@ function stepFind(dir) { if (!F || !F.idx.length) return; F.cur = (F.cur + dir +
 // ---- host commands ----
 function onLoad(m) {
   showLive(null);
+  SEL = InputNav.selectionOnLoad(SEL, S ? S.key : null, m.key);   // a reload of the same session keeps its selection; another session clears it
   S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, hasNewer: !!m.hasNewer, loaded: new Map() };
-  olderPending = false; NG = PagingGate.create(); F = null; H = null; recomputeOff(); items.replaceChildren();
+  olderPending = false; NG = PagingGate.create(); F = null; H = null; NAV = null; recomputeOff(); items.replaceChildren();
   padTop.style.height = '0px'; padBot.style.height = S.off[S.items.length] + 'px';
   const t0 = performance.now();
   vp.scrollTop = m.toBottom ? S.off[S.items.length] : 0;
@@ -195,12 +262,13 @@ function onPrepend(m) {
   olderPending = false;
   if (!S || m.tok !== S.tok) return;
   S.hasOlder = m.hasOlder;
-  if (!m.entries.length) return;
+  if (!m.entries.length) { resumeNav(true); return; }
   const k0 = findK(vp.scrollTop), anchorEntry = S.items[k0].i, anchorD = vp.scrollTop - S.off[k0];
   S.items = m.entries.map(mk).concat(S.items); recomputeOff(); S.a = S.b = 0;
   const k = posOfEntry(anchorEntry);
   vp.scrollTop = S.off[k] + anchorD; render(null);
   vp.scrollTop = S.off[posOfEntry(anchorEntry)] + anchorD;
+  resumeNav();
 }
 function onAppend(m) {
   if (!S || m.tok !== S.tok) return;
@@ -211,6 +279,7 @@ function onAppend(m) {
   recomputeOff();
   if (follow) render('bottom'); else { padBot.style.height = (S.off[S.items.length] - S.off[S.b]) + 'px'; render(null); }
   checkNewer();
+  resumeNav(m.entries.length === 0);
 }
 // ---- live row of a turn in flight (live.js) ----
 // The row is created once and updated in place (so a selection in the streamed text survives); a one-second ticker keeps its timer.
@@ -306,7 +375,7 @@ chrome.webview.addEventListener('message', e => {
     case 'findStep': stepFind(m.dir); break;
     case 'clearFind': clearFind(); break;
     case 'goto': onGoto(m); break;
-    case 'newerFailed': PagingGate.markFailed(NG, vp.scrollTop); break;
+    case 'newerFailed': PagingGate.markFailed(NG, vp.scrollTop); NAV = null; break;
     case 'policy': ALLOW = Array.isArray(m.hosts) ? m.hosts.filter(h => typeof h === 'string') : []; break;
     case 'mediaOk': case 'mediaFail': onMediaOk(m); break;
   }

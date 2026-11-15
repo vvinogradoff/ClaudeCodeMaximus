@@ -83,7 +83,8 @@ public static class RemoteDtoMapping
 			ProfileName = model.ProfileName,
 			ModelId     = model.ModelId,
 			Effort      = model.Effort,
-			Content     = cut ? model.Content[..maxContentChars] : model.Content,
+			Source      = EntrySources.Resolve(model.Role, model.Source, model.Content),   // the legacy "[Scheduled]" prefix is resolved here, never stored
+			Content    = cut ? model.Content[..maxContentChars] : model.Content,
 			Truncated   = cut ? true : null,
 			FullLength  = cut ? model.Content.Length : null,
 		};

@@ -25,5 +25,12 @@ public sealed class SessionEntryModel
 	/// <summary>Effort level stored in the header for ASSISTANT entries.</summary>
 	public string? Effort { get; init; }
 
+	/// <summary>
+	/// What produced a USER entry (<see cref="EntrySources"/>): "scheduled", "orchestrated", "telegram" or "web"; null for the
+	/// desktop user and for every other role. This is the recorded value only; the legacy "[Scheduled]" prefix is resolved on read by
+	/// <see cref="EntrySources.Resolve"/> (DTO mapping) and is never written back.
+	/// </summary>
+	public string? Source { get; init; }
+
 	public bool IsCompaction => Role == Constants.SessionFile.RoleCompaction;
 }
