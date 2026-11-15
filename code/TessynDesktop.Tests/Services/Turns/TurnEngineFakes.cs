@@ -357,6 +357,13 @@ internal sealed class RecordingTurnObserver : ITurnObserver
 	public void ContextRetrying() => Add("contextRetrying");
 	public void Interrupted(DateTimeOffset timestamp) => Add("interrupted");
 
+	/// <summary>Answers <see cref="ShouldAutoCompact"/> like a client with a live toggle; by default the requested flag decides.</summary>
+	public Func<bool, bool>? AutoCompactOverride { get; set; }
+
+	public bool ShouldAutoCompact(bool requested) => AutoCompactOverride?.Invoke(requested) ?? requested;
+	public void CompactionStarted() => Add("compactionStarted");
+	public void CompactionFinished(SessionCompactionResultModel result) => Add($"compactionFinished:{result.Outcome}");
+
 	public Task AfterResponseWhileLockedAsync()
 	{
 		Add("afterResponse");

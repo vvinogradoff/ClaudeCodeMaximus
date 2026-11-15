@@ -21,10 +21,17 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly IEventLog?      _eventLog;
 	private readonly ITurnEngine?    _turnEngine;
 	private readonly bool           _hasContentStore;
+	private readonly bool           _hasDrafts;
+	private readonly bool           _hasCodeIndex;
+	private readonly bool           _hasAuthErrors;
 	private readonly string          _daemonVersion;
 
-	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null)
+	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
+		IDraftService? drafts = null, ICodeIndexService? codeIndex = null, ISessionAuthErrorTracker? authErrors = null)
 	{
+		_hasDrafts     = drafts != null;
+		_hasCodeIndex  = codeIndex != null;
+		_hasAuthErrors = authErrors != null;
 		_time          = time ?? TimeProvider.System;
 		_runInfo       = runInfo ?? new DaemonRunInfo();
 		_eventLog      = eventLog;
@@ -74,6 +81,16 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 			// The interactive turn stream (P1.I) needs the engine that publishes it and the log that carries it.
 			if (_turnEngine != null)
 				capabilities.Add(RemoteProtocol.TurnStream.Capability);
+
+			// Package J2: per-run turn options (the engine runs Auto-Compact), the session auth error, drafts and autocomplete.
+			if (_turnEngine != null)
+				capabilities.Add(RemoteProtocol.Composer.TurnOptionsCapability);
+			if (_hasAuthErrors)
+				capabilities.Add(RemoteProtocol.Composer.AuthErrorCapability);
+			if (_hasDrafts)
+				capabilities.Add(RemoteProtocol.Composer.DraftsCapability);
+			if (_hasCodeIndex)
+				capabilities.Add(RemoteProtocol.Composer.AutocompleteCapability);
 		}
 
 		// P1.F: entry ids need the content store.

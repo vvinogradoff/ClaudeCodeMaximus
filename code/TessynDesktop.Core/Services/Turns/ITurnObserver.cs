@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
 
@@ -58,8 +59,20 @@ public interface ITurnObserver
 	void Idle() { }
 
 	/// <summary>
-	/// Called after the response, still holding the node's turn lock, so a client can run its post-response step (the Auto-Compact
-	/// of FR.11.6). Cancellation of the turn interrupts it like the rest of the turn.
+	/// Called after the response, still holding the node's turn lock, so a client can run a post-response step of its own (Auto-Compact
+	/// is the engine's, see <see cref="ShouldAutoCompact"/>). Runs before it. Cancellation of the turn interrupts it like the rest of the turn.
 	/// </summary>
 	Task AfterResponseWhileLockedAsync() => Task.CompletedTask;
+
+	/// <summary>
+	/// Whether the engine compacts after this turn (Auto-Compact, FR.11.6). <paramref name="requested"/> is the flag the send carried; a client
+	/// whose toggle can still change while the turn runs (the Avalonia composer) answers with the live state instead. Asked once, after the response.
+	/// </summary>
+	bool ShouldAutoCompact(bool requested) => requested;
+
+	/// <summary>A compaction is about to run (Auto-Compact): show progress.</summary>
+	void CompactionStarted() { }
+
+	/// <summary>The compaction ended, with whatever outcome; its system line and the detach are in <paramref name="result"/>. The session file is already rewritten on success.</summary>
+	void CompactionFinished(SessionCompactionResultModel result) { }
 }

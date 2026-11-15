@@ -20,14 +20,16 @@ internal sealed class TurnRun
 	private readonly IAppSettingsService _appSettings;
 	private readonly ITurnObserver _observer;
 	private readonly TurnProgressTracker _progress;
+	private readonly Action<bool>? _authErrorChanged;
 
 	// Cross-thread (prepared on the caller's thread, consumed on the reader thread): use Interlocked.
 	private string? _pendingModelId;
 	private string? _pendingEffort;
 
 	public TurnRun(string turnId, SessionNodeModel node, ISessionFileService files, IAppSettingsService appSettings, ITurnObserver observer,
-		TurnProgressTracker progress, string? pendingModelId, string? pendingEffort)
+		TurnProgressTracker progress, string? pendingModelId, string? pendingEffort, Action<bool>? authErrorChanged = null)
 	{
+		_authErrorChanged = authErrorChanged;
 		TurnId          = turnId;
 		_node           = node;
 		_files          = files;
@@ -104,12 +106,12 @@ internal sealed class TurnRun
 				SendErrorText = evt.Content;
 				_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
 				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
-					_observer.AuthErrorChanged(true);
+					SetAuthError(true);
 				_observer.ResultError(evt.Content, evt.Timestamp);
 				break;
 
 			case Constants.Turns.EventTypes.Result when !evt.IsError && evt.SessionId is not null:
-				_observer.AuthErrorChanged(false);
+				SetAuthError(false);
 				_node.ClaudeSessionId = evt.SessionId;
 				_appSettings.Save();
 				_observer.SessionIdCaptured();
@@ -123,6 +125,13 @@ internal sealed class TurnRun
 
 		// After the persistence above, so a delta never announces text that is not in the transcript yet.
 		_progress.Observe(evt);
+	}
+
+	/// <summary>The auth outcome goes to the observer (the client that runs the turn) and to the session's state (every client).</summary>
+	private void SetAuthError(bool hasAuthError)
+	{
+		_observer.AuthErrorChanged(hasAuthError);
+		_authErrorChanged?.Invoke(hasAuthError);
 	}
 
 	private void HandleSystemError(ClaudeStreamEvent evt)
@@ -154,7 +163,7 @@ internal sealed class TurnRun
 
 		_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, content);
 		if (content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
-			_observer.AuthErrorChanged(true);
+			SetAuthError(true);
 		_observer.SystemError(content, evt.Timestamp);
 	}
 }

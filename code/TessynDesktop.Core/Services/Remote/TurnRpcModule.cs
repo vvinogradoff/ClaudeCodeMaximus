@@ -48,14 +48,18 @@ public sealed class TurnRpcModule : IRemoteRpcModule
 	private async Task<object?> SendAsync(JsonNode? @params)
 	{
 		var node = RemoteSessionLookup.Require(_registry, TdcpParams.RequireString(@params, "nodeId"));
-		var text = TdcpParams.RequireString(@params, "text").Trim();
-		if (text.Length == 0)
+		var autoCompact = TdcpParams.OptionalBool(@params, "autoCompact") ?? false;
+		var newBranch   = TdcpParams.OptionalBool(@params, "newBranch") ?? false;
+
+		// An empty text is a compaction request when autoCompact is set (FR.11.6); otherwise it is as blank as ever.
+		var text = autoCompact ? (TdcpParams.OptionalString(@params, "text") ?? string.Empty).Trim() : TdcpParams.RequireString(@params, "text").Trim();
+		if (text.Length == 0 && !autoCompact)
 			throw new TdcpInvalidParamsException("'text' must not be blank");
 
 		var clientRequestId = TdcpParams.OptionalString(@params, "clientRequestId");
 		var options         = await _options.ResolveAsync(@params);
 		var settings        = await _settings.ResolveAsync(node, options);
-		var ticket          = _send.Send(node, text, settings, clientRequestId);
+		var ticket          = _send.Send(node, text, settings, clientRequestId, newBranch, autoCompact);
 
 		return new TurnSendResult(ticket.TurnId, Accepted: true, ticket.Queued);
 	}

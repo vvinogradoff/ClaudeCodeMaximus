@@ -11,7 +11,7 @@ public static partial class RemoteProtocol
 		/// <summary>The daemon runs interactive turns and publishes their progress.</summary>
 		public const string Capability = "turn.stream";
 
-		/// <summary><c>turn.send { nodeId, text, modelId?, effort?, profileId?, clientRequestId? }</c> answers <c>{ turnId, accepted, queued }</c>. Loopback only.</summary>
+		/// <summary><c>turn.send { nodeId, text, modelId?, effort?, profileId?, clientRequestId?, newBranch?, autoCompact? }</c> (<c>text</c> may be empty with <c>autoCompact</c>) answers <c>{ turnId, accepted, queued }</c>. Loopback only.</summary>
 		public const string SendMethod = "turn.send";
 
 		/// <summary><c>turn.stop { nodeId }</c> answers <c>{ stopped }</c>. Loopback only.</summary>
@@ -38,6 +38,7 @@ public static partial class RemoteProtocol
 		/// </summary>
 		public static bool IsLocalOnly(RemoteNotification notification) =>
 			LocalOnlyEvents.Contains(notification.Method)
+			|| Composer.LocalOnlyEvents.Contains(notification.Method)
 			|| (notification.Method == Events.TurnCompleted && notification.Params["neverRan"]?.GetValue<bool>() == true);
 	}
 }

@@ -19,6 +19,7 @@ public sealed partial class TurnController
 	{
 		private readonly TurnController _owner;
 		private readonly string _message;
+		private MessageEntryViewModel? _compactionRow;
 
 		public RunObserver(TurnController owner, string message)
 		{
@@ -166,14 +167,70 @@ public sealed partial class TurnController
 				_owner._soundService.PlayCompletionSound(_owner._node.Model.NodeId);
 		}
 
-		public async Task AfterResponseWhileLockedAsync()
-		{
-			// Auto-Compact (FR.11.6): _midRunAutoCompactState reflects any mid-run toggle change. Runs inside the send flow, which
-			// still holds the node's turn lock until the engine releases it.
-			if (!_owner._midRunAutoCompactState)
-				return;
+		// Auto-Compact (FR.11.6) is the engine's now; the toggle can still change while the turn runs, so the live state decides.
+		public bool ShouldAutoCompact(bool requested) => _owner._midRunAutoCompactState;
 
-			await _owner.SendCompactionPromptAsync(turnLockHeld: true);
+		public void CompactionStarted()
+		{
+			_compactionRow = new MessageEntryViewModel
+			{
+				Role       = Constants.SessionFile.RoleSystem,
+				Content    = "Compacting session...",
+				Timestamp  = DateTimeOffset.UtcNow,
+				IsProgress = true,
+			};
+			var row = _compactionRow;
+			Dispatcher.UIThread.Post(() => Content.Messages.Add(row));
+		}
+
+		/// <summary>The UI part of a compaction: the reload of Messages, the outcome lines and the toggle reset (the engine did the rewrite and the auth error).</summary>
+		public void CompactionFinished(SessionCompactionResultModel result)
+		{
+			var progressRow = _compactionRow;
+			switch (result.Outcome)
+			{
+				case SessionCompactionOutcome.NothingToCompact:
+					// Only this run's own row: nothing was sent, so other progress rows (a queued send) stay.
+					Dispatcher.UIThread.Post(() =>
+					{
+						if (progressRow != null) Content.Messages.Remove(progressRow);
+						Content.AddSystemMessage(result.SystemMessage);
+					});
+					break;
+
+				case SessionCompactionOutcome.Compacted:
+					Dispatcher.UIThread.Post(() =>
+					{
+						Content.Messages.Clear();
+						var entries = _owner._fileService.ReadEntries(_owner._node.FileName);
+						foreach (var entry in entries)
+						{
+							if (entry.Role != Constants.SessionFile.RoleCompaction
+							    && string.IsNullOrWhiteSpace(entry.Content))
+								continue;
+							Content.Messages.Add(SessionContentViewModel.EntryToViewModel(entry));
+						}
+
+						// The service detached the JSONL (FR.11.8); only when it had a live session is there anything to announce.
+						if (result.SessionDetached)
+						{
+							Content.AddSystemMessage(result.SystemMessage);
+							_owner.RaisePropertyChanged(nameof(CanClear));
+							Content.NotifyClaudeSessionChanged();
+						}
+					});
+					break;
+
+				default:
+					// The auth error itself came through AuthErrorChanged.
+					Dispatcher.UIThread.Post(() =>
+					{
+						_owner.RemoveProgressRows();
+						Content.AddSystemMessage(result.SystemMessage);
+					});
+					break;
+			}
+
 			_owner.IsAutoCompact = false;
 		}
 

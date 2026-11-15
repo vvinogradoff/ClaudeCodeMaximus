@@ -9,5 +9,9 @@ namespace TessynDesktop.Models.Turns;
 /// <param name="IsNewBranch">The one-shot New Branch toggle of this send (FR.11.4).</param>
 /// <param name="TurnId">The id the turn carries on the wire; the engine makes one when null (a caller that must answer with it up front passes it).</param>
 /// <param name="ClientRequestId">The caller's correlation id, echoed by <c>turn.started</c>.</param>
+/// <param name="AutoCompact">
+/// The one-shot Auto-Compact toggle of this send (FR.11.6): the session is compacted after the answer, still under the turn lock. With an empty
+/// <paramref name="Message"/> no turn is sent and the session is only compacted. Per run: nothing is remembered once the run is over.
+/// </param>
 /// <remarks>Created by Claude</remarks>
-public sealed record TurnRequest(SessionNodeModel Node, string Message, TurnSettings Settings, bool IsNewBranch = false, string? TurnId = null, string? ClientRequestId = null);
+public sealed record TurnRequest(SessionNodeModel Node, string Message, TurnSettings Settings, bool IsNewBranch = false, string? TurnId = null, string? ClientRequestId = null, bool AutoCompact = false);

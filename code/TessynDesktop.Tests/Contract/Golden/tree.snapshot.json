@@ -23,7 +23,8 @@
                 "favorite": true,
                 "lastActivityUtc": "2026-11-12T10:00:00+00:00",
                 "lastPromptUtc": "2026-11-12T10:00:00+00:00",
-                "hasDraft": true
+                "hasDraft": true,
+                "authError": false
               }
             }
           ]
@@ -41,7 +42,8 @@
             "favorite": false,
             "lastActivityUtc": "2026-11-12T09:00:00+00:00",
             "lastPromptUtc": "2026-11-12T09:00:00+00:00",
-            "hasDraft": false
+            "hasDraft": false,
+            "authError": false
           }
         }
       ]
