@@ -14,6 +14,17 @@ public interface IAppSettingsService
 	void Save();
 
 	/// <summary>
+	/// Raised after every <see cref="Save"/> has written the file, on the saving thread and outside the service's own lock (the caller may still
+	/// hold <see cref="SyncRoot"/>). Subscribers must return quickly and never throw into the saver. The default does nothing, so a stand-in
+	/// for the service need not implement it. Package J3 uses it for per-section change detection (<c>settings.changed</c>).
+	/// </summary>
+	event System.Action? Saved
+	{
+		add { }
+		remove { }
+	}
+
+	/// <summary>
 	/// Shared lock guarding <see cref="Save"/>/<see cref="Load"/> and all in-memory mutations of
 	/// <see cref="Settings"/>'s tree (ISSUE — concurrent-settings-save-lost-update). Callers that
 	/// mutate the shared <see cref="Settings"/> graph from a background/worker thread and then call

@@ -1,0 +1,24 @@
+{
+  "section": "general",
+  "version": 1,
+  "values": {
+    "sessionFilesRoot": "<root>/sessions",
+    "claudePath": "claude-test",
+    "sourceCodesLocation": "",
+    "httpsProxy": "",
+    "ollamaBaseUrl": "http://localhost:11434",
+    "agentToolsEnabled": true,
+    "fileAccess": {
+      "mode": "workingDirectory",
+      "maxRelayChunkBytes": 524288,
+      "maxTextFileBytes": 5242880,
+      "maxImageFileBytes": 31457280,
+      "maxPdfFileBytes": 52428800,
+      "maxVideoFileBytes": 524288000
+    },
+    "mediaPreviewHosts": [
+      "annielartens.online",
+      "*.githubusercontent.com"
+    ]
+  }
+}

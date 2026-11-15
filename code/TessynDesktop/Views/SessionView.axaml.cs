@@ -257,6 +257,14 @@ public partial class SessionView : UserControl
 		var caret = InputBox.CaretIndex;
 		var trigger = _triggerParser.Parse(text, caret);
 
+		// Build the code index on first use; once ready, re-run suggestions if this session is still shown.
+		if (trigger.Mode is AutocompleteMode.File or AutocompleteMode.Symbol)
+			vm.EnsureCodeIndex(() =>
+			{
+				if (ReferenceEquals(DataContext, vm))
+					UpdateAutocompleteTrigger();
+			});
+
 		vm.AutocompleteVm.UpdateSuggestions(vm.WorkingDirectory, trigger);
 	}
 

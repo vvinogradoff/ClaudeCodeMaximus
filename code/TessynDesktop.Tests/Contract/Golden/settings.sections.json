@@ -1,0 +1,16 @@
+{
+  "sections": [
+    {
+      "name": "general",
+      "version": 1
+    },
+    {
+      "name": "notifications",
+      "version": 1
+    },
+    {
+      "name": "telegram",
+      "version": 1
+    }
+  ]
+}

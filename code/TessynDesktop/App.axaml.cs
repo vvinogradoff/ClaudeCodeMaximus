@@ -288,6 +288,16 @@ public partial class App : Application
 		services.AddSingleton<TdcpDispatcher>();
 		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
 		services.AddTransient<IRemoteRpcModule, ProfileRpcModule>();
+		// Package J3: settings sections, profile administration and sounds. The profile service is shared with the Avalonia profile dropdown;
+		// the three modules are loopback only. The section service is a singleton: it owns the per-section versions and the Saved subscription.
+		services.AddSingleton<IProfileAdminService, ProfileAdminService>();
+		services.AddSingleton<ISettingsSection, GeneralSettingsSection>();
+		services.AddSingleton<ISettingsSection, NotificationsSettingsSection>();
+		services.AddSingleton<ISettingsSection, TelegramSettingsSection>();
+		services.AddSingleton<ISettingsSectionService, SettingsSectionService>();
+		services.AddTransient<IRemoteRpcModule, SettingsRpcModule>();
+		services.AddTransient<IRemoteRpcModule, ProfileAdminRpcModule>();
+		services.AddTransient<IRemoteRpcModule, SoundRpcModule>();
 		services.AddSingleton<IRemoteEventBus, RemoteEventBus>();
 		services.AddSingleton<IEventLog, EventLog>();
 		services.AddSingleton<IDaemonRunInfo, DaemonRunInfo>();
@@ -337,6 +347,14 @@ public partial class App : Application
 		services.AddTransient<IRemoteRpcModule, AttachmentRpcModule>();
 		services.AddTransient<IRemoteRpcModule, CatalogRpcModule>();
 		services.AddTransient<IRemoteRpcModule, UsageRpcModule>();
+		// P1.J1: tree and node mutation, session options, local tools (loopback only). The git-origin cache is a singleton: it owns the cached origins.
+		services.AddSingleton<IDirectoryGitOrigins, DirectoryGitOrigins>();
+		services.AddTransient<ITreeMutationService, TreeMutationService>();
+		services.AddTransient<ISessionOptionsService, SessionOptionsService>();
+		services.AddTransient<ILocalToolsService, LocalToolsService>();
+		services.AddTransient<IRemoteRpcModule, TreeMutationRpcModule>();
+		services.AddTransient<IRemoteRpcModule, SessionOptionsRpcModule>();
+		services.AddTransient<IRemoteRpcModule, LocalToolsRpcModule>();
 
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();

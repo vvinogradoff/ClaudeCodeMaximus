@@ -21,15 +21,29 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly IEventLog?      _eventLog;
 	private readonly ITurnEngine?    _turnEngine;
 	private readonly bool           _hasContentStore;
+	private readonly bool            _hasSettings;
+	private readonly bool            _hasProfileAdmin;
+	private readonly bool            _hasSound;
+	private readonly bool            _hasTreeMutation;
+	private readonly bool            _hasSessionOptions;
+	private readonly bool            _hasLocalTools;
 	private readonly string          _daemonVersion;
 
-	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null)
+	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
+		ISettingsSectionService? settingsSections = null, IProfileAdminService? profileAdmin = null, ISessionSoundService? sounds = null,
+		ITreeMutationService? treeMutation = null, ISessionOptionsService? sessionOptions = null, ILocalToolsService? localTools = null)
 	{
 		_time          = time ?? TimeProvider.System;
 		_runInfo       = runInfo ?? new DaemonRunInfo();
 		_eventLog      = eventLog;
 		_turnEngine    = turnEngine;
 		_hasContentStore = contentStore != null;
+		_hasSettings     = settingsSections != null;
+		_hasProfileAdmin = profileAdmin != null;
+		_hasSound        = sounds != null;
+		_hasTreeMutation   = treeMutation != null;
+		_hasSessionOptions = sessionOptions != null;
+		_hasLocalTools     = localTools != null;
 		_daemonVersion = ReadDaemonVersion();
 	}
 
@@ -79,6 +93,27 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		// P1.F: entry ids need the content store.
 		if (_hasContentStore)
 			capabilities.Add(Constants.Remote.Capabilities.EntriesIds);
+
+		// Package J3: each flag needs the service behind its methods.
+		if (_hasSettings)
+			capabilities.Add(RemoteProtocol.SettingsApi.Capability);
+		if (_hasProfileAdmin)
+			capabilities.Add(RemoteProtocol.ProfilesAdmin.Capability);
+		if (_hasSound)
+			capabilities.Add(RemoteProtocol.SoundApi.Capability);
+
+		// P1.J1: the tree mutation, session option and local tool methods need their services.
+		if (_hasTreeMutation)
+		{
+			capabilities.Add(RemoteProtocol.TreeMutation.Capability);
+			capabilities.Add(RemoteProtocol.TreeMutation.InfoCapability);
+		}
+
+		if (_hasSessionOptions)
+			capabilities.Add(RemoteProtocol.SessionOptions.Capability);
+
+		if (_hasLocalTools)
+			capabilities.Add(RemoteProtocol.LocalTools.Capability);
 
 		return capabilities;
 	}

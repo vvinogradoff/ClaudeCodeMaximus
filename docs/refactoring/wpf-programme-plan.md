@@ -79,6 +79,16 @@ System.Text.Json).
 | A20 | Apply the documentation for the work merged on 2026-11-15, by the A10 procedure. |
 | A21 | Supervisor decision, accepted by default: the WPF E2E tests use a `--test-drop` startup seam, honoured only with `--test-window`. |
 | A22 | Next wave: WPF for daily use, meaning P1.J (complete the remote API) plus Phase 3 parity, so the daily driver can switch to WPF. |
+| A23 | All recommendations of `.wpf-work/400-parity-plan.md` §5.1 accepted:
+- Q1: the browser pane and link chips come after the switch.
+- Q2: an R6 connector-diff design first; W5 ships R1 and R5.
+- Q3: drop `--chrome` in WPF.
+- Q4: drop the Markdown toggle in WPF.
+- Q5: `client.register`; the host stays silent while a registered client is connected.
+- Q6: Avalonia `--background`, launched by WPF when `daemon.json` is stale (approved to touch `Program.cs`/`App.axaml.cs`).
+- Q7: WPF's own `[Publish-WPF]` run folder and self-update (approved build and deploy changes).
+- Q8: a one-time import of the Avalonia UI settings on first launch, with confirmation.
+- Docs: collected per package and approved as one batch before the switch. |
 
 ## 3. Why the current UI slows down
 

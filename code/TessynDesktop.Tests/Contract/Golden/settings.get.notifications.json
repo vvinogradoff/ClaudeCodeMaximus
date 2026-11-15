@@ -1,0 +1,9 @@
+{
+  "section": "notifications",
+  "version": 1,
+  "values": {
+    "notificationsEnabled": true,
+    "sessionCompletionSoundFile": "<root>/ding.wav",
+    "sessionCompletionSoundThrottleSeconds": 180
+  }
+}

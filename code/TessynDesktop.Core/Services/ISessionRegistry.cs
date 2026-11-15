@@ -16,6 +16,12 @@ public enum TreeChangeKind
     SettingsModified,
     /// <summary>The full tree was reloaded from settings on startup.</summary>
     Reloaded,
+    /// <summary>
+    /// A daemon method (a remote client) changed the tree structure (add, rename, delete, move). Raised in addition to <see cref="SettingsModified"/>
+    /// so a host that projects the tree into view models (the desktop) can tell it must re-project: its own edits update the view models in place.
+    /// The remote notification publisher ignores it (<see cref="SettingsModified"/> already published the change).
+    /// </summary>
+    DaemonMutation,
 }
 
 /// <summary>Carries the details of a change raised by <see cref="ISessionRegistry"/>.</summary>
@@ -120,6 +126,20 @@ public interface ISessionRegistry
     DirectoryNodeModel? RemoveSessionFromModel(SessionNodeModel session);
     void InsertSessionIntoDirectory(DirectoryNodeModel parent, SessionNodeModel session, int index);
     void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index);
+
+    /// <summary>
+    /// Moves <paramref name="session"/> in ONE step (one lock, one <c>Save()</c>, one <see cref="TreeChangeKind.SettingsModified"/>) into
+    /// <paramref name="targetGroup"/>, or into <paramref name="targetDirectory"/> when the group is null, at <paramref name="index"/> of the
+    /// target's <c>Sessions</c> list as it is once the session has left its old container (clamped). The session's working directory follows
+    /// the target. Returns false, changing nothing, when the session is not in the tree. The git-origin rule is the caller's (<c>TreeMoveRules</c>).
+    /// </summary>
+    bool MoveSession(SessionNodeModel session, DirectoryNodeModel targetDirectory, GroupNodeModel? targetGroup, int index);
+
+    /// <summary>Raises <see cref="TreeChangeKind.SettingsModified"/> after a change to tree data that bypassed the registry (a directory's local tool profile).</summary>
+    void RaiseTreeModified();
+
+    /// <summary>Raises <see cref="TreeChangeKind.DaemonMutation"/>: a remote client changed the tree structure and a projecting host must reload it.</summary>
+    void RaiseDaemonTreeMutation();
 
     // ── Orchestration helpers ─────────────────────────────────────────────────
 

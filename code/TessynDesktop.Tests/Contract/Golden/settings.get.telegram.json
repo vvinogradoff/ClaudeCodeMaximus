@@ -1,0 +1,11 @@
+{
+  "section": "telegram",
+  "version": 1,
+  "values": {
+    "telegramEnabled": false,
+    "telegramChatId": 0,
+    "telegramAllowedUserIds": [],
+    "telegramMentionHandle": "",
+    "telegramMirrorMode": "answersOnly"
+  }
+}
