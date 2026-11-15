@@ -111,6 +111,10 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 
 	private void OnTreeChanged(object? sender, TreeChangedEventArgs e) => Guard(() =>
 	{
+		// The marker for hosts that project the tree: the structural change was published with its SettingsModified.
+		if (e.Kind == TreeChangeKind.DaemonMutation)
+			return;
+
 		if (e.Kind == TreeChangeKind.SessionIsRunningChanged)
 		{
 			if (e.Session != null)

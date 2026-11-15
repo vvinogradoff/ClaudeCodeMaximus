@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "nodeId": "<id1>",
+      "kind": "session",
+      "path": "Wire session",
+      "workingDirectory": "<root>/proj",
+      "gitOrigin": "git@github.com:org/repo.git",
+      "label": "<root>/proj"
+    },
+    {
+      "nodeId": "<id2>",
+      "kind": "directory",
+      "path": "",
+      "workingDirectory": "<root>/proj",
+      "gitOrigin": "git@github.com:org/repo.git",
+      "label": "<root>/proj"
+    }
+  ]
+}
