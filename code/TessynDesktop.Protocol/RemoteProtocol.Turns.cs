@@ -40,6 +40,7 @@ public static partial class RemoteProtocol
 			LocalOnlyEvents.Contains(notification.Method)
 			|| Composer.LocalOnlyEvents.Contains(notification.Method)
 			|| Notifications.LocalOnlyEvents.Contains(notification.Method)
+			|| Schedules.LocalOnlyEvents.Contains(notification.Method)
 			|| (notification.Method == Events.TurnCompleted && notification.Params["neverRan"]?.GetValue<bool>() == true);
 	}
 }
