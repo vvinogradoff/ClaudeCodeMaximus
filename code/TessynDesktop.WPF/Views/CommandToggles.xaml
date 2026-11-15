@@ -1,0 +1,15 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.CommandToggles"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:TessynDesktop.WPF.Views">
+    <!-- The toggles of the command bar (W4): Streaming Session Mode, completion sound and the local-tools button. The DataContext is the SessionPaneViewModel. -->
+    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+        <StackPanel DataContext="{Binding Toggles}" Orientation="Horizontal">
+            <ToggleButton Content="Streaming" Padding="10,3" Margin="0,0,6,0" IsEnabled="{Binding IsStreamingKnown}" IsChecked="{Binding StreamingChecked, Mode=TwoWay}"
+                          ToolTip="Streaming Session Mode: keep one claude process alive for the session's turns." AutomationProperties.Name="Streaming Session Mode" />
+            <ToggleButton Content="Sound" Padding="10,3" Margin="0,0,6,0" IsEnabled="{Binding IsSoundKnown}" IsChecked="{Binding SoundChecked, Mode=TwoWay}"
+                          ToolTip="Play a sound when a turn of this session completes." AutomationProperties.Name="Completion sound" />
+        </StackPanel>
+        <v:LocalToolsButton DataContext="{Binding LocalTools}" />
+    </StackPanel>
+</UserControl>

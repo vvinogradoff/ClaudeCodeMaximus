@@ -1,0 +1,53 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.LocalToolsButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </UserControl.Resources>
+    <!-- Tools: a short click is the master switch, a hold of 450 ms opens the checklist (FR.12.23.2). Visible only for a local model; dimmed when off (FR.12.23.3). -->
+    <Grid Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
+        <!-- A plain Button, not a ToggleButton: the state is only displayed (weight, dimming), and a click, Space, Enter or a UI Automation Invoke
+             all run ToggleEnabledCommand. The mouse is handled by OnPress/OnRelease (short click or hold), which mark it handled so Click does not also fire. -->
+        <Button x:Name="ToolsButton" Content="Tools" Padding="10,3" Command="{Binding ToggleEnabledCommand}" ToolTip="{Binding Tooltip}"
+                AutomationProperties.Name="Local tools"
+                PreviewMouseLeftButtonDown="OnPress" PreviewMouseLeftButtonUp="OnRelease" LostMouseCapture="OnLostCapture" PreviewKeyDown="OnKeyDown">
+            <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                            <Setter Property="FontWeight" Value="Normal" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Button.Style>
+        </Button>
+        <Popup IsOpen="{Binding IsPopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=ToolsButton}" Placement="Top" StaysOpen="False" AllowsTransparency="True">
+            <Border Padding="10" CornerRadius="6" BorderThickness="1" MaxHeight="360"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MinWidth="200" AutomationProperties.Name="Local tools list">
+                        <TextBlock Text="Native tools" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <ItemsControl ItemsSource="{Binding NativeTools}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked, Mode=TwoWay}" AutomationProperties.Name="{Binding Label}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="MCP" FontWeight="SemiBold" Margin="0,8,0,4" />
+                        <CheckBox Content="cmx" IsChecked="{Binding IncludeCmxMcp, Mode=TwoWay}" AutomationProperties.Name="cmx" />
+                        <ItemsControl ItemsSource="{Binding McpServers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked, Mode=TwoWay}" AutomationProperties.Name="{Binding Label}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

@@ -125,6 +125,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_cache = new TranscriptCache(cacheCapacity);
 		_media = media;
 		InitializeComposer(stateStore);
+		InitializeToolbar();
 		Focus = focus ?? new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance);
 		Preview = preview;
 		Focus.RefActivated += OnRefActivated;
@@ -379,6 +380,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		Title = detail.Name;
 		ApplyFavorite(detail.State);
 		ApplySelection(detail.LastUsed);
+		ApplyToolbarDetail(detail);
 		if (stateEventsAtRequest == _stateEvents)
 			SetDaemonRunning(detail.State.Running);
 		Tags.Clear();
@@ -488,6 +490,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			return;
 
 		ApplyFavorite(state);
+		Toggles.ApplyAlive(state.Id, state.StreamingAlive);
 		_stateEvents++;
 		SetDaemonRunning(state.Running);
 	}
@@ -509,6 +512,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			}
 
 			_ = LoadCatalogAsync();
+			_ = SessionOptions.RefreshAsync();
 		});
 	}
 

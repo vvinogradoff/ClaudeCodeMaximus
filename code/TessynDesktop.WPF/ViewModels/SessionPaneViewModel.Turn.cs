@@ -31,7 +31,8 @@ public sealed partial class SessionPaneViewModel
 	/// <summary>The clock of the thinking timer and of the generic working row.</summary>
 	public TimeProvider Clock { get; set; } = TimeProvider.System;
 
-	private bool CanSend() => HasSession && IsSessionReady && !string.IsNullOrWhiteSpace(InputText);
+	/// <summary>An empty box can be sent while Auto-Compact is on: it then only compacts (FR.11.6).</summary>
+	private bool CanSend() => HasSession && IsSessionReady && (!string.IsNullOrWhiteSpace(InputText) || Instruction.AutoCompact);
 
 	partial void OnHasSessionChanged(bool value) => SendCommand.NotifyCanExecuteChanged();
 
@@ -40,12 +41,13 @@ public sealed partial class SessionPaneViewModel
 	{
 		var id = NodeId;
 		var text = InputText.Trim();
-		if (id == null || text.Length == 0)
+		if (id == null || (text.Length == 0 && !Instruction.AutoCompact))
 			return;
 
 		// A14: what the user picked travels with this send, so a queued send keeps it whatever is picked later. A field the user did not pick is
 		// not sent (tdcp-spec 9.8): the value the selector shows came from lastUsed, and sending it would pin the session to it.
 		var picks = PicksOfOpenSession();
+		var oneShots = Instruction.TakeOneShots();   // New Branch and Auto-Compact go with this send and switch off
 
 		// The input is taken before the round trip: a second press (or key repeat) finds nothing to send, and text typed meanwhile is kept.
 		InputText = string.Empty;
@@ -53,16 +55,18 @@ public sealed partial class SessionPaneViewModel
 		ClearTurnError(id);
 		try
 		{
-			var result = await _client.TurnSendAsync(id, text, picks.ModelId, picks.EffortId, picks.ProfileId, Guid.NewGuid().ToString("N"));
+			var result = await _client.TurnSendAsync(id, text, picks.ModelId, picks.EffortId, picks.ProfileId, Guid.NewGuid().ToString("N"), oneShots.NewBranch, oneShots.AutoCompact);
 			if (!result.Accepted)
 			{
 				RestoreInput(id, text);
+				Instruction.Restore(id, oneShots);
 				Error = Constants.TurnTexts.NotAccepted;
 			}
 		}
 		catch (Exception ex)
 		{
 			RestoreInput(id, text);
+			Instruction.Restore(id, oneShots);
 			_logger.LogWarning(ex, "turn.send failed for {NodeId}", id);
 			Error = Constants.TurnTexts.SendFailed + ex.Message;
 		}

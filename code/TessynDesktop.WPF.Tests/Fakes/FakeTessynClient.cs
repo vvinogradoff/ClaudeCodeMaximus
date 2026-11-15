@@ -216,8 +216,8 @@ public sealed partial class FakeTessynClient : ITessynClient
 			await SessionGetGate.Task;
 		var session = Sessions[nodeId];
 		return new SessionDetailDto(
-			nodeId, session.Name, "dir", null, null!, null, session.State(nodeId), session.Tags,
-			new AttentionSummaryDto(), session.LastUsed, false, session.Entries.Count, session.Epoch);
+			nodeId, session.Name, session.DirectoryId, null, null!, null, session.State(nodeId), session.Tags,
+			new AttentionSummaryDto(), session.LastUsed, session.StreamingMode, session.Entries.Count, session.Epoch);
 	}
 
 	public async Task<SessionEntriesResult> SessionEntriesAsync(string nodeId, int? beforeIndex = null, int? afterIndex = null, int? limit = null, CancellationToken cancellationToken = default)
@@ -284,7 +284,7 @@ public sealed partial class FakeTessynClient : ITessynClient
 		return Task.FromResult(new SessionStopResult(true));
 	}
 
-	public Task<SessionCompactResult> SessionCompactAsync(string nodeId, string? modelId = null, string? effort = null, string? profileId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Task<SessionCompactResult> SessionCompactAsync(string nodeId, string? modelId = null, string? effort = null, string? profileId = null, CancellationToken cancellationToken = default) => CompactImpl(nodeId, modelId, effort, profileId);
 
 	public Task<SetFavoriteResult> SessionSetFavoriteAsync(string nodeId, bool value, CancellationToken cancellationToken = default)
 	{
@@ -292,7 +292,7 @@ public sealed partial class FakeTessynClient : ITessynClient
 		return Task.FromResult(SetFavoriteHandler?.Invoke(nodeId, value) ?? new SetFavoriteResult(value));
 	}
 
-	public Task<SetStreamingResult> SessionSetStreamingAsync(string nodeId, bool enabled, bool? force = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Task<SetStreamingResult> SessionSetStreamingAsync(string nodeId, bool enabled, bool? force = null, CancellationToken cancellationToken = default) => SetStreamingImpl(nodeId, enabled, force);
 
 	/// <summary>The Focus items per session, as the daemon's ledger would list them.</summary>
 	public Dictionary<string, List<AttentionItemDto>> Attention { get; } = [];
