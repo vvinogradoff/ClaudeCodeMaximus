@@ -19,7 +19,8 @@ public partial class App : Application
 	private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(6);
 
 	private IHost? _host;
-	private Mutex? _singleInstanceMutex;
+	private SingleInstanceGuard? _singleInstance;
+	private bool _activationPending;
 
 	/// <summary>The application's service provider (set once the host is built).</summary>
 	public IServiceProvider Services => _host!.Services;
@@ -30,14 +31,16 @@ public partial class App : Application
 
 		var startup = System.Diagnostics.Stopwatch.StartNew();
 		var options = StartupOptions.Parse(e.Args);
-		_singleInstanceMutex = new Mutex(initiallyOwned: true, options.MutexName, out var createdNew);
-		if (!createdNew)
+		_singleInstance = new SingleInstanceGuard(options.MutexName);
+		if (!_singleInstance.TryAcquire())
 		{
-			_singleInstanceMutex.Dispose();
-			_singleInstanceMutex = null;
+			// The running instance has been asked to come to the front.
+			_singleInstance = null;
 			Shutdown();
 			return;
 		}
+
+		_singleInstance.ListenForActivation(() => Dispatcher.BeginInvoke(new Action(() => ActivateMainWindow(options))));
 
 		var paths = options.DataRoot == null ? new AppPaths() : new AppPaths(options.DataRoot);
 		Log.Logger = new LoggingSetup().CreateLogger(paths);
@@ -60,10 +63,13 @@ public partial class App : Application
 		await _host.Services.GetRequiredService<IClientStateStore>().LoadAsync();
 		var stateLoaded = startup.ElapsedMilliseconds;
 
+		_host.Services.GetRequiredService<ShellModuleLoader>().Load();
 		var window = _host.Services.GetRequiredService<MainWindow>();
 		var windowCreated = startup.ElapsedMilliseconds;
 		MainWindow = window;
 		window.Show();
+		if (_activationPending)
+			ActivateMainWindow(options); // a second start arrived while this one was still starting
 		logger.LogInformation("Startup: host built {Host} ms, state loaded {State} ms, window created {Created} ms, shown {Shown} ms",
 			hostBuilt, stateLoaded, windowCreated, startup.ElapsedMilliseconds);
 	}
@@ -72,6 +78,9 @@ public partial class App : Application
 	{
 		if (_host != null)
 		{
+			// A dialog still waiting for an answer would hold its caller forever.
+			_host.Services.GetService<IDialogService>()?.CancelPending();
+
 			// Never block the UI thread on work that may need it: run the shutdown on the thread pool with a bounded wait.
 			var host = _host;
 			var shutdown = Task.Run(async () =>
@@ -92,15 +101,36 @@ public partial class App : Application
 		}
 
 		Log.CloseAndFlush();
-		try
+		_singleInstance?.Dispose();
+		base.OnExit(e);
+	}
+
+	/// <summary>
+	/// A second start asked for this instance: show, restore and raise the window. A test window must never take focus, so it ignores the request.
+	/// A request that comes before the window exists is remembered and applied once it is shown.
+	/// </summary>
+	private void ActivateMainWindow(StartupOptions options)
+	{
+		if (options.TestWindow)
+			return;
+
+		if (MainWindow is not { IsLoaded: true } window)
 		{
-			_singleInstanceMutex?.ReleaseMutex();
-		}
-		catch (ApplicationException)
-		{
+			_activationPending = true;
+			return;
 		}
 
-		_singleInstanceMutex?.Dispose();
-		base.OnExit(e);
+		_activationPending = false;
+		if (window.Visibility != Visibility.Visible)
+			window.Show();
+
+		if (window.WindowState == WindowState.Minimized)
+			window.WindowState = WindowState.Normal;
+
+		// Activate alone often only flashes the taskbar button; toggling Topmost reliably raises the window.
+		window.Activate();
+		window.Topmost = true;
+		window.Topmost = false;
+		window.Focus();
 	}
 }

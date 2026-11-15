@@ -13,6 +13,7 @@ public sealed class StartupOptions
 	public const string DataRootArgument = "--data-root";
 	public const string TestWindowArgument = "--test-window";
 	public const string TestDropArgument = "--test-drop";
+	public const string TestDialogArgument = "--test-dialog";
 
 	public string? DaemonFile { get; init; }
 
@@ -31,6 +32,12 @@ public sealed class StartupOptions
 	/// </summary>
 	public IReadOnlyList<string> TestDropPaths { get; init; } = [];
 
+	/// <summary>
+	/// Test seam (only honoured together with <c>--test-window</c>; repeatable <c>--test-dialog &lt;answer&gt;</c>): dialogs open no window but are answered in order
+	/// from these entries (see <c>ScriptedDialogPresenter</c>); with none left they are cancelled. Without it an E2E test that triggers a dialog would hang on a modal window.
+	/// </summary>
+	public IReadOnlyList<string> TestDialogAnswers { get; init; } = [];
+
 	/// <summary>The single-instance mutex name for this run.</summary>
 	public string MutexName => DataRoot == null
 		? Constants.Identity.SingleInstanceMutexName
@@ -41,6 +48,7 @@ public sealed class StartupOptions
 		string? daemonFile = null;
 		string? dataRoot = null;
 		var testDrops = new List<string>();
+		var testDialogs = new List<string>();
 		for (var i = 0; i < args.Count - 1; i++)
 		{
 			if (string.Equals(args[i], DaemonFileArgument, StringComparison.OrdinalIgnoreCase))
@@ -49,9 +57,11 @@ public sealed class StartupOptions
 				dataRoot = args[++i];
 			else if (string.Equals(args[i], TestDropArgument, StringComparison.OrdinalIgnoreCase))
 				testDrops.Add(args[++i]);
+			else if (string.Equals(args[i], TestDialogArgument, StringComparison.OrdinalIgnoreCase))
+				testDialogs.Add(args[++i]);
 		}
 
 		var testWindow = args.Any(a => string.Equals(a, TestWindowArgument, StringComparison.OrdinalIgnoreCase));
-		return new StartupOptions { DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [] };
+		return new StartupOptions { DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [], TestDialogAnswers = testWindow ? testDialogs : [] };
 	}
 }
