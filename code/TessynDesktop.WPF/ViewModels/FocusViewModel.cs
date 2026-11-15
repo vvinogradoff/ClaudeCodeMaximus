@@ -196,7 +196,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		{
 			Items.Remove(gone);
 			_byId.Remove(gone.Id);
-			ReplySync.Discard(KeyOf(nodeId, gone.Id));   // the item closed: its draft goes with it (the daemon deletes the stored one)
+			KeepOrDiscardGoneReply(nodeId, gone);
 		}
 
 		for (var i = 0; i < wanted.Count; i++)
@@ -237,6 +237,25 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 			_ = ReplySync.FlushAsync(KeyOf(NodeId, item.Id));   // leaving the session: what is still waiting goes to the daemon now
 		}
+	}
+
+	/// <summary>
+	/// A card left the list. Unsent text is never dropped for that: the list may be short for a moment (an unreadable ledger, a failed refresh) and the card may come back.
+	/// The text is written to the daemon now and kept in the local cache for the card's return; if the item really closed, the daemon refuses the write (-32602) or deletes the draft.
+	/// A card without text has nothing to lose, so its waiting empty write is dropped.
+	/// </summary>
+	private void KeepOrDiscardGoneReply(string nodeId, FocusItemViewModel gone)
+	{
+		var key = KeyOf(nodeId, gone.Id);
+		if (string.IsNullOrWhiteSpace(gone.ReplyText))
+		{
+			ReplySync.Discard(key);
+			return;
+		}
+
+		_drafts[(nodeId, gone.Id)] = gone.ReplyText;
+		ReplySync.Schedule(key, gone.ReplyText);
+		_ = ReplySync.FlushAsync(key);
 	}
 
 	/// <summary>Writes every pending reply draft (the app calls it at exit, and after a lost connection returns).</summary>
@@ -381,6 +400,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		{
 			Error = null;
 			await _client.AttentionDismissAsync(id, item.Id);
+			SetReplyQuietly(item, string.Empty);   // closed: the unsent text goes with the item (the refresh that removes the card must not keep it)
 			ReplySync.Discard(KeyOf(id, item.Id));
 			if (id == NodeId)
 				await RequestRefresh();

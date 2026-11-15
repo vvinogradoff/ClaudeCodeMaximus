@@ -86,30 +86,41 @@ public partial class SessionPane : UserControl
 	/// <summary>The most the input area grows to by itself (the text box and the command bar); a height the user dragged to lifts it.</summary>
 	private const double NaturalInputMaxHeight = 260;
 
-	/// <summary>Puts the input row in the state the view model asks for: Auto (the content's height) when collapsed or never resized, the remembered height otherwise.</summary>
+	private bool _dragExpanding;
+
+	/// <summary>
+	/// Puts the input row in the state the view model asks for: Auto (the content's height) when collapsed or never resized, the remembered height otherwise.
+	/// While a drag out of the collapsed state expands the area the splitter sets the height itself, so only the sizing mode changes.
+	/// </summary>
 	private void ApplyInputArea()
 	{
 		if (_subscribed == null)
 			return;
 
-		if (_subscribed.IsInputCollapsed)
+		if (_dragExpanding)
 		{
-			InputRow.Height = GridLength.Auto;
-			InputBody.MaxHeight = NaturalInputMaxHeight;
+			SetInputSizing(userSized: true);
 			return;
 		}
 
-		if (_subscribed.ExpandedInputHeight is > 0 and var height)
+		if (!_subscribed.IsInputCollapsed && _subscribed.ExpandedInputHeight is > 0 and var height)
 		{
 			InputRow.Height = new GridLength(height);
-			InputBody.MaxHeight = double.PositiveInfinity;
+			SetInputSizing(userSized: true);
 		}
 		else
 		{
 			InputRow.Height = GridLength.Auto;
-			InputBody.MaxHeight = NaturalInputMaxHeight;
+			SetInputSizing(userSized: false);
 		}
 	}
+
+	/// <summary>
+	/// A user-sized row (the splitter was dragged): the cap on the natural height is lifted, so the text box fills the row (the scroll viewer around the content gives it the row's
+	/// height) and the content scrolls when the row is smaller than it. A natural row (Auto): the content is as high as it is, capped at <see cref="NaturalInputMaxHeight"/>.
+	/// </summary>
+	private void SetInputSizing(bool userSized) =>
+		InputBody.MaxHeight = userSized ? double.PositiveInfinity : NaturalInputMaxHeight;
 
 	/// <summary>A double click on the splitter collapses or expands the input area; the first press of it only starts a drag.</summary>
 	private void OnInputSplitterMouseDown(object sender, MouseButtonEventArgs e)
@@ -130,21 +141,44 @@ public partial class SessionPane : UserControl
 		e.Handled = true;
 	}
 
-	/// <summary>A drag out of the collapsed state expands the area first, then goes on resizing it.</summary>
+	/// <summary>A drag out of the collapsed state expands the area first, then goes on resizing it: the splitter sets the height, the area only changes mode.</summary>
 	private void OnInputSplitterDragDelta(object sender, DragDeltaEventArgs e)
 	{
-		if (_subscribed is { IsInputCollapsed: true } && Math.Abs(e.VerticalChange) > 0)
-			_subscribed.IsInputCollapsed = false;
-	}
-
-	/// <summary>The row now has the height the user dragged it to: remembered for when the area expands again.</summary>
-	private void OnInputSplitterDragCompleted(object sender, DragCompletedEventArgs e)
-	{
-		if (_subscribed is not { IsInputCollapsed: false } || InputRow.Height.IsAuto || InputRow.ActualHeight <= 0)
+		if (_subscribed is not { IsInputCollapsed: true } || Math.Abs(e.VerticalChange) <= 0)
 			return;
 
+		_dragExpanding = true;
+		try
+		{
+			_subscribed.IsInputCollapsed = false;
+		}
+		finally
+		{
+			_dragExpanding = false;
+		}
+	}
+
+	/// <summary>The drag starts: from here the row is sized by the user, so the content must fill it (and scroll when it is small).</summary>
+	private void OnInputSplitterDragStarted(object sender, DragStartedEventArgs e)
+	{
+		if (_subscribed is { IsInputCollapsed: false })
+			SetInputSizing(userSized: true);
+	}
+
+	/// <summary>The row now has the height the user dragged it to: remembered for when the area expands again. A drag that changed nothing leaves the natural height.</summary>
+	private void OnInputSplitterDragCompleted(object sender, DragCompletedEventArgs e)
+	{
+		if (_subscribed is not { IsInputCollapsed: false })
+			return;
+
+		if (InputRow.Height.IsAuto || InputRow.ActualHeight <= 0)
+		{
+			SetInputSizing(userSized: false);
+			return;
+		}
+
 		_subscribed.ExpandedInputHeight = InputRow.ActualHeight;
-		InputBody.MaxHeight = double.PositiveInfinity;
+		SetInputSizing(userSized: true);
 	}
 
 	private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

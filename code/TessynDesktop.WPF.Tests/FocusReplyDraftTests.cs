@@ -148,6 +148,39 @@ public sealed class FocusReplyDraftTests
 	}
 
 	[Fact]
+	public async Task ACardThatVanishesFromARefresh_KeepsItsUnsentText_WrittenAtOnce_AndRestoredWhenItComesBack()
+	{
+		SeedOpen("A1", "A2");
+		using var focus = Create(TimeSpan.FromMinutes(5));
+		await focus.SetSessionAsync(Node);
+		focus.Items.Single(i => i.Id == "A2").ReplyText = "half typed answer";
+
+		_client.Attention[Node] = [];   // a short answer: the list is empty for a moment
+		await focus.RefreshAsync();
+		await WaitForAsync(() => _client.ReplyDraftTexts.GetValueOrDefault((Node, "A2")) == "half typed answer", "written when the card vanished");
+		Assert.Empty(focus.Items);
+
+		SeedOpen("A1", "A2");
+		await focus.RefreshAsync();
+
+		Assert.Equal("half typed answer", focus.Items.Single(i => i.Id == "A2").ReplyText);
+	}
+
+	[Fact]
+	public async Task ACardWithoutTextThatVanishes_WritesNothing()
+	{
+		SeedOpen("A1");
+		using var focus = Create();
+		await focus.SetSessionAsync(Node);
+
+		_client.Attention[Node] = [];
+		await focus.RefreshAsync();
+		await Task.Delay(100);
+
+		Assert.Equal(0, Count("draft.set:"));
+	}
+
+	[Fact]
 	public async Task AnItemTheDaemonRefusesDraftsFor_IsDroppedNotRetriedForever()
 	{
 		SeedOpen("A1");

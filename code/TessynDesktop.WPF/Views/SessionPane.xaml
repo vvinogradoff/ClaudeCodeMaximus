@@ -197,10 +197,17 @@
         <GridSplitter Grid.Row="3" x:Name="InputSplitter" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Center"
                       ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" ShowsPreview="False" Cursor="SizeNS"
                       AutomationProperties.Name="Input area splitter" ToolTip="Drag to resize. Double-click (or Enter) to collapse or expand the input area."
-                      PreviewMouseLeftButtonDown="OnInputSplitterMouseDown" PreviewKeyDown="OnInputSplitterKeyDown" DragDelta="OnInputSplitterDragDelta" DragCompleted="OnInputSplitterDragCompleted" />
+                      PreviewMouseLeftButtonDown="OnInputSplitterMouseDown" PreviewKeyDown="OnInputSplitterKeyDown" DragStarted="OnInputSplitterDragStarted" DragDelta="OnInputSplitterDragDelta" DragCompleted="OnInputSplitterDragCompleted" />
 
         <!-- Input: expanded (FR.12.1/12.2) or collapsed (FR.12.29: the command bar only while it is shown, otherwise one line of text) -->
-        <StackPanel Grid.Row="4" Margin="16,2,16,12">
+        <!-- The content fills the row the splitter sets: the prompt grid takes the remaining height (the text box stretches); when the row is smaller than the content it scrolls. -->
+        <ScrollViewer Grid.Row="4" x:Name="InputScroll" Margin="16,2,16,12" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <Grid x:Name="InputContent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Grid.Row="0">
         <!-- Slots: instruction toggles above the prompt box, accessories (autocomplete hints, draft and auth notices) right above it -->
         <v:SlotHost SlotId="session.instructionToolbar" Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}" />
         <v:SlotHost SlotId="session.composerAccessory" />
@@ -216,7 +223,8 @@
                 </StackPanel>
             </DockPanel>
         </Border>
-        <Grid>
+        </StackPanel>
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -275,7 +283,8 @@
                 </Button>
             </StackPanel>
         </Grid>
-        </StackPanel>
+        </Grid>
+        </ScrollViewer>
     </Grid>
 </UserControl>
 

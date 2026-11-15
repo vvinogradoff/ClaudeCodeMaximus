@@ -86,6 +86,9 @@ public sealed class InputAreaViewTests
 	private static void Drag(GridSplitter splitter, double vertical) =>
 		splitter.RaiseEvent(new DragDeltaEventArgs(0, vertical) { RoutedEvent = Thumb.DragDeltaEvent, Source = splitter });
 
+	private static void DragStart(GridSplitter splitter) =>
+		splitter.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent, Source = splitter });
+
 	private static void DragDone(GridSplitter splitter) =>
 		splitter.RaiseEvent(new DragCompletedEventArgs(0, 0, canceled: false) { RoutedEvent = Thumb.DragCompletedEvent, Source = splitter });
 
@@ -276,6 +279,94 @@ public sealed class InputAreaViewTests
 
 			Drag(f.Splitter, -30);
 			Assert.False(f.Model.IsInputCollapsed);
+		});
+	}
+
+	[Fact]
+	public void ADraggedHeight_IsFilledByTheTextBox_NotLeftAsBlankSpace()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var f = Create();
+			f.Settle();
+			var natural = f.Input.ActualHeight;
+
+			DragStart(f.Splitter);
+			f.InputRow.Height = new GridLength(360);   // what the splitter does while it drags
+			f.Settle();
+			DragDone(f.Splitter);
+			f.Settle();
+
+			Assert.True(f.Input.ActualHeight > natural + 100, $"the text box stayed at {f.Input.ActualHeight} (natural {natural}) in a 360 row");
+			Assert.True(f.Input.ActualHeight <= 360);
+			Assert.Equal(360, f.Model.ExpandedInputHeight);
+		});
+	}
+
+	[Fact]
+	public void TheTextBoxGrowsAndShrinksWithTheRow_AndAHeightSmallerThanTheContentScrollsInsteadOfClipping()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var f = Create();
+			var scroll = f.Find<ScrollViewer>("InputScroll");
+			DragStart(f.Splitter);
+
+			f.InputRow.Height = new GridLength(300);
+			f.Settle();
+			var tall = f.Input.ActualHeight;
+			f.InputRow.Height = new GridLength(200);
+			f.Settle();
+			var medium = f.Input.ActualHeight;
+			Assert.True(tall > medium, $"{tall} should be above {medium}");
+			Assert.Equal(0, scroll.ScrollableHeight, 1);
+
+			f.InputRow.Height = new GridLength(30);
+			f.Settle();
+			Assert.True(scroll.ScrollableHeight > 0, "a row smaller than the content must scroll");
+			Assert.Equal(Visibility.Visible, scroll.ComputedVerticalScrollBarVisibility);
+		});
+	}
+
+	[Fact]
+	public void ADragThatChangedNothing_LeavesTheNaturalHeightAndItsCap()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var f = Create();
+			f.Settle();
+			var natural = f.Input.ActualHeight;
+
+			DragStart(f.Splitter);
+			DragDone(f.Splitter);
+			f.Settle();
+
+			Assert.True(f.InputRow.Height.IsAuto);
+			Assert.Null(f.Model.ExpandedInputHeight);
+			Assert.Equal(natural, f.Input.ActualHeight, 1);
+			f.Model.InputText = string.Join(Environment.NewLine, Enumerable.Range(0, 60).Select(i => "line " + i));
+			f.Settle();
+			Assert.True(f.Find<DockPanel>("InputBody").ActualHeight <= 262, "the natural height stays capped");
+		});
+	}
+
+	[Fact]
+	public void TheFirstDragOutOfTheCollapsedState_DoesNotResetTheRowTheSplitterIsSizing()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var f = Create();
+			f.Model.ExpandedInputHeight = 400;   // an older, taller height must not jump in mid-drag
+			DoubleClick(f.Splitter);
+			f.Settle();
+
+			DragStart(f.Splitter);
+			f.InputRow.Height = new GridLength(90);   // the splitter sizing the row from the collapsed height
+			Drag(f.Splitter, -30);
+
+			Assert.False(f.Model.IsInputCollapsed);
+			Assert.False(f.InputRow.Height.IsAuto);                  // not reset to the natural height
+			Assert.True(f.InputRow.Height.Value < 200, "the remembered 400 must not jump in: " + f.InputRow.Height.Value);   // the real splitter moved the row from 90
 		});
 	}
 

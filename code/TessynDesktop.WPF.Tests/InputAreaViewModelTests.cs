@@ -280,6 +280,43 @@ public sealed class InputAreaViewModelTests : IDisposable
 	}
 
 	[Fact]
+	public async Task FindFromTheFocusView_SwitchesToTheSessionView_BeforeSearching()
+	{
+		await _pane.OpenAsync("a");
+		_pane.SelectFocusViewCommand.Execute(null);
+
+		_pane.ShowFindCommand.Execute(null);
+		Assert.True(_pane.IsSessionSelected);
+		Assert.True(_pane.FindBarVisible);
+		Assert.False(_pane.IsInputCollapsed);          // Session view: its default
+
+		_pane.SelectFocusViewCommand.Execute(null);
+		_pane.FindNextCommand.Execute(null);
+		Assert.True(_pane.IsSessionSelected);
+
+		_pane.SelectFocusViewCommand.Execute(null);
+		_pane.FindPreviousCommand.Execute(null);
+		Assert.True(_pane.IsSessionSelected);
+
+		_pane.SelectFocusViewCommand.Execute(null);
+		_pane.FindText = "entry";
+		await _pane.FindCommand.ExecuteAsync(null);
+		Assert.True(_pane.IsSessionSelected);
+	}
+
+	[Fact]
+	public async Task FindFromTheSessionView_ChangesNothingElse()
+	{
+		await _pane.OpenAsync("a");
+		_pane.ToggleInputAreaCommand.Execute(null);
+
+		_pane.ShowFindCommand.Execute(null);
+
+		Assert.True(_pane.IsSessionSelected);
+		Assert.True(_pane.IsInputCollapsed);            // no view change, no reset
+	}
+
+	[Fact]
 	public void TheExpandedHeight_IsRememberedForTheRunOfTheApp()
 	{
 		Assert.Null(_pane.ExpandedInputHeight);
