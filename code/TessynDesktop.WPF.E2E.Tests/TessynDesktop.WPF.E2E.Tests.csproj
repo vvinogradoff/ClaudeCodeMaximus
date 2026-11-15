@@ -23,6 +23,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- UI Automation (System.Windows.Automation) presses the app's buttons; it ships in the WindowsDesktop shared framework. -->
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\TessynDesktop.Core\TessynDesktop.Core.csproj" />
     <ProjectReference Include="..\TessynDesktop.Client\TessynDesktop.Client.csproj" />
     <!-- The loopback test host and the seeded-registry fakes live in the main test project. -->
