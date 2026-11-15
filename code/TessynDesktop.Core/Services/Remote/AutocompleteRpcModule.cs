@@ -118,9 +118,11 @@ public sealed class AutocompleteRpcModule : IRemoteRpcModule, IDisposable
 			if (!Directory.Exists(directory))
 				return items;
 
+			// V8: a directory of many entries none of which matches must not be walked in full on every keystroke.
+			var examined = 0;
 			foreach (var path in Directory.EnumerateDirectories(directory))
 			{
-				if (items.Count >= Constants.CodeIndex.MaxSuggestions)
+				if (items.Count >= Constants.CodeIndex.MaxSuggestions || ++examined > Constants.Composer.MaxPathEntriesExamined)
 					break;
 
 				var name = Path.GetFileName(path);
@@ -130,7 +132,7 @@ public sealed class AutocompleteRpcModule : IRemoteRpcModule, IDisposable
 
 			foreach (var path in Directory.EnumerateFiles(directory))
 			{
-				if (items.Count >= Constants.CodeIndex.MaxSuggestions)
+				if (items.Count >= Constants.CodeIndex.MaxSuggestions || ++examined > Constants.Composer.MaxPathEntriesExamined)
 					break;
 
 				var name = Path.GetFileName(path);

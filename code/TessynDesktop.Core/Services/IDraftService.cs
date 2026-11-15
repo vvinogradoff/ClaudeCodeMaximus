@@ -23,6 +23,23 @@ public interface IDraftService
 	/// <summary>Saves the draft for a session. Overwrites any existing draft.</summary>
 	void SaveDraft(string sessionFileName, string text);
 
+	/// <summary>
+	/// Compare-and-write in one step (V6): writes <paramref name="text"/> (an empty text deletes the draft) only when <paramref name="isExpected"/> accepts the
+	/// stored text (null when there is none); false when it does not, and nothing is written. Writers that go through <see cref="SaveDraft"/> and
+	/// <see cref="DeleteDraft"/> are serialised with it. The default implementation is not atomic (for fakes).
+	/// </summary>
+	bool TryWriteDraft(string sessionFileName, string text, Func<string?, bool> isExpected)
+	{
+		if (!isExpected(LoadDraft(sessionFileName)))
+			return false;
+
+		if (text.Length == 0)
+			DeleteDraft(sessionFileName);
+		else
+			SaveDraft(sessionFileName, text);
+		return true;
+	}
+
 	/// <summary>Deletes the draft for a session (e.g. after the message is sent).</summary>
 	void DeleteDraft(string sessionFileName);
 

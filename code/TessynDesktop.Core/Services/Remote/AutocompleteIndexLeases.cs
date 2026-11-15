@@ -25,6 +25,7 @@ public sealed class AutocompleteIndexLeases : IDisposable
 	private sealed class Lease
 	{
 		public DateTimeOffset LastUsed;
+		public DateTimeOffset Started;
 		public bool Acquired;
 	}
 
@@ -51,7 +52,8 @@ public sealed class AutocompleteIndexLeases : IDisposable
 				lease.LastUsed = _time.GetUtcNow();
 			else if (!_index.IsIndexReady(workingDirectory))
 			{
-				_leases[workingDirectory] = new Lease { LastUsed = _time.GetUtcNow() };
+				var now = _time.GetUtcNow();
+				_leases[workingDirectory] = new Lease { LastUsed = now, Started = now };
 				start = true;
 			}
 		}
@@ -93,6 +95,15 @@ public sealed class AutocompleteIndexLeases : IDisposable
 		{
 			foreach (var (directory, lease) in new List<KeyValuePair<string, Lease>>(_leases))
 			{
+				// V8: a build that never returned would answer "not ready" for this directory forever; give it up after the timeout. When it does
+				// return late, AcquireAsync finds no lease and releases the reference it got.
+				if (!lease.Acquired && now - lease.Started > Constants.Composer.AutocompleteBuildTimeout)
+				{
+					_leases.Remove(directory);
+					_log.Warning("Autocomplete gave up waiting for the code index of {Directory}", directory);
+					continue;
+				}
+
 				if (!lease.Acquired || now - lease.LastUsed < Constants.Composer.AutocompleteIndexIdle)
 					continue;
 

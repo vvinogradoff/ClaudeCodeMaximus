@@ -70,8 +70,21 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		var clientId = ReadClientId(@params, required: true)!;
 		var presents = ReadPresents(@params) ?? throw new TdcpInvalidParamsException("'presents' is required");
 
-		_presence!.Register(clientId, presents);
+		RegisterChecked(clientId, presents);
 		return new ClientRegisterResult(true);
+	}
+
+	/// <summary>The registry is bounded (V7): a refusal for too many clients is an invalid-params error, not an internal one.</summary>
+	private void RegisterChecked(string clientId, IReadOnlyCollection<string> presents)
+	{
+		try
+		{
+			_presence!.Register(clientId, presents);
+		}
+		catch (InvalidOperationException ex)
+		{
+			throw new TdcpInvalidParamsException(ex.Message);
+		}
 	}
 
 	private NotificationAckResult AcknowledgeNotification(JsonNode? @params)
@@ -134,7 +147,7 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 			var helloClientId = ReadClientId(@params, required: false);
 			var helloPresents = ReadPresents(@params);
 			if (helloClientId != null && helloPresents != null)
-				_presence.Register(helloClientId, helloPresents);
+				RegisterChecked(helloClientId, helloPresents);
 			else if (helloPresents != null)
 				throw new TdcpInvalidParamsException("'presents' needs a 'clientId'");
 		}

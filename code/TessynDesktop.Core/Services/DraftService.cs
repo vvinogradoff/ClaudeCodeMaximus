@@ -10,6 +10,9 @@ public sealed class DraftService : IDraftService
 {
 	private readonly string _draftsDirectory;
 
+	// Every write takes it, so a compare-and-write (TryWriteDraft) cannot lose a save of the desktop composer made in between.
+	private readonly object _writeGate = new();
+
 	/// <inheritdoc />
 	public event EventHandler<DraftChangedEventArgs>? DraftChanged;
 
@@ -36,19 +39,54 @@ public sealed class DraftService : IDraftService
 
 	public void SaveDraft(string sessionFileName, string text)
 	{
-		var path = GetDraftPath(sessionFileName);
-		File.WriteAllText(path, text, Encoding.UTF8);
-		DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
+		bool changed;
+		lock (_writeGate)
+			changed = Write(sessionFileName, text);
+
+		if (changed)
+			DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
 	}
 
 	public void DeleteDraft(string sessionFileName)
 	{
+		bool changed;
+		lock (_writeGate)
+			changed = Delete(sessionFileName);
+
+		if (changed)
+			DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
+	}
+
+	public bool TryWriteDraft(string sessionFileName, string text, Func<string?, bool> isExpected)
+	{
+		bool changed;
+		lock (_writeGate)
+		{
+			if (!isExpected(LoadDraft(sessionFileName)))
+				return false;
+
+			changed = text.Length == 0 ? Delete(sessionFileName) : Write(sessionFileName, text);
+		}
+
+		if (changed)
+			DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
+		return true;
+	}
+
+	private bool Write(string sessionFileName, string text)
+	{
+		File.WriteAllText(GetDraftPath(sessionFileName), text, Encoding.UTF8);
+		return true;
+	}
+
+	private bool Delete(string sessionFileName)
+	{
 		var path = GetDraftPath(sessionFileName);
 		if (!File.Exists(path))
-			return;
+			return false;
 
 		File.Delete(path);
-		DraftChanged?.Invoke(this, new DraftChangedEventArgs(sessionFileName));
+		return true;
 	}
 
 	public DateTimeOffset? GetDraftTimestamp(string sessionFileName)

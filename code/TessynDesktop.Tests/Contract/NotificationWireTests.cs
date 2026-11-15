@@ -104,6 +104,19 @@ public sealed class NotificationWireTests : IDisposable
 		Assert.All(new[] { noClient, noPresent, badChan, longId, notArray, helloAlone }, r => Assert.Equal(-32602, ErrorCode(r)));
 	}
 
+	[Fact]
+	public async Task ClientRegister_BeyondTheMaximumOfClients_IsInvalidParams()
+	{
+		for (var i = 0; i < Constants.Composer.MaxPresenceClients; i++)
+			await _env.Server.CallAsync("client.register", Register("client-" + i, "toast"));
+
+		var refused = await _env.Server.CallAsync("client.register", Register("one-too-many", "toast"));
+		var known = await _env.Server.CallAsync("client.register", Register("client-0", "sound"));
+
+		Assert.Equal(-32602, ErrorCode(refused));
+		Assert.Null(known["error"]);
+	}
+
 	// -- The relay cannot register ------------------------------------------------------------------------------------------------
 
 	[Fact]

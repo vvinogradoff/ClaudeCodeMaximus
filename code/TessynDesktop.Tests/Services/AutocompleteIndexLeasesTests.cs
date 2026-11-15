@@ -94,6 +94,37 @@ public sealed class AutocompleteIndexLeasesTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ABuildThatNeverReturns_IsGivenUpAfterTheTimeout_SoTheDirectoryIsNotNotReadyForever()
+	{
+		_sut.Touch(Directory);
+		await Waits.Until(() => _index.BuildStarts == 1); // the fake build never finishes
+
+		_time.Advance(Constants.Composer.AutocompleteBuildTimeout - TimeSpan.FromSeconds(1));
+		_sut.ReleaseIdle();
+		_sut.Touch(Directory);
+		Assert.Equal(1, _index.BuildStarts); // still within the timeout: no second build
+
+		_time.Advance(TimeSpan.FromSeconds(2));
+		_sut.ReleaseIdle();
+		Assert.False(_sut.Touch(Directory));
+
+		await Waits.Until(() => _index.BuildStarts == 2);
+	}
+
+	[Fact]
+	public async Task AGivenUpBuildThatFinishesLate_ReleasesTheReferenceItGot()
+	{
+		_sut.Touch(Directory);
+		await Waits.Until(() => _index.BuildStarts == 1);
+		_time.Advance(Constants.Composer.AutocompleteBuildTimeout + TimeSpan.FromSeconds(1));
+		_sut.ReleaseIdle();
+
+		_index.FinishBuild();
+
+		await Waits.Until(() => _index.Acquired == 1 && _index.Released == 1);
+	}
+
+	[Fact]
 	public async Task Dispose_GivesBackWhatWasAcquired()
 	{
 		_sut.Touch(Directory);

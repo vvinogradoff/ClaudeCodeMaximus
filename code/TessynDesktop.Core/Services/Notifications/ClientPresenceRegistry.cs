@@ -13,10 +13,14 @@ public sealed class ClientPresenceRegistry : IClientPresenceRegistry
 	{
 		public HashSet<string> Presents = [];
 		public int OpenStreams;
+		public DateTimeOffset LastTouched;
 	}
 
+	private readonly TimeProvider _time;
 	private readonly object _gate = new();
 	private readonly Dictionary<string, Entry> _clients = new(StringComparer.Ordinal);
+
+	public ClientPresenceRegistry(TimeProvider? time = null) => _time = time ?? TimeProvider.System;
 
 	/// <inheritdoc />
 	public event Action? Changed;
@@ -26,8 +30,14 @@ public sealed class ClientPresenceRegistry : IClientPresenceRegistry
 	{
 		lock (_gate)
 		{
+			// A registration with no stream that nobody refreshed is forgotten, and the table is bounded (V7).
+			DropIdle();
+			if (presents.Count > 0 && !_clients.ContainsKey(clientId) && _clients.Count >= Constants.Composer.MaxPresenceClients)
+				throw new InvalidOperationException($"At most {Constants.Composer.MaxPresenceClients} clients can be registered.");
+
 			var entry = Get(clientId);
 			entry.Presents = [.. presents];
+			entry.LastTouched = _time.GetUtcNow();
 			Prune(clientId, entry);
 		}
 
@@ -41,7 +51,11 @@ public sealed class ClientPresenceRegistry : IClientPresenceRegistry
 			return NullHandle.Instance;
 
 		lock (_gate)
-			Get(clientId).OpenStreams++;
+		{
+			var entry = Get(clientId);
+			entry.OpenStreams++;
+			entry.LastTouched = _time.GetUtcNow();
+		}
 
 		Changed?.Invoke();
 		return new StreamHandle(this, clientId);
@@ -52,6 +66,16 @@ public sealed class ClientPresenceRegistry : IClientPresenceRegistry
 	{
 		lock (_gate)
 			return _clients.Values.Any(e => e.OpenStreams > 0 && e.Presents.Contains(channel));
+	}
+
+	private void DropIdle()
+	{
+		var now = _time.GetUtcNow();
+		foreach (var (id, entry) in _clients.ToList())
+		{
+			if (entry.OpenStreams == 0 && now - entry.LastTouched > Constants.Composer.PresenceIdleTtl)
+				_clients.Remove(id);
+		}
 	}
 
 	private Entry Get(string clientId)
@@ -75,6 +99,7 @@ public sealed class ClientPresenceRegistry : IClientPresenceRegistry
 			if (_clients.TryGetValue(clientId, out var entry))
 			{
 				entry.OpenStreams = Math.Max(0, entry.OpenStreams - 1);
+				entry.LastTouched = _time.GetUtcNow();
 				Prune(clientId, entry);
 			}
 		}

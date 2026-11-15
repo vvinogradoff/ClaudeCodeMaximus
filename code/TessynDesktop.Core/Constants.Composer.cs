@@ -23,6 +23,18 @@ public static partial class Constants
 		/// <summary>How long the host waits for a presenting client's <c>notification.ack</c> before it shows the toast or plays the sound itself (V3).</summary>
 		public static readonly TimeSpan NotificationAckTimeout = TimeSpan.FromSeconds(3);
 
+		/// <summary>Most clients the presence registry keeps (V7); a registration beyond it is refused once the ones without a stream were dropped.</summary>
+		public const int MaxPresenceClients = 32;
+
+		/// <summary>How long a registration without any open stream is kept before the registry forgets it (V7).</summary>
+		public static readonly TimeSpan PresenceIdleTtl = TimeSpan.FromMinutes(10);
+
+		/// <summary>Most directory entries the path autocomplete looks at per request (V8), however many match.</summary>
+		public const int MaxPathEntriesExamined = 5000;
+
+		/// <summary>How long an index build that never returned keeps its lease before the autocomplete forgets it and may start another (V8).</summary>
+		public static readonly TimeSpan AutocompleteBuildTimeout = TimeSpan.FromMinutes(10);
+
 		/// <summary>Longest <c>clientId</c> of <c>client.register</c> / <c>client.hello</c>.</summary>
 		public const int MaxClientIdLength = 64;
 

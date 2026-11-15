@@ -255,6 +255,17 @@ public sealed class ComposerWireTests : IDisposable
 	}
 
 	[Fact]
+	public async Task DraftSet_WithAnEmptyBaseRevisionString_IsNotTheSameAsNone_ItIsAStaleRevision()
+	{
+		_env.Drafts.SaveDraft(_env.Session.FileName, "stored");
+
+		var response = await CallAsync("draft.set", P(("text", "mine"), ("baseRevision", "")));
+
+		Assert.Equal(-32000, ErrorCode(response));
+		Assert.Equal("stored", _env.Drafts.LoadDraft(_env.Session.FileName));
+	}
+
+	[Fact]
 	public async Task DraftSet_EmptyText_DeletesTheDraft_AndAnswersTheEmptyRevision()
 	{
 		_env.Drafts.SaveDraft(_env.Session.FileName, "something");
@@ -331,6 +342,27 @@ public sealed class ComposerWireTests : IDisposable
 		Assert.Equal(root + "\\alpha\\", items[0]!["insertText"]!.GetValue<string>());
 		Assert.Equal(root + "\\alpha.txt", items[1]!["insertText"]!.GetValue<string>());
 		Assert.Equal(".txt", items[1]!["detail"]!.GetValue<string>());
+	}
+
+	[Fact]
+	public async Task Autocomplete_PathMode_LooksAtABoundedNumberOfEntries_InAHugeDirectory()
+	{
+		var root = Path.Combine(_env.ProjectDirectory, "huge");
+		Directory.CreateDirectory(root);
+		for (var i = 0; i < Constants.Composer.MaxPathEntriesExamined + 100; i++)
+			File.Create(Path.Combine(root, "a" + i.ToString("D5"))).Dispose();
+		File.Create(Path.Combine(root, "zmatch.txt")).Dispose(); // listed after every non-matching entry
+		var text = root + "\\zm";
+
+		var response = await CallAsync("autocomplete.suggest", P(("text", text), ("caret", text.Length)));
+
+		Assert.Empty(response["result"]!["items"]!.AsArray()); // beyond the examined bound: the scan stopped, it did not walk the whole directory
+		var small = Path.Combine(_env.ProjectDirectory, "small");
+		Directory.CreateDirectory(small);
+		File.Create(Path.Combine(small, "zmatch.txt")).Dispose();
+		var smallText = small + "\\zm";
+		var found = await CallAsync("autocomplete.suggest", P(("text", smallText), ("caret", smallText.Length)));
+		Assert.Single(found["result"]!["items"]!.AsArray());
 	}
 
 	[Fact]

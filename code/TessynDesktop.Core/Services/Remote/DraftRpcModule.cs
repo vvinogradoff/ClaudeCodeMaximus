@@ -15,9 +15,6 @@ public sealed class DraftRpcModule : IRemoteRpcModule
 	private readonly IDraftService _drafts;
 	private readonly DraftRevisions _revisions = new();
 
-	// Read-compare-write of draft.set must be one step, or two clients both pass the revision check.
-	private readonly object _writeGate = new();
-
 	public DraftRpcModule(ISessionRegistry registry, IDraftService drafts)
 	{
 		_registry = registry;
@@ -45,30 +42,25 @@ public sealed class DraftRpcModule : IRemoteRpcModule
 		var text         = TdcpParams.RequireString(@params, "text");
 		var baseRevision = TdcpParams.OptionalString(@params, "baseRevision");
 
-		lock (_writeGate)
-		{
-			if (baseRevision != null && baseRevision != _revisions.Of(_drafts.LoadDraft(node.FileName)))
-				throw new TdcpException(Constants.Composer.DraftChangedMessage);
+		// The compare and the write are one step inside the draft service (V6), so a save of the desktop composer cannot slip in between.
+		// An empty draft is no draft (the Avalonia composer deletes it too): an empty text deletes.
+		var written = _drafts.TryWriteDraft(node.FileName, text, current => baseRevision == null || baseRevision == _revisions.Of(current));
+		if (!written)
+			throw new TdcpException(Constants.Composer.DraftChangedMessage);
 
-			// An empty draft is no draft (the Avalonia composer deletes it too).
-			if (text.Length == 0)
-				_drafts.DeleteDraft(node.FileName);
-			else
-				_drafts.SaveDraft(node.FileName, text);
-
-			return new DraftSetResult(_revisions.Of(text));
-		}
+		return new DraftSetResult(_revisions.Of(text));
 	}
 
 	private object? Delete(JsonNode? @params)
 	{
 		var node = RemoteSessionLookup.Require(_registry, TdcpParams.RequireString(@params, "nodeId"));
 
-		lock (_writeGate)
+		var existed = false;
+		_drafts.TryWriteDraft(node.FileName, string.Empty, current =>
 		{
-			var existed = _drafts.LoadDraft(node.FileName) != null;
-			_drafts.DeleteDraft(node.FileName);
-			return new DraftDeleteResult(existed);
-		}
+			existed = current != null;
+			return true;
+		});
+		return new DraftDeleteResult(existed);
 	}
 }
