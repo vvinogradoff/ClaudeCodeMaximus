@@ -280,6 +280,54 @@ public sealed class RelayConnectorServiceTests : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// Everything the server received, in order, up to a sentinel notification published after the events under test. The relay
+	/// keeps the order of the bus, so once the sentinel is seen nothing published before it can still be in flight, however late
+	/// the posts are or however the batches split (no fixed sleep). The sentinel itself is not part of the result.
+	/// </summary>
+	private async Task<List<string>> MethodsUpToSentinelAsync()
+	{
+		_bus.Publish("tree.changed", new { version = 99 });
+
+		List<string> Methods() => _server.Events
+			.SelectMany(b => JsonNode.Parse(b)!["events"]!.AsArray())
+			.Select(e => e!["method"]!.GetValue<string>())
+			.ToList();
+
+		await WaitUntilAsync(() => Methods().Contains("tree.changed"), "the sentinel event POST", timeoutMs: 30000);
+		var all = Methods();
+		return all.Take(all.LastIndexOf("tree.changed")).ToList();
+	}
+
+	[Fact]
+	public async Task An_event_published_from_the_Connected_status_change_is_relayed()
+	{
+		// The link is Connected only once relaying is armed: an event published the moment a subscriber sees Connected must not be lost.
+		Configure();
+		var service = Create();
+		var published = false;
+		service.StatusChanged += s =>
+		{
+			if (s.State == RelayState.Connected)
+			{
+				_bus.Publish("session.appended", new { nodeId = "n", epoch = 0 });
+				Volatile.Write(ref published, true);
+			}
+		};
+		service.Start();
+		try
+		{
+			// Status.State flips before StatusChanged is raised, so wait for the handler's own publication before the sentinel.
+			await WaitUntilAsync(() => Volatile.Read(ref published), "the event published from the Connected status change");
+
+			Assert.Equal(["session.appended"], await MethodsUpToSentinelAsync());
+		}
+		finally
+		{
+			service.Stop();
+		}
+	}
+
 	[Fact]
 	public async Task EntriesAppended_IsNeverRelayed_ButSessionAppendedStillIs()
 	{
@@ -289,11 +337,7 @@ public sealed class RelayConnectorServiceTests : IDisposable
 			_bus.Publish("entries.appended", new { nodeId = "n", fileId = "f", fromSeq = 0, toSeq = 1 });
 			_bus.Publish("session.appended", new { nodeId = "n", epoch = 0 });
 
-			await WaitUntilAsync(() => !_server.Events.IsEmpty, "event POST");
-			await Task.Delay(300);
-
-			var methods = _server.Events.SelectMany(b => JsonNode.Parse(b)!["events"]!.AsArray()).Select(e => e!["method"]!.GetValue<string>()).ToList();
-			Assert.Equal(["session.appended"], methods);
+			Assert.Equal(["session.appended"], await MethodsUpToSentinelAsync());
 		}
 		finally
 		{

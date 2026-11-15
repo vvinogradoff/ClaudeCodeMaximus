@@ -168,14 +168,28 @@ public sealed class EntriesAppendedPublisherTests : IDisposable
 	[Fact]
 	public void Many_small_entries_over_the_entry_count_cap_go_ids_only()
 	{
+		// The burst must land in ONE coalescing window, or the test measures how fast the machine is, not the cap. Real appends and
+		// their notifications are slow under load (a window may close between them), so: a primer entry publishes first (it seeds the
+		// published watermark), then the burst is written to the file without notifications and the notifications are raised in a
+		// tight loop of O(1) calls that cannot outlast the window.
+		Append(Constants.SessionFile.RoleUser, "primer");
+		WaitFor(Constants.Remote.Events.EntriesAppended, 1);
+
 		var count = Constants.Remote.Limits.EntriesAppendedInlineMaxEntries + 1;
 		for (var i = 0; i < count; i++)
-			Append(Constants.SessionFile.RoleUser, "x");
+			_env.Files.AppendMessage(_env.FileName, Constants.SessionFile.RoleUser, "x");
+		for (var i = 0; i < count; i++)
+			_fake.Raise(nameof(IDaemonClient.EntryAppended), new SessionEntryAppendedEventArgs
+			{
+				FileName = _env.FileName,
+				Entry = new SessionEntryModel { Timestamp = DateTimeOffset.UtcNow, Role = Constants.SessionFile.RoleUser, Content = "x" },
+			});
 
-		var payload = Payload(Assert.Single(WaitFor(Constants.Remote.Events.EntriesAppended, 1)));
+		var payload = Payload(WaitFor(Constants.Remote.Events.EntriesAppended, 2)[1]);
 
 		Assert.Null(payload.Entries);
-		Assert.Equal((0L, (long)count), (payload.FromSeq, payload.ToSeq));
+		Assert.Equal((1L, (long)count + 1), (payload.FromSeq, payload.ToSeq));
+		Assert.Equal(2, Received(Constants.Remote.Events.EntriesAppended).Count);
 	}
 
 	[Fact]
