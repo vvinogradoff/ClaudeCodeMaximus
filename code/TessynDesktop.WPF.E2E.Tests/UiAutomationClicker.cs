@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Windows.Automation;
 
 namespace TessynDesktop.WPF.E2E.Tests;

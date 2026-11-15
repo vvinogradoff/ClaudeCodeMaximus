@@ -237,8 +237,8 @@ public partial class SessionPane : UserControl
 				break;
 			case Key.Tab when !Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
 			case Key.Enter when !Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift):
-				AcceptSuggestion(-1);
-				e.Handled = true;
+				// M5: the key is taken only when a suggestion was accepted; with stale items (text typed since the answer) it types as usual.
+				e.Handled = AcceptSuggestion(-1);
 				break;
 		}
 	}
@@ -249,13 +249,17 @@ public partial class SessionPane : UserControl
 		InputBox.Focus();
 	}
 
-	private void AcceptSuggestion(int index)
+	/// <summary>Accepts a suggestion; false when there was nothing to accept (no popup content, or the text moved on since the answer).</summary>
+	private bool AcceptSuggestion(int index)
 	{
-		if (_subscribed?.AcceptSuggestion(index) is { ContinuesPath: true })
+		var insertion = _subscribed?.AcceptSuggestion(index);
+		if (insertion is { ContinuesPath: true })
 		{
 			// A directory was accepted: the path goes on, so the next level is offered.
 			Dispatcher.BeginInvoke(() => _subscribed?.Autocomplete.Update(InputBox.Text, InputBox.CaretIndex), System.Windows.Threading.DispatcherPriority.Input);
 		}
+
+		return insertion != null;
 	}
 
 	/// <summary>The popup opens above the caret (or below it when there is no room above): it never covers the line being typed.</summary>

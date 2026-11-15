@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Windows.Automation;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;

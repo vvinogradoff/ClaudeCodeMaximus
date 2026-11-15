@@ -81,7 +81,11 @@ public sealed partial class SessionPaneViewModel
 	{
 		if (nodeId != NodeId)
 		{
-			_drafts[nodeId] = load.Text;
+			// M3: an answer issued before the pane left the session must not put the old daemon text over what was typed and saved since.
+			var cached = _drafts.GetValueOrDefault(nodeId);
+			if (!DraftSync.HasPending(nodeId) && (string.IsNullOrEmpty(cached) || cached == load.PreviousBase))
+				_drafts[nodeId] = load.Text;
+
 			return;
 		}
 
@@ -93,6 +97,7 @@ public sealed partial class SessionPaneViewModel
 		var dirty = load.PreviousBase == null ? local.Length > 0 : local != load.PreviousBase;
 		if (!dirty)
 		{
+			DraftSync.Discard(nodeId);   // M1: a write still waiting would put the older text back over the one just read
 			SetInputQuietly(load.Text);
 			InputCaretRequested?.Invoke(this, load.Text.Length);
 			return;
@@ -134,6 +139,19 @@ public sealed partial class SessionPaneViewModel
 				SetInputQuietly(merged.Merged);
 				InputCaretRequested?.Invoke(this, merged.Merged.Length);
 			}
+			else
+			{
+				// M2: the user typed on; their text and the merged one are merged again, so the text still waiting cannot replace the daemon's.
+				// Text typed at the end of what was sent follows the merge; anything else is merged as two edits.
+				var again = InputText.StartsWith(merged.Sent, StringComparison.Ordinal) && merged.Sent.Length > 0
+					? merged.Merged + InputText[merged.Sent.Length..]
+					: DraftMerge.Merge(InputText, merged.Merged, merged.Sent);
+				if (again != InputText)
+				{
+					SetInput(again);
+					InputCaretRequested?.Invoke(this, again.Length);
+				}
+			}
 		}
 		else if (_drafts.GetValueOrDefault(merged.NodeId) == merged.Sent)
 		{
@@ -150,6 +168,7 @@ public sealed partial class SessionPaneViewModel
 			DraftSync.Forget(nodeId);
 		}
 
+		_ = DraftSync.FlushAllAsync();   // M4: what a lost connection kept from being written goes out now
 		if (openNodeId != null)
 			_ = ReconcileDraftAsync(openNodeId);
 	}

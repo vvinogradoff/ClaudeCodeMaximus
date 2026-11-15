@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -148,6 +148,25 @@ public sealed class ComposerCompletionViewTests
 			Assert.False(Key(input, System.Windows.Input.Key.Enter).Handled);
 			Assert.False(Key(input, System.Windows.Input.Key.Down).Handled);
 			Assert.False(Key(input, System.Windows.Input.Key.Escape).Handled);
+		});
+	}
+
+	[Fact]
+	public void M5_Enter_and_Tab_with_stale_items_are_not_swallowed()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var (_, input, _, model, client) = Create();
+			Type(input, "see #Fo");
+			Assert.True(model.Autocomplete.IsOpen);
+			client.AutocompleteHandler = (_, _) => new TaskCompletionSource<AutocompleteSuggestResult>().Task;   // the next answer never comes in time
+
+			input.CaretIndex = 7;   // typed on at the caret: the items shown belong to "see #Fo"
+			input.SelectedText = "x";
+
+			Assert.False(Key(input, System.Windows.Input.Key.Enter).Handled);
+			Assert.False(Key(input, System.Windows.Input.Key.Tab).Handled);
+			Assert.Equal("see #Fox", input.Text);
 		});
 	}
 

@@ -20,7 +20,7 @@ public sealed partial class SessionPaneViewModel
 	private Task _handoffTask = Task.CompletedTask;
 
 	/// <summary>The session whose finished turn is being handed over to its persisted entries (R1); its live row is not pushed meanwhile.</summary>
-	private string? _handoffNodeId;
+	private readonly HandoffGuard _handoffs = new();
 	private bool _liveFlushScheduled;
 	private bool _daemonRunning;
 	private long? _genericSinceUnixMs;
@@ -218,7 +218,7 @@ public sealed partial class SessionPaneViewModel
 			_daemonRunning = false;
 
 		RecomputeRunning();
-		_handoffNodeId = payload.NodeId;
+		_handoffs.Enter(payload.NodeId);
 		_handoffTask = HandOffAsync(payload.NodeId);
 	}
 
@@ -235,8 +235,7 @@ public sealed partial class SessionPaneViewModel
 		}
 		finally
 		{
-			if (_handoffNodeId == nodeId)
-				_handoffNodeId = null;
+			_handoffs.Exit(nodeId);
 
 			if (nodeId == NodeId)
 				PushLive();
@@ -324,7 +323,7 @@ public sealed partial class SessionPaneViewModel
 
 		// R1: while the persisted answer is being appended the finished turn's row stays, so no other push (the debounced flush that
 		// session.changed schedules) opens a gap before the entry arrives; the hand-off pushes when it is done.
-		if (_handoffNodeId == id)
+		if (_handoffs.IsActive(id))
 			return;
 
 		_turnStates.TryGetValue(id, out var state);

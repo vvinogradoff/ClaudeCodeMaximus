@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Sockets;
 using TessynDesktop.Services;
 using TessynDesktop.Tests.Contract;

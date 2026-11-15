@@ -47,7 +47,6 @@ public sealed class DraftSynchronizer : IDisposable
 	/// <summary>Remembers the newest text of a session and writes it after <see cref="Delay"/> of quiet.</summary>
 	public void Schedule(string nodeId, string text)
 	{
-		CancellationToken token;
 		var entry = EntryOf(nodeId);
 		lock (_lock)
 		{
@@ -55,19 +54,51 @@ public sealed class DraftSynchronizer : IDisposable
 				return;
 
 			entry.Pending = text;
+		}
+
+		ArmTimer(nodeId, entry, Delay);
+	}
+
+	/// <summary>First pause before a failed write is tried again; it doubles per failure up to <see cref="MaxRetryBackoff"/>.</summary>
+	public TimeSpan RetryBackoff { get; set; } = Constants.ComposerLimits.DraftRetryBackoff;
+
+	/// <summary>Longest pause between two tries of a failing write.</summary>
+	public TimeSpan MaxRetryBackoff { get; set; } = Constants.ComposerLimits.DraftMaxRetryBackoff;
+
+	/// <summary>Forgets the text waiting to be written: a newer text from the daemon has replaced it (M1), so writing it would undo that.</summary>
+	public void Discard(string nodeId)
+	{
+		lock (_lock)
+		{
+			if (!_entries.TryGetValue(nodeId, out var entry))
+				return;
+
+			entry.Pending = null;
+			entry.Timer?.Cancel();
+		}
+	}
+
+	/// <summary>Replaces the entry's timer with one that flushes after <paramref name="delay"/> (at once when zero).</summary>
+	private void ArmTimer(string nodeId, Entry entry, TimeSpan delay)
+	{
+		CancellationToken token;
+		lock (_lock)
+		{
+			if (_disposed)
+				return;
+
 			entry.Timer?.Cancel();
 			entry.Timer?.Dispose();
 			entry.Timer = new CancellationTokenSource();
 			token = entry.Timer.Token;
 		}
 
-		if (Delay <= TimeSpan.Zero)
+		if (delay <= TimeSpan.Zero)
 		{
 			_ = FlushAsync(nodeId);
 			return;
 		}
 
-		var delay = Delay;
 		_ = Task.Run(async () =>
 		{
 			try
@@ -110,6 +141,22 @@ public sealed class DraftSynchronizer : IDisposable
 	/// <summary>Reads the daemon's draft and records its revision and text as the agreed state.</summary>
 	public async Task<DraftLoad> LoadAsync(string nodeId, CancellationToken cancellationToken = default)
 	{
+		// Serialised with the writes of the session (L2): an answer that was issued before a write must not return after it and put the older revision back.
+		var entry = EntryOf(nodeId);
+		await entry.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+		try
+		{
+			return await LoadCoreAsync(nodeId, cancellationToken).ConfigureAwait(false);
+		}
+		finally
+		{
+			entry.Gate.Release();
+		}
+	}
+
+	/// <summary>The read itself, for callers that already hold the session's gate.</summary>
+	private async Task<DraftLoad> LoadCoreAsync(string nodeId, CancellationToken cancellationToken = default)
+	{
 		var result = await _client.DraftGetAsync(nodeId, cancellationToken).ConfigureAwait(false);
 		var entry = EntryOf(nodeId);
 		lock (_lock)
@@ -143,12 +190,27 @@ public sealed class DraftSynchronizer : IDisposable
 			try
 			{
 				await WriteAsync(nodeId, entry, text).ConfigureAwait(false);
+				lock (_lock)
+					entry.Failures = 0;
 			}
 			catch (Exception ex)
 			{
 				_logger.LogWarning(ex, "Saving the draft of {NodeId} failed", nodeId);
+				TimeSpan? retryIn = null;
 				lock (_lock)
-					entry.Pending ??= text;   // a newer text keeps its place; this one is retried by the next flush
+				{
+					// A newer text keeps its place (and its own timer); only the text that failed is tried again, after a growing pause (M4).
+					if (entry.Pending == null)
+					{
+						entry.Pending = text;
+						retryIn = TimeSpan.FromTicks(Math.Min(MaxRetryBackoff.Ticks, RetryBackoff.Ticks << Math.Min(entry.Failures, 20)));
+					}
+
+					entry.Failures++;
+				}
+
+				if (retryIn is { } pause)
+					ArmTimer(nodeId, entry, pause);
 			}
 		}
 		finally
@@ -184,7 +246,7 @@ public sealed class DraftSynchronizer : IDisposable
 			if (baseRevision == null)
 			{
 				// Never read: the daemon may hold a draft this text knows nothing about. Read it first so it is merged, not overwritten.
-				var load = await LoadAsync(nodeId).ConfigureAwait(false);
+				var load = await LoadCoreAsync(nodeId).ConfigureAwait(false);
 				var merged = DraftMerge.Merge(text, load.Text, null);
 				if (merged != text)
 				{
@@ -209,7 +271,7 @@ public sealed class DraftSynchronizer : IDisposable
 			}
 			catch (TessynRpcException ex) when (ex.Code == RemoteProtocol.ErrorCodes.DaemonError)
 			{
-				var load = await LoadAsync(nodeId).ConfigureAwait(false);
+				var load = await LoadCoreAsync(nodeId).ConfigureAwait(false);
 				var merged = DraftMerge.Merge(text, load.Text, load.PreviousBase);
 				if (merged != text)
 				{
@@ -261,6 +323,8 @@ public sealed class DraftSynchronizer : IDisposable
 		public string? BaseText { get; set; }
 
 		public string? Pending { get; set; }
+
+		public int Failures { get; set; }
 
 		public CancellationTokenSource? Timer { get; set; }
 	}

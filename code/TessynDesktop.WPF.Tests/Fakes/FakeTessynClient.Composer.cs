@@ -29,10 +29,10 @@ public sealed partial class FakeTessynClient
 	public async Task<DraftGetResult> DraftGetAsync(string nodeId, CancellationToken cancellationToken = default)
 	{
 		Record($"draft.get:{nodeId}");
+		DraftTexts.TryGetValue(nodeId, out var text);   // read before the gate: a slow answer is an old one, as on a real connection
 		if (DraftGetGate != null)
 			await DraftGetGate.Task;
 
-		DraftTexts.TryGetValue(nodeId, out var text);
 		return new DraftGetResult(text ?? string.Empty, RevisionOf(text));
 	}
 

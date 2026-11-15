@@ -10,6 +10,12 @@ public static partial class Constants
 		/// <summary>The input must stay unchanged this long before its text is written as the session's draft.</summary>
 		public static readonly TimeSpan DraftSaveDelay = TimeSpan.FromMilliseconds(800);
 
+		/// <summary>First pause before a draft write that failed is tried again; it doubles per failure.</summary>
+		public static readonly TimeSpan DraftRetryBackoff = TimeSpan.FromSeconds(2);
+
+		/// <summary>Longest pause between two tries of a failing draft write.</summary>
+		public static readonly TimeSpan DraftMaxRetryBackoff = TimeSpan.FromSeconds(30);
+
 		/// <summary>The input must stay unchanged this long before the daemon is asked for suggestions.</summary>
 		public static readonly TimeSpan AutocompleteDebounce = TimeSpan.FromMilliseconds(150);
 
@@ -39,10 +45,7 @@ public static partial class Constants
 	public static class SoundRules
 	{
 		/// <summary>Channel this client registers for: the host stays silent for it while this client is connected.</summary>
-		public const string Channel = "sound";
-
-		/// <summary>Seconds between two sounds of one session when the daemon's settings cannot be read (the daemon's own default).</summary>
-		public const int FallbackThrottleSeconds = 180;
+		public const string Channel = TessynDesktop.Models.Remote.RemoteProtocol.Notifications.SoundChannel;
 
 		/// <summary>The daemon's notification settings are read again after this long (a change in Settings applies without a restart).</summary>
 		public static readonly TimeSpan SettingsCacheAge = TimeSpan.FromSeconds(30);
