@@ -17,7 +17,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	private bool _isExpanded;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention))]
+	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(ProfileName), nameof(HasProfile), nameof(HasProfileMismatch), nameof(ProfileToolTip))]
 	private SessionStateDto? _state;
 
 	[ObservableProperty]
@@ -93,11 +93,35 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
 	public bool HasAttention => AttentionCount > 0;
 
+	/// <summary>The display name of the profile the session last ran on (ISSUE.013 R5); empty for directories and groups and while unknown.</summary>
+	public string ProfileName => IsSessionLike ? State?.ProfileName ?? string.Empty : string.Empty;
+
+	public bool HasProfile => ProfileName.Length > 0;
+
+	/// <summary>True when a loaded worker runs on another profile than this session (ISSUE.013 R5: warn when a supervisor and its workers differ).</summary>
+	public bool HasProfileMismatch => HasProfile && Children.Any(c => c.HasProfile && !string.Equals(c.ProfileName, ProfileName, StringComparison.OrdinalIgnoreCase));
+
+	public string ProfileToolTip => HasProfileMismatch
+		? string.Format(Constants.Profiles.BadgeTip, ProfileName) + " - " + Constants.Profiles.BadgeMismatchTip
+		: string.Format(Constants.Profiles.BadgeTip, ProfileName);
+
 	/// <summary>Re-evaluates the expander after the worker count or the loaded children changed.</summary>
 	public void RefreshExpander()
 	{
 		OnPropertyChanged(nameof(CanExpand));
+		RefreshProfileMismatch();
 	}
 
-	partial void OnStateChanged(SessionStateDto? value) => OnPropertyChanged(nameof(CanExpand));
+	/// <summary>Re-evaluates the mismatch warning of this row after a worker's profile changed or the workers loaded.</summary>
+	public void RefreshProfileMismatch()
+	{
+		OnPropertyChanged(nameof(HasProfileMismatch));
+		OnPropertyChanged(nameof(ProfileToolTip));
+	}
+
+	partial void OnStateChanged(SessionStateDto? value)
+	{
+		OnPropertyChanged(nameof(CanExpand));
+		Parent?.RefreshProfileMismatch();
+	}
 }

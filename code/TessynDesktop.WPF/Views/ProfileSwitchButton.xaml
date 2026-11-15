@@ -1,0 +1,7 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.ProfileSwitchButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- DataContext: TreeViewModel (the tree.footer slot). The button acts on the selected node, as the tree toolbar does. -->
+    <Button Margin="8,4,8,6" Padding="8,4" FontSize="12" HorizontalAlignment="Left" Content="Switch profile…" Click="OnClick"
+            AutomationProperties.Name="Switch profile" ToolTip="Move the selected session, and optionally its workers, to another profile" />
+</UserControl>

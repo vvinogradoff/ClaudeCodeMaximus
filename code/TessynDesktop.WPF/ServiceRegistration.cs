@@ -101,6 +101,11 @@ public sealed class ServiceRegistration
 		services.AddSingleton<SessionListsHost>();
 		services.AddSingleton<IShellModule, SessionListsModule>();
 		services.AddSingleton<IShellModule, TurnLoopShellModule>();
+		services.AddSingleton<ProfileViewModel>();
+		services.AddSingleton<ProfileSwitchViewModel>();
+		services.AddSingleton<AuthBannerViewModel>();
+		services.AddSingleton<ProfileHost>();
+		services.AddSingleton<IShellModule, ProfileShellModule>();
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();
 		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));
