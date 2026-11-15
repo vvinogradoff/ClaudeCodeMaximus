@@ -45,7 +45,10 @@ export function findInText(text: string, quote: string): { start: number; end: n
 
 /** A DOM Range around `quote` inside `root`'s text nodes, or null. */
 export function findQuoteRange(root: Node, quote: string, doc: Document = document): Range | null {
-	const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+	// The React-added Copy buttons live inside the rendered HTML; their text is not part of the message.
+	const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+		acceptNode: (n) => (n.parentElement?.closest('button') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+	});
 	const nodes: Text[] = [];
 	let full = '';
 	const starts: number[] = [];

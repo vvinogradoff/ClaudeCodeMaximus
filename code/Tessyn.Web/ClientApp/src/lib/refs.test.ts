@@ -20,7 +20,8 @@ describe('preview classification', () => {
 		expect(classifyPreview('plan.md', 'text/markdown')).toBe('markdown');
 		expect(classifyPreview('x.markdown', '')).toBe('markdown');
 		expect(classifyPreview('a.svg', 'image/svg+xml')).toBe('text');
-		expect(classifyPreview('a.SVG', 'image/png')).toBe('text');
+		expect(classifyPreview('a.SVG', 'image/svg+xml')).toBe('text');
+		expect(classifyPreview('a.SVG', 'image/png')).toBe('other'); // the mime must fit the extension
 		expect(classifyPreview('page.html', 'text/html')).toBe('text');
 		expect(classifyPreview('page.htm', 'application/octet-stream')).toBe('text');
 	});
@@ -33,7 +34,7 @@ describe('preview classification', () => {
 		expect(classifyPreview('a.txt', 'text/plain')).toBe('text');
 		expect(classifyPreview('Greeter.cs', 'application/octet-stream')).toBe('text');
 		expect(classifyPreview('data.json', 'application/json')).toBe('text');
-		expect(classifyPreview('movie.mkv', 'video/x-matroska')).toBe('video');
+		expect(classifyPreview('movie.mkv', 'video/x-matroska')).toBe('other'); // browsers cannot play it
 		expect(classifyPreview('a.bin', 'application/octet-stream')).toBe('other');
 		expect(classifyPreview('a.zip', 'application/zip')).toBe('other');
 	});

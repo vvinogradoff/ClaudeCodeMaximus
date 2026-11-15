@@ -13,7 +13,7 @@ import { Markdown } from './Markdown';
 const BOTTOM_THRESHOLD = 80;
 const HIGHLIGHT_NAME = 'ref-hit';
 
-interface HighlightRegistry { set(name: string, h: unknown): void; delete(name: string): void }
+interface HighlightRegistry { set(name: string, h: unknown): void; get(name: string): unknown; delete(name: string): void }
 const registry = (): HighlightRegistry | undefined => (globalThis as unknown as { CSS?: { highlights?: HighlightRegistry } }).CSS?.highlights;
 
 /** User entries are plain text: split at the exact offsets the daemon gave. Out-of-range offsets show the text unmarked. */
@@ -37,8 +37,10 @@ function EntryView({ e, now, onFull, focus }: { e: SessionEntryDto; now: number;
 		const q = quoteOf(e.content, focus.offset, focus.length);
 		const range = q ? findQuoteRange(body.current, q) : null;
 		if (!range) return;
-		reg.set(HIGHLIGHT_NAME, new Hl(range));
-		return () => reg.delete(HIGHLIGHT_NAME);
+		const mine = new Hl(range);
+		reg.set(HIGHLIGHT_NAME, mine);
+		// Only remove the highlight if it is still this entry's (another jump may have replaced it already).
+		return () => { if (reg.get(HIGHLIGHT_NAME) === mine) reg.delete(HIGHLIGHT_NAME); };
 	}, [focus, e.content, e.role]);
 
 	if (e.role === 'compaction') return <div className="compaction" role="separator"><span>― Context compacted above ―</span></div>;

@@ -9,7 +9,7 @@ import type {
 	SessionEntriesResult, SessionEntryDto, SessionSendResult, TreeSnapshotResult, TreeWorkersResult, TurnCompletedParams, TurnOptions,
 } from '../api/types';
 import { indexOfEntryId, planAppended } from '../lib/transcript';
-import { topFrame } from '../lib/navStack';
+import { keepNavTarget, takeNavTarget, topFrame } from '../lib/navStack';
 import type { NavFrame } from '../lib/navStack';
 import { clearDrafts, readJson, removeKey, writeJson } from '../lib/storage';
 import { initialState, reduce } from './appState';
@@ -26,7 +26,7 @@ const HASH_PREFIX = '#/s/';
 const AROUND = 40;
 
 /** A jump/back that crosses to another session: consumed by loadSession once that session opens. */
-interface NavTarget { nodeId: string; tab: SessionTab; entryId?: string; offset?: number; length?: number; mark: boolean }
+interface NavTarget { at: number; nodeId: string; tab: SessionTab; entryId?: string; offset?: number; length?: number; mark: boolean }
 
 export interface Actions {
 	login(email: string, password: string): Promise<void>;
@@ -183,7 +183,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 	const loadSession = useCallback(async (id: string) => {
 		dispatch({ type: 'openStart', id });
-		const nav = navTarget.current && navTarget.current.nodeId === id ? navTarget.current : null;
+		const nav = takeNavTarget(navTarget.current, id, Date.now());
 		navTarget.current = null;
 		try {
 			const [detail, around] = await Promise.all([
@@ -221,7 +221,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 					dispatch({ type: 'detail', id, detail });
 					dispatch({ type: 'sessionChanged', state: detail.state });
 					const t = stateRef.current.session?.transcript;
-					if (!t || !t.loaded || t.epoch !== detail.epoch) await reloadEntries(id);
+					if (t?.anchored) { /* keep the reading position; "Jump to latest" leaves it */ }
+					else if (!t || !t.loaded || t.epoch !== detail.epoch) await reloadEntries(id);
 					else await fetchAfter(id);
 					await fetchAttention(id);
 				}
@@ -255,7 +256,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 				const s = stateRef.current.session;
 				const plan = s ? planAppended(s.transcript, s.id, nodeId, epoch) : 'ignore';
 				if (frame.method === 'session.reset' && plan !== 'ignore') void reloadEntries(nodeId).catch(fail);
-				else if (plan === 'reload') void reloadEntries(nodeId).catch(fail);
+				else if (plan === 'reload' && !s?.transcript.anchored) void reloadEntries(nodeId).catch(fail);
 				else if (plan === 'fetchAfter') void fetchAfter(nodeId);
 				break;
 			}
@@ -297,7 +298,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 		const id = hashSessionId();
 		const cur = openId();
 		// A hash change that is not one of our own jumps (browser back, a link) starts a fresh navigation history.
-		if (id && id !== cur && navTarget.current?.nodeId !== id) dispatch({ type: 'navClear' });
+		if (navTarget.current && !keepNavTarget(navTarget.current, id, Date.now())) navTarget.current = null; // stale or meant for another session
+		if (id && id !== cur && !navTarget.current) dispatch({ type: 'navClear' });
 		if (id && id !== cur) void loadSession(id);
 		else if (!id && cur) dispatch({ type: 'close' });
 	}, [loadSession]);
@@ -360,7 +362,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	/** Opens `t.nodeId` on the right tab and (optionally) centred on an entry. Crossing sessions goes through the URL hash. */
-	const goTo = useCallback((t: NavTarget) => {
+	const goTo = useCallback((t: Omit<NavTarget, 'at'>) => {
 		if (openId() === t.nodeId) {
 			dispatch({ type: 'sessionTab', tab: t.tab });
 			if (t.tab === 'focus') void fetchAttention(t.nodeId);
@@ -368,9 +370,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 			else if (stateRef.current.session?.transcript.anchored) void reloadEntries(t.nodeId).catch(fail);
 			return;
 		}
-		navTarget.current = t;
-		window.location.hash = HASH_PREFIX + encodeURIComponent(t.nodeId);
-	}, [fail, fetchAttention, loadAround, reloadEntries]);
+		navTarget.current = { ...t, at: Date.now() };
+		// Same hash already (a load of that session is in flight): no hashchange will fire, so load directly.
+		if (hashSessionId() === t.nodeId) void loadSession(t.nodeId);
+		else window.location.hash = HASH_PREFIX + encodeURIComponent(t.nodeId);
+	}, [fail, fetchAttention, loadAround, loadSession, reloadEntries]);
 
 	const actions = useMemo<Actions>(() => ({
 		dispatch,

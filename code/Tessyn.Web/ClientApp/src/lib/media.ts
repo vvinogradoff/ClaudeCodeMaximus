@@ -34,37 +34,61 @@ export function extensionOf(name: string): string {
 	return i > 0 ? base.slice(i + 1).toLowerCase() : '';
 }
 
-/**
- * What the preview sheet does with a file. svg and html are deliberately TEXT: they are never rendered
- * (scripts, external loads). Anything not clearly an image/video/pdf/markdown that is text-ish is shown as text.
- */
-export function classifyPreview(name: string, mime: string): PreviewKind {
-	const ext = extensionOf(name);
-	const m = mime.toLowerCase();
-	if (ext === 'svg' || m === 'image/svg+xml' || ext === 'html' || ext === 'htm' || m === 'text/html') return 'text';
-	if (MD_EXT.has(ext) || m === 'text/markdown') return 'markdown';
-	if (m === 'application/pdf' || ext === 'pdf') return 'pdf';
-	if (IMAGE_EXT.has(ext) || m.startsWith('image/')) return 'image';
-	if (VIDEO_EXT.has(ext) || m.startsWith('video/')) return 'video';
-	if (m.startsWith('text/') || m === 'application/json' || m === 'application/xml' || m.endsWith('+json') || m.endsWith('+xml')) return 'text';
-	if (ext === 'mkv') return 'other';
-	if (['txt', 'log', 'csv', 'json', 'jsonl', 'xml', 'yaml', 'yml', 'toml', 'ini', 'css', 'diff', 'patch'].includes(ext)) return 'text';
-	if (m === '' || m === 'application/octet-stream') return CODE_EXT.has(ext) ? 'text' : 'other';
-	return CODE_EXT.has(ext) ? 'text' : 'other';
-}
+const MD_MIMES = new Set(['text/markdown', 'text/x-markdown', 'text/plain']);
+const RASTER_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/avif']);
+const VIDEO_MIMES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v']);
+const TEXT_APP_MIMES = new Set(['application/json', 'application/xml', 'application/x-yaml', 'application/yaml', 'application/toml', 'application/javascript', 'application/x-sh', 'application/sql', 'image/svg+xml']);
+const GENERIC_MIMES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
 
 const CODE_EXT = new Set([
 	'cs', 'ts', 'tsx', 'js', 'jsx', 'mjs', 'py', 'java', 'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'rb', 'php', 'sh', 'ps1', 'bat', 'cmd', 'sql',
 	'xaml', 'axaml', 'csproj', 'sln', 'props', 'targets', 'kt', 'swift', 'lua', 'r', 'scala', 'vue', 'scss', 'less', 'razor', 'cshtml', 'gradle',
 ]);
+const TEXT_EXT = new Set(['txt', 'log', 'csv', 'json', 'jsonl', 'xml', 'yaml', 'yml', 'toml', 'ini', 'css', 'diff', 'patch', 'html', 'htm', 'svg']);
 
-/** Mime used for blobs (image/video/pdf) when the daemon's mime is missing or generic. */
-export function blobMime(name: string, mime: string, kind: PreviewKind): string {
-	if (mime && mime !== 'application/octet-stream') return mime;
+function textMimeOk(m: string): boolean {
+	return GENERIC_MIMES.has(m) || m.startsWith('text/') || TEXT_APP_MIMES.has(m) || m.endsWith('+json') || m.endsWith('+xml');
+}
+
+/**
+ * What the preview sheet does with a file. The EXTENSION decides, and the mime must be compatible with it (generic mimes pass);
+ * a mismatch (`a.png` as `text/html`, `x.pdf` as `application/xhtml+xml`) is `other`, i.e. not previewed.
+ * svg and html are deliberately TEXT: they are never rendered (scripts, external loads).
+ */
+export function classifyPreview(name: string, mime: string): PreviewKind {
 	const ext = extensionOf(name);
+	const m = mime.toLowerCase().split(';')[0].trim();
+	if (MD_EXT.has(ext)) return GENERIC_MIMES.has(m) || MD_MIMES.has(m) ? 'markdown' : 'other';
+	if (ext === 'pdf') return GENERIC_MIMES.has(m) || m === 'application/pdf' ? 'pdf' : 'other';
+	if (IMAGE_EXT.has(ext)) return GENERIC_MIMES.has(m) || RASTER_MIMES.has(m) ? 'image' : 'other';
+	if (VIDEO_EXT.has(ext)) return GENERIC_MIMES.has(m) || VIDEO_MIMES.has(m) ? 'video' : 'other';
+	if (TEXT_EXT.has(ext) || CODE_EXT.has(ext)) return textMimeOk(m) ? 'text' : 'other';
+	// Unknown extension: only a clearly safe mime decides.
+	if (m === 'text/markdown' || m === 'text/x-markdown') return 'markdown';
+	if (m === 'application/pdf') return 'pdf';
+	if (RASTER_MIMES.has(m)) return 'image';
+	if (VIDEO_MIMES.has(m)) return 'video';
+	if (m.startsWith('text/') && m !== 'text/html') return 'text';
+	if (m === 'application/json' || m.endsWith('+json')) return 'text';
+	return 'other';
+}
+
+const BLOB_BY_EXT: Record<string, string> = {
+	png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', avif: 'image/avif',
+	mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+};
+
+/**
+ * Type of the blob built for image/video/pdf. Chosen by KIND, never passed through from the daemon or a ref: pdf is always
+ * application/pdf, image and video only the allowlisted types (by extension, else by an exactly-allowlisted mime), anything
+ * else application/octet-stream. A blob opened in a new tab therefore can never be an html/xml/svg document of our origin.
+ */
+export function blobMime(name: string, mime: string, kind: PreviewKind): string {
 	if (kind === 'pdf') return 'application/pdf';
-	if (kind === 'image') return ext === 'jpg' ? 'image/jpeg' : `image/${ext || 'png'}`;
-	if (kind === 'video') return ext === 'mov' ? 'video/quicktime' : `video/${ext || 'mp4'}`;
+	const fromExt = BLOB_BY_EXT[extensionOf(name)];
+	const m = mime.toLowerCase().split(';')[0].trim();
+	if (kind === 'image') return fromExt?.startsWith('image/') ? fromExt : RASTER_MIMES.has(m) ? m : 'application/octet-stream';
+	if (kind === 'video') return fromExt?.startsWith('video/') ? fromExt : VIDEO_MIMES.has(m) ? m : 'application/octet-stream';
 	return 'application/octet-stream';
 }
 

@@ -28,3 +28,17 @@ export function topFrame(stack: readonly NavFrame[]): NavFrame | undefined {
 export function backLabel(frame: NavFrame): string {
 	return `Back to ${frame.title}${frame.tab === 'focus' ? ' · Focus' : ''}`;
 }
+
+/** A one-shot "open this session at that entry" request, valid only for a short time and only for the session it names. */
+export const NAV_TARGET_TTL_MS = 10_000;
+export interface TimedTarget { nodeId: string; at: number }
+
+/** The target when it is meant for the session that is opening now (and is fresh), else null. */
+export function takeNavTarget<T extends TimedTarget>(target: T | null, openingId: string, now: number): T | null {
+	return target && target.nodeId === openingId && now - target.at <= NAV_TARGET_TTL_MS ? target : null;
+}
+
+/** Whether a pending target still applies when the URL hash now names `hashId` (null = no session in the hash). */
+export function keepNavTarget(target: TimedTarget | null, hashId: string | null, now: number): boolean {
+	return !!target && hashId === target.nodeId && now - target.at <= NAV_TARGET_TTL_MS;
+}

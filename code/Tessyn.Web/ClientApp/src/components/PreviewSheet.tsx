@@ -71,7 +71,12 @@ export function PreviewSheet({ target, onClose }: { target: PreviewTarget; onClo
 	useEffect(() => {
 		let cancelled = false;
 		let url: string | null = null;
-		const ctl = { cancelled: () => cancelled, onProgress: (loaded: number, total: number) => { if (!cancelled) setView({ phase: 'loading', loaded, total }); } };
+		const ctl = {
+			cancelled: () => cancelled,
+			onProgress: (loaded: number, total: number) => { if (!cancelled) setView({ phase: 'loading', loaded, total }); },
+			// The daemon's own name/mime must still fit the kind chosen from the (agent-authored) ref.
+			onFirst: (c: FileReadResult) => { if (classifyPreview(target.name, c.mime || target.mime) !== kind) throw new Error('The type of this file does not match its name, so it is not previewed.'); },
+		};
 		const run = async () => {
 			if (kind === 'other') { setView({ phase: 'unsupported' }); return; }
 			const limit = PREVIEW_LIMITS[kind];
@@ -83,7 +88,7 @@ export function PreviewSheet({ target, onClose }: { target: PreviewTarget; onClo
 					const text = await readText(readChunk, target.handle, target.size, limit, ctl);
 					if (!cancelled) setView({ phase: 'text', text });
 				} else {
-					const blob = await readBlob(readChunk, target.handle, target.size, limit, blobMime(target.name, target.mime, kind), ctl);
+					const blob = await readBlob(readChunk, target.handle, target.size, limit, (first) => blobMime(target.name, first.mime || target.mime, kind), ctl);
 					if (cancelled) return;
 					url = URL.createObjectURL(blob);
 					setView({ phase: 'blob', url, blob });

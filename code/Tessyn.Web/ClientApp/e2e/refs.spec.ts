@@ -305,3 +305,128 @@ test.describe('attachments', () => {
 		await expect(dlg.getByRole('button', { name: 'Close preview' })).toBeFocused();
 	});
 });
+
+
+// ---- review fixes (311) ---------------------------------------------------------------------------------------------
+
+type MockHook = { liveId(): string; setOnline(v: boolean): void };
+const mockOf = <T,>(page: Page, f: (m: MockHook) => T) => page.evaluate((src) => (new Function('m', `return (${src})(m)`))((window as unknown as { __mock: MockHook }).__mock), f.toString());
+
+test.describe('review fixes', () => {
+	test('W1: nothing is requested from a non-allowlisted host before the click, markdown images and raw html included', async ({ page }, info) => {
+		const hosts: string[] = [];
+		page.on('request', (r) => { try { const u = new URL(r.url()); if (u.protocol === 'https:') hosts.push(u.hostname); } catch { /* ignore */ } });
+		await login(page);
+		await openByRecent(page, 'Needs your decision');
+		await expect(page.getByText('Remote-load attempts')).toBeVisible();
+		await expect(page.getByTestId('media-preview').first()).toBeVisible(); // the allowlisted one auto-loaded
+		await page.waitForTimeout(800);
+
+		const entry = page.locator('.msg.assistant', { hasText: 'Remote-load attempts' });
+		await expect(entry.locator('img, video, audio, svg, picture, source, object, embed')).toHaveCount(0);
+		await expect(entry.locator('[srcset], [poster], [background]')).toHaveCount(0);
+		await expect(entry.getByRole('link', { name: 'secret' })).toHaveAttribute('href', 'https://tracker.evil.example/md?d=SECRET'); // a link, never fetched
+		expect(hosts).not.toContain('tracker.evil.example');
+		expect(hosts).not.toContain('cdn.example.org'); // not allowlisted: click-to-load
+		expect(hosts).toContain('annielartens.online'); // allowlisted: auto-loaded
+		await check(page, info, 'hostile entry');
+
+		await page.getByTestId('load-preview').click();
+		// WebKit fetches <video> through its media stack, which Playwright does not report as a page request: only check it elsewhere.
+		if (info.project.name.startsWith('chromium')) await expect.poll(() => hosts.includes('cdn.example.org')).toBe(true); // only after the click
+		else await expect(page.locator('.extras video, .media-failed').first()).toBeVisible();
+		expect(hosts).not.toContain('tracker.evil.example');
+	});
+
+	test('W2: blob URLs are revoked when the sheet closes', async ({ page }) => {
+		await page.addInitScript(() => {
+			const w = window as unknown as { __blobs: { created: string[]; revoked: string[] } };
+			w.__blobs = { created: [], revoked: [] };
+			const c = URL.createObjectURL.bind(URL); const r = URL.revokeObjectURL.bind(URL);
+			URL.createObjectURL = (o: Blob | MediaSource) => { const u = c(o); w.__blobs.created.push(u); return u; };
+			URL.revokeObjectURL = (u: string) => { w.__blobs.revoked.push(u); r(u); };
+		});
+		await login(page);
+		await openByRecent(page, 'Needs your decision');
+		await focusTab(page);
+		const critical = page.getByTestId('focus-card').filter({ hasText: 'Production database migration is blocked' });
+		await critical.getByRole('button', { name: 'Preview file: photo.png' }).click();
+		await expect(page.locator('img.pv-img')).toBeVisible();
+		const blobs = () => page.evaluate(() => (window as unknown as { __blobs: { created: string[]; revoked: string[] } }).__blobs);
+		const before = await blobs();
+		expect(before.created.length).toBeGreaterThan(0);
+		expect(before.revoked).toEqual([]);
+		await page.getByRole('button', { name: 'Close preview' }).click();
+		await expect.poll(async () => (await blobs()).revoked).toEqual(before.created);
+
+		// the pdf blob type is application/pdf and revoked too
+		await critical.getByRole('button', { name: 'Preview file: Report (PDF)' }).click();
+		await page.getByRole('button', { name: 'Load PDF' }).click();
+		const link = page.getByRole('link', { name: 'Open in new tab' });
+		await expect(link).toBeVisible();
+		const type = await page.evaluate(async (href) => (await (await fetch(href)).blob()).type, (await link.getAttribute('href'))!);
+		expect(type).toBe('application/pdf');
+		await page.getByRole('button', { name: 'Close preview' }).click();
+		await expect.poll(async () => (await blobs()).revoked.length).toBe((await blobs()).created.length);
+	});
+
+	test('W4: a foreign hash change drops the Back stack and a stale jump target', async ({ page }) => {
+		await login(page);
+		await openByRecent(page, 'Importer: schema drift');
+		await focusTab(page);
+		await page.getByTestId('focus-card').first().getByTestId('ref-entry').click();
+		await expect(page.getByTestId('back-bar')).toBeVisible();
+		const liveId = await mockOf(page, (m) => m.liveId());
+		await page.evaluate((id) => { window.location.hash = `#/s/${id}`; }, liveId);
+		await expect(page.locator('.topbar .title-btn')).toContainText('Live: nightly');
+		await expect(page.getByTestId('back-bar')).toHaveCount(0);
+		// opening the jumped-to session again from the list must show the latest page, not the stale entry
+		await openByRecent(page, 'Needs your decision');
+		await expect(page.locator('.hl-entry')).toHaveCount(0);
+		await expect(page.getByTestId('anchored-bar')).toHaveCount(0);
+		await expect(page.getByText('Remote-load attempts')).toBeVisible();
+	});
+
+	test('W5: the reading position survives a reconnect (resync)', async ({ page }) => {
+		await login(page);
+		await openByRecent(page, 'Needs your decision');
+		await focusTab(page);
+		await page.getByTestId('focus-card').filter({ hasText: 'Which retry policy' }).getByTestId('ref-entry').click();
+		await expect(page.getByTestId('anchored-bar')).toBeVisible();
+		await expect.poll(() => highlightedText(page)).toBe('typed JSON-RPC client plus an SSE event stream');
+		await mockOf(page, (m) => m.setOnline(false));
+		await expect(page.getByText('Desktop offline')).toBeVisible();
+		await mockOf(page, (m) => m.setOnline(true));
+		await expect(page.getByText('Desktop offline')).toHaveCount(0);
+		await page.waitForTimeout(600);
+		await expect(page.getByTestId('anchored-bar')).toBeVisible();
+		expect(await highlightedText(page)).toBe('typed JSON-RPC client plus an SSE event stream');
+	});
+
+	test('upload: switching session mid-upload aborts it and inserts nothing anywhere', async ({ page }) => {
+		await login(page);
+		await openByRecent(page, 'Needs your decision');
+		await page.getByTestId('attach-input').setInputFiles({ name: 'slow.png', mimeType: 'image/png', buffer: PNG });
+		await expect(page.getByTestId('upload-progress')).toBeVisible();
+		const liveId = await mockOf(page, (m) => m.liveId());
+		await page.evaluate((id) => { window.location.hash = `#/s/${id}`; }, liveId);
+		await expect(page.locator('.topbar .title-btn')).toContainText('Live: nightly');
+		await page.waitForTimeout(900);
+		await expect(page.getByTestId('upload-progress')).toHaveCount(0);
+		await expect(page.getByTestId('attach-error')).toHaveCount(0);
+		await expect(page.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+		await openByRecent(page, 'Needs your decision');
+		await expect(page.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+	});
+
+	test('upload: cancel stops the upload without an error', async ({ page }) => {
+		await login(page);
+		await openByRecent(page, 'Needs your decision');
+		await page.getByTestId('attach-input').setInputFiles({ name: 'c.png', mimeType: 'image/png', buffer: PNG });
+		await page.getByTestId('upload-progress').getByRole('button', { name: 'Cancel' }).click();
+		await expect(page.getByTestId('upload-progress')).toHaveCount(0);
+		await expect(page.getByTestId('attach-error')).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Attach file' })).toBeEnabled();
+		await expect(page.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+	});
+});
