@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Runs the WPF E2E tests (the only supported way): one run at a time machine-wide, in a kill-on-close job object, with output
   streamed and the exit code returned.
@@ -13,6 +13,15 @@
     drawn or focused on the user's screen, UI Automation and popups work there, but WebView2 does NOT: its browser process is
     started on the interactive desktop and the controller fails with "Invalid window handle", so every WebView2-dependent E2E
     test fails. Use it only for probes and WebView2-free tests.
+
+  * Test-user mode (DEFAULT when the credential exists; -AsTestUser forces it, -AsCurrentUser or -Hidden opt out): the whole
+    `dotnet test` tree runs as the local user `tessyn-e2e` from a scheduled task with a password logon. That is a batch logon
+    in session 0 with its own window station (Service-0x...$), so the app, WebView2's browser process and UI Automation live
+    there and nothing touches the Architect's desktop, focus or taskbar. Needs: an elevated caller (registering a password task
+    for another user), the DPAPI credential at %AppData%\TessynDesktop\e2e\tessyn-e2e.cred.xml, and the "Log on as a batch
+    job" right on the account. Output is tailed from a log file, the exit code comes from a file, and the task, the run folder
+    (<repo>\.e2e-run) and every leftover process of the account are removed in `finally`. The password is never printed.
+    Without the credential file the runner WARNS and falls back to the plain interactive run.
 
   Everything not consumed by the script's own parameters is passed to `dotnet test`. Without a project argument the WPF E2E
   project is used.
@@ -29,12 +38,16 @@ param(
 	[int]$TimeoutMinutes = 60,
 	[int]$WaitMinutes = 120,
 	[switch]$Hidden,
+	[switch]$AsTestUser,
+	[switch]$AsCurrentUser,
 	[Parameter(ValueFromRemainingArguments = $true)][string[]]$TestArguments
 )
 
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
+$defaultTestCommand = (-not $CommandArguments) -and $Command -eq 'dotnet'
+$testProject = $null
 if (-not $CommandArguments) {
 	$CommandArguments = @('test')
 	if (-not ($TestArguments | Where-Object { $_ -match '\.(csproj|sln)$' -or $_ -match 'TessynDesktop|Tessyn\.Web' })) {
@@ -145,6 +158,34 @@ function Quote([string]$a) {
 	if ($a -match '[\s"]' -or $a -eq '') { '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' } else { $a }
 }
 
+$credPath = Join-Path $env:AppData 'TessynDesktop\e2e\tessyn-e2e.cred.xml'
+$useTestUser = $false
+if (-not $AsCurrentUser -and -not $Hidden) {
+	if (Test-Path $credPath) {
+		if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+			Write-Host '[Run-WpfE2E] ERROR: test-user mode needs an elevated caller (registering a password task for tessyn-e2e). Run elevated, or pass -AsCurrentUser to accept desktop disturbance.'
+			exit 126
+		}
+		$useTestUser = $true
+	}
+	elseif ($AsTestUser) { Write-Host "[Run-WpfE2E] ERROR: -AsTestUser but the credential file is missing: $credPath"; exit 126 }
+	else { Write-Host "[Run-WpfE2E] WARNING: credential file $credPath not found; running as the current user on the interactive desktop (may disturb focus)." }
+}
+
+function Remove-StaleTestUserRuns {
+	Get-ScheduledTask -TaskName 'TessynE2E-*' -ErrorAction SilentlyContinue | ForEach-Object {
+		Stop-ScheduledTask -InputObject $_ -ErrorAction SilentlyContinue
+		Unregister-ScheduledTask -InputObject $_ -Confirm:$false -ErrorAction SilentlyContinue
+	}
+	# Whatever the stopped task left behind (the task job normally kills the tree; this is the guarantee).
+	for ($i = 0; $i -lt 10; $i++) {
+		$left = @(Get-Process -IncludeUserName -ErrorAction SilentlyContinue | Where-Object { $_.UserName -like '*\tessyn-e2e' })
+		if ($left.Count -eq 0) { break }
+		$left | Stop-Process -Force -ErrorAction SilentlyContinue
+		Start-Sleep -Milliseconds 300
+	}
+}
+
 $name = if ($Hidden) { "TessynE2E-$PID" } else { '' }
 $log = Join-Path ([IO.Path]::GetTempPath()) "tessyn-e2e-$PID.log"
 $exe = (Get-Command $Command).Source
@@ -160,6 +201,100 @@ while (-not $owned) {
 		Write-Host ("[Run-WpfE2E] another WPF E2E run is active; waiting ({0:N0} s)" -f ([DateTime]::UtcNow - $waitStart).TotalSeconds)
 		if (([DateTime]::UtcNow - $waitStart).TotalMinutes -gt $WaitMinutes) { Write-Host '[Run-WpfE2E] gave up waiting'; exit 125 }
 	}
+}
+
+if ($useTestUser) {
+	$taskName = "TessynE2E-$PID"
+	$runDir = Join-Path $repo ".e2e-run\$PID"
+	$logFile = Join-Path $runDir 'run.log'
+	$exitFile = Join-Path $runDir 'run.exit'
+	$exit = 1
+	$sr = $null
+	$cred = $null
+	try {
+		Remove-StaleTestUserRuns   # we hold the mutex, so any TessynE2E-* task / account process is left over from a crashed run
+		if (Test-Path (Join-Path $repo '.e2e-run')) { Get-ChildItem (Join-Path $repo '.e2e-run') -Directory | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }
+		$cred = Import-Clixml $credPath
+		New-Item -ItemType Directory -Force $runDir | Out-Null
+		$runArgs = $CommandArguments
+		if ($defaultTestCommand) {
+			# `dotnet test --no-build` imports the VSTest targets from the CALLER's NuGet cache (paths baked into obj\*.nuget.g.targets);
+			# the test user cannot read it and `dotnet test` then silently runs nothing. `dotnet vstest <dll>` needs no NuGet targets.
+			$noBuild = $false; $vs = @(); $proj = $null
+			for ($i = 0; $i -lt $TestArguments.Count; $i++) {
+				$a = $TestArguments[$i]
+				switch -Regex ($a) {
+					'^--no-build$' { $noBuild = $true }
+					'^--no-restore$' { }
+					'^--filter$' { $i++; $vs += "/TestCaseFilter:$($TestArguments[$i])" }
+					'^--logger$' { $i++; $vs += "/Logger:$($TestArguments[$i])" }
+					'^(-c|--configuration|-v|--verbosity)$' { $i++ }
+					'^-' { Write-Host "[Run-WpfE2E] WARNING: option $a is not translated to vstest and is ignored in test-user mode" }
+					default { $proj = $a }
+				}
+			}
+			if (-not $proj) { $proj = Join-Path $repo 'code\TessynDesktop.WPF.E2E.Tests' }
+			if ($proj -match '\.csproj$') { $proj = Split-Path $proj -Parent }
+			if (-not $noBuild) {
+				Write-Host "[Run-WpfE2E] building $proj as the current user"
+				& $exe build $proj -nologo -v q 2>&1 | ForEach-Object { Write-Host $_ }
+				if ($LASTEXITCODE -ne 0) { Write-Host '[Run-WpfE2E] build failed'; $exit = $LASTEXITCODE; throw 'build failed' }
+			}
+			$dll = Get-ChildItem (Join-Path $proj 'bin') -Recurse -Filter ((Split-Path $proj -Leaf) + '.dll') | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+			if (-not $dll) { throw "the test assembly of $proj was not found; build it first" }
+			$runArgs = @('vstest', $dll.FullName, '/Logger:console;verbosity=normal') + $vs
+		}
+		$commandLine = (@((Quote $exe)) + ($runArgs | ForEach-Object { '"' + ($_ -replace '"', '""') + '"' })) -join ' '
+		$cmdLines = @('@echo off', "cd /d `"$repo`"", 'set TESSYN_E2E_RUNNER=1', 'set DOTNET_NOLOGO=1', 'set DOTNET_CLI_TELEMETRY_OPTOUT=1', 'set DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1')
+		$cmdLines += $commandLine.Replace('%', '%%') + " > `"$logFile`" 2>&1"
+		$cmdLines += "> `"$exitFile`" echo %errorlevel%"
+		Set-Content (Join-Path $runDir 'run.cmd') $cmdLines -Encoding Ascii
+		$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$(Join-Path $runDir 'run.cmd')`""
+		# A laptop: the default settings would refuse to start on battery. Time limit is a backstop; the runner enforces $TimeoutMinutes itself.
+		$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes ($TimeoutMinutes + 10))
+		Register-ScheduledTask -TaskName $taskName -Action $action -Settings $settings -User $cred.UserName -Password $cred.GetNetworkCredential().Password -RunLevel Limited | Out-Null
+		Write-Host "[Run-WpfE2E] test-user mode: task $taskName as $($cred.UserName) (session 0, own window station); $commandLine"
+		Start-ScheduledTask -TaskName $taskName
+		$startedAt = [DateTime]::UtcNow
+		$deadline = $startedAt.AddMinutes($TimeoutMinutes)
+		$nextCheck = $startedAt.AddSeconds(15)
+		$stream = $null
+		$idle = 0
+		while ($true) {
+			if (-not $sr -and (Test-Path $logFile)) {
+				$stream = New-Object IO.FileStream $logFile, 'Open', 'Read', 'ReadWrite,Delete'
+				$sr = New-Object IO.StreamReader $stream
+			}
+			if ($sr) { while (($line = $sr.ReadLine()) -ne $null) { Write-Host $line } }
+			if ((Test-Path $exitFile) -and ((Get-Content $exitFile -TotalCount 1 -ErrorAction SilentlyContinue) -match '^\s*-?\d+\s*$')) { Start-Sleep -Milliseconds 400; if ($sr) { while (($line = $sr.ReadLine()) -ne $null) { Write-Host $line } }; break }
+			$now = [DateTime]::UtcNow
+			if ($now -gt $deadline) { Write-Host "[Run-WpfE2E] timeout after $TimeoutMinutes min; killing the run"; $exit = 124; break }
+			if ($now -gt $nextCheck) {
+				$nextCheck = $now.AddSeconds(3)
+				if ((Get-ScheduledTask -TaskName $taskName).State -eq 'Running') { $idle = 0 } else { $idle++ }
+				if ($idle -ge 2 -and -not (Test-Path $exitFile)) {
+					Write-Host '[Run-WpfE2E] the task ended without writing an exit code (killed, or the logon failed); see the Task Scheduler log'
+					$exit = 1; break
+				}
+			}
+			Start-Sleep -Milliseconds 300
+		}
+		if ($exit -ne 124 -and (Test-Path $exitFile)) { $txt = Get-Content $exitFile -TotalCount 1 -ErrorAction SilentlyContinue; if ($txt -match '^\s*(-?\d+)\s*$') { $exit = [int]$Matches[1] } }
+	}
+	catch {
+		Write-Host "[Run-WpfE2E] ERROR: $($_.Exception.Message)"
+		if ($exit -eq 0) { $exit = 1 }
+	}
+	finally {
+		if ($sr) { $sr.Dispose() }
+		$cred = $null
+		Remove-StaleTestUserRuns
+		if ((Test-Path $runDir) -and -not $env:TESSYN_E2E_KEEPRUN) { Remove-Item $runDir -Recurse -Force -ErrorAction SilentlyContinue }
+		Remove-Item Env:\TESSYN_E2E_DESKTOP -ErrorAction SilentlyContinue
+		if ($owned) { $gate.ReleaseMutex() }
+	}
+	Write-Host "[Run-WpfE2E] exit code $exit"
+	exit $exit
 }
 
 $mode = if ($Hidden) { "hidden desktop '$name' (experimental, no WebView2)" } else { 'interactive desktop, serialised' }
@@ -192,3 +327,4 @@ finally {
 }
 Write-Host "[Run-WpfE2E] exit code $exit"
 exit $exit
+

@@ -21,7 +21,7 @@ public sealed class AppWindowFinder
 		EnumWindows((hwnd, _) =>
 		{
 			GetWindowThreadProcessId(hwnd, out var pid);
-			if (pid == processId && IsWindowVisible(hwnd) && found == IntPtr.Zero)
+			if (pid == processId && HasVisibleStyle(hwnd) && found == IntPtr.Zero)
 			{
 				found = hwnd;
 				return false;
@@ -60,9 +60,17 @@ public sealed class AppWindowFinder
 	[DllImport("user32.dll")]
 	private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out int processId);
 
-	[DllImport("user32.dll")]
-	[return: MarshalAs(UnmanagedType.Bool)]
-	private static extern bool IsWindowVisible(IntPtr hwnd);
+	/// <summary>
+	/// The WS_VISIBLE style of a top-level window. <c>IsWindowVisible</c> would say the same on the interactive desktop, but in a
+	/// non-interactive window station (the E2E run as the test user in session 0) it returns false for a window that was shown.
+	/// </summary>
+	private static bool HasVisibleStyle(IntPtr hwnd) => (GetWindowLong(hwnd, GwlStyle) & WsVisible) != 0;
+
+	private const int GwlStyle = -16;
+	private const int WsVisible = 0x10000000;
+
+	[DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+	private static extern int GetWindowLong(IntPtr hwnd, int index);
 
 	[DllImport("user32.dll")]
 	[return: MarshalAs(UnmanagedType.Bool)]
