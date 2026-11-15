@@ -34,6 +34,13 @@ public sealed class ServiceRegistration
 		services.AddSingleton<UrlPolicy>();
 		services.AddSingleton<IUrlLauncher, SystemUrlLauncher>();
 		services.AddSingleton<MediaPreviewPolicy>();
+		services.AddSingleton<PrivateAddressCheck>();
+		services.AddSingleton<MediaProxyUrl>();
+		services.AddSingleton<WebRequestPolicy>();
+		services.AddSingleton<RemoteMediaHttpClientFactory>();
+		services.AddSingleton<RemoteMediaFetcher>(sp => new RemoteMediaFetcher(
+			sp.GetRequiredService<RemoteMediaHttpClientFactory>().Create(), sp.GetRequiredService<MediaPreviewPolicy>(), sp.GetRequiredService<PrivateAddressCheck>()));
+		services.AddSingleton<TranscriptMediaBroker>();
 		services.AddSingleton<MediaLinkDetector>();
 		services.AddSingleton<LocalPathDetector>();
 		services.AddSingleton<ExternalOpenPolicy>();

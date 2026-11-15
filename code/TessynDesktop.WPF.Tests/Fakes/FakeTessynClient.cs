@@ -268,10 +268,15 @@ public sealed class FakeTessynClient : ITessynClient
 	/// <summary>When set, every <see cref="FileReadAsync"/> call after the first waits for it (to cancel a load in flight).</summary>
 	public TaskCompletionSource? FileReadGate { get; set; }
 
+	/// <summary>When set, answers every <see cref="FileReadAsync"/> itself (a daemon that lies about sizes or never ends a file).</summary>
+	public Func<string, long, int?, FileReadResult>? FileReadHandler { get; set; }
+
 	public async Task<FileReadResult> FileReadAsync(string handle, long? offset = null, int? length = null, CancellationToken cancellationToken = default)
 	{
 		Record($"file.read:{handle}:{offset ?? 0}:{length?.ToString() ?? "-"}");
 		cancellationToken.ThrowIfCancellationRequested();
+		if (FileReadHandler != null)
+			return FileReadHandler(handle, offset ?? 0, length);
 		if (!Files.TryGetValue(handle, out var file))
 			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, "Unknown file handle");
 

@@ -25,6 +25,9 @@ public static partial class Constants
 	{
 		public const string AppHost = "app.local";
 		public const string PreviewHost = "preview.local";
+
+		/// <summary>The transcript page's only image host: a virtual name the host answers itself (the media proxy); it is never resolved.</summary>
+		public const string MediaHost = "media.local";
 	}
 
 	/// <summary>Texts the Focus view and the preview pane show; tests refer to them too.</summary>
@@ -97,6 +100,13 @@ public static partial class Constants
 		public const int MaxMediaPreviewsPerEntry = 6;
 		public const int MaxPathChipsPerEntry = 8;
 		public const int MaxPathChipLength = 400;
+		public const int MaxMediaRedirects = 3;
+		public const long MaxRemoteImageBytes = 10L * 1024 * 1024;
+		public const long MaxRemoteVideoBytes = 200L * 1024 * 1024;
+		public const int MaxCachedRemoteImages = 24;
+		public const int MaxMarkdownChars = 200_000;
+		public const int MaxPreviewChunks = 4096;
+		public const int MaxCatchUpPages = 2;
 	}
 
 	/// <summary>Durations.</summary>
@@ -108,6 +118,9 @@ public static partial class Constants
 		public static readonly TimeSpan WatchdogPoll = TimeSpan.FromMilliseconds(100);
 		public static readonly TimeSpan UiStallThreshold = TimeSpan.FromMilliseconds(250);
 		public static readonly TimeSpan WebViewReady = TimeSpan.FromSeconds(30);
+		public static readonly TimeSpan RemoteImage = TimeSpan.FromSeconds(20);
+		public static readonly TimeSpan RemoteVideo = TimeSpan.FromMinutes(5);
+		public static readonly TimeSpan RemoteConnect = TimeSpan.FromSeconds(10);
 	}
 
 	/// <summary>Process-wide identities.</summary>

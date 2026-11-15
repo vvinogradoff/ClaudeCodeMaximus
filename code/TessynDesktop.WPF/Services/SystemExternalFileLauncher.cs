@@ -23,6 +23,18 @@ public sealed class SystemExternalFileLauncher : IExternalFileLauncher
 		_logger = logger;
 	}
 
+	private static bool IsReparsePoint(string path)
+	{
+		try
+		{
+			return File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		{
+			return true;   // cannot be inspected: do not launch
+		}
+	}
+
 	public bool TryOpen(string path)
 	{
 		if (!_policy.IsAllowed(path))
@@ -36,6 +48,14 @@ public sealed class SystemExternalFileLauncher : IExternalFileLauncher
 		if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
 		{
 			_logger.LogWarning("Refused to open a file outside the preview cache");
+			return false;
+		}
+
+		// A junction or symlink inside the cache could point anywhere (V10): the file, its load folder and the cache root must be plain.
+		var cacheRoot = Path.GetFullPath(_paths.PreviewCacheDirectory);
+		if (new[] { full, Path.GetDirectoryName(full)!, cacheRoot }.Any(IsReparsePoint))
+		{
+			_logger.LogWarning("Refused to open a file reached through a reparse point");
 			return false;
 		}
 

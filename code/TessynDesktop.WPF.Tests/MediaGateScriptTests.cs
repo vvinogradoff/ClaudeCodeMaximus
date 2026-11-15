@@ -28,7 +28,7 @@ public sealed class MediaGateScriptTests
 		return JsonDocument.Parse(output).RootElement.Clone();
 	}
 
-	private static string Html(string urls, string hosts, string loaded = "new Set()") =>
+	private static string Html(string urls, string hosts, string loaded = "new Map()") =>
 		Eval($"g.previewHtml({urls},{hosts},7,{loaded})").GetString()!;
 
 	[Fact]
@@ -37,7 +37,9 @@ public sealed class MediaGateScriptTests
 		var html = Html("['https://annielartens.online/r/1.png']", "['annielartens.online']");
 
 		Assert.Contains("<img", html);
-		Assert.Contains("src=\"https://annielartens.online/r/1.png\"", html);
+		// The page never names the remote host as an address: the image goes through the host's media proxy.
+		Assert.Contains("src=\"https://media.local/i?u=https%3A%2F%2Fannielartens.online%2Fr%2F1.png\"", html);
+		Assert.DoesNotContain("src=\"https://annielartens", html);
 		Assert.Contains("referrerpolicy=\"no-referrer\"", html);
 		Assert.Contains("loading=\"lazy\"", html);
 		Assert.DoesNotContain("mload", html);
@@ -80,20 +82,55 @@ public sealed class MediaGateScriptTests
 	[Fact]
 	public void AfterTheClick_TheLoadedSlotBecomesAnElement()
 	{
-		var html = Html("['https://example.com/a.png','https://example.com/b.png']", "[]", "new Set(['7:1'])");
+		// "loaded" is keyed by URL, not by position: reordering the entry's media cannot load a different URL.
+		var html = Html("['https://example.com/a.png','https://example.com/b.png']", "[]", "new Map([['https://example.com/b.png','']])");
 
-		Assert.Contains("src=\"https://example.com/b.png\"", html);
-		Assert.DoesNotContain("src=\"https://example.com/a.png\"", html);
+		Assert.Contains("src=\"https://media.local/i?u=https%3A%2F%2Fexample.com%2Fb.png\"", html);
+		Assert.DoesNotContain("a.png", html.Replace("data-j", string.Empty)); // a.png is still only a button
 		Assert.Contains("Load preview example.com", html);
+
+		var reordered = Html("['https://example.com/b.png','https://example.com/a.png']", "[]", "new Map([['https://example.com/b.png','']])");
+		Assert.Contains("%2Fb.png", reordered);
+		Assert.DoesNotContain("%2Fa.png", reordered);
 	}
 
 	[Fact]
-	public void VideoLinksGetAVideoElement()
+	public void Videos_AreAlwaysClickToLoad_EvenOnAnAllowlistedHost_AndPlayOnlyFromThePreviewCache()
 	{
-		var html = Html("['https://annielartens.online/clip.webm']", "['annielartens.online']");
+		var onAllowlisted = Html("['https://annielartens.online/clip.webm']", "['annielartens.online']");
+		Assert.DoesNotContain("<video", onAllowlisted);
+		Assert.Contains("Load preview annielartens.online", onAllowlisted);
 
-		Assert.Contains("<video", html);
-		Assert.Contains("controls", html);
+		var loaded = Html("['https://annielartens.online/clip.webm']", "['annielartens.online']", "new Map([['https://annielartens.online/clip.webm','https://preview.local/abc/content.webm']])");
+		Assert.Contains("<video", loaded);
+		Assert.Contains("src=\"https://preview.local/abc/content.webm\"", loaded);
+		Assert.Contains("controls", loaded);
+
+		var forged = Html("['https://annielartens.online/clip.webm']", "[]", "new Map([['https://annielartens.online/clip.webm','https://attacker.example/x.mp4']])");
+		Assert.DoesNotContain("<video", forged);
+		Assert.DoesNotContain("attacker.example", forged);
+	}
+
+	[Fact]
+	public void AFailedLoad_ShowsANote_NotAnElement()
+	{
+		var html = Html("['https://example.com/a.png']", "[]", "new Map([['https://example.com/a.png',null]])");
+
+		Assert.Contains("Preview unavailable", html);
+		Assert.DoesNotContain("<img", html);
+	}
+
+	[Fact]
+	public void HostAndPage_UseTheSameUrlForm_EveryOfferedUrlComesBackUnchanged()
+	{
+		// The host approves and serves exactly the strings it offered (V7): the page must not re-normalise them.
+		var detector = new TessynDesktop.WPF.Services.MediaLinkDetector(new TessynDesktop.WPF.Services.MediaPreviewPolicy());
+		var offered = detector.Detect("https://Example.COM/a b/%7Euser/p.png?x=1&y=%20z#frag https://example.com:443/c.jpg https://xn--bcher-kva.example/d.webp https://example.com/a/../e.gif");
+		Assert.NotEmpty(offered);
+
+		var items = Eval($"g.plan({JsonSerializer.Serialize(offered)}, [])");
+
+		Assert.Equal(offered, items.EnumerateArray().Select(i => i.GetProperty("url").GetString()).ToList());
 	}
 
 	[Fact]
@@ -126,24 +163,31 @@ public sealed class MediaGateScriptTests
 	}
 
 	[Fact]
-	public void PageCspAllowsRemoteMediaOnlyAsImagesAndMedia_NothingElse()
+	public void NeitherPageCspNamesARemoteHost_OnlyTheAppsOwnVirtualHosts()
 	{
 		var html = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, Constants.Paths.WebAssetsFolder, Constants.Paths.TranscriptPageFileName));
+		var preview = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, Constants.Paths.WebAssetsFolder, Constants.Paths.PreviewPageFileName));
 
 		Assert.Contains("default-src 'none'", html);
 		Assert.Contains("script-src 'self'", html);
-		Assert.Contains("img-src https:", html);
-		Assert.Contains("media-src https:", html);
+		Assert.Contains("img-src https://media.local;", html);
+		Assert.Contains("media-src https://preview.local;", html);
 		Assert.Contains("connect-src 'none'", html);
 		Assert.Contains("frame-src 'none'", html);
 		Assert.Contains("object-src 'none'", html);
 		Assert.DoesNotContain("script-src 'self' 'unsafe", html);
-		Assert.DoesNotContain("script-src https:", html);
-
-		var preview = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, Constants.Paths.WebAssetsFolder, Constants.Paths.PreviewPageFileName));
 		Assert.Contains("img-src https://preview.local", preview);
 		Assert.Contains("media-src https://preview.local", preview);
-		Assert.DoesNotContain("img-src https:;", preview);
 		Assert.Contains("connect-src 'none'", preview);
+
+		// No source in either policy is a scheme wildcard (https:, http:, data:, blob:, *) or any host other than the three virtual ones.
+		foreach (var page in new[] { html, preview })
+		{
+			var policy = System.Text.RegularExpressions.Regex.Match(page, "Content-Security-Policy\" content=\"([^\"]*)\"").Groups[1].Value;
+			Assert.DoesNotMatch(@"(^|[\s;])(https?|data|blob|filesystem|ws|wss):(?!//)", policy);
+			Assert.DoesNotContain("*", policy);
+			var hosts = System.Text.RegularExpressions.Regex.Matches(policy, @"https?://([^\s;/]+)").Select(m => m.Groups[1].Value).Distinct().Order().ToList();
+			Assert.All(hosts, h => Assert.Contains(h, new[] { "media.local", "preview.local" }));
+		}
 	}
 }

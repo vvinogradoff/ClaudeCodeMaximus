@@ -46,7 +46,12 @@ public sealed class FilePreviewLoader : IFilePreviewLoader
 		if (!isText && first.Size > limit)
 			return Refused(first, kind, $"{Constants.Texts.PreviewTooLarge} ({FormatSize(first.Size)}, limit {FormatSize(limit)}).");
 
-		var path = isText ? null : _store.NewFilePath(first.Name);
+		// The cache file is always "content" + the checked extension; the display name never reaches the disk (V9). The type was checked above.
+		var extension = isText ? null : _openPolicy.ExtensionOf(first.Name);
+		if (!isText && (extension == null || !Constants.FileTypes.ExternallyOpenable.Contains(extension)))
+			return Refused(first, kind, Constants.Texts.PreviewUnsupported);
+
+		var path = isText ? null : _store.NewFilePath(extension!);
 		using var memory = isText ? new MemoryStream() : null;
 		FileStream? file = null;
 		var truncated = false;
@@ -56,11 +61,20 @@ public sealed class FilePreviewLoader : IFilePreviewLoader
 			Stream sink = (Stream?)memory ?? file!;
 			var chunk = first;
 			var read = 0L;
-			while (true)
+			var cap = Math.Max(limit, first.Size);   // real bytes are counted below; a daemon cannot make the cache grow past what it declared
+			for (var chunks = 1; ; chunks++)
 			{
 				var bytes = chunk.Encoding == "base64" ? Convert.FromBase64String(chunk.Data) : Encoding.UTF8.GetBytes(chunk.Data);
+				if (bytes.Length != chunk.Length)
+					throw new InvalidOperationException("The daemon's chunk length does not match its data.");
+				if (chunks > Constants.Limits.MaxPreviewChunks)
+					throw new InvalidOperationException("The daemon sent too many chunks.");
+
+				read += bytes.Length;
+				if (!isText && read > cap)
+					throw new InvalidOperationException("The daemon sent more data than the file's declared size.");
+
 				await sink.WriteAsync(bytes, cancellationToken);
-				read += chunk.Length;
 				progress?.Report(new PreviewProgress(read, first.Size));
 
 				if (chunk.Eof)
@@ -71,7 +85,7 @@ public sealed class FilePreviewLoader : IFilePreviewLoader
 					break;
 				}
 
-				if (chunk.Length <= 0)
+				if (bytes.Length == 0)
 					throw new InvalidOperationException("The daemon returned an empty chunk before the end of the file.");
 
 				cancellationToken.ThrowIfCancellationRequested();

@@ -30,6 +30,7 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 	private CancellationTokenSource? _cts;
 	private int _loadToken;
 	private string? _handle;
+	private string? _rawName;
 	private string? _cachedPath;
 	private string? _markdownSource;
 	private string? _markdownHtml;
@@ -152,7 +153,8 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 
 	private void Apply(LoadedPreview loaded)
 	{
-		Title = loaded.Name;
+		_rawName = loaded.Name;
+		Title = _openPolicy.DisplayName(loaded.Name);
 		Kind = loaded.Kind;
 		_logger.LogInformation("Preview opened: {Name} ({Kind}, {Size} bytes){Refused}", loaded.Name, loaded.Kind, loaded.Size, loaded.Refusal == null ? string.Empty : " refused");
 		_cachedPath = loaded.FilePath;
@@ -242,7 +244,7 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 	[RelayCommand(CanExecute = nameof(CanOpen))]
 	private async Task OpenExternalAsync()
 	{
-		var name = Title;
+		var name = _rawName ?? Title;   // the policy judges the real name, never the display form
 		var handle = _handle;
 		if (handle == null || !_openPolicy.IsAllowed(name))
 			return;
@@ -311,6 +313,7 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 	private void Reset()
 	{
 		_handle = null;
+		_rawName = null;
 		_markdownSource = null;
 		_markdownHtml = null;
 		Kind = PreviewKind.Unsupported;

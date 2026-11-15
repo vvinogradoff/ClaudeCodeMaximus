@@ -1,4 +1,5 @@
 using System.Text;
+using TessynDesktop.Models.Remote;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.Tests.Fakes;
 
@@ -150,18 +151,84 @@ public sealed class FilePreviewLoaderTests : IDisposable
 	{
 		var store = new PreviewFileStore(_temp.Paths);
 
-		var path = store.NewFilePath(@"..\..\evil\na:me?.png");
+		var path = store.NewFilePath(".PNG");
 		File.WriteAllText(path, "x");
 
 		Assert.StartsWith(Path.GetFullPath(_temp.Paths.PreviewCacheDirectory), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
-		Assert.DoesNotContain("..", Path.GetFileName(path));
+		Assert.Equal("content.png", Path.GetFileName(path));          // a fixed name: no name from outside reaches the disk
 		Assert.StartsWith("https://preview.local/", store.UrlOf(path));
 
 		store.Delete(path);
 		Assert.False(File.Exists(path));
 
-		File.WriteAllText(store.NewFilePath("a.png"), "x");
+		File.WriteAllText(store.NewFilePath(".md"), "x");
 		store.Clean();
 		Assert.False(Directory.Exists(_temp.Paths.PreviewCacheDirectory));
+	}
+
+	[Theory]
+	[InlineData(".exe")]
+	[InlineData(".ps1")]
+	[InlineData("")]
+	[InlineData("png")]
+	[InlineData(@".png\..\..\x")]
+	[InlineData(".pÿg")]
+	public void TheCacheRefusesAnyExtensionOffTheAllowlist(string extension) =>
+		Assert.Throws<ArgumentException>(() => new PreviewFileStore(_temp.Paths).NewFilePath(extension));
+
+	[Theory]
+	[InlineData("NUL.png")]
+	[InlineData("com1.pdf")]
+	[InlineData("AUX.txt")]
+	[InlineData("con.mp4")]
+	[InlineData("LPT1.md")]
+	public async Task ReservedDeviceNamesNeverReachTheFileSystem_TheFileIsCalledContent(string name)
+	{
+		_client.Files["h"] = (name, name.EndsWith(".png", StringComparison.Ordinal) ? "image/png" : name.EndsWith(".mp4", StringComparison.Ordinal) ? "video/mp4" : "application/pdf", new byte[] { 1, 2, 3 });
+
+		var loaded = await Loader().LoadAsync("h", saveToFile: true, null, CancellationToken.None);
+
+		Assert.Null(loaded.Refusal);
+		Assert.StartsWith("content.", Path.GetFileName(loaded.FilePath));
+		Assert.Equal(name, loaded.Name);                                  // the display name is kept separately
+	}
+
+	private static FileReadResult Chunk(string name, string mime, long size, long offset, byte[] data, bool eof, int? lengthOverride = null) =>
+		new(name, mime, size, DateTimeOffset.UnixEpoch, offset, lengthOverride ?? data.Length, "base64", Convert.ToBase64String(data), eof);
+
+	[Fact]
+	public async Task ADaemonThatLiesAboutTheSize_AndNeverEndsTheFile_IsStopped_AndTheFileIsDeleted()
+	{
+		// Declares 1 KB, then streams one-megabyte chunks without ever setting Eof.
+		var megabyte = new byte[1024 * 1024];
+		_client.FileReadHandler = (_, offset, _) => Chunk("pic.png", "image/png", 1024, offset, offset == 0 ? new byte[512] : megabyte, eof: false);
+
+		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Loader().LoadAsync("h", saveToFile: false, null, CancellationToken.None));
+
+		Assert.Contains("more data than", ex.Message);
+		Assert.False(Directory.Exists(_temp.Paths.PreviewCacheDirectory) && Directory.EnumerateFiles(_temp.Paths.PreviewCacheDirectory, "*", SearchOption.AllDirectories).Any());
+		Assert.True(_client.Calls.Count(c => c.StartsWith("file.read:", StringComparison.Ordinal)) < 40);   // stopped at the image limit, not endless
+	}
+
+	[Fact]
+	public async Task OneByteChunksForever_AreCutOffByTheChunkCap()
+	{
+		_client.FileReadHandler = (_, offset, _) => Chunk("pic.png", "image/png", Constants.Limits.MaxPreviewImageBytes, offset, new byte[] { 1 }, eof: false);
+
+		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Loader().LoadAsync("h", saveToFile: false, null, CancellationToken.None));
+
+		Assert.Contains("too many chunks", ex.Message);
+		Assert.Equal(Constants.Limits.MaxPreviewChunks + 1, _client.Calls.Count(c => c.StartsWith("file.read:", StringComparison.Ordinal)));
+		Assert.False(Directory.Exists(_temp.Paths.PreviewCacheDirectory) && Directory.EnumerateFiles(_temp.Paths.PreviewCacheDirectory, "*", SearchOption.AllDirectories).Any());
+	}
+
+	[Fact]
+	public async Task AChunkWhoseLengthDoesNotMatchItsData_Fails()
+	{
+		_client.FileReadHandler = (_, offset, _) => Chunk("pic.png", "image/png", 10, offset, new byte[] { 1, 2, 3 }, eof: true, lengthOverride: 9);
+
+		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Loader().LoadAsync("h", saveToFile: false, null, CancellationToken.None));
+
+		Assert.Contains("does not match", ex.Message);
 	}
 }

@@ -33,8 +33,8 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private readonly ILogger<WebView2TranscriptSurface> _logger;
 	private readonly List<string> _pending = new();
 
-	/// <summary>https media URLs the user asked to load (click-to-load); cleared on every <see cref="Load"/>, like the page's own state.</summary>
-	private readonly HashSet<string> _approvedMedia = new(StringComparer.Ordinal);
+	private readonly TranscriptMediaBroker _broker;
+	private readonly WebRequestPolicy _requests;
 
 	private WebView2? _control;
 	private CoreWebView2Environment? _env;
@@ -44,8 +44,10 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private Task _sendTail = Task.CompletedTask;
 	private int _generation;
 
-	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, ILogger<WebView2TranscriptSurface> logger)
+	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, TranscriptMediaBroker broker, WebRequestPolicy requests, ILogger<WebView2TranscriptSurface> logger)
 	{
+		_broker = broker;
+		_requests = requests;
 		_environment = environment;
 		_paths = paths;
 		_launcher = launcher;
@@ -86,7 +88,11 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		_pending.Clear();
 		_generation++;
 		_env = await _environment.GetAsync();
-		await control.EnsureCoreWebView2Async(_env);
+		// An in-private profile (V11): nothing the page or a remote host could store (cookies, cache) survives the run. With the media proxy no
+		// remote host reaches this WebView at all; the private mode is a second layer.
+		var controllerOptions = _env.CreateCoreWebView2ControllerOptions();
+		controllerOptions.IsInPrivateModeEnabled = true;
+		await control.EnsureCoreWebView2Async(_env, controllerOptions);
 		var core = control.CoreWebView2;
 
 		var settings = core.Settings;
@@ -101,7 +107,9 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		settings.IsWebMessageEnabled = true;
 		settings.AreDefaultContextMenusEnabled = false;
 
+		Directory.CreateDirectory(_paths.PreviewCacheDirectory);
 		core.SetVirtualHostNameToFolderMapping(HostName, _paths.WebAssetsDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
+		core.SetVirtualHostNameToFolderMapping(Constants.Hosts.PreviewHost, _paths.PreviewCacheDirectory, CoreWebView2HostResourceAccessKind.DenyCors); // downloaded videos
 		core.NavigationStarting += OnNavigationStarting;
 		core.FrameNavigationStarting += (_, e) => e.Cancel = true;
 		core.NewWindowRequested += OnNewWindowRequested;
@@ -119,9 +127,10 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom)
 	{
 		_token++;
-		_approvedMedia.Clear();
+		_broker.Reset();
 		var token = _token;
 		var snapshot = entries.ToList();
+		Offer(snapshot);
 		Post(() => JsonSerializer.Serialize(new { cmd = "load", tok = token, key, entries = snapshot.Select(ToPage), hasOlder, toBottom }, Json), replacesQueue: true);
 	}
 
@@ -129,6 +138,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	{
 		var token = _token;
 		var snapshot = entries.ToList();
+		Offer(snapshot);
 		Post(() => JsonSerializer.Serialize(new { cmd = "prepend", tok = token, entries = snapshot.Select(ToPage), hasOlder }, Json));
 	}
 
@@ -136,12 +146,14 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	{
 		var token = _token;
 		var snapshot = entries.ToList();
+		Offer(snapshot);
 		Post(() => JsonSerializer.Serialize(new { cmd = "append", tok = token, entries = snapshot.Select(ToPage) }, Json));
 	}
 
 	public void Replace(TranscriptEntryView entry)
 	{
 		var token = _token;
+		Offer([entry]);
 		Post(() => JsonSerializer.Serialize(new { cmd = "replace", tok = token, entry = ToPage(entry) }, Json));
 	}
 
@@ -158,6 +170,13 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	public void GoToEntry(int index, string? quote, bool highlight) =>
 		Post(() => JsonSerializer.Serialize(new { cmd = "goto", i = index, quote, hl = highlight }, Json));
+
+	/// <summary>Tells the broker which media URLs the page is about to receive, so it can later approve and serve exactly those.</summary>
+	private void Offer(IEnumerable<TranscriptEntryView> entries)
+	{
+		foreach (var entry in entries)
+			_broker.Offer(entry.Index, entry.Media);
+	}
 
 	private static object ToPage(TranscriptEntryView view) =>
 		new { i = view.Index, r = view.Role, ts = view.Timestamp, html = view.Html, trunc = view.Truncated, full = view.FullLength, h = view.EstimatedHeight, m = view.Media ?? [], p = view.Paths ?? [] };
@@ -247,19 +266,40 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
 	{
-		if (Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri))
+		var decision = Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) ? _requests.ForTranscript(uri) : RequestDecision.Block;
+		switch (decision)
 		{
-			if (uri.Host == HostName)
+			case RequestDecision.Allow:
 				return;
-
-			// The only foreign requests the page may make are https images and video the user approved or the allowlist covers (FR.26.4).
-			var isMedia = e.ResourceContext is CoreWebView2WebResourceContext.Image or CoreWebView2WebResourceContext.Media;
-			if (isMedia && uri.Scheme == Uri.UriSchemeHttps && (_approvedMedia.Contains(uri.AbsoluteUri) || _media.IsAllowedHost(uri.Host)))
+			case RequestDecision.ServeMedia:
+				// The page asked the media proxy (a virtual host) for an image; the host decides and fetches (V2): nothing else leaves the app.
+				_ = ServeMediaAsync(e, uri!, e.GetDeferral());
+				return;
+			default:
+				_logger.LogInformation("Blocked a request to a foreign host");
+				e.Response = _env!.CreateWebResourceResponse(null, 403, "Blocked", string.Empty);
 				return;
 		}
+	}
 
-		_logger.LogInformation("Blocked a request to a foreign host");
-		e.Response = _env!.CreateWebResourceResponse(null, 403, "Blocked", string.Empty);
+	private async Task ServeMediaAsync(CoreWebView2WebResourceRequestedEventArgs e, Uri request, CoreWebView2Deferral deferral)
+	{
+		try
+		{
+			var image = await _broker.ServeImageAsync(request, CancellationToken.None);
+			var stream = new MemoryStream(image.Bytes);
+			e.Response = _env!.CreateWebResourceResponse(stream, 200, "OK", $"Content-Type: {image.ContentType}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff");
+			_logger.LogInformation("Media proxy served an image ({Bytes} bytes)", image.Bytes.Length);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogInformation("Media proxy refused an image request: {Reason}", ex is MediaRefusedException ? ex.Message : ex.GetType().Name);
+			e.Response = _env!.CreateWebResourceResponse(null, 403, "Refused", string.Empty);
+		}
+		finally
+		{
+			deferral.Complete();
+		}
 	}
 
 	private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -313,7 +353,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 						root.GetProperty("i").GetInt32(), root.GetProperty("visible").GetBoolean(), root.GetProperty("quote").GetBoolean(), root.GetProperty("entry").GetBoolean());
 					break;
 				case "mediaLoad" when TokenMatches(root):
-					ApproveMedia(root.GetProperty("url").GetString(), root.GetProperty("i").GetInt32(), root.GetProperty("j").GetInt32());
+					_ = ApproveMediaAsync(root.GetProperty("url").GetString(), root.GetProperty("i").GetInt32());
 					break;
 			}
 		}
@@ -323,18 +363,40 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		}
 	}
 
-	/// <summary>The user clicked "Load preview": remember the URL as approved, then tell the page it may create the element.</summary>
-	private void ApproveMedia(string? url, int entry, int slot)
+	/// <summary>
+	/// The user clicked "Load preview": the broker approves only a URL the host itself offered for that entry. An image is then fetched when the
+	/// page requests it through the proxy; a video is downloaded to the preview cache first and the page plays it from there.
+	/// </summary>
+	private async Task ApproveMediaAsync(string? url, int entry)
 	{
-		if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length > 0 || uri.Host.Length == 0)
+		var token = _token;
+		if (url == null || !_broker.TryApprove(entry, url))
 		{
-			_logger.LogInformation("Ignored a media load request for an invalid URL");
+			_logger.LogInformation("Ignored a media load request for a URL the host did not offer");
 			return;
 		}
 
-		_approvedMedia.Add(uri.AbsoluteUri);
-		_logger.LogInformation("Media load approved by a click for host {Host}", uri.Host);
-		_control?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { cmd = "mediaOk", tok = _token, i = entry, j = slot }, Json));
+		var host = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : string.Empty;
+		_logger.LogInformation("Media load approved by a click for host {Host}", host);
+		string? src = string.Empty;
+		var failed = false;
+		if (uri != null && Constants.FileTypes.Video.Contains(Path.GetExtension(uri.AbsolutePath)))
+		{
+			try
+			{
+				src = await _broker.DownloadVideoAsync(url, CancellationToken.None);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogInformation("Video download refused: {Reason}", ex is MediaRefusedException ? ex.Message : ex.GetType().Name);
+				failed = true;
+			}
+		}
+
+		if (token != _token)
+			return;
+
+		_control?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { cmd = failed ? "mediaFail" : "mediaOk", tok = token, i = entry, url, src }, Json));
 	}
 
 	private void OnSystemParameterChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

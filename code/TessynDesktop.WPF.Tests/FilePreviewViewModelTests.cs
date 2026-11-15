@@ -104,7 +104,8 @@ public sealed class FilePreviewViewModelTests : IDisposable
 
 		Assert.Equal(PreviewKind.Image, _preview.Kind);
 		Assert.StartsWith("https://preview.local/", _surface.LastUrl);
-		Assert.EndsWith("/pic.png", _surface.LastUrl);
+		Assert.EndsWith("/content.png", _surface.LastUrl);       // the cache file has a fixed name; the title keeps the real one
+		Assert.Equal("pic.png", _preview.Title);
 		Assert.Equal("image", _surface.Calls[^1]);
 		Assert.True(_preview.CanOpenExternally);
 	}
@@ -133,7 +134,7 @@ public sealed class FilePreviewViewModelTests : IDisposable
 		await _preview.OpenExternalCommand.ExecuteAsync(null);
 
 		var opened = Assert.Single(_external.Opened);
-		Assert.EndsWith("doc.pdf", opened);
+		Assert.EndsWith("content.pdf", opened);
 		Assert.Equal(1_000_000, new FileInfo(opened).Length);
 	}
 
@@ -169,6 +170,18 @@ public sealed class FilePreviewViewModelTests : IDisposable
 
 		Assert.Empty(_external.Opened);
 		Assert.False(Directory.Exists(_temp.Paths.PreviewCacheDirectory) && Directory.EnumerateFiles(_temp.Paths.PreviewCacheDirectory, "*", SearchOption.AllDirectories).Any());
+	}
+
+	[Fact]
+	public async Task ASpoofedName_IsShownWithItsRealExtension_AndNeverOpenedExternally()
+	{
+		// "annual<RLO>fdp.png" would display as "annualgnp.pdf" (V8).
+		await Open("h", "annual‮fdp.png", "image/png", new byte[] { 1, 2 });
+
+		Assert.DoesNotContain('‮', _preview.Title);
+		Assert.EndsWith("fdp.png", _preview.Title);
+		Assert.False(_preview.CanOpenExternally);
+		Assert.Empty(_external.Opened);
 	}
 
 	[Fact]

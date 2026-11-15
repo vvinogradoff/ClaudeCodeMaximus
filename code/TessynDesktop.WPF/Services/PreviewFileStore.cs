@@ -4,13 +4,15 @@ namespace TessynDesktop.WPF.Services;
 
 /// <summary>
 /// The preview cache: files the client wrote for previews (images, video, files to open in the default app), one folder per load,
-/// below <see cref="AppPaths.PreviewCacheDirectory"/>. File names are reduced to a safe leaf; the type allowlist is enforced by
-/// the caller before anything is written. The cache is emptied at startup and a load's folder is deleted when it is replaced.
+/// below <see cref="AppPaths.PreviewCacheDirectory"/>. A file is always named <c>content</c> plus an extension from the allowlist (the
+/// display name lives in the view model, never on disk), so no name from the daemon, a transcript or a server can reach the file system
+/// (reserved device names, trailing dots, directory parts, spoofing characters). The cache is emptied at startup and a load's folder is
+/// deleted when it is replaced.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class PreviewFileStore
 {
-	private const string FallbackName = "file";
+	private const string FileStem = "content";
 
 	private readonly AppPaths _paths;
 
@@ -36,12 +38,18 @@ public sealed class PreviewFileStore
 		}
 	}
 
-	/// <summary>Creates the folder of a new load and returns the path of its file, named after <paramref name="name"/>.</summary>
-	public string NewFilePath(string name)
+	/// <summary>
+	/// Creates the folder of a new load and returns the path of its file: <c>content</c> + <paramref name="extension"/>. The extension must be on
+	/// the externally-openable list (documents and media); anything else is refused.
+	/// </summary>
+	public string NewFilePath(string extension)
 	{
+		if (!Constants.FileTypes.ExternallyOpenable.Contains(extension) || extension.Length > 8 || extension.Any(c => c > 127))
+			throw new ArgumentException("The extension is not allowed in the preview cache.", nameof(extension));
+
 		var folder = Path.Combine(_paths.PreviewCacheDirectory, Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(folder);
-		return Path.Combine(folder, SafeLeaf(name));
+		return Path.Combine(folder, FileStem + extension.ToLowerInvariant());
 	}
 
 	/// <summary>Deletes the folder of a load (best effort).</summary>
@@ -70,15 +78,5 @@ public sealed class PreviewFileStore
 	{
 		var relative = Path.GetRelativePath(_paths.PreviewCacheDirectory, filePath).Replace('\\', '/');
 		return $"https://{Constants.Hosts.PreviewHost}/" + string.Join('/', relative.Split('/').Select(Uri.EscapeDataString));
-	}
-
-	private static string SafeLeaf(string name)
-	{
-		var leaf = name[(name.LastIndexOfAny(['\\', '/']) + 1)..];
-		foreach (var bad in Path.GetInvalidFileNameChars())
-			leaf = leaf.Replace(bad, '_');
-
-		leaf = leaf.Trim().TrimEnd('.', ' ');
-		return leaf.Length == 0 ? FallbackName : leaf.Length > 120 ? leaf[^120..] : leaf;
 	}
 }

@@ -57,6 +57,10 @@ public sealed class FileKindClassifier
 
 		var file = name[(name.LastIndexOfAny(['\\', '/']) + 1)..].TrimEnd('.', ' ');
 		var dot = file.LastIndexOf('.');
-		return dot < 0 ? null : file[dot..];
+		if (dot < 0)
+			return null;
+
+		var extension = file[dot..];
+		return extension.Any(c => c > 127) ? null : extension;   // the sets compare ordinal-ignore-case; no culture mapping can turn a look-alike into an allowed type
 	}
 }

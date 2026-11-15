@@ -11,10 +11,12 @@ namespace TessynDesktop.WPF.Services;
 /// <remarks>Created by Claude</remarks>
 public sealed partial class LocalPathDetector
 {
+	private readonly ExternalOpenPolicy _names = new();
+
 	/// <summary>True when <paramref name="path"/> has the shape of an absolute local path with a file name; the same test the detector applies.</summary>
 	public bool IsPathShaped(string? path)
 	{
-		if (string.IsNullOrEmpty(path) || path.Length > Constants.Limits.MaxPathChipLength || path.Any(char.IsControl))
+		if (string.IsNullOrEmpty(path) || path.Length > Constants.Limits.MaxPathChipLength || path.Any(c => _names.IsSpoofingCharacter(c)))
 			return false;
 
 		return Shape().IsMatch(path) && LeafHasExtension(path);

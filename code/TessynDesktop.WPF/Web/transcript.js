@@ -172,7 +172,7 @@ function stepFind(dir) { if (!F || !F.idx.length) return; F.cur = (F.cur + dir +
 
 // ---- host commands ----
 function onLoad(m) {
-  S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, loaded: new Set() };
+  S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, loaded: new Map() };
   olderPending = false; F = null; H = null; recomputeOff(); items.replaceChildren();
   padTop.style.height = '0px'; padBot.style.height = S.off[S.items.length] + 'px';
   const t0 = performance.now();
@@ -253,7 +253,8 @@ function onGoto(m) {
 }
 function onMediaOk(m) {
   if (!S || m.tok !== S.tok) return;
-  S.loaded.add(m.i + ':' + m.j);
+  if (typeof m.url !== 'string') return;
+  S.loaded.set(m.url, m.cmd === 'mediaFail' ? null : (typeof m.src === 'string' ? m.src : ''));
   const k = posOfEntry(m.i); if (!S.items[k] || S.items[k].i !== m.i) return;
   if (k >= S.a && k < S.b) { const el = items.children[k - S.a]; el.replaceWith(fragmentOf(k, k + 1)); if (F) hlRange(items); applyRefHl(); }
   remeasure();
@@ -271,7 +272,7 @@ chrome.webview.addEventListener('message', e => {
     case 'clearFind': clearFind(); break;
     case 'goto': onGoto(m); break;
     case 'policy': ALLOW = Array.isArray(m.hosts) ? m.hosts.filter(h => typeof h === 'string') : []; break;
-    case 'mediaOk': onMediaOk(m); break;
+    case 'mediaOk': case 'mediaFail': onMediaOk(m); break;
   }
 });
 post({ ev: 'ready' });

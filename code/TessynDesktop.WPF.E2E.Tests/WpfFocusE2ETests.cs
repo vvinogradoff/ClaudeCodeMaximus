@@ -40,7 +40,7 @@ public sealed class WpfFocusE2ETests : IDisposable
 		// The newest entry carries a link to a remote image (not on the allowlist) and a local path (a chip).
 		var chipFile = _env.WriteFile("docs/chip.md", "# Chip file\n\nOpened from a chip.\n");
 		_env.WriteBodies(Enumerable.Range(0, 60)
-			.Select(i => i == 59 ? $"Chart: https://tracker.example/pixel.png?token=abc and the notes are at {chipFile} done"
+			.Select(i => i == 59 ? $"Chart: https://tracker.example/pixel.png?token=abc and https://allowed.example/auto.png and the notes are at {chipFile} done"
 				: i % 2 == 0 ? $"question number {i}" : $"answer number {i} with **markdown**").ToArray());
 		_second = _env.AddSession("Second session", Enumerable.Range(0, 30)
 			.Select(i => i == TargetIndex ? $"The benchmark shows {TargetQuote} and 900 ms without it." : i % 2 == 0 ? $"other question {i}" : $"other answer {i}").ToArray());
@@ -50,7 +50,7 @@ public sealed class WpfFocusE2ETests : IDisposable
 		var states = new SessionStateBuilder(_env.Base.Registry, new StubStreamingManager(), _env.Attention, activity);
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Base.Settings), _env.Base.Registry, states, activity, new TreeVersionTracker(),
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
-		_host = new ClientTestHost((run, log) => new TdcpDispatcher([new ClientRpcModule(runInfo: run, eventLog: log), .. _env.Modules, tree]));
+		_host = new ClientTestHost((run, log) => new TdcpDispatcher([new ClientRpcModule(runInfo: run, eventLog: log), .. _env.Modules, tree, new CatalogTestModule(["allowed.example"])]));
 
 		var tokens = new TdcpTokenStore(Path.Combine(_root, "tdcp-token.dat"));
 		tokens.Save(ClientTestHost.Token);
@@ -176,6 +176,13 @@ public sealed class WpfFocusE2ETests : IDisposable
 		try
 		{
 			Assert.True(await _app.WaitForLogAsync(process, StartTimeout, $"Session {_main} opened"), "The session did not open. Log:\n" + _app.ReadLog());
+
+			// An allowlisted host loads without a click, through the host's media proxy (the page only names https://media.local). The sandbox has no
+			// network, so the proxy's fetch fails: the point is that the request reached the proxy at all. Remove the proxy or the request filter and
+			// this line never appears (the request would be blocked as foreign instead).
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "Media proxy refused an image request"), "The allowlisted image never reached the media proxy. Log:\n" + _app.ReadLog());
+			Assert.Equal(1, _app.Count("Media proxy refused an image request"));   // only the allowlisted host: the other URL is a button until clicked
+			Assert.DoesNotContain("Blocked a request to a foreign host", _app.ReadLog());
 
 			// Not on the allowlist: a "Load preview" button, and nothing was requested (the surface logs every blocked foreign request).
 			Assert.True(await _clicker.ClickAsync(process, "Load preview tracker.example", StepTimeout), "The click-to-load button was not found. Log:\n" + _app.ReadLog());

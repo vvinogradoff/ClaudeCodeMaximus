@@ -26,6 +26,7 @@ public sealed class FilePreviewSurface : IPreviewSurface
 	private readonly WebViewEnvironmentProvider _environment;
 	private readonly AppPaths _paths;
 	private readonly UrlPolicy _policy;
+	private readonly WebRequestPolicy _requests;
 	private readonly ILogger<FilePreviewSurface> _logger;
 
 	private WebView2? _control;
@@ -33,8 +34,9 @@ public sealed class FilePreviewSurface : IPreviewSurface
 	private bool _ready;
 	private string? _pending;
 
-	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, ILogger<FilePreviewSurface> logger)
+	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, WebRequestPolicy requests, ILogger<FilePreviewSurface> logger)
 	{
+		_requests = requests;
 		_environment = environment;
 		_paths = paths;
 		_policy = policy;
@@ -51,7 +53,9 @@ public sealed class FilePreviewSurface : IPreviewSurface
 		_control = control;
 		_ready = false;
 		_env = await _environment.GetAsync();
-		await control.EnsureCoreWebView2Async(_env);
+		var controllerOptions = _env.CreateCoreWebView2ControllerOptions();
+		controllerOptions.IsInPrivateModeEnabled = true;   // V11: no cookies or cache survive the run
+		await control.EnsureCoreWebView2Async(_env, controllerOptions);
 		var core = control.CoreWebView2;
 
 		var settings = core.Settings;
@@ -106,8 +110,7 @@ public sealed class FilePreviewSurface : IPreviewSurface
 
 	private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
 	{
-		if (Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
-			&& (uri.Host == Constants.Hosts.AppHost || uri.Host == Constants.Hosts.PreviewHost))
+		if (Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) && _requests.ForPreview(uri) == RequestDecision.Allow)
 			return;
 
 		_logger.LogInformation("Blocked a preview page request to a foreign host");
