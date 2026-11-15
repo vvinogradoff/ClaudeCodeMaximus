@@ -60,8 +60,14 @@ internal sealed class FakeTelegramClientForBridge : ITelegramClient
 	public Exception? DownloadError { get; set; }
 	public List<(string filePath, string destination)> Downloads { get; } = new();
 
+	/// <summary>When it answers an exception, <see cref="GetUpdatesAsync"/> throws it (the poll failure of package J3's <c>telegram.status</c>).</summary>
+	public Func<Exception?>? PollFailure { get; set; }
+
 	public async Task<IReadOnlyList<TelegramUpdate>> GetUpdatesAsync(long offset, int timeoutSeconds, CancellationToken ct = default)
 	{
+		if (PollFailure?.Invoke() is { } failure)
+			throw failure;
+
 		IReadOnlyList<TelegramUpdate>? batch = null;
 		lock (UpdateBatches)
 		{

@@ -28,8 +28,14 @@ public static partial class RemoteProtocol
 		public const string NotificationsSection = "notifications";
 		public const string TelegramSection = "telegram";
 
+		/// <summary>
+		/// The Avalonia client's own settings (theme, colours, font sizes, key bindings, screensaver), served read-only for the one-time import into
+		/// another client (decision A23 Q8). <c>settings.update</c> refuses it, and it has no change notification: its version stays 1.
+		/// </summary>
+		public const string AvaloniaUiSection = "avalonia-ui";
+
 		/// <summary>Every section the daemon serves, in listing order.</summary>
-		public static readonly IReadOnlyList<string> Sections = [GeneralSection, NotificationsSection, TelegramSection];
+		public static readonly IReadOnlyList<string> Sections = [GeneralSection, NotificationsSection, TelegramSection, AvaloniaUiSection];
 	}
 
 	/// <summary>Package J3: profile administration. Loopback only; <c>profile.switch</c> (ISSUE.013) is in <see cref="LoopbackMethods"/>.</summary>
@@ -68,6 +74,6 @@ public static partial class RemoteProtocol
 		public const string TestMethod = "sound.test";
 	}
 
-	/// <summary>Package J3 notifications that the relay must not carry.</summary>
-	public static readonly IReadOnlyList<string> AdminLocalOnlyEvents = [SettingsApi.ChangedEvent, ProfilesAdmin.ChangedEvent];
+	/// <summary>Package J3 notifications that the relay must not carry (part 2 adds <c>mcp.changed</c> and <c>catalog.changed</c>).</summary>
+	public static readonly IReadOnlyList<string> AdminLocalOnlyEvents = [SettingsApi.ChangedEvent, ProfilesAdmin.ChangedEvent, McpApi.ChangedEvent, ModelsApi.CatalogChangedEvent];
 }

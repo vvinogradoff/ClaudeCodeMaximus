@@ -14,6 +14,12 @@ public interface ISettingsSection
 	/// <summary>The section's wire name (<c>general</c>, <c>notifications</c>, <c>telegram</c>).</summary>
 	string Name { get; }
 
+	/// <summary>
+	/// True for a section a client may only read (the <c>avalonia-ui</c> import): <c>settings.update</c> refuses it before anything else, and it is left
+	/// out of change detection, so its version stays at the first one and no <c>settings.changed</c> is published for it.
+	/// </summary>
+	bool IsReadOnly => false;
+
 	/// <summary>The section's values as its wire DTO. The caller holds the settings lock.</summary>
 	object Read(AppSettingsModel settings);
 

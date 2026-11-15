@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using TessynDesktop.Models;
 
@@ -21,6 +22,12 @@ public interface IClaudeModelService
     /// Raises <see cref="ModelsUpdated"/> on the UI thread when the list changes.
     /// </summary>
     Task EnsureModelsLoadedAsync();
+
+    /// <summary>
+    /// Asks the local Ollama instance again (package J3, <c>models.refresh</c>), whether or not it was asked before, and rebuilds the list. Unlike
+    /// <see cref="EnsureModelsLoadedAsync"/> it is not once-per-launch. The default only ensures the first load, so a stand-in need not implement it.
+    /// </summary>
+    Task RefreshAsync(CancellationToken cancellationToken = default) => EnsureModelsLoadedAsync();
 
     /// <summary>Raised on the UI thread after the model list has been refreshed.</summary>
     event EventHandler? ModelsUpdated;

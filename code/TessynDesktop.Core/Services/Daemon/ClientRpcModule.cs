@@ -37,6 +37,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool            _hasSchedules;
 	private readonly bool            _hasAttentionAll;
 	private readonly bool            _hasHealth;
+	private readonly bool            _hasMcpRegistry;
+	private readonly bool            _hasTelegramSettings;
+	private readonly bool            _hasRelaySettings;
+	private readonly bool            _hasModelsAdmin;
 	private readonly string          _daemonVersion;
 
 	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
@@ -45,7 +49,8 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		IClientPresenceRegistry? presence = null, INotificationAckBook? acks = null,
 		ITreeMutationService? treeMutation = null, ISessionOptionsService? sessionOptions = null, ILocalToolsService? localTools = null,
 		IImportService? import = null, IGlobalSearchService? search = null, IScheduleApiService? schedules = null,
-		IAttentionOverviewService? attentionOverview = null, IDaemonHealthService? health = null)
+		IAttentionOverviewService? attentionOverview = null, IDaemonHealthService? health = null,
+		IMcpRegistryService? mcpRegistry = null, ITelegramTokenStore? telegramTokens = null, IRelayConfigStore? relayConfig = null, IClaudeModelService? models = null)
 	{
 		_presence      = presence;
 		_acks          = acks;
@@ -68,6 +73,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		_hasSchedules      = schedules != null;
 		_hasAttentionAll   = attentionOverview != null;
 		_hasHealth         = health != null;
+		_hasMcpRegistry      = mcpRegistry != null;
+		_hasTelegramSettings = telegramTokens != null;
+		_hasRelaySettings    = relayConfig != null;
+		_hasModelsAdmin      = models != null;
 		_daemonVersion = ReadDaemonVersion();
 	}
 
@@ -252,6 +261,16 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 			capabilities.Add(RemoteProtocol.AttentionAll.Capability);
 		if (_hasHealth)
 			capabilities.Add(RemoteProtocol.Health.Capability);
+
+		// Package J3 part 2: the MCP registry, the Telegram token, the relay link and the model refresh.
+		if (_hasMcpRegistry)
+			capabilities.Add(RemoteProtocol.McpApi.Capability);
+		if (_hasTelegramSettings)
+			capabilities.Add(RemoteProtocol.TelegramApi.Capability);
+		if (_hasRelaySettings)
+			capabilities.Add(RemoteProtocol.RelayApi.Capability);
+		if (_hasModelsAdmin)
+			capabilities.Add(RemoteProtocol.ModelsApi.Capability);
 
 		return capabilities;
 	}

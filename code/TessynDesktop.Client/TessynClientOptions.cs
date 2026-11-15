@@ -28,6 +28,12 @@ public sealed record TessynClientOptions
 	/// <summary>Timeout of <c>attachment.import</c>: the daemon copies up to 200 MB in one synchronous call, so it gets far longer than <see cref="RequestTimeout"/>.</summary>
 	public TimeSpan AttachmentImportTimeout { get; init; } = TimeSpan.FromMinutes(10);
 
+	/// <summary>
+	/// Timeout of <c>mcp.authorize</c>: the daemon waits up to two minutes for the user in the browser, and <c>models.refresh</c> for up to 30 s, both longer
+	/// than <see cref="RequestTimeout"/>.
+	/// </summary>
+	public TimeSpan InteractiveRequestTimeout { get; init; } = TimeSpan.FromMinutes(3);
+
 	/// <summary>First reconnect delay; doubles per failed attempt up to <see cref="MaxBackoff"/>.</summary>
 	public TimeSpan InitialBackoff { get; init; } = TimeSpan.FromMilliseconds(250);
 

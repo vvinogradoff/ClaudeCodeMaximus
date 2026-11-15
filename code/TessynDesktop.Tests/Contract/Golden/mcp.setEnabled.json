@@ -1,0 +1,14 @@
+{
+  "id": "mcp1",
+  "displayName": "Docs",
+  "enabled": false,
+  "transport": "http",
+  "url": "https://docs.example.com/mcp",
+  "urlHasQuery": true,
+  "hasArguments": false,
+  "authType": "staticHeader",
+  "staticHeaderName": "Authorization",
+  "hasStaticHeaderValue": true,
+  "authorized": false,
+  "status": "notApplicable"
+}
