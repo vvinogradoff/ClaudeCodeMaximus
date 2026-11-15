@@ -368,7 +368,7 @@ public partial class MainWindow : Window
 		var importTargets = vm.SessionTree.BuildImportTargets();
 		var (initialPath, initialTargetKey) = vm.SessionTree.GetSelectedImportContext();
 
-		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonClient);
+		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonClient, App.Services.GetRequiredService<IImportService>());
 		var alreadyImportedIds = vm.SessionTree.CollectAllClaudeSessionIds();
 		pickerVm.Initialize(sourceDirectories, importTargets, initialPath, initialTargetKey, alreadyImportedIds);
 
@@ -388,10 +388,10 @@ public partial class MainWindow : Window
 		if (dirNode == null && grpNode == null && target.IsDirectory && !string.IsNullOrEmpty(target.WorkingDirectory))
 			dirNode = vm.SessionTree.AddDirectory(target.WorkingDirectory);
 
-		var fileService = App.Services.GetRequiredService<ISessionFileService>();
+		var importer = App.Services.GetRequiredService<IImportService>();
 
 		foreach (var item in picker.Result)
-			SessionTreeView.ExecuteImport(vm.SessionTree, fileService, importService, item, dirNode, grpNode);
+			SessionTreeView.ExecuteImport(vm.SessionTree, importer, item, dirNode, grpNode);
 	}
 
 	// ── Overlay: confirm dialog ───────────────────────────────────────────────

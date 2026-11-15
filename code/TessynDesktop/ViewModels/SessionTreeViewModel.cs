@@ -503,25 +503,20 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	// --- Import operations ---
 
 	/// <summary>
-	/// Creates a session node from imported data and adds it to the tree.
-	/// Used by session import (FR.13.11).
+	/// Puts a session the import service added to a directory (FR.13.11) into the tree view.
 	/// </summary>
-	public SessionNodeViewModel ImportSession(
-		DirectoryNodeViewModel parent, string name, string fileName, string claudeSessionId)
+	public SessionNodeViewModel AddImportedSession(DirectoryNodeViewModel parent, SessionNodeModel model)
 	{
-		var model = _daemon.ImportSession(parent.Model, name, fileName, claudeSessionId);
 		var vm = new SessionNodeViewModel(model);
 		parent.Children.Add(vm);
 		return vm;
 	}
 
 	/// <summary>
-	/// Creates a session node from imported data and adds it to a group.
+	/// Puts a session the import service added to a group into the tree view.
 	/// </summary>
-	public SessionNodeViewModel ImportSessionToGroup(
-		GroupNodeViewModel parent, string name, string fileName, string claudeSessionId)
+	public SessionNodeViewModel AddImportedSession(GroupNodeViewModel parent, SessionNodeModel model)
 	{
-		var model = _daemon.ImportSessionToGroup(parent.Model, name, fileName, claudeSessionId);
 		var vm = new SessionNodeViewModel(model);
 		parent.Children.Add(vm);
 		return vm;

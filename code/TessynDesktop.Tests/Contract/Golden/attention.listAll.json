@@ -1,0 +1,37 @@
+{
+  "items": [
+    {
+      "nodeId": "<id1>",
+      "sessionName": "Other session",
+      "item": {
+        "id": "A1",
+        "number": 1,
+        "kind": "critical",
+        "title": "Disk almost full",
+        "body": "98%",
+        "options": [],
+        "status": "open",
+        "createdUtc": "2026-11-04T12:01:00+00:00",
+        "updatedUtc": "2026-11-04T12:01:00+00:00"
+      }
+    },
+    {
+      "nodeId": "<id2>",
+      "sessionName": "Wire session",
+      "item": {
+        "id": "A1",
+        "number": 1,
+        "kind": "ask",
+        "title": "Which database?",
+        "options": [
+          "pg",
+          "sqlite"
+        ],
+        "recommendation": "pg",
+        "status": "open",
+        "createdUtc": "2026-11-04T12:00:00+00:00",
+        "updatedUtc": "2026-11-04T12:00:00+00:00"
+      }
+    }
+  ]
+}

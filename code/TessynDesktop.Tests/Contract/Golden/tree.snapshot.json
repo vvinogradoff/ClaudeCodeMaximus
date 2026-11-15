@@ -24,7 +24,8 @@
                 "lastActivityUtc": "2026-11-12T10:00:00+00:00",
                 "lastPromptUtc": "2026-11-12T10:00:00+00:00",
                 "hasDraft": true,
-                "authError": false
+                "authError": false,
+                "hasSchedules": false
               }
             }
           ]
@@ -43,7 +44,8 @@
             "lastActivityUtc": "2026-11-12T09:00:00+00:00",
             "lastPromptUtc": "2026-11-12T09:00:00+00:00",
             "hasDraft": false,
-            "authError": false
+            "authError": false,
+            "hasSchedules": false
           }
         }
       ]

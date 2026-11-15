@@ -399,6 +399,8 @@ public sealed class SessionRegistry : ISessionRegistry
             WorkingDirectory = parent.Path,
             ClaudeSessionId  = claudeSessionId,
             ExternalId       = claudeSessionId,
+            NodeId           = Guid.NewGuid().ToString("N"),   // an imported session is addressable at once (it used to wait for the next load)
+            AgentToken       = Guid.NewGuid().ToString("N"),
         };
         lock (_appSettings.SyncRoot)
         {
@@ -418,6 +420,8 @@ public sealed class SessionRegistry : ISessionRegistry
             WorkingDirectory = parent.WorkingDirectory,
             ClaudeSessionId  = claudeSessionId,
             ExternalId       = claudeSessionId,
+            NodeId           = Guid.NewGuid().ToString("N"),   // an imported session is addressable at once (it used to wait for the next load)
+            AgentToken       = Guid.NewGuid().ToString("N"),
         };
         lock (_appSettings.SyncRoot)
         {

@@ -1,0 +1,14 @@
+{
+  "imported": [
+    {
+      "nodeId": "<id1>",
+      "externalId": "claude-a"
+    }
+  ],
+  "failed": [
+    {
+      "externalId": "ghost",
+      "reason": "Session not found"
+    }
+  ]
+}

@@ -819,8 +819,7 @@ public partial class SessionTreeView : UserControl
 		if (result == null)
 			return;
 
-		var fileService = App.Services.GetRequiredService<ISessionFileService>();
-		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var importer = App.Services.GetRequiredService<IImportService>();
 		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
 
 		// If target is a new directory not yet in the tree, create it
@@ -828,7 +827,7 @@ public partial class SessionTreeView : UserControl
 			dirTarget = vm.AddDirectory(result.Value.TargetKey);
 
 		foreach (var item in result.Value.Items)
-			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);
+			ExecuteImport(vm, importer, item, dirTarget, grpTarget);
 	}
 
 	private static async Task ImportToGroupAsync(
@@ -839,8 +838,7 @@ public partial class SessionTreeView : UserControl
 		if (result == null)
 			return;
 
-		var fileService = App.Services.GetRequiredService<ISessionFileService>();
-		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var importer = App.Services.GetRequiredService<IImportService>();
 		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
 
 		// If target is a new directory not yet in the tree, create it
@@ -848,7 +846,7 @@ public partial class SessionTreeView : UserControl
 			dirTarget = vm.AddDirectory(result.Value.TargetKey);
 
 		foreach (var item in result.Value.Items)
-			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);
+			ExecuteImport(vm, importer, item, dirTarget, grpTarget);
 	}
 
 	private static async Task<(IReadOnlyList<ImportSessionItemViewModel> Items, string TargetKey)?> ShowImportPickerAsync(
@@ -862,7 +860,7 @@ public partial class SessionTreeView : UserControl
 		var importTargets = vm.BuildImportTargets();
 		var alreadyImportedIds = vm.CollectAllClaudeSessionIds();
 
-		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonClient);
+		var pickerVm = new ImportPickerViewModel(importService, assistService, daemonClient, App.Services.GetRequiredService<IImportService>());
 		pickerVm.Initialize(sourceDirectories, importTargets, workingDirectory, initialTargetKey, alreadyImportedIds);
 
 		var picker = new ImportPickerWindow { DataContext = pickerVm };
@@ -880,86 +878,19 @@ public partial class SessionTreeView : UserControl
 
 	internal static void ExecuteImport(
 		SessionTreeViewModel vm,
-		ISessionFileService fileService,
-		IClaudeSessionImportService importService,
+		IImportService importer,
 		ImportSessionItemViewModel item,
 		DirectoryNodeViewModel? dirParent,
 		GroupNodeViewModel? grpParent)
 	{
-		try
-		{
-			var name = item.Summary.GeneratedTitle
-				?? TruncateForSessionName(item.Summary.FirstUserPrompt)
-				?? "Imported Session";
+		// The work (session file, tree node, original folder of a cross-project session) is the Core import service's; the view only shows the new node.
+		var outcome = importer.ImportSession(dirParent?.Model, grpParent?.Model, item.Summary);
+		if (outcome.Node == null)
+			return;
 
-			string fileName;
-
-			if (!string.IsNullOrEmpty(item.Summary.JsonlPath))
-			{
-				// Local JSONL file available — parse and create .txt session file
-				var entries = importService.ParseJsonlSession(item.Summary.JsonlPath);
-				if (entries.Count == 0)
-					return;
-
-				fileName = fileService.CreateSessionFile();
-				fileService.WriteSessionFile(fileName, entries);
-			}
-			else
-			{
-				return; // Cannot import without a resolvable JSONL path
-			}
-
-			// Determine original project path for cross-project sessions
-			string? originalProjectPath = null;
-			if (!string.IsNullOrEmpty(item.Summary.JsonlPath))
-			{
-				// JSONL path is like ~/.claude/projects/<slug>/<sessionId>.jsonl
-				// The original project path is NOT directly recoverable from the slug,
-				// but we can store the slug-based path so the daemon can find the session.
-				var jsonlDir = System.IO.Path.GetDirectoryName(item.Summary.JsonlPath);
-				if (jsonlDir != null)
-				{
-					var slug = System.IO.Path.GetFileName(jsonlDir);
-					// Check if this session is from a different project than the import target
-					var targetSlug = Constants.ClaudeSessions.BuildProjectSlug(
-						dirParent?.Path ?? grpParent?.WorkingDirectory ?? string.Empty);
-					if (!string.Equals(slug, targetSlug, StringComparison.Ordinal))
-					{
-						// Cross-project: reconstruct path from slug (replace leading - with /)
-						// Slug format: -Users-aisling-...-projectName → /Users/aisling/.../projectName
-						originalProjectPath = slug.StartsWith('-') ? slug.Replace('-', '/') : slug;
-					}
-				}
-			}
-
-			// Add to tree
-			if (dirParent != null)
-			{
-				var node = vm.ImportSession(dirParent, name, fileName, item.SessionId);
-				if (originalProjectPath != null)
-					node.Model.OriginalProjectPath = originalProjectPath;
-			}
-			else if (grpParent != null)
-			{
-				var node = vm.ImportSessionToGroup(grpParent, name, fileName, item.SessionId);
-				if (originalProjectPath != null)
-					node.Model.OriginalProjectPath = originalProjectPath;
-			}
-		}
-		catch (Exception ex)
-		{
-			Log.Warning(ex, "ExecuteImport: failed to import session {SessionId}", item.SessionId);
-		}
-	}
-
-	private static string? TruncateForSessionName(string? prompt)
-	{
-		if (string.IsNullOrWhiteSpace(prompt))
-			return null;
-
-		var firstLine = prompt.Split('\n')[0].Trim();
-		if (firstLine.Length > 60)
-			return firstLine[..57] + "...";
-		return firstLine;
+		if (dirParent != null)
+			vm.AddImportedSession(dirParent, outcome.Node);
+		else if (grpParent != null)
+			vm.AddImportedSession(grpParent, outcome.Node);
 	}
 }

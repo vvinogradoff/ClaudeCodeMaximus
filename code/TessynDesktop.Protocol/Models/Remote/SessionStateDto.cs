@@ -13,6 +13,7 @@ namespace TessynDesktop.Models.Remote;
 /// <param name="HasDraft">The session has a non-blank unsent draft.</param>
 /// <param name="ProfileName">Profile display name stamped on the last USER entry.</param>
 /// <param name="AuthError">The profile's authentication failed in the last turn of the session and no turn has succeeded since (capability <c>session.authError</c>).</param>
+/// <param name="HasSchedules">At least one schedule targets the session (capability <c>schedules</c>).</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record SessionStateDto(
 	string Id,
@@ -24,4 +25,5 @@ public sealed record SessionStateDto(
 	DateTimeOffset? LastPromptUtc,
 	bool HasDraft,
 	string? ProfileName,
-	bool AuthError = false);
+	bool AuthError = false,
+	bool HasSchedules = false);

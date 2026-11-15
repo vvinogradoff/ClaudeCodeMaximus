@@ -358,7 +358,7 @@ public sealed class SchedulerService : ISchedulerService
 /// Minimal 5-field cron parser (minute hour DOM month DOW).
 /// Supports: * (any), number, */n (step), a-b (range), a,b,c (list).
 /// </summary>
-file static class CronHelper
+internal static class CronHelper
 {
 	/// <summary>
 	/// How far ahead the scan looks. A 29 February schedule's next match can be 8 years away (2096 → 2104), so

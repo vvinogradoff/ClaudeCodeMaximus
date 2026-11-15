@@ -1,0 +1,13 @@
+{
+  "id": "<id1>",
+  "nodeId": "<id2>",
+  "kind": "cron",
+  "prompt": "tick",
+  "note": "",
+  "fireAtUtc": "<next cron time>",
+  "cron": "0 9 * * *",
+  "missedFire": "skip",
+  "fireCount": 0,
+  "maxFires": 3,
+  "isMailbox": false
+}

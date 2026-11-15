@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "externalId": "claude-b",
+      "firstPrompt": "Second prompt",
+      "lastModified": "2026-03-10T10:00:03+00:00",
+      "entryCount": 4,
+      "empty": false,
+      "alreadyImported": false,
+      "projectSlug": "<rootslug>-proj"
+    },
+    {
+      "externalId": "claude-a",
+      "title": "A cached title",
+      "firstPrompt": "First prompt",
+      "lastModified": "2026-03-10T10:00:01+00:00",
+      "entryCount": 2,
+      "empty": false,
+      "alreadyImported": false,
+      "projectSlug": "<rootslug>-proj"
+    }
+  ],
+  "total": 2
+}

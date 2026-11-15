@@ -1,0 +1,14 @@
+{
+  "uptimeSeconds": 25200,
+  "runId": "<run>",
+  "eventSeq": 0,
+  "sessionsRunning": 0,
+  "index": {
+    "state": "scanning",
+    "lastReindexUtc": "2026-11-04T08:05:00+00:00",
+    "queued": 1
+  },
+  "logBytes": 1234,
+  "workingSetMb": 0,
+  "gen2Count": 0
+}

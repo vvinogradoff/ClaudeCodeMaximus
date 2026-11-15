@@ -1,0 +1,19 @@
+{
+  "hits": [
+    {
+      "externalId": "claude-1",
+      "title": "Fix build",
+      "projectSlug": "C--proj",
+      "snippet": "the build is broken",
+      "score": 3.5,
+      "importedNodeId": "<id1>"
+    },
+    {
+      "externalId": "claude-2",
+      "projectSlug": "C--other",
+      "snippet": "another match",
+      "score": 1.25
+    }
+  ],
+  "total": 2
+}

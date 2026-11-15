@@ -15,17 +15,20 @@ public sealed class AttentionRpcModule : IRemoteRpcModule
 	private readonly IAttentionService _attention;
 	private readonly IAttentionReplyService _reply;
 	private readonly ITurnOptionsResolver _options;
+	private readonly IAttentionOverviewService? _overview;
 
 	public AttentionRpcModule(
 		ISessionRegistry registry,
 		IAttentionService attention,
 		IAttentionReplyService reply,
-		ITurnOptionsResolver options)
+		ITurnOptionsResolver options,
+		IAttentionOverviewService? overview = null)
 	{
 		_registry  = registry;
 		_attention = attention;
 		_reply     = reply;
 		_options   = options;
+		_overview  = overview;
 	}
 
 	/// <inheritdoc />
@@ -34,7 +37,18 @@ public sealed class AttentionRpcModule : IRemoteRpcModule
 		registry.AddSync(Constants.Remote.Methods.AttentionList, List, remoteCallable: true);
 		registry.Add(Constants.Remote.Methods.AttentionReply, async (p, _) => await ReplyAsync(p), remoteCallable: true);
 		registry.AddSync(Constants.Remote.Methods.AttentionDismiss, Dismiss, remoteCallable: true);
+
+		// Package J4: the items of every session in one list. Loopback only in this wave (a candidate for the relay with an FR.25 amendment).
+		if (_overview != null)
+			registry.AddSync(RemoteProtocol.AttentionAll.ListAllMethod, ListAll, remoteCallable: false);
 	}
+
+	private object? ListAll(JsonNode? @params) =>
+		_overview!.ListAll(
+			TdcpParams.OptionalString(@params, "status"),
+			TdcpListParams.OptionalStrings(@params, "kinds"),
+			TdcpParams.OptionalInt(@params, "limit"),
+			TdcpParams.OptionalString(@params, "afterId"));
 
 	private object? List(JsonNode? @params)
 	{

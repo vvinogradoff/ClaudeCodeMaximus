@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Serilog;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
@@ -20,6 +21,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 
 	private const string TreeKey = "tree";
 	private const string IndexKey = "index";
+	private const string ScheduleKey = "schedules";
 	private const string NodeKeyPrefix = "node:";
 	private const string FileKeyPrefix = "file:";
 	private const string AllNodesKey = "*";
@@ -32,6 +34,9 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	private readonly ISessionStateBuilder _states;
 	private readonly ISessionAuthErrorTracker? _authErrors;
 	private readonly IDraftService? _drafts;
+	private readonly ISchedulerService? _scheduler;
+	private readonly object _scheduleGate = new();
+	private Dictionary<string, string> _scheduleOwners = new(StringComparer.Ordinal);
 	private readonly DraftRevisions _revisions = new();
 
 	private readonly object _gate = new();
@@ -56,8 +61,10 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		ISessionStateBuilder states,
 		ISessionContentStore? store = null,
 		ISessionAuthErrorTracker? authErrors = null,
-		IDraftService? drafts = null)
+		IDraftService? drafts = null,
+		ISchedulerService? scheduler = null)
 	{
+		_scheduler   = scheduler;
 		_authErrors  = authErrors;
 		_drafts      = drafts;
 		_daemon      = daemon;
@@ -90,6 +97,12 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 				_files.SessionFileRewritten    += OnSessionFileRewritten;
 				if (_authErrors != null) _authErrors.Changed += OnAuthErrorChanged;
 				if (_drafts != null) _drafts.DraftChanged += OnDraftChanged;
+				if (_scheduler != null)
+				{
+					lock (_scheduleGate)
+						_scheduleOwners = ScheduleOwners();
+					_daemon.ScheduleChanged += OnScheduleChanged;
+				}
 			}
 		}
 		catch (Exception ex)
@@ -117,6 +130,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			_files.SessionFileRewritten    -= OnSessionFileRewritten;
 			if (_authErrors != null) _authErrors.Changed -= OnAuthErrorChanged;
 			if (_drafts != null) _drafts.DraftChanged -= OnDraftChanged;
+			if (_scheduler != null) _daemon.ScheduleChanged -= OnScheduleChanged;
 		}
 	}
 
@@ -249,6 +263,56 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	{
 		var node = _daemon.FindSessionByFileName(fileName);
 		return node == null || _drafts == null ? null : new DraftChangedPayload(node.NodeId, _revisions.Of(_drafts.LoadDraft(fileName)));
+	}
+
+	// schedule.changed is local-stream only (the relay filters it). The scheduler event does not say what changed, so when the window ends the schedule ids
+	// are compared with the last ones seen: nothing added or removed (a schedule only fired) publishes nothing; otherwise the payload names the session when
+	// exactly one is touched. A session whose HasSchedules moved gets its session.changed, published from the thread pool and not from this builder.
+	private void OnScheduleChanged(object? sender, EventArgs e) => Guard(() =>
+		_bus.PublishCoalesced(
+			RemoteProtocol.Schedules.ChangedEvent, ScheduleKey,
+			BuildScheduleChangedPayload,
+			Constants.ScheduleApi.ChangedWindow));
+
+	private ScheduleChangedPayload? BuildScheduleChangedPayload()
+	{
+		var now = ScheduleOwners();
+		Dictionary<string, string> before;
+		lock (_scheduleGate)
+		{
+			before = _scheduleOwners;
+			_scheduleOwners = now;
+		}
+
+		var touched = new HashSet<string>(StringComparer.Ordinal);
+		foreach (var (id, node) in before)
+		{
+			if (!now.ContainsKey(id))
+				touched.Add(node);
+		}
+
+		foreach (var (id, node) in now)
+		{
+			if (!before.ContainsKey(id))
+				touched.Add(node);
+		}
+
+		if (touched.Count == 0)
+			return null;
+
+		var moved = touched.Where(node => before.ContainsValue(node) != now.ContainsValue(node)).ToList();
+		if (moved.Count > 0)
+			ThreadPool.QueueUserWorkItem(_ => Guard(() => moved.ForEach(PublishSessionChangedByNode)));
+
+		return new ScheduleChangedPayload(touched.Count == 1 ? touched.First() : null);
+	}
+
+	private Dictionary<string, string> ScheduleOwners()
+	{
+		var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+		foreach (var schedule in _scheduler!.GetSchedules())
+			owners.TryAdd(schedule.ScheduleId, schedule.TargetNodeId);
+		return owners;
 	}
 
 	private void OnSessionFileRewritten(object? sender, SessionFileRewrittenEventArgs e) => Guard(() =>
