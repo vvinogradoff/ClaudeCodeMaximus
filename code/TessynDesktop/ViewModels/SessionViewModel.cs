@@ -515,6 +515,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			_node.IsFavorite = _node.Model.IsFavorite;
 			this.RaisePropertyChanged(nameof(IsFavorite));
 			_turn.RefreshStreamingState();
+
+			// session.setOptions of a remote client: the instruction toggles read the model, so tell the bindings they changed.
+			this.RaisePropertyChanged(nameof(IsAutoCommit));
+			this.RaisePropertyChanged(nameof(IsAutoDocument));
+			this.RaisePropertyChanged(nameof(PlayCompletionSound));
 		});
 	}
 

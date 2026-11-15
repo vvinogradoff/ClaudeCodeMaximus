@@ -45,7 +45,13 @@ internal sealed class TreeMutationTestEnv : IDisposable
 	public FakeDirectoryGitOrigins Origins { get; } = new();
 	public TreeMutationService Tree { get; }
 
-	/// <summary>The structural tree change events raised so far (everything but running-state changes).</summary>
+	/// <summary>The breadth rules of the environment: its own home folder and data root, so the tests do not depend on the machine's profile.</summary>
+	public BroadDirectoryRules Broad { get; }
+
+	public string Home { get; }
+	public string DataRoot { get; }
+
+	/// <summary>The structural tree change events raised so far (everything but running-state changes and the desktop re-projection marker).</summary>
 	public int TreeChanges { get; private set; }
 
 	public TreeMutationTestEnv()
@@ -54,10 +60,13 @@ internal sealed class TreeMutationTestEnv : IDisposable
 		Directory.CreateDirectory(Root);
 		Settings = new AppSettingsService(Root);
 		Registry = new SessionRegistry(Settings, Files, new FakeDirectoryLabelService(), new FakeClaudeSessionStatusService());
-		Tree     = new TreeMutationService(Registry, Settings, new FakeDirectoryLabelService(), Origins);
+		Home     = Path.Combine(Root, "home");
+		DataRoot = Path.Combine(Root, "data-root");
+		Broad    = new BroadDirectoryRules([DataRoot], [Home]);
+		Tree     = new TreeMutationService(Registry, Settings, new FakeDirectoryLabelService(), Origins, Broad);
 		Registry.TreeChanged += (_, e) =>
 		{
-			if (e.Kind != TreeChangeKind.SessionIsRunningChanged)
+			if (e.Kind is not (TreeChangeKind.SessionIsRunningChanged or TreeChangeKind.DaemonMutation))
 				TreeChanges++;
 		};
 	}

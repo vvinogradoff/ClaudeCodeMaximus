@@ -12,9 +12,11 @@ public sealed class TreeMutationService : ITreeMutationService
 	private readonly IDirectoryLabelService _labels;
 	private readonly IDirectoryGitOrigins _origins;
 	private readonly TreeMoveRules _rules = new();
+	private readonly BroadDirectoryRules _broad;
 
-	public TreeMutationService(ISessionRegistry registry, IAppSettingsService appSettings, IDirectoryLabelService labels, IDirectoryGitOrigins origins)
+	public TreeMutationService(ISessionRegistry registry, IAppSettingsService appSettings, IDirectoryLabelService labels, IDirectoryGitOrigins origins, BroadDirectoryRules? broad = null)
 	{
+		_broad       = broad ?? new BroadDirectoryRules();
 		_registry    = registry;
 		_appSettings = appSettings;
 		_labels      = labels;
@@ -27,25 +29,47 @@ public sealed class TreeMutationService : ITreeMutationService
 	/// <inheritdoc />
 	public TreeAddDirectoryResult AddDirectory(string path)
 	{
-		path = path.Trim();
-		if (path.Length == 0)
+		if (path.Trim().Length == 0)
 			throw new TdcpInvalidParamsException("'path' must not be blank");
 
-		string full;
-		try
-		{
-			full = Path.GetFullPath(path);
-		}
-		catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-		{
-			throw new TdcpInvalidParamsException("'path' is not a valid path");
-		}
+		// The shape and the breadth are judged on the text, before any disk access: a UNC path must not make the daemon open a connection.
+		var full = _broad.Normalize(path);
+		if (full == null || _broad.IsTooBroad(full) || IsNetworkDrive(full))
+			throw new TdcpException(Constants.TreeMutation.FolderRefused);
 
 		if (!Directory.Exists(full))
 			throw new TdcpException(Constants.TreeMutation.PathNotFound);
 
+		if (IsReparsePoint(full))
+			throw new TdcpException(Constants.TreeMutation.FolderRefused);
+
 		var directory = _registry.AddDirectory(full);
+		_registry.RaiseDaemonTreeMutation();
 		return new TreeAddDirectoryResult(directory.NodeId, _labels.GetLabel(directory.Path));
+	}
+
+	private static bool IsNetworkDrive(string full)
+	{
+		try
+		{
+			return new DriveInfo(full[..1]).DriveType == DriveType.Network;
+		}
+		catch (Exception ex) when (ex is ArgumentException or IOException)
+		{
+			return false;
+		}
+	}
+
+	private static bool IsReparsePoint(string full)
+	{
+		try
+		{
+			return new DirectoryInfo(full).Attributes.HasFlag(FileAttributes.ReparsePoint);
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		{
+			return true;
+		}
 	}
 
 	/// <inheritdoc />
@@ -54,11 +78,19 @@ public sealed class TreeMutationService : ITreeMutationService
 		name = RequireName(name);
 
 		var directory = _registry.FindDirectoryByNodeId(parentId);
+		string id;
 		if (directory != null)
-			return new TreeAddGroupResult(_registry.AddGroup(directory, name).NodeId);
+		{
+			id = _registry.AddGroup(directory, name).NodeId;
+		}
+		else
+		{
+			var group = _registry.FindGroupByNodeId(parentId) ?? throw new TdcpException(Constants.TreeMutation.ParentNotFound);
+			id = _registry.AddGroupToGroup(group, name).NodeId;
+		}
 
-		var group = _registry.FindGroupByNodeId(parentId) ?? throw new TdcpException(Constants.TreeMutation.ParentNotFound);
-		return new TreeAddGroupResult(_registry.AddGroupToGroup(group, name).NodeId);
+		_registry.RaiseDaemonTreeMutation();
+		return new TreeAddGroupResult(id);
 	}
 
 	/// <inheritdoc />
@@ -79,6 +111,7 @@ public sealed class TreeMutationService : ITreeMutationService
 				throw new TdcpException(Constants.TreeMutation.DirectoryRenameRefused);
 		}
 
+		_registry.RaiseDaemonTreeMutation();
 		return new TreeRenameResult(name);
 	}
 
@@ -116,7 +149,11 @@ public sealed class TreeMutationService : ITreeMutationService
 				break;
 		}
 
-		return deleted ? new TreeDeleteResult(true, null) : Blocked(blocked);
+		if (!deleted)
+			return Blocked(blocked);
+
+		_registry.RaiseDaemonTreeMutation();
+		return new TreeDeleteResult(true, null);
 
 		static TreeDeleteResult Blocked(string reason) => new(false, reason);
 	}
@@ -129,6 +166,10 @@ public sealed class TreeMutationService : ITreeMutationService
 
 		var located = FindSession(nodeId);
 		var session = located.Session!;
+
+		// A move changes the working directory the next --resume (and a correction) uses: not while a turn runs.
+		if (_registry.IsSessionRunning(session.NodeId))
+			throw new TdcpException(Constants.TreeMutation.SessionRunning);
 
 		DirectoryNodeModel targetDirectory;
 		GroupNodeModel? targetGroup = null;
@@ -161,6 +202,7 @@ public sealed class TreeMutationService : ITreeMutationService
 		if (!_registry.MoveSession(session, targetDirectory, targetGroup, rawIndex))
 			throw new TdcpException(Constants.TreeMutation.NodeNotFound);
 
+		_registry.RaiseDaemonTreeMutation();
 		return new TreeMoveResult(true);
 	}
 

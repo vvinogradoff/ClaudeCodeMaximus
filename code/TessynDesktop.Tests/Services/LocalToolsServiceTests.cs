@@ -124,6 +124,26 @@ public sealed class LocalToolsServiceTests : IDisposable
 		Assert.Null(cache.GetOrigin(@"C:\unreadable"));
 	}
 
+	[Fact]
+	public void DirectoryGitOrigins_ANullOriginIsReadAgainAfterAWhile_AFoundOneIsNot()
+	{
+		var clock   = new ManualTimeProvider();
+		var service = new CountingGitOriginService { Origin = null };
+		var cache   = new DirectoryGitOrigins(service, clock);
+
+		Assert.Null(cache.GetOrigin(@"C:"));
+		service.Origin = "cloned-later";
+		Assert.Null(cache.GetOrigin(@"C:"));                     // still within the window: served from memory
+		Assert.Equal(1, service.Reads);
+
+		clock.Advance(TimeSpan.FromMinutes(Constants.TreeMutation.NoOriginCacheMinutes + 1));
+		Assert.Equal("cloned-later", cache.GetOrigin(@"C:"));
+		service.Origin = "changed";
+		clock.Advance(TimeSpan.FromHours(5));
+		Assert.Equal("cloned-later", cache.GetOrigin(@"C:"));    // a found origin stays until a refresh
+		Assert.Equal(2, service.Reads);
+	}
+
 	private sealed class CountingGitOriginService : IGitOriginService
 	{
 		public string? Origin { get; set; }

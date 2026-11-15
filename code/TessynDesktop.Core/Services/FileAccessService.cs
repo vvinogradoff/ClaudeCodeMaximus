@@ -28,6 +28,7 @@ public sealed class FileAccessService : IFileAccessService
 	private readonly string _dataRoot;
 	private readonly string[] _dataRoots;
 	private readonly string[] _userProfiles;
+	private readonly BroadDirectoryRules _broad;
 	private readonly TimeProvider _time;
 	private readonly IAttachmentService? _attachments;
 
@@ -55,6 +56,7 @@ public sealed class FileAccessService : IFileAccessService
 		_dataRoot  = dataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.AppDataFolderName);
 		_userProfiles = FileAccessPolicy.WithCanonical(profile);
 		_dataRoots    = FileAccessPolicy.WithCanonical(_dataRoot);
+		_broad        = new BroadDirectoryRules(_dataRoots, _userProfiles);
 		_time      = time ?? TimeProvider.System;
 		_log       = log ?? Log.ForContext<FileAccessService>();
 	}
@@ -249,7 +251,9 @@ public sealed class FileAccessService : IFileAccessService
 		if (referenced)
 			return null;
 
-		if (settings.Mode == FileAccessMode.WorkingDirectory && IsUnder(workingDirectory, opened.FinalPath))
+		// A working directory that is too broad (a drive root, the profile or a parent of it, the data root) grants nothing, however it got
+		// into the tree: only referenced files and attachments are readable from such a session (J1 review T1).
+		if (settings.Mode == FileAccessMode.WorkingDirectory && !_broad.IsTooBroad(workingDirectory) && IsUnder(workingDirectory, opened.FinalPath))
 			return null;
 
 		return "Only files a Focus item references can be read remotely.";

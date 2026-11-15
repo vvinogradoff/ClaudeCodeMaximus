@@ -51,9 +51,86 @@ public sealed class TreeMutationServiceTests : IDisposable
 	[Theory]
 	[InlineData("")]
 	[InlineData("   ")]
-	[InlineData("bad\0path")]
-	public void AddDirectory_RefusesABlankOrInvalidPath(string path) =>
+	public void AddDirectory_RefusesABlankPath(string path) =>
 		Assert.Throws<TdcpInvalidParamsException>(() => _env.Tree.AddDirectory(path));
+
+	[Theory]
+	[InlineData(@"\\no-such-host-j1\share\proj")]
+	[InlineData("//no-such-host-j1/share/proj")]
+	[InlineData(@"\\?\C:\proj")]
+	[InlineData(@"\\.\C:\proj")]
+	[InlineData("proj")]
+	[InlineData(@".\proj")]
+	[InlineData(@"C:proj")]
+	[InlineData("bad\0path")]
+	public void AddDirectory_RefusesUncDevicePrefixAndRelativePaths_BeforeAnyDiskAccess_WithTheSafeMessage(string path)
+	{
+		var started = DateTime.UtcNow;
+
+		var error = Assert.Throws<TdcpException>(() => _env.Tree.AddDirectory(path));
+
+		Assert.Equal(Constants.TreeMutation.FolderRefused, error.Message);
+		Assert.DoesNotContain("no-such-host", error.Message);
+		Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(2), "a network shape must be refused without a connection attempt");
+		Assert.Empty(_env.Registry.Directories);
+	}
+
+	[Fact]
+	public void AddDirectory_RefusesADriveRoot_TheProfileAndItsParents_AndTheDataRootAroundIt()
+	{
+		Directory.CreateDirectory(_env.Home);
+		Directory.CreateDirectory(Path.Combine(_env.DataRoot, "attachments"));
+
+		foreach (var path in new[] { Path.GetPathRoot(_env.Root)!, _env.Home, _env.Root, _env.DataRoot, Path.Combine(_env.DataRoot, "attachments") })
+			Assert.Equal(Constants.TreeMutation.FolderRefused, Assert.Throws<TdcpException>(() => _env.Tree.AddDirectory(path)).Message);
+
+		Assert.Empty(_env.Registry.Directories);
+	}
+
+	[Fact]
+	public void AddDirectory_AFolderBelowTheProfileIsFine()
+	{
+		var path = Path.Combine(_env.Home, "proj");
+		Directory.CreateDirectory(path);
+
+		Assert.NotNull(_env.Tree.AddDirectory(path).DirectoryId);
+	}
+
+	[Fact]
+	public void AddDirectory_ATrailingSeparatorIsTheSameNode()
+	{
+		var path = Path.Combine(_env.Root, "proj");
+		Directory.CreateDirectory(path);
+
+		var plain    = _env.Tree.AddDirectory(path);
+		var trailing = _env.Tree.AddDirectory(path + Path.DirectorySeparatorChar);
+
+		Assert.Equal(plain.DirectoryId, trailing.DirectoryId);
+		Assert.Equal(path, Assert.Single(_env.Registry.Directories).Path);
+	}
+
+	[Fact]
+	public void AddDirectory_RefusesAJunction()
+	{
+		var target = Path.Combine(_env.Root, "real");
+		var link   = Path.Combine(_env.Root, "link");
+		Directory.CreateDirectory(target);
+		using (var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"") { CreateNoWindow = true, UseShellExecute = false })!)
+			process.WaitForExit();
+		Assert.True(Directory.Exists(link), "the junction could not be created on this machine");
+
+		try
+		{
+			var error = Assert.Throws<TdcpException>(() => _env.Tree.AddDirectory(link));
+
+			Assert.Equal(Constants.TreeMutation.FolderRefused, error.Message);
+			Assert.DoesNotContain("link", error.Message);
+		}
+		finally
+		{
+			Directory.Delete(link);   // removes the junction only; the recursive clean-up of the temp dir must not walk through it
+		}
+	}
 
 	// ── addGroup / renameNode ────────────────────────────────────────────────
 
@@ -291,6 +368,68 @@ public sealed class TreeMutationServiceTests : IDisposable
 		Assert.Equal(Constants.TreeMutation.ParentNotFound, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(other.NodeId, "nope", null)).Message);
 		Assert.Equal(Constants.TreeMutation.TargetMustBeContainer, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(other.NodeId, supervisor.NodeId, null)).Message);
 		Assert.Throws<TdcpInvalidParamsException>(() => _env.Tree.MoveNode(other.NodeId, dir.NodeId, -1));
+	}
+
+	[Fact]
+	public void MoveNode_ARunningSession_IsRefused_AndStaysWhereItIs()
+	{
+		var a = _env.AddDirectory("a");
+		var b = _env.AddDirectory("b");
+		var s = _env.AddSession(a, "S");
+		_env.Registry.SetSessionRunning(s.NodeId, true);
+
+		var error = Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(s.NodeId, b.NodeId, null));
+
+		Assert.Equal(Constants.TreeMutation.SessionRunning, error.Message);
+		Assert.Same(s, Assert.Single(a.Sessions));
+		Assert.Empty(b.Sessions);
+	}
+
+	[Fact]
+	public void MoveSession_ATargetGroupDeletedBetweenLookupAndMove_LosesNothing()
+	{
+		var a     = _env.AddDirectory("a");
+		var group = _env.Registry.AddGroup(a, "G");
+		var s     = _env.AddSession(a, "S");
+		Assert.True(_env.Registry.TryDeleteGroup(a, group));
+
+		var moved = _env.Registry.MoveSession(s, a, group, 0);
+
+		Assert.False(moved);
+		Assert.Same(s, Assert.Single(a.Sessions));
+		Assert.Empty(group.Sessions);
+	}
+
+	[Fact]
+	public void MoveSession_ADeletedTargetDirectory_LosesNothing_AndANestedGroupStillWorks()
+	{
+		var a      = _env.AddDirectory("a");
+		var gone   = _env.AddDirectory("gone");
+		var outer  = _env.Registry.AddGroup(a, "Outer");
+		var inner  = _env.Registry.AddGroupToGroup(outer, "Inner");
+		var s      = _env.AddSession(a, "S");
+		Assert.True(_env.Registry.TryDeleteDirectory(gone));
+
+		Assert.False(_env.Registry.MoveSession(s, gone, null, 0));
+		Assert.True(_env.Registry.MoveSession(s, a, inner, 0));
+
+		Assert.Same(s, Assert.Single(inner.Sessions));
+		Assert.Empty(a.Sessions);
+	}
+
+	[Fact]
+	public async Task MoveNode_TwoParallelMovesOfOneSession_LeaveItInExactlyOneContainer()
+	{
+		var a = _env.AddDirectory("a");
+		var b = _env.AddDirectory("b");
+		var c = _env.AddDirectory("c");
+		var s = _env.AddSession(a, "S");
+
+		await Task.WhenAll(
+			Task.Run(() => _env.Tree.MoveNode(s.NodeId, b.NodeId, null)),
+			Task.Run(() => _env.Tree.MoveNode(s.NodeId, c.NodeId, null)));
+
+		Assert.Equal(1, _env.Registry.Directories.Sum(d => d.Sessions.Count(x => x == s)));
 	}
 
 	// ── moveTargets ──────────────────────────────────────────────────────────

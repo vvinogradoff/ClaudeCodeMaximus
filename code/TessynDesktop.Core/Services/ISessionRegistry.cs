@@ -16,6 +16,12 @@ public enum TreeChangeKind
     SettingsModified,
     /// <summary>The full tree was reloaded from settings on startup.</summary>
     Reloaded,
+    /// <summary>
+    /// A daemon method (a remote client) changed the tree structure (add, rename, delete, move). Raised in addition to <see cref="SettingsModified"/>
+    /// so a host that projects the tree into view models (the desktop) can tell it must re-project: its own edits update the view models in place.
+    /// The remote notification publisher ignores it (<see cref="SettingsModified"/> already published the change).
+    /// </summary>
+    DaemonMutation,
 }
 
 /// <summary>Carries the details of a change raised by <see cref="ISessionRegistry"/>.</summary>
@@ -131,6 +137,9 @@ public interface ISessionRegistry
 
     /// <summary>Raises <see cref="TreeChangeKind.SettingsModified"/> after a change to tree data that bypassed the registry (a directory's local tool profile).</summary>
     void RaiseTreeModified();
+
+    /// <summary>Raises <see cref="TreeChangeKind.DaemonMutation"/>: a remote client changed the tree structure and a projecting host must reload it.</summary>
+    void RaiseDaemonTreeMutation();
 
     // ── Orchestration helpers ─────────────────────────────────────────────────
 

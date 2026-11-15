@@ -9,10 +9,14 @@ public static partial class Constants
 		/// <summary>The most node ids one <c>tree.nodeInfo</c> call accepts.</summary>
 		public const int NodeInfoMaxIds = 500;
 
+		/// <summary>How long the daemon trusts "this directory has no git origin" before it reads the folder again.</summary>
+		public const int NoOriginCacheMinutes = 5;
+
 		public const string NodeNotFound            = "Node not found";
 		public const string DirectoryNotFound       = "Directory not found";
 		public const string ParentNotFound          = "Target not found";
 		public const string NameRequired            = "'name' must not be blank";
+		public const string FolderRefused           = "That folder cannot be added";
 		public const string PathNotFound            = "The folder does not exist";
 		public const string DirectoryRenameRefused  = "A directory cannot be renamed; its name comes from its path";
 		public const string OnlySessionsMove        = "Only sessions can be moved";

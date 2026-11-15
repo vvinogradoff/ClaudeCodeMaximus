@@ -18,13 +18,14 @@ public sealed class SessionOptionsServiceTests : IDisposable
 	private readonly TreeMutationTestEnv _env = new();
 	private readonly RecordingTurnEngine _engine = new();
 	private readonly ScriptedStreamingManager _streaming = new();
+	private readonly SharedLockTurnService _turns = new();
 	private readonly SessionOptionsService _service;
 	private readonly SessionNodeModel _session;
 	private readonly List<string> _settingsChanged = [];
 
 	public SessionOptionsServiceTests()
 	{
-		_service = new SessionOptionsService(_env.Registry, _env.Settings, _engine, new FixedSettingsResolver(), _streaming);
+		_service = new SessionOptionsService(_env.Registry, _env.Settings, _engine, new FixedSettingsResolver(), _streaming, _turns);
 		_session = _env.AddSession(_env.AddDirectory("proj"), "S");
 		_session.ClaudeSessionId = "claude-1";
 		_env.Registry.SessionSettingsChanged += (_, e) => _settingsChanged.Add(e.NodeId);
@@ -198,13 +199,63 @@ public sealed class SessionOptionsServiceTests : IDisposable
 		Assert.Equal([_session.NodeId], _streaming.Stopped);
 	}
 
+	[Fact]
+	public void ResetConversation_WhileTheNodesTurnLockIsHeld_IsRefused_AndChangesNothing()
+	{
+		_streaming.EnsureStarted(_session.NodeId, new StreamingSpawnParams("wd", "claude", null, null, null, null, null, null, false, false), _ => { });
+		var gate = _turns.GetTurnLock(_session.NodeId);
+		gate.Wait();
+		try
+		{
+			var error = Assert.Throws<TdcpException>(() => _service.ResetConversation(_session.NodeId));
+			Assert.Equal(Constants.TreeMutation.TurnRunning, error.Message);
+		}
+		finally
+		{
+			gate.Release();
+		}
+
+		Assert.Equal("claude-1", _session.ClaudeSessionId);
+		Assert.Empty(_streaming.Stopped);
+	}
+
+	[Fact]
+	public void ResetConversation_ATurnThatStartsAfterTheFirstCheck_DoesNotGetItsStreamingProcessStopped()
+	{
+		// The engine reports idle on the entry check and busy on the next one, as when a turn begins between the two.
+		_streaming.EnsureStarted(_session.NodeId, new StreamingSpawnParams("wd", "claude", null, null, null, null, null, null, false, false), _ => { });
+		_engine.BusyFromCall = 2;
+
+		_service.ResetConversation(_session.NodeId);
+
+		// The detach ran under the node's turn lock (nothing could start), but the process of the turn that began is left alone.
+		Assert.Empty(_streaming.Stopped);
+	}
+
+	[Fact]
+	public void ResetConversation_ATurnAlreadyRunningAtTheLockedCheck_IsRefused()
+	{
+		_engine.BusyFromCall = 1;
+
+		var error = Assert.Throws<TdcpException>(() => _service.ResetConversation(_session.NodeId));
+
+		Assert.Equal(Constants.TreeMutation.TurnRunning, error.Message);
+		Assert.Equal("claude-1", _session.ClaudeSessionId);
+	}
+
 	/// <summary>An engine that only knows whether it is busy and records the corrections it was asked to send.</summary>
 	private sealed class RecordingTurnEngine : ITurnEngine
 	{
+		private int _isBusyCalls;
+
 		public bool Busy { get; set; }
+
+		/// <summary>From this call of <see cref="IsBusy"/> on the engine reports busy (a turn that begins in the middle of a reset).</summary>
+		public int BusyFromCall { get; set; } = int.MaxValue;
+
 		public List<(SessionNodeModel Node, string Prompt)> Corrections { get; } = [];
 
-		public bool IsBusy(string nodeId) => Busy;
+		public bool IsBusy(string nodeId) => Busy || ++_isBusyCalls >= BusyFromCall;
 		public void SendCorrection(SessionNodeModel node, TurnSettings settings, string prompt) => Corrections.Add((node, prompt));
 		public Task<TurnOutcome> RunAsync(TurnRequest request, ITurnObserver? observer = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 		public bool CancelRuns(string nodeId) => false;

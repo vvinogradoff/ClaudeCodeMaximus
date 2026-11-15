@@ -16,14 +16,17 @@ public sealed class SessionOptionsService : ISessionOptionsService
 	private readonly ITurnEngine _engine;
 	private readonly ITurnSettingsResolver _settings;
 	private readonly IClaudeStreamingSessionManager _streaming;
+	private readonly ISessionTurnService _turns;
 
 	public SessionOptionsService(
 		ISessionRegistry registry,
 		IAppSettingsService appSettings,
 		ITurnEngine engine,
 		ITurnSettingsResolver settings,
-		IClaudeStreamingSessionManager streaming)
+		IClaudeStreamingSessionManager streaming,
+		ISessionTurnService turns)
 	{
+		_turns       = turns;
 		_registry    = registry;
 		_appSettings = appSettings;
 		_engine      = engine;
@@ -104,29 +107,44 @@ public sealed class SessionOptionsService : ISessionOptionsService
 	public SessionResetConversationResult ResetConversation(string nodeId)
 	{
 		var node = RemoteSessionLookup.Require(_registry, nodeId);
-		if (IsRunning(nodeId))
+
+		// The node's turn lock is held for the whole reset: a turn cannot start between the check and the detach, and a running turn
+		// (which holds the lock) makes the reset refuse. The running flag is checked again under the lock for work that does not hold it.
+		var gate = _turns.GetTurnLock(nodeId);
+		if (!gate.Wait(0))
 			throw new TdcpException(Constants.TreeMutation.TurnRunning);
 
-		bool cleared;
-		lock (_appSettings.SyncRoot)
+		try
 		{
-			var current = node.ClaudeSessionId;
-			cleared = !string.IsNullOrEmpty(current);
-			if (cleared)
+			if (IsRunning(nodeId))
+				throw new TdcpException(Constants.TreeMutation.TurnRunning);
+
+			bool cleared;
+			lock (_appSettings.SyncRoot)
 			{
-				// The JSONL stays viewable (FR.11.8): the id moves to the prior ids, the next prompt feeds the text session as context.
-				node.PriorClaudeSessionIds.Add(current!);
-				node.ClaudeSessionId = null;
-				_appSettings.Save();
+				var current = node.ClaudeSessionId;
+				cleared = !string.IsNullOrEmpty(current);
+				if (cleared)
+				{
+					// The JSONL stays viewable (FR.11.8): the id moves to the prior ids, the next prompt feeds the text session as context.
+					node.PriorClaudeSessionIds.Add(current!);
+					node.ClaudeSessionId = null;
+					_appSettings.Save();
+				}
 			}
+
+			if (!cleared)
+				return new SessionResetConversationResult(false);
+
+			// A live streaming process still holds the old conversation; without stopping it the detach would not take effect.
+			// Only while nothing runs: stopping it in the middle of a turn would end that turn and its background tasks (FR.19.4).
+			if (_streaming.IsAlive(nodeId) && !IsRunning(nodeId))
+				_streaming.Stop(nodeId);
 		}
-
-		if (!cleared)
-			return new SessionResetConversationResult(false);
-
-		// A live streaming process still holds the old conversation; without stopping it the detach would not take effect.
-		if (_streaming.IsAlive(nodeId))
-			_streaming.Stop(nodeId);
+		finally
+		{
+			gate.Release();
+		}
 
 		_log.Information("Detached the Claude session of {NodeId}", nodeId);
 		_registry.RaiseSessionSettingsChanged(nodeId);

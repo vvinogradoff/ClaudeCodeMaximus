@@ -329,6 +329,21 @@ public sealed class MainWindowViewModel : ViewModelBase
 			.Switch()
 			.Subscribe(_ => UpdateStatusBarModel());
 
+		// The instruction toolbar reads the active session's toggles; a remote client (session.setOptions) changes them on the model and the
+		// session raises its property changes, which the toolbar's own properties forward.
+		this.WhenAnyValue(x => x.ActiveSession)
+			.Select(session => session == null
+				? Observable.Empty<bool?>()
+				: session.WhenAnyValue(s => s.IsAutoCommit).Skip(1))
+			.Switch()
+			.Subscribe(_ => this.RaisePropertyChanged(nameof(IsAutoCommit)));
+		this.WhenAnyValue(x => x.ActiveSession)
+			.Select(session => session == null
+				? Observable.Empty<bool>()
+				: session.WhenAnyValue(s => s.IsAutoDocument).Skip(1))
+			.Switch()
+			.Subscribe(_ => this.RaisePropertyChanged(nameof(IsAutoDocument)));
+
 		// When a session row is clicked in the Recent tab (FR.1.16) or the Tags tab (FR.24.12), select it in the tree.
 		// Event-based (not property-based) so a repeat click on the same row still selects it.
 		RecentSessions.SessionChosen += node => SessionTree.SelectedSession = node;

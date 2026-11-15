@@ -89,6 +89,7 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
     public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index) { }
     public bool MoveSession(SessionNodeModel session, DirectoryNodeModel targetDirectory, GroupNodeModel? targetGroup, int index) => throw new System.NotSupportedException();
     public void RaiseTreeModified() { }
+    public void RaiseDaemonTreeMutation() { }
     public SessionNodeModel? CreateSessionForAgent(string workingDir, string name, string? group, int orchestrationDepth = 0, string? supervisorNodeId = null) => null;
     public List<SessionSummaryModel> BuildAgentSessionSummaries() => new();
     public IReadOnlyList<SessionSnapshotModel> SnapshotSessionsForListing() => new List<SessionSnapshotModel>();

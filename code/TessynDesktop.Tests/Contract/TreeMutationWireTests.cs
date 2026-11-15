@@ -181,6 +181,42 @@ public sealed class TreeMutationWireTests : IDisposable
 	}
 
 	[Fact]
+	public async Task SessionSetOptions_ABadValue_IsRefusedWithoutStoringAnything()
+	{
+		_env.Session.IsAutoCommit   = true;
+		_env.Session.IsAutoDocument = false;
+
+		var response = await _env.CallAsync("session.setOptions", Args(("nodeId", _env.Session.NodeId), ("autoDocument", true), ("autoCommit", "yes")));
+
+		Assert.Equal(-32602, response["error"]!["code"]!.GetValue<int>());
+		Assert.True(_env.Session.IsAutoCommit);
+		Assert.False(_env.Session.IsAutoDocument);
+	}
+
+	[Fact]
+	public async Task AMoveOfARunningSession_IsRefusedOnTheWire()
+	{
+		var other = _env.AddDirectory("other");
+		_env.Turn.Registry.SetSessionRunning(_env.Session.NodeId, true);
+
+		var response = await _env.CallAsync("tree.moveNode", Args(("nodeId", _env.Session.NodeId), ("parentId", other.NodeId)));
+
+		Assert.Equal(-32000, response["error"]!["code"]!.GetValue<int>());
+		Assert.Equal(Constants.TreeMutation.SessionRunning, response["error"]!["message"]!.GetValue<string>());
+	}
+
+	[Theory]
+	[InlineData(@"\\no-such-host-j1\share\proj")]
+	[InlineData(@"\\?\C:\proj")]
+	public async Task AddDirectory_UncAndDevicePaths_AreRefusedOnTheWire_WithTheSafeMessage(string path)
+	{
+		var response = await _env.CallAsync("tree.addDirectory", Args(("path", path)));
+
+		Assert.Equal(-32000, response["error"]!["code"]!.GetValue<int>());
+		Assert.Equal(Constants.TreeMutation.FolderRefused, response["error"]!["message"]!.GetValue<string>());
+	}
+
+	[Fact]
 	public async Task ARefusedMove_CarriesTheReasonInTheMessage_AndNoPath()
 	{
 		var other = _env.AddDirectory("other");
