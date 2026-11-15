@@ -628,6 +628,33 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 	}
 
 	[Fact]
+	public async Task N3_ACancelledGenerator_StillAwaitsTheQueuedTitleWrites()
+	{
+		WriteSession("-p-a", "t-1", "a session that gets a title");
+		var service = NewService();
+		await service.RunUpkeepAsync();
+		var summary = new ClaudeSessionSummaryModel
+		{
+			SessionId = "t-1", JsonlPath = Path.Combine(_projectsDir, "-p-a", "t-1.jsonl"), MessageCount = 1, ProjectSlug = "-p-a",
+		};
+		_assist.TitlesToReturn["t-1"] = "Kept despite the cancel";
+		_assist.ThrowAfterBatch = new OperationCanceledException();
+
+		await service.WriteGate.WaitAsync();
+		Task<IReadOnlyDictionary<string, string>> ensure;
+		try
+		{
+			ensure = service.EnsureTitlesAsync([summary]);
+			await Task.Delay(300);
+			Assert.False(ensure.IsCompleted); // the drain waits for the queued write instead of leaving it behind
+		}
+		finally { service.WriteGate.Release(); }
+
+		await Assert.ThrowsAsync<OperationCanceledException>(() => ensure.WaitAsync(TimeSpan.FromSeconds(10)));
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE title = 'Kept despite the cancel';"));
+	}
+
+	[Fact]
 	public async Task X3_OrphanWhoseStoredHomeWasNotListedInThisScan_IsSkipped()
 	{
 		WriteSession("-p-a", "listed-gone", "gone from a listed home");

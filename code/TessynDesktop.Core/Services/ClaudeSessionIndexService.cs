@@ -1182,18 +1182,35 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			onBatchComplete?.Invoke(titlesSoFar);
 		}
 
-		var generated = await _assistService.GenerateTitlesAsync(missing, OnAssistBatchComplete, cancellationToken)
-			.ConfigureAwait(false);
+		Dictionary<string, string> generated;
+		try
+		{
+			generated = await _assistService.GenerateTitlesAsync(missing, OnAssistBatchComplete, cancellationToken)
+				.ConfigureAwait(false);
 
-		var finalNew = generated.Where(kv => !persisted.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
-		if (finalNew.Count > 0)
-			pendingWrites.Add(PersistTitlesAsync(missing, finalNew));
-		await Task.WhenAll(pendingWrites).ConfigureAwait(false);
+			var finalNew = generated.Where(kv => !persisted.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+			if (finalNew.Count > 0)
+				pendingWrites.Add(PersistTitlesAsync(missing, finalNew));
+		}
+		finally
+		{
+			// Also on cancellation or a throwing generator: queued writes are awaited, and a failed one is logged, never left unobserved.
+			await DrainTitleWritesAsync(pendingWrites).ConfigureAwait(false);
+		}
 
 		foreach (var (sessionId, title) in generated)
 			result[sessionId] = title;
 
 		return result;
+	}
+
+	private static async Task DrainTitleWritesAsync(List<Task> pendingWrites)
+	{
+		foreach (var write in pendingWrites.ToArray())
+		{
+			try { await write.ConfigureAwait(false); }
+			catch (Exception ex) { _log.Warning(ex, "A queued session-title write failed; the title will be regenerated later"); }
+		}
 	}
 
 	// ── Session summary lookup ───────────────────────────────────────────────────────
