@@ -1,0 +1,32 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.RecentDropdown"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/SessionListStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid>
+        <ToggleButton x:Name="Toggle" Margin="8,4" Padding="10,4" AutomationProperties.Name="Recent dropdown" ToolTip="Recent sessions"
+                      IsChecked="{Binding IsOpen, ElementName=Menu, Mode=TwoWay}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Recent" />
+                <TextBlock Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphChevronDown}" />
+            </StackPanel>
+        </ToggleButton>
+        <Popup x:Name="Menu" PlacementTarget="{Binding ElementName=Toggle}" Placement="Bottom" StaysOpen="False" ButtonBase.Click="OnRowClick">
+            <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="1"
+                    Padding="4" MinWidth="320" MaxHeight="480">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Margin="8,6" Text="{Binding EmptyText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Visibility="{Binding IsEmpty, Converter={StaticResource SessionListBoolToVis}}" />
+                        <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource SessionRowTemplate}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

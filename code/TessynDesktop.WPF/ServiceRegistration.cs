@@ -84,6 +84,8 @@ public sealed class ServiceRegistration
 			services.AddSingleton<IDialogPresenter, WpfDialogPresenter>();
 
 		services.AddSingleton<IDialogService, DialogService>();
+		services.AddSingleton<SessionListsHost>();
+		services.AddSingleton<IShellModule, SessionListsModule>();
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();
 		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));

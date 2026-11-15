@@ -1,0 +1,58 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+                    xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <sys:String x:Key="GlyphStar">&#xE734;</sys:String>
+    <sys:String x:Key="GlyphStarFilled">&#xE735;</sys:String>
+    <BooleanToVisibilityConverter x:Key="SessionListBoolToVis" />
+
+    <!-- A flat icon button used by the star and hide buttons of a row. -->
+    <Style x:Key="RowIconButton" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="6,4" />
+    </Style>
+
+    <!-- One session row of the Recent tab, the Recent dropdown and the Tags tab. The row carries its own commands. -->
+    <DataTemplate x:Key="SessionRowTemplate" DataType="{x:Type vm:SessionRowViewModel}">
+        <DockPanel Margin="0,1" LastChildFill="True">
+            <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}" Command="{Binding HideCommand}" CommandParameter="{Binding}"
+                    Visibility="{Binding CanHide, Converter={StaticResource SessionListBoolToVis}}" ToolTip="Hide from Recent"
+                    AutomationProperties.Name="{Binding HideAutomationName}">
+                <TextBlock Style="{StaticResource IconText}" FontSize="11" Text="{StaticResource GlyphClose}" />
+            </Button>
+            <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}" Command="{Binding ToggleFavoriteCommand}" CommandParameter="{Binding}"
+                    ToolTip="Favourite" AutomationProperties.Name="{Binding FavoriteAutomationName}">
+                <TextBlock FontSize="12">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+                            <Setter Property="Text" Value="{StaticResource GlyphStar}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                    <Setter Property="Text" Value="{StaticResource GlyphStarFilled}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Button>
+            <Button Command="{Binding OpenCommand}" CommandParameter="{Binding}" Tag="open" Background="Transparent" BorderThickness="0" Padding="6,3"
+                    HorizontalContentAlignment="Stretch" ToolTip="{Binding DirectoryLabel}" AutomationProperties.Name="{Binding OpenAutomationName}">
+                <StackPanel>
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="9" Margin="0,0,6,0" Text="&#xE768;"
+                                   Foreground="{DynamicResource SystemFillColorSuccessBrush}"
+                                   Visibility="{Binding IsRunning, Converter={StaticResource SessionListBoolToVis}}" />
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                    <TextBlock Text="{Binding DirectoryLabel}" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Button>
+        </DockPanel>
+    </DataTemplate>
+</ResourceDictionary>

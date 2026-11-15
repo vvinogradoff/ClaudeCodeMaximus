@@ -1,0 +1,29 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.RecentPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/SessionListStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Margin="10,8" TextWrapping="Wrap" Foreground="{DynamicResource SystemFillColorCriticalBrush}" Text="{Binding Error}">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Error}" Value="{x:Null}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+        <TextBlock DockPanel.Dock="Top" Margin="10,8" TextWrapping="Wrap" Text="{Binding EmptyText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Visibility="{Binding IsEmpty, Converter={StaticResource SessionListBoolToVis}}" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Recent sessions">
+            <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource SessionRowTemplate}" Margin="4,4,4,8" />
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

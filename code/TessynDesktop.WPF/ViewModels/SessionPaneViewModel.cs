@@ -208,6 +208,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		HasSession = true;
 		Title = title ?? nodeId;
 		StateText = string.Empty;
+		IsFavorite = false;
 		IsRunning = false;
 		Error = null;
 		Tags.Clear();
@@ -422,6 +423,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		Title = detail.Name;
 		IsRunning = detail.State.Running;
 		StateText = StateTextOf(detail.State);
+		ApplyFavorite(detail.State);
 		Tags.Clear();
 		foreach (var tag in detail.Tags)
 			Tags.Add(new SessionTagViewModel(tag, _launcher));
@@ -529,6 +531,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 		IsRunning = state.Running;
 		StateText = StateTextOf(state);
+		ApplyFavorite(state);
 	}
 
 	private void OnResynced(object? sender, ResyncedEventArgs e)

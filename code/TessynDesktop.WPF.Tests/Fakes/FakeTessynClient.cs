@@ -102,11 +102,36 @@ public sealed partial class FakeTessynClient : ITessynClient
 
 	public Task<CreateSessionResult> TreeCreateSessionAsync(string anchorId, string name, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-	public Task<RecentListResult> RecentListAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	/// <summary>Answers <c>recent.list</c>; a test sets it (null: an empty list).</summary>
+	public Func<RecentListResult>? RecentListHandler { get; set; }
 
-	public Task<RecentHideResult> RecentHideAsync(string nodeId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	/// <summary>Answers <c>recent.hide</c> for a node id (null: hidden).</summary>
+	public Func<string, RecentHideResult>? RecentHideHandler { get; set; }
 
-	public Task<TagSearchResult> TagsSearchAsync(string text, IReadOnlyList<TagRefDto> selected, string? scopeNodeId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	/// <summary>Answers <c>tags.search</c> for the text and the selected tags (null: no chips, no groups).</summary>
+	public Func<string, IReadOnlyList<TagRefDto>, TagSearchResult>? TagsSearchHandler { get; set; }
+
+	/// <summary>Answers <c>session.setFavorite</c> for a node id and value (null: echoes the value).</summary>
+	public Func<string, bool, SetFavoriteResult>? SetFavoriteHandler { get; set; }
+
+	public Task<RecentListResult> RecentListAsync(CancellationToken cancellationToken = default)
+	{
+		Record("recent.list");
+		return Task.FromResult(RecentListHandler?.Invoke() ?? new RecentListResult(DateTimeOffset.UtcNow, []));
+	}
+
+	public Task<RecentHideResult> RecentHideAsync(string nodeId, CancellationToken cancellationToken = default)
+	{
+		Record($"recent.hide:{nodeId}");
+		return Task.FromResult(RecentHideHandler?.Invoke(nodeId) ?? new RecentHideResult(true));
+	}
+
+	public Task<TagSearchResult> TagsSearchAsync(string text, IReadOnlyList<TagRefDto> selected, string? scopeNodeId = null, CancellationToken cancellationToken = default)
+	{
+		Record($"tags.search:{text}:{string.Join(",", selected.Select(t => t.Key))}");
+		cancellationToken.ThrowIfCancellationRequested();
+		return Task.FromResult(TagsSearchHandler?.Invoke(text, selected) ?? new TagSearchResult(null, [], TagSessionsEmptyReason.SelectTags, []));
+	}
 
 	public async Task<SessionDetailDto> SessionGetAsync(string nodeId, CancellationToken cancellationToken = default)
 	{
@@ -185,7 +210,11 @@ public sealed partial class FakeTessynClient : ITessynClient
 
 	public Task<SessionCompactResult> SessionCompactAsync(string nodeId, string? modelId = null, string? effort = null, string? profileId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-	public Task<SetFavoriteResult> SessionSetFavoriteAsync(string nodeId, bool value, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	public Task<SetFavoriteResult> SessionSetFavoriteAsync(string nodeId, bool value, CancellationToken cancellationToken = default)
+	{
+		Record($"session.setFavorite:{nodeId}:{value}");
+		return Task.FromResult(SetFavoriteHandler?.Invoke(nodeId, value) ?? new SetFavoriteResult(value));
+	}
 
 	public Task<SetStreamingResult> SessionSetStreamingAsync(string nodeId, bool enabled, bool? force = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
