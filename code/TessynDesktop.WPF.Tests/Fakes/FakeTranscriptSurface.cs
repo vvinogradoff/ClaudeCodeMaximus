@@ -40,6 +40,8 @@ public sealed class FakeTranscriptSurface : ITranscriptSurface
 
 	public event EventHandler? NewerRequested;
 
+	public void NewerLoadFailed() => Calls.Add("newerFailed");
+
 	public void RaiseNewerRequested() => NewerRequested?.Invoke(this, EventArgs.Empty);
 
 	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom, bool hasNewer = false)

@@ -125,6 +125,8 @@ public sealed class FakeTessynClient : ITessynClient
 		Record($"session.entries:{nodeId}:before={beforeIndex?.ToString() ?? "-"}:after={afterIndex?.ToString() ?? "-"}:limit={limit?.ToString() ?? "-"}");
 		if (beforeIndex.HasValue && OlderGate != null)
 			await OlderGate.Task;
+		if (afterIndex.HasValue && AfterIndexException != null)
+			throw AfterIndexException;
 		var session = Sessions[nodeId];
 		var total = session.Entries.Count;
 		var max = limit ?? 100;
@@ -146,8 +148,22 @@ public sealed class FakeTessynClient : ITessynClient
 			start = Math.Max(0, end - max);
 		}
 
-		return new SessionEntriesResult(nodeId, session.Epoch, total, session.Entries.Skip(start).Take(end - start).ToList());
+		var result = new SessionEntriesResult(nodeId, session.Epoch, total, session.Entries.Skip(start).Take(end - start).ToList());
+		if (afterIndex.HasValue && AfterPageHook != null)
+		{
+			var hook = AfterPageHook;
+			AfterPageHook = null;   // once
+			hook();                 // something happens after the page was computed and before the caller applies it
+		}
+
+		return result;
 	}
+
+	/// <summary>When set, every after-index entries call throws it (a daemon that keeps failing).</summary>
+	public Exception? AfterIndexException { get; set; }
+
+	/// <summary>Runs once, right after the next after-index page was computed (an append arriving "during" that page).</summary>
+	public Action? AfterPageHook { get; set; }
 
 	public Task<SessionEntryDto> SessionEntryAsync(string nodeId, int index, int epoch, CancellationToken cancellationToken = default)
 	{

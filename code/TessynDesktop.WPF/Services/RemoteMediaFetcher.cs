@@ -43,7 +43,7 @@ public sealed class RemoteMediaFetcher
 	/// Downloads a video. <paramref name="destinationFor"/> maps the checked content type to the file to write (it may refuse a type by
 	/// throwing); the file is deleted again on any failure. Returns the path.
 	/// </summary>
-	public async Task<string> DownloadVideoAsync(Uri url, bool approvedByClick, Func<string, string> destinationFor, CancellationToken cancellationToken)
+	public async Task<string> DownloadVideoAsync(Uri url, bool approvedByClick, Func<string, string> destinationFor, CancellationToken cancellationToken, long maxBytes = Constants.Limits.MaxRemoteVideoBytes)
 	{
 		using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		timeout.CancelAfter(Constants.Timeouts.RemoteVideo);
@@ -52,7 +52,7 @@ public sealed class RemoteMediaFetcher
 		try
 		{
 			await using var file = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
-			await ReadAsync(response, Constants.Limits.MaxRemoteVideoBytes, file, timeout.Token);
+			await ReadAsync(response, Math.Min(maxBytes, Constants.Limits.MaxRemoteVideoBytes), file, timeout.Token);
 			return destinationPath;
 		}
 		catch

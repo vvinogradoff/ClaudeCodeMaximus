@@ -137,6 +137,9 @@ public sealed class WpfFocusE2ETests : IDisposable
 
 			var shown = await _app.WaitForLogAsync(process, StepTimeout, "Preview opened: plan.md (\"Markdown\",", "Preview page rendered markdown: true");
 			Assert.True(shown, "The markdown preview did not open and render. Log:\n" + _app.ReadLog());
+			// V11: both controllers really run in private mode (no cookies or cache survive the run).
+			Assert.Contains("WebView2 private mode (transcript): true", _app.ReadLog());
+			Assert.Contains("WebView2 private mode (preview): true", _app.ReadLog());
 			Assert.True(_clicker.Exists(process, "Open in default app"));           // a markdown file may be opened externally
 			Assert.True(_clicker.Exists(process, "Close preview"));
 			AssertNoErrors();

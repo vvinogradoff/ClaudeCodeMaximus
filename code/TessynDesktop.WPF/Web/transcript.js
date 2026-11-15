@@ -11,7 +11,7 @@ const ROLE = { U: 'USER', A: 'ASSISTANT', S: 'SYSTEM', C: 'COMPACTION' };
 
 let S = null;               // { key, tok, items[], off[], a, b, hasOlder }
 let olderPending = false;
-let newerPending = false;
+let NG = PagingGate.create();   // newer-page request state (paging.js)
 let rafPending = false;
 let F = null;               // { term, idx[], cur }
 let H = null;               // reference highlight: { i, quote } (entry jump from a Focus reference)
@@ -94,14 +94,14 @@ function atBottom() { return vp.scrollTop + vp.clientHeight >= vp.scrollHeight -
 vp.addEventListener('scroll', () => {
   if (rafPending) return; rafPending = true;
   requestAnimationFrame(() => {
-    rafPending = false; render(null); reportView();
+    rafPending = false; render(null); reportView(); PagingGate.onUserScroll(NG, vp.scrollTop);
     if (S && S.hasOlder && !olderPending && vp.scrollTop < NEAR_TOP_PX) { olderPending = true; post({ ev: 'needOlder', tok: S.tok }); }
     checkNewer();
   });
 });
 // A view that started at a jump target stops short of the newest entries: ask the host for the next page when the end is near.
 function checkNewer() {
-  if (S && S.hasNewer && !newerPending && vp.scrollTop + vp.clientHeight >= vp.scrollHeight - NEAR_TOP_PX) { newerPending = true; post({ ev: 'needNewer', tok: S.tok }); }
+  if (S && PagingGate.shouldRequest(NG, S.hasNewer, vp.scrollTop, vp.clientHeight, vp.scrollHeight, NEAR_TOP_PX)) { PagingGate.markRequested(NG); post({ ev: 'needNewer', tok: S.tok }); }
 }
 // Media size themselves after they load; a failed preview becomes a short note (no retry, no remote content left behind).
 items.addEventListener('load', e => { if (e.target.tagName === 'IMG') requestAnimationFrame(remeasure); }, true);
@@ -179,7 +179,7 @@ function stepFind(dir) { if (!F || !F.idx.length) return; F.cur = (F.cur + dir +
 // ---- host commands ----
 function onLoad(m) {
   S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, hasNewer: !!m.hasNewer, loaded: new Map() };
-  olderPending = false; newerPending = false; F = null; H = null; recomputeOff(); items.replaceChildren();
+  olderPending = false; NG = PagingGate.create(); F = null; H = null; recomputeOff(); items.replaceChildren();
   padTop.style.height = '0px'; padBot.style.height = S.off[S.items.length] + 'px';
   const t0 = performance.now();
   vp.scrollTop = m.toBottom ? S.off[S.items.length] : 0;
@@ -201,7 +201,7 @@ function onPrepend(m) {
 function onAppend(m) {
   if (!S || m.tok !== S.tok) return;
   const follow = atBottom() && !S.hasNewer;   // a page loaded on demand (the view stops short of the end) must not drag the view down
-  newerPending = false;
+  PagingGate.markLoaded(NG);
   S.hasNewer = !!m.hasNewer;
   for (const e of m.entries) S.items.push(mk(e));
   recomputeOff();
@@ -280,6 +280,7 @@ chrome.webview.addEventListener('message', e => {
     case 'findStep': stepFind(m.dir); break;
     case 'clearFind': clearFind(); break;
     case 'goto': onGoto(m); break;
+    case 'newerFailed': PagingGate.markFailed(NG, vp.scrollTop); break;
     case 'policy': ALLOW = Array.isArray(m.hosts) ? m.hosts.filter(h => typeof h === 'string') : []; break;
     case 'mediaOk': case 'mediaFail': onMediaOk(m); break;
   }

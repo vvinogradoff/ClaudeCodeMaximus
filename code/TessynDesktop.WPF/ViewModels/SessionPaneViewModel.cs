@@ -162,6 +162,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		await _reloadTask;
 		await _expandTask;
 		await _findTask;
+		await _appendTask;   // an on-demand page can start a catch-up append while it completes
 	}
 
 	/// <summary>Shows a session: from the cache when loaded before (then catches up), otherwise its newest page.</summary>
@@ -213,6 +214,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_current = null;
 		_missedAppend = false;
 		_olderRunning = false;
+		NewerFailed = false;
 		_ = Focus.SetSessionAsync(nodeId);
 
 		try
@@ -613,14 +615,24 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		}
 	}
 
-	private void OnNewerRequested(object? sender, EventArgs e) => _ui.Post(() =>
+	private void OnNewerRequested(object? sender, EventArgs e) => _ui.Post(StartLoadNewer);
+
+	private void StartLoadNewer()
 	{
 		if (_newerRunning)
 			return;
 
 		_newerRunning = true;
+		NewerFailed = false;
 		_newerTask = LoadNewerAsync();
-	});
+	}
+
+	/// <summary>The last on-demand page failed; the page does not ask again until the user scrolls, and this command asks at once.</summary>
+	[ObservableProperty]
+	private bool _newerFailed;
+
+	[RelayCommand]
+	private void RetryNewer() => StartLoadNewer();
 
 	/// <summary>One page of entries after the loaded ones, when the user scrolled to the end of a view that started at a jump target.</summary>
 	private async Task LoadNewerAsync()
@@ -659,11 +671,20 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 			model.Append(fresh, views, page.Total);
 			_surface.Append(views, model.HasNewer);
+
+			// Live appends were ignored while the model stopped short; an entry that arrived during this last page would otherwise wait for the next event (N4).
+			if (!model.HasNewer)
+				_ = RequestAppend();
 		}
 		catch (Exception ex)
 		{
+			// No Append and no automatic retry (N3): the page keeps its request marked as pending until the user scrolls, and Retry asks at once.
 			_logger.LogWarning(ex, "Loading newer entries failed");
-			_surface.Append([], hasNewer: model?.HasNewer ?? false);
+			if (token == _openToken)
+			{
+				NewerFailed = true;
+				_surface.NewerLoadFailed();
+			}
 		}
 		finally
 		{

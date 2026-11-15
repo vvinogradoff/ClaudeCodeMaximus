@@ -85,6 +85,15 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
+            <!-- A failed page of newer entries: no automatic retry; scroll again or press Retry -->
+            <Border Margin="0,6,0,0" Padding="10,6" CornerRadius="4" Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                    Visibility="{Binding NewerFailed, Converter={StaticResource BoolToVis}}">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Command="{Binding RetryNewerCommand}" Content="Retry" Padding="10,2" Margin="8,0,0,0" AutomationProperties.Name="Retry loading newer entries" />
+                    <TextBlock Text="Could not load newer entries" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+
             <!-- Non-blocking notice (a failed jump or preview) -->
             <Border Margin="0,6,0,0" Padding="10,6" CornerRadius="4" Background="{DynamicResource SystemFillColorCautionBackgroundBrush}">
                 <Border.Style>

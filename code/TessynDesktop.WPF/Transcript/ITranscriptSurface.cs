@@ -51,6 +51,9 @@ public interface ITranscriptSurface
 	/// <summary>The user scrolled near the top and older entries exist.</summary>
 	event EventHandler? OlderRequested;
 
+	/// <summary>Loading a page of newer entries failed: the page must not ask again until the user scrolls.</summary>
+	void NewerLoadFailed();
+
 	/// <summary>The user scrolled to the end of loaded entries and newer ones exist.</summary>
 	event EventHandler? NewerRequested;
 

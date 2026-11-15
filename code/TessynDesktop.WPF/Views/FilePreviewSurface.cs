@@ -57,6 +57,7 @@ public sealed class FilePreviewSurface : IPreviewSurface
 		controllerOptions.IsInPrivateModeEnabled = true;   // V11: no cookies or cache survive the run
 		await control.EnsureCoreWebView2Async(_env, controllerOptions);
 		var core = control.CoreWebView2;
+		_logger.LogInformation("WebView2 private mode (preview): {Private}", core.Profile.IsInPrivateModeEnabled);
 
 		var settings = core.Settings;
 		settings.AreHostObjectsAllowed = false;

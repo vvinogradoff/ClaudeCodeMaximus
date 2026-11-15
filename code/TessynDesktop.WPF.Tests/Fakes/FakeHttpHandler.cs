@@ -13,12 +13,21 @@ public sealed class FakeHttpHandler : HttpMessageHandler
 		_respond = respond;
 	}
 
+	private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>? _respondAsync;
+
+	/// <summary>A handler whose answer can wait (for a gate or for cancellation).</summary>
+	public FakeHttpHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respondAsync)
+	{
+		_respond = _ => throw new InvalidOperationException();
+		_respondAsync = respondAsync;
+	}
+
 	public List<HttpRequestMessage> Requests { get; } = [];
 
 	protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
 	{
 		Requests.Add(request);
-		return Task.FromResult(_respond(request));
+		return _respondAsync != null ? _respondAsync(request, cancellationToken) : Task.FromResult(_respond(request));
 	}
 
 	public static HttpResponseMessage Ok(byte[] body, string contentType, bool declareLength = true)

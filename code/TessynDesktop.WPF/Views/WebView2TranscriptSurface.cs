@@ -94,6 +94,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		controllerOptions.IsInPrivateModeEnabled = true;
 		await control.EnsureCoreWebView2Async(_env, controllerOptions);
 		var core = control.CoreWebView2;
+		_logger.LogInformation("WebView2 private mode (transcript): {Private}", core.Profile.IsInPrivateModeEnabled);
 
 		var settings = core.Settings;
 		settings.AreHostObjectsAllowed = false;
@@ -125,6 +126,8 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	}
 
 	public event EventHandler? NewerRequested;
+
+	public void NewerLoadFailed() => Post(() => JsonSerializer.Serialize(new { cmd = "newerFailed" }, Json));
 
 	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom, bool hasNewer = false)
 	{

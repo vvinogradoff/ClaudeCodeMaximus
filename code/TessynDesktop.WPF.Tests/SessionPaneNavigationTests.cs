@@ -371,6 +371,63 @@ public sealed class SessionPaneNavigationTests : IDisposable
 	}
 
 	[Fact]
+	public async Task AFailingNewerPage_IsNotRetriedByItself_UntilTheUserScrollsOrPressesRetry()
+	{
+		AddSession("a", 20);
+		AddSession("b", 600);
+		await _pane.OpenAsync("a");
+		await _pane.JumpToEntryAsync(EntryRef("b", 100));
+		_client.AfterIndexException = new InvalidOperationException("daemon down");
+		_client.Calls.Clear();
+
+		_surface.RaiseNewerRequested();
+		await _pane.WhenIdleAsync();
+
+		Assert.True(_pane.NewerFailed);
+		Assert.Equal("newerFailed", _surface.Calls[^1]);                 // tells the page not to ask again by itself
+		Assert.Single(_client.Calls, c => c.Contains("after=", StringComparison.Ordinal) && !c.Contains("after=-", StringComparison.Ordinal));
+		Assert.DoesNotContain(_surface.Calls, c => c.StartsWith("append:", StringComparison.Ordinal));   // no Append that would re-arm the page
+
+		await _pane.WhenIdleAsync();
+		Assert.Single(_client.Calls, c => c.Contains("after=", StringComparison.Ordinal) && !c.Contains("after=-", StringComparison.Ordinal));   // still one
+
+		_pane.RetryNewerCommand.Execute(null);                            // Retry asks at once, and fails again without looping
+		await _pane.WhenIdleAsync();
+		Assert.Equal(2, _client.Calls.Count(c => c.Contains("after=", StringComparison.Ordinal) && !c.Contains("after=-", StringComparison.Ordinal)));
+		Assert.True(_pane.NewerFailed);
+
+		_client.AfterIndexException = null;
+		_surface.RaiseNewerRequested();                                   // the user scrolled again
+		await _pane.WhenIdleAsync();
+		Assert.False(_pane.NewerFailed);
+		Assert.Equal(249, _surface.PageIndexes[^1]);
+	}
+
+	[Fact]
+	public async Task AnAppendArrivingDuringTheLastOnDemandPage_IsPickedUpOnce_WhenThePageMakesTheViewCurrent()
+	{
+		AddSession("a", 20);
+		var session = AddSession("b", 260);
+		await _pane.OpenAsync("a");
+		await _pane.JumpToEntryAsync(EntryRef("b", 100));         // 50..149
+		_surface.RaiseNewerRequested();
+		await _pane.WhenIdleAsync();                              // 150..249, more remain
+		_client.AfterPageHook = () =>                             // while the last page (250..259) is on its way an entry is appended
+		{
+			session.Entries.Add(session.Entries[^1] with { Index = 260, EntryId = "fb:260" });
+			_client.RaiseNotification(RemoteProtocol.Events.SessionAppended, new SessionEpochPayload("b", 1));   // ignored: the view still stops short
+		};
+		_client.Calls.Clear();
+
+		_surface.RaiseNewerRequested();
+		await _pane.WhenIdleAsync();
+
+		Assert.Equal(260, _surface.PageIndexes[^1]);
+		Assert.False(_surface.HasNewer);
+		Assert.Equal(2, _client.Calls.Count(c => c.StartsWith("session.entries:b:before=-:after=", StringComparison.Ordinal)));   // the page, then exactly one catch-up
+	}
+
+	[Fact]
 	public async Task Back_ToTheBottomOfASessionOpenedByAJump_ShowsTheNewestEntries()
 	{
 		AddSession("long", 1000);

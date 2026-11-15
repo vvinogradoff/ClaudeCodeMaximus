@@ -151,6 +151,133 @@ public sealed class TranscriptMediaBrokerTests : IDisposable
 		Assert.False(File.Exists(file));      // downloaded videos go away with the session view
 	}
 
+	private TranscriptMediaBroker BrokerOver(FakeHttpHandler handler) =>
+		new(new RemoteMediaFetcher(new HttpClient(handler), _policy, new PrivateAddressCheck()), _store, _proxy, NullLogger<TranscriptMediaBroker>.Instance);
+
+	private static async Task<HttpResponseMessage> Never(CancellationToken token)
+	{
+		await Task.Delay(Timeout.Infinite, token);
+		return new HttpResponseMessage(HttpStatusCode.OK);
+	}
+
+	[Fact]
+	public async Task Reset_CancelsRunningDownloads_AndNothingIsLeftOnDisk()
+	{
+		var started = new TaskCompletionSource();
+		var handler = new FakeHttpHandler(async (_, ct) =>
+		{
+			started.TrySetResult();
+			return await Never(ct);
+		});
+		var broker = BrokerOver(handler);
+		const string video = "https://cdn.example.com/clip.mp4";
+		broker.Offer(1, [video]);
+		broker.TryApprove(1, video);
+
+		var download = broker.DownloadVideoAsync(video, CancellationToken.None);
+		await started.Task;
+		broker.Reset();
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => download);
+		Assert.False(Directory.Exists(_temp.Paths.PreviewCacheDirectory) && Directory.EnumerateFiles(_temp.Paths.PreviewCacheDirectory, "*", SearchOption.AllDirectories).Any());
+	}
+
+	[Fact]
+	public async Task ADownloadThatFinishesInTheRaceWithAReset_IsDeletedNotKept()
+	{
+		var release = new TaskCompletionSource();
+		var handler = new FakeHttpHandler(async (_, _) =>
+		{
+			await release.Task;                                 // ignores cancellation, like a download that was already past its last check
+			return FakeHttpHandler.Ok([1, 2, 3], "video/mp4");
+		});
+		var broker = BrokerOver(handler);
+		const string video = "https://cdn.example.com/clip.mp4";
+		broker.Offer(1, [video]);
+		broker.TryApprove(1, video);
+		var download = broker.DownloadVideoAsync(video, CancellationToken.None);
+
+		broker.Reset();
+		release.SetResult();
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => download);
+		Assert.False(Directory.Exists(_temp.Paths.PreviewCacheDirectory) && Directory.EnumerateFiles(_temp.Paths.PreviewCacheDirectory, "*", SearchOption.AllDirectories).Any());
+	}
+
+	[Fact]
+	public async Task AtMostTwoVideoDownloadsRunAtOnce()
+	{
+		var running = 0;
+		var peak = 0;
+		var gate = new TaskCompletionSource();
+		var handler = new FakeHttpHandler(async (_, _) =>
+		{
+			var now = Interlocked.Increment(ref running);
+			peak = Math.Max(peak, now);
+			await gate.Task;
+			Interlocked.Decrement(ref running);
+			return FakeHttpHandler.Ok([1], "video/mp4");
+		});
+		var broker = BrokerOver(handler);
+		var urls = Enumerable.Range(0, 5).Select(i => $"https://cdn.example.com/clip{i}.mp4").ToList();
+		broker.Offer(1, urls);
+		urls.ForEach(u => broker.TryApprove(1, u));
+
+		var downloads = urls.Select(u => broker.DownloadVideoAsync(u, CancellationToken.None)).ToList();
+		await Task.Delay(300);
+		Assert.Equal(Constants.Limits.MaxConcurrentVideoDownloads, Volatile.Read(ref running));
+
+		gate.SetResult();
+		await Task.WhenAll(downloads);
+
+		Assert.Equal(Constants.Limits.MaxConcurrentVideoDownloads, peak);
+	}
+
+	[Fact]
+	public async Task TheTotalDownloadedBytesPerLoadAreCapped()
+	{
+		var handler = new FakeHttpHandler(_ => FakeHttpHandler.Ok(new byte[1000], "video/mp4"));
+		var broker = BrokerOver(handler);
+		var urls = new[] { "https://cdn.example.com/a.mp4", "https://cdn.example.com/b.mp4" };
+		broker.Offer(1, urls);
+		foreach (var url in urls)
+			broker.TryApprove(1, url);
+		broker.ForceDownloadedBytesForTest(Constants.Limits.MaxVideoBytesPerLoad - 500);   // only 500 bytes left
+
+		var ex = await Assert.ThrowsAsync<MediaRefusedException>(() => broker.DownloadVideoAsync(urls[0], CancellationToken.None));   // 1000 bytes exceed what is left
+		Assert.Contains("too large", ex.Message);
+
+		broker.ForceDownloadedBytesForTest(Constants.Limits.MaxVideoBytesPerLoad);
+		var used = await Assert.ThrowsAsync<MediaRefusedException>(() => broker.DownloadVideoAsync(urls[1], CancellationToken.None));
+		Assert.Contains("limit", used.Message);
+
+		broker.Reset();                                             // a new view starts with a fresh budget
+		broker.Offer(1, urls);
+		broker.TryApprove(1, urls[0]);
+		Assert.NotEmpty(await broker.DownloadVideoAsync(urls[0], CancellationToken.None));
+	}
+
+	[Fact]
+	public async Task TheImageCacheIsBoundedByTotalBytesToo()
+	{
+		var tenMb = new byte[(int)Constants.Limits.MaxRemoteImageBytes];
+		var handler = new FakeHttpHandler(_ => FakeHttpHandler.Ok(tenMb, "image/png"));
+		var broker = BrokerOver(handler);
+		var urls = Enumerable.Range(0, 14).Select(i => $"https://cdn.example.com/{i}.png").ToList();   // 14 x 10 MB = 140 MB > 100 MB
+		broker.Offer(1, urls);
+
+		foreach (var url in urls)
+			await broker.ServeImageAsync(new Uri(_proxy.Build(url)), CancellationToken.None);
+
+		Assert.Equal(14, handler.Requests.Count);
+		Assert.True(broker.CachedImageBytes <= Constants.Limits.MaxImageCacheBytes);
+		var before = handler.Requests.Count;
+		await broker.ServeImageAsync(new Uri(_proxy.Build(urls[^1])), CancellationToken.None);   // the newest is still cached
+		Assert.Equal(before, handler.Requests.Count);
+		await broker.ServeImageAsync(new Uri(_proxy.Build(urls[0])), CancellationToken.None);    // the oldest was evicted
+		Assert.Equal(before + 1, handler.Requests.Count);
+	}
+
 	[Fact]
 	public async Task AVideoOfAnUnsupportedType_IsRefused()
 	{
@@ -250,6 +377,48 @@ public sealed class PrivateAddressCheckTests
 	[InlineData("[::1]", false)]
 	[InlineData("", false)]
 	public void PublicVersusLocal(string host, bool expected) => Assert.Equal(expected, _check.IsPublicHost(host));
+
+	[Theory]
+	[InlineData("::7f00:1", false)]                    // IPv4-compatible ::127.0.0.1
+	[InlineData("::a00:5", false)]                     // ::10.0.0.5
+	[InlineData("::808:808", true)]                    // ::8.8.8.8 is routable by embedded address
+	[InlineData("64:ff9b::7f00:1", false)]             // NAT64 of 127.0.0.1
+	[InlineData("64:ff9b::a00:5", false)]              // NAT64 of 10.0.0.5
+	[InlineData("64:ff9b::c0a8:101", false)]           // NAT64 of 192.168.1.1
+	[InlineData("64:ff9b::808:808", true)]             // NAT64 of 8.8.8.8
+	[InlineData("64:ff9b:1::1", false)]                // local-use NAT64 prefix
+	[InlineData("2002:7f00:1::1", false)]              // 6to4 of 127.0.0.1
+	[InlineData("2002:a00:5::1", false)]               // 6to4 of 10.0.0.5
+	[InlineData("2002:c0a8:101::1", false)]            // 6to4 of 192.168.1.1
+	[InlineData("2002:808:808::1", true)]              // 6to4 of 8.8.8.8
+	[InlineData("2001:0:4136:e378:8000:63bf:3fff:fdd2", false)]   // Teredo (2001::/32) is refused
+	[InlineData("2001:db8::1", true)]
+	[InlineData("198.18.0.1", false)]
+	[InlineData("198.19.255.254", false)]
+	[InlineData("198.17.0.1", true)]
+	[InlineData("198.20.0.1", true)]
+	[InlineData("192.0.2.10", false)]
+	[InlineData("198.51.100.7", false)]
+	[InlineData("203.0.113.9", false)]
+	[InlineData("203.0.114.9", true)]
+	[InlineData("198.51.101.7", true)]
+	public void TransitionRangesAndDocumentationBlocks(string address, bool expected)
+	{
+		Assert.Equal(expected, _check.IsPublic(IPAddress.Parse(address)));
+		Assert.Equal(expected, _check.IsPublicHost("[" + address + "]") || (!address.Contains(':') && _check.IsPublicHost(address)));
+	}
+
+	[Fact]
+	public void TheMediaHttpClient_NeverUsesASystemProxy_AndFollowsNoRedirectsOrCookies()
+	{
+		using var handler = new RemoteMediaHttpClientFactory(_check).CreateHandler();
+
+		Assert.False(handler.UseProxy);            // with a proxy the connect-time address check would see the proxy, not the target (N1)
+		Assert.False(handler.AllowAutoRedirect);
+		Assert.False(handler.UseCookies);
+		Assert.Null(handler.Credentials);
+		Assert.NotNull(handler.ConnectCallback);
+	}
 
 	[Fact]
 	public void ANameThatResolvesToTheLocalNetworkIsStoppedAtConnectTime()

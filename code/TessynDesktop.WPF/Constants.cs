@@ -104,6 +104,9 @@ public static partial class Constants
 		public const long MaxRemoteImageBytes = 10L * 1024 * 1024;
 		public const long MaxRemoteVideoBytes = 200L * 1024 * 1024;
 		public const int MaxCachedRemoteImages = 24;
+		public const long MaxImageCacheBytes = 100L * 1024 * 1024;
+		public const long MaxVideoBytesPerLoad = 1024L * 1024 * 1024;
+		public const int MaxConcurrentVideoDownloads = 2;
 		public const int MaxMarkdownChars = 200_000;
 		public const int MaxPreviewChunks = 4096;
 		public const int MaxCatchUpPages = 2;

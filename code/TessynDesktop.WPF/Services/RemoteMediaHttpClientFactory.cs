@@ -18,20 +18,22 @@ public sealed class RemoteMediaHttpClientFactory
 		_addresses = addresses;
 	}
 
-	public HttpClient Create()
+	public HttpClient Create() => new(CreateHandler(), disposeHandler: true) { Timeout = Timeout.InfiniteTimeSpan };
+
+	/// <summary>
+	/// The handler. <c>UseProxy</c> is off on purpose (N1): with a proxy the connect callback would see the proxy's address, not the target's,
+	/// so the public-address check would apply to the wrong host and the proxy would resolve the target unchecked.
+	/// </summary>
+	public SocketsHttpHandler CreateHandler() => new()
 	{
-		var handler = new SocketsHttpHandler
-		{
-			AllowAutoRedirect = false,
-			UseCookies = false,
-			UseProxy = true,
-			Credentials = null,
-			AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
-			ConnectTimeout = Constants.Timeouts.RemoteConnect,
-			ConnectCallback = ConnectPublicAsync,
-		};
-		return new HttpClient(handler, disposeHandler: true) { Timeout = Timeout.InfiniteTimeSpan };
-	}
+		AllowAutoRedirect = false,
+		UseCookies = false,
+		UseProxy = false,
+		Credentials = null,
+		AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+		ConnectTimeout = Constants.Timeouts.RemoteConnect,
+		ConnectCallback = ConnectPublicAsync,
+	};
 
 	private async ValueTask<Stream> ConnectPublicAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
 	{
