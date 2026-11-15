@@ -34,6 +34,9 @@ internal sealed class EntryIdsEnv : IDisposable
 	public SessionContentStore Store { get; private set; } = null!;
 	public SessionEpochTracker Epochs { get; private set; } = null!;
 	public SessionEntryReader Reader { get; private set; } = null!;
+	/// <summary>The tags every session of the module reports (empty unless a test fills it).</summary>
+	public StubTagService TagService { get; } = new();
+
 	public SessionRpcModule Module { get; private set; } = null!;
 	public TdcpDispatcher Dispatcher { get; private set; } = null!;
 
@@ -101,7 +104,7 @@ internal sealed class EntryIdsEnv : IDisposable
 		return new SessionRpcModule(
 			Registry, Settings,
 			new SessionStateBuilder(Registry, streaming, attention, new FakeActivityService()),
-			new StubTagService(), attention, reader, Epochs, Models, labels,
+			TagService, attention, reader, Epochs, Models, labels,
 			new SessionSendService(turns, Registry), options, turns, streaming);
 	}
 
