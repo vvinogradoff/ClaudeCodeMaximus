@@ -32,6 +32,11 @@ public sealed partial class SessionPaneViewModel
 		LocalTools = new LocalToolsViewModel(_client, SessionOptions, _logger);
 		Instruction.Connect(() => Dialogs, () => (PicksOfOpenSession().ModelId, PicksOfOpenSession().EffortId, PicksOfOpenSession().ProfileId));
 		Toggles.Connect(() => Dialogs);
+		Instruction.PropertyChanged += (_, e) =>
+		{
+			if (e.PropertyName == nameof(InstructionToolbarViewModel.AutoCompactChecked))
+				SendCommand.NotifyCanExecuteChanged();
+		};
 		PropertyChanged += (_, e) =>
 		{
 			if (e.PropertyName == nameof(SelectedModel))

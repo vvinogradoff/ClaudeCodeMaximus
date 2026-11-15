@@ -52,7 +52,7 @@ public sealed partial class InstructionToolbarViewModel : ObservableObject
 		_logger = logger;
 		options.PropertyChanged += (_, e) =>
 		{
-			if (e.PropertyName is nameof(SessionOptionsViewModel.AutoCommit) or nameof(SessionOptionsViewModel.IsKnown) or nameof(SessionOptionsViewModel.Notice))
+			if (e.PropertyName is nameof(SessionOptionsViewModel.AutoCommit) or nameof(SessionOptionsViewModel.AutoDocument) or nameof(SessionOptionsViewModel.IsKnown) or nameof(SessionOptionsViewModel.Notice))
 				Refresh();
 		};
 	}
@@ -124,7 +124,7 @@ public sealed partial class InstructionToolbarViewModel : ObservableObject
 	partial void OnAutoCompactChanged(bool value)
 	{
 		Remember();
-		OnPropertyChanged(nameof(AutoCompactChecked));
+		OnPropertyChanged(nameof(AutoCompactChecked));   // the pane also listens: an empty prompt can be sent while this is on (FR.11.6)
 	}
 
 	// The two-way face of the toggle buttons: a click (and UI Automation's Toggle, which does not run a button's Command) sets these, and they do what the commands do.
@@ -256,8 +256,8 @@ public sealed partial class InstructionToolbarViewModel : ObservableObject
 			return;
 
 		var dialogs = _dialogs();
-		if (dialogs != null && !await dialogs.ConfirmAsync(new ConfirmDialogRequest(Constants.ToolbarTexts.ClearTitle, Constants.ToolbarTexts.ClearMessage, Constants.ToolbarTexts.ClearConfirm, IsDestructive: true)))
-			return;
+		if (dialogs == null || !await dialogs.ConfirmAsync(new ConfirmDialogRequest(Constants.ToolbarTexts.ClearTitle, Constants.ToolbarTexts.ClearMessage, Constants.ToolbarTexts.ClearConfirm, IsDestructive: true)))
+			return;   // no dialog service counts as not confirmed: a destructive action never goes ahead unasked
 
 		IsBusy = true;
 		try

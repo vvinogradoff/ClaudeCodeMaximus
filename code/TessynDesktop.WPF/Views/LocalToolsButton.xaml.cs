@@ -83,15 +83,10 @@ public partial class LocalToolsButton : UserControl
 		_pressed = false;
 	}
 
-	/// <summary>Keyboard: Space or Enter is the short click, Alt+Down opens the checklist.</summary>
+	/// <summary>Keyboard: Space and Enter are the button's own Click (which runs the command); Alt+Down opens the checklist.</summary>
 	private void OnKeyDown(object sender, KeyEventArgs e)
 	{
-		if (e.Key is Key.Space or Key.Enter)
-		{
-			Model?.ToggleEnabledCommand.Execute(null);
-			e.Handled = true;
-		}
-		else if (e.Key == Key.Down && Keyboard.Modifiers == ModifierKeys.Alt)
+		if (e.Key == Key.Down && Keyboard.Modifiers == ModifierKeys.Alt)
 		{
 			Model?.TogglePopupCommand.Execute(null);
 			e.Handled = true;

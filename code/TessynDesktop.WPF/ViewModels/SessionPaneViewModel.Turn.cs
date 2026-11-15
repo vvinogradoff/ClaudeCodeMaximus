@@ -31,7 +31,8 @@ public sealed partial class SessionPaneViewModel
 	/// <summary>The clock of the thinking timer and of the generic working row.</summary>
 	public TimeProvider Clock { get; set; } = TimeProvider.System;
 
-	private bool CanSend() => HasSession && IsSessionReady && !string.IsNullOrWhiteSpace(InputText);
+	/// <summary>An empty box can be sent while Auto-Compact is on: it then only compacts (FR.11.6).</summary>
+	private bool CanSend() => HasSession && IsSessionReady && (!string.IsNullOrWhiteSpace(InputText) || Instruction.AutoCompact);
 
 	partial void OnHasSessionChanged(bool value) => SendCommand.NotifyCanExecuteChanged();
 
@@ -40,7 +41,7 @@ public sealed partial class SessionPaneViewModel
 	{
 		var id = NodeId;
 		var text = InputText.Trim();
-		if (id == null || text.Length == 0)
+		if (id == null || (text.Length == 0 && !Instruction.AutoCompact))
 			return;
 
 		// A14: what the user picked travels with this send, so a queued send keeps it whatever is picked later. A field the user did not pick is

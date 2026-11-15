@@ -68,10 +68,20 @@ public sealed partial class FakeTessynClient
 	public Task<LocalToolsDto> LocalToolsGetAsync(string directoryId, CancellationToken cancellationToken = default) =>
 		Record($"localTools.get:{directoryId}", () => LocalToolsGetHandler?.Invoke(directoryId) ?? new LocalToolsDto(true, [], false, [], [], []));
 
-	public Task<LocalToolsDto> LocalToolsSetAsync(string directoryId, bool enabled, IReadOnlyList<string> nativeTools, bool includeCmxMcp, IReadOnlyList<string> includedMcpServerIds, CancellationToken cancellationToken = default) =>
-		Record($"localTools.set:{directoryId}", () =>
+	public Func<bool, Task<LocalToolsDto>>? LocalToolsSetAsyncHandler { get; set; }
+
+	public Task<LocalToolsDto> LocalToolsSetAsync(string directoryId, bool enabled, IReadOnlyList<string> nativeTools, bool includeCmxMcp, IReadOnlyList<string> includedMcpServerIds, CancellationToken cancellationToken = default)
+	{
+		if (LocalToolsSetAsyncHandler != null)
+		{
+			Record($"localTools.set:{directoryId}");
+			return LocalToolsSetAsyncHandler(enabled);
+		}
+
+		return Record($"localTools.set:{directoryId}", () =>
 			LocalToolsSetHandler?.Invoke(directoryId, enabled, nativeTools, includeCmxMcp, includedMcpServerIds)
 			?? new LocalToolsDto(enabled, nativeTools, includeCmxMcp, includedMcpServerIds, [], []));
+	}
 
 	/// <summary>Records the call, then answers from <paramref name="answer"/>; an exception it throws comes back as a faulted task.</summary>
 	private Task<T> Record<T>(string call, Func<T> answer)

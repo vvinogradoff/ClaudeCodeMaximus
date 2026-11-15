@@ -13,6 +13,7 @@ public static partial class Constants
 		public const string AutoCommitDoNotTip = "Auto-Commit: do not commit. Click for Commit.";
 		public const string AutoCommitNoPreferenceTip = "Auto-Commit: no commit instruction at all. Click for Do-not-commit.";
 		public const string OptionsFailed = "Could not change the session options: ";
+		public const string OptionsReadFailed = "Could not read the session options.";
 		public const string NewBranchNotice = "[New Branch {0} for this run: it applies to the next send]";
 		public const string AutoCompactNotice = "[Auto-Compact {0} for this run: it applies to the next send]";
 		public const string On = "enabled";
@@ -36,5 +37,8 @@ public static partial class Constants
 	{
 		/// <summary>How long the local-tools button is held before it opens the checklist instead of toggling the master switch (FR.12.23.2).</summary>
 		public static readonly TimeSpan LocalToolsHold = TimeSpan.FromMilliseconds(450);
+
+		/// <summary>How long a failed first read of the session options waits before its one retry.</summary>
+		public static readonly TimeSpan OptionsRetryDelay = TimeSpan.FromSeconds(2);
 	}
 }

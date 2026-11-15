@@ -43,6 +43,7 @@ public sealed partial class LocalToolsViewModel : ObservableObject
 	private LocalToolsDto? _profile;
 	private bool _applying;
 	private int _token;
+	private int _storeSeq;
 
 	[ObservableProperty]
 	private bool _isVisible;
@@ -186,19 +187,20 @@ public sealed partial class LocalToolsViewModel : ObservableObject
 			return;
 
 		var token = _token;
+		var seq = ++_storeSeq;
 		var native = NativeTools.Where(t => t.IsChecked).Select(t => t.Id).ToList();
 		var servers = McpServers.Where(s => s.IsChecked).Select(s => s.Id).ToList();
 		IsEnabled = enabled;   // shows at once
 		try
 		{
 			var stored = await _client.LocalToolsSetAsync(directoryId, enabled, native, IncludeCmxMcp, servers);
-			if (token == _token)
+			if (token == _token && seq == _storeSeq)   // a newer store has been sent since: this answer is stale
 				_profile = stored;
 		}
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "localTools.set failed for {DirectoryId}", directoryId);
-			if (token == _token && _profile != null)
+			if (token == _token && seq == _storeSeq && _profile != null)
 			{
 				_options.Notice = Constants.ToolbarTexts.LocalToolsFailed + ex.Message;
 				Apply(_profile);   // back to what the daemon has

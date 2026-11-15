@@ -18,6 +18,7 @@ public sealed partial class CommandTogglesViewModel : ObservableObject
 	private Func<IDialogService?> _dialogs = () => null;
 	private string? _nodeId;
 	private int _token;
+	private int _streamSeq;
 
 	[ObservableProperty]
 	private bool _isStreamingMode;
@@ -121,6 +122,7 @@ public sealed partial class CommandTogglesViewModel : ObservableObject
 			return;
 
 		var token = _token;
+		var seq = ++_streamSeq;
 		var before = IsStreamingMode;
 		IsStreamingMode = enable;   // shows at once; the answer or a failure sets it right
 		try
@@ -129,11 +131,11 @@ public sealed partial class CommandTogglesViewModel : ObservableObject
 			if (!enable && result.NeedsConfirm)
 			{
 				var dialogs = _dialogs();
-				var confirmed = dialogs == null || await dialogs.ConfirmAsync(new ConfirmDialogRequest(
+				var confirmed = dialogs != null && await dialogs.ConfirmAsync(new ConfirmDialogRequest(   // no dialog service counts as not confirmed
 					Constants.ToolbarTexts.StreamingOffTitle, Constants.ToolbarTexts.StreamingOffMessage, Constants.ToolbarTexts.StreamingOffConfirm, IsDestructive: true));
 				if (!confirmed)
 				{
-					if (token == _token)
+					if (token == _token && seq == _streamSeq)
 						IsStreamingMode = true;
 
 					return;
@@ -142,13 +144,13 @@ public sealed partial class CommandTogglesViewModel : ObservableObject
 				result = await _client.SessionSetStreamingAsync(id, false, force: true);
 			}
 
-			if (token == _token)
+			if (token == _token && seq == _streamSeq)   // a newer change has been made since: this answer is stale
 				IsStreamingMode = result.Enabled;
 		}
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "session.setStreaming failed for {NodeId}", id);
-			if (token == _token)
+			if (token == _token && seq == _streamSeq)
 			{
 				IsStreamingMode = before;
 				Options.Notice = Constants.ToolbarTexts.StreamingFailed + ex.Message;

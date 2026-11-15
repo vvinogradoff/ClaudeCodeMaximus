@@ -6,19 +6,23 @@
     </UserControl.Resources>
     <!-- Tools: a short click is the master switch, a hold of 450 ms opens the checklist (FR.12.23.2). Visible only for a local model; dimmed when off (FR.12.23.3). -->
     <Grid Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
-        <ToggleButton x:Name="ToolsButton" Content="Tools" Padding="10,3" IsChecked="{Binding IsEnabled, Mode=OneWay}" ToolTip="{Binding Tooltip}"
-                      AutomationProperties.Name="Local tools"
-                      PreviewMouseLeftButtonDown="OnPress" PreviewMouseLeftButtonUp="OnRelease" LostMouseCapture="OnLostCapture" KeyDown="OnKeyDown">
-            <ToggleButton.Style>
-                <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+        <!-- A plain Button, not a ToggleButton: the state is only displayed (weight, dimming), and a click, Space, Enter or a UI Automation Invoke
+             all run ToggleEnabledCommand. The mouse is handled by OnPress/OnRelease (short click or hold), which mark it handled so Click does not also fire. -->
+        <Button x:Name="ToolsButton" Content="Tools" Padding="10,3" Command="{Binding ToggleEnabledCommand}" ToolTip="{Binding Tooltip}"
+                AutomationProperties.Name="Local tools"
+                PreviewMouseLeftButtonDown="OnPress" PreviewMouseLeftButtonUp="OnRelease" LostMouseCapture="OnLostCapture" PreviewKeyDown="OnKeyDown">
+            <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                    <Setter Property="FontWeight" Value="SemiBold" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding IsEnabled}" Value="False">
                             <Setter Property="Opacity" Value="0.45" />
+                            <Setter Property="FontWeight" Value="Normal" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
-            </ToggleButton.Style>
-        </ToggleButton>
+            </Button.Style>
+        </Button>
         <Popup IsOpen="{Binding IsPopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=ToolsButton}" Placement="Top" StaysOpen="False" AllowsTransparency="True">
             <Border Padding="10" CornerRadius="6" BorderThickness="1" MaxHeight="360"
                     Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">

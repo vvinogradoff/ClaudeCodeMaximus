@@ -55,7 +55,7 @@ public sealed class ToolbarViewModelTests
 		};
 	}
 
-	private async Task<SessionPaneViewModel> OpenedAsync(string id = Node, bool running = false, Action<FakeSession>? configure = null)
+	private async Task<SessionPaneViewModel> OpenedAsync(string id = Node, bool running = false, Action<FakeSession>? configure = null, Action<SessionPaneViewModel>? beforeOpen = null)
 	{
 		var session = FakeSession.WithEntries(4);
 		session.Running = running;
@@ -67,6 +67,7 @@ public sealed class ToolbarViewModelTests
 			LiveFlushInterval = TimeSpan.Zero,
 			Dialogs = _dialogs,
 		};
+		beforeOpen?.Invoke(pane);
 		await pane.OpenAsync(id);
 		await pane.SessionOptions.Idle;
 		await pane.LocalTools.Idle;
@@ -465,6 +466,133 @@ public sealed class ToolbarViewModelTests
 		await pane.OpenAsync("b");
 
 		Assert.False(pane.LocalTools.IsPopupOpen);
+	}
+
+	// ---- review fixes (W4 review, findings 2 to 6) ----
+
+	[Fact]
+	public async Task AutoCompact_AllowsSendingAnEmptyPromptThatOnlyCompacts()
+	{
+		StatefulOptions();
+		using var pane = await OpenedAsync();
+		Assert.False(pane.SendCommand.CanExecute(null));   // empty box, nothing to compact
+
+		pane.Instruction.AutoCompactChecked = true;
+		Assert.True(pane.SendCommand.CanExecute(null));
+		await pane.SendCommand.ExecuteAsync(null);
+
+		var send = Assert.Single(_client.TurnSends);
+		Assert.Equal(string.Empty, send.Text);
+		Assert.True(send.AutoCompact);
+		Assert.False(pane.Instruction.AutoCompact);        // switched off with the send
+		Assert.False(pane.SendCommand.CanExecute(null));    // and an empty box cannot be sent again
+	}
+
+	[Fact]
+	public async Task AutoDocumentChecked_IsNotifiedWhenTheValueChangesUnderneath()
+	{
+		StatefulOptions();
+		using var pane = await OpenedAsync();
+		var notified = new List<string?>();
+		pane.Instruction.PropertyChanged += (_, e) => notified.Add(e.PropertyName);
+		_stored = new SessionOptionsDto(false, true, true);   // another client changed it
+
+		await pane.SessionOptions.RefreshAsync();
+
+		Assert.True(pane.Instruction.AutoDocumentChecked);
+		Assert.Contains(string.Empty, notified);   // "everything changed": the toolbar refreshes all its bindings
+	}
+
+	[Fact]
+	public async Task FailedFirstRead_RetriesOnceAndClearsTheNotice()
+	{
+		StatefulOptions();
+		var real = _client.SetOptionsHandler!;
+		var reads = 0;
+		_client.SetOptionsHandler = (id, c, d, s) => ++reads == 1 ? throw new InvalidOperationException("down") : real(id, c, d, s);
+		using var pane = await OpenedAsync(beforeOpen: p => p.SessionOptions.RetryDelay = TimeSpan.Zero);
+
+		Assert.Equal(2, reads);
+		Assert.True(pane.SessionOptions.IsKnown);
+		Assert.Equal(string.Empty, pane.SessionOptions.Notice);
+	}
+
+	[Fact]
+	public async Task FailedFirstRead_StaysDisabledWithANoticeWhenTheRetryFailsToo()
+	{
+		StatefulOptions();
+		var reads = 0;
+		_client.SetOptionsHandler = (_, _, _, _) =>
+		{
+			reads++;
+			throw new InvalidOperationException("down");
+		};
+		using var pane = await OpenedAsync(beforeOpen: p => p.SessionOptions.RetryDelay = TimeSpan.Zero);
+
+		Assert.Equal(2, reads);   // once, and one retry
+		Assert.False(pane.SessionOptions.IsKnown);
+		Assert.Equal(Constants.ToolbarTexts.OptionsReadFailed, pane.SessionOptions.Notice);
+	}
+
+	[Fact]
+	public async Task WithoutADialogService_TerminateAndStreamingOffAreNotConfirmed()
+	{
+		StatefulOptions();
+		_client.SetStreamingHandler = (_, enabled, force) => !enabled && force != true ? new SetStreamingResult(true, true) : new SetStreamingResult(enabled, false);
+		using var pane = await OpenedAsync(configure: s => s.StreamingMode = true);
+		pane.Dialogs = null;
+
+		await pane.Instruction.ClearCommand.ExecuteAsync(null);
+		await pane.Toggles.ToggleStreamingCommand.ExecuteAsync(null);
+
+		Assert.DoesNotContain("session.resetConversation:a", _client.Calls);
+		Assert.DoesNotContain("session.setStreaming:a:False:True", _client.Calls);
+		Assert.True(pane.Toggles.IsStreamingMode);
+	}
+
+	[Fact]
+	public async Task Streaming_AStaleAnswerIsNeverApplied()
+	{
+		StatefulOptions();
+		var firstGate = new TaskCompletionSource<SetStreamingResult>();
+		var calls = 0;
+		_client.SetStreamingAsyncHandler = (enabled, _) => ++calls == 1 ? firstGate.Task : Task.FromResult(new SetStreamingResult(enabled, false));
+		using var pane = await OpenedAsync();
+
+		pane.Toggles.StreamingChecked = true;    // call 1: held back
+		pane.Toggles.StreamingChecked = false;   // call 2: answers at once (off)
+		await pane.Toggles.Idle;
+		firstGate.SetResult(new SetStreamingResult(true, false));   // the answer of call 1 arrives last
+		await Task.Yield();
+
+		Assert.False(pane.Toggles.IsStreamingMode);
+	}
+
+	[Fact]
+	public async Task LocalTools_AStaleStoreAnswerNeverBecomesTheRevertTarget()
+	{
+		StatefulOptions();
+		_client.LocalToolsGetHandler = _ => Profile();
+		var firstGate = new TaskCompletionSource<LocalToolsDto>();
+		var calls = 0;
+		LocalToolsDto Dto(params string[] tools) => new(true, tools, false, [], ["Read", "Write", "Bash"], []);
+		_client.LocalToolsSetAsyncHandler = _ => ++calls switch
+		{
+			1 => firstGate.Task,                                          // tick Bash: held back
+			2 => Task.FromResult(Dto("Read", "Bash", "Write")),           // tick Write: answers at once
+			_ => Task.FromException<LocalToolsDto>(new InvalidOperationException("no")),
+		};
+		using var pane = await OpenedAsync();
+
+		pane.LocalTools.NativeTools.Single(t => t.Id == "Bash").IsChecked = true;
+		pane.LocalTools.NativeTools.Single(t => t.Id == "Write").IsChecked = true;
+		await pane.LocalTools.Idle;
+		firstGate.SetResult(Dto("Read", "Bash"));   // the stale answer of the first store arrives last
+		await Task.Yield();
+		pane.LocalTools.NativeTools.Single(t => t.Id == "Read").IsChecked = false;   // fails: the list goes back to what the daemon last stored
+		await pane.LocalTools.Idle;
+
+		Assert.Equal(["Bash", "Read", "Write"], pane.LocalTools.NativeTools.Where(t => t.IsChecked).Select(t => t.Id).Order());
 	}
 
 	// ---- the slots ----

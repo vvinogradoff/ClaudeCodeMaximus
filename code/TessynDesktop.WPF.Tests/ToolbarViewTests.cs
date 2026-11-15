@@ -122,11 +122,11 @@ public sealed class ToolbarViewTests
 			Assert.Equal(Visibility.Visible, grid.Visibility);
 
 			// A short press and release flips the master switch.
-			var button = FindAll<ToggleButton>(tools).Single(t => (string?)t.Content == "Tools");
-			Assert.True(button.IsChecked);
+			var button = FindAll<Button>(tools).Single(t => (string?)t.Content == "Tools");
+			Assert.Equal(FontWeights.SemiBold, button.FontWeight);   // on
 			pane.LocalTools.ToggleEnabledCommand.Execute(null);
 			Layout(toggles);
-			Assert.False(button.IsChecked);
+			Assert.Equal(FontWeights.Normal, button.FontWeight);
 			Assert.Equal(0.45, button.Opacity, 2);   // dimmed when off
 
 			// The checklist lists the tools and shows its boxes.
@@ -137,6 +137,52 @@ public sealed class ToolbarViewTests
 		});
 
 		Assert.Empty(listener.Messages);
+	}
+
+	/// <summary>Space, Enter and a UI Automation Invoke on the Tools button all run the command and store the profile (a native toggle would only flip its look).</summary>
+	[Fact]
+	public void ToolsButton_SpaceEnterAndInvoke_StoreTheMasterSwitch()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var client = new FakeTessynClient();
+			using var pane = Pane(client);
+			pane.SelectedModel = pane.Models.Single(m => m.Id == "llama");
+			var toggles = new CommandToggles { DataContext = pane };
+			using var source = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("tools-test") { ParentWindow = new IntPtr(-3), Width = 900, Height = 200 })
+			{
+				RootVisual = toggles,
+			};
+			Layout(toggles);
+			var button = FindAll<Button>(toggles).Single(t => (string?)t.Content == "Tools");
+			int Stores() => client.Calls.Count(c => c.StartsWith("localTools.set:", StringComparison.Ordinal));
+			Assert.Equal(0, Stores());
+
+			RaiseKey(button, source, System.Windows.Input.Key.Space, down: true);
+			RaiseKey(button, source, System.Windows.Input.Key.Space, down: false);
+			Assert.Equal(1, Stores());
+
+			RaiseKey(button, source, System.Windows.Input.Key.Enter, down: true);
+			Assert.Equal(2, Stores());
+
+			var invoke = (System.Windows.Automation.Provider.IInvokeProvider)System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(button)
+				.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke)!;
+			invoke.Invoke();
+			for (var i = 0; i < 200 && Stores() < 3; i++)   // Invoke is posted to the dispatcher: pump it until the command has run
+			{
+				button.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+				Thread.Sleep(10);
+			}
+			Assert.Equal(3, Stores());
+		});
+	}
+
+	private static void RaiseKey(UIElement target, PresentationSource source, System.Windows.Input.Key key, bool down)
+	{
+		target.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, key)
+		{
+			RoutedEvent = down ? System.Windows.Input.Keyboard.KeyDownEvent : System.Windows.Input.Keyboard.KeyUpEvent,
+		});
 	}
 
 	[Fact]

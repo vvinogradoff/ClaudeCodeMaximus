@@ -73,16 +73,39 @@ public sealed partial class SessionOptionsViewModel : ObservableObject
 		return id == null ? Task.CompletedTask : Idle = ReadAsync(id, _token);
 	}
 
-	private async Task ReadAsync(string nodeId, int token)
+	/// <summary>How long a failed first read waits before its one retry.</summary>
+	public TimeSpan RetryDelay { get; set; } = Constants.ToolbarLimits.OptionsRetryDelay;
+
+	private async Task ReadAsync(string nodeId, int token, bool retry = true)
 	{
 		try
 		{
 			var result = await _client.SessionSetOptionsAsync(nodeId);
-			_ui.Post(() => Apply(result.Options, nodeId, token));
+			_ui.Post(() =>
+			{
+				if (token == _token && nodeId == NodeId && Notice == Constants.ToolbarTexts.OptionsReadFailed)
+					Notice = string.Empty;
+
+				Apply(result.Options, nodeId, token);
+			});
 		}
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "Reading the options of {NodeId} failed", nodeId);
+			_ui.Post(() =>
+			{
+				if (token == _token && nodeId == NodeId && !IsKnown)
+					Notice = Constants.ToolbarTexts.OptionsReadFailed;   // the toolbar is disabled until a read works: say why
+			});
+
+			if (retry && RetryDelay >= TimeSpan.Zero)
+			{
+				if (RetryDelay > TimeSpan.Zero)
+					await Task.Delay(RetryDelay);
+
+				if (token == _token && nodeId == NodeId)
+					await ReadAsync(nodeId, token, retry: false);
+			}
 		}
 	}
 
