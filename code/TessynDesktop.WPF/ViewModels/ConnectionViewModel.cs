@@ -114,6 +114,7 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 				}
 
 				_client = client;
+				_startingSince = 0; // a later disconnect starts its own "Starting..." clock
 				_daemonPid = found.Daemon.Pid;
 				_logger.LogInformation("Connected to daemon run {RunId} (protocol {Protocol})", client.ServerInfo?.RunId, client.ServerInfo?.ProtocolVersion);
 				_ui.Post(() =>

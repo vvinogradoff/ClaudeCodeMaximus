@@ -121,7 +121,8 @@ public partial class App : Application
 				// Exit (tray, or a client's request through the named event) terminates the active sessions the way the window's close does.
 				var exit = new DaemonHostExit(
 					() => mainVm.ActiveSessionCount, BackgroundTray.ConfirmAsync,
-					mainVm.TerminateAllSessions, () => Avalonia.Threading.Dispatcher.UIThread.Post(() => desktop.Shutdown()));
+					mainVm.TerminateAllSessions, () => Avalonia.Threading.Dispatcher.UIThread.Post(() => desktop.Shutdown()),
+					ex => Log.Error(ex, "Terminating the sessions failed; shutting down anyway"));
 				_trayIcons = BackgroundTray.Create(exit);
 				TrayIcon.SetIcons(this, _trayIcons);
 				_exitListener = new DaemonHostExitListener();

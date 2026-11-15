@@ -15,7 +15,9 @@ public sealed class DaemonRestarterTests : IDisposable
 	{
 		public DateTime? Running { get; set; }
 
-		public DateTime? RunningBuildUtc(int pid) => Running;
+		public string Folder { get; set; } = "";
+
+		public RunningDaemonBuild? Inspect(int pid) => Running == null ? null : new RunningDaemonBuild(Folder, Running.Value);
 	}
 
 	private sealed class FakeSignal : IHostExitSignal
@@ -99,8 +101,115 @@ public sealed class DaemonRestarterTests : IDisposable
 		}
 	}
 
-	private DaemonRestarter Create(string? source = "") =>
-		new(source == "" ? Path.Combine(_root, "src") : source, _probe, _dialogs, _signal, _waiter, _client, TimeSpan.FromSeconds(7), NullLogger.Instance);
+	private DaemonRestarter Create(string? source = "", string? hostFolder = null) =>
+		new(source == "" ? Path.Combine(_root, "src") : source, _probe, _dialogs, _signal, _waiter, _client, TimeSpan.FromSeconds(7), NullLogger.Instance, hostFolder);
+
+	private string BuildFolder => Path.Combine(_root, "src", "code", "TessynDesktop", "bin", "Debug", "net10.0-windows10.0.17763.0");
+
+	private sealed class FolderProbe : IDaemonBuildProbe
+	{
+		public string Folder { get; set; } = "";
+
+		public RunningDaemonBuild? Inspect(int pid) => ProcessDaemonBuildProbe.InspectFolder(Folder);
+	}
+
+	[Fact]
+	public void Check_ChangesOnlyInCoreOrProtocol_AreSeenEvenWhenTheExeAssemblyDidNotChange()
+	{
+		// N1: MSBuild may leave TessynDesktop.dll alone when only Core.dll changed; the daemon is stale all the same.
+		var running = Path.Combine(_root, "running");
+		Directory.CreateDirectory(running);
+		File.WriteAllText(Path.Combine(running, "TessynDesktop.dll"), "exe");
+		File.SetLastWriteTimeUtc(Path.Combine(running, "TessynDesktop.dll"), Build);
+		File.WriteAllText(Path.Combine(running, "TessynDesktop.Core.dll"), "core old");
+		File.SetLastWriteTimeUtc(Path.Combine(running, "TessynDesktop.Core.dll"), Build.AddHours(-2));
+		File.WriteAllText(Path.Combine(BuildFolder, "TessynDesktop.Core.dll"), "core new");
+		File.SetLastWriteTimeUtc(Path.Combine(BuildFolder, "TessynDesktop.Core.dll"), Build.AddMinutes(30));
+		var restarter = new DaemonRestarter(Path.Combine(_root, "src"), new FolderProbe { Folder = running }, _dialogs, _signal, _waiter, _client, TimeSpan.FromSeconds(7), NullLogger.Instance);
+
+		var stale = restarter.Check(1);
+
+		Assert.NotNull(stale);
+		Assert.Equal(Build.AddMinutes(30), stale!.NewestBuildUtc);
+	}
+
+	[Fact]
+	public void NewestAssemblyWrite_ConsidersEveryTessynDesktopAssemblyAndNothingElse()
+	{
+		var folder = Path.Combine(_root, "assemblies");
+		Directory.CreateDirectory(folder);
+		File.WriteAllText(Path.Combine(folder, "TessynDesktop.dll"), "a");
+		File.SetLastWriteTimeUtc(Path.Combine(folder, "TessynDesktop.dll"), Build);
+		File.WriteAllText(Path.Combine(folder, "TessynDesktop.Protocol.dll"), "b");
+		File.SetLastWriteTimeUtc(Path.Combine(folder, "TessynDesktop.Protocol.dll"), Build.AddHours(1));
+		File.WriteAllText(Path.Combine(folder, "Other.dll"), "c");
+		File.SetLastWriteTimeUtc(Path.Combine(folder, "Other.dll"), Build.AddDays(1));
+
+		Assert.Equal(Build.AddHours(1), DaemonRestarter.NewestAssemblyWrite(folder));
+		Assert.Null(DaemonRestarter.NewestAssemblyWrite(Path.Combine(_root, "src")));
+	}
+
+	[Fact]
+	public void Check_ADaemonThatIsNotTheHostOfThisRunFolder_ShowsNoBanner()
+	{
+		// L-c: a visible Avalonia window from [Publish] (the rollback) cannot be restarted from here; it must not cause banner noise.
+		_probe.Running = Build.AddHours(-3);
+		_probe.Folder = @"C:\Projects\Personal\Tessyn\[Publish]";
+
+		Assert.Null(Create(hostFolder: @"C:\Projects\Personal\Tessyn\[Publish-WPF]\host").Check(1));
+
+		_probe.Folder = @"C:\Projects\Personal\Tessyn\[Publish-WPF]\host\";
+		Assert.NotNull(Create(hostFolder: @"C:\Projects\Personal\Tessyn\[Publish-WPF]\host").Check(1));
+	}
+
+	[Fact]
+	public void RestarterFor_IsOfferedOnlyWithTheRealLauncher()
+	{
+		// N3: the no-op launcher (a build output, a custom environment) cannot bring a host back, so no restart button.
+		var created = 0;
+		DaemonRestarter Make()
+		{
+			created++;
+			return Create();
+		}
+
+		Assert.Null(ServiceRegistration.RestarterFor(new NoDaemonHostLauncher(), Make));
+		Assert.Equal(0, created);
+
+		var real = new DaemonHostLauncher(@"C:\run", null, new NoopStarter(), new NoopPresence(), TimeProvider.System, TimeSpan.FromSeconds(1), NullLogger.Instance);
+		Assert.NotNull(ServiceRegistration.RestarterFor(real, Make));
+		Assert.Equal(1, created);
+	}
+
+	private sealed class NoopStarter : IHostProcessStarter
+	{
+		public IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory) => null;
+	}
+
+	private sealed class NoopPresence : IHostPresence
+	{
+		public bool IsHostRunning() => false;
+	}
+
+	[Fact]
+	public async Task Connection_ALaterDisconnectStartsItsOwnStartingClock()
+	{
+		// L-b: after a successful connect the 45 s clock of the first start must not carry over.
+		var locator = new ScriptedLocator();
+		locator.Results.Enqueue(new DaemonDiscoveryResult(DaemonDiscoveryStatus.NoDaemonFile, null));
+		locator.Results.Enqueue(Found);
+		var connection = Connection(locator, new AlwaysStartingLauncher());
+		connection.StartingTimeout = TimeSpan.FromMilliseconds(300);
+		await connection.RunAsync(CancellationToken.None);
+		await Task.Delay(450);
+
+		locator.Results.Clear();
+		locator.Results.Enqueue(new DaemonDiscoveryResult(DaemonDiscoveryStatus.NoDaemonFile, null));
+		using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(80));
+		await connection.RunAsync(cts.Token);
+
+		Assert.Equal(ConnectionBannerState.StartingDaemon, connection.State);
+	}
 
 	[Fact]
 	public void Check_ADaemonOlderThanTheNewestHostBuild_IsStale()

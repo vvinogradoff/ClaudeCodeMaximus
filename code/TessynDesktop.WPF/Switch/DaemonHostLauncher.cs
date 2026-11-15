@@ -219,13 +219,6 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 		}
 	}
 
-	/// <summary>Forgets the last attempt so the next call may start a host at once (the user asked for a restart).</summary>
-	public void ResetCooldown()
-	{
-		lock (_gate)
-			_lastAttempt = DateTimeOffset.MinValue;
-	}
-
 	private HostLaunchOutcome StartHost()
 	{
 		if (!File.Exists(HostExecutable))

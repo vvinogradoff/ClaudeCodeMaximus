@@ -24,7 +24,17 @@ public static class BackgroundTray
 	public static TrayIcons Create(DaemonHostExit exit)
 	{
 		var exitItem = new NativeMenuItem(ExitText);
-		exitItem.Click += (_, _) => Dispatcher.UIThread.Post(async () => await exit.RequestFromTrayAsync());
+		exitItem.Click += (_, _) => Dispatcher.UIThread.Post(async () =>
+		{
+			try
+			{
+				await exit.RequestFromTrayAsync();
+			}
+			catch (Exception ex)
+			{
+				Serilog.Log.Error(ex, "The tray Exit failed");
+			}
+		});
 
 		var menu = new NativeMenu();
 		menu.Add(exitItem);

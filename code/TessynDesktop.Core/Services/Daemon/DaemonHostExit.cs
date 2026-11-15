@@ -15,10 +15,13 @@ public sealed class DaemonHostExit
 	private readonly Func<string, Task<bool>> _confirm;
 	private readonly Action _terminateSessions;
 	private readonly Action _shutdown;
+	private readonly Action<Exception>? _onError;
 	private int _exiting;
+	private int _asking;
 
-	public DaemonHostExit(Func<int> activeSessions, Func<string, Task<bool>> confirm, Action terminateSessions, Action shutdown)
+	public DaemonHostExit(Func<int> activeSessions, Func<string, Task<bool>> confirm, Action terminateSessions, Action shutdown, Action<Exception>? onError = null)
 	{
+		_onError = onError;
 		_activeSessions = activeSessions;
 		_confirm = confirm;
 		_terminateSessions = terminateSessions;
@@ -35,12 +38,23 @@ public sealed class DaemonHostExit
 	/// <summary>The tray's Exit: nothing active exits at once; otherwise the user must confirm, and a refusal changes nothing. True when the host is exiting.</summary>
 	public async Task<bool> RequestFromTrayAsync()
 	{
-		var count = _activeSessions();
-		if (count > 0 && !await _confirm(ConfirmMessage(count)))
+		// A second click while the question is open must not open a second window.
+		if (Interlocked.Exchange(ref _asking, 1) == 1)
 			return false;
 
-		Exit();
-		return true;
+		try
+		{
+			var count = _activeSessions();
+			if (count > 0 && !await _confirm(ConfirmMessage(count)))
+				return false;
+
+			Exit();
+			return true;
+		}
+		finally
+		{
+			Interlocked.Exchange(ref _asking, 0);
+		}
 	}
 
 	/// <summary>Terminates the active sessions and shuts the host down, once, without asking (a client's request, or a confirmed tray Exit).</summary>
@@ -49,8 +63,19 @@ public sealed class DaemonHostExit
 		if (Interlocked.Exchange(ref _exiting, 1) == 1)
 			return;
 
-		_terminateSessions();
-		_shutdown();
+		try
+		{
+			_terminateSessions();
+		}
+		catch (Exception ex)
+		{
+			// A session in an odd state must never keep the host from ending: log it and shut down anyway.
+			_onError?.Invoke(ex);
+		}
+		finally
+		{
+			_shutdown();
+		}
 	}
 }
 

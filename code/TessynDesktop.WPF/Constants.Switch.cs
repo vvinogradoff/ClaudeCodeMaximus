@@ -13,6 +13,9 @@ public static partial class Constants
 
 		public const string HostExeName = "TessynDesktop.exe";
 		public const string HostAssemblyName = "TessynDesktop.dll";
+
+		/// <summary>Every assembly of the daemon host (the exe assembly, Core, Protocol): a build may change only some of them.</summary>
+		public const string HostAssemblyPattern = "TessynDesktop*.dll";
 		public const string WpfExeName = "TessynDesktop.WPF.exe";
 		public const string WpfAssemblyName = "TessynDesktop.WPF.dll";
 

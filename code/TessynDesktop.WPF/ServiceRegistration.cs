@@ -33,7 +33,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<ConnectionViewModel>(sp => new ConnectionViewModel(
 			sp.GetRequiredService<IDaemonLocator>(), sp.GetRequiredService<ITessynClientFactory>(), sp.GetRequiredService<IUiDispatcher>(),
 			sp.GetRequiredService<ILogger<ConnectionViewModel>>(), sp.GetRequiredService<IDaemonHostLauncher>(),
-			options.AutoStartHostEnabled ? sp.GetRequiredService<DaemonRestarter>() : null));
+			RestarterFor(sp.GetRequiredService<IDaemonHostLauncher>(), () => sp.GetRequiredService<DaemonRestarter>())));
 
 		services.AddSingleton<TreeContext>();
 		services.AddSingleton<IShellModule, TreeShellModule>();
@@ -137,6 +137,12 @@ public sealed class ServiceRegistration
 		services.AddSingleton<MainWindow>();
 	}
 
+	/// <summary>
+	/// The restarter is offered only where the client can bring a host back: with the real launcher. A client run from a build output (rule A15), or in a custom environment,
+	/// has the no-op launcher, and a restart there would end the daemon and leave nobody to start one.
+	/// </summary>
+	public static DaemonRestarter? RestarterFor(IDaemonHostLauncher launcher, Func<DaemonRestarter> create) => launcher is DaemonHostLauncher ? create() : null;
+
 	/// <summary>The "daemon is older than the build" check and the one-click restart: only in the real environment and from the run folder.</summary>
 	private static DaemonRestarter CreateRestarter(IServiceProvider sp, AppPaths paths, StartupOptions options)
 	{
@@ -146,7 +152,8 @@ public sealed class ServiceRegistration
 		var restarter = new ScriptClientRestarter(new PowerShellScriptLauncher(), scriptDirectory, exe, options.Arguments, Environment.ProcessId,
 			() => System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() => System.Windows.Application.Current.Shutdown())));
 		return new DaemonRestarter(sourceLocation, new ProcessDaemonBuildProbe(), sp.GetRequiredService<IDialogService>(), new NamedEventHostExitSignal(),
-			new ProcessExitWaiter(), restarter, Constants.Switch.DaemonExitTimeout, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonRestarter>());
+			new ProcessExitWaiter(), restarter, Constants.Switch.DaemonExitTimeout, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonRestarter>(),
+			Path.Combine(AppContext.BaseDirectory.TrimEnd('\\', '/'), Constants.Switch.HostFolderName));
 	}
 
 	/// <summary>The launcher of the Avalonia background host (A23 Q6): real only in the real environment and only when running from the run folder (rule A15).</summary>

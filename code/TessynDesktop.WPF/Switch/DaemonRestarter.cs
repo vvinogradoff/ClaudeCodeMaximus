@@ -26,26 +26,36 @@ public enum DaemonRestartOutcome
 	ClientRestarting,
 }
 
-/// <summary>When was the build of the daemon process made (the write time of <c>TessynDesktop.dll</c> in its folder; a host is never refreshed while it runs, so it is what runs).</summary>
+/// <summary>The folder a daemon process runs from and the build time of what is in it.</summary>
+/// <remarks>Created by Claude</remarks>
+public sealed record RunningDaemonBuild(string Folder, DateTime BuildUtc);
+
+/// <summary>Where the daemon process runs from and when that build was made (a host is never refreshed while it runs, so the folder is what runs).</summary>
 /// <remarks>Created by Claude</remarks>
 public interface IDaemonBuildProbe
 {
-	DateTime? RunningBuildUtc(int pid);
+	RunningDaemonBuild? Inspect(int pid);
 }
 
 /// <summary>Reads the build time from the folder of the process's main module.</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class ProcessDaemonBuildProbe : IDaemonBuildProbe
 {
-	public DateTime? RunningBuildUtc(int pid)
+	/// <summary>The folder with the newest write time over all its <c>TessynDesktop*.dll</c>; null when it holds none.</summary>
+	public static RunningDaemonBuild? InspectFolder(string folder)
+	{
+		var newest = DaemonRestarter.NewestAssemblyWrite(folder);
+		return newest == null ? null : new RunningDaemonBuild(folder, newest.Value);
+	}
+
+	public RunningDaemonBuild? Inspect(int pid)
 	{
 		try
 		{
 			using var process = Process.GetProcessById(pid);
 			var exe = process.MainModule?.FileName;
 			var folder = exe == null ? null : Path.GetDirectoryName(exe);
-			var assembly = folder == null ? null : Path.Combine(folder, Constants.Switch.HostAssemblyName);
-			return assembly != null && File.Exists(assembly) ? File.GetLastWriteTimeUtc(assembly) : null;
+			return folder == null ? null : InspectFolder(folder);
 		}
 		catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
 		{
@@ -156,9 +166,11 @@ public sealed class DaemonRestarter
 	private readonly IClientRestarter _restarter;
 	private readonly TimeSpan _exitTimeout;
 	private readonly ILogger _logger;
+	private readonly string? _hostFolder;
 
-	public DaemonRestarter(string? sourceLocation, IDaemonBuildProbe probe, IDialogService dialogs, IHostExitSignal signal, IProcessExitWaiter waiter, IClientRestarter restarter, TimeSpan exitTimeout, ILogger logger)
+	public DaemonRestarter(string? sourceLocation, IDaemonBuildProbe probe, IDialogService dialogs, IHostExitSignal signal, IProcessExitWaiter waiter, IClientRestarter restarter, TimeSpan exitTimeout, ILogger logger, string? hostFolder = null)
 	{
+		_hostFolder = hostFolder;
 		_sourceLocation = sourceLocation;
 		_probe = probe;
 		_dialogs = dialogs;
@@ -175,13 +187,34 @@ public sealed class DaemonRestarter
 		if (string.IsNullOrWhiteSpace(_sourceLocation))
 			return null;
 
-		var running = _probe.RunningBuildUtc(pid);
+		var running = _probe.Inspect(pid);
 		var buildDir = SourceBuilds.FindNewestBuild(_sourceLocation, Constants.Switch.HostProjectFolder, Constants.Switch.HostAssemblyName);
 		if (running == null || buildDir == null)
 			return null;
 
-		var newest = File.GetLastWriteTimeUtc(Path.Combine(buildDir, Constants.Switch.HostAssemblyName));
-		return newest - running.Value > Tolerance ? new DaemonStaleInfo(running.Value, newest) : null;
+		// A daemon that is not the host of this run folder (a visible Avalonia window from [Publish], the rollback) cannot be restarted from here: no banner.
+		if (_hostFolder != null && !string.Equals(Path.GetFullPath(running.Folder).TrimEnd('\\'), Path.GetFullPath(_hostFolder).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+			return null;
+
+		var newest = NewestAssemblyWrite(buildDir);
+		return newest != null && newest.Value - running.BuildUtc > Tolerance ? new DaemonStaleInfo(running.BuildUtc, newest.Value) : null;
+	}
+
+	/// <summary>
+	/// The newest write time over every <c>TessynDesktop*.dll</c> in the folder (the daemon code lives in Core and Protocol as well as in the exe assembly, and a rebuild may leave
+	/// <c>TessynDesktop.dll</c> alone); null when there is none.
+	/// </summary>
+	public static DateTime? NewestAssemblyWrite(string folder)
+	{
+		DateTime? newest = null;
+		foreach (var file in Directory.EnumerateFiles(folder, Constants.Switch.HostAssemblyPattern, SearchOption.TopDirectoryOnly))
+		{
+			var time = File.GetLastWriteTimeUtc(file);
+			if (newest == null || time > newest)
+				newest = time;
+		}
+
+		return newest;
 	}
 
 	/// <summary>The question of the restart dialog.</summary>

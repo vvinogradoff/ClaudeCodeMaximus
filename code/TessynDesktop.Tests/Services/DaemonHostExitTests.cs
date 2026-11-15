@@ -56,6 +56,49 @@ public sealed class DaemonHostExitTests
 	}
 
 	[Fact]
+	public void AThrowingTerminate_StillShutsDownAndIsLogged_AndLaterRequestsAreNoOps()
+	{
+		// N2: a session in an odd state must never leave the host impossible to exit.
+		var calls = new List<string>();
+		var errors = new List<Exception>();
+		var exit = new DaemonHostExit(() => 1, _ => Task.FromResult(true), () => throw new InvalidOperationException("odd session"), () => calls.Add("shutdown"), errors.Add);
+
+		exit.Exit();
+		exit.Exit();
+
+		Assert.Equal(["shutdown"], calls);
+		Assert.Equal("odd session", Assert.Single(errors).Message);
+	}
+
+	[Fact]
+	public async Task TheTrayExit_WithAThrowingTerminate_StillEndsTheHost()
+	{
+		var calls = new List<string>();
+		var exit = new DaemonHostExit(() => 2, _ => Task.FromResult(true), () => throw new InvalidOperationException("odd"), () => calls.Add("shutdown"));
+
+		Assert.True(await exit.RequestFromTrayAsync());
+
+		Assert.Equal(["shutdown"], calls);
+	}
+
+	[Fact]
+	public async Task ASecondTrayClickWhileTheQuestionIsOpen_DoesNotOpenAnotherWindow()
+	{
+		// L-d.
+		var answer = new TaskCompletionSource<bool>();
+		var asked = 0;
+		var exit = new DaemonHostExit(() => 2, _ => { asked++; return answer.Task; }, () => { }, () => { });
+
+		var first = exit.RequestFromTrayAsync();
+		var second = await exit.RequestFromTrayAsync();
+		answer.SetResult(true);
+
+		Assert.False(second);
+		Assert.True(await first);
+		Assert.Equal(1, asked);
+	}
+
+	[Fact]
 	public void ConfirmMessage_UsesTheSingularForOneSession()
 	{
 		Assert.Contains("1 Claude Code session is currently active", DaemonHostExit.ConfirmMessage(1));
