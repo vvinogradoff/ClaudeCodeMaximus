@@ -1,0 +1,44 @@
+<Window x:Class="TessynDesktop.WPF.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings"
+        Title="Settings" Width="880" Height="720" MinWidth="640" MinHeight="460" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" Padding="16,10" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="SaveButton" Content="Save" MinWidth="88" Margin="0,0,8,0" Style="{DynamicResource AccentButtonStyle}" Command="{Binding SaveCommand}" AutomationProperties.Name="Save settings" />
+                    <Button x:Name="CloseButton" Content="Close" MinWidth="88" IsCancel="True" AutomationProperties.Name="Close settings" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SettingsHint}" Margin="0" Text="{Binding StatusText}" Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Style="{StaticResource SettingsError}" Margin="0" Text="{Binding ErrorText}" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+        <Border DockPanel.Dock="Top" Padding="16,8" Background="{DynamicResource SystemFillColorAttentionBackgroundBrush}" Visibility="{Binding ImportOffered, Converter={StaticResource BoolToVis}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Padding="10,3" Margin="12,0,0,0" Content="Import from Avalonia" Command="{Binding ImportFromAvaloniaCommand}" AutomationProperties.Name="Import from Avalonia" />
+                <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding ImportOfferText}" />
+            </DockPanel>
+        </Border>
+        <TabControl x:Name="Tabs" Margin="8" AutomationProperties.Name="Settings sections">
+            <TabItem Header="General" AutomationProperties.Name="General tab"><s:GeneralSettingsView DataContext="{Binding General}" /></TabItem>
+            <TabItem Header="Notifications" AutomationProperties.Name="Notifications tab"><s:NotificationsSettingsView DataContext="{Binding Notifications}" /></TabItem>
+            <TabItem Header="Telegram" AutomationProperties.Name="Telegram tab"><s:TelegramSettingsView DataContext="{Binding Telegram}" /></TabItem>
+            <TabItem Header="Web access" AutomationProperties.Name="Web access tab"><s:WebAccessSettingsView DataContext="{Binding WebAccess}" /></TabItem>
+            <TabItem Header="MCP servers" AutomationProperties.Name="MCP servers tab"><s:McpSettingsView DataContext="{Binding Mcp}" /></TabItem>
+            <TabItem Header="Models and profiles" AutomationProperties.Name="Models and profiles tab"><s:ModelsProfilesSettingsView DataContext="{Binding ModelsProfiles}" /></TabItem>
+            <TabItem Header="Appearance" AutomationProperties.Name="Appearance tab"><s:AppearanceSettingsView DataContext="{Binding Appearance}" /></TabItem>
+            <TabItem Header="Screensaver" AutomationProperties.Name="Screensaver tab"><s:ScreensaverSettingsView DataContext="{Binding Screensaver}" /></TabItem>
+            <TabItem Header="Keyboard shortcuts" AutomationProperties.Name="Keyboard shortcuts tab"><s:KeyboardSettingsView DataContext="{Binding Keyboard}" /></TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

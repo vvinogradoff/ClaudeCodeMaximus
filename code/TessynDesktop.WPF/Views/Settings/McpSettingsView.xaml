@@ -1,0 +1,60 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.McpSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <DockPanel Margin="16,4,16,16">
+        <TextBlock DockPanel.Dock="Top" Style="{StaticResource SettingsHint}" Text="{Binding UnavailableText}" Visibility="{Binding IsAvailable, Converter={StaticResource InvertedBoolToVis}}" />
+        <DockPanel Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVis}}">
+            <TextBlock DockPanel.Dock="Top" Style="{StaticResource SettingsHint}" Margin="0,8,0,8"
+                       Text="Servers registered here are merged into every session's --mcp-config next to the built-in cmx tools, independent of any claude.ai connector. Every change applies at once." />
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Style="{StaticResource SettingsButton}" Content="Add…" Command="{Binding AddCommand}" AutomationProperties.Name="Add MCP server" />
+                <Button Style="{StaticResource SettingsButton}" Content="Refresh" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh MCP servers" />
+            </StackPanel>
+            <s:SectionMessages DockPanel.Dock="Bottom" Margin="0,8,0,0" />
+            <ListBox x:Name="Servers" ItemsSource="{Binding Servers}" SelectedItem="{Binding Selected, Mode=TwoWay}" HorizontalContentAlignment="Stretch" AutomationProperties.Name="MCP servers">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,4" AutomationProperties.Name="{Binding AutomationName}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                    <TextBlock Margin="8,0,0,0" Text="{Binding EnabledText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Margin="8,0,0,0" Text="{Binding StatusText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding TransportSummary}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding AuthSummary}" />
+                                <TextBlock Style="{StaticResource SettingsError}" Text="{Binding Message}" Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                <Button Padding="8,2" Margin="4,0,0,0" Content="{Binding AuthorizeText}" Visibility="{Binding CanAuthorize, Converter={StaticResource BoolToVis}}" IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolToVis}}"
+                                        Command="{Binding DataContext.AuthorizeCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding DisplayName, StringFormat=Authorize {0}}" />
+                                <Button Padding="8,2" Margin="4,0,0,0" Content="{Binding ToggleText}"
+                                        Command="{Binding DataContext.ToggleEnabledCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding DisplayName, StringFormat=Toggle {0}}" />
+                                <Button Padding="8,2" Margin="4,0,0,0" Content="Edit…"
+                                        Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding DisplayName, StringFormat=Edit {0}}" />
+                                <Button Padding="8,2" Margin="4,0,0,0" Content="Remove"
+                                        Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding DisplayName, StringFormat=Remove {0}}" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+    </DockPanel>
+</UserControl>

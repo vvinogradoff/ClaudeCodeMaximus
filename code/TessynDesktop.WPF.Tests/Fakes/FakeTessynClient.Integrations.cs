@@ -19,6 +19,12 @@ public sealed partial class FakeTessynClient
 	/// <summary>What <see cref="McpDiscoverAsync"/> answers.</summary>
 	public McpDiscoverResult McpDiscoverAnswer { get; set; } = new(new McpDiscoveredConfigDto(string.Empty, string.Empty, null, true), TimedOut: false);
 
+	/// <summary>When set, <see cref="McpDiscoverAsync"/> awaits it (with the cancellation token) instead of answering <see cref="McpDiscoverAnswer"/> at once.</summary>
+	public Func<CancellationToken, Task<McpDiscoverResult>>? McpDiscoverBehavior { get; set; }
+
+	/// <summary>When set, <see cref="McpAuthorizeAsync"/> awaits it before answering.</summary>
+	public Func<Task>? McpAuthorizeBehavior { get; set; }
+
 	/// <summary>What <see cref="McpAuthorizeAsync"/> answers.</summary>
 	public McpAuthorizeResultDto McpAuthorizeAnswer { get; set; } = new(true);
 
@@ -99,14 +105,17 @@ public sealed partial class FakeTessynClient
 	{
 		Record($"mcp.discover:{url}");
 		ThrowIfMcpFails();
-		return Task.FromResult(McpDiscoverAnswer);
+		return McpDiscoverBehavior != null ? McpDiscoverBehavior(cancellationToken) : Task.FromResult(McpDiscoverAnswer);
 	}
 
-	public Task<McpAuthorizeResultDto> McpAuthorizeAsync(string id, CancellationToken cancellationToken = default)
+	public async Task<McpAuthorizeResultDto> McpAuthorizeAsync(string id, CancellationToken cancellationToken = default)
 	{
 		Record($"mcp.authorize:{id}");
 		ThrowIfMcpFails();
-		return Task.FromResult(McpAuthorizeAnswer);
+		if (McpAuthorizeBehavior != null)
+			await McpAuthorizeBehavior();
+
+		return McpAuthorizeAnswer;
 	}
 
 	public Task<TelegramStatusDto> TelegramStatusAsync(CancellationToken cancellationToken = default)

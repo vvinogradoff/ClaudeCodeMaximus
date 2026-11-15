@@ -1,0 +1,89 @@
+<Window x:Class="TessynDesktop.WPF.Views.Settings.McpServerEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings"
+        Title="{Binding Title}" Width="560" Height="640" MinHeight="420" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <DockPanel Margin="16,12,16,12">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button x:Name="SaveButton" Content="Save" MinWidth="88" Margin="0,0,8,0" IsDefault="True" Style="{DynamicResource AccentButtonStyle}" Command="{Binding SaveCommand}"
+                    AutomationProperties.Name="Save MCP server" />
+            <Button Content="Cancel" MinWidth="88" IsCancel="True" AutomationProperties.Name="Cancel MCP server" />
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource SettingsError}" Margin="0,8,0,0" Text="{Binding ErrorText}"
+                   Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SettingsLabel}" Margin="0,0,0,3" Text="Display name" />
+                <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="MCP display name" />
+                <CheckBox Margin="0,8,0,0" Content="Enabled (merged into every session)" IsChecked="{Binding Enabled}" />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Transport" />
+                <ComboBox ItemsSource="{Binding Transports}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Transport}" AutomationProperties.Name="MCP transport" />
+
+                <StackPanel Visibility="{Binding IsHttp, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Server URL" />
+                    <TextBox x:Name="UrlBox" Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" LostFocus="OnUrlLostFocus" AutomationProperties.Name="MCP server URL" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="The stored URL has a query string (not shown). It is kept unless you change the address."
+                               Visibility="{Binding UrlHasHiddenQuery, Converter={StaticResource BoolToVis}}" />
+
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Authentication" />
+                    <ComboBox ItemsSource="{Binding AuthTypes}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding AuthType}" AutomationProperties.Name="MCP authentication" />
+                </StackPanel>
+
+                <StackPanel Visibility="{Binding IsStdio, Converter={StaticResource BoolToVis}}">
+                    <Border Margin="0,10,0,0" Padding="8" BorderThickness="1" BorderBrush="{DynamicResource SystemFillColorCautionBrush}">
+                        <TextBlock TextWrapping="Wrap" Text="{Binding StdioWarning}" />
+                    </Border>
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Command" />
+                    <TextBox Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="MCP command" />
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Arguments" />
+                    <TextBox Text="{Binding ArgumentsInput, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="MCP arguments" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="Arguments are stored (not shown); the stored ones are kept unless you type new ones."
+                               Visibility="{Binding HasStoredArguments, Converter={StaticResource BoolToVis}}" />
+                    <CheckBox Margin="0,4,0,0" Content="Clear the stored arguments" IsChecked="{Binding ClearArguments}" Visibility="{Binding HasStoredArguments, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Working directory (optional)" />
+                    <TextBox Text="{Binding WorkingDirectory, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="MCP working directory" />
+                </StackPanel>
+
+                <StackPanel Visibility="{Binding ShowStaticHeader, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Header name" />
+                    <TextBox Text="{Binding StaticHeaderName, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="MCP header name" />
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Header value" />
+                    <PasswordBox s:PasswordBinder.Secret="{Binding StaticHeaderValueInput, Mode=TwoWay}" AutomationProperties.Name="MCP header value" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding HeaderValueText}" />
+                </StackPanel>
+
+                <StackPanel Visibility="{Binding ShowOauth, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Padding="8,2" Content="Find OAuth endpoints" Command="{Binding DiscoverCommand}" AutomationProperties.Name="Discover OAuth endpoints" />
+                        <Button Padding="8,2" Margin="6,0,0,0" Content="Cancel lookup" Command="{Binding CancelDiscoveryCommand}"
+                                Visibility="{Binding IsDiscovering, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Cancel discovery" />
+                        <ProgressBar Width="80" Height="8" Margin="8,0,0,0" IsIndeterminate="True" Visibility="{Binding IsDiscovering, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding DiscoveryText}" Visibility="{Binding HasDiscoveryText, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Authorization endpoint" />
+                    <TextBox Text="{Binding AuthorizationEndpoint, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="OAuth authorization endpoint" />
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Token endpoint" />
+                    <TextBox Text="{Binding TokenEndpoint, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="OAuth token endpoint" />
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Registration endpoint (optional)" />
+                    <TextBox Text="{Binding RegistrationEndpoint, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="OAuth registration endpoint" />
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Client id (optional)" />
+                    <TextBox Text="{Binding ClientId, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="OAuth client id" />
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Client secret (optional)" />
+                    <PasswordBox s:PasswordBinder.Secret="{Binding ClientSecretInput, Mode=TwoWay}" AutomationProperties.Name="OAuth client secret" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding ClientSecretText}" />
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Scopes (optional)" />
+                    <TextBox Text="{Binding Scopes, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="OAuth scopes" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="Save the server first, then use Authorize in the list to sign in." />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

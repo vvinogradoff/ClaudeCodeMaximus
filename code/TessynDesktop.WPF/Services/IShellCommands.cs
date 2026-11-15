@@ -18,6 +18,9 @@ public interface IShellCommands
 
 	ShellCommand? Find(string commandId);
 
+	/// <summary>Every registered command in registration order (the Settings window lists them to edit their key combinations).</summary>
+	IReadOnlyList<ShellCommand> GetCommands();
+
 	/// <summary>The entries of a menu for this parameter. Entries whose command is unknown are left out, disabled ones are kept.</summary>
 	IReadOnlyList<ShellMenuItemModel> BuildMenu(string menuId, object? parameter);
 

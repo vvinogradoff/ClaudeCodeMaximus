@@ -59,6 +59,12 @@ public sealed class ShellCommands : IShellCommands
 			return _commands.GetValueOrDefault(commandId);
 	}
 
+	public IReadOnlyList<ShellCommand> GetCommands()
+	{
+		lock (_gate)
+			return [.. _commands.Values];
+	}
+
 	public IReadOnlyList<ShellMenuItemModel> BuildMenu(string menuId, object? parameter)
 	{
 		List<(ShellMenuEntryModel Entry, ShellCommand Command)> found;

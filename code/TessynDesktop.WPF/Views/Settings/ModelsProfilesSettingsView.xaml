@@ -1,0 +1,54 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.ModelsProfilesSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16,4,16,16" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource SettingsLabel}" Text="Models" />
+            <TextBlock Style="{StaticResource SettingsHint}" Visibility="{Binding ModelsSupported, Converter={StaticResource InvertedBoolToVis}}"
+                       Text="This daemon does not offer a model refresh (it does not announce 'models.admin')." />
+            <StackPanel Visibility="{Binding ModelsSupported, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource SettingsHint}" Margin="0,0,0,6" Text="Asks the daemon to look at the local Ollama models again, so a model you just pulled shows up in the model list." />
+                <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Content="Refresh models" Command="{Binding RefreshModelsCommand}" AutomationProperties.Name="Refresh models" />
+            </StackPanel>
+            <s:SectionMessages Margin="0,4,0,0" />
+
+            <TextBlock Style="{StaticResource SettingsLabel}" Margin="0,20,0,3" Text="Profiles" />
+            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding ProfilesHint}" />
+            <TextBlock Style="{StaticResource SettingsHint}" Visibility="{Binding Profiles.IsAvailable, Converter={StaticResource InvertedBoolToVis}}"
+                       Text="Profile administration is not available on this daemon." />
+            <StackPanel Visibility="{Binding Profiles.IsAvailable, Converter={StaticResource BoolToVis}}">
+                <ItemsControl ItemsSource="{Binding Profiles.Profiles}" Margin="0,8,0,0" AutomationProperties.Name="Profiles in settings">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="0,3" AutomationProperties.Name="{Binding AutomationName}">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                    <Button Padding="8,2" Margin="4,0,0,0" Content="Re-authenticate" Command="{Binding DataContext.Profiles.AuthenticateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                    <Button Padding="8,2" Margin="4,0,0,0" Content="Rename" Visibility="{Binding CanEdit, Converter={StaticResource BoolToVis}}"
+                                            Command="{Binding DataContext.Profiles.RenameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                    <Button Padding="8,2" Margin="4,0,0,0" Content="Remove" Visibility="{Binding CanEdit, Converter={StaticResource BoolToVis}}"
+                                            Command="{Binding DataContext.Profiles.RemoveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                                        <Run Text="{Binding AuthText, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Email, Mode=OneWay}" />
+                                    </TextBlock>
+                                </StackPanel>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Add profile…" Command="{Binding Profiles.AddCommand}" AutomationProperties.Name="Add profile in settings" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding Profiles.StatusText}" Visibility="{Binding Profiles.HasStatus, Converter={StaticResource BoolToVis}}" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

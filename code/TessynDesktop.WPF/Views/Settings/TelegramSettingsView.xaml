@@ -1,0 +1,53 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.TelegramSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16,4,16,16" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding UnavailableText}" Visibility="{Binding IsAvailable, Converter={StaticResource InvertedBoolToVis}}" />
+            <StackPanel Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVis}}">
+                <CheckBox Margin="0,12,0,0" Content="Enable the Telegram bridge" IsChecked="{Binding TelegramEnabled}" AutomationProperties.Name="Enable Telegram" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="Sessions can notify you, and you can reply, browse and message sessions from a Telegram bot (FR.21). Takes effect the next time the daemon starts." />
+
+                <StackPanel Visibility="{Binding TokenSupported, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Bot token" />
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Remove" Command="{Binding ClearTokenCommand}" AutomationProperties.Name="Remove token" />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Save token" Command="{Binding SaveTokenCommand}" AutomationProperties.Name="Save token" />
+                        <PasswordBox s:PasswordBinder.Secret="{Binding TokenInput, Mode=TwoWay}" AutomationProperties.Name="Bot token" />
+                    </DockPanel>
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding TokenText}" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding BridgeText}" />
+                    <TextBlock Style="{StaticResource SettingsError}" Text="{Binding BridgeError}" />
+                    <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,6,0,0" Content="Refresh status" Command="{Binding RefreshStatusCommand}" />
+                </StackPanel>
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Supergroup chat id" />
+                <TextBox Text="{Binding ChatIdText, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Telegram chat id" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="e.g. -1001234567890" />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Allowed Telegram user ids" />
+                <TextBox Text="{Binding AllowedUserIdsText, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Telegram allowed users" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="Comma-separated, for example 123456789, 987654321." />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Mention handle" />
+                <TextBox Text="{Binding MentionHandle, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Telegram mention handle" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="Prefixed onto notify_user pings so they stand out from the mirrored text in the same topic, e.g. @name. Leave empty for no prefix." />
+
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Mirror" />
+                <ComboBox ItemsSource="{Binding MirrorModes}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding MirrorMode}" AutomationProperties.Name="Telegram mirror mode" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="What is posted to a session's topic: every message, only each turn's final answer (and errors), or nothing. Only notify_user pings make a sound." />
+
+                <s:SectionMessages Margin="0,8,0,0" />
+                <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Reload" Command="{Binding ReloadCommand}" AutomationProperties.Name="Reload Telegram" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

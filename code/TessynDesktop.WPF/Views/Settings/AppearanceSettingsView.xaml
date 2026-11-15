@@ -1,0 +1,43 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.AppearanceSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16,4,16,16" MaxWidth="480" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource SettingsLabel}" Text="Theme" />
+            <ComboBox ItemsSource="{Binding Themes}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Theme}" AutomationProperties.Name="Theme" />
+
+            <TextBlock Style="{StaticResource SettingsLabel}" Text="Font sizes" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="90" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Margin="0,0,16,6" VerticalAlignment="Center" Text="Assistant text" />
+                <TextBox Grid.Row="0" Grid.Column="1" Margin="0,0,0,6" Text="{Binding AssistantFontSize, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Assistant font size" />
+                <TextBlock Grid.Row="1" Margin="0,0,16,6" VerticalAlignment="Center" Text="Assistant Markdown" />
+                <TextBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,6" Text="{Binding AssistantMarkdownFontSize, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Assistant Markdown font size" />
+                <TextBlock Grid.Row="2" Margin="0,0,16,6" VerticalAlignment="Center" Text="Your messages" />
+                <TextBox Grid.Row="2" Grid.Column="1" Margin="0,0,0,6" Text="{Binding UserFontSize, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="User font size" />
+                <TextBlock Grid.Row="3" Margin="0,0,16,6" VerticalAlignment="Center" Text="Prompt box" />
+                <TextBox Grid.Row="3" Grid.Column="1" Margin="0,0,0,6" Text="{Binding InputFontSize, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Input font size" />
+            </Grid>
+            <TextBlock Style="{StaticResource SettingsHint}" Text="Sizes in points, 8 to 40. The colour palette editor of the Avalonia client is not part of this client." />
+
+            <s:SectionMessages Margin="0,8,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

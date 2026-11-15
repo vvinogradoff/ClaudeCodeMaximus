@@ -50,6 +50,8 @@ internal sealed class StagedShellRegistrations : IShellSlots, IShellCommands
 
 	public ShellCommand? Find(string commandId) => _stagedCommands.FirstOrDefault(c => c.Id == commandId) ?? _commands.Find(commandId);
 
+	public IReadOnlyList<ShellCommand> GetCommands() => [.. _commands.GetCommands(), .. _stagedCommands];
+
 	public IReadOnlyList<ShellMenuItemModel> BuildMenu(string menuId, object? parameter) => _commands.BuildMenu(menuId, parameter);
 
 	public string? GetGesture(string commandId) => _commands.GetGesture(commandId);
