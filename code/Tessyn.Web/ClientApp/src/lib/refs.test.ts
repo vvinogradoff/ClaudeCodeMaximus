@@ -9,7 +9,7 @@ import { renderFileMarkdown } from './markdown';
 import { blobMime, classifyPreview, findLocalPaths, findMediaLinks, formatBytes, hostAllowed, MAX_ATTACHMENT_BYTES } from './media';
 import { backLabel, NAV_MAX, popFrame, pushFrame, topFrame } from './navStack';
 import type { NavFrame } from './navStack';
-import { appendEntries, indexOfEntryId, replaceTranscript } from './transcript';
+import { anchorEntryId, appendEntries, indexOfEntryId, replaceTranscript, staleAnchor } from './transcript';
 
 const entry = (index: number, content = `c${index}`): SessionEntryDto => ({ index, timestamp: '2026-01-01T00:00:00Z', role: 'assistant', content, entryId: `f:${index}` });
 const result = (entries: SessionEntryDto[], total: number): SessionEntriesResult => ({ nodeId: 'n', epoch: 1, total, entries });
@@ -279,5 +279,23 @@ describe('attachments', () => {
 	it('replaces a selection and clamps a bad caret', () => {
 		expect(insertAttachedLine('abcdef', 2, 4, 'P').text).toBe('ab\nAttached file: P\nef');
 		expect(insertAttachedLine('abc', 99, 120, 'P').text).toBe('abc\nAttached file: P\n');
+	});
+});
+
+describe('N1: an anchored window after a compaction or reset while offline', () => {
+	const anchored = replaceTranscript(result([entry(10), entry(11), entry(12)], 40), true); // epoch 1, does not reach the end
+	it('is stale when the session epoch moved on, and only then', () => {
+		expect(staleAnchor(anchored, 1)).toBe(false);
+		expect(staleAnchor(anchored, 2)).toBe(true);
+	});
+	it('is never stale for a window that is not anchored or not loaded', () => {
+		const latest = replaceTranscript(result([entry(38), entry(39)], 40)); // reaches the end: not anchored
+		expect(staleAnchor(latest, 2)).toBe(false);
+		expect(staleAnchor({ ...anchored, loaded: false }, 2)).toBe(false);
+	});
+	it('re-anchors on the entry the user was sent to, else the middle of the window, else nothing', () => {
+		expect(anchorEntryId(anchored, 'f:99')).toBe('f:99');
+		expect(anchorEntryId(anchored)).toBe('f:11');
+		expect(anchorEntryId(replaceTranscript(result([], 0), true))).toBeNull();
 	});
 });

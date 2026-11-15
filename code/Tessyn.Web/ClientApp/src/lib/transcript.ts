@@ -69,6 +69,17 @@ export function planAppended(t: TranscriptState, openId: string | null, nodeId: 
 	return 'fetchAfter';
 }
 
+/** An anchored window whose epoch is not the session's current one: a compaction or reset happened while the browser was away. */
+export function staleAnchor(t: TranscriptState, epoch: number): boolean {
+	return t.loaded && t.anchored && t.epoch !== epoch;
+}
+
+/** The entry to centre on again: the one the user was sent to when it is known, else the middle of the loaded window. */
+export function anchorEntryId(t: TranscriptState, focusEntryId?: string): string | null {
+	if (focusEntryId) return focusEntryId;
+	return t.entries.length > 0 ? (t.entries[Math.floor(t.entries.length / 2)].entryId ?? null) : null;
+}
+
 /** Entries to display: whitespace-only entries are hidden except compaction. */
 export function visibleEntries(entries: SessionEntryDto[]): SessionEntryDto[] {
 	return entries.filter((e) => e.role === 'compaction' || e.content.trim().length > 0);

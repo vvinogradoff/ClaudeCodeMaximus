@@ -393,6 +393,18 @@ ${'const veryLongLine = 1; '.repeat(12)}
 		window.setTimeout(() => { if (this.online || method === 'link.status') for (const l of [...this.listeners]) l(frame); }, 0);
 	}
 
+	private applyCompaction(s: MockSession): void {
+		s.entries = [{ index: 0, timestamp: new Date().toISOString(), role: 'compaction', content: '' }, makeAssistantEntry(1, 0, '**Summary of the conversation so far**\n\n- Designed the web client\n- Agreed on SSE', 'claude-opus-5-5', 'high')];
+		s.epoch++;
+	}
+
+	/** Test hook: compacts the named session without telling the client (it is offline), so only a resync can notice. */
+	compactSilently(name: string): void {
+		const s = [...this.sessions.values()].find((x) => x.name === name);
+		if (!s) throw new Error(`No mock session named ${name}`);
+		this.applyCompaction(s);
+	}
+
 	setOnline(online: boolean): void {
 		this.online = online;
 		this.emit('link.status', { online, since: new Date().toISOString() });
@@ -467,8 +479,7 @@ ${'const veryLongLine = 1; '.repeat(12)}
 				const s = this.get(params.nodeId);
 				const queued = s.running;
 				window.setTimeout(() => {
-					s.entries = [{ index: 0, timestamp: new Date().toISOString(), role: 'compaction', content: '' }, makeAssistantEntry(1, 0, '**Summary of the conversation so far**\n\n- Designed the web client\n- Agreed on SSE', 'claude-opus-5-5', 'high')];
-					s.epoch++;
+					this.applyCompaction(s);
 					this.emit('session.reset', { nodeId: s.id, epoch: s.epoch });
 					this.touch(s);
 				}, 800);
