@@ -1,4 +1,5 @@
-﻿using System.Windows.Controls;
+﻿using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using TessynDesktop.WPF.ViewModels;
 
@@ -11,6 +12,16 @@ public partial class TreePanel : UserControl
 	public TreePanel()
 	{
 		InitializeComponent();
+		_dragDrop = new TreeDragDrop(RowList, () => DataContext as TreeViewModel);
+	}
+
+	private readonly TreeDragDrop _dragDrop;
+
+	/// <summary>A group's or a session's tooltip shows its path on disk and git origin: asked once, when the tooltip first opens.</summary>
+	private async void OnRowToolTipOpening(object sender, ToolTipEventArgs e)
+	{
+		if (e.OriginalSource is FrameworkElement { DataContext: TreeNodeViewModel node } && DataContext is TreeViewModel tree)
+			await tree.EnsureInfoAsync(node);
 	}
 
 	/// <summary>

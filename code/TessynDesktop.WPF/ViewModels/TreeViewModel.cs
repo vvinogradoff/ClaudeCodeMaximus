@@ -22,6 +22,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<TreeViewModel> _logger;
 	private readonly TimeSpan _searchDebounce;
+	private readonly TreeNodeInfoLoader? _infoLoader;
 
 	private readonly Dictionary<string, TreeNodeViewModel> _byId = new();
 	private readonly HashSet<string> _expanded = new();
@@ -35,6 +36,8 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 	private CancellationTokenSource? _searchCts;
 	private Task _searchTask = Task.CompletedTask;
 	private Task _refreshTask = Task.CompletedTask;
+	private Task _infoTask = Task.CompletedTask;
+	private int _infoGeneration;
 	private bool _refreshRunning;
 	private bool _refreshPending;
 	private bool _forceNext;
@@ -59,15 +62,21 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 	{
 	}
 
-	public TreeViewModel(ITessynClient client, IUiDispatcher ui, ILogger<TreeViewModel> logger, TimeSpan searchDebounce)
+	public TreeViewModel(ITessynClient client, IUiDispatcher ui, ILogger<TreeViewModel> logger, TimeSpan searchDebounce, TreeOperations? operations = null, TreeNodeInfoLoader? infoLoader = null)
 	{
 		_client = client;
 		_ui = ui;
 		_logger = logger;
 		_searchDebounce = searchDebounce;
+		_infoLoader = infoLoader;
+		Operations = operations;
+		operations?.Attach(this);
 		_client.NotificationReceived += OnNotification;
 		_client.Resynced += OnResynced;
 	}
+
+	/// <summary>Add, rename, delete and move; null in a tree without the daemon's tree mutation methods wired.</summary>
+	public TreeOperations? Operations { get; }
 
 	/// <summary>The visible rows, flattened (bound to a virtualizing list).</summary>
 	public FlatRowCollection Rows { get; } = new();
@@ -109,23 +118,119 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 	{
 		await _refreshTask;
 		await _searchTask;
+		await _infoTask;
 	}
+
+	/// <summary>Asks the daemon for the snapshot now (the version check makes it cheap when nothing changed) and waits until the rows are rebuilt.</summary>
+	public async Task RefreshAsync()
+	{
+		RequestRefresh(force: false);
+		await WhenIdleAsync();
+	}
+
+	/// <summary>The node with this id, or null when it is not in the tree (a worker that was not loaded yet).</summary>
+	public TreeNodeViewModel? FindNode(string nodeId) => _byId.GetValueOrDefault(nodeId);
 
 	/// <summary>Selects a node by id (expanding its ancestors) and raises <see cref="SelectionChanged"/>. False when unknown (e.g. a worker not loaded yet).</summary>
 	public bool SelectNodeById(string nodeId)
 	{
+		if (!RevealNode(nodeId))
+			return false;
+
+		SelectedNode = _byId[nodeId];
+		return true;
+	}
+
+	/// <summary>Expands the ancestors of a node so its row is visible, without selecting it. False when the node is unknown.</summary>
+	public bool RevealNode(string nodeId)
+	{
 		if (!_byId.TryGetValue(nodeId, out var node))
 			return false;
 
+		var changed = false;
 		for (var parent = node.Parent; parent != null; parent = parent.Parent)
 		{
+			changed |= !parent.IsExpanded;
 			parent.IsExpanded = true;
 			_expanded.Add(parent.Id);
 		}
 
 		ApplyRows();
-		SelectedNode = node;
+		if (changed)
+			ExpansionChanged?.Invoke(this, EventArgs.Empty);
+
 		return true;
+	}
+
+	/// <summary>
+	/// Fills in the tooltip (path on disk, git origin) of a node from <c>tree.nodeInfo</c>, once. Directories get theirs with the tree; a group or a session asks
+	/// when its tooltip opens, so a tree of thousands of sessions costs nothing until the user hovers.
+	/// </summary>
+	public async Task EnsureInfoAsync(TreeNodeViewModel node)
+	{
+		if (_infoLoader == null || node.InfoLoaded)
+			return;
+
+		node.InfoLoaded = true;
+		var items = await _infoLoader.LoadAsync([node.Id]);
+		if (items.Count == 0)
+			node.InfoLoaded = false;
+
+		ApplyInfo(items);
+	}
+
+	private void ApplyInfo(IReadOnlyList<TessynDesktop.Models.Remote.TreeNodeInfoItem> items)
+	{
+		foreach (var item in items)
+		{
+			if (!_byId.TryGetValue(item.NodeId, out var node))
+				continue;
+
+			node.InfoLoaded = true;
+			if (node.Kind == TreeNodeKind.Directory)
+				node.GitOrigin = item.GitOrigin;
+
+			node.ToolTipText = BuildToolTip(node, item);
+		}
+	}
+
+	private static string BuildToolTip(TreeNodeViewModel node, TessynDesktop.Models.Remote.TreeNodeInfoItem item)
+	{
+		var lines = new List<string>();
+		if (!string.IsNullOrEmpty(item.Path))
+			lines.Add(item.Path);
+		else
+			lines.Add(node.Label);
+
+		if (!string.IsNullOrEmpty(item.WorkingDirectory))
+			lines.Add(item.WorkingDirectory);
+
+		if (!string.IsNullOrEmpty(item.GitOrigin))
+			lines.Add(Constants.TreeTexts.GitOriginPrefix + item.GitOrigin);
+
+		return string.Join(Environment.NewLine, lines);
+	}
+
+	/// <summary>Asks for the info of every directory (one call): their git-origin labels and tooltips. The groups and sessions follow lazily.</summary>
+	private void LoadDirectoryInfo()
+	{
+		if (_infoLoader == null)
+			return;
+
+		var generation = ++_infoGeneration;
+		var ids = _roots.Where(r => r.Kind == TreeNodeKind.Directory).Select(r => r.Id).ToList();
+		_infoTask = LoadDirectoryInfoAsync(ids, generation);
+	}
+
+	private async Task LoadDirectoryInfoAsync(IReadOnlyList<string> ids, int generation)
+	{
+		if (ids.Count == 0)
+			return;
+
+		var items = await _infoLoader!.LoadAsync(ids);
+		// A newer load (or a rebuild) replaced the nodes these answers belong to.
+		if (generation == _infoGeneration)
+			ApplyInfo(items);
 	}
 
 	[RelayCommand]
@@ -155,7 +260,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		ExpansionChanged?.Invoke(this, EventArgs.Empty);
 	}
 
-	partial void OnSelectedNodeChanged(TreeNodeViewModel? value)
+	private void OnSelectedNodeChangedCore(TreeNodeViewModel? value)
 	{
 		if (_rebuilding || value == null)
 			return;
@@ -240,6 +345,8 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 				var changed = notification.Params.Deserialize<TreeChangedPayload>(TdcpJsonOptions.Default);
 				if (changed != null && changed.Version != _version)
 					_ui.Post(() => RequestRefresh(force: false));
+				else if (changed != null && _infoLoader != null)
+					_ui.Post(LoadDirectoryInfo);
 				break;
 			case RemoteProtocol.Events.SessionChanged:
 				var session = notification.Params.Deserialize<SessionChangedPayload>(TdcpJsonOptions.Default);
@@ -303,6 +410,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		Rebuild(snapshot);
 		await ReloadExpandedWorkersAsync();
 		ApplyRows();
+		LoadDirectoryInfo();
 	}
 
 	private void Rebuild(TreeSnapshotResult snapshot)
