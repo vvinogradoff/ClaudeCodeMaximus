@@ -23,6 +23,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeAssistService _assistService;
 	private readonly IDaemonClient _daemon;
+	private readonly IImportService _importer;
 	private string _searchText = string.Empty;
 	private bool _isSearching;
 	private bool _isGlobalSearch;
@@ -282,8 +283,10 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	public ImportPickerViewModel(
 		IClaudeSessionImportService importService,
 		IClaudeAssistService assistService,
-		IDaemonClient daemon)
+		IDaemonClient daemon,
+		IImportService importer)
 	{
+		_importer = importer;
 		_importService = importService;
 		_assistService = assistService;
 		_daemon = daemon;
@@ -465,9 +468,9 @@ public sealed class ImportPickerViewModel : ViewModelBase
 			}
 			else if (summaryByExternalId.TryGetValue(externalId, out var summary))
 			{
-				// Reverse slug to path for cross-project sessions (best-effort; slugs are lossy)
-				if (summary.OriginalProjectPath == null && summary.ProjectSlug is { } slug && slug.StartsWith('-'))
-					summary.OriginalProjectPath = slug.Replace('-', '/');
+				// The folder behind the slug of a cross-project result: from the session file, the tree, or a reconstruction (Core import service).
+				if (summary.OriginalProjectPath == null && !string.IsNullOrEmpty(summary.ProjectSlug))
+					summary.OriginalProjectPath = _importer.ResolveOriginalProjectPath(summary.ProjectSlug, summary.JsonlPath);
 
 				var isImported = _alreadyImportedIds.Contains(externalId);
 				var item = new ImportSessionItemViewModel(summary, isImported);

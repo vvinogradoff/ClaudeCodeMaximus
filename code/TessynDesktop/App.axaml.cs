@@ -219,6 +219,7 @@ public partial class App : Application
 		services.AddSingleton<IGitOriginService, GitOriginService>();
 		services.AddSingleton<ICodeIndexService, CodeIndexService>();
 		services.AddSingleton<IClaudeSessionImportService, ClaudeSessionImportService>();
+		services.AddSingleton<IImportService, ImportService>(); // J4: the one import implementation (Avalonia picker and import.* methods)
 		services.AddSingleton<IClaudeAssistService, ClaudeAssistService>();
 		services.AddSingleton<IKeyBindingService, KeyBindingService>();
 		services.AddSingleton<IClaudeProfileService, ClaudeProfileService>();
