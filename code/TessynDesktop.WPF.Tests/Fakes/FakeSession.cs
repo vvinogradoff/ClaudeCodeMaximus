@@ -12,6 +12,12 @@ public sealed class FakeSession
 
 	public bool Running { get; set; }
 
+	public bool StreamingMode { get; set; }
+
+	public bool StreamingAlive { get; set; }
+
+	public string DirectoryId { get; set; } = "dir";
+
 	/// <summary>What <c>session.get</c> reports as the settings the session was last used with.</summary>
 	public LastUsedSettingsDto LastUsed { get; set; } = new("default", "default", "default", "[Sys] Default");
 
@@ -21,7 +27,7 @@ public sealed class FakeSession
 
 	public List<SessionTagDto> Tags { get; set; } = [];
 
-	public SessionStateDto State(string nodeId) => new(nodeId, Running, false, null, false, null, null, false, null);
+	public SessionStateDto State(string nodeId) => new(nodeId, Running, StreamingAlive, null, false, null, null, false, null);
 
 	public static FakeSession WithEntries(int count, string name = "session")
 	{

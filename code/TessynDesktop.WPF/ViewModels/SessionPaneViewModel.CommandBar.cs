@@ -45,7 +45,7 @@ public sealed partial class SessionPaneViewModel
 		{
 			var catalog = await _client.CatalogGetAsync();
 			_applyingSelection = true;   // refilling the lists makes the combo boxes report an empty selection: that is no pick
-			Fill(Models, catalog.Models.Select(m => new SelectorOptionViewModel(m.Id, m.DisplayName)));
+			Fill(Models, catalog.Models.Select(m => new SelectorOptionViewModel(m.Id, m.DisplayName, m.Provider)));
 			Fill(Efforts, catalog.Efforts.Select(e => new SelectorOptionViewModel(e, Capitalize(e))));
 			Fill(Profiles, catalog.Profiles.Select(p => new SelectorOptionViewModel(p.Id, p.DisplayName)));
 			_applyingSelection = false;

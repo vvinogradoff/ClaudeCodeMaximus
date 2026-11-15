@@ -49,6 +49,9 @@ internal sealed class ScriptedTurnModule : IRemoteRpcModule
 	/// <summary>The sends received, in order: node, text, model, effort, profile.</summary>
 	public ConcurrentQueue<(string NodeId, string Text, string? Model, string? Effort, string? Profile)> Sends { get; } = new();
 
+	/// <summary>The one-shot flags of each send (<c>newBranch</c>, <c>autoCompact</c>), in the order of <see cref="Sends"/>.</summary>
+	public ConcurrentQueue<(bool NewBranch, bool AutoCompact)> Flags { get; } = new();
+
 	/// <summary>Chunks of streamed answer published so far (all turns): the tests wait on it instead of sleeping.</summary>
 	public int ChunksPublished => Volatile.Read(ref _chunks);
 
@@ -76,6 +79,7 @@ internal sealed class ScriptedTurnModule : IRemoteRpcModule
 		var text = p["text"]!.GetValue<string>();
 		var turn = new Turn(nodeId, "turn-" + Interlocked.Increment(ref _turnCounter), text, p["modelId"]?.GetValue<string>(), p["effort"]?.GetValue<string>(), p["profileId"]?.GetValue<string>());
 		Sends.Enqueue((nodeId, text, turn.Model, turn.Effort, turn.Profile));
+		Flags.Enqueue((p["newBranch"]?.GetValue<bool>() ?? false, p["autoCompact"]?.GetValue<bool>() ?? false));
 
 		var gate = _locks.GetOrAdd(nodeId, _ => new SemaphoreSlim(1, 1));
 		var queued = gate.CurrentCount == 0;
