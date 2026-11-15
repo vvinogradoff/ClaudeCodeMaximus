@@ -225,12 +225,12 @@ public sealed partial class SessionPaneViewModel
 		if (nodeId == null || nodeId == NodeId)
 		{
 			var result = _inserter.Insert(InputText, start, length, insertion);
-			InputText = result.Text;
+			SetInput(result.Text);
 			InputCaretRequested?.Invoke(this, result.Caret);
 		}
 		else
 		{
-			_drafts[nodeId] = _inserter.Insert(_drafts.GetValueOrDefault(nodeId, string.Empty), start, length, insertion).Text;
+			SetDraftText(nodeId, _inserter.Insert(_drafts.GetValueOrDefault(nodeId, string.Empty), start, length, insertion).Text);
 		}
 	}
 

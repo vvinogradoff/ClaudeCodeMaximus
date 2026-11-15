@@ -204,7 +204,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	}
 
 	private static object ToPage(TranscriptEntryView view) =>
-		new { i = view.Index, r = view.Role, ts = view.Timestamp, html = view.Html, trunc = view.Truncated, full = view.FullLength, h = view.EstimatedHeight, m = view.Media ?? [], p = view.Paths ?? [] };
+		new { i = view.Index, r = view.Role, ts = view.Timestamp, html = view.Html, trunc = view.Truncated, full = view.FullLength, h = view.EstimatedHeight, m = view.Media ?? [], p = view.Paths ?? [], s = view.Source };
 
 	/// <summary>Hands the media allowlist to the page, which decides auto-load versus click-to-load from it.</summary>
 	private void PostPolicy()

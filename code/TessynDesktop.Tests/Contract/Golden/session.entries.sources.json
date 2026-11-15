@@ -1,0 +1,68 @@
+{
+  "nodeId": "<id1>",
+  "epoch": 0,
+  "total": 7,
+  "entries": [
+    {
+      "index": 0,
+      "timestamp": "2026-11-14T08:00:00+00:00",
+      "role": "user",
+      "content": "typed on the desktop",
+      "profileName": "work",
+      "entryId": "<id2>:0"
+    },
+    {
+      "index": 1,
+      "timestamp": "2026-11-14T08:01:00+00:00",
+      "role": "assistant",
+      "content": "ok",
+      "modelId": "opus",
+      "effort": "high",
+      "entryId": "<id2>:1"
+    },
+    {
+      "index": 2,
+      "timestamp": "2026-11-14T08:02:00+00:00",
+      "role": "user",
+      "content": "[Scheduled] Nightly check: run it",
+      "profileName": "work",
+      "source": "scheduled",
+      "entryId": "<id2>:2"
+    },
+    {
+      "index": 3,
+      "timestamp": "2026-11-14T08:03:00+00:00",
+      "role": "user",
+      "content": "from the supervisor",
+      "profileName": "work",
+      "source": "orchestrated",
+      "entryId": "<id2>:3"
+    },
+    {
+      "index": 4,
+      "timestamp": "2026-11-14T08:04:00+00:00",
+      "role": "user",
+      "content": "typed in Telegram",
+      "source": "telegram",
+      "entryId": "<id2>:4"
+    },
+    {
+      "index": 5,
+      "timestamp": "2026-11-14T08:05:00+00:00",
+      "role": "user",
+      "content": "typed in the web client",
+      "source": "web",
+      "entryId": "<id2>:5"
+    },
+    {
+      "index": 6,
+      "timestamp": "2026-11-14T08:06:00+00:00",
+      "role": "user",
+      "content": "[Scheduled] Written before sources existed",
+      "source": "scheduled",
+      "entryId": "<id2>:6"
+    }
+  ],
+  "fileId": "<id2>",
+  "seq": 7
+}

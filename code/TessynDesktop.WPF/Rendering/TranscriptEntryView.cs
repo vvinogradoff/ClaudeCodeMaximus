@@ -10,6 +10,7 @@ namespace TessynDesktop.WPF.Rendering;
 /// <param name="EstimatedHeight">Initial height guess in pixels, replaced by the measured height.</param>
 /// <param name="Media">https media links of an assistant entry (FR.26.4), at most six; the page decides per link whether it loads at once or after a click.</param>
 /// <param name="Paths">Absolute local file paths of an assistant entry (FR.26.5); the page shows each as a chip.</param>
+/// <param name="Source">What produced a user entry ("scheduled", "orchestrated", "telegram", "web"); null for the desktop user and other roles. The page colours scheduled and orchestrated inputs apart.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record TranscriptEntryView(
 	int Index,
@@ -20,4 +21,5 @@ public sealed record TranscriptEntryView(
 	int FullLength,
 	int EstimatedHeight,
 	IReadOnlyList<string>? Media = null,
-	IReadOnlyList<string>? Paths = null);
+	IReadOnlyList<string>? Paths = null,
+	string? Source = null);

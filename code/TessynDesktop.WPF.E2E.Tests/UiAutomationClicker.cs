@@ -44,6 +44,47 @@ public sealed class UiAutomationClicker
 		return false;
 	}
 
+	/// <summary>
+	/// Puts the caret of the text box at the end of its text (UI Automation's TextPattern, no keyboard): setting a text through the ValuePattern leaves the caret
+	/// at the start, and a trigger such as <c>#Fo</c> is read at the caret. False on timeout.
+	/// </summary>
+	public async Task<bool> PlaceCaretAtEndAsync(Process process, string textBoxName, TimeSpan timeout)
+	{
+		var finder = new AppWindowFinder();
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			var hwnd = finder.Find(process.Id);
+			if (hwnd != IntPtr.Zero && TryPlaceCaretAtEnd(hwnd, textBoxName))
+				return true;
+
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
+
+	private static bool TryPlaceCaretAtEnd(IntPtr hwnd, string textBoxName)
+	{
+		try
+		{
+			var box = AutomationElement.FromHandle(hwnd).FindFirst(TreeScope.Descendants, new AndCondition(
+				new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit),
+				new PropertyCondition(AutomationElement.NameProperty, textBoxName)));
+			if (box == null || !box.TryGetCurrentPattern(TextPattern.Pattern, out var pattern))
+				return false;
+
+			var range = ((TextPattern)pattern).DocumentRange;
+			range.MoveEndpointByRange(System.Windows.Automation.Text.TextPatternRangeEndpoint.Start, range, System.Windows.Automation.Text.TextPatternRangeEndpoint.End);
+			range.Select();
+			return true;
+		}
+		catch (Exception ex) when (ex is ElementNotAvailableException or ElementNotEnabledException or InvalidOperationException)
+		{
+			return false;
+		}
+	}
+
 	private static bool TrySetText(IntPtr hwnd, string textBoxName, string text)
 	{
 		try

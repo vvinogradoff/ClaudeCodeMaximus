@@ -23,11 +23,17 @@ public sealed partial class FakeTessynClient
 	public static string RevisionOf(string? text) =>
 		string.IsNullOrEmpty(text) ? RemoteProtocol.Composer.EmptyDraftRevision : "rev-" + text.Length + "-" + text.GetHashCode();
 
-	public Task<DraftGetResult> DraftGetAsync(string nodeId, CancellationToken cancellationToken = default)
+	/// <summary>When set, <see cref="DraftGetAsync"/> waits for it before it reads the draft (the user types while the read is pending).</summary>
+	public TaskCompletionSource? DraftGetGate { get; set; }
+
+	public async Task<DraftGetResult> DraftGetAsync(string nodeId, CancellationToken cancellationToken = default)
 	{
 		Record($"draft.get:{nodeId}");
-		DraftTexts.TryGetValue(nodeId, out var text);
-		return Task.FromResult(new DraftGetResult(text ?? string.Empty, RevisionOf(text)));
+		DraftTexts.TryGetValue(nodeId, out var text);   // read before the gate: a slow answer is an old one, as on a real connection
+		if (DraftGetGate != null)
+			await DraftGetGate.Task;
+
+		return new DraftGetResult(text ?? string.Empty, RevisionOf(text));
 	}
 
 	public Task<DraftSetResult> DraftSetAsync(string nodeId, string text, string? baseRevision = null, CancellationToken cancellationToken = default)
@@ -53,10 +59,13 @@ public sealed partial class FakeTessynClient
 		return Task.FromResult(new DraftDeleteResult(DraftTexts.Remove(nodeId)));
 	}
 
+	/// <summary>When set, answers <see cref="AutocompleteSuggestAsync"/> instead of <see cref="AutocompleteAnswer"/> (text and caret are passed; it may wait to model a slow daemon).</summary>
+	public Func<string, int, Task<AutocompleteSuggestResult>>? AutocompleteHandler { get; set; }
+
 	public Task<AutocompleteSuggestResult> AutocompleteSuggestAsync(string nodeId, string text, int caret, CancellationToken cancellationToken = default)
 	{
 		Record($"autocomplete.suggest:{nodeId}:{caret}");
-		return Task.FromResult(AutocompleteAnswer);
+		return AutocompleteHandler?.Invoke(text, caret) ?? Task.FromResult(AutocompleteAnswer);
 	}
 
 	/// <summary>The channels last registered with <see cref="ClientRegisterAsync"/> (empty: unregistered).</summary>

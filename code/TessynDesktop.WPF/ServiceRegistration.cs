@@ -83,6 +83,7 @@ public sealed class ServiceRegistration
 			sp.GetRequiredService<IClientStateStore>())
 		{
 			TestDropPaths = options.TestDropPaths,
+			Dialogs = sp.GetRequiredService<IDialogService>(),
 		});
 		services.AddSingleton<IClientStateStore, JsonClientStateStore>();
 
@@ -101,6 +102,20 @@ public sealed class ServiceRegistration
 		services.AddSingleton<SessionListsHost>();
 		services.AddSingleton<IShellModule, SessionListsModule>();
 		services.AddSingleton<IShellModule, TurnLoopShellModule>();
+		services.AddSingleton<IShellModule, ToolbarShellModule>();
+		services.AddSingleton<ProfileViewModel>();
+		services.AddSingleton<ProfileSwitchViewModel>();
+		services.AddSingleton<ProfileHost>();
+		services.AddSingleton<IShellModule, ProfileShellModule>();
+		services.AddSingleton<IShellModule, ComposerShellModule>();
+
+		// W1b: the completion sound. A test window never plays one (the sound is the one thing an off-screen window cannot hide).
+		if (options.TestWindow)
+			services.AddSingleton<ISoundPlayer, SilentSoundPlayer>();
+		else
+			services.AddSingleton<ISoundPlayer, WinmmSoundPlayer>();
+
+		services.AddSingleton<IHostedService, CompletionSoundHost>();
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();
 		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));

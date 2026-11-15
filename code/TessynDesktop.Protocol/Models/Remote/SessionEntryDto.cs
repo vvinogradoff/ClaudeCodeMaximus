@@ -26,6 +26,12 @@ public sealed record SessionEntryDto
 	public string? ModelId { get; init; }
 	public string? Effort { get; init; }
 
+	/// <summary>
+	/// What produced a user entry: "scheduled", "orchestrated", "telegram" or "web". Omitted for the desktop user and for every
+	/// other role. Additive: a client that does not know the field treats the entry as the user's own.
+	/// </summary>
+	public string? Source { get; init; }
+
 	// P1.F (additive): stable entry identity and ranged reads.
 
 	/// <summary>

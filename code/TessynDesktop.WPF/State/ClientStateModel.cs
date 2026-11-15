@@ -16,11 +16,17 @@ public sealed class ClientStateModel
 
 	public string? LastSelectedNodeId { get; set; }
 
+	/// <summary>The id this install gives the daemon when it registers the channels it presents (<c>client.register</c>); created once, so a reconnect or a restart counts as the same client.</summary>
+	public string? ClientId { get; set; }
+
 	/// <summary>Expanded directories, groups and sessions; null until the user changed an expansion (then the daemon's flags seed it).</summary>
 	public List<string>? ExpandedNodeIds { get; set; }
 
 	/// <summary>The composer's file mode (FR.31.2): dropped files are copied into the session's attachments instead of inserting their paths. Global, not per session.</summary>
 	public bool AttachAsFiles { get; set; }
+
+	/// <summary>The session tag area shows up to <see cref="Constants.TagArea.MaxFullLines"/> lines (FR.24 "full") instead of one line ("mini"). Global, not per session.</summary>
+	public bool TagAreaExpanded { get; set; }
 
 	/// <summary>Typed, versioned settings sections by name (see <see cref="IClientSettingsStore"/>); new sections never need a new property here.</summary>
 	public Dictionary<string, ClientSectionModel> Sections { get; set; } = new();

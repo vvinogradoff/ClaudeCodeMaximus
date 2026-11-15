@@ -42,8 +42,9 @@ public interface ISessionFileService
 	/// <summary>
 	/// Appends a message entry to the session file. Optional metadata is embedded in the header line:
 	/// <paramref name="profileName"/> for USER entries, <paramref name="modelId"/> and <paramref name="effort"/> for ASSISTANT entries.
+	/// <paramref name="source"/> (<see cref="Models.EntrySources"/>) marks a USER entry that was not typed on the desktop; null for the desktop user.
 	/// </summary>
-	void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null);
+	void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null, string? source = null);
 	void AppendCompactionSeparator(string fileName);
 
 	IReadOnlyList<SessionEntryModel> ReadEntries(string fileName);

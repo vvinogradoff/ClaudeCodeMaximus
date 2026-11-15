@@ -18,6 +18,9 @@ public sealed partial class SessionPaneViewModel
 	private readonly Dictionary<string, SessionTurnsState> _turnStates = new();
 	private readonly Queue<string> _errorOrder = new();
 	private Task _handoffTask = Task.CompletedTask;
+
+	/// <summary>The session whose finished turn is being handed over to its persisted entries (R1); its live row is not pushed meanwhile.</summary>
+	private readonly HandoffGuard _handoffs = new();
 	private bool _liveFlushScheduled;
 	private bool _daemonRunning;
 	private long? _genericSinceUnixMs;
@@ -31,7 +34,8 @@ public sealed partial class SessionPaneViewModel
 	/// <summary>The clock of the thinking timer and of the generic working row.</summary>
 	public TimeProvider Clock { get; set; } = TimeProvider.System;
 
-	private bool CanSend() => HasSession && IsSessionReady && !string.IsNullOrWhiteSpace(InputText);
+	/// <summary>An empty box can be sent while Auto-Compact is on: it then only compacts (FR.11.6).</summary>
+	private bool CanSend() => HasSession && IsSessionReady && (!string.IsNullOrWhiteSpace(InputText) || Instruction?.AutoCompact == true);
 
 	partial void OnHasSessionChanged(bool value) => SendCommand.NotifyCanExecuteChanged();
 
@@ -40,29 +44,32 @@ public sealed partial class SessionPaneViewModel
 	{
 		var id = NodeId;
 		var text = InputText.Trim();
-		if (id == null || text.Length == 0)
+		if (id == null || (text.Length == 0 && Instruction?.AutoCompact != true))
 			return;
 
 		// A14: what the user picked travels with this send, so a queued send keeps it whatever is picked later. A field the user did not pick is
 		// not sent (tdcp-spec 9.8): the value the selector shows came from lastUsed, and sending it would pin the session to it.
 		var picks = PicksOfOpenSession();
+		var oneShots = Instruction.TakeOneShots();   // New Branch and Auto-Compact go with this send and switch off
 
 		// The input is taken before the round trip: a second press (or key repeat) finds nothing to send, and text typed meanwhile is kept.
-		InputText = string.Empty;
+		SetInput(string.Empty);
 		Error = null;
 		ClearTurnError(id);
 		try
 		{
-			var result = await _client.TurnSendAsync(id, text, picks.ModelId, picks.EffortId, picks.ProfileId, Guid.NewGuid().ToString("N"));
+			var result = await _client.TurnSendAsync(id, text, picks.ModelId, picks.EffortId, picks.ProfileId, Guid.NewGuid().ToString("N"), oneShots.NewBranch, oneShots.AutoCompact);
 			if (!result.Accepted)
 			{
 				RestoreInput(id, text);
+				Instruction.Restore(id, oneShots);
 				Error = Constants.TurnTexts.NotAccepted;
 			}
 		}
 		catch (Exception ex)
 		{
 			RestoreInput(id, text);
+			Instruction.Restore(id, oneShots);
 			_logger.LogWarning(ex, "turn.send failed for {NodeId}", id);
 			Error = Constants.TurnTexts.SendFailed + ex.Message;
 		}
@@ -74,13 +81,13 @@ public sealed partial class SessionPaneViewModel
 		if (nodeId == NodeId)
 		{
 			if (InputText.Length == 0)
-				InputText = text;
+				SetInput(text);
 
 			return;
 		}
 
 		if (string.IsNullOrEmpty(_drafts.GetValueOrDefault(nodeId)))
-			_drafts[nodeId] = text;
+			SetDraftText(nodeId, text);
 	}
 
 	[RelayCommand(CanExecute = nameof(IsRunning))]
@@ -215,6 +222,7 @@ public sealed partial class SessionPaneViewModel
 			_daemonRunning = false;
 
 		RecomputeRunning();
+		_handoffs.Enter(payload.NodeId);
 		_handoffTask = HandOffAsync(payload.NodeId);
 	}
 
@@ -224,11 +232,18 @@ public sealed partial class SessionPaneViewModel
 	/// </summary>
 	private async Task HandOffAsync(string nodeId)
 	{
-		if (_current != null)
-			await RequestAppend();
+		try
+		{
+			if (_current != null)
+				await RequestAppend();
+		}
+		finally
+		{
+			_handoffs.Exit(nodeId);
 
-		if (nodeId == NodeId)
-			PushLive();
+			if (nodeId == NodeId)
+				PushLive();
+		}
 	}
 
 	/// <summary>Errors of sessions that are not open stay until their next send; only the newest few are kept.</summary>
@@ -308,6 +323,11 @@ public sealed partial class SessionPaneViewModel
 	{
 		var id = NodeId;
 		if (id == null)
+			return;
+
+		// R1: while the persisted answer is being appended the finished turn's row stays, so no other push (the debounced flush that
+		// session.changed schedules) opens a gap before the entry arrives; the hand-off pushes when it is done.
+		if (_handoffs.IsActive(id))
 			return;
 
 		_turnStates.TryGetValue(id, out var state);

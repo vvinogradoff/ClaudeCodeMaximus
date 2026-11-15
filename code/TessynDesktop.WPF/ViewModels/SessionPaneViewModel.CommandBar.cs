@@ -45,7 +45,7 @@ public sealed partial class SessionPaneViewModel
 		{
 			var catalog = await _client.CatalogGetAsync();
 			_applyingSelection = true;   // refilling the lists makes the combo boxes report an empty selection: that is no pick
-			Fill(Models, catalog.Models.Select(m => new SelectorOptionViewModel(m.Id, m.DisplayName)));
+			Fill(Models, catalog.Models.Select(m => new SelectorOptionViewModel(m.Id, m.DisplayName, m.Provider)));
 			Fill(Efforts, catalog.Efforts.Select(e => new SelectorOptionViewModel(e, Capitalize(e))));
 			Fill(Profiles, catalog.Profiles.Select(p => new SelectorOptionViewModel(p.Id, p.DisplayName)));
 			_applyingSelection = false;
@@ -103,7 +103,7 @@ public sealed partial class SessionPaneViewModel
 		if (id == null)
 			return;
 
-		var picks = _picks.GetValueOrDefault(id) ?? new SessionSelection();
+		var picks = PicksOfOpenSession();
 		var last = _lastUsedNodeId == id ? _lastUsed : null;   // never another session's settings
 		_applyingSelection = true;
 		try
@@ -123,7 +123,23 @@ public sealed partial class SessionPaneViewModel
 		options.FirstOrDefault(o => o.Id == id) ?? options.FirstOrDefault(o => o.Id == Constants.TurnTexts.DefaultOption);
 
 	/// <summary>The fields the user picked for the open session; what a turn sent now carries (null = not picked, the daemon resolves it).</summary>
-	private SessionSelection PicksOfOpenSession() => NodeId != null && _picks.TryGetValue(NodeId, out var picks) ? picks : new SessionSelection();
+	private SessionSelection PicksOfOpenSession()
+	{
+		if (NodeId == null || !_picks.TryGetValue(NodeId, out var picks))
+			return new SessionSelection();
+
+		// R2: a pick whose id left the catalog (a deleted profile, a model that went away) is shown as "default" and must not be sent.
+		return picks with
+		{
+			ModelId = StillListed(Models, picks.ModelId),
+			EffortId = StillListed(Efforts, picks.EffortId),
+			ProfileId = StillListed(Profiles, picks.ProfileId),
+		};
+	}
+
+	/// <summary>The id when it is in the list (or the list is not loaded, so nothing can be judged); otherwise null.</summary>
+	private static string? StillListed(IReadOnlyCollection<SelectorOptionViewModel> options, string? id) =>
+		id == null || options.Count == 0 || options.Any(o => o.Id == id) ? id : null;
 
 	private void RememberPick(SelectorOptionViewModel? value, Func<SessionSelection, SessionSelection> change)
 	{

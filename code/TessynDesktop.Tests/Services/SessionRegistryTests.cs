@@ -49,7 +49,7 @@ internal sealed class FakeSessionFileService : ISessionFileService
         ReadEntriesCalls++;
         return Entries.TryGetValue(fileName, out var entries) ? entries : Array.Empty<SessionEntryModel>();
     }
-    public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null) { }
+    public void AppendMessage(string fileName, string role, string content, string? profileName = null, string? modelId = null, string? effort = null, string? source = null) { }
     public void AppendCompactionSeparator(string fileName) { }
     public string GetFullPath(string fileName) => fileName;
     public void RewriteSessionFile(string fileName, string content) { }

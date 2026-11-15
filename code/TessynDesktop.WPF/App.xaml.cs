@@ -86,10 +86,15 @@ public partial class App : Application
 
 			// Never block the UI thread on work that may need it: run the shutdown on the thread pool with a bounded wait.
 			var host = _host;
+			var drafts = host.Services.GetService<MainViewModel>()?.Session?.DraftSync;
 			var shutdown = Task.Run(async () =>
 			{
 				try
 				{
+					// Text typed in the last moments is still waiting for its debounced write: it goes to the daemon before the client is closed.
+					if (drafts != null)
+						await drafts.FlushAllAsync();
+
 					await host.Services.GetRequiredService<IClientStateStore>().FlushAsync();
 					await host.Services.GetRequiredService<ConnectionViewModel>().DisposeAsync();
 					await host.StopAsync(TimeSpan.FromSeconds(3));
