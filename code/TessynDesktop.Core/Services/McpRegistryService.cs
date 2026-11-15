@@ -248,18 +248,16 @@ public sealed partial class McpRegistryService : IMcpRegistryService
 				return new McpAuthorizeResultDto(false, "The authorization took too long and was stopped.");
 			}
 
-			bool stillRegistered, idTaken;
+			bool stillRegistered;
 			lock (_settings.SyncRoot)
-			{
 				stillRegistered = _settings.Settings.ExternalMcpServers.Any(s => ReferenceEquals(s, server));
-				idTaken         = _settings.Settings.ExternalMcpServers.Any(s => s.Id == id);
-			}
 
 			if (!stillRegistered)
 			{
-				// The server was removed while the browser was open: its token goes too, unless a server of the same id was created since (that one's token is not ours to delete).
-				if (!idTaken)
-					_tokens.Delete(id);
+				// The flow belongs to a server instance that is gone (removed, possibly re-created under the same id). Whatever token it stored was issued for
+				// the old server's origin, so it is deleted whether or not the id is taken again: a new server must never be handed it (decision R1). The guard
+				// held for the whole flow means a new server cannot have obtained a token of its own meanwhile.
+				_tokens.Delete(id);
 				return new McpAuthorizeResultDto(false, "The server was removed during the authorization.");
 			}
 

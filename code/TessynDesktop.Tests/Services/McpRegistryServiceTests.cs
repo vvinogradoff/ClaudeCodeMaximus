@@ -598,21 +598,22 @@ public sealed class McpRegistryServiceTests : IDisposable
 	}
 
 	[Fact]
-	public async Task L2_AServerRemovedAndRecreatedDuringTheFlow_KeepsTheTokenOfTheNewOne()
+	public async Task R1_AServerRemovedAndRecreatedDuringTheFlow_NeverKeepsTheTokenTheAbandonedFlowStored()
 	{
 		AddOAuthServer();
 		_oauth.OnAuthorize = (server, _) =>
 		{
 			_service.Remove(server.Id);
-			AddOAuthServer(server.Id);                                       // same id, a new server, with its own token
-			_tokens.Save(server.Id, new McpTokenRecord { AccessToken = "token-of-the-new-server" });
+			AddOAuthServer(server.Id);                                       // same id, a new server
+			_tokens.Save(server.Id, new McpTokenRecord { AccessToken = "token-issued-for-the-old-origin" });   // what the real flow stores when it finishes
 			return Task.FromResult(new McpAuthorizeResult(true, "Authorized."));
 		};
 
 		var result = await _service.AuthorizeAsync("o1", CancellationToken.None);
 
 		Assert.False(result.Authorized);
-		Assert.Equal("token-of-the-new-server", _tokens.Load("o1")!.AccessToken);
+		Assert.Null(_tokens.Load("o1"));
+		Assert.Equal(McpServerStatusDto.NotConnected, _service.List().Single().Status);   // the re-created server is not connected with the old one's token
 	}
 
 	[Fact]
