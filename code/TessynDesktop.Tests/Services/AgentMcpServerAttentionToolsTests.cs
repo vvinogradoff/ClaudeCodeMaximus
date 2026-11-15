@@ -361,7 +361,7 @@ public sealed class AgentMcpServerAttentionToolsTests : IDisposable
 		Assert.Equal(1, schema["properties"]!["items"]!["minItems"]!.GetValue<int>());
 		Assert.Equal(30, schema["properties"]!["items"]!["maxItems"]!.GetValue<int>());
 		Assert.Equal(
-			["body", "key", "kind", "options", "recommendation", "title"],
+			["body", "key", "kind", "options", "recommendation", "refs", "title"],
 			schema["properties"]!["items"]!["items"]!["properties"]!.AsObject().Select(p => p.Key).OrderBy(k => k).ToArray());
 		Assert.Equal("items", schema["required"]![0]!.GetValue<string>());
 	}

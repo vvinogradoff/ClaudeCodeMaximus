@@ -10,6 +10,7 @@ namespace TessynDesktop.Client;
 /// <param name="BeforeEntryId">Entries before the entry with this stable id.</param>
 /// <param name="FileId">Only with <see cref="AfterSeq"/>: fail with "Session history changed" when the file is no longer this content generation.</param>
 /// <param name="Limit">Most entries to return.</param>
+/// <param name="AroundEntryId">The page centred on the entry with this stable id (a Focus reference's <c>entryId</c>); the entry is on the page unless it no longer exists.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record SessionEntriesQuery(
 	int? BeforeIndex = null,
@@ -17,4 +18,5 @@ public sealed record SessionEntriesQuery(
 	long? AfterSeq = null,
 	string? BeforeEntryId = null,
 	string? FileId = null,
-	int? Limit = null);
+	int? Limit = null,
+	string? AroundEntryId = null);

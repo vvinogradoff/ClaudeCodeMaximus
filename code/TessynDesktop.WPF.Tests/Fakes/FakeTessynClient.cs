@@ -44,6 +44,9 @@ public sealed class FakeTessynClient : ITessynClient
 
 	public bool Disposed { get; private set; }
 
+	/// <summary>When set, <see cref="TreeSnapshotAsync"/> throws it.</summary>
+	public Exception? TreeSnapshotException { get; set; }
+
 	public int SendCount => Calls.Count(c => c.StartsWith("session.send:", StringComparison.Ordinal));
 
 	public void SetState(TessynClientState state)
@@ -76,6 +79,8 @@ public sealed class FakeTessynClient : ITessynClient
 	public Task<TreeSnapshotResult> TreeSnapshotAsync(long? sinceVersion = null, CancellationToken cancellationToken = default)
 	{
 		Record($"tree.snapshot:{sinceVersion?.ToString() ?? "full"}");
+		if (TreeSnapshotException != null)
+			throw TreeSnapshotException;
 		if (sinceVersion == TreeVersion)
 			return Task.FromResult(new TreeSnapshotResult(TreeVersion, true, null));
 		return Task.FromResult(new TreeSnapshotResult(TreeVersion, null, Directories));
@@ -184,6 +189,10 @@ public sealed class FakeTessynClient : ITessynClient
 	public Task<SessionEntryDto> SessionEntryByIdAsync(string nodeId, string entryId, EntryRangeParams? range = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
 	public Task<SessionHeadersResult> SessionHeadersAsync(IReadOnlyList<string> nodeIds, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+	public Task<FileReadResult> FileReadAsync(string handle, long? offset = null, int? length = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+	public Task<FilePreviewResult> FilePreviewAsync(string nodeId, string entryId, string path, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
 	public ValueTask DisposeAsync()
 	{

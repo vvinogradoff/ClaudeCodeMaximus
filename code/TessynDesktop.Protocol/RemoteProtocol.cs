@@ -43,6 +43,10 @@ public static partial class RemoteProtocol
 		public const string AttentionDismiss = "attention.dismiss";
 		public const string CatalogGet = "catalog.get";
 		public const string UsageGet = "usage.get";
+
+		// Focus references (additive).
+		public const string FileRead = "file.read";
+		public const string FilePreview = "file.preview";
 	}
 
 	/// <summary>

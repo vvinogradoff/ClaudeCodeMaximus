@@ -136,4 +136,56 @@ public sealed class MainViewModelTests : IDisposable
 		Assert.True(main.Connection.IsBannerVisible);
 		Assert.Contains("Start TessynDesktop to connect", main.StatusText);
 	}
+
+	[Fact]
+	public async Task AFailingSessionPane_DoesNotAbortTheTreeLoad_AndTheErrorIsVisible()
+	{
+		_client.Directories = [_b.Directory("d1", "Repo", [], _b.Session("s1", "Top"))];
+		var ui = new ImmediateUiDispatcher();
+		var locator = new ScriptedLocator();
+		locator.Results.Enqueue(new DaemonDiscoveryResult(DaemonDiscoveryStatus.Found, new DaemonEndpoint(new Uri("http://127.0.0.1:1/tdcp"), "t", "r", 1)));
+		var connection = new ConnectionViewModel(locator, new FixedClientFactory(_client), ui, NullLogger<ConnectionViewModel>.Instance, TimeSpan.FromMilliseconds(5));
+		var store = new JsonClientStateStore(new AppPaths(_root), NullLogger<JsonClientStateStore>.Instance);
+		var main = new MainViewModel(connection, c => new TreeViewModel(c, ui, NullLogger<TreeViewModel>.Instance, TimeSpan.Zero),
+			c => throw new InvalidOperationException("pane boom"), store, NullLogger<MainViewModel>.Instance);
+
+		await main.StartAsync(CancellationToken.None);
+
+		Assert.Equal(["d1"], main.Tree!.Rows.Select(r => r.Id));
+		Assert.Null(main.Session);
+		Assert.True(main.HasError);
+		Assert.Contains("session pane", main.ErrorText);
+		Assert.Contains("pane boom", main.ErrorText);
+	}
+
+	[Fact]
+	public async Task AFailingTree_DoesNotPreventThePane_AndTheErrorIsVisible()
+	{
+		var ui = new ImmediateUiDispatcher();
+		var locator = new ScriptedLocator();
+		locator.Results.Enqueue(new DaemonDiscoveryResult(DaemonDiscoveryStatus.Found, new DaemonEndpoint(new Uri("http://127.0.0.1:1/tdcp"), "t", "r", 1)));
+		var connection = new ConnectionViewModel(locator, new FixedClientFactory(_client), ui, NullLogger<ConnectionViewModel>.Instance, TimeSpan.FromMilliseconds(5));
+		var store = new JsonClientStateStore(new AppPaths(_root), NullLogger<JsonClientStateStore>.Instance);
+		var main = new MainViewModel(connection, c => throw new InvalidOperationException("tree boom"),
+			c => new SessionPaneViewModel(c, _surface, new MarkdigEntryRenderer(new UrlPolicy()), new FakeUrlLauncher(), ui,
+				new SwitchLatencyTracker(NullLogger<SwitchLatencyTracker>.Instance), NullLogger<SessionPaneViewModel>.Instance),
+			store, NullLogger<MainViewModel>.Instance);
+
+		await main.StartAsync(CancellationToken.None);
+
+		Assert.NotNull(main.Session);
+		Assert.Null(main.Tree);
+		Assert.True(main.HasError);
+		Assert.Contains("tree boom", main.ErrorText);
+	}
+
+	[Fact]
+	public async Task AFailingTreeLoad_IsShownNotOnlyLogged()
+	{
+		_client.TreeSnapshotException = new HttpRequestException("daemon went away");
+		var (main, _) = await StartAsync();
+
+		Assert.True(main.HasError);
+		Assert.Contains("tree", main.ErrorText, StringComparison.OrdinalIgnoreCase);
+	}
 }

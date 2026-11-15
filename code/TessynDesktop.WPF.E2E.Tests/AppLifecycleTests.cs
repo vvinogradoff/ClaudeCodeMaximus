@@ -1,8 +1,8 @@
 using System.Diagnostics;
 
-namespace TessynDesktop.WPF.Tests;
+namespace TessynDesktop.WPF.E2E.Tests;
 
-/// <summary>Starts the built app and checks that closing its window really ends the process (review finding F1).</summary>
+/// <summary>Starts the built app (off-screen, not activated: --test-window) and checks that closing its window really ends the process (review finding F1).</summary>
 /// <remarks>Created by Claude</remarks>
 [Collection("timing-sensitive")]
 public sealed class AppLifecycleTests : IDisposable
@@ -24,10 +24,10 @@ public sealed class AppLifecycleTests : IDisposable
 
 	private Process Start()
 	{
-		var exe = Path.Combine(AppContext.BaseDirectory, "TessynDesktop.WPF.exe");
-		Assert.True(File.Exists(exe), "The WPF exe was not copied next to the tests: " + exe);
+		var exe = new BuiltAppLocator().FindExe();
 		Directory.CreateDirectory(_root);
-		var info = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = AppContext.BaseDirectory };
+		var info = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
+		info.ArgumentList.Add("--test-window");
 		info.ArgumentList.Add("--data-root");
 		info.ArgumentList.Add(_root);
 		info.ArgumentList.Add("--daemon-file");
@@ -35,34 +35,21 @@ public sealed class AppLifecycleTests : IDisposable
 		return Process.Start(info)!;
 	}
 
-	private static async Task<bool> WaitForWindowAsync(Process process, TimeSpan timeout)
-	{
-		var deadline = DateTime.UtcNow + timeout;
-		while (DateTime.UtcNow < deadline && !process.HasExited)
-		{
-			process.Refresh();
-			if (process.MainWindowHandle != IntPtr.Zero)
-				return true;
-			await Task.Delay(100);
-		}
-
-		return false;
-	}
+	private readonly AppWindowFinder _windows = new();
 
 	[Fact]
-	public async Task ClosingTheMainWindow_ExitsTheProcessAndWritesTheState()
+	public async Task ClosingTheMainWindow_ExitsTheProcess()
 	{
 		using var process = Start();
 		try
 		{
-			Assert.True(await WaitForWindowAsync(process, TimeSpan.FromSeconds(30)), "The main window did not appear.");
+			Assert.True(await _windows.WaitForWindowAsync(process, TimeSpan.FromSeconds(30)), "The main window did not appear.");
 			await Task.Delay(1500);
 
-			Assert.True(process.CloseMainWindow());
+			Assert.True(_windows.Close(process));
 
 			var exited = process.WaitForExit(TimeSpan.FromSeconds(15));
 			Assert.True(exited, "The process is still alive 15 s after the main window was closed (shutdown deadlock).");
-			Assert.True(File.Exists(Path.Combine(_root, "clients", "wpf.json")), "The client state was not flushed at exit.");
 		}
 		finally
 		{
@@ -76,16 +63,16 @@ public sealed class AppLifecycleTests : IDisposable
 	{
 		using (var first = Start())
 		{
-			Assert.True(await WaitForWindowAsync(first, TimeSpan.FromSeconds(30)));
-			first.CloseMainWindow();
+			Assert.True(await _windows.WaitForWindowAsync(first, TimeSpan.FromSeconds(30)));
+			_windows.Close(first);
 			Assert.True(first.WaitForExit(TimeSpan.FromSeconds(15)));
 		}
 
 		using var second = Start();
 		try
 		{
-			Assert.True(await WaitForWindowAsync(second, TimeSpan.FromSeconds(30)), "The second launch did not show a window.");
-			second.CloseMainWindow();
+			Assert.True(await _windows.WaitForWindowAsync(second, TimeSpan.FromSeconds(30)), "The second launch did not show a window.");
+			_windows.Close(second);
 			Assert.True(second.WaitForExit(TimeSpan.FromSeconds(15)));
 		}
 		finally

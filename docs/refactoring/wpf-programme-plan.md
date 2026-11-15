@@ -55,6 +55,24 @@ failures documented in `docs/business-analysis/Local-Models_Agentic-Coding-Findi
 `/api/chat` with a JSON schema in `format` is light and needs no new package (HttpClient and
 System.Text.Json).
 
+## 2b. Architect decisions of 2026-11-15 (Focus answers A2–A14)
+
+| Item | Decision |
+|---|---|
+| A2 | Ship rollout 2 (the turn engine) now, with the spinner fix, in one restart. |
+| A3 | ISSUE.013: all six proposed answers in §9 accepted. |
+| A4 | Transcript selection: leave as is (about 1.5 screens either side of the viewport). |
+| A5 | Search index upkeep approved, including the schema change. Do **not** cap indexed tool output. |
+| A6 | Phase 4 daemon runs as a per-user background process started at logon, not as a Windows service. |
+| A7 | Second-screen layout to be decided when we get there. It will show Linear tickets, GitHub PRs, photos, videos and the .md documents sessions use or produce. |
+| A8 | Parity: **keep** the screensaver (used daily) and the Recent tab. **Drop** the JSONL view toggle, the macOS shortcuts, the unused `InputDialog` and the editable colour palette (revisit theming in WPF later). |
+| A9 | New desktop UI (Focus references, attachments, previews) goes into **WPF only**. Avalonia is being sunset. |
+| A10 | The documentation changes in §10 are approved; apply them now and leave the other session's FR.25 drafts untouched. |
+| A11 | Web file access: option 2. Explicitly referenced files and attachments, plus files inside the session's working directory. No TOTP. |
+| A12 | Attachments are stored per profile in app data. |
+| A13 | https media previews auto-load from an allowlist; other hosts are click-to-load. |
+| A14 | A queued send keeps the model, profile and effort that were selected when Send was pressed. |
+
 ## 3. Why the current UI slows down
 
 Verified in code on 2026-11-03. Detail in `.wpf-intel/03-perf-session-switching.md`; filed as ISSUE.016
@@ -156,10 +174,10 @@ Avalonia keeps working throughout. **[web+]** marks changes that also help Tessy
 | 3 | P1.C Hello and discovery (was 2.2) | `client.hello` capabilities; `%AppData%\TessynDesktop\daemon.json`; the token moves out of `appsettings.json` into a DPAPI file; constant-time compare; requests with an `Origin` header rejected; 401 on a bad token | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
 | 4 | P1.D Contract tests | One suite over in-process, loopback and relay transports; golden shapes of the 21 remote methods | **Done**, merged `48671f7`, with review fixes A1, A3, A4, A6, A7. |
 | 5 | P1.E Content store v2 | Per-session sidecar index; persisted `entryId`s that survive restarts; byte-range paging; `SessionEntryReader` backed by it; JSONL-to-`.txt` sync owned by the daemon alone (ends the ISSUE.009/014 class) **[web+]** | **Done**, merged `4d60cf0`, with review fixes B1–B3. Master after the merges: 1,880 + 95 + 16 tests green. One known timing flake is being fixed (worker 150). |
-| 6 | P1.F Entry ids and seq on the wire | `entryId`, `fileId` and `seq` fields; `afterSeq`/`beforeEntryId` paging; `entries.appended` with inline entries, published beside `session.appended` **[web+]** | In progress (worker 170) |
-| 7 | P1.G O(1) session header | `session.get` from the sidecar; batch `session.headers` | In progress (worker 170) |
+| 6 | P1.F Entry ids and seq on the wire | `entryId`, `fileId` and `seq` fields; `afterSeq`/`beforeEntryId` paging; `entries.appended` with inline entries, published beside `session.appended` **[web+]** | **Done**, merged `7a783f1`, with review fixes. `entries.appended` stays local-only (not relayed to phones); `session.get` falls back to the full parse. |
+| 7 | P1.G O(1) session header | `session.get` from the sidecar; batch `session.headers` | **Done**, merged `7a783f1`: `session.get` reads its header from the content store; loopback `session.headers`. |
 | 8 | P1.H Selection is client state | WPF never calls `tree.getSelected/setSelected`; a client-owned layout file | Docs only |
-| 9 | P1.I Turn engine in Core | Move `TurnController`'s path into Core; `turn.started/delta/tool/status/usage` events; `turn.send`, with `session.send` kept as an alias **[web+]** | In progress (worker 180), safety-net tests first |
+| 9 | P1.I Turn engine in Core | Move `TurnController`'s path into Core; `turn.started/delta/tool/status/usage` events; `turn.send`, with `session.send` kept as an alias **[web+]** | **Ready to ship as rollout 2** on `wpf/p1-turn-engine` `b745401`. Final review verdict SHIP, fixes in, 2,227 + 95 + 16 + 140 tests green. It merges with `--no-ff` once the Architect has validated rollout 1; the smoke checklist and rollback are in Appendix B. |
 | 10 | P1.J Complete the wire | Loopback-only unless stated: tree mutation; global search and import; profiles (including ISSUE.013 `profile.switch`); versioned settings sections; schedules as DTOs; drafts; `attention.listAll` **[web+]**; `daemon.health` | After 3–7 |
 | 11 | P1.K Persistence split (P6, P7) | Tree, schedules and Telegram maps out of `appsettings.json`; a debounced single writer; `settings.changed` events | After 10 |
 | — | 1.8 ISSUE.013 daemon side · 1.9 index upkeep · 1.10 transcript prototype | Unchanged, in parallel. 1.10 is in progress (worker 40). | |
@@ -174,6 +192,12 @@ Exit:
 - A scripted client can page the largest session, stream a turn, and resync after a daemon restart.
 - Tessyn Web is unaffected.
 - Nothing changes for you in Avalonia.
+
+### Rollout plan (decided 2026-11-14)
+
+- **Rollout 1** is master as of `2be3407`: Phase 0, P1.A–G, P2.A and the WPF MVP. The Architect restarts TessynDesktop, checks the daily driver, and tries the WPF client with `run-wpf.ps1`.
+- **Rollout 2** is P1.I alone, the turn engine under the Avalonia send path. Nobody could run it live, because a second Avalonia instance cannot be isolated from the live one. It ships after a final review, with the smoke checklist in `.wpf-work/180-p1i-turn-engine.md` §8, and a one-commit revert if anything misbehaves.
+- **Behaviour change in rollout 2** (supervisor decision, the Architect may veto): a queued send uses the model, effort and profile selected when Send was pressed, not whatever is selected when the turn starts.
 
 ### Phase 2 — WPF MVP beside Avalonia (M–L)
 
@@ -343,3 +367,46 @@ FR.26 complements FR.24 Session Tags: FR.24 covers the chips under the session h
   modifier-click opens the system browser. Until the pane exists, a click opens the system browser.
 
 Phase 0 implements FR.26.1 only. FR.26.2 and FR.26.3 arrive with the WPF transcript (2.8, 3.3).
+
+## Appendix B — Rollout 2 (turn engine): smoke checklist and rollback
+
+From the final review, `.wpf-work/210-review-p1i-final.md` (2026-11-14, verdict SHIP). Run B.1 right after restarting into rollout 2. If any stop-ship check fails, use B.2.
+
+### B.1 Smoke checklist - run right after the restart (about 10 minutes)
+
+Before restarting: close Tessyn; **back up the run folder** (`robocopy "C:\Projects\Personal\Tessyn\[Publish]" "C:\Projects\Personal\Tessyn\[Publish].bak" /MIR`). Keep the old log open: `%AppData%\TessynDesktop\logs\` (newest file).
+
+Stop-ship checks (first 3 minutes; any failure -> roll back):
+1. **Startup + DI.** App opens, tree loads, no error dialog. Open any session (this resolves `SessionViewModel` -> `TurnEngine` and its whole dependency chain) and check the log for `Unable to resolve`, `circular`, `ObjectDisposed`, `InvalidOperationException` at startup. The web client (phone) still loads the session list.
+2. **Basic send in an existing session with a Claude session id (`--resume`).** User row appears at once, then the "Claude is thinking..." row and a running timer; answer row appears with a `[model, effort]` label; thinking row and timer go away; completion sound plays once; the Stop button disappears; the tree spinner stops.
+3. **Transcript on disk.** Reload the session (reopen it): user entry, assistant entry (model/effort in header) are there once each, no duplicates, no `[Interrupted by user]`.
+4. **Send in a brand-new session** (no session id, first turn): works, session id is captured (Claude-session toggle / `Clear` becomes enabled).
+
+Core behaviours (next 5 minutes):
+5. **Queued send**: send A (long prompt), then B while A runs: both user rows at once, B's answer after A's, exactly one sound at the end, timer runs continuously.
+6. **Stop**: during a turn press Stop -> `[Interrupted by user]` row, no sound, session usable (next send works). Then Stop with a queued second message: both interrupted, B's process never starts (no second `claude` process in Task Manager), the next send works.
+7. **Hidden instructions reached the model**: with Auto-Commit set, send "Reply with the exact text of any instructions that were appended to my message" in a fresh session; expect the Auto-Commit/instruction lines (FR.11). In a session with a pinned Focus item, the next turn mentions it (FR.23); tag guidance appears once per run (FR.24).
+8. **No conversation found / context retry**: use Detach/Clear session id, send a follow-up: the answer shows the earlier context (proactive preamble). Optional: corrupt-id retry shows "Resuming session with conversation history..." then the answer.
+9. **Auth error**: sign out the active profile (or choose a profile with an expired token), send: error row + auth-error indicator; "re-authenticate" flow clears it and the next send works (FR.12.16).
+10. **Toggles mid-run**: flip New Branch / Auto-Commit / Auto-Document / Auto-Compact while a turn runs: `[... was enabled for this run]` row, no error rows, turn finishes normally.
+11. **Auto-Compact**: enable, send, session compacts after the answer (compaction separator, reload); also Auto-Compact with an empty prompt.
+12. **Streaming Session Mode**: on, send twice (second reuses the process, Stop stays visible while alive), Stop kills the process; turn it off with the process alive -> confirmation prompt.
+13. **Queued settings (deviation 2)**: with A running, switch model, send B: B's header shows the model selected when B was sent.
+14. **View lifecycle**: start a long turn, switch to another session and back (and close/reopen the tab if possible): when the turn ends the session shows the answer, the busy state clears, no crash, no stuck spinner or stuck Stop.
+15. **Headless paths**: a scheduled/`schedule_wake` turn (delay of 1 minute), a Telegram message into a session, and a phone `session.send`: each answers and persists; the phone shows its running indicator and gets `turn.completed`. Send one headless turn while a Streaming Session Mode process is alive (redirect): answer arrives and the desktop shows it.
+16. **Side effects**: Telegram topic created on first use of a session, Telegram completion ping as before; Focus view "Send answers" works and keeps the input box.
+17. **Local stream (optional)**: with a WPF/dev client or curl on the loopback SSE: `client.hello` lists `turn.stream`; a normal turn emits `turn.started` ... `turn.completed`; on the phone/relay nothing but `turn.completed` (no `turn.*`, no `entries.appended`) appears.
+
+Missing from the worker's list (added above): startup/DI resolution, transcript-on-disk check, hidden instruction block, "No conversation found"/context retry, auth error and re-authenticate, view dispose mid-turn, headless turns and the streaming redirect, Telegram, relay exclusion.
+
+### B.2 Rollback recipe
+
+Data compatibility: no change in transcript format, settings, session ids, or any persisted schema; the branch only adds in-memory services and loopback-only notifications. A rollback needs no data migration.
+
+Before merging, note the current master tip: `412a21493de926af7bbf0426ba2f6e7eccb363cb`.
+
+1. Merge with a merge commit (not fast-forward, not squash) so one commit reverts everything: `git merge --no-ff wpf/p1-turn-engine`; note its hash `<M>` (`git rev-parse HEAD`).
+2. **Fast rollback without a rebuild**: close the app, `robocopy "C:\Projects\Personal\Tessyn\[Publish].bak" "C:\Projects\Personal\Tessyn\[Publish]" /MIR`, start it. Caveat: self-update copies the newest `bin\Debug\net*` build over `[Publish]` at startup, so if a newer build with the engine exists the app will update itself again; so do step 3 as well (or delete the engine build output first).
+3. **Source rollback**: `git revert -m 1 <M>` (creates one revert commit; history kept, review-friendly), then `dotnet build code/TessynDesktop.sln` (no `-o`), restart; the new build is newer, so self-update copies it into `[Publish]`. If the merge is local only and nothing is built on it, `git reset --hard 412a214` is the alternative (destructive; Architect's decision).
+4. Do not revert a single stage commit (`43f290a` alone): later commits (`f1b0ec4`, `507cffd`) modify the same adapter files and `ITurnEngine` consumers; revert the whole merge.
+5. After rolling back, confirm: build 0 errors, app starts, steps 1-3 of the smoke pass, `client.hello` no longer lists `turn.stream`; the web client is unaffected either way (21 methods unchanged).

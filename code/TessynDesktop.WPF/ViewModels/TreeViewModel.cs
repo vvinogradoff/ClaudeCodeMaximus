@@ -334,6 +334,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		_roots = roots;
 		_version = snapshot.Version;
 		SessionCount = sessions;
+		_logger.LogInformation("Tree loaded: {Sessions} sessions, {Directories} directories, version {Version}", sessions, roots.Count, snapshot.Version);
 	}
 
 	private void AddGroupsAndSessions(TreeNodeViewModel parent, IReadOnlyList<TreeGroupDto> groups, IReadOnlyList<TreeSessionDto> sessions, List<string> serverExpanded, ref int sessionCount)

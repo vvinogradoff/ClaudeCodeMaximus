@@ -36,6 +36,8 @@ public static partial class Constants
 			public const string AttentionDismiss = RemoteProtocol.Methods.AttentionDismiss;
 			public const string CatalogGet = RemoteProtocol.Methods.CatalogGet;
 			public const string UsageGet = RemoteProtocol.Methods.UsageGet;
+			public const string FileRead = RemoteProtocol.Methods.FileRead;
+			public const string FilePreview = RemoteProtocol.Methods.FilePreview;
 		}
 
 		/// <summary>Notification names published on the remote event bus (contract section 4).</summary>

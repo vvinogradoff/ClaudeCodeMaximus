@@ -23,4 +23,7 @@ public sealed class AttentionItemModel
 	public DateTimeOffset CreatedUtc { get; set; }
 	public DateTimeOffset UpdatedUtc { get; set; }
 	public DateTimeOffset? ClosedUtc { get; set; }
+
+	/// <summary>References to entries, files and URLs, resolved when the item was posted. Ledger files without the field read as none.</summary>
+	public List<AttentionRefModel> Refs { get; set; } = [];
 }

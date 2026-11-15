@@ -41,6 +41,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly IAttentionService         _attention;
 	private readonly ISessionTagService        _tags;
 	private readonly DiagnosticsToolHandler?   _diagnostics;
+	private readonly IFocusRefResolver?        _refs;
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
 	private readonly SessionTagSearchPageBuilder _tagSearchBuilder   = new();
@@ -74,7 +75,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		IDirectoryLabelService labelService,
 		IAttentionService attention,
 		ISessionTagService tags,
-		DiagnosticsToolHandler? diagnostics = null)
+		DiagnosticsToolHandler? diagnostics = null,
+		IFocusRefResolver? refResolver = null)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -91,6 +93,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_tags           = tags;
 		_tagIndex       = new SessionTagIndexProvider(registry, tags);
 		_diagnostics    = diagnostics;
+		_refs           = refResolver;
 	}
 
 	public void Start()
@@ -1251,7 +1254,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		if (callerNode.OrchestrationDepth > 0)
 			return BuildTextContent(Constants.Attention.WorkerRefusalText);
 
-		var requests = ParseAttentionItems(args);
+		var requests = ParseAttentionItems(args, callerNode);
 		var notify   = GetOptionalBool(args, "notify") ?? false;
 
 		var outcomes = _attention.Post(callerNode, requests);
@@ -1292,7 +1295,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	}
 
 	/// <summary>Validates and normalises the whole <c>items</c> array before anything is posted (FR.23.4).</summary>
-	private static List<AttentionPostRequestModel> ParseAttentionItems(JsonNode? args)
+	private List<AttentionPostRequestModel> ParseAttentionItems(JsonNode? args, SessionNodeModel callerNode)
 	{
 		if (args?["items"] is not JsonArray items || items.Count == 0)
 			throw new McpToolException("'items' is required and must contain at least one item.");
@@ -1333,10 +1336,61 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				Recommendation = string.IsNullOrEmpty(recommendation) ? null : Cut(recommendation, Constants.Attention.MaxRecommendationLength),
 				Key            = string.IsNullOrEmpty(key) ? null : Cut(key, Constants.Attention.MaxKeyLength),
 				Source         = AttentionSource.Tool,
+				Refs           = ResolveRefs(item, n, callerNode),
 			});
 		}
 
 		return requests;
+	}
+
+	/// <summary>
+	/// Reads <c>refs</c> of one item and resolves each against the transcripts and the disk. The first one that cannot be resolved fails
+	/// the whole call with a message that names it, so nothing is pinned and the model can fix the reference and retry.
+	/// </summary>
+	private List<AttentionRefModel> ResolveRefs(JsonObject item, int itemIndex, SessionNodeModel callerNode)
+	{
+		var node = item["refs"];
+		if (node == null)
+			return [];
+		if (node is not JsonArray array)
+			throw new McpToolException($"items[{itemIndex}]: 'refs' must be an array.");
+		if (array.Count > Constants.Attention.MaxRefsPerItem)
+			throw new McpToolException($"items[{itemIndex}]: 'refs' may contain at most {Constants.Attention.MaxRefsPerItem} references (got {array.Count}).");
+
+		var resolved = new List<AttentionRefModel>(array.Count);
+		for (var m = 0; m < array.Count; m++)
+		{
+			var where = $"items[{itemIndex}].refs[{m}]";
+			if (array[m] is not JsonObject refNode)
+				throw new McpToolException($"{where} must be an object.");
+
+			var kind = GetOptionalString(refNode, "kind")?.Trim().ToLowerInvariant();
+			if (kind is not (Constants.Attention.RefKindEntry or Constants.Attention.RefKindFile or Constants.Attention.RefKindUrl))
+				throw new McpToolException($"{where}: 'kind' is required - use entry, file or url.");
+
+			if (_refs == null)
+				throw new McpToolException($"{where}: references are not available.");
+
+			var request = new FocusRefRequest(
+				kind,
+				Session: GetOptionalString(refNode, "session"),
+				Quote: GetOptionalString(refNode, "quote"),
+				Occurrence: GetOptionalString(refNode, "occurrence")?.Trim().ToLowerInvariant(),
+				Path: GetOptionalString(refNode, "path"),
+				Url: GetOptionalString(refNode, "url"),
+				Label: GetOptionalString(refNode, "label"));
+
+			try
+			{
+				resolved.Add(_refs.Resolve(callerNode, request));
+			}
+			catch (FocusRefException ex)
+			{
+				throw new McpToolException($"{where} ({kind}): {ex.Message}{Constants.Attention.RefsClosingHint}");
+			}
+		}
+
+		return resolved;
 	}
 
 	private static bool TryParseKind(string text, out AttentionKind kind)
@@ -1871,7 +1925,25 @@ public sealed class AgentMcpServer : IAgentMcpServer
 							"body":           { "type": "string", "description": "Markdown, self-contained, up to 20,000 characters." },
 							"options":        { "type": "array", "maxItems": 10, "items": { "type": "string" }, "description": "Answer options the user can pick (each up to 200 characters)." },
 							"recommendation": { "type": "string", "description": "Your recommended answer, up to 1,000 characters." },
-							"key":            { "type": "string", "description": "Stable dedupe key of your choosing, up to 100 characters." }
+							"key":            { "type": "string", "description": "Stable dedupe key of your choosing, up to 100 characters." },
+							"refs": {
+								"type": "array",
+								"maxItems": 10,
+								"description": "References that point the user at the exact thing the item is about, instead of pasting bulky output or a long plan into the body. kind=entry: a quote of an entry of this session (or of another one, see session); kind=file: a file you wrote or read; kind=url: a page. A reference that cannot be resolved fails the whole call - fix it and post again.",
+								"items": {
+									"type": "object",
+									"properties": {
+										"kind":       { "type": "string", "enum": ["entry", "file", "url"] },
+										"quote":      { "type": "string", "maxLength": 300, "description": "entry: text copied exactly from the entry (whitespace is normalised, nothing else); it must occur exactly once in the entry. Quote a distinctive part, not the whole entry." },
+										"session":    { "type": "string", "description": "entry: short id or node id of the session the entry belongs to. Default: this session." },
+										"occurrence": { "type": "string", "enum": ["last", "first"], "description": "entry: which entry to pick when several hold the quote - the newest (last, default) or the oldest (first)." },
+										"path":       { "type": "string", "description": "file: absolute path, or relative to this session's working directory (a relative path must stay inside it, otherwise give an absolute path). The file must exist." },
+										"url":        { "type": "string", "description": "url: an http or https URL." },
+										"label":      { "type": "string", "maxLength": 100, "description": "Short text the user sees for the reference." }
+									},
+									"required": ["kind"]
+								}
+							}
 						},
 						"required": ["kind", "title"]
 					}

@@ -51,4 +51,13 @@ public interface IAttentionService
 
 	/// <summary>Returns the user-closed items not yet reported to the session, oldest closure first, and clears their flag (FR.23.11).</summary>
 	IReadOnlyList<AttentionItemModel> TakeUnreportedUserClosures(string nodeId);
+
+	/// <summary>
+	/// The file reference with this opaque <see cref="AttentionRefModel.RefId"/> and the session it was posted from, or null. Looks
+	/// through every ledger, including those not loaded yet; the index is built once and kept current by <see cref="Post"/>.
+	/// </summary>
+	(string NodeId, AttentionRefModel Ref)? FindFileRef(string refId);
+
+	/// <summary>The file references of the node that grant read access now: those of open items and of items closed within <see cref="Constants.FileAccess.RefGracePeriod"/>.</summary>
+	IReadOnlyList<AttentionRefModel> GetActiveFileRefs(string nodeId);
 }

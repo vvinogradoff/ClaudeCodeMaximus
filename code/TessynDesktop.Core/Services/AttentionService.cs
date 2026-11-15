@@ -23,6 +23,8 @@ public sealed class AttentionService : IAttentionService
 
 	private readonly object _lock = new();
 	private readonly Dictionary<string, AttentionLedgerModel> _cache = new();
+	private readonly Dictionary<string, string> _fileRefIndex = new(StringComparer.Ordinal);   // refId -> nodeId
+	private bool _allLedgersIndexed;
 
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 
@@ -74,6 +76,11 @@ public sealed class AttentionService : IAttentionService
 				item.Body           = request.Body;
 				item.Options        = request.Options.ToList();
 				item.Recommendation = request.Recommendation;
+				if (request.Refs.Count > 0)
+				{
+					item.Refs = request.Refs.Select(CopyRef).ToList();
+					IndexFileRefsLocked(node.NodeId, item);
+				}
 				if (!string.IsNullOrWhiteSpace(request.Key))
 					item.Key = request.Key;
 				item.UpdatedUtc = now;
@@ -229,6 +236,68 @@ public sealed class AttentionService : IAttentionService
 		}
 	}
 
+	public (string NodeId, AttentionRefModel Ref)? FindFileRef(string refId)
+	{
+		lock (_lock)
+		{
+			if (!_allLedgersIndexed)
+			{
+				// Once: every ledger on disk, so a handle issued before a restart still resolves.
+				foreach (var nodeId in _store.EnumerateNodeIds())
+				{
+					foreach (var item in LoadLocked(nodeId).Items)
+						IndexFileRefsLocked(nodeId, item);
+				}
+
+				_allLedgersIndexed = true;
+			}
+
+			if (!_fileRefIndex.TryGetValue(refId, out var owner))
+				return null;
+
+			var now = _time.GetUtcNow();
+			var holder = LoadLocked(owner).Items.FirstOrDefault(i =>
+				i.Refs.Any(r => string.Equals(r.RefId, refId, StringComparison.Ordinal)));
+			if (holder == null || !GrantsAccess(holder, now))
+			{
+				// The item is gone or closed for good: the handle is dead, so the index forgets it.
+				_fileRefIndex.Remove(refId);
+				return null;
+			}
+
+			var found = holder.Refs.First(r => string.Equals(r.RefId, refId, StringComparison.Ordinal));
+			return (owner, CopyRef(found));
+		}
+	}
+
+	public IReadOnlyList<AttentionRefModel> GetActiveFileRefs(string nodeId)
+	{
+		lock (_lock)
+		{
+			var now = _time.GetUtcNow();
+			return LoadLocked(nodeId).Items
+				.Where(i => GrantsAccess(i, now))
+				.SelectMany(i => i.Refs)
+				.Where(r => r.Kind == Constants.Attention.RefKindFile)
+				.Select(CopyRef)
+				.ToList();
+		}
+	}
+
+	/// <summary>An open item, or one closed within the grace period, still lets clients read its file references.</summary>
+	private static bool GrantsAccess(AttentionItemModel item, DateTimeOffset now) =>
+		item.Status == AttentionStatus.Open
+		|| (item.ClosedUtc is { } closed && now - closed <= Constants.FileAccess.RefGracePeriod);
+
+	private void IndexFileRefsLocked(string nodeId, AttentionItemModel item)
+	{
+		foreach (var r in item.Refs)
+		{
+			if (r.Kind == Constants.Attention.RefKindFile && !string.IsNullOrEmpty(r.RefId))
+				_fileRefIndex[r.RefId] = nodeId;
+		}
+	}
+
 	// ── Helpers ────────────────────────────────────────────────────────────────
 
 	private AttentionLedgerModel LoadLocked(string nodeId)
@@ -345,5 +414,13 @@ public sealed class AttentionService : IAttentionService
 		CreatedUtc            = item.CreatedUtc,
 		UpdatedUtc            = item.UpdatedUtc,
 		ClosedUtc             = item.ClosedUtc,
+		Refs                  = item.Refs.Select(CopyRef).ToList(),
+	};
+
+	private static AttentionRefModel CopyRef(AttentionRefModel r) => new()
+	{
+		Kind = r.Kind, Label = r.Label, NodeId = r.NodeId, FileId = r.FileId, EntryId = r.EntryId, Offset = r.Offset, Length = r.Length,
+		RefId = r.RefId, Name = r.Name, RelativePath = r.RelativePath, AbsolutePath = r.AbsolutePath, Size = r.Size, Mime = r.Mime,
+		MtimeUtc = r.MtimeUtc, Url = r.Url,
 	};
 }

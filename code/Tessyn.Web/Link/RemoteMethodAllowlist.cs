@@ -27,6 +27,8 @@ public sealed class RemoteMethodAllowlist
 		Constants.Remote.Methods.AttentionDismiss,
 		Constants.Remote.Methods.CatalogGet,
 		Constants.Remote.Methods.UsageGet,
+		Constants.Remote.Methods.FileRead,
+		Constants.Remote.Methods.FilePreview,
 	];
 
 	private static readonly string[] LongMethods =
@@ -35,6 +37,8 @@ public sealed class RemoteMethodAllowlist
 		Constants.Remote.Methods.TreeSnapshot,
 		Constants.Remote.Methods.TagsSearch,
 		Constants.Remote.Methods.TreeSearch,
+		Constants.Remote.Methods.FileRead,
+		Constants.Remote.Methods.FilePreview,
 	];
 
 	private readonly HashSet<string> _allowed = new(AllowedMethods, StringComparer.Ordinal);

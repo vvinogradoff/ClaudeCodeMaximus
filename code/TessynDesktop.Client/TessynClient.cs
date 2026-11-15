@@ -708,6 +708,7 @@ public sealed partial class TessynClient : ITessynClient
 				("afterIndex", Node(query.AfterIndex)),
 				("afterSeq", Node(query.AfterSeq)),
 				("beforeEntryId", Node(query.BeforeEntryId)),
+				("aroundEntryId", Node(query.AroundEntryId)),
 				("fileId", Node(query.FileId)),
 				("limit", Node(query.Limit))),
 			cancellationToken);
@@ -727,5 +728,19 @@ public sealed partial class TessynClient : ITessynClient
 		CallAsync<SessionHeadersResult>(
 			RemoteProtocol.LoopbackMethods.SessionHeaders,
 			Params(("nodeIds", new JsonArray([.. nodeIds.Select(id => (JsonNode?)JsonValue.Create(id))]))),
+			cancellationToken);
+
+	/// <inheritdoc />
+	public Task<FileReadResult> FileReadAsync(string handle, long? offset = null, int? length = null, CancellationToken cancellationToken = default) =>
+		CallAsync<FileReadResult>(
+			RemoteProtocol.Methods.FileRead,
+			Params(("handle", Node(handle)), ("offset", Node(offset)), ("length", Node(length))),
+			cancellationToken);
+
+	/// <inheritdoc />
+	public Task<FilePreviewResult> FilePreviewAsync(string nodeId, string entryId, string path, CancellationToken cancellationToken = default) =>
+		CallAsync<FilePreviewResult>(
+			RemoteProtocol.Methods.FilePreview,
+			Params(("nodeId", Node(nodeId)), ("entryId", Node(entryId)), ("path", Node(path))),
 			cancellationToken);
 }

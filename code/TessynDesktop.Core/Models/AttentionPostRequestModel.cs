@@ -16,4 +16,7 @@ public sealed class AttentionPostRequestModel
 	public string? Recommendation { get; init; }
 	public string? Key { get; init; }
 	public AttentionSource Source { get; init; } = AttentionSource.Tool;
+
+	/// <summary>Already resolved references. A re-post that carries some replaces the item's; one without keeps them.</summary>
+	public IReadOnlyList<AttentionRefModel> Refs { get; init; } = [];
 }
