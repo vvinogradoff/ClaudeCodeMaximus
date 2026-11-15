@@ -5,7 +5,7 @@ Related requirements: FR.23.19 (also FR.23.14–FR.23.16) in [requirements.md](/
 ## Actors
 
 - **User** — types replies in Focus cards, closes and reopens the app.
-- **Client** — Avalonia or WPF.
+- **Client** — the WPF app.
 - **Tessyn** — the daemon that keeps the drafts store.
 
 ## Preconditions (common)
