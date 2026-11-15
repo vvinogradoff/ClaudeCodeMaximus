@@ -23,6 +23,9 @@ public sealed class AppPaths
 
 	public string ClientStateFilePath => Path.Combine(DataRoot, Constants.Paths.ClientsFolder, Constants.Paths.ClientStateFileName);
 
+	/// <summary>Where preview files (images, video, files to open externally) are written; emptied at startup and served to the preview page as <c>preview.local</c>.</summary>
+	public string PreviewCacheDirectory => Path.Combine(DataRoot, Constants.Paths.PreviewCacheFolder);
+
 	/// <summary>The folder with the transcript page, next to the executable.</summary>
 	public string WebAssetsDirectory => Path.Combine(AppContext.BaseDirectory, Constants.Paths.WebAssetsFolder);
 }

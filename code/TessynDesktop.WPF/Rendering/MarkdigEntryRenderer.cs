@@ -14,18 +14,23 @@ namespace TessynDesktop.WPF.Rendering;
 /// Content-Security-Policy this keeps transcript text from running anything.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class MarkdigEntryRenderer : IEntryRenderer
+public sealed class MarkdigEntryRenderer : IEntryRenderer, IMarkdownRenderer
 {
 	private const string BlockedLinkClass = "blocked";
 	private const string BlockedLinkTarget = "#";
 	private const string ImagePlaceholder = "[image]";
+	private const string AssistantRole = "assistant";
 
 	private readonly MarkdownPipeline _pipeline;
 	private readonly UrlPolicy _urlPolicy;
+	private readonly MediaLinkDetector? _media;
+	private readonly LocalPathDetector? _paths;
 
-	public MarkdigEntryRenderer(UrlPolicy urlPolicy)
+	public MarkdigEntryRenderer(UrlPolicy urlPolicy, MediaLinkDetector? media = null, LocalPathDetector? paths = null)
 	{
 		_urlPolicy = urlPolicy;
+		_media = media;
+		_paths = paths;
 		_pipeline = new MarkdownPipelineBuilder()
 			.DisableHtml()
 			.UsePipeTables()
@@ -38,6 +43,7 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer
 	public TranscriptEntryView Render(SessionEntryDto entry)
 	{
 		var truncated = entry.Truncated == true;
+		var assistant = entry.Role == AssistantRole;
 		return new TranscriptEntryView(
 			entry.Index,
 			RoleCode(entry.Role),
@@ -45,7 +51,9 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer
 			RenderMarkdown(entry.Content),
 			truncated,
 			entry.FullLength ?? entry.Content.Length,
-			EstimateHeight(entry.Content));
+			EstimateHeight(entry.Content),
+			assistant ? _media?.Detect(entry.Content) : null,
+			assistant ? _paths?.Detect(entry.Content) : null);
 	}
 
 	/// <summary>Markdown to sanitized HTML.</summary>
