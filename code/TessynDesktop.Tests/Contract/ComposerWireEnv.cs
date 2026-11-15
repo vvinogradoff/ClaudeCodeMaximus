@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
 using TessynDesktop.Tests.Services;
 using TessynDesktop.Tests.Services.Turns;
@@ -29,6 +30,8 @@ internal sealed class ComposerWireEnv : IDisposable
 	public SessionAuthErrorTracker AuthErrors { get; } = new();
 	public DraftService Drafts { get; }
 	public FakeCodeIndexService CodeIndex { get; } = new();
+	public RemoteEventBus Bus { get; } = new();
+	public TurnEventPublisher Publisher { get; }
 	public TurnEngine Engine { get; }
 	public AutocompleteRpcModule Autocomplete { get; }
 	public TdcpDispatcher Dispatcher { get; }
@@ -53,10 +56,11 @@ internal sealed class ComposerWireEnv : IDisposable
 		Compaction = new RecordingCompactionService(() => Turns.GetTurnLock(Session.NodeId).CurrentCount, Files.Log);
 		Drafts     = new DraftService(Path.Combine(_dir, "drafts"));
 
+		Publisher = new TurnEventPublisher(Bus, TimeSpan.FromMilliseconds(20));
 		Engine = new TurnEngine(
 			Files, Registry, Turns, Process, Streaming, Settings,
 			new Lazy<IAgentMcpServer>(() => new RecordingMcpServer()), new Lazy<ITelegramBridgeService>(() => new RecordingTelegramBridge()),
-			new RecordingSessionStatusService(), Attention.Service, Tags.Service, compaction: Compaction, authErrors: AuthErrors);
+			new RecordingSessionStatusService(), Attention.Service, Tags.Service, [Publisher], compaction: Compaction, authErrors: AuthErrors);
 
 		var models   = new FakeModelServiceForTurnService();
 		var profiles = new FakeProfileServiceForTurnService();
@@ -68,7 +72,7 @@ internal sealed class ComposerWireEnv : IDisposable
 		Autocomplete = new AutocompleteRpcModule(Registry, CodeIndex);
 
 		var runInfo  = new DaemonRunInfo();
-		var bus      = new RemoteEventBus();
+		var bus      = Bus;
 		var helloLog = new EventLog(bus);
 		var hello    = new ClientRpcModule(
 			runInfo: runInfo, eventLog: helloLog, turnEngine: Engine,
@@ -76,6 +80,14 @@ internal sealed class ComposerWireEnv : IDisposable
 
 		Dispatcher = new TdcpDispatcher([hello, turnModule, new DraftRpcModule(Registry, Drafts), Autocomplete]);
 		Host = new TdcpTestHost(Dispatcher, bus: bus, runInfo: runInfo);
+
+		// The file service's TurnCompleted becomes turn.completed, as RemoteNotificationPublisher does.
+		Files.TurnCompleted += (_, e) =>
+		{
+			var node = Registry.FindModelByFileName(e.FileName);
+			if (node != null)
+				Bus.Publish(RemoteProtocol.Events.TurnCompleted, new TurnCompletedPayload(node.NodeId, e.Cancelled, e.ErrorText, e.TurnId));
+		};
 	}
 
 	public string NodeId => Session.NodeId;
@@ -83,6 +95,7 @@ internal sealed class ComposerWireEnv : IDisposable
 	public void Dispose()
 	{
 		Host.Dispose();
+		Publisher.Dispose();
 		Autocomplete.Dispose();
 		Attention.Dispose();
 		Tags.Dispose();

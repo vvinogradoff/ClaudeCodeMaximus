@@ -106,6 +106,74 @@ public sealed class ComposerWireTests : IDisposable
 		Assert.Empty(_env.Process.Calls);
 	}
 
+	// -- A compaction-only turn.send is a turn of its own on the stream (V2) ----------------------------------------------------
+
+	private async Task<(JsonNode Started, JsonNode Completed)> CompactionOnlyAsync(SessionCompactionOutcome outcome, string? error)
+	{
+		_env.Compaction.Result = new SessionCompactionResultModel(outcome, error, "[" + outcome + "]", SessionDetached: false);
+		using var sse = await _env.Host.OpenStreamAsync();
+
+		var sent = await CallAsync("turn.send", P(("text", ""), ("autoCompact", true), ("clientRequestId", "req-c")));
+		var turnId = sent["result"]!["turnId"]!.GetValue<string>();
+
+		var frames = await TurnWireEnv.ReadUntilCompletedAsync(sse, turnId);
+		var started = frames.Single(f => f.Method == "turn.started");
+		Assert.Equal(("req-c", turnId), (started.Params!["clientRequestId"]!.GetValue<string>(), started.Params["turnId"]!.GetValue<string>()));
+		Assert.Equal("turn.started", frames[0].Method);
+		return (started.Params, frames[^1].Params!);
+	}
+
+	[Fact]
+	public async Task CompactionOnly_Success_PublishesStartedThenCompleted_WithoutAnError()
+	{
+		var (_, completed) = await CompactionOnlyAsync(SessionCompactionOutcome.Compacted, null);
+
+		Assert.False(completed["cancelled"]!.GetValue<bool>());
+		Assert.Null(completed["error"]);
+		Assert.Empty(_env.Process.Calls);
+	}
+
+	[Fact]
+	public async Task CompactionOnly_NothingToCompact_IsNoError_AndNothingIsAppended()
+	{
+		var (_, completed) = await CompactionOnlyAsync(SessionCompactionOutcome.NothingToCompact, null);
+
+		Assert.Null(completed["error"]);
+		Assert.DoesNotContain(_env.Files.Log, line => line.StartsWith("append:SYSTEM", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task CompactionOnly_Failure_CompletesWithTheError_AndAppendsTheSystemLine()
+	{
+		var (_, completed) = await CompactionOnlyAsync(SessionCompactionOutcome.Failed, "the cli died");
+
+		Assert.Equal("the cli died", completed["error"]!.GetValue<string>());
+		Assert.Contains("append:SYSTEM:[Failed]", _env.Files.Log);
+	}
+
+	[Fact]
+	public async Task CompactionOnly_FailureWithoutAnErrorText_UsesTheSystemLineAsTheError()
+	{
+		var (_, completed) = await CompactionOnlyAsync(SessionCompactionOutcome.Failed, null);
+
+		Assert.Equal("[Failed]", completed["error"]!.GetValue<string>());
+	}
+
+	[Fact]
+	public async Task CompactionOnly_StopOnTheWire_EndsTheTurnAsCancelled()
+	{
+		_env.Compaction.Gate = new TaskCompletionSource();
+		using var sse = await _env.Host.OpenStreamAsync();
+		var sent = await CallAsync("turn.send", P(("text", ""), ("autoCompact", true)));
+		await _env.Compaction.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+		var stopped = await CallAsync("turn.stop", P());
+		var frames = await TurnWireEnv.ReadUntilCompletedAsync(sse, sent["result"]!["turnId"]!.GetValue<string>());
+
+		Assert.True(stopped["result"]!["stopped"]!.GetValue<bool>());
+		Assert.True(frames[^1].Params!["cancelled"]!.GetValue<bool>());
+	}
+
 	[Fact]
 	public async Task TurnSend_AutoCompactWithoutTextParam_IsAccepted_ButBlankTextWithoutItStaysAnError()
 	{

@@ -120,6 +120,47 @@ public sealed class SessionCompactionTests : IDisposable
 			return Task.CompletedTask;
 		};
 
+	// ── Stop (V1): a cancelled compaction never touches the transcript ──────────────────────
+
+	[Fact]
+	public async Task StopDuringTheCliCall_LeavesTheFileUnchanged_AndTheSessionAttached()
+	{
+		var node = NodeWithHistory();
+		var before = FileBytes(node);
+		using var cts = new CancellationTokenSource();
+		_process.Behaviour = async (onEvent, ct) =>
+		{
+			onEvent(new ClaudeStreamEvent { Type = "assistant", Content = "half of a summary" });
+			cts.Cancel();
+			await Task.Delay(Timeout.Infinite, ct);
+		};
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _sut.CompactAsync(node, Options(), cts.Token));
+
+		Assert.Equal(before, FileBytes(node));
+		Assert.Equal("claude-1", node.ClaudeSessionId);
+		Assert.Empty(node.PriorClaudeSessionIds);
+	}
+
+	[Fact]
+	public async Task StopAfterTheCliAnswered_ButBeforeTheRewrite_LeavesTheFileUnchanged()
+	{
+		var node = NodeWithHistory();
+		var before = FileBytes(node);
+		using var cts = new CancellationTokenSource();
+		_process.Behaviour = (onEvent, _) =>
+		{
+			onEvent(new ClaudeStreamEvent { Type = "assistant", Content = "the whole summary" });
+			cts.Cancel(); // the process manager returned normally, the token was cancelled meanwhile
+			return Task.CompletedTask;
+		};
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _sut.CompactWhileHoldingTurnLockAsync(node, Options(), cts.Token));
+
+		Assert.Equal(before, FileBytes(node));
+		Assert.Equal("claude-1", node.ClaudeSessionId);
+	}
+
 	// ── Prompt building ──────────────────────────────────────────────────────────
 
 	[Fact]

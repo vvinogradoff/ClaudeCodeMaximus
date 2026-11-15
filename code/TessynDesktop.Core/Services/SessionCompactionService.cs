@@ -137,6 +137,9 @@ public sealed class SessionCompactionService : ISessionCompactionService
 		if (hadError || string.IsNullOrEmpty(compacted))
 			return Unchanged(node, hadError, errorContent);
 
+		// A Stop that arrived after the CLI call returned: leave the transcript as it is.
+		cancellationToken.ThrowIfCancellationRequested();
+
 		// COMPACTION separator followed by the compacted conversation (Claude answers in the session file format).
 		var fileContent = new StringBuilder();
 		fileContent.AppendLine($"[{DateTimeOffset.UtcNow.ToString(Constants.SessionFile.TimestampFormat)}] {Constants.SessionFile.RoleCompaction}");

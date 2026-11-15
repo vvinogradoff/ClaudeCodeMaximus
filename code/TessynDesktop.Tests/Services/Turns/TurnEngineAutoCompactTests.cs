@@ -100,7 +100,7 @@ public sealed class TurnEngineAutoCompactTests : IDisposable
 
 		Assert.Empty(_h.Process.Calls);
 		Assert.Empty(_h.Streaming.Sends);
-		Assert.Equal(["compact"], _h.Files.Log);
+		Assert.Equal(["compact", "completed:cancelled=False:error=null"], _h.Files.Log); // V2: a compaction-only run is reported as a turn
 		var call = Assert.Single(_h.Compaction.Calls);
 		Assert.Equal("compact", call.Variant);
 		Assert.Equal(1, call.LockCount);
@@ -185,6 +185,62 @@ public sealed class TurnEngineAutoCompactTests : IDisposable
 		await _h.Run(TurnEngineHarness.Node(), "two", disabledMidRun, autoCompact: true).Within();
 
 		Assert.Single(_h.Compaction.Calls);
+	}
+
+	// -- Stop (V1) ---------------------------------------------------------------------------------------------------------------
+
+	[Fact]
+	public async Task AStopBetweenTheAnswerAndTheCompaction_GivesNoCompaction()
+	{
+		// The Stop arrives after the answer, in the post-response hook: the token is cancelled, the old code compacted anyway.
+		var observer = new RecordingTurnObserver
+		{
+			AfterResponse = () =>
+			{
+				_h.Engine.CancelRuns(TurnEngineHarness.NodeId);
+				return Task.CompletedTask;
+			},
+		};
+		_h.Process.ScriptEvents(Evt.Assistant("a"), Evt.Result());
+
+		var outcome = await _h.Run(TurnEngineHarness.Node(), "Hi", observer, autoCompact: true).Within();
+
+		Assert.True(outcome.Cancelled);
+		Assert.Empty(_h.Compaction.Calls);
+		Assert.Equal("completed:cancelled=True:error=null", _h.Files.Log[^1]);
+	}
+
+	[Fact]
+	public async Task AStopDuringTheCompaction_CancelsIt_TheTurnEndsInterrupted_AndTheClientIsToldItEnded()
+	{
+		var observer = new RecordingTurnObserver();
+		_h.Compaction.Gate = new TaskCompletionSource(); // never completes: a compaction that runs long
+		_h.Process.ScriptEvents(Evt.Result());
+
+		var run = _h.Run(TurnEngineHarness.Node(), "Hi", observer, autoCompact: true);
+		await _h.Compaction.Started.Task.Within();
+		Assert.True(_h.Engine.CancelRuns(TurnEngineHarness.NodeId));
+		var outcome = await run.Within();
+
+		Assert.True(outcome.Cancelled);
+		Assert.Contains("compactionStarted", observer.Snapshot());
+		Assert.Contains("compactionFinished:Failed", observer.Snapshot());
+		Assert.Contains("interrupted", observer.Snapshot());
+		Assert.Equal("completed:cancelled=True:error=null", _h.Files.Log[^1]);
+	}
+
+	[Fact]
+	public async Task AStopReachesACompactionOnlyRun_Too()
+	{
+		_h.Compaction.Gate = new TaskCompletionSource();
+
+		var run = _h.Run(TurnEngineHarness.Node(), message: "", autoCompact: true);
+		await _h.Compaction.Started.Task.Within();
+		Assert.True(_h.Engine.CancelRuns(TurnEngineHarness.NodeId));
+		var outcome = await run.Within();
+
+		Assert.True(outcome.Cancelled);
+		Assert.Equal(["compact", "append:SYSTEM:" + Constants.Turns.InterruptedByUserText, "completed:cancelled=True:error=null"], _h.Files.Log);
 	}
 
 	// -- Failure ---------------------------------------------------------------------------------------------------------------------
