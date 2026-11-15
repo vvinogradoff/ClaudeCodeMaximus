@@ -18,4 +18,7 @@ public sealed class ClientStateModel
 
 	/// <summary>Expanded directories, groups and sessions; null until the user changed an expansion (then the daemon's flags seed it).</summary>
 	public List<string>? ExpandedNodeIds { get; set; }
+
+	/// <summary>The composer's file mode (FR.31.2): dropped files are copied into the session's attachments instead of inserting their paths. Global, not per session.</summary>
+	public bool AttachAsFiles { get; set; }
 }

@@ -12,6 +12,7 @@ public sealed class StartupOptions
 	public const string DaemonFileArgument = "--daemon-file";
 	public const string DataRootArgument = "--data-root";
 	public const string TestWindowArgument = "--test-window";
+	public const string TestDropArgument = "--test-drop";
 
 	public string? DaemonFile { get; init; }
 
@@ -23,6 +24,13 @@ public sealed class StartupOptions
 	/// </summary>
 	public bool TestWindow { get; init; }
 
+	/// <summary>
+	/// Test seam for end-to-end tests (only honoured together with <c>--test-window</c>; the repeatable <c>--test-drop &lt;path&gt;</c>): once the first session is shown,
+	/// these paths are handed to the prompt input exactly as a drop of those files would hand them over. Real OLE drag-and-drop cannot be driven without
+	/// moving the user's mouse, so the test starts after the drop target (<c>FileDropReader</c>, covered by view tests) and exercises everything behind it.
+	/// </summary>
+	public IReadOnlyList<string> TestDropPaths { get; init; } = [];
+
 	/// <summary>The single-instance mutex name for this run.</summary>
 	public string MutexName => DataRoot == null
 		? Constants.Identity.SingleInstanceMutexName
@@ -32,15 +40,18 @@ public sealed class StartupOptions
 	{
 		string? daemonFile = null;
 		string? dataRoot = null;
+		var testDrops = new List<string>();
 		for (var i = 0; i < args.Count - 1; i++)
 		{
 			if (string.Equals(args[i], DaemonFileArgument, StringComparison.OrdinalIgnoreCase))
 				daemonFile = args[++i];
 			else if (string.Equals(args[i], DataRootArgument, StringComparison.OrdinalIgnoreCase))
 				dataRoot = args[++i];
+			else if (string.Equals(args[i], TestDropArgument, StringComparison.OrdinalIgnoreCase))
+				testDrops.Add(args[++i]);
 		}
 
 		var testWindow = args.Any(a => string.Equals(a, TestWindowArgument, StringComparison.OrdinalIgnoreCase));
-		return new StartupOptions { DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow };
+		return new StartupOptions { DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [] };
 	}
 }

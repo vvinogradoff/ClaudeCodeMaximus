@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Views;
@@ -13,12 +14,14 @@ public partial class SessionPane : UserControl
 {
 	private SessionPaneViewModel? _subscribed;
 	private double _sideWidth = Constants.Limits.DefaultSidePaneWidth;
+	private readonly FileDropReader _fileDrops = new();
 
 	public SessionPane()
 	{
 		InitializeComponent();
 		DataContextChanged += OnDataContextChanged;
 		Loaded += OnLoaded;
+		DataObject.AddPastingHandler(InputBox, OnInputPasting);
 	}
 
 	private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -26,6 +29,7 @@ public partial class SessionPane : UserControl
 		Loaded -= OnLoaded;
 		var surface = ((App)Application.Current).Services.GetRequiredService<WebView2TranscriptSurface>();
 		surface.BrowserLost += (_, _) => Dispatcher.BeginInvoke(() => _ = RecreateAsync(surface));
+		TryTestDrop();
 		await AttachAsync(surface, Transcript);
 	}
 
@@ -57,6 +61,7 @@ public partial class SessionPane : UserControl
 		if (_subscribed != null)
 		{
 			_subscribed.FindFocusRequested -= OnFindFocusRequested;
+			_subscribed.InputCaretRequested -= OnInputCaretRequested;
 			_subscribed.PropertyChanged -= OnViewModelPropertyChanged;
 		}
 
@@ -64,6 +69,7 @@ public partial class SessionPane : UserControl
 		if (_subscribed != null)
 		{
 			_subscribed.FindFocusRequested += OnFindFocusRequested;
+			_subscribed.InputCaretRequested += OnInputCaretRequested;
 			_subscribed.PropertyChanged += OnViewModelPropertyChanged;
 		}
 
@@ -74,6 +80,9 @@ public partial class SessionPane : UserControl
 	{
 		if (e.PropertyName == nameof(SessionPaneViewModel.IsSidePaneVisible))
 			ApplySidePane();
+
+		if (e.PropertyName == nameof(SessionPaneViewModel.IsLoading))
+			TryTestDrop();
 	}
 
 	/// <summary>Opens or closes the side column; the width the user dragged it to is kept while the pane is hidden.</summary>
@@ -128,5 +137,57 @@ public partial class SessionPane : UserControl
 				e.Handled = true;
 				break;
 		}
+	}
+
+	/// <summary>Only a real file list (<see cref="DataFormats.FileDrop"/>) is taken over; any other drag keeps the text box's own behaviour.</summary>
+	private void OnInputDragOver(object sender, DragEventArgs e)
+	{
+		if (_subscribed == null || !e.Data.GetDataPresent(DataFormats.FileDrop))   // presence only: the list is read on Drop, not on every DragOver
+			return;
+
+		e.Effects = DragDropEffects.Copy;
+		e.Handled = true;
+	}
+
+	private void OnInputDrop(object sender, DragEventArgs e)
+	{
+		var paths = _fileDrops.Read(e.Data);
+		if (_subscribed == null || paths.Count == 0)
+			return;
+
+		e.Handled = true;
+		_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
+	}
+
+	/// <summary>Ctrl+V of files copied in Explorer behaves like a drop; text on the clipboard pastes as usual.</summary>
+	private void OnInputPasting(object sender, DataObjectPastingEventArgs e)
+	{
+		if (_subscribed == null || e.DataObject.GetDataPresent(DataFormats.UnicodeText) || e.DataObject.GetDataPresent(DataFormats.Text))
+			return;
+
+		var paths = _fileDrops.Read(e.DataObject);
+		if (paths.Count == 0)
+			return;
+
+		e.CancelCommand();
+		_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
+	}
+
+	private void OnInputCaretRequested(object? sender, int caret)
+	{
+		InputBox.CaretIndex = Math.Min(caret, InputBox.Text.Length);
+		if (IsKeyboardFocusWithin || InputBox.IsKeyboardFocused)   // never pull focus away from another control or window
+			InputBox.Focus();
+	}
+
+	/// <summary>The <c>--test-drop</c> seam (see <see cref="SessionPaneViewModel.TestDropPaths"/>): hands the paths over once, when the first session is shown.</summary>
+	private void TryTestDrop()
+	{
+		if (_subscribed is not { HasSession: true, IsLoading: false })
+			return;
+
+		var paths = _subscribed.TakeTestDropPaths();
+		if (paths.Count > 0)
+			_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
 	}
 }

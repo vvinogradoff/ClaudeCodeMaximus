@@ -10,6 +10,7 @@ using TessynDesktop.Services;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Rendering;
 using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Transcript;
 
 namespace TessynDesktop.WPF.ViewModels;
@@ -111,7 +112,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		int cacheCapacity,
 		FocusViewModel? focus = null,
 		FilePreviewViewModel? preview = null,
-		MediaPreviewPolicy? media = null)
+		MediaPreviewPolicy? media = null,
+		IClientStateStore? stateStore = null)
 	{
 		_client = client;
 		_surface = surface;
@@ -122,6 +124,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_logger = logger;
 		_cache = new TranscriptCache(cacheCapacity);
 		_media = media;
+		InitializeComposer(stateStore);
 		Focus = focus ?? new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance);
 		Preview = preview;
 		Focus.RefActivated += OnRefActivated;
@@ -194,6 +197,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private async Task<bool> OpenCoreAsync(string nodeId, string? title, JumpTarget? target, SessionEntriesResult? preloaded, Action? shown)
 	{
 		var wasShown = false;
+		if (nodeId != NodeId)
+			AbandonImport();   // first: a copy that ends at once still adds to the text this switch is about to save
 		if (NodeId != null)
 			_drafts[NodeId] = InputText;
 
@@ -793,6 +798,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 	public void Dispose()
 	{
+		_importCts?.Cancel();
 		_client.NotificationReceived -= OnNotification;
 		_client.Resynced -= OnResynced;
 		_surface.Painted -= OnPainted;

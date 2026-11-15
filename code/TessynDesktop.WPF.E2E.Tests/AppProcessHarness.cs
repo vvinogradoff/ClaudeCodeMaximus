@@ -16,7 +16,7 @@ public sealed class AppProcessHarness
 		_daemonFile = daemonFile;
 	}
 
-	public Process Start()
+	public Process Start(params string[] extraArguments)
 	{
 		var exe = new BuiltAppLocator().FindExe();
 		var info = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
@@ -25,6 +25,8 @@ public sealed class AppProcessHarness
 		info.ArgumentList.Add(_root);
 		info.ArgumentList.Add("--daemon-file");
 		info.ArgumentList.Add(_daemonFile);
+		foreach (var argument in extraArguments)
+			info.ArgumentList.Add(argument);
 		return Process.Start(info)!;
 	}
 
