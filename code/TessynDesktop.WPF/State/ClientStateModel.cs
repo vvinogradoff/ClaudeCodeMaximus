@@ -16,6 +16,9 @@ public sealed class ClientStateModel
 
 	public string? LastSelectedNodeId { get; set; }
 
+	/// <summary>The id this install gives the daemon when it registers the channels it presents (<c>client.register</c>); created once, so a reconnect or a restart counts as the same client.</summary>
+	public string? ClientId { get; set; }
+
 	/// <summary>Expanded directories, groups and sessions; null until the user changed an expansion (then the daemon's flags seed it).</summary>
 	public List<string>? ExpandedNodeIds { get; set; }
 

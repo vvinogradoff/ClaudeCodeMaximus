@@ -27,7 +27,10 @@ public sealed class FakeSession
 
 	public List<SessionTagDto> Tags { get; set; } = [];
 
-	public SessionStateDto State(string nodeId) => new(nodeId, Running, StreamingAlive, null, false, null, null, false, null);
+	/// <summary>The daemon's auth-error flag of the session (<c>SessionStateDto.authError</c>).</summary>
+	public bool AuthError { get; set; }
+
+	public SessionStateDto State(string nodeId) => new(nodeId, Running, StreamingAlive, null, false, null, null, false, null, AuthError);
 
 	public static FakeSession WithEntries(int count, string name = "session")
 	{

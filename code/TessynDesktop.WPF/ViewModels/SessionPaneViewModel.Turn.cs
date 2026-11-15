@@ -18,6 +18,9 @@ public sealed partial class SessionPaneViewModel
 	private readonly Dictionary<string, SessionTurnsState> _turnStates = new();
 	private readonly Queue<string> _errorOrder = new();
 	private Task _handoffTask = Task.CompletedTask;
+
+	/// <summary>The session whose finished turn is being handed over to its persisted entries (R1); its live row is not pushed meanwhile.</summary>
+	private readonly HandoffGuard _handoffs = new();
 	private bool _liveFlushScheduled;
 	private bool _daemonRunning;
 	private long? _genericSinceUnixMs;
@@ -50,7 +53,7 @@ public sealed partial class SessionPaneViewModel
 		var oneShots = Instruction.TakeOneShots();   // New Branch and Auto-Compact go with this send and switch off
 
 		// The input is taken before the round trip: a second press (or key repeat) finds nothing to send, and text typed meanwhile is kept.
-		InputText = string.Empty;
+		SetInput(string.Empty);
 		Error = null;
 		ClearTurnError(id);
 		try
@@ -78,13 +81,13 @@ public sealed partial class SessionPaneViewModel
 		if (nodeId == NodeId)
 		{
 			if (InputText.Length == 0)
-				InputText = text;
+				SetInput(text);
 
 			return;
 		}
 
 		if (string.IsNullOrEmpty(_drafts.GetValueOrDefault(nodeId)))
-			_drafts[nodeId] = text;
+			SetDraftText(nodeId, text);
 	}
 
 	[RelayCommand(CanExecute = nameof(IsRunning))]
@@ -219,6 +222,7 @@ public sealed partial class SessionPaneViewModel
 			_daemonRunning = false;
 
 		RecomputeRunning();
+		_handoffs.Enter(payload.NodeId);
 		_handoffTask = HandOffAsync(payload.NodeId);
 	}
 
@@ -228,11 +232,18 @@ public sealed partial class SessionPaneViewModel
 	/// </summary>
 	private async Task HandOffAsync(string nodeId)
 	{
-		if (_current != null)
-			await RequestAppend();
+		try
+		{
+			if (_current != null)
+				await RequestAppend();
+		}
+		finally
+		{
+			_handoffs.Exit(nodeId);
 
-		if (nodeId == NodeId)
-			PushLive();
+			if (nodeId == NodeId)
+				PushLive();
+		}
 	}
 
 	/// <summary>Errors of sessions that are not open stay until their next send; only the newest few are kept.</summary>
@@ -312,6 +323,11 @@ public sealed partial class SessionPaneViewModel
 	{
 		var id = NodeId;
 		if (id == null)
+			return;
+
+		// R1: while the persisted answer is being appended the finished turn's row stays, so no other push (the debounced flush that
+		// session.changed schedules) opens a gap before the entry arrives; the hand-off pushes when it is done.
+		if (_handoffs.IsActive(id))
 			return;
 
 		_turnStates.TryGetValue(id, out var state);
