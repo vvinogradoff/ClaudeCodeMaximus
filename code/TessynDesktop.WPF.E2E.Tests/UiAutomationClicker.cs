@@ -246,6 +246,60 @@ public sealed class UiAutomationClicker
 		}
 	}
 
+	/// <summary>Waits for a radio button with this name (the Session / Focus switch) and selects it through its SelectionItemPattern; false on timeout.</summary>
+	public async Task<bool> SelectRadioAsync(Process process, string name, TimeSpan timeout)
+	{
+		var finder = new AppWindowFinder();
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			var hwnd = finder.Find(process.Id);
+			if (hwnd != IntPtr.Zero && TrySelectRadio(hwnd, name))
+				return true;
+
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
+
+	private static bool TrySelectRadio(IntPtr hwnd, string name)
+	{
+		try
+		{
+			var radio = FindRadio(hwnd, name);
+			if (radio == null || !radio.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var pattern))
+				return false;
+
+			((SelectionItemPattern)pattern).Select();
+			return true;
+		}
+		catch (Exception ex) when (ex is ElementNotAvailableException or ElementNotEnabledException)
+		{
+			return false;
+		}
+	}
+
+	private static AutomationElement? FindRadio(IntPtr hwnd, string name) =>
+		AutomationElement.FromHandle(hwnd).FindFirst(TreeScope.Descendants, new AndCondition(
+			new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.RadioButton),
+			new PropertyCondition(AutomationElement.NameProperty, name)));
+
+	/// <summary>True when the radio button with this name exists and is selected.</summary>
+	public bool IsRadioSelected(Process process, string name)
+	{
+		var hwnd = new AppWindowFinder().Find(process.Id);
+		try
+		{
+			var radio = hwnd == IntPtr.Zero ? null : FindRadio(hwnd, name);
+			return radio != null && radio.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var pattern) && ((SelectionItemPattern)pattern).Current.IsSelected;
+		}
+		catch (Exception ex) when (ex is ElementNotAvailableException or ElementNotEnabledException)
+		{
+			return false;
+		}
+	}
+
 	/// <summary>Waits until a button with this name exists; false on timeout.</summary>
 	public async Task<bool> WaitForButtonAsync(Process process, string buttonName, TimeSpan timeout)
 	{

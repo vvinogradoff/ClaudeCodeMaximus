@@ -18,22 +18,32 @@ public sealed record DraftMerged(string NodeId, string Sent, string Merged);
 /// <summary>
 /// Saves the unsent text of sessions through <c>draft.set</c> (debounced per session, one write in flight per session) and keeps the revision the daemon
 /// last confirmed, so a write that raced another writer (-32000 "Draft changed") is merged instead of lost. Independent of the UI thread: the
-/// view model hands it text snapshots, and <see cref="FlushAllAsync"/> can run at exit without it.
+/// view model hands it text snapshots, and <see cref="FlushAllAsync"/> can run at exit without it. The key it works with is opaque: the session pane
+/// uses the node id (the composer draft), the Focus view a node id and item id joined (the reply drafts of FR.23.19) through its own read and write delegates.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class DraftSynchronizer : IDisposable
 {
 	private const int MaxConflictRounds = 3;
 
-	private readonly ITessynClient _client;
+	private readonly Func<string, CancellationToken, Task<DraftGetResult>> _get;
+	private readonly Func<string, string, string?, Task<DraftSetResult>> _set;
 	private readonly ILogger _logger;
 	private readonly Dictionary<string, Entry> _entries = new();
 	private readonly object _lock = new();
 	private bool _disposed;
 
 	public DraftSynchronizer(ITessynClient client, ILogger logger, TimeSpan delay)
+		: this((key, ct) => client.DraftGetAsync(key, ct), (key, text, baseRevision) => client.DraftSetAsync(key, text, baseRevision), logger, delay)
 	{
-		_client = client;
+	}
+
+	/// <summary>A synchronizer over any draft endpoint: <paramref name="get"/> reads the draft of a key, <paramref name="set"/> writes it (key, text, base revision).</summary>
+	public DraftSynchronizer(
+		Func<string, CancellationToken, Task<DraftGetResult>> get, Func<string, string, string?, Task<DraftSetResult>> set, ILogger logger, TimeSpan delay)
+	{
+		_get = get;
+		_set = set;
 		_logger = logger;
 		Delay = delay;
 	}
@@ -157,7 +167,7 @@ public sealed class DraftSynchronizer : IDisposable
 	/// <summary>The read itself, for callers that already hold the session's gate.</summary>
 	private async Task<DraftLoad> LoadCoreAsync(string nodeId, CancellationToken cancellationToken = default)
 	{
-		var result = await _client.DraftGetAsync(nodeId, cancellationToken).ConfigureAwait(false);
+		var result = await _get(nodeId, cancellationToken).ConfigureAwait(false);
 		var entry = EntryOf(nodeId);
 		lock (_lock)
 		{
@@ -190,6 +200,13 @@ public sealed class DraftSynchronizer : IDisposable
 			try
 			{
 				await WriteAsync(nodeId, entry, text).ConfigureAwait(false);
+				lock (_lock)
+					entry.Failures = 0;
+			}
+			catch (TessynRpcException ex) when (ex.Code == RemoteProtocol.ErrorCodes.InvalidParams)
+			{
+				// The daemon refuses this draft for good (a reply draft of an item that closed): trying again would never end.
+				_logger.LogInformation("The daemon refused the draft of {Key}: {Message}; dropped", nodeId, ex.Message);
 				lock (_lock)
 					entry.Failures = 0;
 			}
@@ -259,7 +276,7 @@ public sealed class DraftSynchronizer : IDisposable
 
 			try
 			{
-				var result = await _client.DraftSetAsync(nodeId, text, baseRevision).ConfigureAwait(false);
+				var result = await _set(nodeId, text, baseRevision).ConfigureAwait(false);
 				lock (_lock)
 				{
 					entry.Revision = result.Revision;

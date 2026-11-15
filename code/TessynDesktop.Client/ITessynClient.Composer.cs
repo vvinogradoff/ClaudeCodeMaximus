@@ -18,6 +18,12 @@ public partial interface ITessynClient
 	/// </summary>
 	Task<DraftSetResult> DraftSetAsync(string nodeId, string text, string? baseRevision = null, CancellationToken cancellationToken = default);
 
+	/// <summary><c>draft.get</c> with <c>itemId</c> (FR.23.19): the unsent reply text of one Focus item and its revision. An unknown or closed item is -32602.</summary>
+	Task<DraftGetResult> ReplyDraftGetAsync(string nodeId, string itemId, CancellationToken cancellationToken = default);
+
+	/// <summary><c>draft.set</c> with <c>itemId</c> (FR.23.19): like <see cref="DraftSetAsync"/>, for the reply draft of one Focus item.</summary>
+	Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, CancellationToken cancellationToken = default);
+
 	/// <summary><c>draft.delete</c>: removes the draft; <see cref="DraftDeleteResult.Deleted"/> says whether there was one.</summary>
 	Task<DraftDeleteResult> DraftDeleteAsync(string nodeId, CancellationToken cancellationToken = default);
 

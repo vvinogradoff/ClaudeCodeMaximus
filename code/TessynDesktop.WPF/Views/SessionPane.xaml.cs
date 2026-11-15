@@ -78,12 +78,82 @@ public partial class SessionPane : UserControl
 		}
 
 		ApplySidePane();
+		ApplyInputArea();
+	}
+
+	// ---- the collapsible input area (FR.12.29) ----
+
+	/// <summary>The most the input area grows to by itself (the text box and the command bar); a height the user dragged to lifts it.</summary>
+	private const double NaturalInputMaxHeight = 260;
+
+	/// <summary>Puts the input row in the state the view model asks for: Auto (the content's height) when collapsed or never resized, the remembered height otherwise.</summary>
+	private void ApplyInputArea()
+	{
+		if (_subscribed == null)
+			return;
+
+		if (_subscribed.IsInputCollapsed)
+		{
+			InputRow.Height = GridLength.Auto;
+			InputBody.MaxHeight = NaturalInputMaxHeight;
+			return;
+		}
+
+		if (_subscribed.ExpandedInputHeight is > 0 and var height)
+		{
+			InputRow.Height = new GridLength(height);
+			InputBody.MaxHeight = double.PositiveInfinity;
+		}
+		else
+		{
+			InputRow.Height = GridLength.Auto;
+			InputBody.MaxHeight = NaturalInputMaxHeight;
+		}
+	}
+
+	/// <summary>A double click on the splitter collapses or expands the input area; the first press of it only starts a drag.</summary>
+	private void OnInputSplitterMouseDown(object sender, MouseButtonEventArgs e)
+	{
+		if (e.ClickCount != 2 || _subscribed == null)
+			return;
+
+		_subscribed.ToggleInputAreaCommand.Execute(null);
+		e.Handled = true;
+	}
+
+	private void OnInputSplitterKeyDown(object sender, KeyEventArgs e)
+	{
+		if (e.Key is not (Key.Enter or Key.Space) || _subscribed == null)
+			return;
+
+		_subscribed.ToggleInputAreaCommand.Execute(null);
+		e.Handled = true;
+	}
+
+	/// <summary>A drag out of the collapsed state expands the area first, then goes on resizing it.</summary>
+	private void OnInputSplitterDragDelta(object sender, DragDeltaEventArgs e)
+	{
+		if (_subscribed is { IsInputCollapsed: true } && Math.Abs(e.VerticalChange) > 0)
+			_subscribed.IsInputCollapsed = false;
+	}
+
+	/// <summary>The row now has the height the user dragged it to: remembered for when the area expands again.</summary>
+	private void OnInputSplitterDragCompleted(object sender, DragCompletedEventArgs e)
+	{
+		if (_subscribed is not { IsInputCollapsed: false } || InputRow.Height.IsAuto || InputRow.ActualHeight <= 0)
+			return;
+
+		_subscribed.ExpandedInputHeight = InputRow.ActualHeight;
+		InputBody.MaxHeight = double.PositiveInfinity;
 	}
 
 	private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
 		if (e.PropertyName == nameof(SessionPaneViewModel.IsSidePaneVisible))
 			ApplySidePane();
+
+		if (e.PropertyName == nameof(SessionPaneViewModel.IsInputCollapsed))
+			ApplyInputArea();
 
 		if (e.PropertyName == nameof(SessionPaneViewModel.IsLoading))
 			TryTestDrop();

@@ -47,8 +47,8 @@ public sealed partial class SessionPaneViewModel
 	/// <summary>There is a place to go back to.</summary>
 	public bool CanGoBack => _back.Count > 0;
 
-	/// <summary>The side pane has something to show: open Focus items or a preview.</summary>
-	public bool HasSideContent => Focus.HasItems || Preview?.IsOpen == true;
+	/// <summary>The side pane has something to show: a file preview (the Focus view has its own place, FR.23.12).</summary>
+	public bool HasSideContent => Preview?.IsOpen == true;
 
 	public bool IsSidePaneVisible => HasSideContent && !SideCollapsed;
 
@@ -74,6 +74,7 @@ public sealed partial class SessionPaneViewModel
 			OnPropertyChanged(nameof(HasSideContent));
 			OnPropertyChanged(nameof(IsSidePaneVisible));
 			OnPropertyChanged(nameof(FocusBadge));
+			OnPropertyChanged(nameof(IsFocusBadgeVisible));
 		}
 	}
 
@@ -191,6 +192,7 @@ public sealed partial class SessionPaneViewModel
 				if (loaded != null)
 				{
 					PushBack(origin);
+					IsFocusSelected = false;   // the entry is in the transcript: show it (FR.23.12)
 					_surface.GoToEntry(loaded.Index, QuoteOf(loaded, reference.Offset, reference.Length), highlight: true);
 					return;
 				}

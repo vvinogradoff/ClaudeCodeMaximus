@@ -16,7 +16,9 @@ namespace TessynDesktop.WPF.ViewModels;
 /// Reply) and dismissing through the Remote API (<c>attention.list</c>, <c>attention.reply</c>, <c>attention.dismiss</c>). It follows
 /// <c>attention.changed</c> events of its own session and reloads after a client resync. References on items are handed to the owner
 /// (the session pane) through <see cref="RefActivated"/>. It serves one session at a time and leaves room for a cross-session list:
-/// nothing here depends on the transcript.
+/// nothing here depends on the transcript. The text of every reply box is a draft kept by the daemon (FR.23.19): written through <c>draft.set</c> with the
+/// item id a moment after typing stops (the <see cref="DraftSynchronizer"/> of the composer, over the reply endpoint), read again when a card shows, merged with
+/// what another client wrote, and dropped when the reply is sent or the item closes.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class FocusViewModel : ObservableObject, IDisposable
@@ -26,6 +28,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	private readonly ILogger<FocusViewModel> _logger;
 	private readonly Dictionary<(string NodeId, string ItemId), string> _drafts = new();
 	private readonly Dictionary<string, FocusItemViewModel> _byId = new(StringComparer.OrdinalIgnoreCase);
+	private bool _applyingReply;
 
 	private int _token;
 	private Task _refreshTask = Task.CompletedTask;
@@ -49,9 +52,25 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		_client = client;
 		_ui = ui;
 		_logger = logger;
+		ReplySync = new DraftSynchronizer(
+			(key, ct) => _client.ReplyDraftGetAsync(NodeOf(key), ItemOf(key), ct),
+			(key, text, baseRevision) => _client.ReplyDraftSetAsync(NodeOf(key), ItemOf(key), text, baseRevision),
+			logger, Constants.ComposerLimits.DraftSaveDelay);
+		ReplySync.Merged += OnReplyMerged;
 		_client.NotificationReceived += OnNotification;
 		_client.Resynced += OnResynced;
 	}
+
+	/// <summary>Writes the reply drafts to the daemon; the app flushes it at exit. Its keys join a node id and an item id.</summary>
+	public DraftSynchronizer ReplySync { get; }
+
+	private const char KeySeparator = '\n';
+
+	public static string KeyOf(string nodeId, string itemId) => nodeId + KeySeparator + itemId;
+
+	private static string NodeOf(string key) => key[..key.IndexOf(KeySeparator)];
+
+	private static string ItemOf(string key) => key[(key.IndexOf(KeySeparator) + 1)..];
 
 	/// <summary>The open items of the session, newest first.</summary>
 	public ObservableCollection<FocusItemViewModel> Items { get; } = [];
@@ -164,11 +183,12 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 				continue;
 			}
 
-			var item = new FocusItemViewModel(dto, this);
+			var item = new FocusItemViewModel(dto, this, nodeId);
 			if (_drafts.Remove((nodeId, dto.Id), out var draft))
-				item.ReplyText = draft;
+				SetReplyQuietly(item, draft);   // a quick return: what was typed before the pane left, until the daemon's text arrives
 			_byId[dto.Id] = item;
 			wanted.Add(item);
+			_ = ReconcileReplyAsync(item);
 		}
 
 		// Sync in place (no Clear): a card the user is typing into keeps its focus across refreshes.
@@ -176,6 +196,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		{
 			Items.Remove(gone);
 			_byId.Remove(gone.Id);
+			ReplySync.Discard(KeyOf(nodeId, gone.Id));   // the item closed: its draft goes with it (the daemon deletes the stored one)
 		}
 
 		for (var i = 0; i < wanted.Count; i++)
@@ -213,8 +234,81 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		{
 			if (!string.IsNullOrWhiteSpace(item.ReplyText))
 				_drafts[(NodeId, item.Id)] = item.ReplyText;
+
+			_ = ReplySync.FlushAsync(KeyOf(NodeId, item.Id));   // leaving the session: what is still waiting goes to the daemon now
 		}
 	}
+
+	/// <summary>Writes every pending reply draft (the app calls it at exit, and after a lost connection returns).</summary>
+	public Task FlushDraftsAsync() => ReplySync.FlushAllAsync();
+
+	/// <summary>Shows reply text without saving it as a draft (it came from the daemon or the local cache, or the reply was sent).</summary>
+	private void SetReplyQuietly(FocusItemViewModel item, string text)
+	{
+		_applyingReply = true;
+		try
+		{
+			item.ReplyText = text;
+		}
+		finally
+		{
+			_applyingReply = false;
+		}
+	}
+
+	/// <summary>Reads the daemon's reply draft of a card and merges it with what is in the box.</summary>
+	private async Task ReconcileReplyAsync(FocusItemViewModel item)
+	{
+		DraftLoad load;
+		try
+		{
+			load = await ReplySync.LoadAsync(KeyOf(item.NodeId, item.Id)).ConfigureAwait(false);
+		}
+		catch (TessynRpcException ex) when (ex.Code == RemoteProtocol.ErrorCodes.InvalidParams)
+		{
+			return;   // the item is closed or gone: there is no draft to read
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "Reading the reply draft of {ItemId} failed", item.Id);
+			return;
+		}
+
+		_ui.Post(() => ApplyRemoteReply(item, load));
+	}
+
+	private void ApplyRemoteReply(FocusItemViewModel item, DraftLoad load)
+	{
+		if (item.NodeId != NodeId || !_byId.TryGetValue(item.Id, out var current) || !ReferenceEquals(current, item))
+			return;
+
+		var local = item.ReplyText;
+		if (local == load.Text)
+			return;
+
+		var key = KeyOf(item.NodeId, item.Id);
+		var dirty = load.PreviousBase == null ? local.Length > 0 : local != load.PreviousBase;
+		if (!dirty)
+		{
+			ReplySync.Discard(key);   // a write still waiting would put the older text back over the one just read
+			SetReplyQuietly(item, load.Text);
+			return;
+		}
+
+		var merged = DraftMerge.Merge(local, load.Text, load.PreviousBase);
+		if (merged != local)
+			item.ReplyText = merged;   // saved with the revision just read
+	}
+
+	/// <summary>A conflicting write was merged with the daemon's newer text: the box shows the merge unless the user typed on since.</summary>
+	private void OnReplyMerged(object? sender, DraftMerged merged) => _ui.Post(() =>
+	{
+		var node = NodeOf(merged.NodeId);
+		if (node != NodeId || !_byId.TryGetValue(ItemOf(merged.NodeId), out var item) || item.ReplyText != merged.Sent)
+			return;
+
+		SetReplyQuietly(item, merged.Merged);
+	});
 
 	private void RaiseCountsChanged()
 	{
@@ -226,11 +320,13 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 	partial void OnAnswerCountChanged(int value) => OnPropertyChanged(nameof(SendAnswersText));
 
-	/// <summary>A reply box changed: the "Send answers" count follows.</summary>
-	internal void OnReplyTextChanged()
+	/// <summary>A reply box changed: the "Send answers" count follows and the text is saved as the item's draft (unless it came from the daemon).</summary>
+	internal void OnReplyTextChanged(FocusItemViewModel item)
 	{
 		AnswerCount = Items.Count(i => i.HasReply);
 		SendAnswersCommand.NotifyCanExecuteChanged();
+		if (!_applyingReply && item.NodeId == NodeId && _byId.ContainsKey(item.Id))
+			ReplySync.Schedule(KeyOf(item.NodeId, item.Id), item.ReplyText);
 	}
 
 	internal void ActivateRef(FocusRefViewModel reference) => RefActivated?.Invoke(this, reference.Reference);
@@ -258,7 +354,10 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 				return;
 
 			foreach (var card in cards.Where(c => result.AnsweredIds.Contains(c.Id, StringComparer.OrdinalIgnoreCase)))
-				card.ReplyText = string.Empty;
+			{
+				SetReplyQuietly(card, string.Empty);
+				ReplySync.Discard(KeyOf(id, card.Id));   // sent: nothing to keep (the daemon deletes the stored draft when the item closes)
+			}
 
 			await RequestRefresh();
 			if (result.SkippedIds.Count > 0 && id == NodeId)
@@ -282,6 +381,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		{
 			Error = null;
 			await _client.AttentionDismissAsync(id, item.Id);
+			ReplySync.Discard(KeyOf(id, item.Id));
 			if (id == NodeId)
 				await RequestRefresh();
 		}
@@ -294,6 +394,12 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 	private void OnNotification(object? sender, RemoteNotification notification)
 	{
+		if (notification.Method == RemoteProtocol.Composer.DraftChangedEvent)
+		{
+			OnDraftChanged(notification);
+			return;
+		}
+
 		if (notification.Method != RemoteProtocol.Events.AttentionChanged)
 			return;
 
@@ -306,15 +412,41 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 			});
 	}
 
+	/// <summary>The reply draft of an item changed (another client, or this one's own write echoing back): the card reads it again unless the revision is the one known here.</summary>
+	private void OnDraftChanged(RemoteNotification notification)
+	{
+		if (!notification.TryGetDraftChanged(out var payload) || payload.ItemId == null)
+			return;   // the composer draft is the session pane's
+
+		_ui.Post(() =>
+		{
+			if (payload.NodeId != NodeId || !_byId.TryGetValue(payload.ItemId, out var item))
+				return;
+
+			var key = KeyOf(payload.NodeId, payload.ItemId);
+			if (ReplySync.IsKnownRevision(key, payload.Revision))
+				return;
+
+			_ = ReconcileReplyAsync(item);
+		});
+	}
+
 	private void OnResynced(object? sender, ResyncedEventArgs e) => _ui.Post(() =>
 	{
-		if (NodeId != null)
-			_ = RequestRefresh();
+		if (NodeId == null)
+			return;
+
+		_ = RequestRefresh();
+		_ = ReplySync.FlushAllAsync();   // what a lost connection kept from being written goes out now
+		foreach (var item in Items.ToList())
+			_ = ReconcileReplyAsync(item);   // draft events may have been lost
 	});
 
 	public void Dispose()
 	{
 		_client.NotificationReceived -= OnNotification;
 		_client.Resynced -= OnResynced;
+		ReplySync.Merged -= OnReplyMerged;
+		ReplySync.Dispose();
 	}
 }

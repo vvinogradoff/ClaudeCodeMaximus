@@ -182,15 +182,18 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		];
 		await _pane.OpenAsync("a");
 		await _pane.Focus.WhenIdleAsync();
-		Assert.True(_pane.HasSideContent);
-		Assert.True(_pane.IsSidePaneVisible);
+		Assert.False(_pane.HasSideContent);              // the Focus view has its own place; the side pane is for previews (FR.23.12)
 		Assert.Equal(1, _pane.FocusBadge);
+		Assert.True(_pane.IsFocusBadgeVisible);
 
+		_pane.SelectFocusViewCommand.Execute(null);
+		Assert.False(_pane.IsFocusBadgeVisible);          // the badge shows only while Session is selected (FR.23.13)
 		_pane.Focus.Items.Single().Refs.Single().OpenCommand.Execute(null);
 		await Task.Yield();
 
 		Assert.Contains(_surface.Calls, c => c.StartsWith("goto:12:", StringComparison.Ordinal));
 		Assert.True(_pane.CanGoBack);
+		Assert.True(_pane.IsSessionSelected);             // a jump lands on the transcript
 	}
 
 	[Fact]
@@ -507,7 +510,7 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		await _pane.OpenAsync("a");
 		await _pane.Focus.WhenIdleAsync();
 		Assert.Single(_pane.Focus.Items);
-		Assert.True(_pane.HasSideContent);
+		Assert.False(_pane.HasSideContent);     // only a preview fills the side pane
 
 		await _pane.OpenAsync("b");
 		await _pane.Focus.WhenIdleAsync();

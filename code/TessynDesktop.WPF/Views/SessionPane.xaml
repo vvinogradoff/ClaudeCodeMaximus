@@ -10,6 +10,50 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <v:InvertedBooleanToVisibilityConverter x:Key="InvertedBoolToVis" />
         <v:BoolToGridLengthConverter x:Key="BoolToStarLength" />
+
+        <!-- The Session / Focus switch (FR.23.12): two radio buttons drawn as one segmented control; a click on the checked side changes nothing. -->
+        <Style x:Key="SegmentButton" TargetType="RadioButton">
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Chrome" Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1" Padding="{TemplateBinding Padding}" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.9" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- The prompt box: the full text box when expanded, one line (no wrapping, scrolls sideways) when the input area is collapsed (FR.12.29). -->
+        <Style x:Key="PromptBox" TargetType="TextBox">
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MinHeight" Value="56" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsInputCollapsed}" Value="True">
+                    <Setter Property="TextWrapping" Value="NoWrap" />
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="Height" Value="34" />
+                    <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+                    <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </ResourceDictionary>
     </UserControl.Resources>
     <UserControl.InputBindings>
@@ -21,6 +65,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition x:Name="InputRow" Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Header: name, state, tag chips -->
@@ -33,24 +78,28 @@
                         <TextBlock Text="Back" Margin="6,0,0,0" />
                     </StackPanel>
                 </Button>
-                <Button DockPanel.Dock="Right" Command="{Binding ToggleSideCommand}" Margin="8,0,0,0" Padding="8,6" ToolTip="Show or hide the Focus pane"
-                        Visibility="{Binding HasSideContent, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Focus pane">
+                <Button DockPanel.Dock="Right" Command="{Binding ToggleSideCommand}" Margin="8,0,0,0" Padding="8,6" ToolTip="Show or hide the preview pane"
+                        Visibility="{Binding HasSideContent, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Preview pane">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphPin}" />
-                        <TextBlock Text="Focus" Margin="6,0,0,0" />
-                        <TextBlock Text="{Binding FocusBadge, StringFormat={}({0})}" Margin="4,0,0,0">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding FocusBadge}" Value="0">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphFile}" />
+                        <TextBlock Text="Preview" Margin="6,0,0,0" />
                     </StackPanel>
                 </Button>
+                <!-- Session / Focus switch (FR.23.12): exactly one side is checked; the Focus badge shows while Session is selected (FR.23.13) -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
+                    <RadioButton x:Name="SessionViewButton" GroupName="SessionFocusView" Style="{StaticResource SegmentButton}" Content="Session"
+                                 IsChecked="{Binding IsSessionSelected, Mode=OneWay}" Command="{Binding SelectSessionViewCommand}"
+                                 AutomationProperties.Name="Session view" ToolTip="Show the transcript" />
+                    <RadioButton x:Name="FocusViewButton" GroupName="SessionFocusView" Style="{StaticResource SegmentButton}" Margin="2,0,0,0"
+                                 IsChecked="{Binding IsFocusSelected, Mode=OneWay}" Command="{Binding SelectFocusViewCommand}"
+                                 AutomationProperties.Name="Focus view" ToolTip="Show what needs your attention">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Focus" />
+                            <TextBlock x:Name="FocusBadgeText" Text="{Binding FocusBadge, StringFormat={}({0})}" Margin="4,0,0,0"
+                                       Visibility="{Binding IsFocusBadgeVisible, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Focus badge" />
+                        </StackPanel>
+                    </RadioButton>
+                </StackPanel>
                 <!-- Slot: buttons at the right of the header -->
                 <v:SlotHost DockPanel.Dock="Right" SlotId="session.headerToolbar">
                     <v:SlotHost.ItemsPanel>
@@ -129,28 +178,31 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition x:Name="SideColumn" Width="0" />
             </Grid.ColumnDefinitions>
-            <Grid Grid.Column="0" x:Name="TranscriptHost">
+            <Grid Grid.Column="0" x:Name="TranscriptHost" Visibility="{Binding IsFocusSelected, Converter={StaticResource InvertedBoolToVis}}">
                 <wv2:WebView2 x:Name="Transcript" />
             </Grid>
+            <!-- The Focus view replaces the transcript while it is selected (FR.23.12); the transcript is hidden, not unloaded -->
+            <Grid Grid.Column="0" x:Name="FocusHost" Visibility="{Binding IsFocusSelected, Converter={StaticResource BoolToVis}}">
+                <v:FocusPanel x:Name="FocusView" DataContext="{Binding Focus}" />
+            </Grid>
 
-            <!-- Side pane: the Focus view, and below it the file preview while one is open (WebView2 cannot be overlapped, so it has its own cell). -->
+            <!-- Side pane: the file preview while one is open (WebView2 cannot be overlapped, so it has its own cell). -->
             <GridSplitter Grid.Column="1" x:Name="SideSplitter" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Visibility="Collapsed" />
             <Grid Grid.Column="2" x:Name="SidePane" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="{Binding Preview.IsOpen, Converter={StaticResource BoolToStarLength}, FallbackValue=0}" />
-                </Grid.RowDefinitions>
-                <v:FocusPanel Grid.Row="0" DataContext="{Binding Focus}" />
-                <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Center" Visibility="{Binding Preview.IsOpen, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
-                <v:FilePreviewPane Grid.Row="2" DataContext="{Binding Preview}" Visibility="{Binding IsOpen, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                <v:FilePreviewPane DataContext="{Binding Preview}" Visibility="{Binding IsOpen, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
             </Grid>
         </Grid>
 
-        <!-- Input -->
-        <StackPanel Grid.Row="3" Margin="16,8,16,12">
+        <!-- The splitter that sets the height of the input area; a double click collapses or expands it (FR.12.29) -->
+        <GridSplitter Grid.Row="3" x:Name="InputSplitter" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                      ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" ShowsPreview="False" Cursor="SizeNS"
+                      AutomationProperties.Name="Input area splitter" ToolTip="Drag to resize. Double-click (or Enter) to collapse or expand the input area."
+                      PreviewMouseLeftButtonDown="OnInputSplitterMouseDown" PreviewKeyDown="OnInputSplitterKeyDown" DragDelta="OnInputSplitterDragDelta" DragCompleted="OnInputSplitterDragCompleted" />
+
+        <!-- Input: expanded (FR.12.1/12.2) or collapsed (FR.12.29: the command bar only while it is shown, otherwise one line of text) -->
+        <StackPanel Grid.Row="4" Margin="16,2,16,12">
         <!-- Slots: instruction toggles above the prompt box, accessories (autocomplete hints, draft and auth notices) right above it -->
-        <v:SlotHost SlotId="session.instructionToolbar" />
+        <v:SlotHost SlotId="session.instructionToolbar" Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}" />
         <v:SlotHost SlotId="session.composerAccessory" />
         <!-- Progress of a file-mode drop: one copy per file, cancellable -->
         <Border Margin="0,0,0,6" Padding="10,6" CornerRadius="4" Background="{DynamicResource SubtleFillColorSecondaryBrush}"
@@ -169,22 +221,29 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="InputBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="200" AllowDrop="True" AutomationProperties.Name="Prompt input"
-                     VerticalScrollBarVisibility="Auto" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
-                     ToolTip="Ctrl+Enter sends. Drop or paste files here."
-                     PreviewDragEnter="OnInputDragOver" PreviewDragOver="OnInputDragOver" PreviewDrop="OnInputDrop"
-                     TextChanged="OnInputEdited" SelectionChanged="OnInputEdited" PreviewKeyDown="OnInputPreviewKeyDown" LostKeyboardFocus="OnInputLostFocus">
-                <TextBox.InputBindings>
-                    <KeyBinding Gesture="Ctrl+Enter" Command="{Binding SendCommand}" />
-                </TextBox.InputBindings>
-            </TextBox>
+            <DockPanel x:Name="InputBody" LastChildFill="True" MaxHeight="260">
+                <!-- Slot: command bar below the prompt box (model, effort and profile selectors, toggles) -->
+                <v:SlotHost DockPanel.Dock="Bottom" SlotId="session.commandBar" Visibility="{Binding IsCommandBarVisible, Converter={StaticResource BoolToVis}}" />
+                <TextBox x:Name="InputBox" Style="{StaticResource PromptBox}" AllowDrop="True" AutomationProperties.Name="Prompt input"
+                         Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
+                         Visibility="{Binding ShowInputBox, Converter={StaticResource BoolToVis}}"
+                         ToolTip="Ctrl+Enter sends. Drop or paste files here."
+                         PreviewDragEnter="OnInputDragOver" PreviewDragOver="OnInputDragOver" PreviewDrop="OnInputDrop"
+                         TextChanged="OnInputEdited" SelectionChanged="OnInputEdited" PreviewKeyDown="OnInputPreviewKeyDown" LostKeyboardFocus="OnInputLostFocus">
+                    <TextBox.InputBindings>
+                        <KeyBinding Gesture="Ctrl+Enter" Command="{Binding SendCommand}" />
+                    </TextBox.InputBindings>
+                </TextBox>
+            </DockPanel>
             <!-- Autocomplete suggestions (W1b), placed at the caret by SessionPane.xaml.cs; the input box keeps the keyboard focus -->
             <Popup x:Name="SuggestionsPopup" PlacementTarget="{Binding ElementName=InputBox}" Placement="Custom" StaysOpen="True" Focusable="False"
                    IsOpen="{Binding Autocomplete.IsOpen, Mode=OneWay}">
                 <v:AutocompletePopup x:Name="Suggestions" DataContext="{Binding Autocomplete}" />
             </Popup>
+            <!-- The side column: expanded it holds the file-mode and settings toggles, Send, and Stop while a turn runs; collapsed it holds exactly one button, Send or Stop -->
             <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Bottom">
                 <ToggleButton x:Name="FileModeToggle" IsChecked="{Binding AttachAsFiles, Mode=TwoWay}" Margin="0,0,0,4" Padding="8,6" HorizontalAlignment="Stretch"
+                              Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}"
                               ToolTip="File mode: dropped files are copied into this session's attachments and 'Attached file: path' is inserted. Off: the file's own path is inserted."
                               AutomationProperties.Name="File mode">
                     <StackPanel Orientation="Horizontal">
@@ -192,13 +251,23 @@
                         <TextBlock Text="File mode" Margin="8,0,0,0" />
                     </StackPanel>
                 </ToggleButton>
-                <Button Command="{Binding SendCommand}" Margin="0,0,0,4" Style="{DynamicResource AccentButtonStyle}" ToolTip="Send (Ctrl+Enter)" AutomationProperties.Name="Send">
+                <ToggleButton x:Name="SettingsToggle" IsChecked="{Binding IsCommandBarVisible, Mode=TwoWay}" Margin="0,0,0,4" Padding="8,6" HorizontalAlignment="Stretch"
+                              Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}"
+                              ToolTip="Show or hide the settings bar (model, effort, profile)" AutomationProperties.Name="Settings">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSettings}" />
+                        <TextBlock Text="Settings" Margin="8,0,0,0" />
+                    </StackPanel>
+                </ToggleButton>
+                <Button x:Name="SendButton" Command="{Binding SendCommand}" Margin="0,0,0,4" Style="{DynamicResource AccentButtonStyle}" ToolTip="Send (Ctrl+Enter)" AutomationProperties.Name="Send"
+                        Visibility="{Binding ShowSendButton, Converter={StaticResource BoolToVis}}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />
                         <TextBlock Text="Send" Margin="8,0,0,0" />
                     </StackPanel>
                 </Button>
-                <Button Command="{Binding StopCommand}" ToolTip="Stop the running turn" AutomationProperties.Name="Stop">
+                <Button x:Name="StopButton" Command="{Binding StopCommand}" ToolTip="Stop the running turn" AutomationProperties.Name="Stop"
+                        Visibility="{Binding ShowStopButton, Converter={StaticResource BoolToVis}}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphStop}" />
                         <TextBlock Text="Stop" Margin="8,0,0,0" />
@@ -206,8 +275,6 @@
                 </Button>
             </StackPanel>
         </Grid>
-        <!-- Slot: command bar below the prompt box (model, effort and profile selectors, toggles) -->
-        <v:SlotHost SlotId="session.commandBar" />
         </StackPanel>
     </Grid>
 </UserControl>

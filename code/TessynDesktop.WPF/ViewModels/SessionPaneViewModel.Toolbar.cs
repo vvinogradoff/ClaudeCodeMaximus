@@ -53,7 +53,11 @@ public sealed partial class SessionPaneViewModel
 		LocalTools.SetModel(SelectedModel?.Provider);
 	}
 
-	partial void OnIsRunningChanged(bool value) => Instruction.IsRunning = value;
+	partial void OnIsRunningChanged(bool value)
+	{
+		Instruction.IsRunning = value;
+		OnRunningChangedForInput();
+	}
 
 	private void ApplyToolbarDetail(SessionDetailDto detail)
 	{

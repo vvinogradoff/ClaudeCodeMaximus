@@ -32,14 +32,18 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	[NotifyCanExecuteChangedFor(nameof(ReplyCommand))]
 	private string _replyText = string.Empty;
 
-	public FocusItemViewModel(AttentionItemDto item, FocusViewModel owner)
+	public FocusItemViewModel(AttentionItemDto item, FocusViewModel owner, string nodeId = "")
 	{
 		_owner = owner;
+		NodeId = nodeId;
 		Id = item.Id;
 		CreatedUtc = item.CreatedUtc;
 		Number = item.Number;
 		Update(item);
 	}
+
+	/// <summary>The session the item belongs to (the key of its reply draft, FR.23.19).</summary>
+	public string NodeId { get; }
 
 	/// <summary>The item id as the session and the user know it ("A3").</summary>
 	public string Id { get; }
@@ -115,7 +119,7 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	partial void OnReplyTextChanged(string value)
 	{
 		OnPropertyChanged(nameof(HasReply));
-		_owner.OnReplyTextChanged();
+		_owner.OnReplyTextChanged(this);
 	}
 
 	[RelayCommand]
