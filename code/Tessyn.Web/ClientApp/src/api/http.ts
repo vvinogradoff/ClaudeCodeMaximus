@@ -1,6 +1,6 @@
-import { LoginError, newRequestId, notifyUnauthorized, RpcError } from './rpc';
-import type { LoginResult, Transport, EventSourceHandlers, EventSourceHandle } from './rpc';
-import type { EventFrame } from './types';
+import { LoginError, newRequestId, notifyUnauthorized, RpcError, UploadError } from './rpc';
+import type { LoginResult, Transport, EventSourceHandlers, EventSourceHandle, UploadHandle } from './rpc';
+import type { AttachmentResult, EventFrame } from './types';
 
 interface RpcEnvelope { result?: unknown; error?: { code: number; message: string } }
 
@@ -66,6 +66,37 @@ export const httpTransport: Transport = {
 		if (res.status === 401) return null;
 		if (!res.ok) throw new Error(`me failed (${res.status})`);
 		return (await res.json()) as LoginResult;
+	},
+
+	upload(nodeId, file, onProgress): UploadHandle {
+		// XMLHttpRequest, not fetch: only XHR reports upload progress.
+		const xhr = new XMLHttpRequest();
+		const promise = new Promise<AttachmentResult>((resolve, reject) => {
+			xhr.open('POST', '/api/attachments');
+			xhr.withCredentials = true;
+			for (const [k, v] of Object.entries(CLIENT_HEADERS)) xhr.setRequestHeader(k, v);
+			xhr.responseType = 'text';
+			xhr.upload.onprogress = (ev) => { if (ev.lengthComputable && ev.total > 0) onProgress(ev.loaded / ev.total); };
+			xhr.onerror = () => reject(new UploadError(0, 'Network error - the upload did not finish'));
+			xhr.onabort = () => reject(new UploadError(-1, 'Upload cancelled'));
+			xhr.ontimeout = () => reject(new UploadError(0, 'The upload timed out'));
+			xhr.onload = () => {
+				if (xhr.status === 401) { notifyUnauthorized(); reject(new UploadError(401, 'Logged out')); return; }
+				type UploadBody = Partial<AttachmentResult> & { error?: string };
+				let body = null as UploadBody | null;
+				try { body = JSON.parse(xhr.responseText) as UploadBody; } catch { /* not JSON */ }
+				if (xhr.status >= 200 && xhr.status < 300 && body && typeof body.path === 'string') {
+					onProgress(1);
+					resolve(body as AttachmentResult);
+				} else if (xhr.status === 413) reject(new UploadError(413, body?.error ?? 'The file is too large'));
+				else reject(new UploadError(xhr.status, body?.error ?? `Upload failed (${xhr.status})`));
+			};
+			const form = new FormData();
+			form.append('nodeId', nodeId);
+			form.append('file', file, file.name);
+			xhr.send(form);
+		});
+		return { promise, abort: () => xhr.abort() };
 	},
 
 	openEvents(handlers: EventSourceHandlers): EventSourceHandle {

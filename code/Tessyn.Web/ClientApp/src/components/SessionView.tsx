@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { SessionTagDto } from '../api/types';
+import { backLabel, topFrame } from '../lib/navStack';
 import { safeHttpsUrl } from '../lib/url';
 import { useApp } from '../state/AppContext';
 import { Composer } from './Composer';
@@ -51,9 +52,16 @@ export function SessionView() {
 	}
 	const d = open.detail;
 	const att = d?.attention;
+	const back = topFrame(state.navStack);
 	return (
 		<div className="session-view" data-testid="session-view">
 			<div className="sv-header">
+				{back && (
+					<button type="button" className="back-bar" data-testid="back-bar" onClick={() => void actions.goBack()}>
+						<span aria-hidden="true">←</span><span className="back-label">{backLabel(back)}</span>
+						{state.navStack.length > 1 && <span className="back-depth" aria-label={`${state.navStack.length} places in the history`}>{state.navStack.length}</span>}
+					</button>
+				)}
 				{d && <div className="sv-loc">{[d.location.directoryLabel, d.location.treePath].filter((x) => x).join(' / ')}</div>}
 				{!d && open.error && <div className="sv-loc">Session unavailable</div>}
 				{d && d.tags.length > 0 && <TagRow tags={d.tags} />}

@@ -6,6 +6,8 @@ import { reconcilePending } from '../lib/pending';
 import type { PendingMsg } from '../lib/pending';
 import { appendEntries, emptyTranscript, prependEntries, replaceEntry, replaceTranscript } from '../lib/transcript';
 import type { TranscriptState } from '../lib/transcript';
+import { popFrame, pushFrame } from '../lib/navStack';
+import type { NavFrame } from '../lib/navStack';
 
 export type PanelTab = 'tree' | 'recent' | 'tags';
 export type SessionTab = 'session' | 'focus';
@@ -14,6 +16,12 @@ export interface Selection { id: string; kind: 'directory' | 'group' | 'session'
 
 /** Per-session client-side turn settings, sent with every send/reply/compact (initialised from session.get.lastUsed). */
 export interface TurnSettings { modelId: string; effort: string; profileId: string }
+
+/** A Focus ref the user jumped to: the transcript scrolls to the entry; `mark` also highlights offset/length. */
+export interface FocusEntry { entryId: string; offset?: number; length?: number; mark: boolean; token: number }
+
+/** What the file preview sheet shows (from a file ref or a file.preview handle). */
+export interface PreviewTarget { handle: string; name: string; mime: string; size: number; title?: string }
 
 export interface OpenSession {
 	id: string;
@@ -25,6 +33,7 @@ export interface OpenSession {
 	attention: AttentionListResult | null;
 	runningSince: number | null;
 	settings: TurnSettings | null;
+	focusEntry: FocusEntry | null;
 }
 
 export interface Toast { id: number; text: string; kind: 'error' | 'info' }
@@ -44,6 +53,9 @@ export interface AppState {
 	panelTab: PanelTab;
 	selected: Selection | null;
 	session: OpenSession | null;
+	/** Jump history: Back returns to the previous place, also across sessions and for nested jumps. */
+	navStack: NavFrame[];
+	preview: PreviewTarget | null;
 	toasts: Toast[];
 	/** Bumped on resync / events that make list tabs refetch. */
 	listRevision: number;
@@ -56,7 +68,7 @@ export function initialState(panelTab: PanelTab): AppState {
 	return {
 		auth: 'unknown', email: null, online: true, serverOffsetMs: 0,
 		tree: [], treeLoaded: false, workers: {}, states: {}, catalog: null,
-		panelOpen: false, panelTab, selected: null, session: null, toasts: [], listRevision: 0, scopeProject: false, scopeTags: false,
+		panelOpen: false, panelTab, selected: null, session: null, navStack: [], preview: null, toasts: [], listRevision: 0, scopeProject: false, scopeTags: false,
 	};
 }
 
@@ -78,6 +90,11 @@ export type Action =
 	| { type: 'transcriptReplace'; result: SessionEntriesResult }
 	| { type: 'transcriptAppend'; result: SessionEntriesResult }
 	| { type: 'transcriptPrepend'; result: SessionEntriesResult }
+	| { type: 'transcriptAround'; result: SessionEntriesResult; focus: FocusEntry | null }
+	| { type: 'navPush'; frame: NavFrame }
+	| { type: 'navPop' }
+	| { type: 'navClear' }
+	| { type: 'preview'; preview: PreviewTarget | null }
 	| { type: 'entryFull'; nodeId: string; entry: SessionEntryDto }
 	| { type: 'pendingAdd'; nodeId: string; msg: PendingMsg }
 	| { type: 'pendingRemove'; nodeId: string; id: string }
@@ -93,7 +110,7 @@ export type Action =
 	| { type: 'pendingQueued'; nodeId: string; id: string };
 
 function freshSession(id: string): OpenSession {
-	return { id, detail: null, error: null, transcript: emptyTranscript, pending: [], tab: 'session', attention: null, runningSince: null, settings: null };
+	return { id, detail: null, error: null, transcript: emptyTranscript, pending: [], tab: 'session', attention: null, runningSince: null, settings: null, focusEntry: null };
 }
 
 function withSession(s: AppState, id: string, f: (o: OpenSession) => OpenSession): AppState {
@@ -140,8 +157,8 @@ export function reduce(s: AppState, a: Action): AppState {
 		case 'panel': return { ...s, panelOpen: a.open };
 		case 'panelTab': return { ...s, panelTab: a.tab };
 		case 'select': return withSelection(s, a.selection);
-		case 'openStart': return { ...withSelection(s, { id: a.id, kind: 'session' }), session: freshSession(a.id), panelOpen: false };
-		case 'close': return { ...s, session: null };
+		case 'openStart': return { ...withSelection(s, { id: a.id, kind: 'session' }), session: freshSession(a.id), panelOpen: false, preview: null };
+		case 'close': return { ...s, session: null, navStack: [], preview: null };
 		case 'detail': return withSession(s, a.id, (o) => ({
 			...o,
 			detail: a.detail,
@@ -152,8 +169,16 @@ export function reduce(s: AppState, a: Action): AppState {
 		case 'openError': return withSession(s, a.id, (o) => ({ ...o, error: a.message }));
 		case 'transcriptReplace': return withSession(s, a.result.nodeId, (o) => {
 			const t = replaceTranscript(a.result);
-			return { ...o, transcript: t, pending: reconcilePending(o.pending, t.entries) };
+			return { ...o, transcript: t, pending: reconcilePending(o.pending, t.entries), focusEntry: null };
 		});
+		case 'transcriptAround': return withSession(s, a.result.nodeId, (o) => {
+			const t = replaceTranscript(a.result, true);
+			return { ...o, transcript: t, pending: reconcilePending(o.pending, t.entries), focusEntry: a.focus };
+		});
+		case 'navPush': return { ...s, navStack: pushFrame(s.navStack, a.frame) };
+		case 'navPop': return { ...s, navStack: popFrame(s.navStack) };
+		case 'navClear': return s.navStack.length === 0 ? s : { ...s, navStack: [] };
+		case 'preview': return { ...s, preview: a.preview };
 		case 'transcriptAppend': return withSession(s, a.result.nodeId, (o) => {
 			const t = appendEntries(o.transcript, a.result);
 			return { ...o, transcript: t, pending: reconcilePending(o.pending, t.entries) };

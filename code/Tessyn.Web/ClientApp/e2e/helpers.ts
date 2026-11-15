@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test';
 /** Horizontal scrollers that are allowed to be wider than the viewport inside; their descendants are not checked. */
 const SCROLLERS = '.sv-tags, .tw, .md .code pre';
 /** Regions whose elements must never poke out of the viewport. */
-const REGIONS = '.topbar, .sv-header, .transcript, .composer, .usage, .focus, .card, .panel, .sheet, .dialog, .toasts, .menu, .backdrop';
+const REGIONS = '.topbar, .sv-header, .transcript, .composer, .usage, .focus, .card, .panel, .sheet, .dialog, .toasts, .menu, .backdrop, .refs, .back-bar, .extras, .upload-row, .attach-error';
 
 export interface OverflowReport { docScrollWidth: number; innerWidth: number; offenders: string[] }
 

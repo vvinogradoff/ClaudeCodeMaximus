@@ -15,6 +15,12 @@ export function subscribeEvents(fn: Listener): () => void {
 	return () => { listeners.delete(fn); };
 }
 
+/** Where the transcript viewport is: set by the mounted Transcript so a jump can remember the place the user leaves. */
+export interface ViewportInfo { firstVisibleEntryId: string | null; atBottom: boolean }
+let viewportProbe: (() => ViewportInfo) | null = null;
+export function setViewportProbe(fn: (() => ViewportInfo) | null): void { viewportProbe = fn; }
+export function probeViewport(): ViewportInfo | null { return viewportProbe ? viewportProbe() : null; }
+
 let focusRequested = false;
 /** Ask the composer to take focus as soon as it is ready (after creating a session). */
 export function requestComposerFocus(): void { focusRequested = true; }
