@@ -58,7 +58,7 @@ public sealed class Issue013ReviewFixTests : IDisposable
 	// ── P1: the engine applies a queued switch only under the turn lock ──────────────────────
 
 	[Fact]
-	public async Task TurnEngine_AppliesAQueuedSwitchUnderTheTurnLock_BeforeRecordingTheTurnProfile_AndDoesNotAdoptBeforeThat()
+	public async Task TurnEngine_AppliesAQueuedSwitchUnderTheTurnLock_BeforeRecordingTheTurnProfile_AndAdoptsOnlyAfterThat()
 	{
 		using var h = new TurnEngineHarness();
 		var observer = new LockObservingSwitchService(() => h.Turns.GetTurnLock(TurnEngineHarness.NodeId).CurrentCount == 0);
@@ -73,7 +73,7 @@ public sealed class Issue013ReviewFixTests : IDisposable
 		await engine.RunAsync(new TurnRequest(node, "hi", TurnEngineHarness.Chosen(), false));
 
 		Assert.Equal(["ApplyPending lockHeld=True", "RecordTurnProfile lockHeld=True"], observer.Calls);
-		Assert.Empty(h.Status.Adoptions);   // the pre-lock adoption would have moved files under a running turn
+		Assert.Single(h.Status.Adoptions);   // the adoption runs once, after both calls above and under the same lock (N1)
 	}
 
 	// ── P2/P3 on send_to_session ─────────────────────────────────────────────────────────────
@@ -441,5 +441,83 @@ public sealed class Issue013ReviewFixTests : IDisposable
 	{
 		var parameter = typeof(SessionCompactRpcModule).GetConstructors().Single().GetParameters().Single(p => p.ParameterType == typeof(IProfileResolver));
 		Assert.True(parameter.HasDefaultValue);   // optional: callers without DI fall back to the shared implementation
+	}
+
+	// ── N1: the adoption moves files, so it runs under the turn lock ─────────────────────────
+
+	[Fact]
+	public async Task TurnEngine_RunningNodeAndAnExplicitPerTurnProfile_NothingMovesBeforeTheLockIsAcquired()
+	{
+		using var h = new TurnEngineHarness();
+		h.Process.ScriptEvents(new ClaudeStreamEvent { Type = "result", SessionId = "s1" });
+		var node = TurnEngineHarness.Node(sessionId: "s1");
+		var turnLock = h.Turns.GetTurnLock(TurnEngineHarness.NodeId);
+		await turnLock.WaitAsync();   // the node's previous turn is still running
+
+		var queued = h.Run(node, settings: TurnEngineHarness.Chosen(profileDir: @"C:\profiles\p2", profileName: "Other"));
+		await Task.Delay(300);
+
+		Assert.Empty(h.Status.Adoptions);   // no pre-lock move from under the running turn
+		turnLock.Release();
+		await queued;
+		Assert.Single(h.Status.Adoptions);  // done once, under the lock, with the chosen profile's dir
+		Assert.Equal(@"C:\profiles\p2", h.Status.Adoptions[0].ProfileConfigDir);
+	}
+
+	[Fact]
+	public async Task HeadlessTurn_AdoptsOnlyAfterItHoldsTheTurnLock_NoPreLockMove()
+	{
+		using var attention = new AttentionTestEnv();
+		using var tags = new TagTestEnv();
+		var dir = Path.Combine(_env.Root, "headless");
+		Directory.CreateDirectory(dir);
+		var settings = new AppSettingsService(dir);
+		settings.Settings.SessionFilesRoot = dir;
+		settings.Settings.AgentToolsEnabled = false;
+		var profiles = new FakeProfileServiceForTurnService();
+		var process = new FakeProcessManagerForTurnService
+		{
+			EmitEvents = onEvent => { onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "s1" }); return Task.CompletedTask; },
+		};
+		var status = new RecordingSessionStatusService();
+		var sut = new SessionTurnService(
+			process, new FakeFileServiceForTurnService(), settings, profiles,
+			new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService()), new FakeRegistryForTurnService(), status,
+			new FakeModelServiceForTurnService(), new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()),
+			new FakeStreamingManagerForTurnService(), attention.Service, tags.Service, new ProfileLabelService(profiles, settings));
+		var node = new SessionNodeModel { NodeId = "n1", Name = "N", FileName = "n1.txt", WorkingDirectory = @"C:\proj", ClaudeSessionId = "s1" };
+		var turnLock = sut.GetTurnLock(node.NodeId);
+		await turnLock.WaitAsync();   // a turn is running
+
+		var queued = sut.RunTurnAsync(node, "hi", TurnSource.Orchestrated, new TurnOptionsModel(ProfileName: "[Sys] me@example.com"));
+		await Task.Delay(300);
+
+		Assert.Empty(status.Adoptions);
+		turnLock.Release();
+		await queued;
+		Assert.Single(status.Adoptions);
+	}
+
+	// ── N2: a switch back cancels an earlier queued switch ───────────────────────────────────
+
+	[Fact]
+	public async Task SwitchingBackToTheCurrentProfile_CancelsAQueuedSwitch()
+	{
+		var o = _env.AddSession("O", profileId: "p1");
+		_env.WriteSession(_p1, o);
+		_env.Registry.SetSessionRunning(o.NodeId, true);
+		_env.Switch.Switch(o.NodeId, "p2", includeDescendants: false);   // queued
+		Assert.Equal("p2", o.PendingProfileId);
+
+		_env.Switch.Switch(o.NodeId, "p1", includeDescendants: false);   // back to where it is
+		_env.Registry.SetSessionRunning(o.NodeId, false);
+
+		Assert.Null(o.PendingProfileId);
+		Assert.False(_env.Switch.ApplyPending(o));                        // the next turn start has nothing to apply
+		_env.Switch.RecordTurnProfile(o, "Account A");
+		Assert.Equal("p1", o.ProfileId);
+		Assert.True(File.Exists(_env.TranscriptIn(_p1, o)));
+		var list = ProfileSwitchEnv.TextOf(await _env.Call("list_sessions", new(), o));
+		Assert.DoesNotContain("switching-to=", list);
 	}
 }

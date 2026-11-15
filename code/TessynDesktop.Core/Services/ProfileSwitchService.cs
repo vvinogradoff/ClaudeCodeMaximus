@@ -72,6 +72,7 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 			if (from.ProfileId == target.ProfileId && from.IsResolved)
 			{
 				Pin(session, target); // already there: record the pin, move nothing
+				session.PendingProfileId = null; // a switch back cancels an earlier queued switch (ISSUE.013 N2)
 				continue;
 			}
 
