@@ -11,7 +11,8 @@ namespace TessynDesktop.Services;
 /// <remarks>
 /// Change detection compares each section's serialised values with the last ones seen, on every <see cref="IAppSettingsService.Saved"/> and before every
 /// read or update, so values an Avalonia Settings save wrote (or wrote into memory but not yet saved) are seen. Lock order is the settings lock, then
-/// the state lock; notifications are published after the state lock is released. Created by Claude.
+/// the state lock. Notifications are published after the state lock is released but, on the get/update paths, while the caller's settings lock is still
+/// held: the bus never blocks (O(1) subscribers by contract). Created by Claude.
 /// </remarks>
 public sealed class SettingsSectionService : ISettingsSectionService, IDisposable
 {
@@ -79,11 +80,22 @@ public sealed class SettingsSectionService : ISettingsSectionService, IDisposabl
 					throw new TdcpException(Constants.SettingsApi.StaleVersionMessage);
 			}
 
+			var restore = state.Section.CaptureRestore(_settings.Settings);
 			state.Section.Apply(_settings.Settings, patch);
 			if (Serialize(state.Section.Read(_settings.Settings)) == state.Snapshot)
 				return state.Version;
 
-			_settings.Save();
+			try
+			{
+				_settings.Save();
+			}
+			catch
+			{
+				// The file was not written: the live model must not keep a change the caller was told failed (decision U4).
+				restore();
+				throw;
+			}
+
 			Detect(); // the Saved event does this too; a service without the event still needs it
 
 			lock (_gate)

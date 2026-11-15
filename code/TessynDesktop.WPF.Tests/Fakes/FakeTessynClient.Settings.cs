@@ -32,6 +32,9 @@ public sealed partial class FakeTessynClient
 	/// <summary>What <see cref="ProfileAuthenticateAsync"/> answers.</summary>
 	public bool AuthenticateStarted { get; set; } = true;
 
+	/// <summary>The pinned-session count <see cref="ProfileRemoveAsync"/> reports.</summary>
+	public int RemovedProfilePinnedSessions { get; set; }
+
 	/// <summary>The answer of <see cref="ProfileSwitchAsync"/>.</summary>
 	public ProfileSwitchResultDto? ProfileSwitchResult { get; set; }
 
@@ -93,13 +96,13 @@ public sealed partial class FakeTessynClient
 		return Task.FromResult(renamed);
 	}
 
-	public Task<ProfileDto> ProfileRemoveAsync(string profileId, CancellationToken cancellationToken = default)
+	public Task<ProfileRemoveResult> ProfileRemoveAsync(string profileId, CancellationToken cancellationToken = default)
 	{
 		Record($"profile.remove:{profileId}");
 		ThrowIfProfileFails();
 		var removed = Profiles.Single(p => p.Id == profileId);
 		Profiles.Remove(removed);
-		return Task.FromResult(removed);
+		return Task.FromResult(new ProfileRemoveResult(removed, RemovedProfilePinnedSessions));
 	}
 
 	public Task<ProfileAuthenticateResult> ProfileAuthenticateAsync(string profileId, CancellationToken cancellationToken = default)

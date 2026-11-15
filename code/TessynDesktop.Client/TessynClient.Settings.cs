@@ -36,8 +36,8 @@ public sealed partial class TessynClient
 		CallAsync<ProfileDto>(RemoteProtocol.ProfilesAdmin.RenameMethod, Params(("profileId", Node(profileId)), ("displayName", Node(displayName))), cancellationToken);
 
 	/// <inheritdoc />
-	public Task<ProfileDto> ProfileRemoveAsync(string profileId, CancellationToken cancellationToken = default) =>
-		CallAsync<ProfileDto>(RemoteProtocol.ProfilesAdmin.RemoveMethod, Params(("profileId", Node(profileId))), cancellationToken);
+	public Task<ProfileRemoveResult> ProfileRemoveAsync(string profileId, CancellationToken cancellationToken = default) =>
+		CallAsync<ProfileRemoveResult>(RemoteProtocol.ProfilesAdmin.RemoveMethod, Params(("profileId", Node(profileId))), cancellationToken);
 
 	/// <inheritdoc />
 	public Task<ProfileAuthenticateResult> ProfileAuthenticateAsync(string profileId, CancellationToken cancellationToken = default) =>

@@ -10,6 +10,8 @@ namespace TessynDesktop.Services;
 /// <summary>
 /// The <c>general</c> section: session files root, Claude path, source tree, proxy, Ollama URL, agent tools, remote file access and the media
 /// preview hosts. The whitelist is the member list of <see cref="GeneralSettingsPatch"/> and <see cref="FileAccessSettingsPatch"/>.
+/// The session files root, the Claude path and the source tree are <b>read-only</b> here (decision U1): the first is where files are written and the
+/// other two name what the daemon executes, so they are edited in the Avalonia Settings window only.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class GeneralSettingsSection : ISettingsSection
@@ -38,22 +40,32 @@ public sealed partial class GeneralSettingsSection : ISettingsSection
 	}
 
 	/// <inheritdoc />
+	public Action CaptureRestore(AppSettingsModel settings)
+	{
+		var (proxy, ollama, agentTools, hosts) = (settings.HttpsProxy, settings.OllamaBaseUrl, settings.AgentToolsEnabled, settings.MediaPreviewHosts);
+		var hadAccess = settings.FileAccess;
+		var access = hadAccess == null ? ((FileAccessMode, int, long, long, long, long)?)null
+			: (hadAccess.Mode, hadAccess.MaxRelayChunkBytes, hadAccess.MaxTextFileBytes, hadAccess.MaxImageFileBytes, hadAccess.MaxPdfFileBytes, hadAccess.MaxVideoFileBytes);
+		return () =>
+		{
+			(settings.HttpsProxy, settings.OllamaBaseUrl, settings.AgentToolsEnabled, settings.MediaPreviewHosts) = (proxy, ollama, agentTools, hosts);
+			settings.FileAccess = hadAccess;
+			if (hadAccess != null && access is { } v)
+				(hadAccess.Mode, hadAccess.MaxRelayChunkBytes, hadAccess.MaxTextFileBytes, hadAccess.MaxImageFileBytes, hadAccess.MaxPdfFileBytes, hadAccess.MaxVideoFileBytes) = v;
+		};
+	}
+
+	/// <inheritdoc />
 	public void Apply(AppSettingsModel settings, JsonNode patch)
 	{
 		var p = SettingsPatchReader.Read<GeneralSettingsPatch>(patch);
 
 		// Validate everything first so that a rejected patch changes nothing.
-		var sessionFilesRoot = p.SessionFilesRoot == null ? null : SettingsPatchReader.AbsolutePath(nameof(p.SessionFilesRoot), p.SessionFilesRoot, allowEmpty: false);
-		var claudePath       = p.ClaudePath == null ? null : SettingsPatchReader.RequireText(nameof(p.ClaudePath), p.ClaudePath);
-		var sourceCodes      = p.SourceCodesLocation == null ? null : SettingsPatchReader.AbsolutePath(nameof(p.SourceCodesLocation), p.SourceCodesLocation, allowEmpty: true);
 		var proxy            = p.HttpsProxy == null ? null : SettingsPatchReader.HttpUrl(nameof(p.HttpsProxy), p.HttpsProxy, allowEmpty: true);
 		var ollama           = p.OllamaBaseUrl == null ? null : SettingsPatchReader.HttpUrl(nameof(p.OllamaBaseUrl), p.OllamaBaseUrl, allowEmpty: false);
 		var hosts            = p.MediaPreviewHosts == null ? null : ReadHosts(p.MediaPreviewHosts);
 		var access           = p.FileAccess == null ? null : ValidateAccess(p.FileAccess);
 
-		if (sessionFilesRoot != null) settings.SessionFilesRoot = sessionFilesRoot;
-		if (claudePath != null)       settings.ClaudePath = claudePath;
-		if (sourceCodes != null)      settings.SourceCodesLocation = sourceCodes;
 		if (proxy != null)            settings.HttpsProxy = proxy;
 		if (ollama != null)           settings.OllamaBaseUrl = ollama;
 		if (p.AgentToolsEnabled is { } agentTools) settings.AgentToolsEnabled = agentTools;
@@ -69,7 +81,7 @@ public sealed partial class GeneralSettingsSection : ISettingsSection
 		foreach (var raw in hosts)
 		{
 			var host = (raw ?? string.Empty).Trim().ToLowerInvariant();
-			if (host.Length == 0 || host.Length > Constants.SettingsApi.MaxHostLength || !HostPattern().IsMatch(host))
+			if (host.Length == 0 || host.Length > Constants.SettingsApi.MaxHostLength || !HostPattern().IsMatch(host) || IsTooBroadWildcard(host))
 				throw new TdcpInvalidParamsException($"'{nameof(GeneralSettingsPatch.MediaPreviewHosts)}' holds an invalid host: '{Truncate(raw)}'");
 
 			if (!result.Contains(host))
@@ -78,6 +90,9 @@ public sealed partial class GeneralSettingsSection : ISettingsSection
 
 		return result;
 	}
+
+	/// <summary>A wildcard needs at least two labels after <c>*.</c>: <c>*.com</c> would be "any host" (decision U5).</summary>
+	private static bool IsTooBroadWildcard(string host) => host.StartsWith("*.", StringComparison.Ordinal) && !host[2..].Contains('.');
 
 	private static FileAccessSettingsPatch ValidateAccess(FileAccessSettingsPatch access)
 	{

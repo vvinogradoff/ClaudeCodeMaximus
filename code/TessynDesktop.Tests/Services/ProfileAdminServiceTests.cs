@@ -243,6 +243,42 @@ public sealed class ProfileAdminServiceTests : IDisposable
 		Assert.Equal(0, _env.Settings.Settings.SelectedProfileIndex);
 	}
 
+	[Fact]
+	public async Task TryStartAuthentication_AProfileRemovedBeforeTheLoginStarts_DoesNotFallThroughToTheDefaultAccount()
+	{
+		_env.AddStored("p1", "a@example.com");
+		var completed = new TaskCompletionSource<(string Id, bool Success)>(TaskCreationOptions.RunContinuationsAsynchronously);
+		_env.Admin.AuthenticationCompleted += (id, success) => completed.TrySetResult((id, success));
+
+		lock (_env.Settings.SyncRoot) // the background login waits for the lock; the removal lands first
+		{
+			Assert.True(_env.Admin.TryStartAuthentication("p1"));
+			_env.Admin.Remove("p1");
+		}
+
+		Assert.Equal(("p1", false), await completed.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+		Assert.Empty(_env.Profiles.Logins); // no login at all, in particular none for the Default account
+	}
+
+	[Fact]
+	public void Remove_CountsTheSessionsPinnedToTheProfile_InGroupsToo()
+	{
+		_env.AddStored("p1", "a");
+		_env.AddStored("p2", "b");
+		var directory = new DirectoryNodeModel { Path = @"C:\proj" };
+		directory.Sessions.Add(new SessionNodeModel { Name = "S1", FileName = "1.txt", ProfileId = "p1" });
+		directory.Sessions.Add(new SessionNodeModel { Name = "S2", FileName = "2.txt", ProfileId = "p2" });
+		var group = new GroupNodeModel { Name = "G" };
+		group.Sessions.Add(new SessionNodeModel { Name = "S3", FileName = "3.txt", ProfileId = "p1" });
+		directory.Groups.Add(group);
+		_env.Settings.Settings.Tree.Add(directory);
+
+		var removal = _env.Admin.Remove("p1");
+
+		Assert.Equal(2, removal!.PinnedSessionCount);
+		Assert.Equal("p1", directory.Sessions[0].ProfileId); // the pins are left alone: the resolver reports them as a missing profile (A18)
+	}
+
 	// ── Registering without a login (profile.add) ────────────────────────────────────────────
 
 	[Fact]

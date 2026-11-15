@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
@@ -29,6 +30,13 @@ public sealed partial class TelegramSettingsSection : ISettingsSection
 			[.. settings.TelegramAllowedUserIds],
 			settings.TelegramMentionHandle,
 			(TelegramMirrorModeDto)(int)settings.TelegramMirrorMode);
+
+	/// <inheritdoc />
+	public Action CaptureRestore(AppSettingsModel settings)
+	{
+		var (enabled, chat, users, handle, mode) = (settings.TelegramEnabled, settings.TelegramChatId, settings.TelegramAllowedUserIds, settings.TelegramMentionHandle, settings.TelegramMirrorMode);
+		return () => (settings.TelegramEnabled, settings.TelegramChatId, settings.TelegramAllowedUserIds, settings.TelegramMentionHandle, settings.TelegramMirrorMode) = (enabled, chat, users, handle, mode);
+	}
 
 	/// <inheritdoc />
 	public void Apply(AppSettingsModel settings, JsonNode patch)

@@ -167,6 +167,7 @@ public sealed class ProfileAdminService : IProfileAdminService
 				return null;
 
 			var profile = _appSettings.Settings.Profiles[index];
+			var pinned = CountPinnedSessions(profile.ProfileId);
 			_appSettings.Settings.Profiles.RemoveAt(index);
 
 			_profileService.MarkProfileDirectoryRemoved(profile.ProfileId);
@@ -185,7 +186,7 @@ public sealed class ProfileAdminService : IProfileAdminService
 				directoryToSelect.SelectedProfileIndex = newSelected;
 			_appSettings.Save();
 
-			removal = new ProfileRemoval(Copy(profile), removedListIndex, newSelected, wasSelected);
+			removal = new ProfileRemoval(Copy(profile), removedListIndex, newSelected, wasSelected, pinned);
 		}
 
 		RaiseProfilesChanged();
@@ -239,13 +240,24 @@ public sealed class ProfileAdminService : IProfileAdminService
 	private async Task<ProfileAuthentication> RunLoginAsync(string profileId)
 	{
 		string claudePath;
-		string? configDir;
+		string? configDir = null;
+		var removed = false;
 		lock (_appSettings.SyncRoot)
 		{
 			claudePath = _appSettings.Settings.ClaudePath;
-			configDir = IsDefault(profileId)
-				? null
-				: _profileService.GetConfigDirForProfile(IndexOf(profileId) + 1, _appSettings.Settings.Profiles);
+			if (!IsDefault(profileId))
+			{
+				// A profile removed since the request was accepted must not fall through to the Default account (index 0 means Default).
+				var index = IndexOf(profileId);
+				removed = index < 0;
+				configDir = removed ? null : _profileService.GetConfigDirForProfile(index + 1, _appSettings.Settings.Profiles);
+			}
+		}
+
+		if (removed)
+		{
+			Complete(profileId, success: false);
+			return new ProfileAuthentication(Ran: false, Email: null);
 		}
 
 		await _profileService.LaunchAuthLoginAsync(claudePath, configDir);
@@ -341,6 +353,16 @@ public sealed class ProfileAdminService : IProfileAdminService
 
 			return profileId;
 		}
+	}
+
+	/// <summary>Sessions pinned by id to the profile (ISSUE.013 rule A18: after the removal their turns fail with a "profile missing" error, never fall back to Default).</summary>
+	private int CountPinnedSessions(string profileId)
+	{
+		static int Count(IEnumerable<SessionNodeModel> sessions, IEnumerable<GroupNodeModel> groups, string id) =>
+			sessions.Count(s => string.Equals(s.ProfileId, id, StringComparison.OrdinalIgnoreCase))
+			+ groups.Sum(g => Count(g.Sessions, g.Groups, id));
+
+		return _appSettings.Settings.Tree.Sum(d => Count(d.Sessions, d.Groups, profileId));
 	}
 
 	private int IndexOf(string profileId) => _appSettings.Settings.Profiles.FindIndex(p => p.ProfileId == profileId);

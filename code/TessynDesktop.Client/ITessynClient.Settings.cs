@@ -34,8 +34,8 @@ public partial interface ITessynClient
 	/// <summary><c>profile.rename</c>.</summary>
 	Task<ProfileDto> ProfileRenameAsync(string profileId, string displayName, CancellationToken cancellationToken = default);
 
-	/// <summary><c>profile.remove</c>: removes a stored profile (its config directory is preserved with a suffix); answers the removed one.</summary>
-	Task<ProfileDto> ProfileRemoveAsync(string profileId, CancellationToken cancellationToken = default);
+	/// <summary><c>profile.remove</c>: removes a stored profile (its config directory is preserved with a suffix); answers the removed one and how many sessions are pinned to it.</summary>
+	Task<ProfileRemoveResult> ProfileRemoveAsync(string profileId, CancellationToken cancellationToken = default);
 
 	/// <summary><c>profile.authenticate</c>: starts the login on the daemon's machine and answers at once; <c>profiles.changed</c> follows when it ends.</summary>
 	Task<ProfileAuthenticateResult> ProfileAuthenticateAsync(string profileId, CancellationToken cancellationToken = default);

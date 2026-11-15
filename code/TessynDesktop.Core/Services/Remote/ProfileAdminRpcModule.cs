@@ -73,7 +73,7 @@ public sealed class ProfileAdminRpcModule : IRemoteRpcModule
 			throw new TdcpInvalidParamsException("The Default profile cannot be removed.");
 
 		var removal = _admin.Remove(profileId) ?? throw new TdcpInvalidParamsException($"There is no profile '{profileId}'.");
-		return ToDto(removal.Profile, ProfileAuthState.Unknown, isDefault: false);
+		return new ProfileRemoveResult(ToDto(removal.Profile, ProfileAuthState.Unknown, isDefault: false), removal.PinnedSessionCount);
 	}
 
 	private object? Authenticate(JsonNode? @params)

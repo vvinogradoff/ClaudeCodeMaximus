@@ -51,15 +51,18 @@ public static class SettingsPatchReader
 	/// <summary>A trimmed text that may be empty.</summary>
 	public static string OptionalText(string name, string value) => LimitLength(name, value.Trim());
 
-	/// <summary>A rooted (absolute) path, or an empty one when <paramref name="allowEmpty"/>.</summary>
+	/// <summary>
+	/// A fully qualified local path (<c>C:\x</c>), or an empty one when <paramref name="allowEmpty"/>. Root-relative, drive-relative, UNC and device
+	/// paths (<c>\foo</c>, <c>C:foo</c>, <c>\\host\share</c>, <c>\\?\C:\x</c>) are refused before any file access: a UNC path makes Windows connect to the host.
+	/// </summary>
 	public static string AbsolutePath(string name, string value, bool allowEmpty)
 	{
 		var text = allowEmpty ? OptionalText(name, value) : RequireText(name, value);
 		if (text.Length == 0)
 			return text;
 
-		if (text.IndexOfAny(System.IO.Path.GetInvalidPathChars()) >= 0 || !System.IO.Path.IsPathRooted(text))
-			throw new TdcpInvalidParamsException($"'{name}' must be an absolute path");
+		if (text.IndexOfAny(System.IO.Path.GetInvalidPathChars()) >= 0 || !System.IO.Path.IsPathFullyQualified(text) || IsNetworkOrDevicePath(text))
+			throw new TdcpInvalidParamsException($"'{name}' must be a fully qualified local path");
 
 		return text;
 	}
@@ -116,6 +119,9 @@ public static class SettingsPatchReader
 
 		return (TModel)Enum.ToObject(typeof(TModel), Convert.ToInt32(value));
 	}
+
+	private static bool IsNetworkOrDevicePath(string path) =>
+		path.Length >= 2 && (path[0] is '\\' or '/') && (path[1] is '\\' or '/');
 
 	private static string LimitLength(string name, string text) =>
 		text.Length > Constants.SettingsApi.MaxTextLength

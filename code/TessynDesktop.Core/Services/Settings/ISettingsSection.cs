@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json.Nodes;
 using TessynDesktop.Models;
 
@@ -15,6 +16,9 @@ public interface ISettingsSection
 
 	/// <summary>The section's values as its wire DTO. The caller holds the settings lock.</summary>
 	object Read(AppSettingsModel settings);
+
+	/// <summary>Captures the values <see cref="Apply"/> may write; the returned action puts them back (used when the save that follows fails).</summary>
+	Action CaptureRestore(AppSettingsModel settings);
 
 	/// <summary>
 	/// Applies <paramref name="patch"/> to <paramref name="settings"/>. Every value is validated first, so a rejected patch changes nothing.

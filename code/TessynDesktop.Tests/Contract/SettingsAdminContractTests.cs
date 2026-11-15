@@ -147,6 +147,11 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 	[InlineData("profile.remove", """{"profileId":"default"}""")]
 	[InlineData("profile.authenticate", """{"profileId":"nope"}""")]
 	[InlineData("sound.test", """{"file":"C:\\a.mp3"}""")]
+	[InlineData("sound.test", """{"file":"\\\\10.0.0.5\\s\\a.wav"}""")]    // UNC: refused before any file access
+	[InlineData("sound.test", """{"file":"\\foo.wav"}""")]
+	[InlineData("sound.test", """{"file":"C:foo.wav"}""")]
+	[InlineData("sound.test", """{"file":"\\\\?\\C:\\x.wav"}""")]
+	[InlineData("settings.update", """{"section":"general","baseVersion":1,"patch":{"claudePath":"C:\\tmp\\evil.exe"}}""")]
 	[InlineData("sound.test", """{}""")]
 	public async Task BadParams_AreInvalidParams(string method, string paramsJson)
 	{

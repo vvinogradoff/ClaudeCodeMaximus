@@ -59,7 +59,7 @@ public sealed class SettingsClientTests : IDisposable
 		var general = await client.SettingsGetAsync<GeneralSettingsDto>(RemoteProtocol.SettingsApi.GeneralSection);
 		var telegram = await client.SettingsGetAsync<TelegramSettingsDto>(RemoteProtocol.SettingsApi.TelegramSection);
 
-		Assert.Equal(("general", 1L, "claude-test"), (general.Section, general.Version, general.Values.ClaudePath));
+		Assert.Equal(("general", 1L, "claude-test"), (general.Section, general.Version, general.Values.ClaudePath)); // read-only, but served
 		Assert.Equal(FileAccessModeDto.WorkingDirectory, general.Values.FileAccess.Mode);
 		Assert.Equal(TelegramMirrorModeDto.AnswersOnly, telegram.Values.TelegramMirrorMode);
 	}
@@ -101,7 +101,7 @@ public sealed class SettingsClientTests : IDisposable
 		await client.ConnectAsync();
 
 		var ex = await Assert.ThrowsAsync<TessynRpcException>(() =>
-			client.SettingsUpdateAsync("general", new GeneralSettingsPatch(ClaudePath: "   "), 1));
+			client.SettingsUpdateAsync("general", new GeneralSettingsPatch(OllamaBaseUrl: "   "), 1));
 
 		Assert.Equal(RemoteProtocol.ErrorCodes.InvalidParams, ex.Code);
 	}
@@ -133,7 +133,7 @@ public sealed class SettingsClientTests : IDisposable
 		var added = await client.ProfileAddAsync("Work");
 		var renamed = await client.ProfileRenameAsync(added.Id, "Home");
 		var started = await client.ProfileAuthenticateAsync("p1");
-		var removed = await client.ProfileRemoveAsync(added.Id);
+		var removed = (await client.ProfileRemoveAsync(added.Id));
 		var after = await client.ProfileListAsync();
 
 		Assert.Equal(["default", "p1"], list.Profiles.Select(p => p.Id));
@@ -141,7 +141,7 @@ public sealed class SettingsClientTests : IDisposable
 		Assert.Equal(("profile_1", "Work", ProfileAuthState.LoggedOut), (added.Id, added.DisplayName, added.AuthState));
 		Assert.Equal("Home", renamed.DisplayName);
 		Assert.True(started.Started);
-		Assert.Equal(added.Id, removed.Id);
+		Assert.Equal((added.Id, 0), (removed.Profile.Id, removed.PinnedSessionCount));
 		Assert.Equal(["default", "p1"], after.Profiles.Select(p => p.Id));
 	}
 

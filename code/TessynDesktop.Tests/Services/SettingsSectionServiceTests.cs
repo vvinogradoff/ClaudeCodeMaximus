@@ -22,8 +22,7 @@ public sealed class SettingsSectionServiceTests : IDisposable
 	/// <summary>Every top-level member of <see cref="AppSettingsModel"/> a section may write; the rest of the model must never change.</summary>
 	private static readonly string[] WhitelistedModelMembers =
 	[
-		nameof(AppSettingsModel.SessionFilesRoot), nameof(AppSettingsModel.ClaudePath), nameof(AppSettingsModel.SourceCodesLocation), nameof(AppSettingsModel.HttpsProxy),
-		nameof(AppSettingsModel.OllamaBaseUrl), nameof(AppSettingsModel.AgentToolsEnabled), nameof(AppSettingsModel.FileAccess), nameof(AppSettingsModel.MediaPreviewHosts),
+		nameof(AppSettingsModel.HttpsProxy), nameof(AppSettingsModel.OllamaBaseUrl), nameof(AppSettingsModel.AgentToolsEnabled), nameof(AppSettingsModel.FileAccess), nameof(AppSettingsModel.MediaPreviewHosts),
 		nameof(AppSettingsModel.NotificationsEnabled), nameof(AppSettingsModel.SessionCompletionSoundFile), nameof(AppSettingsModel.SessionCompletionSoundThrottleSeconds),
 		nameof(AppSettingsModel.TelegramEnabled), nameof(AppSettingsModel.TelegramChatId), nameof(AppSettingsModel.TelegramAllowedUserIds),
 		nameof(AppSettingsModel.TelegramMentionHandle), nameof(AppSettingsModel.TelegramMirrorMode),
@@ -130,7 +129,7 @@ public sealed class SettingsSectionServiceTests : IDisposable
 		var counting = new SaveCountingAppSettings(_settings);
 		using var service = NewService(counting);
 
-		var version = service.Update("general", Patch("""{"claudePath":"claude"}"""), 1); // the default already
+		var version = service.Update("general", Patch("""{"ollamaBaseUrl":"http://localhost:11434"}"""), 1); // the default already
 
 		Assert.Equal(1, version);
 		Assert.Equal(0, counting.SaveCount);
@@ -207,6 +206,12 @@ public sealed class SettingsSectionServiceTests : IDisposable
 	// ── The whitelist ────────────────────────────────────────────────────────────────────────
 
 	[Theory]
+	[InlineData("general", """{"claudePath":"C:\\tmp\\evil.exe"}""")]               // decision U1: read-only on the wire
+	[InlineData("general", """{"sourceCodesLocation":"C:\\src"}""")]
+	[InlineData("general", """{"sessionFilesRoot":"C:\\files"}""")]
+	[InlineData("general", """{"ClaudePath":"x"}""")]                                    // a case variant is the same (absent) member
+	[InlineData("general", """{"$type":"System.Object"}""")]
+	[InlineData("general", """{"fileAccess":{"Mode":"referencedOnly","ModeRevision":1}}""")]
 	[InlineData("general", """{"tdcpToken":"x"}""")]
 	[InlineData("general", """{"tree":[]}""")]
 	[InlineData("general", """{"profiles":[]}""")]
@@ -249,7 +254,7 @@ public sealed class SettingsSectionServiceTests : IDisposable
 		var before = ModelObject();
 
 		_service.Update("general", Patch($$$"""
-			{"sessionFilesRoot":{{{Json(Path.Combine(_dir, "other"))}}},"claudePath":"c2","sourceCodesLocation":{{{Json(Path.Combine(_dir, "src"))}}},"httpsProxy":"http://p:1",
+			{"httpsProxy":"http://p:1",
 			 "ollamaBaseUrl":"http://o:2","agentToolsEnabled":false,"mediaPreviewHosts":["*.x.com","y.org"],
 			 "fileAccess":{"mode":"referencedOnly","maxRelayChunkBytes":1000,"maxTextFileBytes":2000,"maxImageFileBytes":3000,"maxPdfFileBytes":4000,"maxVideoFileBytes":5000}}
 			"""), 1);
@@ -266,6 +271,7 @@ public sealed class SettingsSectionServiceTests : IDisposable
 
 		Assert.Equal(before.ToJsonString(), after.ToJsonString()); // ...and nothing else moved
 		Assert.Equal(2, _settings.Settings.FileAccess.ModeRevision);
+		Assert.Equal(("claude", string.Empty), (_settings.Settings.ClaudePath, _settings.Settings.SourceCodesLocation)); // read-only: untouched
 		Assert.Equal(["a"], _settings.Settings.TelegramTopicThreadIdsByNodeId.Keys.ToArray());
 	}
 
@@ -283,7 +289,8 @@ public sealed class SettingsSectionServiceTests : IDisposable
 		foreach (var (dto, patch) in pairs)
 		{
 			var dtoNames = dto.GetProperties().Select(p => p.Name).Order().ToArray();
-			Assert.Equal(dtoNames, patch.GetProperties().Select(p => p.Name).Order());
+			string[] readOnly = dto == typeof(GeneralSettingsDto) ? ["ClaudePath", "SessionFilesRoot", "SourceCodesLocation"] : [];
+			Assert.Equal(dtoNames.Except(readOnly), patch.GetProperties().Select(p => p.Name).Order());
 			Assert.DoesNotContain(dtoNames, n => n.Contains("token", StringComparison.OrdinalIgnoreCase) || n.Contains("secret", StringComparison.OrdinalIgnoreCase)
 				|| n.Contains("password", StringComparison.OrdinalIgnoreCase) || n.Contains("topic", StringComparison.OrdinalIgnoreCase));
 		}
@@ -302,16 +309,14 @@ public sealed class SettingsSectionServiceTests : IDisposable
 	// ── Validation ───────────────────────────────────────────────────────────────────────────
 
 	[Theory]
-	[InlineData("general", """{"claudePath":"  "}""")]
-	[InlineData("general", """{"sessionFilesRoot":"relative\\dir"}""")]
-	[InlineData("general", """{"sessionFilesRoot":""}""")]
-	[InlineData("general", """{"sourceCodesLocation":"relative"}""")]
 	[InlineData("general", """{"httpsProxy":"not a url"}""")]
 	[InlineData("general", """{"httpsProxy":"ftp://p:1"}""")]
 	[InlineData("general", """{"ollamaBaseUrl":""}""")]
 	[InlineData("general", """{"ollamaBaseUrl":"localhost:11434"}""")]
 	[InlineData("general", """{"mediaPreviewHosts":["http://x.com/y"]}""")]
 	[InlineData("general", """{"mediaPreviewHosts":["a b"]}""")]
+	[InlineData("general", """{"mediaPreviewHosts":["*.com"]}""")]        // decision U5: a wildcard needs two labels
+	[InlineData("general", """{"mediaPreviewHosts":["*.io","ok.example.com"]}""")]
 	[InlineData("general", """{"mediaPreviewHosts":[""]}""")]
 	[InlineData("general", """{"fileAccess":{"mode":"everything"}}""")]
 	[InlineData("general", """{"fileAccess":{"mode":7}}""")]
@@ -322,6 +327,11 @@ public sealed class SettingsSectionServiceTests : IDisposable
 	[InlineData("notifications", """{"sessionCompletionSoundThrottleSeconds":100000000}""")]
 	[InlineData("notifications", """{"sessionCompletionSoundFile":"C:\\sounds\\a.mp3"}""")]
 	[InlineData("notifications", """{"sessionCompletionSoundFile":"a.wav"}""")]
+	[InlineData("notifications", """{"sessionCompletionSoundFile":"\\\\h\\s\\a.wav"}""")]   // UNC (decision U2)
+	[InlineData("notifications", """{"sessionCompletionSoundFile":"//h/s/a.wav"}""")]
+	[InlineData("notifications", """{"sessionCompletionSoundFile":"\\foo.wav"}""")]         // root-relative
+	[InlineData("notifications", """{"sessionCompletionSoundFile":"C:foo.wav"}""")]          // drive-relative
+	[InlineData("notifications", """{"sessionCompletionSoundFile":"\\\\?\\C:\\x.wav"}""")]   // device path
 	[InlineData("telegram", """{"telegramAllowedUserIds":[0]}""")]
 	[InlineData("telegram", """{"telegramAllowedUserIds":[-5]}""")]
 	[InlineData("telegram", """{"telegramMentionHandle":"boss"}""")]
@@ -345,6 +355,42 @@ public sealed class SettingsSectionServiceTests : IDisposable
 		Assert.Throws<TdcpInvalidParamsException>(() => _service.Update("general", Patch("\"x\""), 1));
 		Assert.Throws<TdcpInvalidParamsException>(() => _service.Update("avalonia-ui", Patch("{}"), 1));
 		Assert.Throws<TdcpInvalidParamsException>(() => _service.Get("mcp"));
+	}
+
+	[Fact]
+	public void Update_AcceptsAListAtTheLimit()
+	{
+		var hosts = string.Join(",", Enumerable.Range(0, Constants.SettingsApi.MaxListEntries).Select(i => $"\"h{i}.example.com\""));
+
+		_service.Update("general", Patch($$"""{"mediaPreviewHosts":[{{hosts}}]}"""), 1);
+
+		Assert.Equal(Constants.SettingsApi.MaxListEntries, _settings.Settings.MediaPreviewHosts.Count);
+	}
+
+	[Fact]
+	public void Update_ACaseVariantAndADuplicateKey_StayInsideTheWhitelist_TheLastOneWins()
+	{
+		_service.Update("general", Patch("""{"OllamaBaseUrl":"http://a:1","ollamabaseurl":"http://b:2"}"""), 1);
+
+		Assert.Equal("http://b:2", _settings.Settings.OllamaBaseUrl);
+	}
+
+	[Fact]
+	public void Update_WhenTheSaveFails_TheModelAndTheVersionAreAsBefore()
+	{
+		var failing = new ThrowingSaveAppSettings(_settings);
+		using var service = NewService(failing);
+		failing.FailSaves = true;
+		var before = ModelJson();
+
+		Assert.Throws<IOException>(() => service.Update("general", Patch("""{"httpsProxy":"http://p:1","fileAccess":{"mode":"referencedOnly"},"mediaPreviewHosts":["x.example.com"]}"""), 1));
+		Assert.Throws<IOException>(() => service.Update("telegram", Patch("""{"telegramChatId":5,"telegramAllowedUserIds":[1]}"""), 1));
+		Assert.Throws<IOException>(() => service.Update("notifications", Patch("""{"notificationsEnabled":false}"""), 1));
+
+		Assert.Equal(before, ModelJson());
+		Assert.Equal([1L, 1L, 1L], service.GetSections().Select(s => s.Version));
+		failing.FailSaves = false;
+		Assert.Equal(2, service.Update("telegram", Patch("""{"telegramChatId":5}"""), 1)); // the version was not consumed
 	}
 
 	[Fact]
@@ -372,7 +418,7 @@ public sealed class SettingsSectionServiceTests : IDisposable
 		_settings.Settings.TelegramMentionHandle = "@me";
 		using var service = NewService(_settings);
 
-		service.Update("general", Patch("""{"mediaPreviewHosts":[],"httpsProxy":"","sourceCodesLocation":""}"""), 1);
+		service.Update("general", Patch("""{"mediaPreviewHosts":[],"httpsProxy":""}"""), 1);
 		service.Update("telegram", Patch("""{"telegramMentionHandle":"","telegramAllowedUserIds":[]}"""), 1);
 
 		Assert.Empty(_settings.Settings.MediaPreviewHosts);

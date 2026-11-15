@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json.Nodes;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
@@ -14,6 +15,13 @@ public sealed class NotificationsSettingsSection : ISettingsSection
 	/// <inheritdoc />
 	public object Read(AppSettingsModel settings) =>
 		new NotificationsSettingsDto(settings.NotificationsEnabled, settings.SessionCompletionSoundFile, settings.SessionCompletionSoundThrottleSeconds);
+
+	/// <inheritdoc />
+	public Action CaptureRestore(AppSettingsModel settings)
+	{
+		var (enabled, file, throttle) = (settings.NotificationsEnabled, settings.SessionCompletionSoundFile, settings.SessionCompletionSoundThrottleSeconds);
+		return () => (settings.NotificationsEnabled, settings.SessionCompletionSoundFile, settings.SessionCompletionSoundThrottleSeconds) = (enabled, file, throttle);
+	}
 
 	/// <inheritdoc />
 	public void Apply(AppSettingsModel settings, JsonNode patch)
