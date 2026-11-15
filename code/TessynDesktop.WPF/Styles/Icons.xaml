@@ -14,6 +14,13 @@
     <sys:String x:Key="GlyphSearch">&#xE721;</sys:String>
     <sys:String x:Key="GlyphWarning">&#xE7BA;</sys:String>
     <sys:String x:Key="GlyphLink">&#xE71B;</sys:String>
+    <sys:String x:Key="GlyphBack">&#xE72B;</sys:String>
+    <sys:String x:Key="GlyphEntry">&#xE8BD;</sys:String>
+    <sys:String x:Key="GlyphFile">&#xE8A5;</sys:String>
+    <sys:String x:Key="GlyphOpenInNew">&#xE8A7;</sys:String>
+    <sys:String x:Key="GlyphPin">&#xE718;</sys:String>
+    <sys:String x:Key="GlyphCheck">&#xE73E;</sys:String>
+    <sys:String x:Key="GlyphInfo">&#xE946;</sys:String>
 
     <Style x:Key="IconText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource IconFont}" />

@@ -1,0 +1,63 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.FilePreviewPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis" />
+            <Style x:Key="OptionalText" TargetType="TextBlock">
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="12,0,12,8" />
+                <Setter Property="Visibility" Value="Visible" />
+                <Style.Triggers>
+                    <Trigger Property="Text" Value="{x:Null}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                    </Trigger>
+                    <Trigger Property="Text" Value="">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header: file name and actions -->
+        <DockPanel Grid.Row="0" Margin="12,8,12,8">
+            <Button DockPanel.Dock="Right" Command="{Binding CloseCommand}" ToolTip="Close the preview" Margin="4,0,0,0" Padding="8,6" AutomationProperties.Name="Close preview">
+                <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphClose}" />
+            </Button>
+            <Button DockPanel.Dock="Right" Command="{Binding OpenExternalCommand}" ToolTip="Open in default app" Margin="4,0,0,0" Padding="8,6"
+                    Visibility="{Binding CanOpenExternally, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Open in default app">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphOpenInNew}" />
+                    <TextBlock Text="Open in default app" Margin="6,0,0,0" />
+                </StackPanel>
+            </Button>
+            <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding ShowSource}" Content="Source" Padding="10,5" Margin="4,0,0,0"
+                          Visibility="{Binding CanToggleSource, Converter={StaticResource BoolToVis}}" ToolTip="Show the markdown source instead of the rendered text" />
+            <TextBlock Text="{Binding Title}" Style="{DynamicResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+
+        <!-- Progress with cancel -->
+        <DockPanel Grid.Row="1" Margin="12,0,12,8" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+            <Button DockPanel.Dock="Right" Command="{Binding CancelCommand}" Content="Cancel" Margin="8,0,0,0" />
+            <ProgressBar Value="{Binding Progress, Mode=OneWay}" Minimum="0" Maximum="1" VerticalAlignment="Center" Height="4" />
+        </DockPanel>
+
+        <TextBlock Grid.Row="2" Style="{StaticResource OptionalText}" Text="{Binding Error}" Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+        <TextBlock Grid.Row="3" Style="{StaticResource OptionalText}" Text="{Binding Message}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+        <!-- The sandboxed page; the WebView2 control is created when the pane is first opened. -->
+        <Grid Grid.Row="4" x:Name="PageHost" />
+    </Grid>
+</UserControl>
