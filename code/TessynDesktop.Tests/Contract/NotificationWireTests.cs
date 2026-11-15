@@ -204,6 +204,32 @@ public sealed class NotificationWireTests : IDisposable
 		Assert.Equal("session.changed", frame.Method);
 	}
 
+	// -- V4: nothing is left behind by a finished stream ---------------------------------------------------------------------------
+
+	[Fact]
+	public async Task AfterManyStreamsWereDropped_NoKeepAliveLoopIsLeft()
+	{
+		const int Streams = 12;
+		for (var i = 0; i < Streams; i++)
+		{
+			var stream = await OpenStreamAsync("wpf");
+			await Task.Delay(30);
+			stream.Dispose();
+		}
+
+		Assert.True(await BecomesAsync(() => _env.Server.Server.ActiveKeepAlives == 0, true),
+			$"{_env.Server.Server.ActiveKeepAlives} keep-alive loops are still running");
+	}
+
+	[Fact]
+	public async Task OpenStreamsHaveOneKeepAliveLoopEach()
+	{
+		using var a = await OpenStreamAsync("a");
+		using var b = await OpenStreamAsync("b");
+
+		Assert.True(await BecomesAsync(() => _env.Server.Server.ActiveKeepAlives == 2, true));
+	}
+
 	// -- notification.raised ------------------------------------------------------------------------------------------------------
 
 	[Fact]

@@ -342,6 +342,10 @@ public sealed class TdcpServer : IDisposable
 				_client.ScheduleChanged -= OnScheduleChanged;
 			}
 
+			// Whatever ended the stream (a write failure surfaces as HttpListenerException, not only IOException), the keep-alive of this stream
+			// must end with it, or it would wake every interval for the life of the daemon (V4).
+			try { connectionCts.Cancel(); } catch (ObjectDisposedException) { /* already gone */ }
+
 			channel.Writer.TryComplete();
 			try { ctx.Response.Close(); } catch { /* best effort */ }
 		}
@@ -376,6 +380,7 @@ public sealed class TdcpServer : IDisposable
 	/// <summary>Feeds the stream's channel a keep-alive frame every interval until the stream ends.</summary>
 	private async Task KeepAliveAsync(ChannelWriter<SseFrame> writer, CancellationToken ct)
 	{
+		Interlocked.Increment(ref _activeKeepAlives);
 		try
 		{
 			using var timer = new PeriodicTimer(_keepAlive);
@@ -386,7 +391,16 @@ public sealed class TdcpServer : IDisposable
 		{
 			// The stream ended.
 		}
+		finally
+		{
+			Interlocked.Decrement(ref _activeKeepAlives);
+		}
 	}
+
+	private int _activeKeepAlives;
+
+	/// <summary>Keep-alive loops still running (one per open stream); a test seam for "a finished stream leaves nothing behind".</summary>
+	internal int ActiveKeepAlives => Volatile.Read(ref _activeKeepAlives);
 
 	private const long KeepAliveSeq = -1;
 
