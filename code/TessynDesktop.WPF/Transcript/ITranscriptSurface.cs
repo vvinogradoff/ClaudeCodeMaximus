@@ -30,6 +30,19 @@ public interface ITranscriptSurface
 	/// <summary>Removes the highlights.</summary>
 	void ClearFind();
 
+	/// <summary>
+	/// Scrolls entry <paramref name="index"/> into view (it must be loaded) and highlights <paramref name="quote"/> in it, or the whole
+	/// entry when the quote is null or cannot be located in the rendered text. The highlight stays until the next load. With
+	/// <paramref name="highlight"/> false the entry is only scrolled into view (Back restores a position).
+	/// </summary>
+	void GoToEntry(int index, string? quote, bool highlight);
+
+	/// <summary>The user scrolled; the page reports the entry at the top of the view (argument: the position).</summary>
+	event EventHandler<ViewAnchorEventArgs>? ViewChanged;
+
+	/// <summary>The user clicked a local-path chip under an assistant entry (FR.26.5).</summary>
+	event EventHandler<PathClickedEventArgs>? PathClicked;
+
 	/// <summary>The first paint after a <see cref="Load"/> happened.</summary>
 	event EventHandler<TranscriptPaintedEventArgs>? Painted;
 

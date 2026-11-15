@@ -29,8 +29,12 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private readonly AppPaths _paths;
 	private readonly IUrlLauncher _launcher;
 	private readonly UrlPolicy _policy;
+	private readonly MediaPreviewPolicy _media;
 	private readonly ILogger<WebView2TranscriptSurface> _logger;
 	private readonly List<string> _pending = new();
+
+	/// <summary>https media URLs the user asked to load (click-to-load); cleared on every <see cref="Load"/>, like the page's own state.</summary>
+	private readonly HashSet<string> _approvedMedia = new(StringComparer.Ordinal);
 
 	private WebView2? _control;
 	private CoreWebView2Environment? _env;
@@ -40,14 +44,20 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private Task _sendTail = Task.CompletedTask;
 	private int _generation;
 
-	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, ILogger<WebView2TranscriptSurface> logger)
+	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, ILogger<WebView2TranscriptSurface> logger)
 	{
 		_environment = environment;
 		_paths = paths;
 		_launcher = launcher;
 		_policy = policy;
+		_media = media;
 		_logger = logger;
+		_media.Changed += (_, _) => PostPolicy();
 	}
+
+	public event EventHandler<ViewAnchorEventArgs>? ViewChanged;
+
+	public event EventHandler<PathClickedEventArgs>? PathClicked;
 
 	public event EventHandler<TranscriptPaintedEventArgs>? Painted;
 
@@ -109,6 +119,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	public void Load(string key, IReadOnlyList<TranscriptEntryView> entries, bool hasOlder, bool toBottom)
 	{
 		_token++;
+		_approvedMedia.Clear();
 		var token = _token;
 		var snapshot = entries.ToList();
 		Post(() => JsonSerializer.Serialize(new { cmd = "load", tok = token, key, entries = snapshot.Select(ToPage), hasOlder, toBottom }, Json), replacesQueue: true);
@@ -145,8 +156,20 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	public void ClearFind() => Post(() => JsonSerializer.Serialize(new { cmd = "clearFind" }, Json));
 
+	public void GoToEntry(int index, string? quote, bool highlight) =>
+		Post(() => JsonSerializer.Serialize(new { cmd = "goto", i = index, quote, hl = highlight }, Json));
+
 	private static object ToPage(TranscriptEntryView view) =>
-		new { i = view.Index, r = view.Role, ts = view.Timestamp, html = view.Html, trunc = view.Truncated, full = view.FullLength, h = view.EstimatedHeight };
+		new { i = view.Index, r = view.Role, ts = view.Timestamp, html = view.Html, trunc = view.Truncated, full = view.FullLength, h = view.EstimatedHeight, m = view.Media ?? [], p = view.Paths ?? [] };
+
+	/// <summary>Hands the media allowlist to the page, which decides auto-load versus click-to-load from it.</summary>
+	private void PostPolicy()
+	{
+		if (_control?.CoreWebView2 == null || !_ready)
+			return;
+
+		_control.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new { cmd = "policy", hosts = _media.Hosts }, Json));
+	}
 
 	/// <summary>
 	/// Queues a message. The JSON is built on a thread-pool thread (a warm switch can carry thousands of entries), and the messages
@@ -224,8 +247,16 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
 	{
-		if (Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) && uri.Host == HostName)
-			return;
+		if (Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri))
+		{
+			if (uri.Host == HostName)
+				return;
+
+			// The only foreign requests the page may make are https images and video the user approved or the allowlist covers (FR.26.4).
+			var isMedia = e.ResourceContext is CoreWebView2WebResourceContext.Image or CoreWebView2WebResourceContext.Media;
+			if (isMedia && uri.Scheme == Uri.UriSchemeHttps && (_approvedMedia.Contains(uri.AbsoluteUri) || _media.IsAllowedHost(uri.Host)))
+				return;
+		}
 
 		_logger.LogInformation("Blocked a request to a foreign host");
 		e.Response = _env!.CreateWebResourceResponse(null, 403, "Blocked", string.Empty);
@@ -270,12 +301,40 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 				case "findStatus":
 					FindStatusChanged?.Invoke(this, new FindStatusEventArgs(root.GetProperty("cur").GetInt32(), root.GetProperty("count").GetInt32()));
 					break;
+				case "view" when TokenMatches(root):
+					ViewChanged?.Invoke(this, new ViewAnchorEventArgs(root.GetProperty("i").GetInt32(), root.GetProperty("bottom").GetBoolean()));
+					break;
+				case "path" when TokenMatches(root):
+					if (root.GetProperty("path").GetString() is { Length: > 0 } path)
+						PathClicked?.Invoke(this, new PathClickedEventArgs(root.GetProperty("i").GetInt32(), path));
+					break;
+				case "refHl" when TokenMatches(root):
+					_logger.LogInformation("Reference jump: entry {Index} visible {Visible}, quote highlighted {Quote}, entry outlined {Entry}",
+						root.GetProperty("i").GetInt32(), root.GetProperty("visible").GetBoolean(), root.GetProperty("quote").GetBoolean(), root.GetProperty("entry").GetBoolean());
+					break;
+				case "mediaLoad" when TokenMatches(root):
+					ApproveMedia(root.GetProperty("url").GetString(), root.GetProperty("i").GetInt32(), root.GetProperty("j").GetInt32());
+					break;
 			}
 		}
 		catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
 		{
 			_logger.LogWarning(ex, "Ignored a malformed page message");
 		}
+	}
+
+	/// <summary>The user clicked "Load preview": remember the URL as approved, then tell the page it may create the element.</summary>
+	private void ApproveMedia(string? url, int entry, int slot)
+	{
+		if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length > 0 || uri.Host.Length == 0)
+		{
+			_logger.LogInformation("Ignored a media load request for an invalid URL");
+			return;
+		}
+
+		_approvedMedia.Add(uri.AbsoluteUri);
+		_logger.LogInformation("Media load approved by a click for host {Host}", uri.Host);
+		_control?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { cmd = "mediaOk", tok = _token, i = entry, j = slot }, Json));
 	}
 
 	private void OnSystemParameterChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -302,6 +361,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		_ready = true;
 		_everReady = true;
 		ApplyAccent();
+		PostPolicy();
 		var queued = _pending.ToList();
 		_pending.Clear();
 		foreach (var json in queued)

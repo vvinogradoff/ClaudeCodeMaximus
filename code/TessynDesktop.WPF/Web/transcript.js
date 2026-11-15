@@ -13,11 +13,14 @@ let S = null;               // { key, tok, items[], off[], a, b, hasOlder }
 let olderPending = false;
 let rafPending = false;
 let F = null;               // { term, idx[], cur }
+let H = null;               // reference highlight: { i, quote } (entry jump from a Focus reference)
+let ALLOW = [];             // hosts whose media previews load without a click (from the host; media-gate.js applies it)
+let viewTimer = 0;
 
 function post(o) { chrome.webview.postMessage(o); }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
-function mk(e) { return { i: e.i, r: e.r, ts: e.ts, html: e.html, trunc: e.trunc, full: e.full, h: e.h || 60 }; }
+function mk(e) { return { i: e.i, r: e.r, ts: e.ts, html: e.html, trunc: e.trunc, full: e.full, h: e.h || 60, m: e.m || [], p: e.p || [] }; }
 function recomputeOff() { let y = 0; const n = S.items.length; S.off = new Float64Array(n + 1); for (let k = 0; k < n; k++) { S.off[k] = y; y += S.items[k].h; } S.off[n] = y; }
 function findK(y) { let lo = 0, hi = S.items.length - 1; const off = S.off; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (off[mid] <= y) lo = mid; else hi = mid - 1; } return lo; }
 function posOfEntry(i) { return S.items.length ? Math.min(Math.max(i - S.items[0].i, 0), S.items.length - 1) : 0; }
@@ -25,7 +28,15 @@ function posOfEntry(i) { return S.items.length ? Math.min(Math.max(i - S.items[0
 function entryHtml(k) {
   const it = S.items[k];
   const more = it.trunc ? '<a class="more" data-i="' + it.i + '">Show full entry (' + it.full + ' chars)</a>' : '';
-  return '<div class="e ' + esc(it.r) + '" data-k="' + k + '"><div class="c"><div class="h">' + esc(ROLE[it.r] || it.r) + ' &middot; ' + esc(it.ts) + '</div><div class="b">' + it.html + '</div>' + more + '</div></div>';
+  const media = it.m.length ? MediaGate.previewHtml(it.m, ALLOW, it.i, S.loaded) : '';
+  return '<div class="e ' + esc(it.r) + '" data-k="' + k + '"><div class="c"><div class="h">' + esc(ROLE[it.r] || it.r) + ' &middot; ' + esc(it.ts) + '</div><div class="b">' + it.html + '</div>' + more + media + chipsHtml(it) + '</div></div>';
+}
+// Local-file chips (FR.26.5): the path is kept in S.items, the DOM carries only its index and the escaped file name.
+function chipsHtml(it) {
+  if (!it.p.length) return '';
+  let s = '<div class="chips">';
+  it.p.forEach((path, j) => { s += '<button class="chip" type="button" data-i="' + it.i + '" data-j="' + j + '" title="' + esc(path) + '">' + esc(path.substring(path.lastIndexOf('\\') + 1)) + '</button>'; });
+  return s + '</div>';
 }
 function rangeHtml(a, b) { let s = ''; for (let k = a; k < b; k++) s += entryHtml(k); return s; }
 function fragmentOf(a, b) { const t = document.createElement('div'); t.innerHTML = rangeHtml(a, b); const f = document.createDocumentFragment(); while (t.firstChild) f.appendChild(t.firstChild); return f; }
@@ -64,21 +75,52 @@ function render(pin) {
     if (pin === 'bottom') vp.scrollTop = vp.scrollHeight; else if (pin === 'top') vp.scrollTop = 0; else if (anchorK >= 0) vp.scrollTop = S.off[anchorK] + anchorD;
     if (!changed) break;
   }
+  if (H) applyRefHl();
+}
+// Reports the entry at the top of the view (debounced), for the host's Back stack.
+function reportView() {
+  clearTimeout(viewTimer);
+  viewTimer = setTimeout(() => { if (S && S.items.length) post({ ev: 'view', tok: S.tok, i: S.items[findK(vp.scrollTop)].i, bottom: atBottom() }); }, 150);
+}
+// Re-measures after an image or video sized itself; the entry at the top of the view stays where it is.
+function remeasure() {
+  if (!S || !S.items.length) return;
+  const anchorK = findK(vp.scrollTop), d = vp.scrollTop - S.off[anchorK];
+  if (measure()) { recomputeOff(); padTop.style.height = S.off[S.a] + 'px'; padBot.style.height = (S.off[S.items.length] - S.off[S.b]) + 'px'; vp.scrollTop = S.off[anchorK] + d; }
 }
 function atBottom() { return vp.scrollTop + vp.clientHeight >= vp.scrollHeight - BOTTOM_SLACK_PX; }
 
 vp.addEventListener('scroll', () => {
   if (rafPending) return; rafPending = true;
   requestAnimationFrame(() => {
-    rafPending = false; render(null);
+    rafPending = false; render(null); reportView();
     if (S && S.hasOlder && !olderPending && vp.scrollTop < NEAR_TOP_PX) { olderPending = true; post({ ev: 'needOlder', tok: S.tok }); }
   });
 });
+// Media size themselves after they load; a failed preview becomes a short note (no retry, no remote content left behind).
+items.addEventListener('load', e => { if (e.target.tagName === 'IMG') requestAnimationFrame(remeasure); }, true);
+items.addEventListener('loadedmetadata', e => { if (e.target.tagName === 'VIDEO') requestAnimationFrame(remeasure); }, true);
+items.addEventListener('error', e => {
+  const t = e.target; if (!t || (t.tagName !== 'IMG' && t.tagName !== 'VIDEO')) return;
+  const note = document.createElement('span'); note.className = 'mfail'; note.textContent = 'Preview unavailable'; t.replaceWith(note); requestAnimationFrame(remeasure);
+}, true);
+
+function entryOf(i) { if (!S) return null; const n = parseInt(i, 10), k = posOfEntry(n); return S.items[k] && S.items[k].i === n ? S.items[k] : null; }
 
 // Links: never navigate in the page; post the click to the host.
 function onLinkClick(e) {
   const more = e.target.closest && e.target.closest('a.more');
   if (more) { e.preventDefault(); post({ ev: 'expand', tok: S ? S.tok : 0, i: parseInt(more.getAttribute('data-i'), 10) }); return; }
+  const chip = e.target.closest && e.target.closest('button.chip');
+  if (chip) { const it = entryOf(chip.getAttribute('data-i')); const path = it && it.p[parseInt(chip.getAttribute('data-j'), 10)]; if (path) post({ ev: 'path', tok: S.tok, i: it.i, path: path }); return; }
+  const load = e.target.closest && e.target.closest('button.mload');
+  if (load) {
+    // Click-to-load: ask the host first; only its "mediaOk" lets this page create the element (the URL is not in the DOM until then).
+    const it = entryOf(load.getAttribute('data-i')), j = parseInt(load.getAttribute('data-j'), 10);
+    const p = it && MediaGate.plan(it.m, ALLOW)[j];
+    if (p && !p.auto) post({ ev: 'mediaLoad', tok: S.tok, i: it.i, j: j, url: p.url });
+    return;
+  }
   const a = e.target.closest && e.target.closest('a');
   if (!a) return;
   e.preventDefault();
@@ -130,8 +172,8 @@ function stepFind(dir) { if (!F || !F.idx.length) return; F.cur = (F.cur + dir +
 
 // ---- host commands ----
 function onLoad(m) {
-  S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder };
-  olderPending = false; F = null; recomputeOff(); items.replaceChildren();
+  S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, loaded: new Set() };
+  olderPending = false; F = null; H = null; recomputeOff(); items.replaceChildren();
   padTop.style.height = '0px'; padBot.style.height = S.off[S.items.length] + 'px';
   const t0 = performance.now();
   vp.scrollTop = m.toBottom ? S.off[S.items.length] : 0;
@@ -165,6 +207,58 @@ function onReplace(m) {
   const anchorK = findK(vp.scrollTop), d = vp.scrollTop - S.off[anchorK];
   if (measure()) { recomputeOff(); padTop.style.height = S.off[S.a] + 'px'; padBot.style.height = (S.off[S.items.length] - S.off[S.b]) + 'px'; vp.scrollTop = S.off[anchorK] + d; }
 }
+// ---- reference jump (FR.23.18): scroll an entry into view and highlight the quoted text ----
+// The quote is plain text from the entry's source; the page shows rendered markdown, so both sides are compared with whitespace
+// collapsed and the emphasis characters * _ ` ignored. When the quote cannot be located the whole entry is outlined instead.
+const SKIP_CHARS = '*_`';
+function normalizeQuote(q) { let s = '', sp = true; for (const c of String(q)) { if (/\s/.test(c)) { if (!sp) { s += ' '; sp = true; } } else if (SKIP_CHARS.indexOf(c) < 0) { s += c; sp = false; } } return s.replace(/ $/, ''); }
+function textMap(root) {
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); const map = []; let s = '', sp = true, n;
+  while ((n = w.nextNode())) {
+    const v = n.nodeValue;
+    for (let o = 0; o < v.length; o++) {
+      const c = v[o];
+      if (/\s/.test(c)) { if (!sp) { s += ' '; map.push([n, o]); sp = true; } }
+      else if (SKIP_CHARS.indexOf(c) < 0) { s += c; map.push([n, o]); sp = false; }
+    }
+  }
+  return { s, map };
+}
+function applyRefHl() {
+  if (!H) return;
+  const k = posOfEntry(H.i); if (!S.items[k] || S.items[k].i !== H.i || k < S.a || k >= S.b) return;
+  const el = items.children[k - S.a]; if (!el || el.querySelector('mark.ref, .c.refhl')) return;
+  const q = H.quote ? normalizeQuote(H.quote) : '';
+  const body = el.querySelector('.b'); let hit = false;
+  if (q && body) {
+    const t = textMap(body), at = t.s.indexOf(q);
+    if (at >= 0) {
+      const segs = new Map();
+      for (let x = at; x < at + q.length; x++) { const [node, off] = t.map[x]; const g = segs.get(node); if (g) g[1] = off + 1; else segs.set(node, [off, off + 1]); }
+      for (const [node, [from, to]] of Array.from(segs.entries()).reverse()) { const r = document.createRange(); r.setStart(node, from); r.setEnd(node, to); const m = document.createElement('mark'); m.className = 'ref'; r.surroundContents(m); }
+      hit = true;
+    }
+  }
+  if (!hit) { const c = el.querySelector('.c'); if (c) c.classList.add('refhl'); }
+}
+function onGoto(m) {
+  if (!S || !S.items.length) return;
+  const k = posOfEntry(m.i); if (S.items[k].i !== m.i) return;
+  H = m.hl === false ? null : { i: m.i, quote: m.quote || null };
+  for (let pass = 0; pass < 2; pass++) { vp.scrollTop = Math.max(0, S.off[posOfEntry(m.i)] - vp.clientHeight / 4); S.a = S.b = 0; render(null); }
+  applyRefHl(); reportView();
+  // Diagnostics for the host log (and the end-to-end test): was the quote found, and was the entry on screen?
+  const k2 = posOfEntry(m.i), vis = k2 >= S.a && k2 < S.b && S.off[k2] < vp.scrollTop + vp.clientHeight && S.off[k2 + 1] > vp.scrollTop;
+  post({ ev: 'refHl', tok: S.tok, i: m.i, hl: m.hl !== false, quote: !!items.querySelector('mark.ref'), entry: !!items.querySelector('.c.refhl'), visible: vis });
+}
+function onMediaOk(m) {
+  if (!S || m.tok !== S.tok) return;
+  S.loaded.add(m.i + ':' + m.j);
+  const k = posOfEntry(m.i); if (!S.items[k] || S.items[k].i !== m.i) return;
+  if (k >= S.a && k < S.b) { const el = items.children[k - S.a]; el.replaceWith(fragmentOf(k, k + 1)); if (F) hlRange(items); applyRefHl(); }
+  remeasure();
+}
+
 chrome.webview.addEventListener('message', e => {
   const m = e.data; if (!m || typeof m.cmd !== 'string') return;
   switch (m.cmd) {
@@ -175,6 +269,9 @@ chrome.webview.addEventListener('message', e => {
     case 'find': if (S) doFind(m); break;
     case 'findStep': stepFind(m.dir); break;
     case 'clearFind': clearFind(); break;
+    case 'goto': onGoto(m); break;
+    case 'policy': ALLOW = Array.isArray(m.hosts) ? m.hosts.filter(h => typeof h === 'string') : []; break;
+    case 'mediaOk': onMediaOk(m); break;
   }
 });
 post({ ev: 'ready' });

@@ -67,6 +67,16 @@ public sealed class FakeTranscriptSurface : ITranscriptSurface
 
 	public void ClearFind() => Calls.Add("clearFind");
 
+	public event EventHandler<ViewAnchorEventArgs>? ViewChanged;
+
+	public event EventHandler<PathClickedEventArgs>? PathClicked;
+
+	public void GoToEntry(int index, string? quote, bool highlight) => Calls.Add($"goto:{index}:{quote ?? "-"}:{(highlight ? "hl" : "nohl")}");
+
+	public void RaiseViewChanged(int topIndex, bool atBottom) => ViewChanged?.Invoke(this, new ViewAnchorEventArgs(topIndex, atBottom));
+
+	public void RaisePathClicked(int entryIndex, string path) => PathClicked?.Invoke(this, new PathClickedEventArgs(entryIndex, path));
+
 	public void RaisePainted(string key, double jsMs = 1) => Painted?.Invoke(this, new TranscriptPaintedEventArgs(key, jsMs));
 
 	public void RaiseOlderRequested() => OlderRequested?.Invoke(this, EventArgs.Empty);
