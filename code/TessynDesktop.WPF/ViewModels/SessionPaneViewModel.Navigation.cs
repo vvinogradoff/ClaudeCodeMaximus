@@ -56,7 +56,7 @@ public sealed partial class SessionPaneViewModel
 	public int FocusBadge => Focus.OpenCount;
 
 	/// <summary>Reads the optional media-preview allowlist from the daemon (FR.26.4); safe to call when the daemon does not send one.</summary>
-	public Task InitializeAsync() => _media?.RefreshAsync(_client) ?? Task.CompletedTask;
+	public Task InitializeAsync() => Task.WhenAll(_media?.RefreshAsync(_client) ?? Task.CompletedTask, LoadCatalogAsync());
 
 	private void NotifyBack()
 	{
@@ -108,6 +108,7 @@ public sealed partial class SessionPaneViewModel
 
 					_viewAtBottom = true;
 					_surface.Load(origin.NodeId, _current.Views, _current.HasOlder, toBottom: true, hasNewer: false);
+					PushLive();   // a load clears the page's live row
 					return;
 				}
 

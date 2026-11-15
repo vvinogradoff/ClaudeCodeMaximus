@@ -34,13 +34,22 @@ mark.ref{background:color-mix(in srgb,var(--accent) 40%,transparent);color:inher
 .mfail{font-size:12px;color:var(--sys)}
 .mload,.chip{font:12px "Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:3px 10px;cursor:pointer}
 .mload:hover,.chip:hover{background:var(--icode)}
+.lv{margin:4px 10px 12px;padding:6px 10px;border:1px dashed var(--line);border-radius:8px;color:var(--sys);font-size:13px}
+.lh{display:flex;align-items:center;gap:6px;font-size:12px}.ld{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:lp 1.2s ease-in-out infinite}
+@keyframes lp{50%{opacity:.25}}
+.lq{font-size:12px;opacity:.8;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ltool{font:12px Consolas,monospace;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ltool.done{opacity:.65}.ltool.err{color:#c42b1c}
+.lk{font-style:italic;font-size:12px;margin-top:4px;max-height:3.6em;overflow:hidden;white-space:pre-wrap;opacity:.75}
+.ltx{margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg)}
+.lerr{margin-top:4px;color:#c42b1c;white-space:pre-wrap;overflow-wrap:anywhere}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.chip{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:Consolas,monospace}
 </style>
 </head>
 <body>
-<div id="vp"><div id="padTop"></div><div id="items"></div><div id="padBot"></div></div>
+<div id="vp"><div id="padTop"></div><div id="items"></div><div id="padBot"></div><div id="live"></div></div>
 <script src="media-gate.js"></script>
 <script src="paging.js"></script>
+<script src="live.js"></script>
 <script src="transcript.js"></script>
 </body>
 </html>
