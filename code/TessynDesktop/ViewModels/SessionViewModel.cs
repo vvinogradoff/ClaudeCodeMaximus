@@ -414,6 +414,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
+		IProfileAdminService profileAdmin,
 		IClaudeSessionImportService importService,
 		IClaudeModelService modelService,
 		IDaemonClient daemonClient,
@@ -441,7 +442,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_content = new SessionContentViewModel(fileService, importService, node, () => turn?.IsBusy ?? false,
 			() => daemonClient.IsSessionRunning(node.Model.NodeId), _timer);
 		_models = new ModelSelectionController(modelService, appSettings, _directoryModel);
-		_profiles = new ProfileController(profileService, appSettings, _directoryModel, _content);
+		_profiles = new ProfileController(profileService, profileAdmin, appSettings, _directoryModel, _content);
 		_turn = new TurnController(node, fileService, draftService, turnEngine, streamingManager, appSettings, daemonClient,
 			soundService, compaction, _content, _models, _profiles);
 		turn = _turn;

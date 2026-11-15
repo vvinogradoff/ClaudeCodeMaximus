@@ -1,0 +1,26 @@
+{
+  "profiles": [
+    {
+      "id": "default",
+      "displayName": "[Sys] system.account@example.com",
+      "isSystem": true,
+      "email": "system.account@example.com",
+      "authState": "unknown",
+      "isDefault": true
+    },
+    {
+      "id": "p1",
+      "displayName": "first@example.com",
+      "isSystem": false,
+      "authState": "loggedIn",
+      "isDefault": false
+    },
+    {
+      "id": "p2",
+      "displayName": "second@example.com",
+      "isSystem": false,
+      "authState": "loggedOut",
+      "isDefault": false
+    }
+  ]
+}

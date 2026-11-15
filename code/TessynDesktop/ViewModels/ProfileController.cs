@@ -22,6 +22,7 @@ public sealed class ProfileController : ReactiveObject
 	private static readonly ILogger _log = Log.ForContext<ProfileController>();
 
 	private readonly IClaudeProfileService _profileService;
+	private readonly IProfileAdminService _profileAdmin;
 	private readonly IAppSettingsService _appSettings;
 	private readonly DirectoryNodeModel? _directoryModel;
 	private readonly SessionContentViewModel _content;
@@ -96,11 +97,13 @@ public sealed class ProfileController : ReactiveObject
 
 	public ProfileController(
 		IClaudeProfileService profileService,
+		IProfileAdminService profileAdmin,
 		IAppSettingsService appSettings,
 		DirectoryNodeModel? directoryModel,
 		SessionContentViewModel content)
 	{
 		_profileService = profileService;
+		_profileAdmin   = profileAdmin;
 		_appSettings    = appSettings;
 		_directoryModel = directoryModel;
 		_content        = content;
@@ -226,46 +229,20 @@ public sealed class ProfileController : ReactiveObject
 		_isProfileAuthInProgress = true;
 		try
 		{
-			// Generate a unique profile ID — check both settings and filesystem to avoid collisions
-			var existingIds = _appSettings.Settings.Profiles.Select(p => p.ProfileId).ToHashSet();
-			var profileId = "profile_1";
-			for (var i = 2;
-			     existingIds.Contains(profileId)
-			     || Directory.Exists(Path.Combine(_profileService.ProfilesRootDirectory, profileId));
-			     i++)
-				profileId = $"profile_{i}";
-
-			// Build the config directory path for this profile
-			var configDir = Path.Combine(_profileService.ProfilesRootDirectory, profileId);
-
 			// Launch interactive auth in a visible terminal
 			_content.AddSystemMessage("Launching auth login for new profile... Complete authentication in the opened window.");
 
-			await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, configDir);
-
-			// Verify auth succeeded by querying the profile status
-			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, configDir);
-			if (string.IsNullOrEmpty(email))
+			// The service picks a free profile id, runs the login, checks the account, adds the profile named after it and selects it
+			// (globally and on this session's directory) in one save.
+			var profile = await _profileAdmin.AddAfterLoginAsync(_directoryModel);
+			if (profile is null)
 			{
 				_content.AddSystemMessage("Profile authentication was cancelled or failed.");
 				return;
 			}
 
-			var displayName = email;
-
-			// Add profile to settings
-			_appSettings.Settings.Profiles.Add(new ClaudeProfileModel
-			{
-				ProfileId   = profileId,
-				DisplayName = displayName,
-			});
-
 			// Select the newly added profile
 			var newIndex = _appSettings.Settings.Profiles.Count; // 1-based (0 is Default)
-			_appSettings.Settings.SelectedProfileIndex = newIndex;
-			if (_directoryModel != null)
-				_directoryModel.SelectedProfileIndex = newIndex;
-			_appSettings.Save();
 
 			Dispatcher.UIThread.Post(() =>
 			{
@@ -275,7 +252,7 @@ public sealed class ProfileController : ReactiveObject
 				this.RaisePropertyChanged(nameof(CanManageSelectedProfile));
 			});
 
-			_content.AddSystemMessage($"Profile '{displayName}' added and selected.");
+			_content.AddSystemMessage($"Profile '{profile.DisplayName}' added and selected.");
 		}
 		finally
 		{
@@ -292,24 +269,28 @@ public sealed class ProfileController : ReactiveObject
 		_isProfileAuthInProgress = true;
 		try
 		{
-			var configDir = SelectedProfileConfigDir;
-
 			_content.AddSystemMessage("Launching re-authentication... Complete authentication in the opened window.");
 
-			await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, configDir);
+			// The profile the selector shows: a stored one, or the Default (index 0, and an index that points at no stored profile).
+			var storedIndex = _selectedProfileIndex - 1;
+			var profileId = _selectedProfileIndex > 0 && storedIndex < _appSettings.Settings.Profiles.Count
+				? _appSettings.Settings.Profiles[storedIndex].ProfileId
+				: Constants.ProfileSwitch.DefaultProfileId;
 
-			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, configDir);
+			var login = await _profileAdmin.AuthenticateAsync(profileId);
+			if (!login.Ran)
+				return;
+
+			var email = login.Email;
 			if (string.IsNullOrEmpty(email))
 			{
 				_content.AddSystemMessage("Re-authentication was cancelled or failed.");
 				return;
 			}
 
-			// Update the display name if it changed (e.g. different account authenticated)
+			// The service renamed a stored profile after the account that logged in (e.g. a different account authenticated)
 			if (_selectedProfileIndex > 0 && _selectedProfileIndex - 1 < _appSettings.Settings.Profiles.Count)
 			{
-				_appSettings.Settings.Profiles[_selectedProfileIndex - 1].DisplayName = email;
-				_appSettings.Save();
 				Dispatcher.UIThread.Post(RebuildProfileList);
 			}
 			else if (_selectedProfileIndex == 0)
@@ -348,12 +329,9 @@ public sealed class ProfileController : ReactiveObject
 		if (item.ProfileId is null)
 			return;
 
-		var profile = _appSettings.Settings.Profiles.FirstOrDefault(p => p.ProfileId == item.ProfileId);
-		if (profile is null)
+		if (_profileAdmin.Rename(item.ProfileId, newName) is null)
 			return;
 
-		profile.DisplayName = newName;
-		_appSettings.Save();
 		RebuildProfileList();
 	}
 
@@ -366,31 +344,16 @@ public sealed class ProfileController : ReactiveObject
 		if (item.ProfileId is null)
 			return;
 
-		var index = _appSettings.Settings.Profiles.FindIndex(p => p.ProfileId == item.ProfileId);
-		if (index < 0)
+		// The service removes the entry, renames its config directory, fixes the selection up (Default when the removed one was selected,
+		// one less when a later one was) and writes it globally and on this session's directory in one save.
+		var removal = _profileAdmin.Remove(item.ProfileId, _selectedProfileIndex, _directoryModel);
+		if (removal is null)
 			return;
 
-		var profile = _appSettings.Settings.Profiles[index];
-		_appSettings.Settings.Profiles.RemoveAt(index);
-
-		_profileService.MarkProfileDirectoryRemoved(profile.ProfileId);
-
-		// The removed entry sits at AvailableProfiles index (index + 1) (0 is Default).
-		var removedListIndex = index + 1;
-		if (_selectedProfileIndex == removedListIndex)
-		{
-			_selectedProfileIndex = 0;
+		var profile = removal.Profile;
+		_selectedProfileIndex = removal.SelectedIndex;
+		if (removal.WasSelected)
 			HasAuthError = false;
-		}
-		else if (_selectedProfileIndex > removedListIndex)
-		{
-			_selectedProfileIndex--;
-		}
-
-		_appSettings.Settings.SelectedProfileIndex = _selectedProfileIndex;
-		if (_directoryModel != null)
-			_directoryModel.SelectedProfileIndex = _selectedProfileIndex;
-		_appSettings.Save();
 
 		Dispatcher.UIThread.Post(() =>
 		{

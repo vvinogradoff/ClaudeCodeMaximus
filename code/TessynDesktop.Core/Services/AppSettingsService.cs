@@ -33,6 +33,9 @@ public sealed class AppSettingsService : IAppSettingsService
 
 	public object SyncRoot => _gate;
 
+	/// <inheritdoc />
+	public event Action? Saved;
+
 	public AppSettingsModel Settings { get; private set; } = new();
 
 	public AppSettingsService(IUiThreadTracker? uiThread = null) : this(GetDefaultAppDataDir(), uiThread)
@@ -118,6 +121,21 @@ public sealed class AppSettingsService : IAppSettingsService
 					(long)total.TotalMilliseconds, (long)lockWait.TotalMilliseconds,
 					(long)serialize.TotalMilliseconds, (long)write.TotalMilliseconds,
 					json.Length, _uiThread?.IsUiThread() == true ? "UI" : "background");
+		}
+
+		RaiseSaved();
+	}
+
+	private void RaiseSaved()
+	{
+		try
+		{
+			Saved?.Invoke();
+		}
+		catch (Exception ex)
+		{
+			// A subscriber must never fail the save that already succeeded.
+			_log.Warning(ex, "A Saved subscriber of the settings service threw");
 		}
 	}
 

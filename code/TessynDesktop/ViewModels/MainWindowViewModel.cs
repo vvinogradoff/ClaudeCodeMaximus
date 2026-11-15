@@ -26,6 +26,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IDraftService _draftService;
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
+	private readonly IProfileAdminService _profileAdmin;
 	private readonly IClaudeSessionImportService _importService;
 	private readonly IClaudeModelService _modelService;
 	private readonly IClaudeUsageService _usageService;
@@ -247,6 +248,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
+		IProfileAdminService profileAdmin,
 		IClaudeSessionImportService importService,
 		IClaudeModelService modelService,
 		IClaudeUsageService usageService,
@@ -268,6 +270,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_draftService     = draftService;
 		_codeIndexService = codeIndexService;
 		_profileService   = profileService;
+		_profileAdmin     = profileAdmin;
 		_importService    = importService;
 		_modelService     = modelService;
 		_usageService     = usageService;
@@ -401,7 +404,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _turnEngine, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _modelService, _daemonClient, _soundService, _compaction, _uiDispatcher);
+				vm = new SessionViewModel(node, _fileService, _turnEngine, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _profileAdmin, _importService, _modelService, _daemonClient, _soundService, _compaction, _uiDispatcher);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache.Set(cacheKey, vm);
