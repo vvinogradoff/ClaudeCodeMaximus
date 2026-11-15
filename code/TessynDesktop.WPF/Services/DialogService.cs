@@ -10,6 +10,9 @@ public sealed class DialogService : IDialogService
 	private readonly IDialogPresenter _presenter;
 	private readonly IUiDispatcher _dispatcher;
 	private readonly SemaphoreSlim _one = new(1, 1);
+	private readonly CancellationTokenSource _closing = new();
+	private readonly object _gate = new();
+	private DialogViewModel? _current;
 
 	public DialogService(IDialogPresenter presenter, IUiDispatcher dispatcher)
 	{
@@ -44,11 +47,35 @@ public sealed class DialogService : IDialogService
 		return outcome.Accepted ? outcome.ChoiceId : null;
 	}
 
+	public void CancelPending()
+	{
+		DialogViewModel? open;
+		lock (_gate)
+		{
+			_closing.Cancel();
+			open = _current;
+		}
+
+		open?.CancelCommand.Execute(null);
+	}
+
 	private async Task<DialogOutcome> ShowAsync(DialogViewModel dialog)
 	{
-		await _one.WaitAsync().ConfigureAwait(false);
+		var token = _closing.Token;
 		try
 		{
+			await _one.WaitAsync(token).ConfigureAwait(false);
+		}
+		catch (OperationCanceledException)
+		{
+			return new DialogOutcome(false);
+		}
+
+		try
+		{
+			lock (_gate)
+				_current = dialog;
+
 			var done = new TaskCompletionSource<DialogOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
 			_dispatcher.Post(async () =>
 			{
@@ -61,10 +88,19 @@ public sealed class DialogService : IDialogService
 					done.SetException(ex);
 				}
 			});
-			return await done.Task.ConfigureAwait(false);
+
+			// A dispatcher that is shutting down never runs the post; the token then ends the wait.
+			return await done.Task.WaitAsync(token).ConfigureAwait(false);
+		}
+		catch (OperationCanceledException)
+		{
+			return new DialogOutcome(false);
 		}
 		finally
 		{
+			lock (_gate)
+				_current = null;
+
 			_one.Release();
 		}
 	}

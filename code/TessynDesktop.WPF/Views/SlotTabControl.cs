@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Services;
 
 namespace TessynDesktop.WPF.Views;
@@ -29,6 +30,9 @@ public class SlotTabControl : TabControl
 	/// <summary>The registry; the running app supplies it, tests set it.</summary>
 	public IShellSlots? Slots { get; set; }
 
+	/// <summary>Where a failing contribution is logged; the running app supplies it, tests set it.</summary>
+	public ILogger? Logger { get; set; }
+
 	/// <summary>Adds the contributed tabs (once); public so tests can do it without a loaded window.</summary>
 	public void Populate()
 	{
@@ -37,11 +41,19 @@ public class SlotTabControl : TabControl
 
 		_populated = true;
 		var slots = Slots ?? new ShellServiceProvider().Get<IShellSlots>();
-		var contributions = slots?.For(SlotId) ?? [];
-		foreach (var contribution in contributions)
-			Items.Add(new TabItem { Header = contribution.Title ?? contribution.SlotId, Content = contribution.Create() });
+		var logger = SlotContributions.ResolveLogger(Logger);
+		var added = 0;
+		foreach (var contribution in slots?.For(SlotId) ?? [])
+		{
+			var view = SlotContributions.TryCreate(contribution, logger);
+			if (view == null)
+				continue;
 
-		if (contributions.Count > 0)
+			Items.Add(new TabItem { Header = contribution.Title ?? contribution.SlotId, Content = view });
+			added++;
+		}
+
+		if (added > 0)
 			return;
 
 		foreach (var tab in Items.OfType<TabItem>())

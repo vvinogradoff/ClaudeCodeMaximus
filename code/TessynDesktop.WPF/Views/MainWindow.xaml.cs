@@ -89,12 +89,8 @@ public partial class MainWindow : Window
 			return;
 
 		var key = e.Key == Key.System ? e.SystemKey : e.Key;
-		var command = _commands.FindByGesture(key, Keyboard.Modifiers);
-		if (command == null)
-			return;
-
-		e.Handled = true;
-		_ = _commands.ExecuteAsync(command.Id, null);
+		if (_commands.TryExecuteGesture(key, Keyboard.Modifiers, ShellKeyPolicy.IsTextInput(Keyboard.FocusedElement)))
+			e.Handled = true;
 	}
 
 	private void RestartPlacementTimer()

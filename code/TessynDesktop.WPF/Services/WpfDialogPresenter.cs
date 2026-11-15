@@ -16,7 +16,11 @@ public sealed class WpfDialogPresenter : IDialogPresenter
 			window.Owner = owner;
 
 		// ShowDialog blocks until the window closes, so the answer has to close it from outside.
-		_ = dialog.Outcome.ContinueWith(_ => window.Dispatcher.BeginInvoke(window.Close), TaskScheduler.Default);
+		_ = dialog.Outcome.ContinueWith(_ => window.Dispatcher.BeginInvoke(() =>
+		{
+			if (window.IsVisible)
+				window.Close();
+		}), TaskScheduler.Default);
 		window.ShowDialog();
 		return await dialog.Outcome;
 	}

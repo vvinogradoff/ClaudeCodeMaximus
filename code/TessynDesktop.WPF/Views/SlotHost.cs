@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Services;
 
 namespace TessynDesktop.WPF.Views;
@@ -31,6 +32,9 @@ public class SlotHost : ItemsControl
 	/// <summary>The registry; the running app supplies it, tests set it.</summary>
 	public IShellSlots? Slots { get; set; }
 
+	/// <summary>Where a failing contribution is logged; the running app supplies it, tests set it.</summary>
+	public ILogger? Logger { get; set; }
+
 	/// <summary>Fills the slot (once); public so tests can do it without a loaded window.</summary>
 	public void Populate()
 	{
@@ -42,7 +46,12 @@ public class SlotHost : ItemsControl
 		if (slots == null)
 			return;
 
+		var logger = SlotContributions.ResolveLogger(Logger);
 		foreach (var contribution in slots.For(SlotId))
-			Items.Add(contribution.Create());
+		{
+			var view = SlotContributions.TryCreate(contribution, logger);
+			if (view != null)
+				Items.Add(view);
+		}
 	}
 }

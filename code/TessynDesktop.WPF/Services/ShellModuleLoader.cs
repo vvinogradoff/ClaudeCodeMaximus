@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 
 namespace TessynDesktop.WPF.Services;
 
-/// <summary>Runs every registered <see cref="IShellModule"/> once; a failing module is logged and skipped so it cannot keep the window from opening.</summary>
+/// <summary>Runs every registered <see cref="IShellModule"/> once; a failing module is logged and skipped with none of its registrations so it cannot keep the window from opening.</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class ShellModuleLoader
 {
@@ -25,7 +25,10 @@ public sealed class ShellModuleLoader
 		{
 			try
 			{
-				module.Register(_slots, _commands);
+				// Staged: a module that throws half-way registers nothing.
+				var staged = new StagedShellRegistrations(_slots, _commands);
+				module.Register(staged, staged);
+				staged.Commit();
 			}
 			catch (Exception ex)
 			{

@@ -77,7 +77,12 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IShellSlots, ShellSlots>();
 		services.AddSingleton<IShellCommands, ShellCommands>();
 		services.AddSingleton<ShellModuleLoader>();
-		services.AddSingleton<IDialogPresenter, WpfDialogPresenter>();
+		// A test window never opens a modal dialog: nobody could click it.
+		if (options.TestWindow)
+			services.AddSingleton<IDialogPresenter>(sp => new ScriptedDialogPresenter(options.TestDialogAnswers, sp.GetRequiredService<ILogger<ScriptedDialogPresenter>>()));
+		else
+			services.AddSingleton<IDialogPresenter, WpfDialogPresenter>();
+
 		services.AddSingleton<IDialogService, DialogService>();
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();
