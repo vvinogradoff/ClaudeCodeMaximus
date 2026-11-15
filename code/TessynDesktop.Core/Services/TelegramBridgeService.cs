@@ -57,6 +57,9 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 	/// </summary>
 	public Func<TimeSpan, CancellationToken, Task> DelayAsync { get; set; } = Task.Delay;
 
+	/// <summary>Pause before the poll loop tries again after a failure. Settable so tests do not sleep for seconds.</summary>
+	public TimeSpan PollRetryDelay { get; set; } = TimeSpan.FromSeconds(5);
+
 	/// <summary>Pause after a rename that really changed the topic name (FR.21.18). Settable so tests do not sleep for seconds.</summary>
 	public int TopicRenameIntervalMs { get; set; } = Constants.Telegram.TopicRenameIntervalMs;
 
@@ -126,7 +129,29 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 		_pendingAnswerByNodeId.Clear();
 		_cts?.Cancel();
 		_cts = null;
+		_lastError = null;
 	}
+
+	/// <inheritdoc />
+	public bool IsRunning => _cts != null;
+
+	/// <inheritdoc />
+	public string? LastError => _lastError;
+
+	private volatile string? _lastError;
+
+	/// <summary>
+	/// A short sentence for a poll failure. It never uses the exception's own text: the Bot API URL carries the bot token, and an exception that
+	/// names the request can carry the URL.
+	/// </summary>
+	public static string DescribeFailure(Exception ex) => ex switch
+	{
+		TelegramApiException { ErrorCode: 401 or 404 } => "Telegram rejected the bot token",
+		TelegramApiException api                        => $"Telegram answered with error {api.ErrorCode}",
+		System.Net.Http.HttpRequestException            => "Could not reach Telegram",
+		TaskCanceledException                           => "The request to Telegram timed out",
+		_                                               => "The Telegram poll failed",
+	};
 
 	public async Task EnsureTopicForSessionAsync(SessionNodeModel node)
 	{
@@ -515,6 +540,7 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 				var updates = await _client.GetUpdatesAsync(
 					_appSettings.Settings.TelegramUpdateOffset, Constants.Telegram.LongPollTimeoutSeconds, ct);
 
+				_lastError = null;
 				Acknowledge(updates);
 				var actionable = updates.Where(u => u.IsActionable).ToList();
 
@@ -546,8 +572,9 @@ public sealed class TelegramBridgeService : ITelegramBridgeService
 			}
 			catch (Exception ex)
 			{
+				_lastError = DescribeFailure(ex);
 				_log.Warning(ex, "TelegramBridgeService: polling loop failed; retrying in 5s");
-				try { await Task.Delay(TimeSpan.FromSeconds(5), ct); }
+				try { await Task.Delay(PollRetryDelay, ct); }
 				catch (OperationCanceledException) { return; }
 			}
 		}

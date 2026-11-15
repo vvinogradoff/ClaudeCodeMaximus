@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "state": "connected",
+  "url": "https://web2.example.com",
+  "hasToken": true,
+  "since": "2026-11-15T08:30:00+00:00"
+}

@@ -27,6 +27,11 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 		"settings.sections", "settings.get", "settings.update",
 		"profile.list", "profile.add", "profile.rename", "profile.remove", "profile.authenticate",
 		"sound.list", "sound.test",
+		// Part 2: the MCP registry, Telegram, relay and model refresh.
+		"mcp.list", "mcp.upsert", "mcp.remove", "mcp.setEnabled", "mcp.discover", "mcp.authorize",
+		"telegram.status", "telegram.setToken", "telegram.clearToken",
+		"relay.status", "relay.configure",
+		"models.refresh",
 	];
 
 	private readonly SettingsAdminEnv _env = new();
@@ -46,6 +51,7 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 		{ "settings.get.general", "settings.get", """{"section":"general"}""" },
 		{ "settings.get.notifications", "settings.get", """{"section":"notifications"}""" },
 		{ "settings.get.telegram", "settings.get", """{"section":"telegram"}""" },
+		{ "settings.get.avaloniaUi", "settings.get", """{"section":"avalonia-ui"}""" },
 		{ "settings.update", "settings.update", """{"section":"telegram","baseVersion":1,"patch":{"telegramChatId":-1001,"telegramMirrorMode":"off"}}""" },
 		{ "profile.list", "profile.list", "{}" },
 		{ "profile.add", "profile.add", """{"displayName":"Work"}""" },
@@ -54,12 +60,29 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 		{ "profile.authenticate", "profile.authenticate", """{"profileId":"p1"}""" },
 		{ "sound.list", "sound.list", "{}" },
 		{ "sound.test", "sound.test", """{"file":"$DING"}""" },
+
+		// Part 2. Run in this order by the secrecy scan on one environment, so each call must stay valid after the ones before it. The requests carry
+		// secrets on purpose: none may come back.
+		{ "mcp.list", "mcp.list", "{}" },
+		{ "mcp.upsert.http", "mcp.upsert", """{"id":"mcp4","displayName":"Search","url":"https://search.example.com/mcp?token=q-secret-key-777","authType":"staticHeader","staticHeaderName":"X-Api-Key","staticHeaderValue":"hunter2-static-header-value"}""" },
+		{ "mcp.upsert.update", "mcp.upsert", """{"id":"mcp2","displayName":"Tracker 2","oauth":{"scopes":"read","clientSecret":"oauth-client-secret-9f8e7d"}}""" },
+		{ "mcp.upsert.stdio", "mcp.upsert", """{"id":"mcp5","displayName":"Files","transport":"stdio","command":"npx","arguments":"-y server --token=stdio-arg-secret-555"}""" },
+		{ "mcp.remove", "mcp.remove", """{"id":"mcp3"}""" },
+		{ "mcp.setEnabled", "mcp.setEnabled", """{"id":"mcp1","enabled":false}""" },
+		{ "mcp.discover", "mcp.discover", """{"url":"https://tracker.example.com/mcp"}""" },
+		{ "mcp.authorize", "mcp.authorize", """{"id":"mcp2"}""" },
+		{ "telegram.status", "telegram.status", "{}" },
+		{ "telegram.setToken", "telegram.setToken", """{"token":"987654321:AAFsecretBotTokenForTestsOnly_0123456789ab"}""" },
+		{ "telegram.clearToken", "telegram.clearToken", "{}" },
+		{ "relay.status", "relay.status", "{}" },
+		{ "relay.configure", "relay.configure", """{"enabled":true,"url":"https://web2.example.com","linkToken":"relay-link-token-secret-xyz-0001"}""" },
+		{ "models.refresh", "models.refresh", "{}" },
 	};
 
 	// ── Registration, capabilities ───────────────────────────────────────────────────────────
 
 	[Fact]
-	public void TheNewMethods_AreExactlyTheTenOfPackageJ3_AllLoopbackOnly()
+	public void TheNewMethods_AreExactlyTheTwentyTwoOfPackageJ3_AllLoopbackOnly()
 	{
 		var methods = _env.Methods();
 
@@ -83,18 +106,18 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 	public static TheoryData<string> MethodNames => new(NewMethods);
 
 	[Fact]
-	public async Task Hello_AnnouncesTheThreeCapabilities_WhenTheirServicesAreWired()
+	public async Task Hello_AnnouncesTheCapabilitiesOfJ3_WhenTheirServicesAreWired()
 	{
 		var result = (await _env.Host.CallAsync("client.hello"))["result"]!;
 
 		var capabilities = result["capabilities"]!.AsArray().Select(c => c!.GetValue<string>()).ToArray();
-		Assert.Equal(["events.local", "events.resume", "settings", "profiles.admin", "sound"], capabilities);
+		Assert.Equal(["events.local", "events.resume", "settings", "profiles.admin", "sound", "mcp.registry", "telegram.settings", "relay.settings", "models.admin"], capabilities);
 	}
 
 	[Fact]
 	public void TheAdminNotifications_AreLocalOnly()
 	{
-		Assert.Equal(["settings.changed", "profiles.changed"], RemoteProtocol.AdminLocalOnlyEvents);
+		Assert.Equal(["settings.changed", "profiles.changed", "mcp.changed", "catalog.changed"], RemoteProtocol.AdminLocalOnlyEvents);
 	}
 
 	// ── Result shapes ────────────────────────────────────────────────────────────────────────
@@ -136,7 +159,9 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 
 	[Theory]
 	[InlineData("settings.get", """{}""")]
-	[InlineData("settings.get", """{"section":"avalonia-ui"}""")]
+	[InlineData("settings.get", """{"section":"nope"}""")]
+	[InlineData("settings.update", """{"section":"avalonia-ui","baseVersion":1,"patch":{"theme":"Light"}}""")]   // read-only, whatever the patch
+	[InlineData("settings.update", """{"section":"avalonia-ui","baseVersion":1,"patch":{}}""")]
 	[InlineData("settings.update", """{"section":"general","patch":{}}""")]                                   // baseVersion missing
 	[InlineData("settings.update", """{"section":"general","baseVersion":1}""")]                             // patch missing
 	[InlineData("settings.update", """{"section":"general","baseVersion":1,"patch":{"tree":[]}}""")]         // outside the whitelist
@@ -175,18 +200,7 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 
 		// The whole model with every secret in it is behind these: scan every string of every result.
 		foreach (var (name, result) in results)
-		{
-			var text = result.ToJsonString();
-			foreach (var secret in SettingsAdminEnv.Secrets)
-				Assert.DoesNotContain(secret, text);
-
-			foreach (var value in StringsOf(result))
-			{
-				Assert.False(TokenShape().IsMatch(value), $"{name}: '{value}' looks like a token");
-				if (name != "profile.list")
-					Assert.DoesNotContain(SettingsAdminEnv.DefaultAccountEmail, value);
-			}
-		}
+			AssertCarriesNoSecret(name, result, accountEmailAllowed: name == "profile.list");
 
 		Assert.Contains(SettingsAdminEnv.DefaultAccountEmail, results["profile.list"].ToJsonString()); // the one place it is meant to be
 	}
@@ -199,6 +213,24 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 		var text = response["result"]!.ToJsonString();
 		Assert.DoesNotContain(_env.ProfileService.ProfilesRootDirectory.Replace("\\", "\\\\"), text);
 		Assert.DoesNotContain("configDir", text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	/// <summary>
+	/// The secrecy rule for one result: none of the seeded secrets, no string that has the shape of a token (a bot token, a 32+ character opaque run, a bearer
+	/// value, an API key, a JWT) and, unless allowed, not the Default account's e-mail. Shared with the part 2 methods, whose secrets are write-only too.
+	/// </summary>
+	internal static void AssertCarriesNoSecret(string name, JsonNode result, bool accountEmailAllowed)
+	{
+		var text = result.ToJsonString();
+		foreach (var secret in SettingsAdminEnv.Secrets)
+			Assert.DoesNotContain(secret, text);
+
+		foreach (var value in StringsOf(result))
+		{
+			Assert.False(TokenShape().IsMatch(value), $"{name}: '{value}' looks like a token");
+			if (!accountEmailAllowed)
+				Assert.DoesNotContain(SettingsAdminEnv.DefaultAccountEmail, value);
+		}
 	}
 
 	[GeneratedRegex(@"(\d{6,12}:[A-Za-z0-9_-]{30,})|([A-Za-z0-9+/_=-]{32,})|(^Bearer\s)|(^sk-)|(^eyJ)")]

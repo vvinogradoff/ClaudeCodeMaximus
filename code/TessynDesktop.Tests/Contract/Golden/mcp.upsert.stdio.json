@@ -1,0 +1,13 @@
+{
+  "id": "mcp5",
+  "displayName": "Files",
+  "enabled": true,
+  "transport": "stdio",
+  "urlHasQuery": false,
+  "command": "npx",
+  "hasArguments": true,
+  "authType": "none",
+  "hasStaticHeaderValue": false,
+  "authorized": false,
+  "status": "notApplicable"
+}

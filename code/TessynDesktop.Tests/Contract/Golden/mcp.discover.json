@@ -1,0 +1,9 @@
+{
+  "config": {
+    "authorizationEndpoint": "https://auth.example.com/authorize",
+    "tokenEndpoint": "https://auth.example.com/token",
+    "registrationEndpoint": "https://auth.example.com/register",
+    "discoveryCompleted": true
+  },
+  "timedOut": false
+}

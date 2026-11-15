@@ -99,4 +99,23 @@ public sealed class McpTokenStoreTests : IDisposable
 		Assert.Equal("token-a", _store.Load("a")!.AccessToken);
 		Assert.Equal("token-b", _store.Load("b")!.AccessToken);
 	}
+
+	[Theory]
+	[InlineData("x\n")]
+	[InlineData("x\r\n")]
+	[InlineData(@"..\evil")]
+	[InlineData("../evil")]
+	[InlineData("a b")]
+	[InlineData("")]
+	public void AnIdOutsideTheRegistryCharset_IsRefusedBySave_AndIgnoredByLoadAndDelete(string id)
+	{
+		var outside = Path.Combine(_tempDir, "..", "evil.token");
+		File.Delete(outside);                                                       // a leftover of an earlier run must not decide this one
+		Assert.Throws<ArgumentException>(() => _store.Save(id, new McpTokenRecord { AccessToken = "at" }));
+
+		Assert.Null(_store.Load(id));
+		_store.Delete(id);                                                          // nothing to delete, and no exception
+		Assert.False(File.Exists(outside));       // nothing was written outside the token directory
+		Assert.Empty(Directory.GetFiles(_tempDir));
+	}
 }
