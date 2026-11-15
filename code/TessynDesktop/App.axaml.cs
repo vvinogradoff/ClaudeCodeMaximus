@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using TessynDesktop.Services;
@@ -18,6 +19,11 @@ namespace TessynDesktop;
 public partial class App : Application
 {
 	public static IServiceProvider Services { get; private set; } = null!;
+
+	/// <summary>True when started with <c>--background</c> (set by <c>Program.Main</c>): no main window, a tray icon with Exit instead.</summary>
+	public static bool IsBackgroundHost { get; set; }
+
+	private TrayIcons? _trayIcons; // kept so the tray icon is not collected
 
 	public override void Initialize()
 	{
@@ -107,10 +113,21 @@ public partial class App : Application
 
 		if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
 		{
-			desktop.MainWindow = new MainWindow
+			if (IsBackgroundHost)
 			{
-				DataContext = mainVm,
-			};
+				// A23 Q6: the daemon without a window or taskbar entry. The process lives until the tray icon's Exit (or a system shutdown).
+				desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+				_trayIcons = BackgroundTray.Create(desktop);
+				TrayIcon.SetIcons(this, _trayIcons);
+				Log.Information("Running as the background daemon host (no main window)");
+			}
+			else
+			{
+				desktop.MainWindow = new MainWindow
+				{
+					DataContext = mainVm,
+				};
+			}
 
 			desktop.Exit += (_, _) =>
 			{

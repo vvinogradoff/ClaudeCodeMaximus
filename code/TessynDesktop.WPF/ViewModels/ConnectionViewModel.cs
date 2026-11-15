@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using TessynDesktop.Client;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.Switch;
 
 namespace TessynDesktop.WPF.ViewModels;
 
@@ -18,6 +19,7 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<ConnectionViewModel> _logger;
 	private readonly TimeSpan _retryDelay;
+	private readonly IDaemonHostLauncher _hostLauncher;
 
 	private ITessynClient? _client;
 
@@ -28,13 +30,14 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	[ObservableProperty]
 	private string? _detail;
 
-	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger)
-		: this(locator, factory, ui, logger, Constants.Timeouts.DaemonDiscoveryRetry)
+	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, IDaemonHostLauncher? hostLauncher = null)
+		: this(locator, factory, ui, logger, Constants.Timeouts.DaemonDiscoveryRetry, hostLauncher)
 	{
 	}
 
-	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, TimeSpan retryDelay)
+	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, TimeSpan retryDelay, IDaemonHostLauncher? hostLauncher = null)
 	{
+		_hostLauncher = hostLauncher ?? new NoDaemonHostLauncher();
 		_locator = locator;
 		_factory = factory;
 		_ui = ui;
@@ -54,6 +57,7 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	{
 		ConnectionBannerState.DaemonNotFound => "Daemon not found. Start TessynDesktop to connect.",
 		ConnectionBannerState.DaemonUnreachable => "Daemon found but not reachable. It may still be starting.",
+		ConnectionBannerState.StartingDaemon => "Starting the Tessyn daemon in the background...",
 		ConnectionBannerState.Connecting => "Connecting to the daemon...",
 		ConnectionBannerState.Connected => "Connected",
 		ConnectionBannerState.Reconnecting => "Connection lost. Reconnecting...",
@@ -72,7 +76,8 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 				var found = await _locator.DiscoverAsync(cancellationToken);
 				if (found.Status != DaemonDiscoveryStatus.Found || found.Daemon == null)
 				{
-					Set(ConnectionBannerState.DaemonNotFound, found.Status.ToString());
+					var launch = await StartHostIfNeededAsync(found.Status, cancellationToken);
+					Set(launch is HostLaunchOutcome.Started or HostLaunchOutcome.AlreadyStarting or HostLaunchOutcome.HostPresent ? ConnectionBannerState.StartingDaemon : ConnectionBannerState.DaemonNotFound, found.Status.ToString());
 					await Task.Delay(_retryDelay, cancellationToken);
 					continue;
 				}
@@ -125,6 +130,20 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 				if (!await DelayAsync(cancellationToken))
 					return;
 			}
+		}
+	}
+
+	/// <summary>Asks the launcher to start the background host; a failure of that never ends the connect loop.</summary>
+	private async Task<HostLaunchOutcome> StartHostIfNeededAsync(DaemonDiscoveryStatus status, CancellationToken cancellationToken)
+	{
+		try
+		{
+			return await _hostLauncher.EnsureStartedAsync(status, cancellationToken);
+		}
+		catch (Exception ex) when (ex is not OperationCanceledException)
+		{
+			_logger.LogWarning(ex, "Starting the daemon host failed");
+			return HostLaunchOutcome.Failed;
 		}
 	}
 

@@ -16,6 +16,26 @@ public sealed class StartupOptions
 	public const string TestDialogArgument = "--test-dialog";
 	public const string TestFolderArgument = "--test-folder";
 
+	/// <summary>The arguments the process was started with (a self-update restarts the client with them).</summary>
+	public IReadOnlyList<string> Arguments { get; init; } = [];
+
+	/// <summary><c>--no-self-update</c>: do not look for a newer build (the restarted client after an update).</summary>
+	public bool NoSelfUpdate { get; init; }
+
+	/// <summary><c>--no-host-start</c>: never start the Avalonia daemon host.</summary>
+	public bool NoHostStart { get; init; }
+
+	/// <summary>
+	/// The self-update looks only in the real environment: not for a test window, not with a custom data root or daemon file, and not when switched off.
+	/// </summary>
+	public bool SelfUpdateEnabled => !NoSelfUpdate && !TestWindow && DataRoot == null && DaemonFile == null;
+
+	/// <summary>
+	/// The client starts the Avalonia background host only in the real environment (the same rule as <see cref="SelfUpdateEnabled"/> without the update flag):
+	/// a test or a custom daemon file must never launch a real host against the user's data.
+	/// </summary>
+	public bool AutoStartHostEnabled => !NoHostStart && !TestWindow && DataRoot == null && DaemonFile == null;
+
 	public string? DaemonFile { get; init; }
 
 	public string? DataRoot { get; init; }
@@ -69,6 +89,8 @@ public sealed class StartupOptions
 		}
 
 		var testWindow = args.Any(a => string.Equals(a, TestWindowArgument, StringComparison.OrdinalIgnoreCase));
-		return new StartupOptions { DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [], TestDialogAnswers = testWindow ? testDialogs : [], TestFolderAnswers = testWindow ? testFolders : [] };
+		var noSelfUpdate = args.Any(a => string.Equals(a, Constants.Switch.NoSelfUpdateArgument, StringComparison.OrdinalIgnoreCase));
+		var noHostStart = args.Any(a => string.Equals(a, Constants.Switch.NoHostStartArgument, StringComparison.OrdinalIgnoreCase));
+		return new StartupOptions { Arguments = [.. args], NoSelfUpdate = noSelfUpdate, NoHostStart = noHostStart, DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [], TestDialogAnswers = testWindow ? testDialogs : [], TestFolderAnswers = testWindow ? testFolders : [] };
 	}
 }

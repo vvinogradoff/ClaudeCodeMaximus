@@ -7,6 +7,7 @@ using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.Rendering;
 using TessynDesktop.WPF.State;
+using TessynDesktop.WPF.Switch;
 using TessynDesktop.WPF.Transcript;
 using TessynDesktop.WPF.ViewModels;
 using TessynDesktop.WPF.Views;
@@ -27,6 +28,7 @@ public sealed class ServiceRegistration
 		// Daemon connection: daemon.json discovery (overridable with --daemon-file) and the real TessynClient.
 		services.AddSingleton<IDaemonLocator>(new DaemonLocator(options.DaemonFile));
 		services.AddSingleton<ITessynClientFactory, TessynClientFactory>();
+		services.AddSingleton<IDaemonHostLauncher>(sp => CreateHostLauncher(sp, paths, options));
 		services.AddSingleton<ConnectionViewModel>();
 
 		services.AddSingleton<TreeContext>();
@@ -116,10 +118,30 @@ public sealed class ServiceRegistration
 			services.AddSingleton<ISoundPlayer, WinmmSoundPlayer>();
 
 		services.AddSingleton<IHostedService, CompletionSoundHost>();
+
+		// A23 Q8: the one-time Avalonia settings import. A test window never asks it: its scripted dialog answers belong to the test.
+		if (!options.TestWindow)
+		{
+			services.AddSingleton<AvaloniaImportHost>();
+			services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<AvaloniaImportHost>());
+		}
+
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();
 		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));
 		services.AddSingleton<MainViewModel>();
 		services.AddSingleton<MainWindow>();
+	}
+
+	/// <summary>The launcher of the Avalonia background host (A23 Q6): real only in the real environment and only when running from the run folder (rule A15).</summary>
+	private static IDaemonHostLauncher CreateHostLauncher(IServiceProvider sp, AppPaths paths, StartupOptions options)
+	{
+		var runFolder = AppContext.BaseDirectory.TrimEnd('\\', '/');
+		if (!options.AutoStartHostEnabled || SourceBuilds.IsBuildOutput(runFolder))
+			return new NoDaemonHostLauncher();
+
+		var sourceLocation = new SourceBuilds(Path.Combine(paths.DataRoot, Constants.Switch.AppSettingsFileName)).ReadSourceLocation();
+		return new DaemonHostLauncher(runFolder, sourceLocation, new ProcessHostStarter(), new MutexHostPresence(), TimeProvider.System,
+			Constants.Switch.HostStartCooldown, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonHostLauncher>());
 	}
 }

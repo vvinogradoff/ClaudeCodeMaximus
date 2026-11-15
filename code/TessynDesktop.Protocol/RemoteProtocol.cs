@@ -152,5 +152,8 @@ public static partial class RemoteProtocol
 	{
 		public const string FileName = "daemon.json";
 		public const string TokenFileName = "tdcp-token.dat";
+
+		/// <summary>The session-local named mutex of the one daemon host per user: the Avalonia process takes it for its whole life, the WPF client only looks at it.</summary>
+		public const string HostMutexName = @"Local\TessynDesktop.DaemonHost";
 	}
 }
