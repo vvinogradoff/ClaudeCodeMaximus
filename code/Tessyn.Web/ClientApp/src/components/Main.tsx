@@ -3,6 +3,7 @@ import { useTick } from '../App';
 import { nowMs } from '../state/appState';
 import { useApp } from '../state/AppContext';
 import { ConfirmDialog } from './Dialogs';
+import { PreviewSheet } from './PreviewSheet';
 import { SessionsPanel } from './SessionsPanel';
 import { SessionView } from './SessionView';
 import { SettingsSheet } from './SettingsSheet';
@@ -26,6 +27,7 @@ export function Main() {
 			</div>
 			<UsageStrip />
 			<Toasts />
+			{state.preview && <PreviewSheet key={state.preview.handle} target={state.preview} onClose={actions.closePreview} />}
 			{settingsOpen && state.session?.detail && <SettingsSheet onClose={() => setSettingsOpen(false)} />}
 			{confirmCompact && (
 				<ConfirmDialog title="Compact session" message="Compact this session? The transcript is replaced by a summary." confirmLabel="Compact"

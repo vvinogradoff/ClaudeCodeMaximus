@@ -76,8 +76,10 @@ export interface SessionEntryDto {
 	profileName?: string;
 	modelId?: string;
 	effort?: string;
+	/** Stable id `{fileId}:{ordinal}`; omitted when the daemon has no content store. */
+	entryId?: string;
 }
-export interface SessionEntriesResult { nodeId: string; epoch: number; total: number; entries: SessionEntryDto[] }
+export interface SessionEntriesResult { nodeId: string; epoch: number; total: number; entries: SessionEntryDto[]; fileId?: string; seq?: number }
 export interface SessionSendResult { accepted: true; queued: boolean }
 
 export interface AttentionItemDto {
@@ -94,6 +96,7 @@ export interface AttentionItemDto {
 	createdUtc: string;
 	updatedUtc: string;
 	closedUtc?: string;
+	refs?: AttentionRefDto[];
 }
 export interface AttentionListResult { nodeId: string; summary: AttentionSummaryDto; items: AttentionItemDto[] }
 export interface AttentionAnswer { itemId: string; text: string }
@@ -101,7 +104,25 @@ export interface AttentionReplyResult { answeredIds: string[]; skippedIds: strin
 
 export interface ModelOptionDto { id: string; displayName: string; provider?: string }
 export interface ProfileOptionDto { id: string; displayName: string }
-export interface CatalogResult { models: ModelOptionDto[]; efforts: string[]; profiles: ProfileOptionDto[] }
+export interface CatalogResult {
+	models: ModelOptionDto[];
+	efforts: string[];
+	profiles: ProfileOptionDto[];
+	/** Hosts whose https images/video auto-load in the transcript (`host` or `*.suffix`). Optional: older daemons omit it. */
+	mediaPreviewHosts?: string[];
+}
+
+// ---- Focus references, file preview, attachments (docs/features/focus-references-attachments-previews.md) ----
+export interface AttentionEntryRefDto { kind: 'entry'; label?: string; nodeId: string; fileId: string; entryId: string; offset: number; length: number }
+export interface AttentionFileRefDto { kind: 'file'; label?: string; refId: string; name: string; path?: string; size: number; mime: string; mtimeUtc?: string }
+export interface AttentionUrlRefDto { kind: 'url'; label?: string; url: string }
+export type AttentionRefDto = AttentionEntryRefDto | AttentionFileRefDto | AttentionUrlRefDto;
+
+/** file.read result; offset/length are bytes. `utf8` for text types, `base64` for everything else. */
+export interface FileReadResult { name: string; mime: string; size: number; mtimeUtc?: string; offset: number; length: number; encoding: 'utf8' | 'base64'; data: string; eof: boolean }
+export interface FilePreviewResult { handle: string; name: string; mime: string; size: number; mtimeUtc?: string }
+/** POST /api/attachments answer. */
+export interface AttachmentResult { attachmentId: string; path: string; name: string; size: number; mime: string }
 
 export interface UsageWindowDto { utilization: number; resetsAtUtc: string; isStale: boolean }
 export interface UsageResult {

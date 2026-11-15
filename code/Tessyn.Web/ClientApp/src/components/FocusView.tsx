@@ -5,6 +5,7 @@ import { readText, writeText } from '../lib/storage';
 import { nowMs } from '../state/appState';
 import { useApp } from '../state/AppContext';
 import { Markdown } from './Markdown';
+import { RefList } from './RefList';
 
 const KIND_LABEL: Record<AttentionKind, string> = { critical: 'CRITICAL', ask: 'ASK', todo: 'TODO', alert: 'ALERT', decided: 'DECIDED' };
 const DISMISS_LABEL: Record<AttentionKind, string> = { critical: 'Got it', alert: 'Got it', decided: 'Got it', ask: 'Dismiss', todo: 'Dismiss' };
@@ -39,6 +40,7 @@ function OpenCard({ item, text, now, onText, onReply, onDismiss }: CardProps) {
 				<time>{formatSmartTime(item.createdUtc, now)}</time>
 			</header>
 			{item.body && <Markdown text={item.body} className="card-body" />}
+			{item.refs && item.refs.length > 0 && <RefList refs={item.refs} />}
 			{item.options.length > 0 && (
 				<div className="options">
 					{item.options.map((o) => <button key={o} type="button" className="btn small" onClick={() => onText(o)}>{o}</button>)}
@@ -70,6 +72,7 @@ function ClosedCard({ item }: { item: AttentionItemDto }) {
 			</header>
 			<div className="outcome">{outcome(item)}</div>
 			{open && item.body && <Markdown text={item.body} className="card-body" />}
+			{item.refs && item.refs.length > 0 && <RefList refs={item.refs} />}
 		</article>
 	);
 }

@@ -1,4 +1,4 @@
-import type { EventFrame } from './types';
+import type { AttachmentResult, EventFrame } from './types';
 
 export class RpcError extends Error {
 	readonly code: number;
@@ -21,6 +21,18 @@ export class LoginError extends Error {
 	}
 }
 
+/** Upload failure; `status` is the HTTP status (0 = network error, -1 = aborted by the user). */
+export class UploadError extends Error {
+	readonly status: number;
+	constructor(status: number, message: string) {
+		super(message);
+		this.name = 'UploadError';
+		this.status = status;
+	}
+}
+
+export interface UploadHandle { promise: Promise<AttachmentResult>; abort(): void }
+
 export interface EventSourceHandle { close(): void; readonly closed: boolean }
 export interface EventSourceHandlers { onFrame(frame: EventFrame): void; onError(): void }
 
@@ -30,6 +42,8 @@ export interface Transport {
 	login(email: string, password: string): Promise<LoginResult>;
 	logout(): Promise<void>;
 	me(): Promise<LoginResult | null>;
+	/** POST /api/attachments (multipart: `file`, `nodeId`); `onProgress` gets 0..1. */
+	upload(nodeId: string, file: File, onProgress: (fraction: number) => void): UploadHandle;
 	openEvents(handlers: EventSourceHandlers): EventSourceHandle;
 }
 

