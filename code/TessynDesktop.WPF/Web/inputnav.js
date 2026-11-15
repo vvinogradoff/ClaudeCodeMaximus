@@ -44,7 +44,25 @@
   // scrollTop that puts the entry at position k near the top of the view, `margin` pixels below it (never negative).
   function revealTop(off, k, margin) { return Math.max(0, off[k] - margin); }
 
-  const api = { isInput, isAuto, labelOf, find, keyAction, revealTop, LINE_PX, PAGE_FRACTION };
+  // The selection (entry index, or null) to carry into a freshly loaded window: kept while it is the same session, dropped when the session
+  // changes. It is kept even when that input is outside the loaded window; Up/Down then navigate from it (see plan), so it is never stuck.
+  function selectionOnLoad(sel, prevKey, newKey) { return sel !== null && prevKey !== null && prevKey !== undefined && prevKey === newKey ? sel : null; }
+
+  // What an Up/Down move from entry index `sel` does. `auto` is whether the selected input is automated (kept beside the selection, because
+  // the entry itself may not be loaded). Returns { type: 'reveal', k } (position in items), { type: 'load', dir } (ask the host for the next
+  // page in that direction and try again once it arrives) or { type: 'none' } (nothing further that way).
+  function plan(items, sel, auto, dir, hasOlder, hasNewer) {
+    const k = find(items, sel, dir, !auto);
+    if (k >= 0) return { type: 'reveal', k: k };
+    if (dir < 0 ? !hasOlder : !hasNewer) return { type: 'none' };
+    return { type: 'load', dir: dir };
+  }
+
+  // Whether a pending move (nav) carries on after a page arrived: not when it expired, the selection is gone, or the page was empty (the host
+  // had nothing more to give, so asking again would loop until the expiry).
+  function shouldResume(nav, now, sel, pageEmpty) { return !!nav && sel !== null && now <= nav.until && !pageEmpty; }
+
+  const api = { isInput, isAuto, labelOf, find, keyAction, revealTop, selectionOnLoad, plan, shouldResume, LINE_PX, PAGE_FRACTION };
   root.InputNav = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

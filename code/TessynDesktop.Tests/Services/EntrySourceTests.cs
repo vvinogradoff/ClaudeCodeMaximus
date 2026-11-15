@@ -117,7 +117,7 @@ public sealed class EntrySourceTests : IDisposable
 	// ── legacy: a scheduled prompt written before the source was recorded ───────────────────
 
 	[Fact]
-	public void An_unmarked_user_entry_that_starts_with_the_scheduled_prefix_counts_as_scheduled()
+	public void An_unmarked_user_entry_that_starts_with_the_scheduled_prefix_is_resolved_as_scheduled_on_read_only()
 	{
 		var lines = new[]
 		{
@@ -131,8 +131,30 @@ public sealed class EntrySourceTests : IDisposable
 
 		var entries = SessionFileService.ParseEntries(lines);
 
-		Assert.Equal(EntrySources.Scheduled, entries[0].Source);
-		Assert.Null(entries[1].Source);
+		// The parsed model holds what the file records (nothing); the DTO resolves the legacy prefix.
+		Assert.Null(entries[0].Source);
+		Assert.Equal(EntrySources.Scheduled, entries[0].ToDto(0, 1000).Source);
+		Assert.Null(entries[1].ToDto(1, 1000).Source);
+	}
+
+	[Fact]
+	public void The_prefix_is_resolved_from_the_full_content_even_when_the_dto_cuts_it()
+	{
+		var legacy = new SessionEntryModel { Timestamp = DateTimeOffset.UtcNow, Role = "USER", Content = Constants.Agent.ScheduledTurnSystemPrefix + " " + new string('x', 500) };
+
+		Assert.Equal(EntrySources.Scheduled, legacy.ToDto(0, 10).Source);
+	}
+
+	[Fact]
+	public void Rewriting_a_file_never_writes_a_source_for_a_legacy_prefixed_entry()
+	{
+		var fileName = _sut.CreateSessionFile();
+		_sut.AppendMessage(fileName, Constants.SessionFile.RoleUser, $"{Constants.Agent.ScheduledTurnSystemPrefix} typed or legacy");
+
+		_sut.WriteSessionFile(fileName, _sut.ReadEntries(fileName));
+
+		Assert.DoesNotContain("source=", Raw(fileName));
+		Assert.Null(_sut.ReadEntries(fileName)[0].Source);
 	}
 
 	[Fact]

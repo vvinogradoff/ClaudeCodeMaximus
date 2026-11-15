@@ -132,9 +132,10 @@ public sealed class CdpPage : IDisposable
 		});
 
 	/// <summary>A key press (down and up) with the Windows virtual key code the browser reports for it.</summary>
-	public async Task PressAsync(string key, int virtualKey)
+	/// <param name="modifiers">DevTools modifier bits: 1 Alt, 2 Ctrl, 4 Meta, 8 Shift.</param>
+	public async Task PressAsync(string key, int virtualKey, int modifiers = 0)
 	{
 		foreach (var type in new[] { "rawKeyDown", "keyUp" })
-			await SendAsync("Input.dispatchKeyEvent", new JsonObject { ["type"] = type, ["key"] = key, ["code"] = key, ["windowsVirtualKeyCode"] = virtualKey, ["nativeVirtualKeyCode"] = virtualKey });
+			await SendAsync("Input.dispatchKeyEvent", new JsonObject { ["type"] = type, ["key"] = key, ["code"] = key, ["windowsVirtualKeyCode"] = virtualKey, ["nativeVirtualKeyCode"] = virtualKey, ["modifiers"] = modifiers });
 	}
 }

@@ -22,17 +22,22 @@ public static class EntrySources
 		_                       => null,
 	};
 
+	/// <summary>The source as recorded in the file: only USER entries carry one. This is what a rewrite of the file writes back.</summary>
+	public static string? Stored(string role, string? stored)
+		=> role == Constants.SessionFile.RoleUser && !string.IsNullOrEmpty(stored) ? stored : null;
+
 	/// <summary>
-	/// The source of a parsed entry. Only USER entries carry one; an unmarked USER entry whose text starts with the scheduled-turn
-	/// prefix is a scheduled input written before the source was recorded.
+	/// The source to show for an entry, resolved on read only: the recorded one, or for an unmarked USER entry whose text starts with the
+	/// scheduled-turn prefix (a scheduled input written before the source was recorded) "scheduled". The legacy result is never written back.
 	/// </summary>
 	public static string? Resolve(string role, string? stored, string content)
 	{
+		var recorded = Stored(role, stored);
+		if (recorded != null)
+			return recorded;
+
 		if (role != Constants.SessionFile.RoleUser)
 			return null;
-
-		if (!string.IsNullOrEmpty(stored))
-			return stored;
 
 		return content.StartsWith(Constants.Agent.ScheduledTurnSystemPrefix, System.StringComparison.Ordinal) ? Scheduled : null;
 	}

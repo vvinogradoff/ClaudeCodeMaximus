@@ -121,6 +121,59 @@ public sealed class InputNavScriptTests
 		Assert.Equal(40, result[0].GetProperty("dy").GetInt32());
 	}
 
+	// ── the selection across reloads, paging and empty pages (M1, M2, L4) ───────────────────
+
+	[Fact]
+	public void The_selection_is_kept_while_the_session_is_the_same_and_cleared_when_it_changes()
+	{
+		var result = Run("out.push(n.selectionOnLoad(5, 'a', 'a'), n.selectionOnLoad(5, 'a', 'b'), n.selectionOnLoad(null, 'a', 'a'), n.selectionOnLoad(5, null, 'a'), n.selectionOnLoad(0, 'a', 'a'));");
+
+		Assert.Equal(5, result[0].GetInt32());
+		Assert.Equal(JsonValueKind.Null, result[1].ValueKind);
+		Assert.Equal(JsonValueKind.Null, result[2].ValueKind);
+		Assert.Equal(JsonValueKind.Null, result[3].ValueKind);
+		Assert.Equal(0, result[4].GetInt32());   // entry 0 is a valid selection
+	}
+
+	[Fact]
+	public void A_kept_selection_outside_the_loaded_window_still_navigates_so_it_is_never_stuck()
+	{
+		// Window holds entries 4..9 only; the selection (mine, entry 2) is older than the window: Down reaches 4, Up needs the older page.
+		var result = Run("const w = items.slice(4); out.push(n.plan(w, 2, false, 1, true, false), n.plan(w, 2, false, -1, true, false), n.plan(w, 2, false, -1, false, false));");
+
+		Assert.Equal(("reveal", 0), (result[0].GetProperty("type").GetString(), result[0].GetProperty("k").GetInt32()));
+		Assert.Equal(("load", -1), (result[1].GetProperty("type").GetString(), result[1].GetProperty("dir").GetInt32()));
+		Assert.Equal("none", result[2].GetProperty("type").GetString());
+	}
+
+	[Fact]
+	public void A_move_asks_for_the_newer_page_when_nothing_loaded_lies_ahead_and_a_newer_page_exists()
+	{
+		// Entries 0..4 loaded; from mine entry 4 down: nothing loaded after it. hasNewer -> load; otherwise none.
+		var result = Run("const w = items.slice(0, 5); out.push(n.plan(w, 4, false, 1, false, true), n.plan(w, 4, false, 1, false, false), n.plan(w, 4, true, 1, false, true));");
+
+		Assert.Equal(("load", 1), (result[0].GetProperty("type").GetString(), result[0].GetProperty("dir").GetInt32()));
+		Assert.Equal("none", result[1].GetProperty("type").GetString());
+		Assert.Equal("load", result[2].GetProperty("type").GetString());
+	}
+
+	[Fact]
+	public void The_kind_of_the_selection_decides_between_my_inputs_only_and_all_inputs()
+	{
+		// From entry 0 (mine) going down: my-only skips the scheduled 2 and lands on 4 (position 4); an automated selection lands on 2.
+		var result = Run("out.push(n.plan(items, 0, false, 1, false, false).k, n.plan(items, 0, true, 1, false, false).k);");
+
+		Assert.Equal([4, 2], Ints(result));
+	}
+
+	[Fact]
+	public void A_pending_move_resumes_only_while_it_is_fresh_selected_and_the_page_brought_entries()
+	{
+		var result = Run("const nav = { dir: -1, until: 1000 }; out.push(n.shouldResume(nav, 500, 3, false), n.shouldResume(nav, 1001, 3, false), n.shouldResume(nav, 500, null, false), n.shouldResume(nav, 500, 3, true), n.shouldResume(null, 500, 3, false));");
+
+		Assert.Equal([true, false, false, false, false], result.EnumerateArray().Select(x => x.GetBoolean()).ToArray());
+	}
+
 	[Fact]
 	public void A_revealed_input_sits_a_margin_below_the_top_and_never_above_zero()
 	{

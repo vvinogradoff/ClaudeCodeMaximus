@@ -66,7 +66,7 @@ public sealed class SessionFileService : ISessionFileService
 				ProfileName = profileName,
 				ModelId = modelId,
 				Effort = effort,
-				Source = EntrySources.Resolve(role, source, content),
+				Source = EntrySources.Stored(role, source),
 			},
 		});
 	}
@@ -384,7 +384,7 @@ public sealed class SessionFileService : ISessionFileService
 				ProfileName = profileName,
 				ModelId     = modelId,
 				Effort      = effort,
-				Source      = EntrySources.Resolve(role, storedSource, content),
+				Source      = EntrySources.Stored(role, storedSource),
 			});
 		}
 

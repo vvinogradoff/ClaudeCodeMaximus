@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
+using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
 using TessynDesktop.Tests.Client;
 using TessynDesktop.Tests.Services;
@@ -334,6 +335,244 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 			await page.PressAsync("ArrowDown", Down);
 			await ExpectSelectedAsync(page, 158);
 			Assert.DoesNotContain("[ERR]", _app.ReadLog());
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	// ── the page's stateful logic: newer pages, appends, reloads, find, jumps, links ─────────
+	// Where the host would answer a page request (a window that stops short of the newest entries, a reload), the test plays the host by calling the
+	// page's own handlers (onAppend, onPrepend, onLoad) with entries it holds; what the page posts to the host is recorded in window.__posts.
+
+	private static async Task RecordPostsAsync(CdpPage page) =>
+		await page.EvalAsync("(() => { window.__posts = []; const orig = post; post = function (o) { window.__posts.push(o); orig(o); }; return true; })()");
+
+	private static async Task<int> PostsAsync(CdpPage page, string ev) => (int)await Num($"window.__posts.filter(p => p.ev === '{ev}').length", page);
+
+	private async Task ExpectPostAsync(CdpPage page, string ev) =>
+		await WaitAsync($"the page to post '{ev}'", async () => await PostsAsync(page, ev) > 0);
+
+	[Fact]
+	public async Task Navigation_into_a_newer_page_that_is_not_loaded_asks_for_it_and_carries_on_when_it_arrives()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			await RecordPostsAsync(page);
+			// The window stops short of the newest entries: entries 252.. are held back (the host has them on its newer page).
+			await page.EvalAsync("(() => { window.__newer = S.items.splice(posOfEntry(252)); S.hasNewer = true; recomputeOff(); S.a = S.b = 0; render('bottom'); return true; })()");
+			Assert.Equal(251, await Num("S.items[S.items.length - 1].i", page));
+
+			await ClickEntryAsync(page, 250);   // mine; the next of mine is 252, on the newer page
+			await ExpectSelectedAsync(page, 250);
+			await page.PressAsync("ArrowDown", Down);
+			await ExpectPostAsync(page, "needNewer");
+			Assert.Equal(250, await SelectedAsync(page));   // waiting for the page, the selection has not moved
+
+			await page.EvalAsync("(() => { onAppend({ cmd: 'append', tok: S.tok, hasNewer: false, entries: window.__newer }); return true; })()");
+			await ExpectSelectedAsync(page, 252);
+			await ExpectNearTopAsync(page, 252);
+			Assert.Null(await page.EvalAsync("NAV"));
+			Assert.DoesNotContain("[ERR]", _app.ReadLog());
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
+	public async Task An_empty_page_drops_the_pending_move_instead_of_asking_again()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			await RecordPostsAsync(page);
+			await page.EvalAsync("(() => { S.hasOlder = true; return true; })()");   // a host that says there is more, then returns nothing
+			await ClickEntryAsync(page, 162);   // mine; before it only the scheduled 160 is loaded
+			await page.PressAsync("ArrowUp", Up);
+			await ExpectPostAsync(page, "needOlder");
+			var asked = await PostsAsync(page, "needOlder");
+
+			await page.EvalAsync("(() => { onPrepend({ cmd: 'prepend', tok: S.tok, hasOlder: true, entries: [] }); return true; })()");
+			await Task.Delay(500);
+
+			Assert.Null(await page.EvalAsync("NAV"));
+			Assert.Equal(asked, await PostsAsync(page, "needOlder"));   // no loop of requests
+			Assert.Equal(162, await SelectedAsync(page));
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
+	public async Task The_selection_is_kept_across_an_append_a_live_update_and_a_replaced_entry()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			await ClickEntryAsync(page, 254);
+			await ExpectSelectedAsync(page, 254);
+
+			// A real append through the host: a new user entry and its answer.
+			var node = _env.Base.Registry.FindModelByNodeId(_main)!;
+			_env.Base.Files.AppendMessage(node.FileName, "USER", "late input", "work", null, null);
+			_env.Base.Files.AppendMessage(node.FileName, "ASSISTANT", "late answer", null, "opus", "high");
+			_host.Bus.Publish(RemoteProtocol.Events.SessionAppended, new SessionEpochPayload(node.NodeId, _env.Base.Epochs.GetEpoch(node.FileName)));
+			await WaitAsync("the appended entries to reach the page", async () => await Num("S.items[S.items.length - 1].i", page) >= Entries + 1);
+			Assert.Equal(254, await SelectedAsync(page));
+
+			// A live row of a turn in flight.
+			await page.EvalAsync("(() => { showLive({ status: 'running', text: 'partial answer so far' }); return true; })()");
+			Assert.Equal(254, await SelectedAsync(page));
+
+			// The entry itself replaced (its text changed): the frame is still on it.
+			await ShowEntryAsync(page, 254);
+			await page.EvalAsync("(() => { const it = Object.assign({}, S.items[posOfEntry(254)]); it.html = '<p>input 254 edited</p>'; onReplace({ cmd: 'replace', tok: S.tok, entry: it }); return true; })()");
+			await ExpectSelectedAsync(page, 254);
+			Assert.Contains("edited", (await page.EvalAsync("document.querySelector('.c.sel .b').textContent"))!.GetValue<string>());
+
+			// Arrow keys still navigate from it afterwards (it is the selection, not the scroll).
+			await page.PressAsync("ArrowUp", Up);
+			await ExpectSelectedAsync(page, 252);
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
+	public async Task A_reload_of_the_same_session_keeps_the_selection_even_outside_the_new_window_and_another_session_clears_it()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			await RecordPostsAsync(page);
+			await ClickEntryAsync(page, 254);
+			await ExpectSelectedAsync(page, 254);
+			await page.EvalAsync("(() => { window.__all = S.items.map(x => Object.assign({}, x)); return true; })()");
+
+			// The page is reloaded at the bottom with a window that does not hold 254 (entries 258..).
+			await page.EvalAsync("(() => { onLoad({ cmd: 'load', key: S.key, tok: S.tok, hasOlder: true, hasNewer: false, toBottom: true, entries: window.__all.filter(x => x.i >= 258) }); return true; })()");
+			Assert.Equal(254, await SelectedAsync(page));   // kept: same session
+
+			// It is not stuck: Up navigates from it (a page is needed), and the older page brings the previous input of mine.
+			await page.PressAsync("ArrowUp", Up);
+			await ExpectPostAsync(page, "needOlder");
+			Assert.Equal(254, await SelectedAsync(page));
+			await page.EvalAsync("(() => { onPrepend({ cmd: 'prepend', tok: S.tok, hasOlder: true, entries: window.__all.filter(x => x.i < 258) }); return true; })()");
+			await ExpectSelectedAsync(page, 252);
+
+			// Another session: nothing stays selected.
+			await page.EvalAsync("(() => { onLoad({ cmd: 'load', key: 'another-session', tok: S.tok, hasOlder: false, hasNewer: false, toBottom: true, entries: window.__all }); return true; })()");
+			Assert.Equal(-1, await SelectedAsync(page));
+			Assert.Equal(0, await Num("document.querySelectorAll('.c.sel').length", page));
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
+	public async Task Find_F3_and_a_reference_jump_keep_working_with_an_input_selected()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			await RecordPostsAsync(page);
+			await ClickEntryAsync(page, 254);
+			await ExpectSelectedAsync(page, 254);
+
+			await page.PressAsync("f", 70, modifiers: 2);   // Ctrl+F
+			await ExpectPostAsync(page, "findRequested");
+			await page.PressAsync("F3", 114);
+			await ExpectPostAsync(page, "findStep");
+			Assert.Equal(254, await SelectedAsync(page));   // neither key navigated or selected anything
+
+			// The host answers a search with the matching entries; the page highlights and steps through them.
+			await page.EvalAsync("(() => { doFind({ cmd: 'find', term: 'input 2', idx: S.items.filter(x => x.r === 'U' && x.html.indexOf('input 2') >= 0).map(x => x.i) }); return true; })()");
+			await ExpectPostAsync(page, "findStatus");
+			Assert.True(await Num("items.querySelectorAll('mark').length", page) > 0, "the term was not highlighted");
+			var before = await Num("F.cur", page);
+			await page.EvalAsync("(() => { stepFind(-1); return true; })()");
+			Assert.NotEqual(before, await Num("F.cur", page));
+			await page.EvalAsync("(() => { clearFind(); return true; })()");
+			Assert.Equal(254, await SelectedAsync(page));
+
+			// A reference jump to another entry: it is shown and its quote highlighted; the selection stays.
+			await page.EvalAsync("(() => { onGoto({ cmd: 'goto', i: 200, quote: 'input 200', hl: true }); return true; })()");
+			await ExpectPostAsync(page, "refHl");
+			Assert.True((await page.EvalAsync("window.__posts.filter(p => p.ev === 'refHl').pop().visible"))!.GetValue<bool>(), "the jump target is not in the view");
+			Assert.True((await page.EvalAsync("window.__posts.filter(p => p.ev === 'refHl').pop().quote"))!.GetValue<bool>(), "the quote was not highlighted");
+			Assert.Equal(254, await SelectedAsync(page));
+			Assert.DoesNotContain("[ERR]", _app.ReadLog());
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
+	public async Task A_click_on_a_link_inside_an_input_opens_the_link_and_does_not_select_the_input()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			await RecordPostsAsync(page);
+			// Entry 254 gets a link in its text (the seeded entries are plain).
+			await page.EvalAsync("(() => { S.items[posOfEntry(254)].html = '<p>see <a id=\"lk\" href=\"https://example.com/page\">this link</a> now</p>'; S.a = S.b = 0; render(null); return true; })()");
+			await ShowEntryAsync(page, 254);
+			await WaitAsync("the link to render", async () => await Num("document.querySelectorAll('#lk').length", page) == 1);
+			var rect = await page.EvalAsync("(() => { const r = document.getElementById('lk').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()");
+
+			await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>());
+			await ExpectPostAsync(page, "link");
+			Assert.Equal(-1, await SelectedAsync(page));   // nothing was selected before, and the click on the link selected nothing
+
+			// With another input selected, the link click leaves that one alone.
+			await ClickEntryAsync(page, 252);
+			await ExpectSelectedAsync(page, 252);
+			await ShowEntryAsync(page, 254);
+			rect = await page.EvalAsync("(() => { const r = document.getElementById('lk').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()");
+			await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>());
+			await WaitAsync("a second link post", async () => await PostsAsync(page, "link") >= 2);
+			Assert.Equal(252, await SelectedAsync(page));
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
+	public async Task A_click_in_the_margin_beside_an_input_does_not_select_it()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			await ShowEntryAsync(page, 254);
+			// The row's left margin: inside the row, left of the bubble.
+			var margin = await page.EvalAsync("(() => { const e = document.querySelector('.e[data-k=\"' + posOfEntry(254) + '\"]'), c = e.querySelector('.c'); const er = e.getBoundingClientRect(), cr = c.getBoundingClientRect(); return [(er.left + cr.left) / 2, er.top + er.height / 2, cr.left - er.left]; })()");
+			Assert.True(margin![2]!.GetValue<double>() > 4, "the row has no margin left of the bubble to click");
+
+			await page.ClickAsync(margin[0]!.GetValue<double>(), margin[1]!.GetValue<double>());
+			await Task.Delay(300);
+			Assert.Equal(-1, await SelectedAsync(page));
+
+			// With a selection, a margin click is a click elsewhere: it clears.
+			await ClickEntryAsync(page, 252);
+			await ExpectSelectedAsync(page, 252);
+			await ShowEntryAsync(page, 254);
+			margin = await page.EvalAsync("(() => { const e = document.querySelector('.e[data-k=\"' + posOfEntry(254) + '\"]'), c = e.querySelector('.c'); const er = e.getBoundingClientRect(), cr = c.getBoundingClientRect(); return [(er.left + cr.left) / 2, er.top + er.height / 2]; })()");
+			await page.ClickAsync(margin![0]!.GetValue<double>(), margin[1]!.GetValue<double>());
+			await WaitAsync("the margin click to clear the selection", async () => await SelectedAsync(page) == -1);
 		}
 		finally
 		{

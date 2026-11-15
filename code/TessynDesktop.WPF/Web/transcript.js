@@ -21,7 +21,8 @@ let viewTimer = 0;
 let liveSeen = { st: '', len: 0, queued: 0 };   // what the host was last told about the live row (diagnostics)
 let liveTimer = 0;          // ticks the elapsed time of the live row once a second
 let SEL = null;             // entry index of the selected input (kept by index across re-renders, appends, replaces and paging)
-let NAV = null;             // an Up/Down move waiting for a page to load: { dir, mineOnly, until }
+let SELAUTO = false;        // whether the selected input is automated (kept beside SEL: the entry may not be loaded)
+let NAV = null;            // an Up/Down move waiting for a page to load: { dir, mineOnly, until }
 const NAV_MARGIN_PX = 24;   // a revealed input sits this far below the top of the view
 const NAV_WAIT_MS = 15000;  // a move still waiting for a page after this long is dropped (a failed page request must not fire later)
 
@@ -150,14 +151,14 @@ document.addEventListener('keydown', e => {
 });
 
 // ---- input selection and Up/Down navigation (inputnav.js) ----
-function selectedItem() { return SEL === null ? null : entryOf(SEL); }
+// SEL is the selection even when that entry is not in the loaded window (SELAUTO remembers its kind); Up/Down then navigate from it.
 function applySel() {
   items.querySelectorAll('.c.sel').forEach(c => c.classList.remove('sel'));
   if (SEL === null || !S) return;
   const k = posOfEntry(SEL); if (!S.items[k] || S.items[k].i !== SEL || k < S.a || k >= S.b) return;
   const c = items.children[k - S.a].querySelector('.c'); if (c) c.classList.add('sel');
 }
-function select(i) { SEL = i; NAV = null; applySel(); }
+function select(it) { SEL = it.i; SELAUTO = InputNav.isAuto(it); NAV = null; applySel(); }
 // A click on an input selects it; a click anywhere else clears the selection. Links, chips and buttons keep their meaning (and leave the
 // selection alone), and so does a drag that selected text.
 function onSelectClick(e) {
@@ -166,40 +167,41 @@ function onSelectClick(e) {
   if (t.closest && t.closest('a, button')) return;
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed && vp.contains(sel.anchorNode)) return;
-  const row = t.closest && t.closest('.e');
+  const bubble = t.closest && t.closest('.c');   // the margin around a bubble is not the input
+  const row = bubble && bubble.closest('.e');
   const it = row ? S.items[parseInt(row.getAttribute('data-k'), 10)] : null;
-  if (it && InputNav.isInput(it)) select(it.i); else { SEL = null; NAV = null; applySel(); }
+  if (it && InputNav.isInput(it)) select(it); else { SEL = null; NAV = null; applySel(); }
 }
 vp.addEventListener('click', onSelectClick);
 function onNavKey(e) {
-  const act = InputNav.keyAction(e.key, { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey }, selectedItem() !== null, vp.clientHeight);
+  const act = InputNav.keyAction(e.key, { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey }, SEL !== null, vp.clientHeight);
   if (!act) return;
   e.preventDefault();
   NAV = null;
   if (act.type === 'scroll') vp.scrollTop += act.dy;
   else if (act.type === 'clear') { SEL = null; applySel(); }
-  else { const it = selectedItem(); if (it) stepNav(act.dir, !InputNav.isAuto(it)); }
+  else if (S) stepNav(act.dir);
 }
 // Moves the selection to the nearest input in the loaded entries; when there is none and more entries can be loaded in that direction,
 // asks the host for the next page and carries on once it arrives (resumeNav).
-function stepNav(dir, mineOnly) {
-  const k = InputNav.find(S.items, SEL, dir, mineOnly);
-  if (k >= 0) { NAV = null; reveal(k); return; }
-  if (dir < 0 ? !S.hasOlder : !S.hasNewer) { NAV = null; return; }
-  NAV = { dir: dir, mineOnly: mineOnly, until: Date.now() + NAV_WAIT_MS };
+function stepNav(dir) {
+  const p = InputNav.plan(S.items, SEL, SELAUTO, dir, S.hasOlder, S.hasNewer);
+  if (p.type === 'reveal') { NAV = null; reveal(p.k); return; }
+  if (p.type === 'none') { NAV = null; return; }
+  NAV = { dir: dir, until: Date.now() + NAV_WAIT_MS };
   if (dir < 0) { if (!olderPending) { olderPending = true; post({ ev: 'needOlder', tok: S.tok }); } }
   else if (!NG.pending) { PagingGate.markRequested(NG); post({ ev: 'needNewer', tok: S.tok }); }
 }
-function resumeNav() {
+function resumeNav(pageEmpty) {
   if (!NAV || !S) return;
-  if (Date.now() > NAV.until || SEL === null) { NAV = null; return; }
-  stepNav(NAV.dir, NAV.mineOnly);
+  if (!InputNav.shouldResume(NAV, Date.now(), SEL, pageEmpty)) { NAV = null; return; }
+  stepNav(NAV.dir);
 }
 // Selects the input at position k and scrolls it to just below the top of the view. The entries above it may still have estimated heights,
 // so the position is corrected once they are measured.
 function reveal(k) {
   const i = S.items[k].i;
-  SEL = i;
+  SEL = i; SELAUTO = InputNav.isAuto(S.items[k]);
   for (let pass = 0; pass < 3; pass++) {
     const want = Math.min(InputNav.revealTop(S.off, posOfEntry(i), NAV_MARGIN_PX), Math.max(0, vp.scrollHeight - vp.clientHeight));
     if (pass > 0 && Math.abs(vp.scrollTop - want) < 1) break;
@@ -246,10 +248,9 @@ function stepFind(dir) { if (!F || !F.idx.length) return; F.cur = (F.cur + dir +
 // ---- host commands ----
 function onLoad(m) {
   showLive(null);
-  const sameSession = !!S && S.key === m.key;   // a reload of the session on show keeps its selection when that input is still there
+  SEL = InputNav.selectionOnLoad(SEL, S ? S.key : null, m.key);   // a reload of the same session keeps its selection; another session clears it
   S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, hasNewer: !!m.hasNewer, loaded: new Map() };
   olderPending = false; NG = PagingGate.create(); F = null; H = null; NAV = null; recomputeOff(); items.replaceChildren();
-  if (SEL !== null && !(sameSession && InputNav.isInput(entryOf(SEL)))) SEL = null;
   padTop.style.height = '0px'; padBot.style.height = S.off[S.items.length] + 'px';
   const t0 = performance.now();
   vp.scrollTop = m.toBottom ? S.off[S.items.length] : 0;
@@ -261,7 +262,7 @@ function onPrepend(m) {
   olderPending = false;
   if (!S || m.tok !== S.tok) return;
   S.hasOlder = m.hasOlder;
-  if (!m.entries.length) { resumeNav(); return; }
+  if (!m.entries.length) { resumeNav(true); return; }
   const k0 = findK(vp.scrollTop), anchorEntry = S.items[k0].i, anchorD = vp.scrollTop - S.off[k0];
   S.items = m.entries.map(mk).concat(S.items); recomputeOff(); S.a = S.b = 0;
   const k = posOfEntry(anchorEntry);
@@ -278,7 +279,7 @@ function onAppend(m) {
   recomputeOff();
   if (follow) render('bottom'); else { padBot.style.height = (S.off[S.items.length] - S.off[S.b]) + 'px'; render(null); }
   checkNewer();
-  resumeNav();
+  resumeNav(m.entries.length === 0);
 }
 // ---- live row of a turn in flight (live.js) ----
 // The row is created once and updated in place (so a selection in the streamed text survives); a one-second ticker keeps its timer.
