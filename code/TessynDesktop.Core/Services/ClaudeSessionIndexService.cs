@@ -34,6 +34,13 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	// False until the rowid map is known to exist for the whole index (set under the write gate).
 	private volatile bool _schemaMigrated;
 
+	// One chain of deferred passes at a time, however many callers run an upkeep.
+	private int _deferredChainRunning;
+
+	/// <summary>Deferred passes run so far (observable by tests).</summary>
+	internal int DeferredPassesRun => Volatile.Read(ref _deferredPassesRun);
+	private int _deferredPassesRun;
+
 	public ClaudeSessionIndexService(
 		IClaudeSessionImportService importService,
 		IClaudeAssistService assistService,
@@ -107,7 +114,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		{
 			// mtime_ticks = 0 never matches a real file's last-write-time, so ReindexAsync's
 			// incremental check treats every stored session as stale and rebuilds it.
-			using var tx = conn.BeginTransaction();
+			using var tx = conn.BeginTransaction(deferred: false);
 			Exec(conn, Constants.SqlQueries.MarkAllSessionsStale, tx);
 			Exec(conn, $"PRAGMA user_version = {Constants.SessionIndex.ContentVersion};", tx);
 			tx.Commit();
@@ -134,26 +141,83 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			return null;
 
 		_writeGate.Wait(cancellationToken);
+		try { return MigrateSchemaLocked(conn); }
+		finally { _writeGate.Release(); }
+	}
+
+	/// <summary>The migration proper; the caller holds the write gate.</summary>
+	private TimeSpan? MigrateSchemaLocked(SqliteConnection conn)
+	{
+		if (_schemaMigrated)
+			return null;
+		if (ReadUserVersion(conn) >= Constants.SessionIndex.SchemaVersion)
+		{
+			_schemaMigrated = true;
+			return null;
+		}
+
+		var started = System.Diagnostics.Stopwatch.StartNew();
+		RebuildRowMap(conn, bumpVersion: true);
+		_schemaMigrated = true;
+		_log.Information("EnsureSchemaMigrated: session rowid map built in {Elapsed} ms", (long)started.Elapsed.TotalMilliseconds);
+		return started.Elapsed;
+	}
+
+	/// <summary>Replaces the whole rowid map from the FTS table in one immediate transaction (the caller holds the gate).</summary>
+	private static void RebuildRowMap(SqliteConnection conn, bool bumpVersion)
+	{
+		using var tx = conn.BeginTransaction(deferred: false);
+		Exec(conn, Constants.SqlQueries.ClearRowMap, tx);
+		Exec(conn, Constants.SqlQueries.BuildRowMap, tx);
+		if (bumpVersion)
+			Exec(conn, $"PRAGMA user_version = {Constants.SessionIndex.SchemaVersion};", tx);
+		tx.Commit();
+	}
+
+	/// <summary>
+	/// Audits the rowid map against the FTS table: the mapped row total and the highest mapped rowid must equal the
+	/// FTS row count and highest rowid. A build that predates the map (a rollback) rewrites rows without maintaining
+	/// it, so the map can be stale although <c>user_version</c> says it is current; a mismatch rebuilds it (cheap, metadata only).
+	/// </summary>
+	private void RebuildRowMapIfInconsistent(SqliteConnection conn, SessionIndexUpkeepReport report, CancellationToken cancellationToken)
+	{
+		if (MapIsConsistent(conn))
+			return;
+
+		_writeGate.Wait(cancellationToken);
 		try
 		{
-			if (_schemaMigrated)
-				return null;
-			if (ReadUserVersion(conn) >= Constants.SessionIndex.SchemaVersion)
-			{
-				_schemaMigrated = true;
-				return null;
-			}
-
+			if (MapIsConsistent(conn))
+				return;
 			var started = System.Diagnostics.Stopwatch.StartNew();
-			using var tx = conn.BeginTransaction();
-			Exec(conn, Constants.SqlQueries.BuildRowMap, tx);
-			Exec(conn, $"PRAGMA user_version = {Constants.SessionIndex.SchemaVersion};", tx);
-			tx.Commit();
-			_schemaMigrated = true;
-			_log.Information("EnsureSchemaMigrated: session rowid map built in {Elapsed} ms", (long)started.Elapsed.TotalMilliseconds);
-			return started.Elapsed;
+			RebuildRowMap(conn, bumpVersion: false);
+			report.MapRebuilt = true;
+			_log.Warning("RebuildRowMapIfInconsistent: the session rowid map did not match the FTS table (written by an older build?); rebuilt in {Elapsed} ms",
+				(long)started.Elapsed.TotalMilliseconds);
 		}
 		finally { _writeGate.Release(); }
+	}
+
+	private static bool MapIsConsistent(SqliteConnection conn)
+	{
+		long mapped, mappedMax, rows, rowMax;
+		using (var cmd = conn.CreateCommand())
+		{
+			cmd.CommandText = Constants.SqlQueries.AuditMap;
+			using var r = cmd.ExecuteReader();
+			r.Read();
+			mapped = r.GetInt64(0);
+			mappedMax = r.GetInt64(1);
+		}
+		using (var cmd = conn.CreateCommand())
+		{
+			cmd.CommandText = Constants.SqlQueries.AuditFts;
+			using var r = cmd.ExecuteReader();
+			r.Read();
+			rows = r.GetInt64(0);
+			rowMax = r.IsDBNull(1) ? 0 : r.GetInt64(1);
+		}
+		return mapped == rows && mappedMax == rowMax;
 	}
 
 	private static void Exec(SqliteConnection conn, string sql, SqliteTransaction? tx = null)
@@ -241,6 +305,9 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	/// </summary>
 	private void ScheduleDeferredPasses()
 	{
+		if (Interlocked.CompareExchange(ref _deferredChainRunning, 1, 0) != 0)
+			return; // a chain is already waiting; it picks up whatever is still deferred
+
 		_ = Task.Run(async () =>
 		{
 			try
@@ -250,6 +317,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 					await Task.Delay(_activeFileQuietPeriod + _activeFileQuietPeriod).ConfigureAwait(false);
 					var report = await RunOnUpkeepThread(() => RunUpkeep(CancellationToken.None), CancellationToken.None)
 						.ConfigureAwait(false);
+					Interlocked.Increment(ref _deferredPassesRun);
 					if (report.Deferred == 0)
 						return;
 				}
@@ -257,6 +325,10 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			catch (Exception ex)
 			{
 				_log.Error(ex, "Deferred session index pass failed");
+			}
+			finally
+			{
+				Volatile.Write(ref _deferredChainRunning, 0);
 			}
 		});
 	}
@@ -273,6 +345,8 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			report.MigrationDuration = migration.Value;
 		}
 
+		RebuildRowMapIfInconsistent(conn, report, cancellationToken);
+
 		var scan = ReindexPass(conn, report, cancellationToken);
 		_log.Information("ReindexAsync: (re)indexed {Count} sessions, {Deferred} deferred (being written)", report.Indexed, report.Deferred);
 
@@ -285,11 +359,13 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	}
 
 	/// <summary>The external ids found on disk and whether every configured projects folder that exists was listed in full.</summary>
-	private sealed record DiskScan(HashSet<string> SeenIds, bool Complete);
+	private sealed record DiskScan(HashSet<string> SeenIds, bool Complete, HashSet<string> ListedHomes, List<string> MissingHomes);
 
 	private DiskScan ReindexPass(SqliteConnection conn, SessionIndexUpkeepReport report, CancellationToken cancellationToken)
 	{
 		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var listedHomes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		var missingHomes = new List<string>();
 		var complete = true;
 		var anyDir = false;
 		var sinceYield = 0;
@@ -299,6 +375,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			if (!Directory.Exists(claudeProjectsDir))
 			{
 				_log.Debug("ReindexAsync: no {Dir} found, skipping", claudeProjectsDir);
+				missingHomes.Add(claudeProjectsDir);
 				continue;
 			}
 
@@ -311,6 +388,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 				complete = false;
 				continue;
 			}
+			listedHomes.Add(Path.TrimEndingDirectorySeparator(claudeProjectsDir));
 
 			foreach (var slugDir in slugDirs)
 			{
@@ -343,7 +421,8 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 					if (GetIndexedMtime(conn, externalId) == mtimeTicks)
 						continue; // unchanged since last index
 
-					if (DateTime.UtcNow - lastWriteUtc < _activeFileQuietPeriod)
+					var age = DateTime.UtcNow - lastWriteUtc;
+					if (age >= TimeSpan.Zero && age < _activeFileQuietPeriod) // a future-dated mtime is not "live"
 					{
 						report.Deferred++; // a live session: indexing it now would be redone on the next write
 						continue;
@@ -353,10 +432,19 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 					if (prepared == null)
 						continue;
 
-					_writeGate.Wait(cancellationToken);
-					try { WriteSession(conn, prepared); }
-					finally { _writeGate.Release(); }
-					report.Indexed++;
+					try
+					{
+						_writeGate.Wait(cancellationToken);
+						try { WriteSession(conn, prepared); }
+						finally { _writeGate.Release(); }
+						report.Indexed++;
+					}
+					catch (Exception ex) when (ex is not OperationCanceledException)
+					{
+						// One bad session must not cost the purge, optimize and checkpoint that follow.
+						report.Failed++;
+						_log.Warning(ex, "ReindexPass: writing session {Id} failed; continuing", externalId);
+					}
 
 					if (++sinceYield >= Constants.SessionIndex.ReindexBatchSize)
 					{
@@ -368,12 +456,14 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			}
 		}
 
-		return new DiskScan(seen, complete && anyDir);
+		return new DiskScan(seen, complete && anyDir, listedHomes, missingHomes);
 	}
 
 	/// <summary>
-	/// Removes sessions whose JSONL no longer exists in any Claude home. Only after a complete scan that found
-	/// at least one file: an unreadable or missing projects folder must never empty the index (it also holds the title cache).
+	/// Removes sessions whose JSONL no longer exists in any Claude home and that no tree node refers to. Guards, all
+	/// of which skip the purge (the index also holds the title cache): an incomplete scan, a scan that saw no file at
+	/// all, a configured home that is missing but still has rows under it, a stored JSONL whose home was not listed
+	/// in this scan (skipped per id), and a purge that would remove more than half of the index.
 	/// </summary>
 	private void PurgeOrphans(SqliteConnection conn, DiskScan scan, SessionIndexUpkeepReport report, CancellationToken cancellationToken)
 	{
@@ -398,15 +488,61 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		}
 		var treeIds = _treeSessionIds.GetTreeSessionIds();
 		var missing = known.Where(id => !scan.SeenIds.Contains(id)).ToList();
-		var orphans = missing.Where(id => !treeIds.Contains(id)).ToList();
-		report.KeptForTree = missing.Count - orphans.Count;
-		if (orphans.Count == 0)
+		var candidates = missing.Where(id => !treeIds.Contains(id)).ToList();
+		report.KeptForTree = missing.Count - candidates.Count;
+		if (candidates.Count == 0)
 			return;
 
 		if (scan.SeenIds.Count == 0)
 		{
 			report.PurgeSkippedUnsafeScan = true;
-			_log.Warning("PurgeOrphans: scan saw no JSONL at all but the index holds {Count} sessions; purge skipped", orphans.Count);
+			_log.Warning("PurgeOrphans: scan saw no JSONL at all but the index holds {Count} sessions; purge skipped", candidates.Count);
+			return;
+		}
+
+		var storedPaths = new Dictionary<string, string>(StringComparer.Ordinal);
+		using (var cmd = conn.CreateCommand())
+		{
+			cmd.CommandText = Constants.SqlQueries.SelectSessionPaths;
+			using var reader = cmd.ExecuteReader();
+			while (reader.Read())
+				storedPaths[reader.GetString(0)] = reader.GetString(1);
+		}
+
+		// A configured home that is missing now but still has rows under it may be an unmounted drive or a moved folder.
+		foreach (var home in scan.MissingHomes)
+		{
+			var prefix = Path.TrimEndingDirectorySeparator(home) + Path.DirectorySeparatorChar;
+			if (storedPaths.Values.Any(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+			{
+				report.PurgeSkippedUnsafeScan = true;
+				_log.Warning("PurgeOrphans: configured home {Home} is missing but the index still has sessions under it; purge skipped", home);
+				return;
+			}
+		}
+
+		var orphans = new List<string>();
+		foreach (var id in candidates)
+		{
+			if (storedPaths.TryGetValue(id, out var path))
+			{
+				var home = Path.GetDirectoryName(Path.GetDirectoryName(path));
+				if (home == null || !scan.ListedHomes.Contains(Path.TrimEndingDirectorySeparator(home)) || File.Exists(path))
+				{
+					report.PurgeSkippedUnlisted++; // its home was not listed in this scan, or the file reappeared: not provably gone
+					continue;
+				}
+			}
+			orphans.Add(id);
+		}
+		if (orphans.Count == 0)
+			return;
+
+		if (orphans.Count > known.Count * Constants.SessionIndex.PurgeMaxShare)
+		{
+			report.PurgeSkippedOverCap = true;
+			_log.Warning("PurgeOrphans: would remove {Count} of {Total} indexed sessions (over {Share:P0}); purge skipped",
+				orphans.Count, known.Count, Constants.SessionIndex.PurgeMaxShare);
 			return;
 		}
 
@@ -416,7 +552,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 			_writeGate.Wait(cancellationToken);
 			try
 			{
-				using var tx = conn.BeginTransaction();
+				using var tx = conn.BeginTransaction(deferred: false);
 				foreach (var id in chunk)
 				{
 					DeleteSessionRows(conn, tx, id);
@@ -457,21 +593,33 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		if (VacuumIsDue(conn, out var freeBytes))
 		{
 			_writeGate.Wait(cancellationToken);
-			try { TryVacuum(conn, freeBytes, report); }
+			try
+			{
+				TryVacuum(conn, freeBytes, report);
+				// The rewrite went through the WAL, so it is as large as the database: give the space back now,
+				// under the gate so no upkeep write competes with the truncate.
+				if (report.Vacuumed)
+					report.Checkpointed = TryCheckpoint(conn, Constants.SqlQueries.CheckpointTruncate);
+			}
 			finally { _writeGate.Release(); }
 		}
 
-		if (worked || report.Vacuumed)
+		// Otherwise PASSIVE: it never waits for readers or blocks a writer, and the WAL is reused from the start.
+		if (worked && !report.Checkpointed)
+			report.Checkpointed = TryCheckpoint(conn, Constants.SqlQueries.CheckpointPassive);
+	}
+
+	private bool TryCheckpoint(SqliteConnection conn, string sql)
+	{
+		try
 		{
-			try
-			{
-				Exec(conn, Constants.SqlQueries.CheckpointTruncate);
-				report.Checkpointed = true;
-			}
-			catch (SqliteException ex)
-			{
-				_log.Warning(ex, "RunMaintenance: WAL checkpoint(TRUNCATE) did not complete");
-			}
+			Exec(conn, sql);
+			return true;
+		}
+		catch (SqliteException ex)
+		{
+			_log.Warning(ex, "RunMaintenance: WAL checkpoint did not complete ({Sql})", sql);
+			return false;
 		}
 	}
 
@@ -549,35 +697,52 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	/// Re-indexes a single session from its JSONL file, if the file changed since it was last indexed.
 	/// Returns false when the file is missing, unchanged, or could not be indexed.
 	/// </summary>
-	public Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default) =>
-		Task.Run(() => IndexSessionCore(externalId, workingDirectory, cancellationToken), cancellationToken);
-
-	private bool IndexSessionCore(string externalId, string workingDirectory, CancellationToken cancellationToken)
+	public async Task<bool> IndexSessionAsync(string externalId, string workingDirectory, CancellationToken cancellationToken = default)
 	{
-		var slug = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
+		try
+		{
+			var slug = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
+			var prepared = await Task.Run(() => PrepareIfChanged(externalId, slug), cancellationToken).ConfigureAwait(false);
+			if (prepared == null)
+				return false;
+
+			// WaitAsync: a minutes-long optimize or VACUUM must not park a pool thread per live session.
+			await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+			try
+			{
+				using var conn = OpenConnection();
+				MigrateSchemaLocked(conn);
+				if (GetIndexedMtime(conn, externalId) == prepared.MtimeTicks)
+					return false;
+				WriteSession(conn, prepared);
+			}
+			finally { _writeGate.Release(); }
+
+			SessionIndexed?.Invoke(this, new SessionIndexedEventArgs { ExternalId = externalId });
+			return true;
+		}
+		catch (Exception ex) when (ex is SqliteException or IOException)
+		{
+			_log.Warning(ex, "IndexSessionAsync: indexing {Id} failed", externalId);
+			return false;
+		}
+	}
+
+	/// <summary>Parses the session's JSONL when it is new or changed since it was last indexed; null otherwise. Runs outside the write gate.</summary>
+	private PreparedSession? PrepareIfChanged(string externalId, string slug)
+	{
 		var jsonlPath = FindSessionJsonl(slug, externalId);
 		if (jsonlPath == null)
-			return false;
+			return null;
 
 		long mtimeTicks;
 		try { mtimeTicks = File.GetLastWriteTimeUtc(jsonlPath).Ticks; }
-		catch (IOException) { return false; }
+		catch (IOException) { return null; }
 
 		using var conn = OpenConnection();
-		EnsureSchemaMigrated(conn, cancellationToken);
 		if (GetIndexedMtime(conn, externalId) == mtimeTicks)
-			return false;
-
-		var prepared = PrepareSession(externalId, slug, jsonlPath, mtimeTicks);
-		if (prepared == null)
-			return false;
-
-		_writeGate.Wait(cancellationToken);
-		try { WriteSession(conn, prepared); }
-		finally { _writeGate.Release(); }
-
-		SessionIndexed?.Invoke(this, new SessionIndexedEventArgs { ExternalId = externalId });
-		return true;
+			return null;
+		return PrepareSession(externalId, slug, jsonlPath, mtimeTicks);
 	}
 
 	private string? FindSessionJsonl(string slug, string externalId)
@@ -603,8 +768,15 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 		{
 			var entries = _importService.ParseJsonlSessionForIndexing(jsonlPath);
 			var summary = _importService.ExtractSummary(externalId, jsonlPath);
-			if (summary == null || summary.MessageCount == 0)
-				return null;
+			// A JSONL without indexable messages is still recorded (zero-row map entry plus mtime) so the next pass
+			// sees it as unchanged instead of parsing it again.
+			summary ??= new ClaudeSessionSummaryModel
+			{
+				SessionId = externalId,
+				JsonlPath = jsonlPath,
+				Created = new DateTimeOffset(mtimeTicks, TimeSpan.Zero),
+				LastUsed = new DateTimeOffset(mtimeTicks, TimeSpan.Zero),
+			};
 			return new PreparedSession(externalId, projectSlug, jsonlPath, mtimeTicks, entries, summary);
 		}
 		catch (Exception ex)
@@ -617,7 +789,9 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 	/// <summary>Replaces one session's rows. The caller holds the write gate and the rowid map exists.</summary>
 	private void WriteSession(SqliteConnection conn, PreparedSession session)
 	{
-		using var tx = conn.BeginTransaction();
+		// IMMEDIATE: the write lock is taken up front, so the map lookup below can never pin a read snapshot
+		// that a concurrent commit (a title batch) turns into SQLITE_BUSY_SNAPSHOT.
+		using var tx = conn.BeginTransaction(deferred: false);
 
 		DeleteSessionRows(conn, tx, session.ExternalId);
 
@@ -1059,8 +1233,19 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService
 
 	private void PersistTitles(List<ClaudeSessionSummaryModel> summaries, Dictionary<string, string> generated)
 	{
+		// Serialised with the upkeep writer (single writer), and IMMEDIATE like every write here.
+		_writeGate.Wait();
+		try
+		{
+			PersistTitlesLocked(summaries, generated);
+		}
+		finally { _writeGate.Release(); }
+	}
+
+	private void PersistTitlesLocked(List<ClaudeSessionSummaryModel> summaries, Dictionary<string, string> generated)
+	{
 		using var conn = OpenConnection();
-		using var tx = conn.BeginTransaction();
+		using var tx = conn.BeginTransaction(deferred: false);
 
 		var summariesById = summaries.ToDictionary(s => s.SessionId);
 		var nowTicks = DateTimeOffset.UtcNow.UtcTicks;

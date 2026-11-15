@@ -23,7 +23,19 @@ public sealed class SessionIndexUpkeepReport
 	/// <summary>Sessions without a JSONL that were kept because a tree node still refers to them.</summary>
 	public int KeptForTree { get; set; }
 
+	/// <summary>The purge was skipped because it would have removed more than the allowed share of the index.</summary>
+	public bool PurgeSkippedOverCap { get; set; }
+
+	/// <summary>Orphans left alone because their stored JSONL home was not listed in this scan.</summary>
+	public int PurgeSkippedUnlisted { get; set; }
+
 	public bool PurgeSkippedUnsafeScan { get; set; }
+
+	/// <summary>The rowid map disagreed with the FTS table and was rebuilt.</summary>
+	public bool MapRebuilt { get; set; }
+
+	/// <summary>Sessions whose write failed in this run; the run carried on without them.</summary>
+	public int Failed { get; set; }
 
 	public bool Optimized { get; set; }
 

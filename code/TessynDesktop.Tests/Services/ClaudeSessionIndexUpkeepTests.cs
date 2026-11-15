@@ -280,14 +280,33 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 			Assert.Contains(plan, p => p.Contains("SEARCH session_rows") && p.Contains("INDEX"));
 		}
 
-		TimeSpan Time(string sql, string id, params (string, object)[] extra)
+		// The planner pushes the rowid bounds into the FTS5 scan ("><" = rowid >= and <=); the old delete has none.
+		string Plan(string sql)
+		{
+			using var c = Open();
+			using var cmd = c.CreateCommand();
+			cmd.CommandText = "EXPLAIN QUERY PLAN " + sql;
+			cmd.Parameters.AddWithValue("@externalId", "sess-1");
+			cmd.Parameters.AddWithValue("@first", 1);
+			cmd.Parameters.AddWithValue("@last", 25);
+			using var r = cmd.ExecuteReader();
+			var details = new List<string>();
+			while (r.Read()) details.Add(r.GetString(3));
+			return string.Join(" | ", details);
+		}
+		var rangedPlan = Plan(Constants.SqlQueries.DeleteMessagesByRange);
+		var scanPlan = Plan(Constants.SqlQueries.DeleteMessagesByScan);
+		Assert.Contains("><", rangedPlan);
+		Assert.DoesNotContain("><", scanPlan);
+
+		TimeSpan Time(string sql, params (string, object)[] extra)
 		{
 			using var c = Open();
 			using var tx = c.BeginTransaction();
 			using var cmd = c.CreateCommand();
 			cmd.Transaction = tx;
 			cmd.CommandText = sql;
-			cmd.Parameters.AddWithValue("@externalId", id);
+			cmd.Parameters.AddWithValue("@externalId", "sess-399");
 			foreach (var (n, v) in extra) cmd.Parameters.AddWithValue(n, v);
 			var sw = Stopwatch.StartNew();
 			var changed = cmd.ExecuteNonQuery();
@@ -297,13 +316,13 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 			return sw.Elapsed;
 		}
 
-		// 399 is the last session: the old scan visits every row either way, the mapped delete only its 25.
+		// Soft secondary check: wall-clock only has to agree with the plan, and only when the scan was measurable.
 		long first399 = Scalar("SELECT first_rowid FROM session_rows WHERE external_id='sess-399';");
 		long last399 = Scalar("SELECT last_rowid FROM session_rows WHERE external_id='sess-399';");
-		var scan = Enumerable.Range(0, 3).Select(_ => Time(Constants.SqlQueries.DeleteMessagesByScan, "sess-399")).Min();
-		var ranged = Enumerable.Range(0, 3).Select(_ => Time(Constants.SqlQueries.DeleteMessagesByRange, "sess-399", ("@first", first399), ("@last", last399))).Min();
-
-		Assert.True(ranged < scan / 3, $"ranged delete {ranged.TotalMilliseconds:F1} ms should be far below the scan {scan.TotalMilliseconds:F1} ms");
+		var scan = Enumerable.Range(0, 3).Select(_ => Time(Constants.SqlQueries.DeleteMessagesByScan)).Min();
+		var ranged = Enumerable.Range(0, 3).Select(_ => Time(Constants.SqlQueries.DeleteMessagesByRange, ("@first", first399), ("@last", last399))).Min();
+		if (scan > TimeSpan.FromMilliseconds(20))
+			Assert.True(ranged < scan, $"ranged delete {ranged.TotalMilliseconds:F1} ms should be below the scan {scan.TotalMilliseconds:F1} ms");
 	}
 
 	// ── Orphan purge ────────────────────────────────────────────────────────────────
@@ -442,6 +461,289 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 		Assert.Single(await service.SearchAsync("doohickeys"));
 	}
 
+	// ── Review fixes (314) ──────────────────────────────────────────────────────────
+
+	[Fact]
+	public async Task X1_TitleWrites_RunningWithReindexAndPurge_RaiseNoSqliteException()
+	{
+		for (var i = 0; i < 120; i++)
+			WriteSession("-p-x1", "keep-" + i, "keeper message " + i, "second line " + i);
+		for (var i = 0; i < 40; i++)
+			WriteSession("-p-x1", "doomed-" + i, "doomed message " + i);
+		var service = NewService();
+		await service.RunUpkeepAsync();
+		foreach (var f in Directory.GetFiles(Path.Combine(_projectsDir, "-p-x1"), "doomed-*")) File.Delete(f);
+		foreach (var f in Directory.GetFiles(Path.Combine(_projectsDir, "-p-x1"), "keep-*")) File.SetLastWriteTimeUtc(f, DateTime.UtcNow.AddMinutes(-3));
+
+		var titlePath = Path.Combine(_projectsDir, "-p-t");
+		for (var i = 0; i < 30; i++) _assist.TitlesToReturn["title-" + i] = "Title " + i;
+		var titles = Task.Run(async () =>
+		{
+			for (var i = 0; i < 30; i++)
+			{
+				var summary = new ClaudeSessionSummaryModel
+				{
+					SessionId = "title-" + i, JsonlPath = Path.Combine(titlePath, "title-" + i + ".jsonl"),
+					MessageCount = 1, ProjectSlug = "-p-t",
+				};
+				await service.EnsureTitlesAsync([summary]);
+			}
+		});
+
+		var report = await service.RunUpkeepAsync(); // reindex of 120 sessions + purge of 60, while titles commit
+		await titles;
+
+		Assert.Equal(0, report.Failed);
+		Assert.True(report.Purged >= 40);
+		Assert.Equal(120, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id LIKE 'keep-%';"));
+	}
+
+	[Fact]
+	public async Task X2_MapWrittenStaleByAnOlderBuild_IsRebuilt_AndLeavesNoDuplicateHits()
+	{
+		var pathA = WriteSession("-p-a", "A", "alpha one", "alpha two");
+		WriteSession("-p-a", "B", "beta only");
+		var service = NewService();
+		await service.RunUpkeepAsync();
+
+		// An older build rewrites A's rows (more of them, new rowids) and knows nothing about session_rows.
+		Exec("DELETE FROM messages WHERE external_id = 'A';");
+		for (var i = 0; i < 3; i++)
+			Exec("INSERT INTO messages (content, role, external_id, project_slug, message_index, timestamp_ticks) VALUES ('staleold " + i + "', 'USER', 'A', '-p-a', " + i + ", 0);");
+
+		WriteSession("-p-a", "A", "alpha rewritten");
+		File.SetLastWriteTimeUtc(pathA, DateTime.UtcNow.AddMinutes(-5));
+		var report = await service.RunUpkeepAsync();
+
+		Assert.True(report.MapRebuilt);
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM messages WHERE external_id = 'A';"));
+		Assert.Empty(await service.SearchAsync("staleold"));
+		Assert.Single(await service.SearchAsync("rewritten"));
+
+		var again = await service.RunUpkeepAsync();
+		Assert.False(again.MapRebuilt); // consistent now: no rebuild on every start
+	}
+
+	[Fact]
+	public async Task X3_ConfiguredHomeThatIsMissingButStillHasRows_BlocksThePurge()
+	{
+		var second = Path.Combine(_tempRoot, "profiles", "p9", "projects");
+		Directory.CreateDirectory(Path.Combine(second, "-p-x"));
+		File.WriteAllLines(Path.Combine(second, "-p-x", "in-b.jsonl"), File.ReadAllLines(WriteSession("-p-a", "in-a", "in home a")));
+		WriteSession("-p-a", "gone-a", "will vanish from a");
+		WriteSession("-p-a", "stay-1", "stay one");
+		WriteSession("-p-a", "stay-2", "stay two");
+		var service = new ClaudeSessionIndexService(new ClaudeSessionImportService(), _assist, _dbPath, [_projectsDir, second], TimeSpan.Zero, _tree);
+		await service.RunUpkeepAsync();
+
+		Directory.Delete(second, recursive: true); // the unmounted or moved home
+		File.Delete(Path.Combine(_projectsDir, "-p-a", "gone-a.jsonl"));
+		var report = await service.RunUpkeepAsync();
+
+		Assert.Equal(0, report.Purged);
+		Assert.True(report.PurgeSkippedUnsafeScan);
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'in-b';"));
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'gone-a';"));
+	}
+
+	[Fact]
+	public async Task X3_OrphanWhoseStoredHomeWasNotListedInThisScan_IsSkipped()
+	{
+		WriteSession("-p-a", "listed-gone", "gone from a listed home");
+		WriteSession("-p-a", "elsewhere", "recorded under some other home");
+		for (var i = 0; i < 4; i++) WriteSession("-p-a", "ballast-" + i, "ballast " + i);
+		var service = NewService();
+		await service.RunUpkeepAsync();
+
+		Exec("UPDATE sessions SET jsonl_path = 'Z:/not-configured/projects/-p-a/elsewhere.jsonl' WHERE external_id = 'elsewhere';");
+		File.Delete(Path.Combine(_projectsDir, "-p-a", "listed-gone.jsonl"));
+		File.Delete(Path.Combine(_projectsDir, "-p-a", "elsewhere.jsonl"));
+		var report = await service.RunUpkeepAsync();
+
+		Assert.Equal(1, report.Purged);
+		Assert.Equal(1, report.PurgeSkippedUnlisted);
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'elsewhere';"));
+		Assert.Equal(0, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'listed-gone';"));
+	}
+
+	[Fact]
+	public async Task X3_APurgeOfMoreThanHalfTheIndex_IsSkippedWithAWarning()
+	{
+		var paths = Enumerable.Range(0, 4).Select(i => WriteSession("-p-a", "s-" + i, "session " + i)).ToList();
+		var service = NewService();
+		await service.RunUpkeepAsync();
+
+		File.Delete(paths[0]);
+		File.Delete(paths[1]);
+		File.Delete(paths[2]); // 3 of 4 gone
+		var report = await service.RunUpkeepAsync();
+
+		Assert.Equal(0, report.Purged);
+		Assert.True(report.PurgeSkippedOverCap);
+		Assert.Equal(4, Scalar("SELECT COUNT(*) FROM sessions;"));
+	}
+
+	[Fact]
+	public async Task X4_X5_AFailingSessionWrite_IsCounted_TheRunCarriesOn_AndIndexSessionAsyncDoesNotThrow()
+	{
+		var cwd = "C:/work/fail";
+		var slug = Constants.ClaudeSessions.BuildProjectSlug(cwd);
+		var victim = WriteSession(slug, "victim", "victim original");
+		var gone = WriteSession("-p-b", "to-purge", "purge me");
+		for (var i = 0; i < 6; i++) WriteSession("-p-b", "ok-" + i, "fine " + i);
+		var service = NewService();
+		await service.RunUpkeepAsync();
+
+		// Every write of a map row now fails; searches keep working off the committed data.
+		Exec("CREATE TRIGGER fail_map BEFORE INSERT ON session_rows BEGIN SELECT RAISE(ABORT, 'boom'); END;");
+		File.WriteAllLines(victim, ["""{"type":"user","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"victim changed"}}"""]);
+		File.SetLastWriteTimeUtc(victim, DateTime.UtcNow.AddMinutes(-5));
+		File.Delete(gone);
+
+		Assert.False(await service.IndexSessionAsync("victim", cwd)); // reported, not thrown
+		var report = await service.RunUpkeepAsync();
+
+		Assert.True(report.Failed >= 1);
+		Assert.Equal(1, report.Purged); // the pass carried on to the purge
+		Assert.Single(await service.SearchAsync("original")); // the failed write rolled back: old rows still searchable
+	}
+
+	[Fact]
+	public async Task X2_ACorruptOrMissingMap_LeavesSearchWorking_AndIsRebuiltByTheNextUpkeep()
+	{
+		WriteSession("-p-a", "one", "findable content one");
+		WriteSession("-p-a", "two", "findable content two");
+		var service = NewService();
+		await service.RunUpkeepAsync();
+
+		Exec("DROP TABLE session_rows;"); // a failed migration or a hand-damaged index
+		var restarted = NewService();
+
+		Assert.Equal(2, (await restarted.SearchAsync("findable")).Count);
+		var report = await restarted.RunUpkeepAsync();
+		Assert.True(report.MapRebuilt);
+		Assert.Equal(2, Scalar("SELECT COUNT(*) FROM session_rows;"));
+		Assert.Equal(0, report.Indexed);
+	}
+
+	[Fact]
+	public async Task X7_AJsonlWithoutIndexableMessages_IsRecordedAndNotParsedAgain()
+	{
+		var dir = Path.Combine(_projectsDir, "-p-z");
+		Directory.CreateDirectory(dir);
+		File.WriteAllLines(Path.Combine(dir, "empty-1.jsonl"), ["""{"type":"summary","summary":"nothing said"}"""]);
+		var service = NewService();
+
+		var first = await service.RunUpkeepAsync();
+		var second = await service.RunUpkeepAsync();
+
+		Assert.Equal(1, first.Indexed);
+		Assert.Equal(0, second.Indexed); // unchanged by mtime: not re-parsed
+		Assert.Equal(0, Scalar("SELECT row_count FROM session_rows WHERE external_id = 'empty-1';"));
+		Assert.Equal(1, Scalar("SELECT COUNT(*) FROM sessions WHERE external_id = 'empty-1';"));
+	}
+
+	[Fact]
+	public async Task X6_AFutureDatedFile_IsNotLive_AndIsIndexedAtOnce()
+	{
+		var path = WriteSession("-p-a", "future-1", "from the future");
+		File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddHours(2));
+		var service = NewService(TimeSpan.FromMinutes(1));
+
+		var report = await service.RunUpkeepAsync();
+
+		Assert.Equal(0, report.Deferred);
+		Assert.Equal(1, report.Indexed);
+		Assert.Single(await service.SearchAsync("from the future"));
+	}
+
+	[Fact]
+	public async Task X6_DeferredPasses_RetryTheLiveFile_AreBounded_AndNeverOverlap()
+	{
+		var path = WriteSession("-p-a", "live-1", "still being written");
+		var service = NewService(TimeSpan.FromMilliseconds(150));
+
+		using var touching = new System.Threading.CancellationTokenSource();
+		var toucher = Task.Run(async () =>
+		{
+			while (!touching.IsCancellationRequested)
+			{
+				File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+				await Task.Delay(20);
+			}
+		});
+
+		// Two upkeeps at once both end with a deferred file: still one chain of at most DeferredPassLimit passes.
+		var runs = await Task.WhenAll(service.RunUpkeepAsync(), service.RunUpkeepAsync());
+		Assert.All(runs, r => Assert.Equal(1, r.Deferred));
+		var deadline = DateTime.UtcNow.AddSeconds(15);
+		while (service.DeferredPassesRun < Constants.SessionIndex.DeferredPassLimit && DateTime.UtcNow < deadline)
+			await Task.Delay(50);
+		await Task.Delay(800);
+		touching.Cancel();
+		await toucher;
+
+		Assert.Equal(Constants.SessionIndex.DeferredPassLimit, service.DeferredPassesRun);
+		Assert.Empty(await service.SearchAsync("still being written")); // never quiet, so never indexed
+
+		// Quiet again: the next explicit upkeep indexes it.
+		File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-1));
+		Assert.Equal(1, (await service.RunUpkeepAsync()).Indexed);
+	}
+
+	[Fact]
+	public async Task X6_DeferredPass_IndexesAFileOnceItIsQuiet()
+	{
+		WriteSession("-p-a", "settling-1", "settles shortly");
+		var service = NewService(TimeSpan.FromMilliseconds(150));
+
+		var first = await service.RunUpkeepAsync();
+		Assert.Equal(1, first.Deferred);
+
+		var deadline = DateTime.UtcNow.AddSeconds(15);
+		while (DateTime.UtcNow < deadline && (await service.SearchAsync("settles shortly")).Count == 0)
+			await Task.Delay(50);
+		Assert.Single(await service.SearchAsync("settles shortly"));
+	}
+
+	[Fact]
+	public async Task RowidsAndTheMap_StayInAgreement_AcrossARealVacuum()
+	{
+		var service = await ServiceWithFreePagesAsync();
+		service.VacuumMinFreeBytes = 1;
+		service.VacuumMinFreeRatio = 0.05;
+
+		List<(string, long, long, long)> Truth()
+		{
+			var list = new List<(string, long, long, long)>();
+			using var c = Open();
+			using var cmd = c.CreateCommand();
+			cmd.CommandText = "SELECT external_id, MIN(rowid), MAX(rowid), COUNT(*) FROM messages GROUP BY external_id ORDER BY external_id;";
+			using var r = cmd.ExecuteReader();
+			while (r.Read()) list.Add((r.GetString(0), r.GetInt64(1), r.GetInt64(2), r.GetInt64(3)));
+			return list;
+		}
+		List<(string, long, long, long)> Map()
+		{
+			var list = new List<(string, long, long, long)>();
+			using var c = Open();
+			using var cmd = c.CreateCommand();
+			cmd.CommandText = "SELECT external_id, first_rowid, last_rowid, row_count FROM session_rows WHERE row_count > 0 ORDER BY external_id;";
+			using var r = cmd.ExecuteReader();
+			while (r.Read()) list.Add((r.GetString(0), r.GetInt64(1), r.GetInt64(2), r.GetInt64(3)));
+			return list;
+		}
+		Assert.Equal(Truth(), Map());
+		var before = Truth();
+
+		var report = await service.RunUpkeepAsync();
+
+		Assert.True(report.Vacuumed);
+		Assert.False(report.MapRebuilt); // the audit saw a consistent map after the VACUUM
+		Assert.Equal(before, Truth());   // VACUUM did not renumber any FTS rowid
+		Assert.Equal(Truth(), Map());
+	}
+
 	// ── Optimize, vacuum, checkpoint ──────────────────────────────────────────────
 
 	private async Task<ClaudeSessionIndexService> ServiceWithFreePagesAsync()
@@ -449,6 +751,8 @@ public sealed class ClaudeSessionIndexUpkeepTests : IDisposable
 		var filler = string.Join(' ', Enumerable.Repeat("vacuum filler words that take up pages", 400));
 		for (var i = 0; i < 60; i++)
 			WriteSession("-p-v", "v-" + i, filler + " " + i, filler + " again " + i);
+		for (var i = 0; i < 80; i++) // ballast keeps the purge under the 50% cap
+			WriteSession("-p-ballast", "ballast-" + i, "small " + i);
 		var service = NewService();
 		await service.RunUpkeepAsync();
 		foreach (var f in Directory.GetFiles(Path.Combine(_projectsDir, "-p-v")).Where(f => !f.EndsWith("v-58.jsonl")).Take(55))

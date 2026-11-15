@@ -47,6 +47,9 @@ public static partial class Constants
 		/// <summary>VACUUM rewrites the file through the WAL: require this multiple of the database size free on disk.</summary>
 		public const double VacuumDiskSpaceFactor = 2.0;
 
+		/// <summary>The purge refuses to remove more than this share of the indexed sessions in one run (a sanity cap against a missing home).</summary>
+		public const double PurgeMaxShare = 0.5;
+
 		public const string BackgroundThreadName = "SessionIndexUpkeep";
 	}
 }

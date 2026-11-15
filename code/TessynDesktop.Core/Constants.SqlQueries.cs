@@ -47,6 +47,16 @@ public static partial class Constants
 			SELECT external_id, MIN(rowid), MAX(rowid), COUNT(*) FROM messages GROUP BY external_id;
 			""";
 
+		public const string ClearRowMap = "DELETE FROM session_rows;";
+
+		/// <summary>Mapped row total and highest mapped rowid.</summary>
+		public const string AuditMap = "SELECT COALESCE(SUM(row_count), 0), COALESCE(MAX(last_rowid), 0) FROM session_rows;";
+
+		/// <summary>FTS row count and highest rowid, in one scan.</summary>
+		public const string AuditFts = "SELECT COUNT(*), MAX(rowid) FROM messages;";
+
+		public const string SelectSessionPaths = "SELECT external_id, jsonl_path FROM sessions;";
+
 		public const string SelectRowRange = "SELECT first_rowid, last_rowid, row_count FROM session_rows WHERE external_id = @externalId;";
 
 		/// <summary>Rowid range lookup in the FTS content table; the external_id guard keeps a stale or overlapping range from touching other sessions.</summary>
@@ -106,6 +116,7 @@ public static partial class Constants
 		public const string PageCount = "PRAGMA page_count;";
 		public const string PageSize = "PRAGMA page_size;";
 		public const string Vacuum = "VACUUM;";
+		public const string CheckpointPassive = "PRAGMA wal_checkpoint(PASSIVE);";
 		public const string CheckpointTruncate = "PRAGMA wal_checkpoint(TRUNCATE);";
 		public const string SelectUserVersion = "PRAGMA user_version;";
 		public const string EnableWal = "PRAGMA journal_mode=WAL;";
