@@ -19,12 +19,6 @@ public sealed class TempAppPaths : IDisposable
 
 	public void Dispose()
 	{
-		try
-		{
-			Directory.Delete(Root, recursive: true);
-		}
-		catch (IOException)
-		{
-		}
+		TestDirectory.Delete(Root);
 	}
 }

@@ -92,13 +92,7 @@ public sealed class DaemonRestarterTests : IDisposable
 
 	public void Dispose()
 	{
-		try
-		{
-			Directory.Delete(_root, recursive: true);
-		}
-		catch (IOException)
-		{
-		}
+		TestDirectory.Delete(_root);
 	}
 
 	private DaemonRestarter Create(string? source = "", string? hostFolder = null) =>

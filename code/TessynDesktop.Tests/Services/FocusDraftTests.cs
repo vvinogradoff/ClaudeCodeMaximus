@@ -154,18 +154,143 @@ public sealed class FocusDraftTests : IDisposable
 		Assert.Single(shared.Distinct());
 	}
 
+	[Fact]
+	public async Task AReaderPollingTheStore_NeverMakesAWriteFail_NorSeesATornFile()
+	{
+		// draft.get and the activity scanners read while the composer and the Focus boxes write: a read that holds the file open used to make the write throw (sharing violation).
+		var stop = false;
+		var failures = new List<Exception>();
+		var reader = Task.Run(() =>
+		{
+			while (!Volatile.Read(ref stop))
+			{
+				try
+				{
+					var text = _store.LoadItemDraft("s.txt", "A1");
+					if (text != null && text.Length != 4000)
+						lock (failures) failures.Add(new InvalidOperationException("torn read of length " + text.Length));
+				}
+				catch (Exception ex)
+				{
+					lock (failures) failures.Add(ex);
+				}
+			}
+		});
+		var writers = Enumerable.Range(0, 3).Select(w => Task.Run(() =>
+		{
+			for (var i = 0; i < 400; i++)
+			{
+				try
+				{
+					_store.SaveItemDraft("s.txt", "A1", new string((char)('a' + w), 4000));
+				}
+				catch (Exception ex)
+				{
+					lock (failures) failures.Add(ex);
+				}
+			}
+		})).ToArray();
+
+		await Task.WhenAll(writers);
+		Volatile.Write(ref stop, true);
+		await reader;
+
+		Assert.Empty(failures);
+	}
+
 	// -- The client-side helper -------------------------------------------------------------------------------------------------------
 
-	[Fact]
-	public void FocusReplyDrafts_WritesAfterThePause_AndAnEmptyTextDeletes()
+	/// <summary>Reports every completed write of an item draft through a semaphore, so a test waits for the write itself instead of polling the store or sleeping.</summary>
+	private sealed class SignalingDraftService(IDraftService inner) : IDraftService
 	{
-		using var drafts = new FocusReplyDrafts(_store, "s.txt", Short);
+		private readonly SemaphoreSlim _written = new(0);
+		private int _failNextSaves;
+
+		public int Saves;
+		public int Deletes;
+
+		/// <summary>The next <paramref name="count"/> saves throw instead of writing.</summary>
+		public void FailNextSaves(int count) => Volatile.Write(ref _failNextSaves, count);
+
+		/// <summary>Completes when one more write (save, failed save or delete) has finished; false after the timeout.</summary>
+		public Task<bool> NextWriteAsync() => _written.WaitAsync(TimeSpan.FromSeconds(30));
+
+		public string? LoadDraft(string f) => inner.LoadDraft(f);
+		public void SaveDraft(string f, string t) => inner.SaveDraft(f, t);
+		public void DeleteDraft(string f) => inner.DeleteDraft(f);
+		public SessionFileStampModel? GetDraftStamp(string f) => inner.GetDraftStamp(f);
+		public DateTimeOffset? GetDraftTimestamp(string f) => inner.GetDraftTimestamp(f);
+		public string? LoadItemDraft(string f, string i) => inner.LoadItemDraft(f, i);
+		public IReadOnlyList<string> ListItemDraftIds(string f) => inner.ListItemDraftIds(f);
+
+		public void SaveItemDraft(string f, string i, string t)
+		{
+			if (Interlocked.Decrement(ref _failNextSaves) >= 0)
+			{
+				_written.Release();
+				throw new IOException("simulated failure");
+			}
+
+			Interlocked.Exchange(ref _failNextSaves, 0);
+			inner.SaveItemDraft(f, i, t);
+			Interlocked.Increment(ref Saves);
+			_written.Release();
+		}
+
+		public void DeleteItemDraft(string f, string i)
+		{
+			inner.DeleteItemDraft(f, i);
+			Interlocked.Increment(ref Deletes);
+			_written.Release();
+		}
+	}
+
+	[Fact]
+	public async Task FocusReplyDrafts_WritesAfterThePause_AndAnEmptyTextDeletes()
+	{
+		var signals = new SignalingDraftService(_store);
+		using var drafts = new FocusReplyDrafts(signals, "s.txt", Short);
 
 		drafts.Queue("A1", "typing");
-		Assert.True(WaitUntil(() => _store.LoadItemDraft("s.txt", "A1") == "typing"));
+		Assert.True(await signals.NextWriteAsync(), "the debounced write never happened");
+		Assert.Equal("typing", _store.LoadItemDraft("s.txt", "A1"));
 
 		drafts.Queue("A1", "   ");
-		Assert.True(WaitUntil(() => _store.LoadItemDraft("s.txt", "A1") == null));
+		Assert.True(await signals.NextWriteAsync(), "the debounced delete never happened");
+		Assert.Null(_store.LoadItemDraft("s.txt", "A1"));
+		Assert.Equal((1, 1), (signals.Saves, signals.Deletes));
+	}
+
+	[Fact]
+	public async Task FocusReplyDrafts_AFailedWrite_WaitsAgain_AndLandsOnTheNextTry()
+	{
+		var signals = new SignalingDraftService(_store);
+		signals.FailNextSaves(2);
+		using var drafts = new FocusReplyDrafts(signals, "s.txt", Short);
+
+		drafts.Queue("A1", "must not be lost");
+		for (var attempt = 0; attempt < 3; attempt++)
+			Assert.True(await signals.NextWriteAsync(), "attempt " + attempt + " never happened");
+
+		Assert.Equal("must not be lost", _store.LoadItemDraft("s.txt", "A1"));
+		Assert.Equal(1, signals.Saves);
+	}
+
+	[Fact]
+	public async Task FocusReplyDrafts_AFailedWrite_NeverOverwritesANewerText()
+	{
+		var signals = new SignalingDraftService(_store);
+		signals.FailNextSaves(1);
+		using var drafts = new FocusReplyDrafts(signals, "s.txt", TimeSpan.FromMinutes(5));
+		drafts.Queue("A1", "old text");
+		drafts.Flush();                        // fails: back in the queue
+		drafts.Queue("A1", "newer text");      // queued meanwhile
+
+		drafts.Flush();
+
+		Assert.True(await signals.NextWriteAsync());
+		Assert.True(await signals.NextWriteAsync());
+		Assert.Equal("newer text", _store.LoadItemDraft("s.txt", "A1"));
 	}
 
 	[Fact]

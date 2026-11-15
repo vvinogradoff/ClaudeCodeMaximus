@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Switch;
+using TessynDesktop.WPF.Tests.Fakes;
 
 namespace TessynDesktop.WPF.Tests;
 
@@ -33,13 +34,7 @@ public sealed class WpfSelfUpdaterTests : IDisposable
 
 	public void Dispose()
 	{
-		try
-		{
-			Directory.Delete(_root, recursive: true);
-		}
-		catch (IOException)
-		{
-		}
+		TestDirectory.Delete(_root);
 	}
 
 	private string ScriptDir => Path.Combine(_root, "scripts");

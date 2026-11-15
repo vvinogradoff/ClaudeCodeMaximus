@@ -18,6 +18,10 @@ public sealed class JsonClientStateStore : IClientStateStore
 	private readonly TimeSpan _debounce;
 	private readonly object _gate = new();
 
+	// One write at a time: the debounced write and a flush both go through wpf.json.tmp, so two at once failed ("being used by another process") and a flush could
+	// return while an older write was still running. A write takes the file gate before it looks at the dirty flag, so a flush waits for the one in flight.
+	private readonly SemaphoreSlim _fileGate = new(1, 1);
+
 	private CancellationTokenSource? _pendingWrite;
 	private Task _writeTask = Task.CompletedTask;
 	private bool _dirty;
@@ -126,29 +130,37 @@ public sealed class JsonClientStateStore : IClientStateStore
 
 	private async Task WriteNowAsync()
 	{
-		string json;
-		lock (_gate)
-		{
-			if (!_dirty)
-				return;
-
-			_dirty = false;
-			json = JsonSerializer.Serialize(State, Json);
-		}
-
-		var path = _paths.ClientStateFilePath;
+		await _fileGate.WaitAsync().ConfigureAwait(false);
 		try
 		{
-			Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-			var temp = path + ".tmp";
-			await File.WriteAllTextAsync(temp, json).ConfigureAwait(false);
-			File.Move(temp, path, overwrite: true);
-		}
-		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-		{
-			_logger.LogWarning(ex, "Writing the client state failed");
+			string json;
 			lock (_gate)
-				_dirty = true;
+			{
+				if (!_dirty)
+					return;
+
+				_dirty = false;
+				json = JsonSerializer.Serialize(State, Json);
+			}
+
+			var path = _paths.ClientStateFilePath;
+			try
+			{
+				Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+				var temp = path + ".tmp";
+				await File.WriteAllTextAsync(temp, json).ConfigureAwait(false);
+				File.Move(temp, path, overwrite: true);
+			}
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+			{
+				_logger.LogWarning(ex, "Writing the client state failed");
+				lock (_gate)
+					_dirty = true;
+			}
+		}
+		finally
+		{
+			_fileGate.Release();
 		}
 	}
 }

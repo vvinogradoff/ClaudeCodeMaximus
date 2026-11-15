@@ -22,8 +22,7 @@ public sealed class TreeReviewFixTests : IDisposable
 
 	public void Dispose()
 	{
-		if (Directory.Exists(_root))
-			Directory.Delete(_root, recursive: true);
+		TestDirectory.Delete(_root);
 	}
 
 	private sealed class NoFolders : IFolderPicker

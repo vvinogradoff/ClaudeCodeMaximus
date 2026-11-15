@@ -20,8 +20,7 @@ public sealed class MainViewModelTests : IDisposable
 
 	public void Dispose()
 	{
-		if (Directory.Exists(_root))
-			Directory.Delete(_root, recursive: true);
+		TestDirectory.Delete(_root);
 	}
 
 	private async Task<(MainViewModel Main, JsonClientStateStore Store)> StartAsync(Action<ClientStateModel>? seedState = null)

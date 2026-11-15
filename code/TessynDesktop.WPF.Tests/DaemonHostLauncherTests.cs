@@ -73,13 +73,7 @@ public sealed class DaemonHostLauncherTests : IDisposable
 
 	public void Dispose()
 	{
-		try
-		{
-			Directory.Delete(_root, recursive: true);
-		}
-		catch (IOException)
-		{
-		}
+		TestDirectory.Delete(_root);
 	}
 
 	private string RunFolder => Path.Combine(_root, "[Publish-WPF]");

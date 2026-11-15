@@ -120,13 +120,18 @@ public sealed class DraftService : IDraftService
 	private string PathOf(string sessionFileName, string? itemId)
 		=> itemId == null ? GetDraftPath(sessionFileName) : GetItemDraftPath(sessionFileName, itemId);
 
-	private static string? Read(string path)
+	// A read takes the same gate as the writes: a read that holds the file open made a write throw (sharing violation), and a read that met a write half done saw
+	// a torn file. Reads are rare and short, so the gate costs nothing.
+	private string? Read(string path)
 	{
-		if (!File.Exists(path))
-			return null;
+		lock (_writeGate)
+		{
+			if (!File.Exists(path))
+				return null;
 
-		var text = File.ReadAllText(path, Encoding.UTF8);
-		return string.IsNullOrEmpty(text) ? null : text;
+			var text = File.ReadAllText(path, Encoding.UTF8);
+			return string.IsNullOrEmpty(text) ? null : text;
+		}
 	}
 
 	private static bool Write(string path, string text)

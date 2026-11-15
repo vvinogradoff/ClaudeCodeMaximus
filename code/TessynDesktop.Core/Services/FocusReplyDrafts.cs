@@ -78,6 +78,7 @@ public sealed class FocusReplyDrafts : IDisposable, IFlushesDrafts
 				_pending.Clear();
 			}
 
+			var retry = false;
 			foreach (var (itemId, text) in pending)
 			{
 				try
@@ -90,6 +91,22 @@ public sealed class FocusReplyDrafts : IDisposable, IFlushesDrafts
 				catch (Exception ex)
 				{
 					_log.Warning(ex, "FocusReplyDrafts: writing the reply draft of item {ItemId} of {FileName} failed", itemId, _sessionFileName);
+
+					// A write that failed is not lost: it waits again (unless something newer was queued meanwhile, or this is the last flush).
+					lock (_gate)
+					{
+						if (!_disposed && _pending.TryAdd(itemId, text))
+							retry = true;
+					}
+				}
+			}
+
+			if (retry)
+			{
+				lock (_gate)
+				{
+					if (!_disposed)
+						_timer?.Change(_debounce, Timeout.InfiniteTimeSpan);
 				}
 			}
 		}
