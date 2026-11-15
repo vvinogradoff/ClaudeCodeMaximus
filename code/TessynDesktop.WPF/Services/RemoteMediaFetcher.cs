@@ -26,7 +26,10 @@ public sealed class RemoteMediaFetcher
 	}
 
 	/// <summary>True when a request for <paramref name="url"/> may start at all (the initial check of <see cref="FetchImageAsync"/>).</summary>
-	public bool MayRequest(Uri url, bool approvedByClick) => IsSafeUrl(url) && (approvedByClick || _policy.IsAllowedHost(url.Host));
+	public bool MayRequest(Uri url, bool approvedByClick) => IsSafeUrl(url) && IsPermitted(url, approvedByClick);
+
+	/// <summary>The approval rule alone, without the address check: a click on that URL, or an allowlisted host.</summary>
+	public bool IsPermitted(Uri url, bool approvedByClick) => approvedByClick || _policy.IsAllowedHost(url.Host);
 
 	/// <summary>Fetches an image; refuses with <see cref="MediaRefusedException"/>.</summary>
 	public async Task<FetchedMedia> FetchImageAsync(Uri url, bool approvedByClick, CancellationToken cancellationToken)
