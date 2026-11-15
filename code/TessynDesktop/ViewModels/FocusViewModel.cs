@@ -199,6 +199,7 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable, IFlushesDrafts
 	private void Refresh()
 	{
 		var items = _daemonClient.GetAttentionItems(_nodeId);
+		var ledgerReadable = _daemonClient.IsAttentionLedgerReadable(_nodeId);
 
 		var open = new List<FocusItemViewModel>();
 		var decided = new List<FocusItemViewModel>();
@@ -214,7 +215,7 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable, IFlushesDrafts
 			{
 				// A closed card has no reply box, so unsent text on it is dropped.
 				card.ReplyText = string.Empty;
-				_replyDrafts?.Discard(item.Id);
+				_replyDrafts?.DiscardClosed(item.Id, ledgerReadable);
 				closed.Add(card);
 			}
 			else if (item.Kind == AttentionKind.Decided)
@@ -224,7 +225,7 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable, IFlushesDrafts
 		}
 
 		// Only a ledger that was read: an unreadable one answers with no items, and that must not delete every draft. Tried again on the next refresh.
-		if (!_prunedDrafts && _daemonClient.IsAttentionLedgerReadable(_nodeId))
+		if (!_prunedDrafts && ledgerReadable)
 		{
 			_prunedDrafts = true;
 			_replyDrafts?.Prune(items.Where(i => i.Status == AttentionStatus.Open).Select(i => i.Id));
@@ -233,7 +234,7 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable, IFlushesDrafts
 		foreach (var staleId in _cards.Keys.Where(id => !seen.Contains(id)).ToList())
 		{
 			_cards.Remove(staleId);
-			_replyDrafts?.Discard(staleId);
+			_replyDrafts?.DiscardClosed(staleId, ledgerReadable);
 		}
 
 		Sync(OpenItems, open);
@@ -285,7 +286,7 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable, IFlushesDrafts
 
 		if (item.Status != AttentionStatus.Open)
 		{
-			_replyDrafts.Discard(item.Id);
+			_replyDrafts.DiscardClosed(item.Id, _daemonClient.IsAttentionLedgerReadable(_nodeId));
 			return;
 		}
 

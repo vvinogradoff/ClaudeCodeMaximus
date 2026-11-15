@@ -327,6 +327,22 @@ public sealed class FocusDraftTests : IDisposable
 		Assert.Empty(_store.ListItemDraftIds("s.txt"));
 	}
 
+	// R1: a stale or closed card must not lose its draft while the ledger is unreadable (every card looks stale then).
+	[Fact]
+	public void DiscardClosed_WhenTheLedgerWasNotReadable_KeepsTheDraft_AndAQueuedText()
+	{
+		_store.SaveItemDraft("s.txt", "A1", "stored");
+		using var drafts = new FocusReplyDrafts(_store, "s.txt", TimeSpan.FromMinutes(5));
+		drafts.Queue("A1", "typed since");
+
+		drafts.DiscardClosed("A1", ledgerReadable: false);
+		drafts.Flush();
+		Assert.Equal("typed since", _store.LoadItemDraft("s.txt", "A1"));
+
+		drafts.DiscardClosed("A1", ledgerReadable: true);
+		Assert.Null(_store.LoadItemDraft("s.txt", "A1"));
+	}
+
 	[Fact]
 	public void ACorruptLedgerFile_IsReportedUnreadable_UntilItIsWrittenAgain()
 	{

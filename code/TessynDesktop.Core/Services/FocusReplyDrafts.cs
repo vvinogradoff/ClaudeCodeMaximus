@@ -119,6 +119,16 @@ public sealed class FocusReplyDrafts : IDisposable, IFlushesDrafts
 		}
 	}
 
+	/// <summary>
+	/// Discards the draft of an item that the ledger no longer shows as open (closed, or missing from it). Does nothing when <paramref name="ledgerReadable"/>
+	/// is false: an unreadable ledger answers with no items, which must not make every card look stale or closed. A text still queued is kept and written.
+	/// </summary>
+	public void DiscardClosed(string itemId, bool ledgerReadable)
+	{
+		if (ledgerReadable)
+			Discard(itemId);
+	}
+
 	/// <summary>The reply was sent or the item closed: forgets a queued text and deletes the stored draft now.</summary>
 	public void Discard(string itemId)
 	{
