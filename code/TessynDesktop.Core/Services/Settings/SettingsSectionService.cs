@@ -36,7 +36,7 @@ public sealed class SettingsSectionService : ISettingsSectionService, IDisposabl
 		lock (_settings.SyncRoot)
 		{
 			foreach (var section in sections)
-				_states[section.Name] = new SectionState(section, Serialize(section.Read(_settings.Settings)));
+				_states[section.Name] = new SectionState(section, section.IsReadOnly ? string.Empty : Serialize(section.Read(_settings.Settings)));
 		}
 
 		_settings.Saved += OnSaved;
@@ -74,6 +74,9 @@ public sealed class SettingsSectionService : ISettingsSectionService, IDisposabl
 		{
 			Detect();
 			var state = Find(section);
+			if (state.Section.IsReadOnly)
+				throw new TdcpInvalidParamsException($"Settings section '{section}' is read-only");
+
 			lock (_gate)
 			{
 				if (state.Version != baseVersion)
@@ -129,6 +132,9 @@ public sealed class SettingsSectionService : ISettingsSectionService, IDisposabl
 			{
 				foreach (var state in _states.Values)
 				{
+					if (state.Section.IsReadOnly)
+						continue;
+
 					var snapshot = Serialize(state.Section.Read(_settings.Settings));
 					if (snapshot == state.Snapshot)
 						continue;

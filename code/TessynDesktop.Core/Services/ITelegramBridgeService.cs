@@ -17,6 +17,15 @@ public interface ITelegramBridgeService
 	/// <summary>Stops the long-poll loop.</summary>
 	void Stop();
 
+	/// <summary>True while the long-poll loop is started (package J3, <c>telegram.status</c>). The default says false, so a stand-in need not implement it.</summary>
+	bool IsRunning => false;
+
+	/// <summary>
+	/// The last failure of the poll loop as a short sentence that never carries the bot token (the Bot API URL contains it), cleared by the next
+	/// successful poll; null when there is none. The default says null.
+	/// </summary>
+	string? LastError => null;
+
 	/// <summary>
 	/// Ensures a Telegram forum topic exists for this session, creating one on first call (FR.21.2).
 	/// No-op when the bridge is disabled or misconfigured. Never throws — failures are logged.

@@ -22,19 +22,19 @@ public static class SettingsPatchReader
 
 	/// <summary>Reads <paramref name="patch"/> as a <typeparamref name="TPatch"/>.</summary>
 	/// <exception cref="TdcpInvalidParamsException">It is not an object, names a member the patch type does not have, or a value has the wrong type.</exception>
-	public static TPatch Read<TPatch>(JsonNode patch)
+	public static TPatch Read<TPatch>(JsonNode patch, string what = "patch")
 		where TPatch : class
 	{
 		if (patch is not JsonObject)
-			throw new TdcpInvalidParamsException("'patch' must be an object");
+			throw new TdcpInvalidParamsException($"'{what}' must be an object");
 
 		try
 		{
-			return patch.Deserialize<TPatch>(Strict) ?? throw new TdcpInvalidParamsException("'patch' must be an object");
+			return patch.Deserialize<TPatch>(Strict) ?? throw new TdcpInvalidParamsException($"'{what}' must be an object");
 		}
 		catch (JsonException ex)
 		{
-			throw new TdcpInvalidParamsException("Invalid patch: " + FirstLine(ex.Message));
+			throw new TdcpInvalidParamsException($"Invalid {what}: " + FirstLine(ex.Message));
 		}
 	}
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using TessynDesktop.Models;
 using Serilog;
@@ -58,10 +59,25 @@ public sealed class ClaudeModelService : IClaudeModelService
         return _fetchTask;
     }
 
-    private async Task DiscoverOllamaAndMergeAsync()
+    public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var ollamaBaseUrl = _appSettings.Settings.OllamaBaseUrl;
-        var ollamaModels  = await _ollamaService.GetModelsAsync(ollamaBaseUrl);
+        // Not the once-per-launch task: ask again now, so a model pulled since the launch, or a changed Ollama URL, shows up.
+        var discovery = DiscoverOllamaAndMergeAsync(cancellationToken);
+        lock (this)
+        {
+            _fetchTask = discovery;
+        }
+        await discovery;
+    }
+
+    private async Task DiscoverOllamaAndMergeAsync(CancellationToken cancellationToken = default)
+    {
+        string ollamaBaseUrl;
+        lock (_appSettings.SyncRoot)
+            ollamaBaseUrl = _appSettings.Settings.OllamaBaseUrl;
+
+        var ollamaModels  = await _ollamaService.GetModelsAsync(ollamaBaseUrl, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested(); // the lookup swallows a cancel and answers "none": do not replace the list with that
 
         if (ollamaModels.Count > 0)
             _log.Information("Discovered {Count} Ollama models", ollamaModels.Count);

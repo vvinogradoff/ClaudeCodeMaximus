@@ -308,6 +308,15 @@ public partial class App : Application
 		services.AddTransient<IRemoteRpcModule, SettingsRpcModule>();
 		services.AddTransient<IRemoteRpcModule, ProfileAdminRpcModule>();
 		services.AddTransient<IRemoteRpcModule, SoundRpcModule>();
+		// Package J3 part 2: the read-only avalonia-ui section, the MCP registry (a singleton: it guards the running authorizations), Telegram, relay and
+		// model refresh methods; every module is loopback only.
+		services.AddSingleton<ISettingsSection, AvaloniaUiSettingsSection>();
+		services.AddSingleton<IMcpRegistryService, McpRegistryService>();
+		services.AddTransient<IRemoteRpcModule, McpRegistryRpcModule>();
+		services.AddTransient<IRemoteRpcModule, TelegramSettingsRpcModule>();
+		services.AddTransient<IRemoteRpcModule, RelaySettingsRpcModule>();
+		services.AddSingleton(sp => new Lazy<IRelayConnectorService>(sp.GetRequiredService<IRelayConnectorService>)); // the connector needs the dispatcher, which needs this module
+		services.AddTransient<IRemoteRpcModule, ModelsRpcModule>();
 		// Package J4: global search, session import (the service is the one registered with the Claude session services above), schedules, the attention
 		// list of all sessions and the daemon health; every module is loopback only. The search and health services hold state (a running rescan, the start time).
 		services.AddSingleton<ISessionIndexActivity>(sp => (ClaudeSessionIndexService)sp.GetRequiredService<IClaudeSessionIndexService>());
