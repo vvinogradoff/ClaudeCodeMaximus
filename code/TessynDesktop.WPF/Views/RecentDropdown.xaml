@@ -16,16 +16,14 @@
                 <TextBlock Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphChevronDown}" />
             </StackPanel>
         </ToggleButton>
-        <Popup x:Name="Menu" PlacementTarget="{Binding ElementName=Toggle}" Placement="Bottom" StaysOpen="False" ButtonBase.Click="OnRowClick">
+        <Popup x:Name="Menu" PlacementTarget="{Binding ElementName=Toggle}" Placement="Bottom" StaysOpen="False" ButtonBase.Click="OnRowClick" Opened="OnOpened">
             <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="1"
                     Padding="4" MinWidth="320" MaxHeight="480">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Margin="8,6" Text="{Binding EmptyText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                   Visibility="{Binding IsEmpty, Converter={StaticResource SessionListBoolToVis}}" />
-                        <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource SessionRowTemplate}" />
-                    </StackPanel>
-                </ScrollViewer>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="8,6" Text="{Binding EmptyText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Visibility="{Binding IsEmpty, Converter={StaticResource SessionListBoolToVis}}" />
+                    <ListBox ItemsSource="{Binding Rows}" Style="{StaticResource SessionFlatListBox}" MaxHeight="460" />
+                </DockPanel>
             </Border>
         </Popup>
     </Grid>

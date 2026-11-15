@@ -29,6 +29,16 @@ public static partial class Constants
 		public const string TagChipPrefix = "Tag ";
 		public const string RecentDropdownName = "Recent dropdown";
 
+		public const int RecencyLightMinutes = 15;
+		public const int RecencyMediumMinutes = 30;
+		public const int RecencyDarkMinutes = 60;
+		public const string ChevronExpanded = "▾";
+		public const string ChevronCollapsed = "▸";
+		public const string GroupPrefix = "Group ";
+		public const string ScopeToggleName = "Project scope";
+		public const string TagsNoTagsScopedText = "No tags in this directory";
+		public const string LeftTabsName = "LeftTabs";
+		public const string OpenInBrowserTitle = "Open in browser";
 		public const string RecentEmptyText = "No sessions in the last 24 hours.";
 		public const string TagsSelectTagsText = "Select one or more tags to list their sessions.";
 		public const string TagsNoSessionsText = "No sessions carry the selected tags.";

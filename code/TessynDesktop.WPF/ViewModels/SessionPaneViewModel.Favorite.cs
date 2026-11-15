@@ -13,13 +13,21 @@ public sealed partial class SessionPaneViewModel
 	[ObservableProperty]
 	private bool _isFavorite;
 
-	private void ApplyFavorite(SessionStateDto state) => IsFavorite = state.Favorite;
+	/// <summary>The flag of the open session has arrived (false between opening a session and its detail, so the star neither shows the previous session's flag nor sets a stale one).</summary>
+	[ObservableProperty]
+	private bool _isFavoriteKnown;
+
+	private void ApplyFavorite(SessionStateDto state)
+	{
+		IsFavorite = state.Favorite;
+		IsFavoriteKnown = true;
+	}
 
 	[RelayCommand]
 	private async Task ToggleFavoriteAsync()
 	{
 		var nodeId = NodeId;
-		if (nodeId == null || !HasSession)
+		if (nodeId == null || !HasSession || !IsFavoriteKnown)
 			return;
 
 		try

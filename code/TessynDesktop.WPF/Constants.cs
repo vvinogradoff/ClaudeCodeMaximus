@@ -126,6 +126,9 @@ public static partial class Constants
 	public static class Timeouts
 	{
 		public static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(300);
+		/// <summary>Rebuilds and reloads of the session lists while states stream in.</summary>
+		public static readonly TimeSpan ListRebuildThrottle = TimeSpan.FromSeconds(1);
+		public static readonly TimeSpan RecencyRefresh = TimeSpan.FromSeconds(60);
 		public static readonly TimeSpan StateSaveDebounce = TimeSpan.FromSeconds(1);
 		public static readonly TimeSpan DaemonDiscoveryRetry = TimeSpan.FromSeconds(3);
 		public static readonly TimeSpan WatchdogPoll = TimeSpan.FromMilliseconds(100);

@@ -475,6 +475,26 @@ Rollout 3 is master at `f57d404` or later. It is built in the main tree only **a
 
 `b59b14f` (web refs UI) changes only the SPA. It goes live with the web deploy (A19), not with the desktop restart.
 
+**Wave "WPF for daily use" (A22), status 2026-11-15, 16:35.**
+- **On master** (after rollout 3, so not in the A25 build):
+  - W0 shell foundations `710c28e`;
+  - J3 part 1 `27764c3`;
+  - J1 `fdf29d2`;
+  - the WPF focus guard `a1d85c4`;
+  - J2 `37a6293`.
+  - Each one reviewed to SHIP and verified: 3,223 + 146 + 24 + 661 + 14.
+- **Rollout 4** is master after A25 passes. Its smoke list must add:
+  - Avalonia Auto-Compact (B.1 step 11);
+  - a real WPF client acknowledging toasts and sounds;
+  - the Avalonia tree redraw after WPF changes (J1 T5: expansion kept, unsent text kept, no flicker on batch renames).
+- **In flight:**
+  - W1a turn loop (fixed, recheck 423b);
+  - J2 follow-up R1 (411e);
+  - J4 (414);
+  - W2 tree operations (415);
+  - W3 Recent, Tags and favourites (416).
+- **WPF E2E focus theft** (Architect report, 16:05): every `--test-window` start took the foreground for 2-4 s. `TestWindowFocusGuard` (`a1d85c4`) brings it down to about 2 blips of 0.3-0.6 s per 14-test run. Workers run the WPF E2E suite once, at the end.
+
 **Update 2026-11-15, 16:00.** Rollout 2 passed B.1. The Architect reports Tessyn noticeably faster and lighter on RAM. The ISSUE.016 follow-up shows idle CPU at 3-13 % and GC pauses at 0.3-0.5 %. Rollout 3 is now master `fdf29d2`, built in the main tree at 16:01, with the rollout-2 run folder backed up to `[Publish].bak3`. Beyond the three merges above it also carries:
 - `e05a957`: the low-findings batch;
 - `27764c3`: J3 part 1. Settings sections, and profile administration moved from the Avalonia `ProfileController` into Core.

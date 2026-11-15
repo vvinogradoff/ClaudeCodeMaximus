@@ -69,6 +69,17 @@ public sealed class FakeTranscriptSurface : ITranscriptSurface
 		PageIndexes.AddRange(entries.Select(e => e.Index));
 	}
 
+	/// <summary>Every live row the pane sent, in order (null = removed).</summary>
+	public List<TranscriptLiveView?> LiveViews { get; } = [];
+
+	public TranscriptLiveView? LastLive => LiveViews.Count == 0 ? null : LiveViews[^1];
+
+	public void SetLive(TranscriptLiveView? live)
+	{
+		LiveViews.Add(live);
+		Calls.Add(live == null ? "live:none" : $"live:{live.Status}");
+	}
+
 	public void Replace(TranscriptEntryView entry) => Calls.Add($"replace:{entry.Index}:{entry.Html}");
 
 	public void Find(string term, IReadOnlyList<int> matchingIndexes) => Calls.Add($"find:{term}:{string.Join(",", matchingIndexes)}");

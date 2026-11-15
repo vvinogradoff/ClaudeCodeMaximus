@@ -7,21 +7,54 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/SessionListStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="EmptyHint" TargetType="TextBlock">
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="8,2" />
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
-    <DockPanel>
-        <DockPanel DockPanel.Dock="Top" Margin="8,8,8,4">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="60" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="2*" MinHeight="80" />
+        </Grid.RowDefinitions>
+
+        <!-- Search bar: text with watermark, project scope toggle, clear -->
+        <DockPanel Grid.Row="0" Margin="8,8,8,4">
             <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}" Command="{Binding ClearCommand}" ToolTip="Clear the selection and the text"
                     AutomationProperties.Name="Clear tag filter">
                 <TextBlock Style="{StaticResource IconText}" FontSize="11" Text="{StaticResource GlyphClose}" />
             </Button>
-            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tag search" ToolTip="Search tags" />
-        </DockPanel>
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="8,0,8,8">
-                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource SystemFillColorCriticalBrush}" Text="{Binding Error}">
+            <ToggleButton DockPanel.Dock="Right" Margin="4,0,0,0" Padding="8,4" IsChecked="{Binding IsScopeEnabled, Mode=TwoWay}" IsEnabled="{Binding CanScope}"
+                          ToolTip="Only tags of the selected session's directory" AutomationProperties.Name="Project scope">
+                <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphFolder}" />
+            </ToggleButton>
+            <Grid>
+                <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tag search" ToolTip="Search tags" />
+                <TextBlock Text="Search tags…" Margin="8,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" Foreground="{DynamicResource TextFillColorTertiaryBrush}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SearchText}" Value="">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+        </DockPanel>
+
+        <!-- Tag results: a height-capped scroller of chips -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="8,0">
+            <StackPanel>
+                <TextBlock Foreground="{DynamicResource SystemFillColorCriticalBrush}" Text="{Binding Error}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyHint}">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Error}" Value="{x:Null}">
                                     <Setter Property="Visibility" Value="Collapsed" />
@@ -30,9 +63,9 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <TextBlock TextWrapping="Wrap" Margin="0,2" Text="{Binding EmptyChipsText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                <TextBlock Text="{Binding EmptyChipsText}">
                     <TextBlock.Style>
-                        <Style TargetType="TextBlock">
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyHint}">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding EmptyChipsText}" Value="{x:Null}">
                                     <Setter Property="Visibility" Value="Collapsed" />
@@ -50,7 +83,15 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:TagChipViewModel}">
                             <Button Margin="0,0,6,4" Padding="8,3" Command="{Binding DataContext.ToggleChipCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    CommandParameter="{Binding}" ToolTip="{Binding Url}" AutomationProperties.Name="{Binding AutomationName}">
+                                    CommandParameter="{Binding}" ToolTip="{Binding ToolTipText}" AutomationProperties.Name="{Binding AutomationName}"
+                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Open in browser" IsEnabled="{Binding HasUrl}"
+                                                  Command="{Binding PlacementTarget.Tag.OpenChipCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
                                 <Button.Style>
                                     <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                         <Style.Triggers>
@@ -69,29 +110,25 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <Separator Margin="0,6" />
-                <TextBlock TextWrapping="Wrap" Margin="0,2" Text="{Binding EmptySessionsText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding EmptySessionsText}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-                <ItemsControl ItemsSource="{Binding Groups}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:TagGroupViewModel}">
-                            <StackPanel Margin="0,4,0,6">
-                                <TextBlock Text="{Binding DirectoryLabel}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="2,0,0,2" />
-                                <ItemsControl ItemsSource="{Binding Sessions}" ItemTemplate="{StaticResource SessionRowTemplate}" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
             </StackPanel>
         </ScrollViewer>
-    </DockPanel>
+
+        <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Background="Transparent" />
+
+        <!-- Sessions of the selected tags: a virtualising grouped list -->
+        <Grid Grid.Row="3">
+            <ListBox ItemsSource="{Binding Sessions.Items}" Style="{StaticResource SessionFlatListBox}" Margin="2,0" AutomationProperties.Name="Tagged sessions" />
+            <TextBlock Text="{Binding EmptySessionsText}" VerticalAlignment="Top">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyHint}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding EmptySessionsText}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
+    </Grid>
 </UserControl>

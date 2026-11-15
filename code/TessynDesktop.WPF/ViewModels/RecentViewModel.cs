@@ -22,7 +22,10 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 	private readonly IUiDispatcher _ui;
 	private readonly ISessionListActions _actions;
 	private readonly ILogger<RecentViewModel> _logger;
+	private readonly Throttle _throttle;
 	private ITessynClient? _client;
+	private readonly Dictionary<string, int> _hiddenAt = new(StringComparer.Ordinal);
+	private int _loadSequence;
 	private bool _refreshRunning;
 	private bool _refreshPending;
 	private Task _refreshTask = Task.CompletedTask;
@@ -35,10 +38,16 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 	private bool _loaded;
 
 	public RecentViewModel(ISessionListActions actions, IUiDispatcher ui, ILogger<RecentViewModel> logger)
+		: this(actions, ui, logger, Constants.Timeouts.ListRebuildThrottle)
+	{
+	}
+
+	public RecentViewModel(ISessionListActions actions, IUiDispatcher ui, ILogger<RecentViewModel> logger, TimeSpan throttle)
 	{
 		_actions = actions;
 		_ui = ui;
 		_logger = logger;
+		_throttle = new Throttle(throttle, ui);
 		Rows.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
 	}
 
@@ -103,15 +112,23 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 				if (client == null)
 					return;
 
+				var sequence = ++_loadSequence;
 				try
 				{
 					var result = await client.RecentListAsync();
-					Apply(result);
+					if (!ReferenceEquals(client, _client))
+					{
+						_refreshPending = true;   // another client was attached meanwhile: its answer is the one to show
+						continue;
+					}
+
+					Apply(result, sequence);
 				}
 				catch (Exception ex) when (ex is not OperationCanceledException)
 				{
 					_logger.LogWarning(ex, "recent.list failed");
-					Error = ex.Message;
+					if (ReferenceEquals(client, _client))
+						Error = ex.Message;
 				}
 			}
 			while (_refreshPending);
@@ -122,12 +139,17 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 		}
 	}
 
-	private void Apply(RecentListResult result)
+	private void Apply(RecentListResult result, int sequence)
 	{
 		Error = null;
+		// A load that was already running when the user hid a row still lists it: it must not bring the row back.
+		var sessions = result.Sessions.Where(s => !_hiddenAt.TryGetValue(s.Id, out var at) || sequence > at).ToList();
+		foreach (var id in _hiddenAt.Where(h => sequence > h.Value).Select(h => h.Key).ToList())
+			_hiddenAt.Remove(id);
+
 		var existing = Rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
-		var ordered = new List<SessionRowViewModel>(result.Sessions.Count);
-		foreach (var dto in result.Sessions)
+		var ordered = new List<SessionRowViewModel>(sessions.Count);
+		foreach (var dto in sessions)
 		{
 			if (existing.TryGetValue(dto.Id, out var row))
 			{
@@ -189,7 +211,10 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 		{
 			var result = await client.RecentHideAsync(row.Id);
 			if (result.Hidden)
+			{
+				_hiddenAt[row.Id] = _loadSequence;   // loads started up to now may still list it
 				Rows.Remove(row);
+			}
 			else
 				await RefreshAsync();
 		}
@@ -217,6 +242,9 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 
 	private void OnResynced(object? sender, ResyncedEventArgs e) => _ui.Post(() => _ = RefreshAsync());
 
+	/// <summary>Reloads at most once per throttle interval (a turn streaming pushes many session.changed events).</summary>
+	private void ScheduleRefresh() => _throttle.Request(() => _ = RefreshAsync());
+
 	private void OnNotification(object? sender, RemoteNotification notification)
 	{
 		if (notification.Method != RemoteProtocol.Events.SessionChanged)
@@ -232,13 +260,17 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 		var row = Rows.FirstOrDefault(r => r.Id == state.Id);
 		if (row == null)
 		{
-			_ = RefreshAsync();   // a session that just got active enters the list
+			ScheduleRefresh();   // a session that just got active enters the list
 			return;
 		}
 
-		var favouriteChanged = row.IsFavorite != state.Favorite;
+		// Anything that moves a row or changes what pins it: last activity (the order, the 24 h window), running, attention (a Focus item pins), favourite.
+		var reorder = row.State.LastActivityUtc != state.LastActivityUtc
+			|| row.IsRunning != state.Running
+			|| row.AttentionCount != (state.Attention?.Count ?? 0)
+			|| row.IsFavorite != state.Favorite;
 		row.State = state;
-		if (favouriteChanged)
-			_ = RefreshAsync();   // pinned membership and the order may have changed
+		if (reorder)
+			ScheduleRefresh();
 	}
 }

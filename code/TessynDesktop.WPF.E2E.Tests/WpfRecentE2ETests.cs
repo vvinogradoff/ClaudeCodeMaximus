@@ -65,7 +65,6 @@ public sealed class WpfRecentE2ETests : IDisposable
 		var process = _app.Start();
 		var ready = await _app.WaitForLogAsync(process, StartTimeout, "Connected to daemon run");
 		Assert.True(ready, "The app did not connect. Log:\n" + _app.ReadLog());
-		Assert.True(await _clicker.SelectTabAsync(process, "Recent", StepTimeout), "The Recent tab was not found. Log:\n" + _app.ReadLog());
 		return process;
 	}
 
@@ -90,13 +89,15 @@ public sealed class WpfRecentE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task The_Recent_tab_lists_the_sessions_and_a_click_opens_one()
+	public async Task The_Recent_tab_lists_the_sessions_by_directory_and_a_click_opens_one()
 	{
 		using var process = await StartAsync();
 		try
 		{
+			Assert.True(await _clicker.SelectTabAsync(process, "Recent", StepTimeout), "The Recent tab was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await _clicker.WaitForButtonAsync(process, "Open " + _second.Name, StepTimeout), "The Recent rows did not appear. Log:\n" + _app.ReadLog());
 			Assert.True(_clicker.Exists(process, "Open " + _env.Session.Name));
+			Assert.True(_clicker.Exists(process, "Group " + _env.Base.Directory.Path), "The directory header was not found.");
 
 			Assert.True(await _clicker.ClickAsync(process, "Open " + _second.Name, StepTimeout));
 
@@ -117,9 +118,9 @@ public sealed class WpfRecentE2ETests : IDisposable
 		using var process = await StartAsync();
 		try
 		{
+			Assert.True(await _clicker.SelectTabAsync(process, "Recent", StepTimeout), "The Recent tab was not found.");
 			Assert.True(await _clicker.ClickAsync(process, "Favourite " + _second.Name, StepTimeout), "The star of the row was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await WaitForAsync(() => _second.IsFavorite), "The daemon did not get the favourite flag.");
-			Assert.True(await _clicker.WaitForButtonGoneAsync(process, "Hide " + _second.Name, StepTimeout), "A pinned favourite must not offer Hide.");
 
 			Assert.True(await _clicker.ClickAsync(process, "Open " + _second.Name, StepTimeout));
 			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, $"Session {_second.NodeId} opened"));
@@ -135,12 +136,13 @@ public sealed class WpfRecentE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task Hiding_a_row_removes_it_from_the_list_and_tells_the_daemon()
+	public async Task Hiding_a_row_in_the_Recent_dropdown_removes_it_and_tells_the_daemon()
 	{
 		using var process = await StartAsync();
 		try
 		{
-			Assert.True(await _clicker.ClickAsync(process, "Hide " + _env.Session.Name, StepTimeout), "The hide button was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ToggleAsync(process, "Recent dropdown", StepTimeout), "The dropdown button was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Hide " + _env.Session.Name, StepTimeout), "The hide button was not found in the dropdown. Log:\n" + _app.ReadLog());
 
 			Assert.True(await _clicker.WaitForButtonGoneAsync(process, "Open " + _env.Session.Name, StepTimeout), "The hidden row is still listed.");
 			Assert.Contains(_env.Session.NodeId, _recent.Hidden);

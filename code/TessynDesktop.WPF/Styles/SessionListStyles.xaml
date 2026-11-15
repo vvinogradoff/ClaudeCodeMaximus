@@ -8,51 +8,128 @@
 
     <sys:String x:Key="GlyphStar">&#xE734;</sys:String>
     <sys:String x:Key="GlyphStarFilled">&#xE735;</sys:String>
+    <sys:String x:Key="GlyphHide">&#xE8F8;</sys:String>
+    <sys:String x:Key="GlyphEdit">&#xE70F;</sys:String>
+    <sys:String x:Key="GlyphFolder">&#xE8B7;</sys:String>
+    <sys:String x:Key="GlyphClock">&#xE823;</sys:String>
     <BooleanToVisibilityConverter x:Key="SessionListBoolToVis" />
 
-    <!-- A flat icon button used by the star and hide buttons of a row. -->
+    <!-- Recency backgrounds (FR.9.5): last prompt within 15 / 30 / 60 minutes. The colours move to the theme settings with W10a. -->
+    <SolidColorBrush x:Key="RecencyLightBrush" Color="#4081C784" />
+    <SolidColorBrush x:Key="RecencyMediumBrush" Color="#4D4CAF50" />
+    <SolidColorBrush x:Key="RecencyDarkBrush" Color="#5C2E7D32" />
+
+    <!-- A flat icon button used by the icon slot of a row. -->
     <Style x:Key="RowIconButton" TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="6,4" />
     </Style>
 
-    <!-- One session row of the Recent tab, the Recent dropdown and the Tags tab. The row carries its own commands. -->
-    <DataTemplate x:Key="SessionRowTemplate" DataType="{x:Type vm:SessionRowViewModel}">
-        <DockPanel Margin="0,1" LastChildFill="True">
-            <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}" Command="{Binding HideCommand}" CommandParameter="{Binding}"
-                    Visibility="{Binding CanHide, Converter={StaticResource SessionListBoolToVis}}" ToolTip="Hide from Recent"
-                    AutomationProperties.Name="{Binding HideAutomationName}">
-                <TextBlock Style="{StaticResource IconText}" FontSize="11" Text="{StaticResource GlyphClose}" />
-            </Button>
-            <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}" Command="{Binding ToggleFavoriteCommand}" CommandParameter="{Binding}"
-                    ToolTip="Favourite" AutomationProperties.Name="{Binding FavoriteAutomationName}">
-                <TextBlock FontSize="12">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}">
-                            <Setter Property="Text" Value="{StaticResource GlyphStar}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsFavorite}" Value="True">
-                                    <Setter Property="Text" Value="{StaticResource GlyphStarFilled}" />
-                                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </Button>
-            <Button Command="{Binding OpenCommand}" CommandParameter="{Binding}" Tag="open" Background="Transparent" BorderThickness="0" Padding="6,3"
-                    HorizontalContentAlignment="Stretch" ToolTip="{Binding DirectoryLabel}" AutomationProperties.Name="{Binding OpenAutomationName}">
-                <StackPanel>
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="9" Margin="0,0,6,0" Text="&#xE768;"
-                                   Foreground="{DynamicResource SystemFillColorSuccessBrush}"
-                                   Visibility="{Binding IsRunning, Converter={StaticResource SessionListBoolToVis}}" />
-                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                    </DockPanel>
-                    <TextBlock Text="{Binding DirectoryLabel}" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-            </Button>
-        </DockPanel>
+    <!-- A virtualising list of flattened group headers and session rows: no selection chrome, rows are buttons. -->
+    <Style x:Key="SessionFlatListBox" TargetType="ListBox">
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+        <Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="ItemContainerStyle">
+            <Setter.Value>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <ContentPresenter />
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The collapsible directory header of a grouped list. -->
+    <DataTemplate DataType="{x:Type vm:SessionGroupHeaderViewModel}">
+        <Button Command="{Binding ToggleCommand}" CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Padding="6,5"
+                HorizontalContentAlignment="Stretch" AutomationProperties.Name="{Binding AutomationName}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Width="14" Text="{Binding Chevron}" />
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="12" Margin="0,0,6,0" Text="{StaticResource GlyphFolder}" />
+                <TextBlock DockPanel.Dock="Right" Margin="6,0,0,0" Text="{Binding Count}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+        </Button>
+    </DataTemplate>
+
+    <!-- One session row (FR.1.16, FR.9.7): status, name, draft mark, profile, last prompt, attention, schedule; the icon slot on the right shows one of: star (favourite), Hide, star to set. -->
+    <DataTemplate DataType="{x:Type vm:SessionRowViewModel}">
+        <Border Margin="0,1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding RecencyLevel}" Value="3">
+                            <Setter Property="Background" Value="{StaticResource RecencyLightBrush}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding RecencyLevel}" Value="2">
+                            <Setter Property="Background" Value="{StaticResource RecencyMediumBrush}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding RecencyLevel}" Value="1">
+                            <Setter Property="Background" Value="{StaticResource RecencyDarkBrush}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <DockPanel LastChildFill="True">
+                <Grid DockPanel.Dock="Right" Width="30">
+                    <Button Style="{StaticResource RowIconButton}" Command="{Binding ToggleFavoriteCommand}" CommandParameter="{Binding}" ToolTip="Favourite"
+                            Visibility="{Binding ShowStar, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="{Binding FavoriteAutomationName}">
+                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphStarFilled}" Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                    </Button>
+                    <Button Style="{StaticResource RowIconButton}" Command="{Binding HideCommand}" CommandParameter="{Binding}" ToolTip="Hide from Recent"
+                            Visibility="{Binding ShowHide, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="{Binding HideAutomationName}">
+                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphHide}" />
+                    </Button>
+                    <Button Style="{StaticResource RowIconButton}" Command="{Binding ToggleFavoriteCommand}" CommandParameter="{Binding}" ToolTip="Make a favourite"
+                            Visibility="{Binding ShowStarToggle, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="{Binding FavoriteAutomationName}">
+                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphStar}" />
+                    </Button>
+                </Grid>
+                <Button Command="{Binding OpenCommand}" CommandParameter="{Binding}" Tag="open" Background="Transparent" BorderThickness="0" Padding="6,3"
+                        HorizontalContentAlignment="Stretch" AutomationProperties.Name="{Binding OpenAutomationName}">
+                    <StackPanel>
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="9" Margin="0,0,6,0" Text="&#xE768;"
+                                       Foreground="{DynamicResource SystemFillColorSuccessBrush}"
+                                       Visibility="{Binding IsRunning, Converter={StaticResource SessionListBoolToVis}}" />
+                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="10" Margin="0,0,6,0" Text="{StaticResource GlyphEdit}" ToolTip="Unsent draft"
+                                       Visibility="{Binding HasDraft, Converter={StaticResource SessionListBoolToVis}}" />
+                            <Border DockPanel.Dock="Right" CornerRadius="8" Padding="6,0" Margin="6,0,0,0" Background="{DynamicResource SystemFillColorAttentionBrush}"
+                                    Visibility="{Binding HasAttention, Converter={StaticResource SessionListBoolToVis}}" ToolTip="Open Focus items">
+                                <TextBlock Text="{Binding AttentionCount}" FontSize="11" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Border>
+                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphClock}" ToolTip="Scheduled"
+                                       Visibility="{Binding HasSchedules, Converter={StaticResource SessionListBoolToVis}}" />
+                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                        <TextBlock FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <Run Text="{Binding ProfileName, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding LastPromptText, Mode=OneWay}" />
+                        </TextBlock>
+                        <TextBlock Text="{Binding DirectoryLabel}" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Visibility="{Binding ShowDirectory, Converter={StaticResource SessionListBoolToVis}}" />
+                    </StackPanel>
+                </Button>
+            </DockPanel>
+        </Border>
     </DataTemplate>
 </ResourceDictionary>

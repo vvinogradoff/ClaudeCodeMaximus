@@ -165,6 +165,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		await _reloadTask;
 		await _expandTask;
 		await _findTask;
+		await _handoffTask;
 		await _appendTask;   // an on-demand page can start a catch-up append while it completes
 	}
 
@@ -208,8 +209,9 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		HasSession = true;
 		Title = title ?? nodeId;
 		StateText = string.Empty;
-		IsFavorite = false;
-		IsRunning = false;
+		IsFavoriteKnown = false;
+		ResetRunningForOpen();
+		ResetSelectionForOpen();
 		Error = null;
 		Tags.Clear();
 		FindBarVisible = false;
@@ -225,6 +227,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 		try
 		{
+			var stateEventsAtRequest = _stateEvents;
 			var detailTask = _client.SessionGetAsync(nodeId);
 			_ = detailTask.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); // observed even when the switch is superseded
 			// A cached model that stops short of the newest entries (left by a jump) is not a bottom view: reload the newest page instead.
@@ -252,6 +255,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			_viewTop = -1;
 			_viewAtBottom = target == null;
 			_surface.Load(nodeId, model.Views, model.HasOlder, toBottom: target == null, hasNewer: model.HasNewer);
+			PushLive();
 			if (target != null)
 				ScrollToTarget(model, target);
 			wasShown = true;
@@ -262,7 +266,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			if (token != _openToken)
 				return wasShown;
 
-			ApplyDetail(detail);
+			ApplyDetail(detail, stateEventsAtRequest);
 			if (detail.Epoch != model.Epoch)
 				await ReloadCoreAsync(token);
 			else if (!model.HasNewer && (warm || _missedAppend || detail.EntryCount > model.LastIndex + 1))
@@ -280,7 +284,10 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		finally
 		{
 			if (token == _openToken)
+			{
 				IsLoading = false;
+				IsSessionReady = true;   // also after a failed detail: Send must not stay disabled for good
+			}
 		}
 
 		return wasShown;
@@ -303,58 +310,6 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		Focus.Clear();
 		Preview?.CloseCommand.Execute(null);
 		_surface.Load(string.Empty, [], hasOlder: false, toBottom: true);
-	}
-
-	private bool CanSend() => HasSession && !string.IsNullOrWhiteSpace(InputText);
-
-	partial void OnHasSessionChanged(bool value) => SendCommand.NotifyCanExecuteChanged();
-
-	[RelayCommand(CanExecute = nameof(CanSend))]
-	private async Task SendAsync()
-	{
-		var id = NodeId;
-		var text = InputText.Trim();
-		if (id == null || text.Length == 0)
-			return;
-
-		try
-		{
-			Error = null;
-			var result = await _client.SessionSendAsync(id, text);
-			if (!result.Accepted)
-			{
-				Error = "The daemon did not accept the message.";
-				return;
-			}
-
-			if (id == NodeId)
-				InputText = string.Empty;
-			else
-				_drafts.Remove(id);
-		}
-		catch (Exception ex)
-		{
-			_logger.LogWarning(ex, "session.send failed for {NodeId}", id);
-			Error = "Send failed: " + ex.Message;
-		}
-	}
-
-	[RelayCommand(CanExecute = nameof(IsRunning))]
-	private async Task StopAsync()
-	{
-		var id = NodeId;
-		if (id == null)
-			return;
-
-		try
-		{
-			await _client.SessionStopAsync(id);
-		}
-		catch (Exception ex)
-		{
-			_logger.LogWarning(ex, "session.stop failed for {NodeId}", id);
-			Error = "Stop failed: " + ex.Message;
-		}
 	}
 
 	// ---- find ----
@@ -418,23 +373,26 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 	// ---- header ----
 
-	private void ApplyDetail(SessionDetailDto detail)
+	/// <param name="stateEventsAtRequest">The state-event counter when the request was sent: a push that arrived since is newer than the answer's running flag.</param>
+	private void ApplyDetail(SessionDetailDto detail, int stateEventsAtRequest)
 	{
 		Title = detail.Name;
-		IsRunning = detail.State.Running;
-		StateText = StateTextOf(detail.State);
 		ApplyFavorite(detail.State);
+		ApplySelection(detail.LastUsed);
+		if (stateEventsAtRequest == _stateEvents)
+			SetDaemonRunning(detail.State.Running);
 		Tags.Clear();
 		foreach (var tag in detail.Tags)
 			Tags.Add(new SessionTagViewModel(tag, _launcher));
 	}
 
-	private static string StateTextOf(SessionStateDto state) => state.Running ? "Running" : "Idle";
-
 	// ---- push events ----
 
 	private void OnNotification(object? sender, RemoteNotification notification)
 	{
+		if (TryHandleTurnNotification(notification))
+			return;
+
 		switch (notification.Method)
 		{
 			case RemoteProtocol.Events.SessionAppended:
@@ -529,9 +487,9 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		if (state.Id != NodeId)
 			return;
 
-		IsRunning = state.Running;
-		StateText = StateTextOf(state);
 		ApplyFavorite(state);
+		_stateEvents++;
+		SetDaemonRunning(state.Running);
 	}
 
 	private void OnResynced(object? sender, ResyncedEventArgs e)
@@ -540,8 +498,17 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		{
 			var current = NodeId;
 			_cache.Clear();
+
+			// The stream may have lost turn events: what is known about turns in flight is dropped, and the session's own state (a running
+			// turn shows as a generic working row) and its entries are read again. A resume without a gap never gets here.
+			_turnStates.Clear();
 			if (current != null && HasSession)
+			{
 				_reloadTask = ReloadAsync();
+				_ = RefreshDetailAsync(current);
+			}
+
+			_ = LoadCatalogAsync();
 		});
 	}
 
@@ -581,6 +548,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_viewAtBottom = true;
 		_viewTop = -1;
 		_surface.Load(id, model.Views, model.HasOlder, toBottom: true, hasNewer: model.HasNewer);
+		PushLive();
 	}
 
 	private async Task AppendNewCoreAsync(int token)
@@ -618,6 +586,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 			model.Append(fresh, views, page.Total);
 			_surface.Append(views);
+			_logger.LogInformation("Session {NodeId}: {Count} new entries appended, {Total} in all", model.NodeId, views.Count, page.Total);
 			if (page.Entries.Count < Constants.Limits.EntriesPageSize)
 				return;
 		}
@@ -784,6 +753,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		var model = _current;
 		if (model != null)
 			_surface.Load(model.NodeId, model.Views, model.HasOlder, toBottom: true, hasNewer: model.HasNewer);
+
+		PushLive();
 	});
 
 	private void OnLinkClicked(object? sender, string url) => _ui.Post(() => _launcher.TryOpen(url));

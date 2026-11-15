@@ -9,7 +9,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <Button Command="{Binding ToggleFavoriteCommand}" Margin="8,0,0,0" Padding="8,6" ToolTip="Favourite" AutomationProperties.Name="Favourite"
-            Visibility="{Binding HasSession, Converter={StaticResource SessionListBoolToVis}}">
+            IsEnabled="{Binding IsFavoriteKnown}" Visibility="{Binding HasSession, Converter={StaticResource SessionListBoolToVis}}">
         <TextBlock FontSize="12">
             <TextBlock.Style>
                 <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}">

@@ -202,13 +202,13 @@
                         <TextBlock Text="File mode" Margin="8,0,0,0" />
                     </StackPanel>
                 </ToggleButton>
-                <Button Command="{Binding SendCommand}" Margin="0,0,0,4" Style="{DynamicResource AccentButtonStyle}" ToolTip="Send (Ctrl+Enter)">
+                <Button Command="{Binding SendCommand}" Margin="0,0,0,4" Style="{DynamicResource AccentButtonStyle}" ToolTip="Send (Ctrl+Enter)" AutomationProperties.Name="Send">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />
                         <TextBlock Text="Send" Margin="8,0,0,0" />
                     </StackPanel>
                 </Button>
-                <Button Command="{Binding StopCommand}" ToolTip="Stop the running turn">
+                <Button Command="{Binding StopCommand}" ToolTip="Stop the running turn" AutomationProperties.Name="Stop">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphStop}" />
                         <TextBlock Text="Stop" Margin="8,0,0,0" />

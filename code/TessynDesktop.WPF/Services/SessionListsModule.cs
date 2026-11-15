@@ -24,7 +24,7 @@ public sealed class SessionListsModule : IShellModule
 			SlotId = Constants.Slots.LeftPanelTabs,
 			Order = Constants.SessionLists.RecentTabOrder,
 			Title = Constants.SessionLists.RecentTabTitle,
-			Create = () => new RecentPanel { DataContext = _host.Recent },
+			Create = () => new RecentPanel { DataContext = _host.RecentTab },
 		});
 		slots.Add(new ShellSlotContribution
 		{

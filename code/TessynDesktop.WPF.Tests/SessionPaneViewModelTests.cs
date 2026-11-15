@@ -220,7 +220,8 @@ public sealed class SessionPaneViewModelTests
 
 		await pane.SendCommand.ExecuteAsync(null);
 
-		Assert.Contains("session.send:a:hello world", _client.Calls);
+		Assert.Contains("turn.send:a:hello world", _client.Calls);
+		Assert.NotNull(_client.TurnSends[0].ClientRequestId);
 		Assert.Equal(string.Empty, pane.InputText);
 		Assert.False(pane.SendCommand.CanExecute(null));
 	}
@@ -239,7 +240,7 @@ public sealed class SessionPaneViewModelTests
 	}
 
 	[Fact]
-	public async Task Stop_IsEnabledOnlyWhileRunningAndCallsSessionStop()
+	public async Task Stop_IsEnabledOnlyWhileRunningAndCallsTurnStop()
 	{
 		var session = AddSession("a", 3);
 		using var pane = CreatePane();
@@ -251,7 +252,7 @@ public sealed class SessionPaneViewModelTests
 		Assert.Equal("Running", pane.StateText);
 		await pane.StopCommand.ExecuteAsync(null);
 
-		Assert.Contains("session.stop:a", _client.Calls);
+		Assert.Contains("turn.stop:a", _client.Calls);
 	}
 
 	[Fact]

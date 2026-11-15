@@ -45,6 +45,9 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	/// <summary>Raised on the UI thread once the client completed its first handshake.</summary>
 	public event Action<ITessynClient>? ClientReady;
 
+	/// <summary>The connected client; null until the first handshake completed (a late subscriber to <see cref="ClientReady"/> checks it).</summary>
+	public ITessynClient? Client => _client;
+
 	public bool IsBannerVisible => State != ConnectionBannerState.Connected;
 
 	public string BannerText => State switch

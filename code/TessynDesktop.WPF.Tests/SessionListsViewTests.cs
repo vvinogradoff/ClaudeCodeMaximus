@@ -42,8 +42,8 @@ public sealed class SessionListsViewTests
 		public Task<bool?> SetFavoriteAsync(string nodeId, bool value) => Task.FromResult<bool?>(value);
 	}
 
-	private static SessionStateDto State(string id, bool favorite = false, bool running = false) =>
-		new(id, running, false, null, favorite, DateTimeOffset.UtcNow, null, false, null);
+	private static SessionStateDto State(string id, bool favorite = false, bool running = false, DateTimeOffset? activity = null) =>
+		new(id, running, false, null, favorite, activity ?? DateTimeOffset.UtcNow, null, false, null);
 
 	private static void Layout(FrameworkElement element)
 	{
@@ -66,7 +66,7 @@ public sealed class SessionListsViewTests
 	}
 
 	private static List<string> ButtonNames(DependencyObject root) =>
-		Descendants<ButtonBase>(root).Select(b => AutomationProperties.GetName(b)).Where(n => n.Length > 0).ToList();
+		Descendants<ButtonBase>(root).Where(b => b.Visibility == Visibility.Visible).Select(b => AutomationProperties.GetName(b)).Where(n => n.Length > 0).ToList();
 
 	private static void WithBindingCheck(Action body)
 	{
@@ -82,75 +82,201 @@ public sealed class SessionListsViewTests
 		Assert.Empty(listener.Messages);
 	}
 
+	private static async Task<(RecentTabViewModel Tab, TreeViewModel Tree, FakeTessynClient Client, Actions Actions)> TabAsync(int sessions = 2)
+	{
+		var builder = new TreeBuilder();
+		var client = new FakeTessynClient();
+		client.Directories = [builder.Directory("d1", "Repo", [], Enumerable.Range(0, sessions).Select(i =>
+			builder.SessionWith(State("s" + i, favorite: i == 1, running: i == 0, activity: DateTimeOffset.UtcNow.AddMinutes(-i)), "Session " + i)).ToArray())];
+		var tree = new TreeViewModel(client, new ImmediateUiDispatcher(), NullLogger<TreeViewModel>.Instance, TimeSpan.Zero);
+		await tree.LoadAsync();
+		var actions = new Actions();
+		var tab = new RecentTabViewModel(actions, new ImmediateUiDispatcher(), NullLogger<RecentTabViewModel>.Instance, TimeSpan.Zero);
+		tab.Attach(tree);
+		return (tab, tree, client, actions);
+	}
+
 	[Fact]
-	public void RecentPanel_ShowsRowsWithOpenFavouriteAndHideButtons_AndPinnedRowsHaveNoHide()
+	public void RecentPanel_ShowsGroupHeaderRowsAndTheOneIconSlot()
 	{
 		WithBindingCheck(() =>
 		{
-			var recent = new RecentViewModel(new Actions(), new ImmediateUiDispatcher(), NullLogger<RecentViewModel>.Instance);
-			var client = new FakeTessynClient
-			{
-				RecentListHandler = () => new RecentListResult(DateTimeOffset.UtcNow,
-				[
-					new RecentRowDto("a", "Alpha", "proj", State("a", running: true), false, false, true),
-					new RecentRowDto("f", "Starred", "proj", State("f", favorite: true), false, true, false),
-				]),
-			};
-			recent.AttachAsync(client).GetAwaiter().GetResult();
-			var panel = new RecentPanel { DataContext = recent };
+			var (tab, _, _, actions) = TabAsync().GetAwaiter().GetResult();
+			var panel = new RecentPanel { DataContext = tab };
 
 			Layout(panel);
 
 			var names = ButtonNames(panel);
-			Assert.Contains("Open Alpha", names);
-			Assert.Contains("Favourite Alpha", names);
-			Assert.Contains("Hide Alpha", names);
-			Assert.Contains("Open Starred", names);
-			var hide = Descendants<Button>(panel).Single(b => AutomationProperties.GetName(b) == "Hide Starred");
-			Assert.Equal(Visibility.Collapsed, hide.Visibility);
-			var hideAlpha = Descendants<Button>(panel).Single(b => AutomationProperties.GetName(b) == "Hide Alpha");
-			Assert.Equal(Visibility.Visible, hideAlpha.Visibility);
+			Assert.Contains("Group Repo", names);
+			Assert.Contains("Open Session 0", names);
+			Assert.Contains("Favourite Session 0", names);   // not a favourite: a star to set
+			Assert.Contains("Favourite Session 1", names);   // a favourite: the filled star
+			Assert.DoesNotContain(names, n => n.StartsWith("Hide ", StringComparison.Ordinal));   // the tab has no Hide; the dropdown does
+
+			Descendants<Button>(panel).Single(b => AutomationProperties.GetName(b) == "Open Session 1").Command.Execute(tab.List.Items.OfType<SessionRowViewModel>().Single(r => r.Id == "s1"));
+			Assert.Equal(["s1"], actions.Opened);
 		});
 	}
 
 	[Fact]
-	public void RecentPanel_RowButtons_RunTheRowCommands()
+	public void RecentPanel_HeaderButtonCollapsesAndExpandsItsGroup()
 	{
 		WithBindingCheck(() =>
 		{
+			var (tab, _, _, _) = TabAsync().GetAwaiter().GetResult();
+			var panel = new RecentPanel { DataContext = tab };
+			Layout(panel);
+			var header = Descendants<Button>(panel).Single(b => AutomationProperties.GetName(b) == "Group Repo");
+
+			header.Command.Execute(header.CommandParameter);
+			Layout(panel);
+			Assert.DoesNotContain("Open Session 0", ButtonNames(panel));
+
+			header.Command.Execute(header.CommandParameter);
+			Layout(panel);
+			Assert.Contains("Open Session 0", ButtonNames(panel));
+		});
+	}
+
+	[Fact]
+	public void RecentPanel_EachTimeItIsShown_CollapsesAllButTheSelectedSessionsDirectory()
+	{
+		var builder = new TreeBuilder();
+		var client = new FakeTessynClient { Directories = [builder.Directory("d1", "One", [], builder.Session("a", "A")), builder.Directory("d2", "Two", [], builder.Session("b", "B"))] };
+		StaTestRunner.Run(() =>
+		{
+			var tree = new TreeViewModel(client, new ImmediateUiDispatcher(), NullLogger<TreeViewModel>.Instance, TimeSpan.Zero);
+			tree.LoadAsync().GetAwaiter().GetResult();
+			var tab = new RecentTabViewModel(new Actions(), new ImmediateUiDispatcher(), NullLogger<RecentTabViewModel>.Instance, TimeSpan.Zero);
+			tab.Attach(tree);
+			tree.SelectNodeById("b");
+			var panel = new RecentPanel { DataContext = tab };
+			var window = new Window { Content = panel, Width = 300, Height = 300, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
+			window.Show();
+			try
+			{
+				window.UpdateLayout();   // Loaded: the tab was shown
+
+				Assert.Equal(["Group One", "Group Two", "Favourite B", "Open B"], ButtonNames(panel));
+			}
+			finally
+			{
+				window.Close();
+			}
+		});
+	}
+
+	[Fact]
+	public void RecentPanel_WithNoSessions_ShowsAHint()
+	{
+		WithBindingCheck(() =>
+		{
+			var panel = new RecentPanel { DataContext = new RecentTabViewModel(new Actions(), new ImmediateUiDispatcher(), NullLogger<RecentTabViewModel>.Instance, TimeSpan.Zero) };
+
+			Layout(panel);
+
+			Assert.Contains(Descendants<TextBlock>(panel), t => t.Text == "No sessions yet." && t.Visibility == Visibility.Visible);
+		});
+	}
+
+	[Fact]
+	public void RecentPanel_VirtualisesALongList()
+	{
+		WithBindingCheck(() =>
+		{
+			var (tab, _, _, _) = TabAsync(sessions: 600).GetAwaiter().GetResult();
+			var panel = new RecentPanel { DataContext = tab };
+
+			Layout(panel);
+
+			Assert.Equal(601, tab.List.Items.Count);
+			var realised = Descendants<ListBoxItem>(panel).Count();
+			Assert.InRange(realised, 1, 60);
+		});
+	}
+
+	[Fact]
+	public void TagsPanel_SessionListVirtualisesAndTheChipsAreHeightCapped()
+	{
+		WithBindingCheck(() =>
+		{
+			var tags = new TagSearchViewModel(new Actions(), new ImmediateUiDispatcher(), NullLogger<TagSearchViewModel>.Instance, TimeSpan.Zero);
+			var client = new FakeTessynClient
+			{
+				TagsSearchHandler = (_, _) => new TagSearchResult(null,
+					Enumerable.Range(0, 300).Select(i => new TagChipDto("t" + i, "TAG-" + i, "u", SessionTagKind.LinearIssue, 1, false)).ToList(), null,
+					[new SessionGroupDto("d", "Repo", Enumerable.Range(0, 500).Select(i => new SessionRowDto("s" + i, "Session " + i, State("s" + i))).ToList())]),
+			};
+			tags.AttachAsync(client).GetAwaiter().GetResult();
+			var panel = new TagsPanel { DataContext = tags };
+
+			Layout(panel);
+
+			Assert.Equal(501, tags.Sessions.Items.Count);
+			Assert.InRange(Descendants<ListBoxItem>(panel).Count(), 1, 80);
+			Assert.True(Descendants<GridSplitter>(panel).Any(), "chips and sessions are separated by a splitter");
+			var chipScroller = Descendants<ScrollViewer>(panel).First();
+			Assert.True(chipScroller.ActualHeight < 300, "the chip region scrolls inside its own height");
+		});
+	}
+
+	[Fact]
+	public void TagsPanel_HasTheScopeToggleAndTheSearchWatermark()
+	{
+		WithBindingCheck(() =>
+		{
+			var tags = new TagSearchViewModel(new Actions(), new ImmediateUiDispatcher(), NullLogger<TagSearchViewModel>.Instance, TimeSpan.Zero);
+			var panel = new TagsPanel { DataContext = tags };
+
+			Layout(panel);
+
+			var scope = Descendants<ToggleButton>(panel).Single(b => AutomationProperties.GetName(b) == Constants.SessionLists.ScopeToggleName);
+			Assert.False(scope.IsEnabled);   // nothing selected: the scope is forced off
+			Assert.Contains(Descendants<TextBlock>(panel), t => t.Text == "Search tags…" && t.Visibility == Visibility.Visible);
+			tags.SearchText = "x";
+			Layout(panel);
+			Assert.DoesNotContain(Descendants<TextBlock>(panel), t => t.Text == "Search tags…" && t.Visibility == Visibility.Visible);
+		});
+	}
+
+	[Fact]
+	public void RecentDropdown_OpeningReloadsTheList_AndPickingASessionSelectsTheTreeTab()
+	{
+		StaTestRunner.Run(() =>
+		{
 			var actions = new Actions();
-			var recent = new RecentViewModel(actions, new ImmediateUiDispatcher(), NullLogger<RecentViewModel>.Instance);
+			var recent = new RecentViewModel(actions, new ImmediateUiDispatcher(), NullLogger<RecentViewModel>.Instance, TimeSpan.Zero);
 			var client = new FakeTessynClient
 			{
 				RecentListHandler = () => new RecentListResult(DateTimeOffset.UtcNow, [new RecentRowDto("a", "Alpha", "proj", State("a"), false, false, true)]),
 			};
 			recent.AttachAsync(client).GetAwaiter().GetResult();
-			var panel = new RecentPanel { DataContext = recent };
-			Layout(panel);
+			var dropdown = new RecentDropdown { DataContext = recent };
+			var tabs = new TabControl { Name = Constants.SessionLists.LeftTabsName, Items = { new TabItem { Header = "Tree" }, new TabItem { Header = "Recent" } }, SelectedIndex = 1 };
+			var stack = new StackPanel { Children = { dropdown, tabs } };
+			var window = new Window { Content = stack, Width = 400, Height = 400, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
+			NameScope.SetNameScope(window, new NameScope());
+			window.RegisterName(Constants.SessionLists.LeftTabsName, tabs);
+			window.Show();
+			try
+			{
+				window.UpdateLayout();
+				var before = client.Calls.Count(c => c == "recent.list");
+				var menu = (System.Windows.Controls.Primitives.Popup)dropdown.FindName("Menu");
 
-			Descendants<Button>(panel).Single(b => AutomationProperties.GetName(b) == "Open Alpha").Command.Execute(recent.Rows[0]);
-			Descendants<Button>(panel).Single(b => AutomationProperties.GetName(b) == "Hide Alpha").Command.Execute(recent.Rows[0]);
-			recent.RefreshTask.GetAwaiter().GetResult();
-			Layout(panel);
+				menu.IsOpen = true;
+				window.UpdateLayout();
+				Assert.Equal(before + 1, client.Calls.Count(c => c == "recent.list"));   // opening reloads
 
-			Assert.Equal(["a"], actions.Opened);
-			Assert.Empty(recent.Rows);
-			Assert.Contains("recent.hide:a", client.Calls);
-		});
-	}
-
-	[Fact]
-	public void RecentPanel_WithNoRows_ShowsTheEmptyText()
-	{
-		WithBindingCheck(() =>
-		{
-			var recent = new RecentViewModel(new Actions(), new ImmediateUiDispatcher(), NullLogger<RecentViewModel>.Instance);
-			recent.AttachAsync(new FakeTessynClient()).GetAwaiter().GetResult();
-			var panel = new RecentPanel { DataContext = recent };
-
-			Layout(panel);
-
-			Assert.Contains(Descendants<TextBlock>(panel), t => t.Text == Constants.SessionLists.RecentEmptyText && t.Visibility == Visibility.Visible);
+				var open = Descendants<Button>((DependencyObject)menu.Child).Single(b => AutomationProperties.GetName(b) == "Open Alpha");
+				open.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, open));
+				Assert.False(menu.IsOpen);
+				Assert.Equal(0, tabs.SelectedIndex);
+			}
+			finally
+			{
+				window.Close();
+			}
 		});
 	}
 

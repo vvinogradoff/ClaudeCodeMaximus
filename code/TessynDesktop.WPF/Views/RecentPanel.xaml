@@ -8,22 +8,19 @@
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>
-    <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Margin="10,8" TextWrapping="Wrap" Foreground="{DynamicResource SystemFillColorCriticalBrush}" Text="{Binding Error}">
+    <Grid>
+        <ListBox ItemsSource="{Binding List.Items}" Style="{StaticResource SessionFlatListBox}" AutomationProperties.Name="Recent sessions" Margin="2,4,2,4" />
+        <TextBlock Margin="10,8" TextWrapping="Wrap" VerticalAlignment="Top" Text="No sessions yet." Foreground="{DynamicResource TextFillColorSecondaryBrush}">
             <TextBlock.Style>
                 <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed" />
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding Error}" Value="{x:Null}">
-                            <Setter Property="Visibility" Value="Collapsed" />
+                        <DataTrigger Binding="{Binding List.Items.Count}" Value="0">
+                            <Setter Property="Visibility" Value="Visible" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </TextBlock.Style>
         </TextBlock>
-        <TextBlock DockPanel.Dock="Top" Margin="10,8" TextWrapping="Wrap" Text="{Binding EmptyText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                   Visibility="{Binding IsEmpty, Converter={StaticResource SessionListBoolToVis}}" />
-        <ScrollViewer VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Recent sessions">
-            <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource SessionRowTemplate}" Margin="4,4,4,8" />
-        </ScrollViewer>
-    </DockPanel>
+    </Grid>
 </UserControl>

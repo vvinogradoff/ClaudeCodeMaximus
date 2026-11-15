@@ -24,6 +24,8 @@ public sealed class TagSearchViewModelTests
 
 	private TagSearchViewModel Create() => new(_actions, new ImmediateUiDispatcher(), NullLogger<TagSearchViewModel>.Instance, TimeSpan.Zero);
 
+	private static List<SessionRowViewModel> Rows(TagSearchViewModel tags) => tags.Sessions.Items.OfType<SessionRowViewModel>().ToList();
+
 	private static SessionStateDto State(string id, bool favorite = false) => new(id, false, false, null, favorite, DateTimeOffset.UtcNow, null, false, null);
 
 	private static TagChipDto Chip(string key, int count, bool selected = false) => new(key, key.ToUpperInvariant(), "https://x/" + key, SessionTagKind.LinearIssue, count, selected);
@@ -66,7 +68,7 @@ public sealed class TagSearchViewModelTests
 
 		Assert.Equal(["a", "b"], tags.Chips.Select(c => c.Key));
 		Assert.Equal("A (2)", tags.Chips[0].Text);
-		Assert.Empty(tags.Groups);
+		Assert.Empty(tags.Sessions.Items);
 		Assert.Equal(Constants.SessionLists.TagsSelectTagsText, tags.EmptySessionsText);
 		Assert.Contains("tags.search::", _client.Calls);
 	}
@@ -82,9 +84,9 @@ public sealed class TagSearchViewModelTests
 
 		Assert.Contains("tags.search::a", _client.Calls);
 		Assert.True(tags.Chips[0].Selected);
-		Assert.Equal("Repo", Assert.Single(tags.Groups).DirectoryLabel);
-		Assert.Equal(["s1", "s2"], tags.Groups[0].Sessions.Select(s => s.Id));
-		Assert.True(tags.Groups[0].Sessions[1].IsFavorite);
+		Assert.Equal("Repo", Assert.Single(tags.Sessions.Items.OfType<SessionGroupHeaderViewModel>()).Label);
+		Assert.Equal(["s1", "s2"], Rows(tags).Select(s => s.Id));
+		Assert.True(Rows(tags)[1].IsFavorite);
 		Assert.Null(tags.EmptySessionsText);
 	}
 
@@ -100,7 +102,7 @@ public sealed class TagSearchViewModelTests
 
 		Assert.Equal(["a", "b"], tags.SelectedTags.Select(t => t.Key).OrderBy(k => k));
 		Assert.Contains("tags.search::b,a", _client.Calls);
-		Assert.Equal(["s1", "s2", "s3"], tags.Groups[0].Sessions.Select(s => s.Id));
+		Assert.Equal(["s1", "s2", "s3"], Rows(tags).Select(s => s.Id));
 		Assert.All(tags.Chips, c => Assert.True(c.Selected));
 	}
 
@@ -115,7 +117,7 @@ public sealed class TagSearchViewModelTests
 		await tags.ToggleChipCommand.ExecuteAsync(tags.Chips.Single(c => c.Key == "a"));
 
 		Assert.Empty(tags.SelectedTags);
-		Assert.Empty(tags.Groups);
+		Assert.Empty(tags.Sessions.Items);
 		Assert.Equal(Constants.SessionLists.TagsSelectTagsText, tags.EmptySessionsText);
 	}
 
@@ -189,7 +191,7 @@ public sealed class TagSearchViewModelTests
 		using var tags = Create();
 		await tags.AttachAsync(_client);
 		await tags.ToggleChipCommand.ExecuteAsync(tags.Chips[0]);
-		var row = tags.Groups[0].Sessions[0];
+		var row = Rows(tags)[0];
 
 		_client.RaiseNotification(RemoteProtocol.Events.SessionChanged, new SessionChangedPayload(State("s1", favorite: true)));
 
@@ -204,7 +206,7 @@ public sealed class TagSearchViewModelTests
 		await tags.AttachAsync(_client);
 		await tags.ToggleChipCommand.ExecuteAsync(tags.Chips[0]);
 
-		tags.OpenCommand.Execute(tags.Groups[0].Sessions[1]);
+		tags.OpenCommand.Execute(Rows(tags)[1]);
 
 		Assert.Equal(["s2"], _actions.Opened);
 	}
@@ -216,9 +218,10 @@ public sealed class TagSearchViewModelTests
 		using var tags = Create();
 		await tags.AttachAsync(_client);
 		await tags.ToggleChipCommand.ExecuteAsync(tags.Chips[0]);
-		var row = tags.Groups[0].Sessions[0];
+		var row = Rows(tags)[0];
 
-		await tags.ToggleFavoriteCommand.ExecuteAsync(row);
+		tags.ToggleFavoriteCommand.Execute(row);
+		await Task.Yield();
 
 		Assert.True(row.IsFavorite);
 	}
@@ -239,7 +242,7 @@ public sealed class TagSearchViewModelTests
 		Assert.Equal(before + 1, _client.Calls.Count(c => c.StartsWith("tags.search", StringComparison.Ordinal)));
 		Assert.Equal(string.Empty, tags.SearchText);
 		Assert.Empty(tags.SelectedTags);
-		Assert.Empty(tags.Groups);
+		Assert.Empty(tags.Sessions.Items);
 	}
 
 	[Fact]

@@ -100,10 +100,10 @@ public sealed class TurnEngineAutoCompactTests : IDisposable
 
 		Assert.Empty(_h.Process.Calls);
 		Assert.Empty(_h.Streaming.Sends);
-		Assert.Equal(["compact", "completed:cancelled=False:error=null"], _h.Files.Log); // V2: a compaction-only run is reported as a turn
+		Assert.Equal(["compactHeld", "completed:cancelled=False:error=null"], _h.Files.Log); // V2: a compaction-only run is reported as a turn
 		var call = Assert.Single(_h.Compaction.Calls);
-		Assert.Equal("compact", call.Variant);
-		Assert.Equal(1, call.LockCount);
+		Assert.Equal("compactHeld", call.Variant); // R3: the engine takes the turn lock itself, so it knows whether the run started
+		Assert.Equal(0, call.LockCount);
 		Assert.False(outcome.Cancelled);
 		Assert.Null(outcome.ErrorText);
 		Assert.Equal(["compactionStarted", "compactionFinished:Compacted"], observer.Snapshot());
@@ -240,7 +240,25 @@ public sealed class TurnEngineAutoCompactTests : IDisposable
 		var outcome = await run.Within();
 
 		Assert.True(outcome.Cancelled);
-		Assert.Equal(["compact", "append:SYSTEM:" + Constants.Turns.InterruptedByUserText, "completed:cancelled=True:error=null"], _h.Files.Log);
+		Assert.Equal(["compactHeld", "append:SYSTEM:" + Constants.Turns.InterruptedByUserText, "completed:cancelled=True:error=null"], _h.Files.Log);
+	}
+
+	[Fact]
+	public async Task ACompactionOnlyRunStoppedWhileItWaitsBehindAnotherTurn_NeverRan_AndReleasesNothingItDidNotTake()
+	{
+		var turnLock = _h.Turns.GetTurnLock(TurnEngineHarness.NodeId);
+		await turnLock.WaitAsync(); // another turn holds the node
+
+		var run = _h.Run(TurnEngineHarness.Node(), message: "", autoCompact: true);
+		await Task.Delay(100);
+		Assert.True(_h.Engine.CancelRuns(TurnEngineHarness.NodeId));
+		var outcome = await run.Within();
+
+		Assert.True(outcome.Cancelled);
+		Assert.Empty(_h.Compaction.Calls);
+		Assert.DoesNotContain(_h.Files.Log, l => l.StartsWith("completed:", StringComparison.Ordinal)); // no turn.completed of a run that never ran
+		Assert.Equal(0, turnLock.CurrentCount); // still held by the other turn: the stopped run did not release it
+		turnLock.Release();
 	}
 
 	// -- Failure ---------------------------------------------------------------------------------------------------------------------

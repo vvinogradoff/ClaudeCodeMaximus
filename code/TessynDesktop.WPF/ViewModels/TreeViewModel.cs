@@ -303,6 +303,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		Rebuild(snapshot);
 		await ReloadExpandedWorkersAsync();
 		ApplyRows();
+		RaiseListsChanged();
 	}
 
 	private void Rebuild(TreeSnapshotResult snapshot)
@@ -445,7 +446,10 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 	private void ApplyState(SessionStateDto state)
 	{
 		if (_byId.TryGetValue(state.Id, out var node))
+		{
 			node.State = state;
+			RaiseListsChanged();
+		}
 
 		if (_searchRoots == null)
 			return;

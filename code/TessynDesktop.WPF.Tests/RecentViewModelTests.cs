@@ -149,17 +149,19 @@ public sealed class RecentViewModelTests
 	}
 
 	[Fact]
-	public async Task SessionChanged_ForAListedRow_UpdatesItInPlaceWithoutReloading()
+	public async Task SessionChanged_ThatChangesNothingTheListDependsOn_UpdatesTheRowInPlaceWithoutReloading()
 	{
 		Serve(Row("a", "A"), Row("b", "B"));
 		using var recent = Create();
 		await recent.AttachAsync(_client);
 		var row = recent.Rows[0];
+		var same = row.State with { HasDraft = true, ProfileName = "work" };
 
-		_client.RaiseNotification(RemoteProtocol.Events.SessionChanged, new SessionChangedPayload(State("a", running: true)));
+		_client.RaiseNotification(RemoteProtocol.Events.SessionChanged, new SessionChangedPayload(same));
 
 		Assert.Same(row, recent.Rows[0]);
-		Assert.True(row.IsRunning);
+		Assert.True(row.HasDraft);
+		Assert.Equal("work", row.ProfileName);
 		Assert.Equal(1, _client.Calls.Count(c => c == "recent.list"));
 	}
 
