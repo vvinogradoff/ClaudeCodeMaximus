@@ -28,6 +28,21 @@ public partial class SessionPane : UserControl
 		Suggestions.ItemChosen += OnSuggestionChosen;
 	}
 
+	// The Session / Focus switch (FR.23.12) also reacts to Checked, besides the click Command: a radio chosen through UI Automation (SelectionItem.Select), which is how
+	// assistive technology and the E2E tests choose it, or by the keyboard, is checked without a click, so the Command alone never ran and the view did not switch.
+	// The guards make the second execution after a click a no-op.
+	private void OnSessionViewChecked(object sender, RoutedEventArgs e)
+	{
+		if (DataContext is SessionPaneViewModel { IsFocusSelected: true } viewModel)
+			viewModel.SelectSessionViewCommand.Execute(null);
+	}
+
+	private void OnFocusViewChecked(object sender, RoutedEventArgs e)
+	{
+		if (DataContext is SessionPaneViewModel { IsFocusSelected: false } viewModel)
+			viewModel.SelectFocusViewCommand.Execute(null);
+	}
+
 	private async void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		Loaded -= OnLoaded;

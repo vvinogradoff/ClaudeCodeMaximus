@@ -63,7 +63,14 @@ public sealed class CdpPage : IDisposable
 			await Task.Delay(250);
 		}
 
-		throw new TimeoutException("Could not reach the transcript page over the DevTools port: " + lastError);
+		throw new TimeoutException("Could not reach the transcript page over the DevTools port: " + lastError + (IsElevated() ? " The test process is ELEVATED, and WebView2 ignores WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS (so the debugging port is never opened) when its host runs elevated. Run through toolse2eRun-WpfE2E.ps1 in its test-user mode, or from a non-elevated shell." : ""));
+	}
+
+	/// <summary>Whether this process runs elevated (administrator token): WebView2 then drops the additional browser arguments, including the debugging port.</summary>
+	private static bool IsElevated()
+	{
+		using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+		return new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 	}
 
 	public void Dispose() => _socket.Dispose();
@@ -105,6 +112,32 @@ public sealed class CdpPage : IDisposable
 			throw new InvalidOperationException("Script failed: " + result["exceptionDetails"] + " in: " + expression);
 
 		return result?["result"]?["value"];
+	}
+
+	/// <summary>
+	/// Waits for a button of the page whose text is exactly <paramref name="text"/>, scrolls it into view and clicks it with a real mouse click; false on timeout.
+	/// The page's content cannot be reached through UI Automation in a non-interactive session (UIA hides the invisible child windows of the browser), so buttons inside the page are found here.
+	/// </summary>
+	public async Task<bool> ClickButtonAsync(string text, TimeSpan timeout)
+	{
+		var script = "((t) => { const b = Array.from(document.querySelectorAll('button')).find(x => x.textContent.trim() === t); if (!b) return null; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })(" + System.Text.Json.JsonSerializer.Serialize(text) + ")";
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline)
+		{
+			if (await EvalAsync(script) is JsonArray point)
+			{
+				await Task.Delay(100);   // the scroll above is applied before the position is read again
+				if (await EvalAsync(script) is JsonArray settled)
+				{
+					await ClickAsync(settled[0]!.GetValue<double>(), settled[1]!.GetValue<double>());
+					return true;
+				}
+			}
+
+			await Task.Delay(250);
+		}
+
+		return false;
 	}
 
 	/// <summary>A left click at page coordinates (CSS pixels).</summary>

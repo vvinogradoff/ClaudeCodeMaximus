@@ -88,10 +88,10 @@
                 <!-- Session / Focus switch (FR.23.12): exactly one side is checked; the Focus badge shows while Session is selected (FR.23.13) -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
                     <RadioButton x:Name="SessionViewButton" GroupName="SessionFocusView" Style="{StaticResource SegmentButton}" Content="Session"
-                                 IsChecked="{Binding IsSessionSelected, Mode=OneWay}" Command="{Binding SelectSessionViewCommand}"
+                                 IsChecked="{Binding IsSessionSelected, Mode=OneWay}" Command="{Binding SelectSessionViewCommand}" Checked="OnSessionViewChecked"
                                  AutomationProperties.Name="Session view" ToolTip="Show the transcript" />
                     <RadioButton x:Name="FocusViewButton" GroupName="SessionFocusView" Style="{StaticResource SegmentButton}" Margin="2,0,0,0"
-                                 IsChecked="{Binding IsFocusSelected, Mode=OneWay}" Command="{Binding SelectFocusViewCommand}"
+                                 IsChecked="{Binding IsFocusSelected, Mode=OneWay}" Command="{Binding SelectFocusViewCommand}" Checked="OnFocusViewChecked"
                                  AutomationProperties.Name="Focus view" ToolTip="Show what needs your attention">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Focus" />

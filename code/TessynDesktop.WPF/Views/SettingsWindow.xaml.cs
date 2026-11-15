@@ -18,6 +18,8 @@ public partial class SettingsWindow : Window
 		InitializeComponent();
 		Loaded += OnLoaded;
 		Closed += (_, _) => _settings.Dispose();
+		// IsCancel closes only a dialog; this window is modeless, so pressing Close (mouse, keyboard or UI Automation Invoke) must close it itself.
+		CloseButton.Click += (_, _) => Close();
 	}
 
 	private async void OnLoaded(object sender, RoutedEventArgs e)

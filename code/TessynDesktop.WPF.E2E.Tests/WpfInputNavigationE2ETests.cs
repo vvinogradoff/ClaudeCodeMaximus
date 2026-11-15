@@ -105,6 +105,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 
 		var page = await CdpPage.ConnectAsync(port, "transcript.html", StartTimeout);
 		await WaitAsync("the transcript page to show the newest entries", async () => await Num("S && S.items.length ? S.items[S.items.length - 1].i : -1", page) == Entries - 1);
+		await WarmHeightsAsync(page);
 		return (process, page);
 	}
 
@@ -130,6 +131,30 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 		Assert.Fail($"Expected: {what}. Log:\n{_app.ReadLog()}");
 	}
 
+	/// <summary>
+	/// Measures every loaded entry once (scrolls through the content), then returns to the bottom. Unmeasured entries have estimated heights; the page corrects them
+	/// as they are rendered and keeps the top entry in place, so content a test looks at would otherwise move by more or less than the scroll it asked for.
+	/// </summary>
+	private static async Task WarmHeightsAsync(CdpPage page)
+	{
+		// Scrolling to the top would make the page ask the host for older entries (and change the loaded window), so nothing is posted meanwhile and the paging state is reset after.
+		await page.EvalAsync("(async () => { const realPost = post; post = function () { }; try { for (let y = vp.scrollHeight; y >= 0; y -= vp.clientHeight / 2) { vp.scrollTop = y; render(null); await new Promise(r => requestAnimationFrame(r)); } vp.scrollTop = vp.scrollHeight; render(null); } finally { post = realPost; NG = PagingGate.create(); olderPending = false; } return true; })()");
+		await SettleAsync(page);
+	}
+
+	/// <summary>Waits until the scroll position, the content height and the rendered range stop changing (three equal samples), so a rectangle measured next is still valid when the click arrives.</summary>
+	private static async Task SettleAsync(CdpPage page)
+	{
+		var last = "";
+		for (int stable = 0, i = 0; stable < 3 && i < 100; i++)
+		{
+			var now = (await page.EvalAsync("vp.scrollTop + ':' + S.off[S.items.length] + ':' + S.a + ':' + S.b"))?.ToString() ?? "";
+			stable = now == last ? stable + 1 : 0;
+			last = now;
+			await Task.Delay(40);
+		}
+	}
+
 	/// <summary>Scrolls the page so that entry <paramref name="i"/> is in the middle of the view, once it is rendered.</summary>
 	private static async Task ShowEntryAsync(CdpPage page, int i)
 	{
@@ -149,6 +174,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 	private static async Task ClickEntryAsync(CdpPage page, int i)
 	{
 		await ShowEntryAsync(page, i);
+		await SettleAsync(page);
 		var rect = await page.EvalAsync($"(() => {{ const r = document.querySelector('.e[data-k=\"' + posOfEntry({i}) + '\"] .b').getBoundingClientRect(); return [r.left + 20, r.top + r.height / 2]; }})()");
 		await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>());
 	}
@@ -346,8 +372,9 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 	// Where the host would answer a page request (a window that stops short of the newest entries, a reload), the test plays the host by calling the
 	// page's own handlers (onAppend, onPrepend, onLoad) with entries it holds; what the page posts to the host is recorded in window.__posts.
 
-	private static async Task RecordPostsAsync(CdpPage page) =>
-		await page.EvalAsync("(() => { window.__posts = []; const orig = post; post = function (o) { window.__posts.push(o); orig(o); }; return true; })()");
+	/// <summary>Records what the page posts. Posts named in <paramref name="answeredByTest"/> are NOT forwarded to the real host: the test answers them itself (onAppend / onPrepend), and a real host reply racing the injected one would resolve or drop the pending move first.</summary>
+	private static async Task RecordPostsAsync(CdpPage page, params string[] answeredByTest) =>
+		await page.EvalAsync("(() => { window.__posts = []; const swallow = " + System.Text.Json.JsonSerializer.Serialize(answeredByTest) + "; const orig = post; post = function (o) { window.__posts.push(o); if (!swallow.includes(o.ev)) orig(o); }; return true; })()");
 
 	private static async Task<int> PostsAsync(CdpPage page, string ev) => (int)await Num($"window.__posts.filter(p => p.ev === '{ev}').length", page);
 
@@ -360,7 +387,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 		var (process, page) = await StartAsync();
 		try
 		{
-			await RecordPostsAsync(page);
+			await RecordPostsAsync(page, "needNewer");
 			// The window stops short of the newest entries: entries 252.. are held back (the host has them on its newer page).
 			await page.EvalAsync("(() => { window.__newer = S.items.splice(posOfEntry(252)); S.hasNewer = true; recomputeOff(); S.a = S.b = 0; render('bottom'); return true; })()");
 			Assert.Equal(251, await Num("S.items[S.items.length - 1].i", page));
@@ -389,7 +416,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 		var (process, page) = await StartAsync();
 		try
 		{
-			await RecordPostsAsync(page);
+			await RecordPostsAsync(page, "needOlder");
 			await page.EvalAsync("(() => { S.hasOlder = true; return true; })()");   // a host that says there is more, then returns nothing
 			await ClickEntryAsync(page, 162);   // mine; before it only the scheduled 160 is loaded
 			await page.PressAsync("ArrowUp", Up);
@@ -452,7 +479,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 		var (process, page) = await StartAsync();
 		try
 		{
-			await RecordPostsAsync(page);
+			await RecordPostsAsync(page, "needOlder");
 			await ClickEntryAsync(page, 254);
 			await ExpectSelectedAsync(page, 254);
 			await page.EvalAsync("(() => { window.__all = S.items.map(x => Object.assign({}, x)); return true; })()");
@@ -485,7 +512,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 		var (process, page) = await StartAsync();
 		try
 		{
-			await RecordPostsAsync(page);
+			await RecordPostsAsync(page, "findRequested", "findStep");
 			await ClickEntryAsync(page, 254);
 			await ExpectSelectedAsync(page, 254);
 
@@ -530,6 +557,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 			await page.EvalAsync("(() => { S.items[posOfEntry(254)].html = '<p>see <a id=\"lk\" href=\"https://example.com/page\">this link</a> now</p>'; S.a = S.b = 0; render(null); return true; })()");
 			await ShowEntryAsync(page, 254);
 			await WaitAsync("the link to render", async () => await Num("document.querySelectorAll('#lk').length", page) == 1);
+			await SettleAsync(page);
 			var rect = await page.EvalAsync("(() => { const r = document.getElementById('lk').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()");
 
 			await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>());
@@ -540,6 +568,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 			await ClickEntryAsync(page, 252);
 			await ExpectSelectedAsync(page, 252);
 			await ShowEntryAsync(page, 254);
+			await SettleAsync(page);
 			rect = await page.EvalAsync("(() => { const r = document.getElementById('lk').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()");
 			await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>());
 			await WaitAsync("a second link post", async () => await PostsAsync(page, "link") >= 2);
@@ -619,4 +648,5 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 			Stop(process, page);
 		}
 	}
+
 }
