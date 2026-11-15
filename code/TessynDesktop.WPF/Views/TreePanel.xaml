@@ -1,7 +1,8 @@
 ﻿<UserControl x:Class="TessynDesktop.WPF.Views.TreePanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels">
+             xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels"
+             xmlns:v="clr-namespace:TessynDesktop.WPF.Views">
     <UserControl.Resources>
         <ResourceDictionary>
         <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/TreeRowStyles.xaml" /></ResourceDictionary.MergedDictionaries>
@@ -98,6 +99,9 @@
         </DataTemplate>    </ResourceDictionary>
     </UserControl.Resources>
     <DockPanel>
+        <!-- Slots: a toolbar above the search box and a footer below the rows -->
+        <v:SlotHost DockPanel.Dock="Top" SlotId="tree.toolbar" />
+        <v:SlotHost DockPanel.Dock="Bottom" SlotId="tree.footer" />
         <Grid DockPanel.Dock="Top" Margin="8,8,8,4">
             <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Search sessions" Padding="8,5,30,5" />
             <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphSearch}" FontSize="12" HorizontalAlignment="Right"
@@ -107,6 +111,7 @@
         <ListBox ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
                  ItemContainerStyle="{StaticResource TreeRowItem}"
                  BorderThickness="0" Background="Transparent"
+                 v:CommandMenu.Menu="tree.node"
                  PreviewKeyDown="OnTreeKeyDown"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling"

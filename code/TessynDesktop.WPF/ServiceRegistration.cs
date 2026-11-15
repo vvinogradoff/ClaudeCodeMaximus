@@ -71,6 +71,14 @@ public sealed class ServiceRegistration
 			TestDropPaths = options.TestDropPaths,
 		});
 		services.AddSingleton<IClientStateStore, JsonClientStateStore>();
+
+		// Shell foundations (W0). Singletons by nature: each is the one registry or store of its kind for the whole window.
+		services.AddSingleton<IClientSettingsStore, ClientSettingsStore>();
+		services.AddSingleton<IShellSlots, ShellSlots>();
+		services.AddSingleton<IShellCommands, ShellCommands>();
+		services.AddSingleton<ShellModuleLoader>();
+		services.AddSingleton<IDialogPresenter, WpfDialogPresenter>();
+		services.AddSingleton<IDialogService, DialogService>();
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();
 		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));

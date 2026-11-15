@@ -49,6 +49,7 @@ public sealed class JsonClientStateStore : IClientStateStore
 			if (loaded != null)
 			{
 				loaded.TreeWidth = ClampTreeWidth(loaded.TreeWidth);
+				loaded.Sections ??= new();
 				State = loaded;
 			}
 		}

@@ -1,0 +1,155 @@
+using System.Windows.Input;
+using Microsoft.Extensions.Logging;
+using TessynDesktop.WPF.State;
+
+namespace TessynDesktop.WPF.Services;
+
+/// <summary><see cref="IShellCommands"/>: in-memory registry; gestures honour the user's overrides of the key binding settings.</summary>
+/// <remarks>Created by Claude</remarks>
+public sealed class ShellCommands : IShellCommands
+{
+	private readonly IClientSettingsStore _settings;
+	private readonly ILogger<ShellCommands> _logger;
+	private readonly KeyGestureConverter _converter = new();
+	private readonly object _gate = new();
+	private readonly Dictionary<string, ShellCommand> _commands = new(StringComparer.Ordinal);
+	private readonly List<ShellMenuEntryModel> _entries = [];
+
+	public ShellCommands(IClientSettingsStore settings, ILogger<ShellCommands> logger)
+	{
+		_settings = settings;
+		_logger = logger;
+	}
+
+	public void Register(ShellCommand command)
+	{
+		lock (_gate)
+		{
+			if (!_commands.TryAdd(command.Id, command))
+				throw new InvalidOperationException($"A command with the id '{command.Id}' is already registered");
+		}
+	}
+
+	public void AddMenuEntry(string menuId, string commandId, int order = 0, string? group = null)
+	{
+		lock (_gate)
+			_entries.Add(new ShellMenuEntryModel { MenuId = menuId, CommandId = commandId, Order = order, Group = group, Sequence = _entries.Count });
+	}
+
+	public ShellCommand? Find(string commandId)
+	{
+		lock (_gate)
+			return _commands.GetValueOrDefault(commandId);
+	}
+
+	public IReadOnlyList<ShellMenuItemModel> BuildMenu(string menuId, object? parameter)
+	{
+		List<(ShellMenuEntryModel Entry, ShellCommand Command)> found;
+		lock (_gate)
+		{
+			found = _entries.Where(e => e.MenuId == menuId && _commands.ContainsKey(e.CommandId))
+				.OrderBy(e => e.Order).ThenBy(e => e.Sequence)
+				.Select(e => (e, _commands[e.CommandId]))
+				.ToList();
+		}
+
+		var items = new List<ShellMenuItemModel>(found.Count);
+		string? previousGroup = null;
+		foreach (var (entry, command) in found)
+		{
+			items.Add(new ShellMenuItemModel
+			{
+				CommandId = command.Id,
+				Title = command.Title,
+				Gesture = GetGesture(command.Id),
+				IsEnabled = CanExecute(command, parameter),
+				BeginsGroup = items.Count > 0 && entry.Group != previousGroup,
+			});
+			previousGroup = entry.Group;
+		}
+
+		return items;
+	}
+
+	public string? GetGesture(string commandId)
+	{
+		var command = Find(commandId);
+		if (command == null)
+			return null;
+
+		var overrides = _settings.Get<KeyBindingSettings>().Gestures;
+		if (overrides.TryGetValue(commandId, out var custom))
+			return string.IsNullOrWhiteSpace(custom) ? null : custom;
+
+		return command.DefaultGesture;
+	}
+
+	public ShellCommand? FindByGesture(Key key, ModifierKeys modifiers)
+	{
+		List<ShellCommand> all;
+		lock (_gate)
+			all = _commands.Values.ToList();
+
+		var overrides = _settings.Get<KeyBindingSettings>().Gestures;
+		foreach (var command in all)
+		{
+			var text = overrides.TryGetValue(command.Id, out var custom) ? custom : command.DefaultGesture;
+			if (string.IsNullOrWhiteSpace(text))
+				continue;
+
+			if (TryParse(command.Id, text, out var gesture) && gesture.Key == key && gesture.Modifiers == modifiers)
+				return command;
+		}
+
+		return null;
+	}
+
+	public async Task<bool> ExecuteAsync(string commandId, object? parameter)
+	{
+		var command = Find(commandId);
+		if (command == null || !CanExecute(command, parameter))
+			return false;
+
+		try
+		{
+			await command.ExecuteAsync(parameter).ConfigureAwait(true);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Command {CommandId} failed", commandId);
+			return false;
+		}
+	}
+
+	private bool CanExecute(ShellCommand command, object? parameter)
+	{
+		if (command.CanExecute == null)
+			return true;
+
+		try
+		{
+			return command.CanExecute(parameter);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "CanExecute of command {CommandId} failed", command.Id);
+			return false;
+		}
+	}
+
+	private bool TryParse(string commandId, string text, out KeyGesture gesture)
+	{
+		try
+		{
+			gesture = (KeyGesture)_converter.ConvertFromInvariantString(text)!;
+			return true;
+		}
+		catch (Exception ex) when (ex is NotSupportedException or FormatException or ArgumentException or InvalidCastException)
+		{
+			_logger.LogWarning("The gesture '{Gesture}' of command {CommandId} is not valid and is ignored", text, commandId);
+			gesture = null!;
+			return false;
+		}
+	}
+}

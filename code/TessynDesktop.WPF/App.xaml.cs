@@ -19,7 +19,7 @@ public partial class App : Application
 	private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(6);
 
 	private IHost? _host;
-	private Mutex? _singleInstanceMutex;
+	private SingleInstanceGuard? _singleInstance;
 
 	/// <summary>The application's service provider (set once the host is built).</summary>
 	public IServiceProvider Services => _host!.Services;
@@ -30,14 +30,16 @@ public partial class App : Application
 
 		var startup = System.Diagnostics.Stopwatch.StartNew();
 		var options = StartupOptions.Parse(e.Args);
-		_singleInstanceMutex = new Mutex(initiallyOwned: true, options.MutexName, out var createdNew);
-		if (!createdNew)
+		_singleInstance = new SingleInstanceGuard(options.MutexName);
+		if (!_singleInstance.TryAcquire())
 		{
-			_singleInstanceMutex.Dispose();
-			_singleInstanceMutex = null;
+			// The running instance has been asked to come to the front.
+			_singleInstance = null;
 			Shutdown();
 			return;
 		}
+
+		_singleInstance.ListenForActivation(() => Dispatcher.BeginInvoke(new Action(() => ActivateMainWindow(options))));
 
 		var paths = options.DataRoot == null ? new AppPaths() : new AppPaths(options.DataRoot);
 		Log.Logger = new LoggingSetup().CreateLogger(paths);
@@ -60,6 +62,7 @@ public partial class App : Application
 		await _host.Services.GetRequiredService<IClientStateStore>().LoadAsync();
 		var stateLoaded = startup.ElapsedMilliseconds;
 
+		_host.Services.GetRequiredService<ShellModuleLoader>().Load();
 		var window = _host.Services.GetRequiredService<MainWindow>();
 		var windowCreated = startup.ElapsedMilliseconds;
 		MainWindow = window;
@@ -92,15 +95,19 @@ public partial class App : Application
 		}
 
 		Log.CloseAndFlush();
-		try
-		{
-			_singleInstanceMutex?.ReleaseMutex();
-		}
-		catch (ApplicationException)
-		{
-		}
-
-		_singleInstanceMutex?.Dispose();
+		_singleInstance?.Dispose();
 		base.OnExit(e);
+	}
+
+	/// <summary>A second start asked for this instance: restore and raise the window. A test window must never take focus, so it ignores the request.</summary>
+	private void ActivateMainWindow(StartupOptions options)
+	{
+		if (options.TestWindow || MainWindow == null)
+			return;
+
+		if (MainWindow.WindowState == WindowState.Minimized)
+			MainWindow.WindowState = WindowState.Normal;
+
+		MainWindow.Activate();
 	}
 }
