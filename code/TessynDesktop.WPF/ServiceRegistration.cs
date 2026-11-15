@@ -65,7 +65,8 @@ public sealed class ServiceRegistration
 				sp.GetRequiredService<IPreviewSurface>(), sp.GetRequiredService<IMarkdownRenderer>(), sp.GetRequiredService<IExternalFileLauncher>(),
 				sp.GetRequiredService<ExternalOpenPolicy>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<IUrlLauncher>(),
 				sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FilePreviewViewModel>>()),
-			sp.GetRequiredService<MediaPreviewPolicy>()));
+			sp.GetRequiredService<MediaPreviewPolicy>(),
+			sp.GetRequiredService<IClientStateStore>()));
 		services.AddSingleton<IClientStateStore, JsonClientStateStore>();
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();

@@ -10,6 +10,7 @@ using TessynDesktop.Services;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Rendering;
 using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Transcript;
 
 namespace TessynDesktop.WPF.ViewModels;
@@ -111,7 +112,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		int cacheCapacity,
 		FocusViewModel? focus = null,
 		FilePreviewViewModel? preview = null,
-		MediaPreviewPolicy? media = null)
+		MediaPreviewPolicy? media = null,
+		IClientStateStore? stateStore = null)
 	{
 		_client = client;
 		_surface = surface;
@@ -122,6 +124,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_logger = logger;
 		_cache = new TranscriptCache(cacheCapacity);
 		_media = media;
+		InitializeComposer(stateStore);
 		Focus = focus ?? new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance);
 		Preview = preview;
 		Focus.RefActivated += OnRefActivated;
@@ -196,6 +199,9 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		var wasShown = false;
 		if (NodeId != null)
 			_drafts[NodeId] = InputText;
+
+		if (nodeId != NodeId)
+			_importCts?.Cancel();   // a copy in flight belongs to the session the user just left
 
 		var token = ++_openToken;
 		_switchTracker.Begin(nodeId);

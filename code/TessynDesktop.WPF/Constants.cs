@@ -40,6 +40,12 @@ public static partial class Constants
 		public const string PreviewUnsupported = "This file type has no preview.";
 		public const string PreviewTruncated = "Showing the first part of a large file.";
 		public const string PdfHint = "PDF files open in your default PDF app.";
+		public const string AttachedFilePrefix = "Attached file: ";
+		public const string AttachFolderRefused = "a folder cannot be attached; drop the files inside it instead";
+		public const string AttachNeedsSession = "Select a session first: files are attached to a session.";
+		public const string AttachBusy = "Files are still being attached. Wait for them or cancel.";
+		public const string AttachCancelled = "Attaching cancelled.";
+		public const string AttachFailedHeading = "Could not attach:";
 	}
 
 	/// <summary>
@@ -82,6 +88,7 @@ public static partial class Constants
 		public const int LogRetainedFiles = 14;
 		public const int EntriesPageSize = 100;
 		public const int MaxCachedTranscripts = 4;
+		public const int MaxListedAttachFailures = 5;
 		public const int MaxSearchWorkerLookups = 50;
 		public const int MinWindowVisiblePixels = 80;
 		public const int MinWindowWidth = 640;

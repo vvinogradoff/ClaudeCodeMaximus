@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Views;
@@ -13,12 +14,14 @@ public partial class SessionPane : UserControl
 {
 	private SessionPaneViewModel? _subscribed;
 	private double _sideWidth = Constants.Limits.DefaultSidePaneWidth;
+	private readonly FileDropReader _fileDrops = new();
 
 	public SessionPane()
 	{
 		InitializeComponent();
 		DataContextChanged += OnDataContextChanged;
 		Loaded += OnLoaded;
+		DataObject.AddPastingHandler(InputBox, OnInputPasting);
 	}
 
 	private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -57,6 +60,7 @@ public partial class SessionPane : UserControl
 		if (_subscribed != null)
 		{
 			_subscribed.FindFocusRequested -= OnFindFocusRequested;
+			_subscribed.InputCaretRequested -= OnInputCaretRequested;
 			_subscribed.PropertyChanged -= OnViewModelPropertyChanged;
 		}
 
@@ -64,6 +68,7 @@ public partial class SessionPane : UserControl
 		if (_subscribed != null)
 		{
 			_subscribed.FindFocusRequested += OnFindFocusRequested;
+			_subscribed.InputCaretRequested += OnInputCaretRequested;
 			_subscribed.PropertyChanged += OnViewModelPropertyChanged;
 		}
 
@@ -128,5 +133,45 @@ public partial class SessionPane : UserControl
 				e.Handled = true;
 				break;
 		}
+	}
+
+	/// <summary>Only a real file list (<see cref="DataFormats.FileDrop"/>) is taken over; any other drag keeps the text box's own behaviour.</summary>
+	private void OnInputDragOver(object sender, DragEventArgs e)
+	{
+		if (_subscribed == null || _fileDrops.Read(e.Data).Count == 0)
+			return;
+
+		e.Effects = DragDropEffects.Copy;
+		e.Handled = true;
+	}
+
+	private void OnInputDrop(object sender, DragEventArgs e)
+	{
+		var paths = _fileDrops.Read(e.Data);
+		if (_subscribed == null || paths.Count == 0)
+			return;
+
+		e.Handled = true;
+		_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
+	}
+
+	/// <summary>Ctrl+V of files copied in Explorer behaves like a drop; text on the clipboard pastes as usual.</summary>
+	private void OnInputPasting(object sender, DataObjectPastingEventArgs e)
+	{
+		if (_subscribed == null || e.DataObject.GetDataPresent(DataFormats.UnicodeText) || e.DataObject.GetDataPresent(DataFormats.Text))
+			return;
+
+		var paths = _fileDrops.Read(e.DataObject);
+		if (paths.Count == 0)
+			return;
+
+		e.CancelCommand();
+		_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
+	}
+
+	private void OnInputCaretRequested(object? sender, int caret)
+	{
+		InputBox.CaretIndex = Math.Min(caret, InputBox.Text.Length);
+		InputBox.Focus();
 	}
 }

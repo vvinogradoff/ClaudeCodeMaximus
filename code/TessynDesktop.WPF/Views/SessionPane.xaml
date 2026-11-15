@@ -156,19 +156,41 @@
         </Grid>
 
         <!-- Input -->
-        <Grid Grid.Row="3" Margin="16,8,16,12">
+        <StackPanel Grid.Row="3" Margin="16,8,16,12">
+        <!-- Progress of a file-mode drop: one copy per file, cancellable -->
+        <Border Margin="0,0,0,6" Padding="10,6" CornerRadius="4" Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                Visibility="{Binding IsImporting, Converter={StaticResource BoolToVis}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Command="{Binding CancelImportCommand}" Content="Cancel" Padding="10,2" Margin="8,0,0,0"
+                        ToolTip="Stop attaching files" AutomationProperties.Name="Cancel attaching" />
+                <StackPanel>
+                    <TextBlock Text="{Binding ImportStatus}" TextTrimming="CharacterEllipsis" AutomationProperties.Name="Attach progress" />
+                    <ProgressBar Margin="0,4,0,0" Minimum="0" Maximum="{Binding ImportTotal}" Value="{Binding ImportDone}" Height="4" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+        <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="InputBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="200"
+            <TextBox x:Name="InputBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="200" AllowDrop="True" AutomationProperties.Name="Prompt input"
                      VerticalScrollBarVisibility="Auto" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
-                     ToolTip="Ctrl+Enter sends">
+                     ToolTip="Ctrl+Enter sends. Drop or paste files here."
+                     PreviewDragEnter="OnInputDragOver" PreviewDragOver="OnInputDragOver" PreviewDrop="OnInputDrop">
                 <TextBox.InputBindings>
                     <KeyBinding Gesture="Ctrl+Enter" Command="{Binding SendCommand}" />
                 </TextBox.InputBindings>
             </TextBox>
             <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Bottom">
+                <ToggleButton x:Name="FileModeToggle" IsChecked="{Binding AttachAsFiles, Mode=TwoWay}" Margin="0,0,0,4" Padding="8,6" HorizontalAlignment="Stretch"
+                              ToolTip="File mode: dropped files are copied into this session's attachments and 'Attached file: path' is inserted. Off: the file's own path is inserted."
+                              AutomationProperties.Name="File mode">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphAttach}" />
+                        <TextBlock Text="File mode" Margin="8,0,0,0" />
+                    </StackPanel>
+                </ToggleButton>
                 <Button Command="{Binding SendCommand}" Margin="0,0,0,4" Style="{DynamicResource AccentButtonStyle}" ToolTip="Send (Ctrl+Enter)">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />
@@ -183,6 +205,7 @@
                 </Button>
             </StackPanel>
         </Grid>
+        </StackPanel>
     </Grid>
 </UserControl>
 

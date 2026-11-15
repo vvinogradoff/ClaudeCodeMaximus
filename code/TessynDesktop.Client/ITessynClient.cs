@@ -122,4 +122,15 @@ public partial interface ITessynClient : IAsyncDisposable
 
 	/// <summary><c>file.preview</c>: a handle for a path that occurs in the text of the given entry.</summary>
 	Task<FilePreviewResult> FilePreviewAsync(string nodeId, string entryId, string path, CancellationToken cancellationToken = default);
+
+	// ── Attachments (additive) ───────────────────────────────────────────────────────────────
+
+	/// <summary>
+	/// <c>attachment.import</c> (loopback only): copies the local file at <paramref name="sourcePath"/> into the session's attachments folder
+	/// and returns where it went. The daemon refuses denied paths, UNC and device paths, hard links, folders, files over 200 MB and unknown sessions.
+	/// </summary>
+	Task<AttachmentDto> AttachmentImportAsync(string nodeId, string sourcePath, CancellationToken cancellationToken = default);
+
+	/// <summary><c>attachment.list</c>: the session's attachments, newest first.</summary>
+	Task<AttachmentListResult> AttachmentListAsync(string nodeId, CancellationToken cancellationToken = default);
 }

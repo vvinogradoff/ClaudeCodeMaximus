@@ -327,6 +327,25 @@ public sealed class FakeTessynClient : ITessynClient
 		return Task.FromResult(new FilePreviewResult(handle, file.Name, file.Mime, file.Bytes.Length, DateTimeOffset.UnixEpoch));
 	}
 
+	/// <summary>When set, answers every <see cref="AttachmentImportAsync"/> (nodeId, sourcePath); throw a <see cref="TessynRpcException"/> to refuse. Default: succeeds with a path under <c>a temp folder</c>.</summary>
+	public Func<string, string, CancellationToken, Task<AttachmentDto>>? AttachmentImportHandler { get; set; }
+
+	public Task<AttachmentDto> AttachmentImportAsync(string nodeId, string sourcePath, CancellationToken cancellationToken = default)
+	{
+		Record($"attachment.import:{nodeId}:{sourcePath}");
+		if (AttachmentImportHandler != null)
+			return AttachmentImportHandler(nodeId, sourcePath, cancellationToken);
+
+		var name = Path.GetFileName(sourcePath);
+		return Task.FromResult(new AttachmentDto("att." + name, Path.Combine(Path.GetTempPath(), "attachments", nodeId, "20260101-000000-" + name), name, 1, "application/octet-stream", DateTimeOffset.UnixEpoch));
+	}
+
+	public Task<AttachmentListResult> AttachmentListAsync(string nodeId, CancellationToken cancellationToken = default)
+	{
+		Record($"attachment.list:{nodeId}");
+		return Task.FromResult(new AttachmentListResult(nodeId, []));
+	}
+
 	public ValueTask DisposeAsync()
 	{
 		Disposed = true;

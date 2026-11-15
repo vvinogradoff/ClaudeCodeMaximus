@@ -21,6 +21,7 @@
     <sys:String x:Key="GlyphPin">&#xE718;</sys:String>
     <sys:String x:Key="GlyphCheck">&#xE73E;</sys:String>
     <sys:String x:Key="GlyphInfo">&#xE946;</sys:String>
+    <sys:String x:Key="GlyphAttach">&#xE723;</sys:String>
 
     <Style x:Key="IconText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
