@@ -71,6 +71,7 @@ public sealed partial class SessionPaneViewModel
 		{
 			Notice = null;
 			ApplyInsertion(NodeId, selectionStart, selectionLength, string.Join(Environment.NewLine, paths));
+			_logger.LogInformation("Composer: {Count} file(s) handled in path mode", paths.Count);
 			return;
 		}
 
@@ -88,6 +89,7 @@ public sealed partial class SessionPaneViewModel
 		}
 
 		await ImportFilesAsync(id, paths, selectionStart, selectionLength);
+		_logger.LogInformation("Composer: {Count} file(s) handled in file mode for {NodeId}", paths.Count, id);
 	}
 
 	private async Task ImportFilesAsync(string nodeId, IReadOnlyList<string> paths, int selectionStart, int selectionLength)

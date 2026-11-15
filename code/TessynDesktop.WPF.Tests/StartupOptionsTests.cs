@@ -48,4 +48,15 @@ public sealed class StartupOptionsTests
 	{
 		Assert.Null(StartupOptions.Parse(["--daemon-file"]).DaemonFile);
 	}
+
+	[Fact]
+	public void Parse_TestDropPaths_AreHonouredOnlyTogetherWithTheTestWindowSwitch()
+	{
+		var withWindow = StartupOptions.Parse(["--test-window", "--test-drop", @"C:.txt", "--test-drop", @"C:.txt"]);
+		var without = StartupOptions.Parse(["--test-drop", @"C:.txt"]);
+
+		Assert.Equal([@"C:.txt", @"C:.txt"], withWindow.TestDropPaths);
+		Assert.Empty(without.TestDropPaths);
+		Assert.Empty(StartupOptions.Parse([]).TestDropPaths);
+	}
 }

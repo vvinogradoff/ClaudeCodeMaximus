@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.ViewModels;
 
@@ -15,6 +16,7 @@ public partial class SessionPane : UserControl
 	private SessionPaneViewModel? _subscribed;
 	private double _sideWidth = Constants.Limits.DefaultSidePaneWidth;
 	private readonly FileDropReader _fileDrops = new();
+	private IReadOnlyList<string> _testDrop = [];
 
 	public SessionPane()
 	{
@@ -27,8 +29,10 @@ public partial class SessionPane : UserControl
 	private async void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		Loaded -= OnLoaded;
+		_testDrop = ((App)Application.Current).Services.GetRequiredService<StartupOptions>().TestDropPaths;
 		var surface = ((App)Application.Current).Services.GetRequiredService<WebView2TranscriptSurface>();
 		surface.BrowserLost += (_, _) => Dispatcher.BeginInvoke(() => _ = RecreateAsync(surface));
+		TryTestDrop();
 		await AttachAsync(surface, Transcript);
 	}
 
@@ -79,6 +83,9 @@ public partial class SessionPane : UserControl
 	{
 		if (e.PropertyName == nameof(SessionPaneViewModel.IsSidePaneVisible))
 			ApplySidePane();
+
+		if (e.PropertyName == nameof(SessionPaneViewModel.IsLoading))
+			TryTestDrop();
 	}
 
 	/// <summary>Opens or closes the side column; the width the user dragged it to is kept while the pane is hidden.</summary>
@@ -173,5 +180,16 @@ public partial class SessionPane : UserControl
 	{
 		InputBox.CaretIndex = Math.Min(caret, InputBox.Text.Length);
 		InputBox.Focus();
+	}
+
+	/// <summary>The <c>--test-drop</c> seam (see <see cref="StartupOptions.TestDropPaths"/>): hands the paths over once, when the first session is shown.</summary>
+	private void TryTestDrop()
+	{
+		if (_testDrop.Count == 0 || _subscribed is not { HasSession: true, IsLoading: false })
+			return;
+
+		var paths = _testDrop;
+		_testDrop = [];
+		_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
 	}
 }
