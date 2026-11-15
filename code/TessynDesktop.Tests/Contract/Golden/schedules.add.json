@@ -1,0 +1,12 @@
+{
+  "id": "<id1>",
+  "nodeId": "<id2>",
+  "kind": "at",
+  "prompt": "wake up",
+  "note": "morning",
+  "fireAtUtc": "2026-11-05T09:00:00+00:00",
+  "missedFire": "fireOnce",
+  "fireCount": 0,
+  "maxFires": 0,
+  "isMailbox": false
+}

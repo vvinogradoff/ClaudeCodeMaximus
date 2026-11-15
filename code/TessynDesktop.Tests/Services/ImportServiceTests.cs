@@ -43,6 +43,23 @@ public sealed class ImportServiceTests : IDisposable
 	}
 
 	[Fact]
+	public void AnImportedSession_IsAddressableAtOnce_WithANodeIdAndAnAgentToken()
+	{
+		var directory = _env.AddDirectory("proj");
+		var group     = _env.Registry.AddGroup(directory, "G");
+		var path      = _env.WriteClaudeSession("any", "s1");
+		var summary   = _env.SummaryOf(path);
+
+		var inDirectory = _env.Service.ImportSession(directory, null, summary).Node!;
+		var inGroup     = _env.Service.ImportSession(null, group, summary).Node!;
+
+		Assert.Matches("^[0-9a-f]{32}$", inDirectory.NodeId);   // the registry used to leave both empty until the next load
+		Assert.Matches("^[0-9a-f]{32}$", inDirectory.AgentToken);
+		Assert.NotEqual(inDirectory.NodeId, inGroup.NodeId);
+		Assert.Same(inGroup, _env.Registry.FindModelByNodeId(inGroup.NodeId));
+	}
+
+	[Fact]
 	public void ImportSession_IntoAGroup_UsesTheGroupsWorkingDirectory()
 	{
 		var directory = _env.AddDirectory("proj");
