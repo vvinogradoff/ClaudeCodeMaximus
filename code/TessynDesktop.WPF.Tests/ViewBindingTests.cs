@@ -36,26 +36,7 @@ public sealed class ViewBindingTests
 		}
 	}
 
-	private static void RunSta(Action action)
-	{
-		Exception? failure = null;
-		var thread = new Thread(() =>
-		{
-			try
-			{
-				action();
-			}
-			catch (Exception ex)
-			{
-				failure = ex;
-			}
-		});
-		thread.SetApartmentState(ApartmentState.STA);
-		thread.Start();
-		thread.Join();
-		if (failure != null)
-			ExceptionDispatchInfo.Capture(failure).Throw();
-	}
+	private static void RunSta(Action action) => StaTestRunner.Run(action);
 
 	private static void Layout(FrameworkElement element)
 	{

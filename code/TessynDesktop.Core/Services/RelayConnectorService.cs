@@ -221,7 +221,8 @@ public sealed class RelayConnectorService : IRelayConnectorService
 			}
 			response.EnsureSuccessStatusCode();
 
-			SetStatus(RelayState.Connected);
+			// Connected is announced only after the bus handler is subscribed (below): a publisher that acts on Connected would
+			// otherwise race the subscription and lose its event.
 			elapsed.Start();
 			_blobGateway?.Attach(client, baseUrl);
 
@@ -252,6 +253,8 @@ public sealed class RelayConnectorService : IRelayConnectorService
 				_eventLog.Appended += handler;
 			else
 				_bus.Published += handler;
+
+			SetStatus(RelayState.Connected);
 
 			await ReadStreamAsync(response, requests.Writer, conn.Token);
 
