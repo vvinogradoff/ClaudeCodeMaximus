@@ -8,7 +8,7 @@ namespace TessynDesktop.WPF.Tests.Fakes;
 
 /// <summary>An in-memory <see cref="ITessynClient"/> with scriptable tree, workers, search and transcripts; records every call.</summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class FakeTessynClient : ITessynClient
+public sealed partial class FakeTessynClient : ITessynClient
 {
 	private readonly object _gate = new();
 
@@ -73,7 +73,6 @@ public sealed class FakeTessynClient : ITessynClient
 		return Task.CompletedTask;
 	}
 
-	public Task<TurnSendResult> TurnSendAsync(string nodeId, string text, string? modelId = null, string? effort = null, string? profileId = null, string? clientRequestId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 	public Task<SessionStopResult> TurnStopAsync(string nodeId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 	public Task<HelloResult> HelloAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
