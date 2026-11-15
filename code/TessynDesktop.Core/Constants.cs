@@ -403,6 +403,12 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string DeniedMessage = "That file cannot be read remotely.";
 		public const string UnknownHandleMessage = "Unknown file handle";
 
+		/// <summary>
+		/// Revision of the FileAccess mode default. 1 = decision A11 (2026-11-15): the default moved from ReferencedOnly to WorkingDirectory.
+		/// Builds before it stored ReferencedOnly only as their default (there was no way to choose it), so loading such a file moves the mode once.
+		/// </summary>
+		public const int ModeRevision = 1;
+
 		/// <summary>Decision A13: media from these hosts auto-loads in a client's preview.</summary>
 		public static readonly string[] DefaultMediaPreviewHosts = ["annielartens.online", "*.githubusercontent.com"];
 	}

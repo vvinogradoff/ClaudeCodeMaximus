@@ -85,6 +85,79 @@ public sealed class AppSettingsServiceTests
 		}
 	}
 
+	[Fact]
+	public void Load_SettingsWrittenBeforeDecisionA11_MovesTheOldReferencedOnlyDefaultToWorkingDirectoryOnce()
+	{
+		var tempDir = CreateTempDir();
+		try
+		{
+			// Written by a build before A11: ReferencedOnly is stored, but only as that build's default (it had no way to choose the mode).
+			File.WriteAllText(Path.Combine(tempDir, Constants.SettingsFileName), """{"FileAccess":{"Mode":0}}""");
+			var service = new AppSettingsService(tempDir);
+
+			service.Load();
+
+			Assert.Equal(FileAccessMode.WorkingDirectory, service.Settings.FileAccess.Mode);
+			Assert.Equal(Constants.FileAccess.ModeRevision, service.Settings.FileAccess.ModeRevision);
+
+			// After the move, ReferencedOnly is an explicit choice and survives a save and a reload.
+			service.Settings.FileAccess.Mode = FileAccessMode.ReferencedOnly;
+			service.Save();
+			var reloaded = new AppSettingsService(tempDir);
+			reloaded.Load();
+
+			Assert.Equal(FileAccessMode.ReferencedOnly, reloaded.Settings.FileAccess.Mode);
+		}
+		finally
+		{
+			Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
+	public void Load_SettingsWithoutFileAccess_GetsWorkingDirectory()
+	{
+		var tempDir = CreateTempDir();
+		try
+		{
+			File.WriteAllText(Path.Combine(tempDir, Constants.SettingsFileName), "{}");
+			var service = new AppSettingsService(tempDir);
+
+			service.Load();
+
+			Assert.Equal(FileAccessMode.WorkingDirectory, service.Settings.FileAccess.Mode);
+			Assert.Equal(Constants.FileAccess.ModeRevision, service.Settings.FileAccess.ModeRevision);
+		}
+		finally
+		{
+			Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
+	public void Load_WhenNoFileExists_MarksTheModeRevision_SoALaterExplicitReferencedOnlyStays()
+	{
+		var tempDir = CreateTempDir();
+		try
+		{
+			var service = new AppSettingsService(tempDir);
+			service.Load();
+
+			Assert.Equal(FileAccessMode.WorkingDirectory, service.Settings.FileAccess.Mode);
+
+			service.Settings.FileAccess.Mode = FileAccessMode.ReferencedOnly;
+			service.Save();
+			var reloaded = new AppSettingsService(tempDir);
+			reloaded.Load();
+
+			Assert.Equal(FileAccessMode.ReferencedOnly, reloaded.Settings.FileAccess.Mode);
+		}
+		finally
+		{
+			Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
 	private static string CreateTempDir()
 	{
 		var path = Path.Combine(Path.GetTempPath(), "cm_test_settings_" + Path.GetRandomFileName());
