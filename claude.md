@@ -137,7 +137,11 @@ When a new session starts, and if the user indicates the session is a continuati
 1. When implementing any requirement align it with an use case from [Use Cases](/docs/usecases/).
 2. If there is no use case for a specific requirement please draft one in [Use Cases](/docs/usecases/)
 3. For every use case write a set of test cases in [Test Cases](/docs/testases) which are to be end to end tests.
-4. Run these E2E tests when you assume a requirement implemented. E2E tests now manage the application instance internally and no longer require external process calls.
+4. Run these E2E tests when you assume a requirement implemented. What exists today:
+   - `code/Tessyn.Web.E2E.Tests`: Tessyn Web (browser) end-to-end tests against a test daemon.
+   - `code/TessynDesktop.WPF.E2E.Tests`: the WPF client end to end. It starts the built WPF app with `--test-window` (off-screen, not in the taskbar, window state neither restored nor saved) against a real `TdcpServer` on a temporary data root with a fake `claude` executable, and closes it by process id.
+   - Both are **explicitly-run projects**: run them by name (`dotnet test code/TessynDesktop.WPF.E2E.Tests`, `dotnet test code/Tessyn.Web.E2E.Tests`) after `dotnet build code/TessynDesktop.sln`. They manage the app instance themselves; no external process calls are needed.
+   - There are **no Avalonia UI tests**: the Avalonia client is covered only by unit and integration tests, and is being retired in favour of WPF.
 5. Do not report a requirement implemented till the solution passes all unit, integration and end to end tests.
 6. E2E tests output application logs the the console, so you can see errors happened on server side if any. Do read the test output when a test fails to understand the reason of failure.
 
