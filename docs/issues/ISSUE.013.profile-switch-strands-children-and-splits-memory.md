@@ -222,4 +222,32 @@ whether `spawn_session` may register a new directory (open question).
   process group alive until children exit, or document and enforce "detached process" in the
   worker instructions.
 
-Status: Open (analysis only, nothing implemented).
+## Status (2026-11-15): daemon side implemented
+
+Decision A3. Merge `9fa7cd6` (branch `feat/issue013-daemon`, with the review fixes P1-P12, N1 and N2). Reports: `.wpf-work/320-issue013-daemon.md`, `320b-issue013-fixes.md`, `320c-issue013-n1n2.md`. Requirements: FR.12.27, FR.12.28, FR.15.14. Wire format of `profile.switch`: `docs/refactoring/tdcp-spec.md` section 9.8.
+
+**Reproduction findings** (`Issue013ReproductionTests`; the pre-fix behaviour is recorded in commit `528a250`):
+- The claim "`send_to_session` to an old child fails" did **not** reproduce. A child pinned to profile 1 whose parent was switched to profile 2 runs on profile 1's config dir, with no error and no user step. The code has no rule that blocks a resume across profiles.
+- The **silent Default fallback did** reproduce. When the pinned display name no longer matched a stored profile (renamed or removed), the turn ran on the Default account with no error, and the user entry was stamped `[Sys] <email>`. That is the most plausible cause of the incident claim. The same fallback existed in `SessionTurnService`, `TurnSettingsResolver` and `SessionCompactRpcModule`.
+- Not reproducible without a real CLI: a dead token behind a profile that still exists. The CLI reports it at run time as an auth error.
+
+**Built:**
+- **ProfileId pins.** `SessionNodeModel.ProfileId` and `PendingProfileId`. One resolver (`ProfileResolver`) for the turn path, the turn engine and compact. Load-time migration of name pins to ids. Pinned and unresolvable is an error; a legacy name-only label that matches nothing runs on Default with a visible note (decision A18; FR.12.27). A turn refused before it ran is reported by Telegram and the scheduler.
+- **R1 (daemon API).** `profile.switch` (loopback only), with `includeDescendants`. A running session is never touched: its switch is queued and applied under the turn lock at its next turn. A switch back cancels a queued switch. Failed file moves keep the switch queued (`failed[]`).
+- **R2.** `send_to_session` states `[profile=<name>]`, refuses an unusable pinned profile with an error that names it, and takes `migrate: true` for the caller's own descendants only (no cascade). Spawned children inherit the supervisor's pin by id.
+- **R3.** `ClaudeSessionMigrator` moves the transcript and merges the `<id>\` folder from every store (the target's files win; a source copy is never deleted), reports absolute paths under the old config dir and never rewrites them. The turn-time adoption (FR.11.13) uses it and runs under the turn lock.
+- **R5 (daemon part).** `list_sessions` rows carry `profile=<name>` and `switching-to=<name>`. `session.get` and `session.headers` `lastUsed.profileId` follow the pin.
+- **R7.** A live streaming process is stopped when a switch is applied to a session that is not running.
+- **R9.** `spawn_session` gives a clear error for a directory outside every project (and lists the registered ones); the `workingDir` match respects path separators. The tool never registers a directory.
+- Tests: about 90 new tests (reproduction, switch service, MCP tools, resolver and contract, review fixes). All suites were green at the merge.
+
+**Still open:**
+- **R4** shared project memory.
+- **R6** connector diff before a switch.
+- **R1 cascade dialog** in the WPF client (the daemon API exists; the client has no wrapper for `profile.switch` yet).
+- **R5 tree badge** in WPF (the daemon part is done).
+- The WPF profile dropdown should read `ProfileId` from the node. The Avalonia dropdown is restored from the transcript history and can show the old profile until the next turn.
+- A dead token behind an existing `.credentials.json` is known only at run time. A `claude auth status` pre-flight was left out (one process spawn per send). "Logged out" means no `.credentials.json` in the profile folder.
+
+Status: Daemon side implemented (merge `9fa7cd6`, 2026-11-15). R4, R6 and the WPF parts (R1 cascade dialog, R5 badge) are open.
+
