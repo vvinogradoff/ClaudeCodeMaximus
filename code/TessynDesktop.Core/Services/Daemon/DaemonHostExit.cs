@@ -121,6 +121,24 @@ public sealed class DaemonHostExitListener : IDisposable
 		}
 	}
 
+	/// <summary>True when a host listens on <paramref name="name"/>. Looks only: nothing is signalled.</summary>
+	public static bool IsListening(string name)
+	{
+		try
+		{
+			using var existing = EventWaitHandle.OpenExisting(name);
+			return true;
+		}
+		catch (WaitHandleCannotBeOpenedException)
+		{
+			return false;
+		}
+		catch (UnauthorizedAccessException)
+		{
+			return false;
+		}
+	}
+
 	public void Dispose()
 	{
 		_wait?.Unregister(null);

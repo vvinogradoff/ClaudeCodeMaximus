@@ -63,6 +63,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		Appearance = new AppearanceSectionViewModel(store);
 		Screensaver = new ScreensaverSectionViewModel(store, picker);
 		Keyboard = new KeyboardSectionViewModel(store, commands);
+		Startup = new StartupSectionViewModel(store);
 
 		client.NotificationReceived += OnNotification;
 	}
@@ -85,6 +86,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
 	public KeyboardSectionViewModel Keyboard { get; }
 
+	public StartupSectionViewModel Startup { get; }
+
 	public bool HasStatus => !string.IsNullOrEmpty(StatusText);
 
 	public bool HasError => !string.IsNullOrEmpty(ErrorText);
@@ -92,7 +95,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 	public string ImportOfferText => Constants.Settings.ImportOffer;
 
 	/// <summary>The sections the window's Save button applies.</summary>
-	private IEnumerable<ISettingsEditor> Editors => [General, Notifications, Telegram, Appearance, Screensaver, Keyboard];
+	private IEnumerable<ISettingsEditor> Editors => [General, Notifications, Telegram, Appearance, Screensaver, Keyboard, Startup];
 
 	public bool HasChanges => Editors.Any(e => e.HasChanges);
 

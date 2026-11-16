@@ -156,7 +156,7 @@ public sealed class SettingsViewTests
 
 			var tabs = FindAll<TabControl>(ContentOf(window)).Single();
 			Assert.Equal(
-				["General", "Notifications", "Telegram", "Web access", "MCP servers", "Models and profiles", "Appearance", "Screensaver", "Keyboard shortcuts"],
+				["General", "Notifications", "Telegram", "Web access", "MCP servers", "Models and profiles", "Appearance", "Screensaver", "Startup", "Keyboard shortcuts"],
 				tabs.Items.OfType<TabItem>().Select(t => (string)t.Header));
 
 			// Every tab, one after the other: a tab's content is only built when it is selected.

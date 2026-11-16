@@ -64,6 +64,7 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 		ConnectionBannerState.DaemonNotFound => "Daemon not found. Start TessynDesktop to connect.",
 		ConnectionBannerState.DaemonUnreachable => "Daemon found but not reachable. It may still be starting.",
 		ConnectionBannerState.StartingDaemon => "Starting the Tessyn daemon in the background...",
+		ConnectionBannerState.WaitingForTessyn => Constants.Switch.WaitingText,
 		ConnectionBannerState.Connecting => "Connecting to the daemon...",
 		ConnectionBannerState.Connected => "Connected",
 		ConnectionBannerState.Reconnecting => "Connection lost. Reconnecting...",
@@ -93,6 +94,8 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 						Set(ConnectionBannerState.StartingDaemon, found.Status.ToString());
 					else if (waiting)
 						Set(ConnectionBannerState.DaemonNotFound, Constants.Switch.StartingTimedOutDetail); // never "Starting..." for ever
+					else if (launch == HostLaunchOutcome.Disabled)
+						Set(ConnectionBannerState.WaitingForTessyn, found.Status.ToString()); // side-by-side: the Avalonia app brings the daemon up, the loop connects
 					else
 						Set(ConnectionBannerState.DaemonNotFound, found.Status == DaemonDiscoveryStatus.TokenUnavailable ? Constants.Switch.TokenUnavailableDetail : found.Status.ToString());
 					await Task.Delay(_retryDelay, cancellationToken);

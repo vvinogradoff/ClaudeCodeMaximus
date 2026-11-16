@@ -13,6 +13,9 @@ public enum ConnectionBannerState
 	/// <summary>No daemon runs; the client started the background host and waits for it to publish <c>daemon.json</c>.</summary>
 	StartingDaemon,
 
+	/// <summary>No daemon runs and this client may not start one (the setting is off): it waits for Tessyn (the Avalonia app) and connects when it comes up.</summary>
+	WaitingForTessyn,
+
 	Connecting,
 	Connected,
 	Reconnecting,
