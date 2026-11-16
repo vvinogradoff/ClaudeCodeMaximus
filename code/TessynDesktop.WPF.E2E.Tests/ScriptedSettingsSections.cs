@@ -21,6 +21,8 @@ internal sealed class ScriptedSettingsSections : ISettingsSectionService
 		["telegram"] = 1,
 	};
 
+	private AvaloniaUiSettingsDto? _avaloniaUi;
+
 	private GeneralSettingsDto _general = new(@"C:\Sessions", "claude", @"C:\Src", string.Empty, "http://localhost:11434", false,
 		new FileAccessSettingsDto(FileAccessModeDto.ReferencedOnly, 65536, 1000, 2000, 3000, 4000), []);
 
@@ -38,6 +40,16 @@ internal sealed class ScriptedSettingsSections : ISettingsSectionService
 
 	public int UpdateCount { get; private set; }
 
+	/// <summary>Makes the daemon serve the read-only <c>avalonia-ui</c> section the first-start import reads (W10a E2E).</summary>
+	public void ServeAvaloniaUi(AvaloniaUiSettingsDto values)
+	{
+		lock (_gate)
+		{
+			_avaloniaUi = values;
+			_versions["avalonia-ui"] = 1;
+		}
+	}
+
 	public IReadOnlyList<SettingsSectionInfoDto> GetSections()
 	{
 		lock (_gate)
@@ -53,6 +65,7 @@ internal sealed class ScriptedSettingsSections : ISettingsSectionService
 				"general" => _general,
 				"notifications" => _notifications,
 				"telegram" => _telegram,
+				"avalonia-ui" when _avaloniaUi != null => _avaloniaUi,
 				_ => throw new TdcpInvalidParamsException($"Unknown settings section '{section}'"),
 			};
 			return new SettingsGetResult<object>(section, _versions[section], values);

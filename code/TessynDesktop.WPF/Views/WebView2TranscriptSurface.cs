@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Windows;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
@@ -36,6 +36,9 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	private readonly TranscriptMediaBroker _broker;
 	private readonly WebRequestPolicy _requests;
+	private readonly IAppearanceService _appearance;
+	private readonly ScreensaverController _screensaver;
+	private readonly UiCoalescer _appearanceCoalescer;
 
 	private WebView2? _control;
 	private CoreWebView2Environment? _env;
@@ -45,9 +48,12 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private Task _sendTail = Task.CompletedTask;
 	private int _generation;
 
-	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, TranscriptMediaBroker broker, WebRequestPolicy requests, ILogger<WebView2TranscriptSurface> logger)
+	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, TranscriptMediaBroker broker, WebRequestPolicy requests, IAppearanceService appearance, ScreensaverController screensaver, ILogger<WebView2TranscriptSurface> logger)
 	{
+		_screensaver = screensaver;
+		_appearanceCoalescer = new UiCoalescer(ApplyAppearance);
 		_broker = broker;
+		_appearance = appearance;
 		_requests = requests;
 		_environment = environment;
 		_paths = paths;
@@ -56,6 +62,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		_media = media;
 		_logger = logger;
 		_media.Changed += (_, _) => PostPolicy();
+		_appearance.Changed += (_, _) => _appearanceCoalescer.Request(_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher);
 	}
 
 	public event EventHandler<ViewAnchorEventArgs>? ViewChanged;
@@ -108,6 +115,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		settings.IsBuiltInErrorPageEnabled = false;
 		settings.IsWebMessageEnabled = true;
 		settings.AreDefaultContextMenusEnabled = false;
+		settings.IsZoomControlEnabled = false;   // Ctrl+wheel changes the font sizes (W10a), not the page zoom
 
 		Directory.CreateDirectory(_paths.PreviewCacheDirectory);
 		core.SetVirtualHostNameToFolderMapping(HostName, _paths.WebAssetsDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
@@ -363,6 +371,12 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 				case "expand" when TokenMatches(root):
 					ExpandRequested?.Invoke(this, root.GetProperty("i").GetInt32());
 					break;
+				case "activity":
+						_screensaver.NotePageActivity(DateTime.UtcNow);   // the page sees pointer, wheel and keys that WPF never does
+						break;
+					case "zoom":
+					OnZoom(root);
+					break;
 				case "link":
 					if (root.GetProperty("href").GetString() is { } href && _policy.IsAllowed(href))
 						LinkClicked?.Invoke(this, href);
@@ -444,7 +458,16 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 			ApplyAccent();
 	}
 
-	/// <summary>Hands the Windows accent colour to the page as the --accent CSS variable; light/dark follows the system through prefers-color-scheme.</summary>
+	/// <summary>Hands the theme and the font sizes to the page (it sets the data-theme attribute and the --fs-* CSS variables).</summary>
+	private void ApplyAppearance()
+	{
+		if (_control?.CoreWebView2 == null || !_ready)
+			return;
+
+		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(_appearance.IsDark, _appearance.Current).ToMessage());
+	}
+
+	/// <summary>Hands the Windows accent colour to the page as the --accent CSS variable.</summary>
 	private void ApplyAccent()
 	{
 		if (_control?.CoreWebView2 == null || !_ready)
@@ -452,6 +475,22 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 		var accent = SystemParameters.WindowGlassColor;
 		_ = _control.CoreWebView2.ExecuteScriptAsync($"document.documentElement.style.setProperty('--accent','#{accent.R:X2}{accent.G:X2}{accent.B:X2}')");
+	}
+
+	/// <summary>Ctrl+wheel over an entry: the font size of what the entry shows changes by one point.</summary>
+	private void OnZoom(JsonElement root)
+	{
+		var direction = root.TryGetProperty("dir", out var dir) && dir.ValueKind == JsonValueKind.Number ? Math.Sign(dir.GetInt32()) : 0;
+		if (direction == 0)
+			return;
+
+		var target = (root.TryGetProperty("role", out var role) ? role.GetString() : null) switch
+		{
+			"U" => FontTarget.User,
+			"A" => FontTarget.AssistantMarkdown,
+			_ => FontTarget.Assistant,   // system and compaction rows and the live row show plain text
+		};
+		_appearance.AdjustFont(target, direction);
 	}
 
 	private bool TokenMatches(JsonElement root) => root.TryGetProperty("tok", out var tok) && tok.ValueKind == JsonValueKind.Number && tok.GetInt32() == _token;
@@ -462,6 +501,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		_ready = true;
 		_everReady = true;
 		ApplyAccent();
+		ApplyAppearance();
 		PostPolicy();
 		var queued = _pending.ToList();
 		_pending.Clear();

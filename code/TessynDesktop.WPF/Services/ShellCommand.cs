@@ -32,6 +32,12 @@ public sealed class ShellCommand
 	public bool AllowInTextInput { get; init; }
 
 	/// <summary>
+	/// Narrows where the gesture fires: it is given the element that has the keyboard focus and the key is left alone when it answers false. Null = wherever
+	/// <see cref="AllowInTextInput"/> and the key policy allow it. Send uses it to stay out of the Find box and the suggestion list.
+	/// </summary>
+	public Func<object?, bool>? AllowsFocus { get; init; }
+
+	/// <summary>
 	/// True for a command that must run once per key press (a destructive one such as Delete): the auto-repeat of a held key is swallowed.
 	/// Default false: a held key repeats the command (Find next, for instance).
 	/// </summary>

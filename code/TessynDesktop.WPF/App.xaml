@@ -2,4 +2,15 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ThemeMode="System"
-             ShutdownMode="OnMainWindowClose" />
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             ShutdownMode="OnMainWindowClose">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- The light colours until the stored theme is applied (AppearanceApplier swaps this dictionary) -->
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Theme.Light.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <sys:Double x:Key="InputFontSize">13</sys:Double>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

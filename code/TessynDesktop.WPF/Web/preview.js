@@ -41,6 +41,17 @@ chrome.webview.addEventListener('message', e => {
     case 'image': showMedia('image', m.url); break;
     case 'video': showMedia('video', m.url); break;
     case 'clear': clear(); break;
+    case 'appearance': if (m.theme === 'dark' || m.theme === 'light') document.documentElement.setAttribute('data-theme', m.theme); break;
   }
 });
+// Pointer, wheel and key activity goes to the host (W10a screensaver): WPF never sees input that lands in a web page. Throttled; a pointer move counts after it travelled 6 px.
+(function () {
+  let last = 0, ax = null, ay = null;
+  const act = () => { const n = Date.now(); if (n - last < 500) return; last = n; post({ ev: 'activity' }); };
+  window.addEventListener('pointermove', e => {
+    if (ax !== null && Math.hypot(e.screenX - ax, e.screenY - ay) < 6) return;
+    const first = ax === null; ax = e.screenX; ay = e.screenY; if (!first) act();
+  }, { passive: true, capture: true });
+  for (const t of ['pointerdown', 'wheel', 'keydown']) window.addEventListener(t, act, { passive: true, capture: true });
+})();
 post({ ev: 'ready' });

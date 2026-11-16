@@ -86,7 +86,8 @@ public sealed class AvaloniaImportTests : IDisposable
 		Assert.Equal(20, screensaver.SlideshowIntervalSeconds);
 		var keys = _settings.Get<KeyBindingSettings>().Gestures;
 		Assert.Equal("Ctrl+Shift+N", keys["tree.addDirectory"]);
-		Assert.Single(keys); // ImportSessions and Send have no WPF command yet
+		Assert.Equal("Ctrl+Enter", keys[Constants.Appearance.SendCommandId]);   // W10a: Send has a command now
+		Assert.Equal(2, keys.Count); // ImportSessions has no WPF command until the import picker (W7)
 		Assert.True(_settings.Get<ImportState>().AvaloniaUiHandled);
 		Assert.Equal("imported", _settings.Get<ImportState>().AvaloniaUiOutcome);
 		Assert.Single(_dialogs.Confirms);

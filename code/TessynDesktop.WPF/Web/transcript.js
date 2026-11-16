@@ -363,6 +363,26 @@ function onMediaOk(m) {
   remeasure();
 }
 
+// Theme and fonts from the host (W10a): the theme name and the three font sizes become attributes and CSS variables on the root; entry heights change with the font, so the list is measured again.
+function onAppearance(m) {
+  const r = document.documentElement;
+  if (m.theme === 'dark' || m.theme === 'light') r.setAttribute('data-theme', m.theme);
+  const px = v => (typeof v === 'number' && v >= 6 && v <= 80) ? v + 'px' : null;
+  let sizeChanged = false;
+  const set = (name, v) => { const x = px(v); if (x && r.style.getPropertyValue(name) !== x) { r.style.setProperty(name, x); sizeChanged = true; } };
+  set('--fs-a', m.asst); set('--fs-m', m.md); set('--fs-u', m.user);
+  if (S && sizeChanged) remeasure();   // the entries change height only with a font size, not with the theme
+}
+
+// Ctrl+wheel over an entry changes the font size of what it shows (the host stores it); the browser's own zoom is off.
+vp.addEventListener('wheel', e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  const el = e.target.closest ? e.target.closest('.e, .lv') : null;
+  const role = el && el.classList.contains('lv') ? 'L' : (el ? (['U', 'A', 'S', 'C'].find(c => el.classList.contains(c)) || 'A') : 'A');
+  post({ ev: 'zoom', role, dir: e.deltaY < 0 ? 1 : -1 });
+}, { passive: false });
+
 chrome.webview.addEventListener('message', e => {
   const m = e.data; if (!m || typeof m.cmd !== 'string') return;
   switch (m.cmd) {
@@ -376,8 +396,19 @@ chrome.webview.addEventListener('message', e => {
     case 'clearFind': clearFind(); break;
     case 'goto': onGoto(m); break;
     case 'newerFailed': PagingGate.markFailed(NG, vp.scrollTop); NAV = null; break;
+    case 'appearance': onAppearance(m); break;
     case 'policy': ALLOW = Array.isArray(m.hosts) ? m.hosts.filter(h => typeof h === 'string') : []; break;
     case 'mediaOk': case 'mediaFail': onMediaOk(m); break;
   }
 });
+// Pointer, wheel and key activity goes to the host (W10a screensaver): WPF never sees input that lands in a web page. Throttled; a pointer move counts after it travelled 6 px.
+(function () {
+  let last = 0, ax = null, ay = null;
+  const act = () => { const n = Date.now(); if (n - last < 500) return; last = n; post({ ev: 'activity' }); };
+  window.addEventListener('pointermove', e => {
+    if (ax !== null && Math.hypot(e.screenX - ax, e.screenY - ay) < 6) return;
+    const first = ax === null; ax = e.screenX; ay = e.screenY; if (!first) act();
+  }, { passive: true, capture: true });
+  for (const t of ['pointerdown', 'wheel', 'keydown']) window.addEventListener(t, act, { passive: true, capture: true });
+})();
 post({ ev: 'ready' });
