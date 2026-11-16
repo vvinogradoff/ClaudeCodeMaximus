@@ -32,7 +32,8 @@ public sealed class ScheduleShellModule : IShellModule
 		// A button as well as the right-click: a keyboard or assistive-technology user cannot right-click, and the key is not discoverable.
 		slots.Add(new ShellSlotContribution
 		{
-			SlotId = Constants.Slots.CommandBar,
+			// In the header, not the command bar: an extra button there wrapped the bar onto another row and shortened the transcript.
+			SlotId = Constants.Slots.SessionHeaderToolbar,
 			Order = Constants.Schedules.SendLaterButtonOrder,
 			Create = CreateSendLaterButton,
 		});
@@ -55,8 +56,8 @@ public sealed class ScheduleShellModule : IShellModule
 		var button = new Button
 		{
 			Content = Constants.Schedules.SendLaterTitle,
-			Margin = new Thickness(0, 6, 6, 0),
-			Padding = new Thickness(10, 3, 10, 3),
+			Margin = new Thickness(8, 0, 0, 0),
+			Padding = new Thickness(8, 4, 8, 4),
 			ToolTip = Constants.Schedules.SendLaterToolTip,
 		};
 		System.Windows.Automation.AutomationProperties.SetName(button, Constants.Schedules.SendLaterButtonName);

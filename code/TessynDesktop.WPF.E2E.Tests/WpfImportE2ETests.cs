@@ -42,7 +42,14 @@ public sealed class WpfImportE2ETests : IDisposable
 		var import = new ImportService(new ClaudeSessionImportService([_projects]), new InProcFakeIndexService(), _env.Base.Files, _env.Base.Registry, _env.Base.Settings, [_projects]);
 		var activity = new ActivityByNodeService();
 		var states = new SessionStateBuilder(_env.Base.Registry, new StubStreamingManager(), _env.Attention, activity);
-		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Base.Settings), _env.Base.Registry, states, activity, new TreeVersionTracker(),
+		var versions = new TreeVersionTracker();
+		// What the daemon's notification publisher does: a structural change of the tree is a new tree version.
+		_env.Base.Registry.TreeChanged += (_, e) =>
+		{
+			if (e.Kind != TreeChangeKind.DaemonMutation && e.Kind != TreeChangeKind.SessionIsRunningChanged)
+				versions.Increment();
+		};
+		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Base.Settings), _env.Base.Registry, states, activity, versions,
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
 		_host = new ClientTestHost((run, log) => new TdcpDispatcher(
 			[new ClientRpcModule(runInfo: run, eventLog: log, import: import, search: _search), .. _env.Modules, tree, new ImportRpcModule(import), new SearchRpcModule(_search), new CatalogTestModule([])]));
