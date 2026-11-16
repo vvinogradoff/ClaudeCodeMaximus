@@ -421,6 +421,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable, IFlushesDraft
 		ISessionSoundService soundService,
 		ISessionCompactionService compaction,
 		IUiDispatcher uiDispatcher,
+		TagAreaModeStore tagAreaMode,
 		IOperationTimer? timer = null)
 	{
 		_timer        = timer ?? new OperationTimer(new UiThreadTracker());
@@ -464,7 +465,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable, IFlushesDraft
 			prompt => _turn.SendAsync(prompt, preserveInput: true), draftService, node.FileName);
 
 		TagsVm = new SessionTagsViewModel(node.Model.NodeId, daemonClient, uiDispatcher, new SessionTagLauncher(),
-			node.WhenAnyValue(x => x.Name));
+			node.WhenAnyValue(x => x.Name), tagAreaMode);
 
 		// Subscriptions on the tree node outlive this view model unless disposed (the node is held by the tree for the whole run).
 		_nodeSubscriptions.Add(node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n));

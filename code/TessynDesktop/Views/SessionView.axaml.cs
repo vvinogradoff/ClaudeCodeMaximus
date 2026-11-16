@@ -53,6 +53,9 @@ public partial class SessionView : UserControl
 		// Cross-block text selection (works in both text and markdown modes)
 		_crossBlockSelection = new CrossBlockSelectionHandler(MessageScroller);
 
+		// Input selection and keyboard navigation (FR.2.6)
+		InitInputNavigation();
+
 		// Track whether user is at the bottom of the scroller for auto-scroll
 		MessageScroller.ScrollChanged += OnScrollChanged;
 
@@ -64,6 +67,9 @@ public partial class SessionView : UserControl
 	protected override void OnDataContextChanged(EventArgs e)
 	{
 		base.OnDataContextChanged(e);
+
+		// The selection belongs to the session it was made in.
+		ClearInputSelection();
 
 		// Save scroll position of previous session
 		if (_subscribedVm != null)
@@ -139,19 +145,6 @@ public partial class SessionView : UserControl
 
 		if (confirmed)
 			vm.ConfirmStreamingModeOff();
-	}
-
-	/// <summary>A tag chip opens its URL in the default browser (FR.24.7); the launcher enforces the URL policy.</summary>
-	private void OnTagChipPressed(object? sender, PointerPressedEventArgs e)
-	{
-		if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-			return;
-
-		if (sender is Control { DataContext: SessionTagChipViewModel chip })
-		{
-			chip.Open();
-			e.Handled = true;
-		}
 	}
 
 	private void OnInputKeyDown(object? sender, KeyEventArgs e)
@@ -280,6 +273,7 @@ public partial class SessionView : UserControl
 	{
 		// Unsubscribe from previously tracked progress message
 		UnsubscribeProgressMessage();
+		DropSelectionIfGone(e);
 
 		if (e.Action == NotifyCollectionChangedAction.Add && _subscribedVm != null)
 		{

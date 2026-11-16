@@ -569,6 +569,7 @@ public sealed class SessionContentViewModel : ReactiveObject, IDisposable
 			Timestamp   = entry.Timestamp,
 			ProfileName = entry.ProfileName,
 			ModelLabel  = modelLabel,
+			Source      = EntrySources.Resolve(entry.Role, entry.Source, entry.Content),
 		};
 	}
 
