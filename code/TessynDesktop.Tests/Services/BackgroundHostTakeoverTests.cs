@@ -22,10 +22,12 @@ public sealed class BackgroundHostTakeoverTests
 		private readonly ManualResetEventSlim _stop = new();
 		private readonly TimeSpan _delayBeforeListening;
 		private readonly bool _leaves;
+		private readonly bool _dropsEventKeepsGuard;
 
-		public FakeBackgroundHost(string guardName, string eventName, bool leaves = true, TimeSpan? delayBeforeListening = null)
+		public FakeBackgroundHost(string guardName, string eventName, bool leaves = true, TimeSpan? delayBeforeListening = null, bool dropsEventKeepsGuard = false)
 		{
 			_leaves = leaves;
+			_dropsEventKeepsGuard = dropsEventKeepsGuard;
 			_delayBeforeListening = delayBeforeListening ?? TimeSpan.Zero;
 			_thread = new Thread(() => Run(guardName, eventName)) { IsBackground = true };
 			_thread.Start();
@@ -42,9 +44,16 @@ public sealed class BackgroundHostTakeoverTests
 			if (_delayBeforeListening > TimeSpan.Zero)
 				Thread.Sleep(_delayBeforeListening);
 
-			using var listener = new DaemonHostExitListener(eventName);
+			var listener = new DaemonHostExitListener(eventName);
 			listener.Start(() => _asked.Set());
 			WaitHandle.WaitAny([_asked.WaitHandle, _stop.WaitHandle]);
+			if (_asked.IsSet && _dropsEventKeepsGuard)
+			{
+				listener.Dispose(); // no event any more, the guard stays: what a visible window that won the race looks like
+				_stop.Wait();
+			}
+
+			listener.Dispose();
 			if (_asked.IsSet && !_leaves)
 				_stop.Wait(); // asked, but it hangs on to the guard
 		}
@@ -187,5 +196,89 @@ public sealed class BackgroundHostTakeoverTests
 			holder.WaitForExit();
 			File.Delete(marker);
 		}
+	}
+
+	[Fact]
+	public void ADeclinedQuestion_SignalsNothing_AndStartsNoWait()
+	{
+		var guardName = Unique("guard");
+		var eventName = Unique("exit");
+		using var host = new FakeBackgroundHost(guardName, eventName);
+		using var window = new DaemonHostGuard(guardName);
+		var waited = false;
+
+		var outcome = BackgroundHostTakeover.TryTakeOver(window, eventName, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), Poll, confirm: () => false, onWaiting: () => waited = true, onDone: () => waited = true);
+
+		Assert.Equal(TakeoverOutcome.Declined, outcome);
+		Assert.False(host.WasAsked);
+		Assert.False(waited);
+		Assert.True(DaemonHostGuard.IsHeldElsewhere(guardName));
+	}
+
+	[Fact]
+	public void TheQuestionIsAskedOnce_BeforeTheSignal_AndTheProgressNoticeWrapsTheWait()
+	{
+		var guardName = Unique("guard");
+		var eventName = Unique("exit");
+		using var host = new FakeBackgroundHost(guardName, eventName);
+		using var window = new DaemonHostGuard(guardName);
+		var log = new List<string>();
+
+		var outcome = BackgroundHostTakeover.TryTakeOver(window, eventName, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(10), Poll,
+			confirm: () => { log.Add("ask:asked=" + host.WasAsked); return true; }, onWaiting: () => log.Add("waiting"), onDone: () => log.Add("done"));
+
+		Assert.Equal(TakeoverOutcome.Acquired, outcome);
+		Assert.Equal(["ask:asked=False", "waiting", "done"], log);
+	}
+
+	[Fact]
+	public void TheProgressNoticeIsClosedWhenTheHostDoesNotLeave_AndNeverShownForAVisibleWindow()
+	{
+		var guardName = Unique("guard");
+		var eventName = Unique("exit");
+		using var host = new FakeBackgroundHost(guardName, eventName, leaves: false);
+		using var window = new DaemonHostGuard(guardName);
+		var log = new List<string>();
+
+		Assert.Equal(TakeoverOutcome.DidNotExit, BackgroundHostTakeover.TryTakeOver(window, eventName, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(400), Poll,
+			onWaiting: () => log.Add("waiting"), onDone: () => log.Add("done")));
+		Assert.Equal(["waiting", "done"], log);
+
+		using var visible = new FakeVisibleWindow(Unique("guard"));
+		using var other = new DaemonHostGuard(Unique("guard-none"));
+		var asked = false;
+		using var second = new DaemonHostGuard(Unique("guard-visible"));
+		Assert.Equal(TakeoverOutcome.Acquired, BackgroundHostTakeover.TryTakeOver(second, Unique("exit"), TimeSpan.FromMilliseconds(100), TimeSpan.FromSeconds(1), Poll, confirm: () => asked = true));
+		Assert.False(asked); // a free guard needs no question
+	}
+
+	[Fact]
+	public void AVisibleWindowIsNeverAsked_NoQuestionAndNoNotice()
+	{
+		var guardName = Unique("guard");
+		using var visible = new FakeVisibleWindow(guardName);
+		using var second = new DaemonHostGuard(guardName);
+		var touched = false;
+
+		var outcome = BackgroundHostTakeover.TryTakeOver(second, Unique("exit"), TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(10), Poll,
+			confirm: () => touched = true, onWaiting: () => touched = true, onDone: () => touched = true);
+
+		Assert.Equal(TakeoverOutcome.NotABackgroundHost, outcome);
+		Assert.False(touched);
+	}
+
+	[Fact]
+	public void WhenTheHolderTurnsOutToBeAWindowThatWonTheRace_TheAnswerIsNotABackgroundHost_NotDidNotExit()
+	{
+		var guardName = Unique("guard");
+		var eventName = Unique("exit");
+		using var host = new FakeBackgroundHost(guardName, eventName, dropsEventKeepsGuard: true);
+		using var window = new DaemonHostGuard(guardName);
+		var watch = Stopwatch.StartNew();
+
+		var outcome = BackgroundHostTakeover.TryTakeOver(window, eventName, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(30), Poll, holderChangedAfter: TimeSpan.FromMilliseconds(400));
+
+		Assert.Equal(TakeoverOutcome.NotABackgroundHost, outcome);
+		Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), "it must not wait out the whole exit timeout");
 	}
 }

@@ -29,7 +29,11 @@ sealed class Program
 
             var outcome = BackgroundHostTakeover.TryTakeOver(
                 guard, TessynDesktop.Models.Remote.RemoteProtocol.Discovery.HostExitEventName,
-                TakeoverSignalWindow, TakeoverExitTimeout, TimeSpan.FromMilliseconds(200));
+                TakeoverSignalWindow, TakeoverExitTimeout, TimeSpan.FromMilliseconds(200),
+                confirm: AskTakeOver, onWaiting: ShowTakingOver, onDone: HideTakingOver);
+            if (outcome == TakeoverOutcome.Declined)
+                return 0;
+
             if (outcome != TakeoverOutcome.Acquired)
             {
                 ShowAlreadyRunning(outcome);
@@ -41,14 +45,45 @@ sealed class Program
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
-    private static readonly TimeSpan TakeoverSignalWindow = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan TakeoverSignalWindow = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan TakeoverExitTimeout = TimeSpan.FromSeconds(40);
+
+    private const string TakeOverQuestion = "A background Tessyn daemon is running (started by WPF). Take over? Turns running there will be stopped.";
+    private const string TakingOverCaption = "Tessyn - taking over";
+
+    private static bool AskTakeOver() =>
+        !OperatingSystem.IsWindows() || MessageBoxW(IntPtr.Zero, TakeOverQuestion, "Tessyn", 0x24 /* MB_YESNO | MB_ICONQUESTION */) == 6 /* IDYES */;
+
+    /// <summary>A small non-blocking notice while the background daemon shuts down (up to 40 s), so a double-click does not look dead.</summary>
+    private static void ShowTakingOver()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        new System.Threading.Thread(() => MessageBoxW(IntPtr.Zero, "Taking over from the background daemon…", TakingOverCaption, 0x40)) { IsBackground = true }.Start();
+    }
+
+    private static void HideTakingOver()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var window = FindWindowW(null, TakingOverCaption);
+        if (window != IntPtr.Zero)
+            PostMessageW(window, 0x0010 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr FindWindowW(string? className, string windowName);
+
+    [DllImport("user32.dll")]
+    private static extern bool PostMessageW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     private static void ShowAlreadyRunning(TakeoverOutcome outcome)
     {
         var text = outcome == TakeoverOutcome.DidNotExit
             ? "Tessyn's background daemon was asked to exit but is still running. Exit it from its tray icon, then start this window again."
-            : "Tessyn is already running in another window (or in an older background host). Use that one, or exit it first, then start this window.";
+            : "Tessyn is already running in another window. Use that one, or exit it first, then start this window.";
         if (OperatingSystem.IsWindows())
             MessageBoxW(IntPtr.Zero, text, "Tessyn", 0x40);
     }
