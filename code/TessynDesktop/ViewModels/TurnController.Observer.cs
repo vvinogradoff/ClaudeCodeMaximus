@@ -37,6 +37,7 @@ public sealed partial class TurnController
 				Content     = _message,
 				Timestamp   = timestamp,
 				ProfileName = profileName,
+				Source      = EntrySources.Resolve(Constants.SessionFile.RoleUser, null, _message),
 			});
 			_owner._node.LastPromptTime = timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 			_owner._node.LastPromptTimestamp = timestamp;

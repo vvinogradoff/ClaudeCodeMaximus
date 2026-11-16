@@ -150,30 +150,17 @@
                 </StackPanel>
             </DockPanel>
             <!-- Tag row (FR.24.7): below the header row, same bordered header; hidden without tags; shown in Session and Focus -->
-            <ItemsControl ItemsSource="{Binding TagsVm.Chips}"
-                          IsVisible="{Binding TagsVm.HasTags}"
-                          Margin="0,6,0,0">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:SessionTagChipViewModel">
-                        <Border Classes="tagChip"
-                                ToolTip.Tip="{Binding Tooltip}"
-                                PointerPressed="OnTagChipPressed">
-                            <TextBlock Text="{Binding Label}" FontSize="11"/>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <!-- Mini/full tag area (FR.24.16); the Panel carries IsVisible: a binding on the area itself would resolve against its own DataContext. -->
+            <Panel IsVisible="{Binding TagsVm.HasTags}" Margin="0,6,0,0">
+                <views:SessionTagArea DataContext="{Binding TagsVm}"/>
+            </Panel>
             </StackPanel>
         </Border>
 
         <Grid Grid.Row="1" RowDefinitions="*,Auto">
             <Grid Grid.Row="0" Classes.hiddenByFocus="{Binding FocusVm.IsFocusSelected}">
             <ScrollViewer x:Name="MessageScroller"
+                          Focusable="True"
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="MessageList"
@@ -201,30 +188,35 @@
                                                    FontSize="10" Opacity="0.35"
                                                    HorizontalAlignment="Right"/>
                                     </StackPanel>
-                                    <Border Grid.Column="1" Padding="10,7" CornerRadius="8"
-                                            Background="{DynamicResource CmxUserBubbleBg}">
-                                        <StackPanel>
-                                            <DockPanel Margin="0,0,0,3">
-                                                <TextBlock DockPanel.Dock="Left" Text="You" FontSize="11"
-                                                           Foreground="{DynamicResource CmxUserBubbleFg}"
-                                                           Opacity="0.6"/>
-                                                <TextBlock DockPanel.Dock="Right"
-                                                           Text="{Binding ProfileName}"
-                                                           FontSize="11"
-                                                           Foreground="{DynamicResource CmxUserBubbleFg}"
-                                                           Opacity="0.5"
-                                                           HorizontalAlignment="Right"
-                                                           IsVisible="{Binding HasProfileName}"/>
-                                            </DockPanel>
-                                            <views:HighlightTextBlock Text="{Binding Content}"
-                                                                 HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
-                                                                 IsCurrentMatch="{Binding IsCurrentSearchMatch}"
-                                                                 TextWrapping="Wrap"
-                                                                 Foreground="{DynamicResource CmxUserBubbleFg}"
-                                                                 FontFamily="Cascadia Code,Consolas,monospace"
-                                                                 FontSize="{Binding DataContext.UserFontSize, ElementName=Root}"/>
-                                        </StackPanel>
-                                    </Border>
+                                    <!-- An input (FR.2.6): teal when automated (scheduled / supervisor), a thin dotted border when selected. The bubble is what a click selects. -->
+                                    <Panel Grid.Column="1">
+                                        <Border Classes="inputBubble" Classes.automated="{Binding IsAutomated}"
+                                                Padding="10,7" CornerRadius="8">
+                                            <StackPanel>
+                                                <DockPanel Margin="0,0,0,3">
+                                                    <TextBlock DockPanel.Dock="Left" Text="{Binding UserLabel}" FontSize="11"
+                                                               Classes.automatedLabel="{Binding IsAutomated}"
+                                                               Opacity="0.6"/>
+                                                    <TextBlock DockPanel.Dock="Right"
+                                                               Text="{Binding ProfileName}"
+                                                               FontSize="11"
+                                                               Opacity="0.5"
+                                                               HorizontalAlignment="Right"
+                                                               IsVisible="{Binding HasProfileName}"/>
+                                                </DockPanel>
+                                                <views:HighlightTextBlock Text="{Binding Content}"
+                                                                     HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                                                     IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                                                     TextWrapping="Wrap"
+                                                                     FontFamily="Cascadia Code,Consolas,monospace"
+                                                                     FontSize="{Binding DataContext.UserFontSize, ElementName=Root}"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Rectangle IsVisible="{Binding IsSelected}" IsHitTestVisible="False"
+                                                   RadiusX="8" RadiusY="8"
+                                                   Stroke="{DynamicResource CmxInputSelectionBrush}"
+                                                   StrokeThickness="1" StrokeDashArray="1,2"/>
+                                    </Panel>
                                 </Grid>
 
                                 <!-- Assistant message: text left, timestamp right -->

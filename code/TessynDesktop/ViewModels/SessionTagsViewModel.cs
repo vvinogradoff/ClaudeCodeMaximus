@@ -20,17 +20,20 @@ public sealed class SessionTagsViewModel : ViewModelBase, IDisposable
 	private readonly IUiDispatcher _dispatcher;
 	private readonly SessionTagLauncher _launcher;
 	private readonly IDisposable _renameSubscription;
+	private readonly TagAreaModeStore _modeStore;
 
 	/// <param name="sessionName">Emits the session's name (current value first); each later value triggers a refresh, because name-derived tags follow the name.</param>
 	public SessionTagsViewModel(string nodeId, IDaemonClient daemonClient, IUiDispatcher dispatcher,
-		SessionTagLauncher launcher, IObservable<string> sessionName)
+		SessionTagLauncher launcher, IObservable<string> sessionName, TagAreaModeStore modeStore)
 	{
+		_modeStore = modeStore;
 		_nodeId = nodeId;
 		_daemonClient = daemonClient;
 		_dispatcher = dispatcher;
 		_launcher = launcher;
 
 		_daemonClient.SessionTagsChanged += OnSessionTagsChanged;
+		_modeStore.Changed += OnModeChanged;
 		_renameSubscription = sessionName.Skip(1).Subscribe(_ => _dispatcher.Post(Refresh));
 		Refresh();
 	}
@@ -40,11 +43,24 @@ public sealed class SessionTagsViewModel : ViewModelBase, IDisposable
 	/// <summary>The row is hidden when the session has no tags.</summary>
 	public bool HasTags => Chips.Count > 0;
 
+	/// <summary>The global tag area mode (FR.24.16): true = full, false = mini. Remembered in the app settings; shared by all sessions.</summary>
+	public bool IsExpanded
+	{
+		get => _modeStore.IsExpanded;
+		set => _modeStore.Set(value);
+	}
+
+	/// <summary>Re-reads the mode: another session's view may have changed it while this one was not shown.</summary>
+	public void RefreshMode() => this.RaisePropertyChanged(nameof(IsExpanded));
+
 	public void Dispose()
 	{
 		_daemonClient.SessionTagsChanged -= OnSessionTagsChanged;
+		_modeStore.Changed -= OnModeChanged;
 		_renameSubscription.Dispose();
 	}
+
+	private void OnModeChanged() => _dispatcher.Post(RefreshMode);
 
 	private void OnSessionTagsChanged(object? sender, SessionTagsChangedEventArgs e)
 	{

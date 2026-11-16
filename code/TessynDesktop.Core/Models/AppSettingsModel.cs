@@ -46,6 +46,9 @@ public sealed class AppSettingsModel
 	/// <summary>Whether the tree panel is collapsed (auto-hidden).</summary>
 	public bool IsTreePanelCollapsed { get; set; }
 
+	/// <summary>Whether the session tag area is in "full" mode (FR.24.16); false = "mini", one line. One global mode, not per session.</summary>
+	public bool TagAreaExpanded { get; set; }
+
 	/// <summary>
 	/// Path to the TessynDesktop source codes root (solution directory).
 	/// Used by self-update to find build output. Empty = auto-detect or skip.
