@@ -1,0 +1,115 @@
+<Window x:Class="TessynDesktop.WPF.Views.ImportPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Import sessions" Width="820" Height="640" MinWidth="560" MinHeight="420" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis" />
+            <Style x:Key="ImportRowText" TargetType="TextBlock">
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <DockPanel Margin="16">
+        <!-- Footer: where to import, the status and the buttons -->
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Text="Import into" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Import selected" MinWidth="120" Margin="0,0,8,0" Style="{DynamicResource AccentButtonStyle}" Command="{Binding ImportCommand}" AutomationProperties.Name="Import selected" />
+                    <Button x:Name="CloseButton" Content="Close" MinWidth="88" IsCancel="True" AutomationProperties.Name="Close import" />
+                </StackPanel>
+                <ComboBox ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget, Mode=TwoWay}" DisplayMemberPath="DisplayText" Margin="0,0,12,0"
+                          AutomationProperties.Name="Import target" />
+            </DockPanel>
+            <TextBlock Text="{Binding StatusText}" Margin="0,8,0,0" TextWrapping="Wrap" AutomationProperties.Name="Import status" />
+            <StackPanel Orientation="Horizontal" Visibility="{Binding IsGeneratingTitles, Converter={StaticResource BoolToVis}}" Margin="0,4,0,0">
+                <ProgressBar IsIndeterminate="True" Width="80" Height="4" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding TitleProgressText}" Margin="8,0,0,0" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Header: the project, the Global toggle and the search box (Enter searches) -->
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Project" VerticalAlignment="Center" Margin="0,0,8,0" Visibility="{Binding ShowSourcePicker, Converter={StaticResource BoolToVis}}" />
+            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource, Mode=TwoWay}" DisplayMemberPath="Label"
+                      Visibility="{Binding ShowSourcePicker, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Import source" />
+            <CheckBox Grid.Row="0" Grid.Column="2" Content="Global" Margin="12,0,0,0" IsChecked="{Binding IsGlobal, Mode=TwoWay}" ToolTip="Search the sessions of every project"
+                      AutomationProperties.Name="Global search" />
+            <TextBox x:Name="SearchBox" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,0" Padding="8,5" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                     AutomationProperties.Name="Import search" ToolTip="Press Enter to search">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
+                </TextBox.InputBindings>
+            </TextBox>
+            <Button Grid.Row="1" Grid.Column="2" Content="Search" Margin="12,8,0,0" Padding="12,5" Command="{Binding SearchCommand}" AutomationProperties.Name="Search sessions" />
+        </Grid>
+
+        <!-- The list -->
+        <Grid>
+            <ListBox ItemsSource="{Binding Items}" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Import list" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     SelectionMode="Single">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                        <Setter Property="Focusable" Value="False" />
+                        <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,4">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsGreyed}" Value="True">
+                                            <Setter Property="Opacity" Value="0.5" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" VerticalAlignment="Top" Margin="0,2,10,0" IsChecked="{Binding IsSelected, Mode=TwoWay}" IsEnabled="{Binding IsSelectable}"
+                                      AutomationProperties.Name="{Binding AutomationName}" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" Style="{StaticResource ImportRowText}" />
+                                <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Subtitle}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="{Binding DetailText}" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding BadgeText}" FontSize="11" VerticalAlignment="Top" Margin="8,2,0,0"
+                                       Visibility="{Binding HasBadge, Converter={StaticResource BoolToVis}}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <Button Content="Load more" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8" Padding="14,5" Command="{Binding LoadMoreCommand}"
+                    Visibility="{Binding CanLoadMoreItems, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Load more" />
+            <ProgressBar IsIndeterminate="True" Height="3" VerticalAlignment="Top" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Import busy" />
+        </Grid>
+    </DockPanel>
+</Window>

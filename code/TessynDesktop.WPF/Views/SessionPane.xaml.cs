@@ -43,6 +43,16 @@ public partial class SessionPane : UserControl
 			viewModel.SelectFocusViewCommand.Execute(null);
 	}
 
+	// W8: a right-click on Send opens the "Send later" dialog (FR.14.4); the same command is bound to a key and listed in the key bindings.
+	private void OnSendRightClick(object sender, MouseButtonEventArgs e)
+	{
+		if (DataContext is SessionPaneViewModel viewModel && viewModel.SendLaterCommand.CanExecute(null))
+		{
+			e.Handled = true;
+			_ = viewModel.SendLaterCommand.ExecuteAsync(null);
+		}
+	}
+
 	private async void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		Loaded -= OnLoaded;

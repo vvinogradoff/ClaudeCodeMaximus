@@ -120,6 +120,9 @@
                         <TextBlock Text="{Binding AttentionCount}" FontWeight="SemiBold" FontSize="12" Margin="3,0,0,0"
                                    Foreground="{DynamicResource SystemFillColorCautionBrush}" />
                     </StackPanel>
+                    <TextBlock Style="{StaticResource IconText}" FontSize="12" Margin="0,0,8,0" Text="{StaticResource GlyphClock}" ToolTip="This session has a schedule"
+                               AutomationProperties.Name="Schedule indicator" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Visibility="{Binding HasSchedules, Converter={StaticResource BoolToVis}}" />
                     <Ellipse Width="8" Height="8" Fill="{DynamicResource SystemFillColorSuccessBrush}" ToolTip="Running"
                              Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
