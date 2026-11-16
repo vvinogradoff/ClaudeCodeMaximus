@@ -41,6 +41,7 @@ chrome.webview.addEventListener('message', e => {
     case 'image': showMedia('image', m.url); break;
     case 'video': showMedia('video', m.url); break;
     case 'clear': clear(); break;
+    case 'appearance': if (m.theme === 'dark' || m.theme === 'light') document.documentElement.setAttribute('data-theme', m.theme); break;
   }
 });
 post({ ev: 'ready' });

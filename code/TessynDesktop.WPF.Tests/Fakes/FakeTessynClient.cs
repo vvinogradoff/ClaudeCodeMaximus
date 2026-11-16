@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using TessynDesktop.Client;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
@@ -355,7 +355,17 @@ public sealed partial class FakeTessynClient : ITessynClient
 		return Task.FromResult(Catalog);
 	}
 
-	public Task<UsageResult> UsageGetAsync(string? profileId = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+	/// <summary>What <c>usage.get</c> answers per profile id; a profile without an entry is "pending". Calls are recorded by profile id in <see cref="UsageRequests"/>.</summary>
+	public Dictionary<string, UsageResult> Usage { get; } = new();
+
+	public List<string?> UsageRequests { get; } = [];
+
+	public Task<UsageResult> UsageGetAsync(string? profileId = null, CancellationToken cancellationToken = default)
+	{
+		UsageRequests.Add(profileId);
+		var id = profileId ?? "default";
+		return Task.FromResult(Usage.TryGetValue(id, out var usage) ? usage : new UsageResult(id, id, UsageState.Pending, null, null, null));
+	}
 
 	// P1.F / P1.G additions to ITessynClient; the WPF client does not use them yet.
 	/// <summary>When set, around-entry queries wait for it (a jump still loading while the user does something else).</summary>

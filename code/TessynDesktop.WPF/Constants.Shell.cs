@@ -48,6 +48,7 @@ public static partial class Constants
 		public const string Appearance = "appearance";
 		public const string KeyBindings = "keyBindings";
 		public const string Screensaver = "screensaver";
+		public const string Layout = "layout";
 	}
 
 	/// <summary>Defaults of the client settings sections; they mirror the Avalonia client's.</summary>

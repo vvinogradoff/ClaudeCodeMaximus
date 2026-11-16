@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -75,6 +75,7 @@ public partial class App : Application
 		var stateLoaded = startup.ElapsedMilliseconds;
 
 		_host.Services.GetRequiredService<ShellModuleLoader>().Load();
+		_host.Services.GetRequiredService<AppearanceApplier>().Start();   // the stored theme and fonts, before any window exists
 		var window = _host.Services.GetRequiredService<MainWindow>();
 		var windowCreated = startup.ElapsedMilliseconds;
 		MainWindow = window;

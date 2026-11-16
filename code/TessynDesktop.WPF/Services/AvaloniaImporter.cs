@@ -15,11 +15,12 @@ public sealed record AvaloniaImportResult(IReadOnlyList<string> Imported, IReadO
 /// <remarks>Created by Claude</remarks>
 public sealed class AvaloniaImporter
 {
-	/// <summary>Avalonia action name to the command id that replaces it here; actions without an entry (Send, ImportSessions, CloseDialog) have no command in this client yet.</summary>
+	/// <summary>Avalonia action name to the command id that replaces it here; actions without an entry (ImportSessions until the import picker exists, CloseDialog) have no command in this client yet.</summary>
 	public static readonly IReadOnlyDictionary<string, string> ActionCommands = new Dictionary<string, string>(StringComparer.Ordinal)
 	{
 		["OpenSettings"] = Constants.Settings.OpenCommandId,
 		["AddDirectory"] = Constants.TreeCommands.AddDirectory,
+		["Send"] = Constants.Appearance.SendCommandId,
 	};
 
 	private readonly IClientSettingsStore _store;

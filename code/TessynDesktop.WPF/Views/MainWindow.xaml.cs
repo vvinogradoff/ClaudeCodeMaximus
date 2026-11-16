@@ -1,7 +1,8 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Windows.Input;
+using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
@@ -20,12 +21,15 @@ public partial class MainWindow : Window
 	private readonly Win32WindowPlacement _placement;
 	private readonly WindowPlacementClamper _clamper;
 	private readonly IShellCommands _commands;
+	private readonly TitleBarViewModel _titleBar;
+	private double _treeWidth;
 	private readonly bool _testWindow;
 	private readonly CancellationTokenSource _lifetime = new();
 	private readonly DispatcherTimer _placementTimer;
 
-	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands)
+	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands, TitleBarViewModel titleBar, ScreensaverController screensaver, ILogger<MainWindow> logger)
 	{
+		_titleBar = titleBar;
 		_commands = commands;
 		_testWindow = options.TestWindow;
 		_viewModel = viewModel;
@@ -37,7 +41,11 @@ public partial class MainWindow : Window
 		if (_testWindow)
 			PrepareTestWindow();
 
-		TreeColumn.Width = new GridLength(JsonClientStateStore.ClampTreeWidth(stateStore.State.TreeWidth));
+		TitleBarView.DataContext = titleBar;
+		Screensaver.Attach(screensaver, logger);
+		_treeWidth = JsonClientStateStore.ClampTreeWidth(stateStore.State.TreeWidth);
+		titleBar.TreeVisibilityChanged += (_, _) => ApplyTreeVisibility();
+		ApplyTreeVisibility();
 		_placementTimer = new DispatcherTimer { Interval = PlacementSaveDelay };
 		_placementTimer.Tick += (_, _) =>
 		{
@@ -49,11 +57,35 @@ public partial class MainWindow : Window
 		Loaded += OnLoaded;
 		LocationChanged += (_, _) => RestartPlacementTimer();
 		SizeChanged += (_, _) => RestartPlacementTimer();
-		StateChanged += (_, _) => RestartPlacementTimer();
+		StateChanged += (_, _) =>
+		{
+			RestartPlacementTimer();
+			FitMaximized();
+		};
 		Closing += (_, _) => CapturePlacement();
 		Closed += (_, _) => _lifetime.Cancel();
-		Splitter.DragCompleted += (_, _) => _stateStore.Update(state => state.TreeWidth = TreeColumn.ActualWidth);
+		Splitter.DragCompleted += (_, _) =>
+		{
+			_treeWidth = TreeColumn.ActualWidth;
+			_stateStore.Update(state => state.TreeWidth = _treeWidth);
+		};
 	}
+
+	/// <summary>Shows or hides the left panel (the title bar's chevron); the width it had comes back when it is shown again.</summary>
+	private void ApplyTreeVisibility()
+	{
+		var visible = _titleBar.IsTreeVisible;
+		if (!visible && TreeColumn.ActualWidth > 0)
+			_treeWidth = TreeColumn.ActualWidth;
+
+		LeftTabs.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+		Splitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+		TreeColumn.MinWidth = visible ? Constants.Limits.MinTreeWidth : 0;
+		TreeColumn.Width = visible ? new GridLength(_treeWidth) : new GridLength(0);
+	}
+
+	/// <summary>A maximized window with a custom frame reaches over the screen edge by the resize border; pull the content back in.</summary>
+	private void FitMaximized() => Root.Margin = WindowState == WindowState.Maximized ? SystemParameters.WindowResizeBorderThickness : new Thickness(0);
 
 	/// <summary>Test mode: shown but never activated, off every monitor, hidden from the taskbar.</summary>
 	private void PrepareTestWindow()

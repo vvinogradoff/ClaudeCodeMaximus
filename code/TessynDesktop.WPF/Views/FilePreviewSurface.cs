@@ -27,6 +27,7 @@ public sealed class FilePreviewSurface : IPreviewSurface
 	private readonly AppPaths _paths;
 	private readonly UrlPolicy _policy;
 	private readonly WebRequestPolicy _requests;
+	private readonly IAppearanceService _appearance;
 	private readonly ILogger<FilePreviewSurface> _logger;
 
 	private WebView2? _control;
@@ -34,9 +35,11 @@ public sealed class FilePreviewSurface : IPreviewSurface
 	private bool _ready;
 	private string? _pending;
 
-	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, WebRequestPolicy requests, ILogger<FilePreviewSurface> logger)
+	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, WebRequestPolicy requests, IAppearanceService appearance, ILogger<FilePreviewSurface> logger)
 	{
 		_requests = requests;
+		_appearance = appearance;
+		_appearance.Changed += (_, _) => (_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher)?.BeginInvoke(new Action(ApplyTheme));
 		_environment = environment;
 		_paths = paths;
 		_policy = policy;
@@ -135,6 +138,7 @@ public sealed class FilePreviewSurface : IPreviewSurface
 				case "ready":
 					_ready = true;
 					ApplyAccent();
+					ApplyTheme();
 					if (_pending != null)
 					{
 						var json = _pending;
@@ -163,6 +167,14 @@ public sealed class FilePreviewSurface : IPreviewSurface
 	{
 		if (e.PropertyName == nameof(SystemParameters.WindowGlassColor))
 			ApplyAccent();
+	}
+
+	private void ApplyTheme()
+	{
+		if (_control?.CoreWebView2 == null || !_ready)
+			return;
+
+		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(_appearance.IsDark, _appearance.Current).ToMessage());
 	}
 
 	private void ApplyAccent()

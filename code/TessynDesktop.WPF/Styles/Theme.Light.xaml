@@ -1,0 +1,14 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The colours the app adds to Fluent's own light theme: title bar, usage meters, screensaver. -->
+    <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#F3F3F3" />
+    <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#1A1A1A" />
+    <SolidColorBrush x:Key="TitleBarHoverBrush" Color="#1F000000" />
+    <SolidColorBrush x:Key="TitleBarCloseHoverBrush" Color="#C42B1C" />
+    <SolidColorBrush x:Key="TitleBarSubtleBrush" Color="#6B6B6B" />
+    <SolidColorBrush x:Key="MeterTrackBrush" Color="#E3E3E3" />
+    <SolidColorBrush x:Key="MeterFillBrush" Color="#8C8C8C" />
+    <SolidColorBrush x:Key="MeterHotBrush" Color="#D8803A" />
+    <SolidColorBrush x:Key="MeterTextBrush" Color="#1A1A1A" />
+    <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#F3F3F3" />
+</ResourceDictionary>

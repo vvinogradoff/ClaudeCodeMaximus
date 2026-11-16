@@ -1,4 +1,4 @@
-using System.Windows.Threading;
+﻿using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -124,6 +124,17 @@ public sealed class ServiceRegistration
 			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILoggerFactory>()));
 		services.AddSingleton<SettingsHost>();
 		services.AddSingleton<IShellModule, SettingsShellModule>();
+
+		// W10a: theme and fonts, the custom title bar, the status bar items, the screensaver.
+		services.AddSingleton<ISystemThemeProbe, RegistrySystemThemeProbe>();
+		services.AddSingleton<IAppearanceService, AppearanceService>();
+		services.AddSingleton<AppearanceApplier>();
+		services.AddSingleton<IScreensaverImages, FolderScreensaverImages>();
+		services.AddSingleton(sp => new ScreensaverController(sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IScreensaverImages>(), DateTime.UtcNow));
+		services.AddSingleton(sp => new TitleBarViewModel(sp.GetRequiredService<IAppearanceService>(), sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(),
+			sp.GetRequiredService<IUiDispatcher>(), BuildNumber.Read(typeof(App).Assembly), SourceBuilds.IsBuildOutput(AppContext.BaseDirectory)));
+		services.AddSingleton<StatusBarViewModel>();
+		services.AddSingleton<IShellModule, ChromeShellModule>();
 
 		// W1b: the completion sound. A test window never plays one (the sound is the one thing an off-screen window cannot hide).
 		if (options.TestWindow)

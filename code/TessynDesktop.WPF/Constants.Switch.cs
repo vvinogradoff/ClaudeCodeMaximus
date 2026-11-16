@@ -1,4 +1,4 @@
-namespace TessynDesktop.WPF;
+﻿namespace TessynDesktop.WPF;
 
 public static partial class Constants
 {
@@ -83,6 +83,8 @@ public static partial class Constants
 		public static readonly IReadOnlyDictionary<string, string> KeyActionToCommand = new Dictionary<string, string>(StringComparer.Ordinal)
 		{
 			["AddDirectory"] = TreeCommands.AddDirectory,
+			["OpenSettings"] = Constants.Settings.OpenCommandId,
+			["Send"] = Constants.Appearance.SendCommandId,
 		};
 	}
 }
