@@ -28,18 +28,23 @@ public sealed class FilePreviewSurface : IPreviewSurface
 	private readonly UrlPolicy _policy;
 	private readonly WebRequestPolicy _requests;
 	private readonly IAppearanceService _appearance;
+	private readonly ScreensaverController _screensaver;
+	private readonly UiCoalescer _themeCoalescer;
 	private readonly ILogger<FilePreviewSurface> _logger;
 
 	private WebView2? _control;
 	private CoreWebView2Environment? _env;
 	private bool _ready;
 	private string? _pending;
+	private bool? _postedDark;
 
-	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, WebRequestPolicy requests, IAppearanceService appearance, ILogger<FilePreviewSurface> logger)
+	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, WebRequestPolicy requests, IAppearanceService appearance, ScreensaverController screensaver, ILogger<FilePreviewSurface> logger)
 	{
 		_requests = requests;
 		_appearance = appearance;
-		_appearance.Changed += (_, _) => (_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher)?.BeginInvoke(new Action(ApplyTheme));
+		_screensaver = screensaver;
+		_themeCoalescer = new UiCoalescer(ApplyTheme);
+		_appearance.Changed += (_, _) => _themeCoalescer.Request(_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher);
 		_environment = environment;
 		_paths = paths;
 		_policy = policy;
@@ -174,7 +179,13 @@ public sealed class FilePreviewSurface : IPreviewSurface
 		if (_control?.CoreWebView2 == null || !_ready)
 			return;
 
-		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(_appearance.IsDark, _appearance.Current).ToMessage());
+		// The preview page only uses the theme: a font change (Ctrl+wheel) is no reason to send it again.
+		var dark = _appearance.IsDark;
+		if (_postedDark == dark)
+			return;
+
+		_postedDark = dark;
+		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(dark, _appearance.Current).ToMessage());
 	}
 
 	private void ApplyAccent()

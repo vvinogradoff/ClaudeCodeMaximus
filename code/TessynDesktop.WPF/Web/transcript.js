@@ -368,9 +368,10 @@ function onAppearance(m) {
   const r = document.documentElement;
   if (m.theme === 'dark' || m.theme === 'light') r.setAttribute('data-theme', m.theme);
   const px = v => (typeof v === 'number' && v >= 6 && v <= 80) ? v + 'px' : null;
-  const set = (name, v) => { const x = px(v); if (x) r.style.setProperty(name, x); };
+  let sizeChanged = false;
+  const set = (name, v) => { const x = px(v); if (x && r.style.getPropertyValue(name) !== x) { r.style.setProperty(name, x); sizeChanged = true; } };
   set('--fs-a', m.asst); set('--fs-m', m.md); set('--fs-u', m.user);
-  if (S) remeasure();
+  if (S && sizeChanged) remeasure();   // the entries change height only with a font size, not with the theme
 }
 
 // Ctrl+wheel over an entry changes the font size of what it shows (the host stores it); the browser's own zoom is off.
@@ -400,4 +401,14 @@ chrome.webview.addEventListener('message', e => {
     case 'mediaOk': case 'mediaFail': onMediaOk(m); break;
   }
 });
+// Pointer, wheel and key activity goes to the host (W10a screensaver): WPF never sees input that lands in a web page. Throttled; a pointer move counts after it travelled 6 px.
+(function () {
+  let last = 0, ax = null, ay = null;
+  const act = () => { const n = Date.now(); if (n - last < 500) return; last = n; post({ ev: 'activity' }); };
+  window.addEventListener('pointermove', e => {
+    if (ax !== null && Math.hypot(e.screenX - ax, e.screenY - ay) < 6) return;
+    const first = ax === null; ax = e.screenX; ay = e.screenY; if (!first) act();
+  }, { passive: true, capture: true });
+  for (const t of ['pointerdown', 'wheel', 'keydown']) window.addEventListener(t, act, { passive: true, capture: true });
+})();
 post({ ev: 'ready' });

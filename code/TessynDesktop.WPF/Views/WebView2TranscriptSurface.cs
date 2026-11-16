@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Windows;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
@@ -37,6 +37,8 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private readonly TranscriptMediaBroker _broker;
 	private readonly WebRequestPolicy _requests;
 	private readonly IAppearanceService _appearance;
+	private readonly ScreensaverController _screensaver;
+	private readonly UiCoalescer _appearanceCoalescer;
 
 	private WebView2? _control;
 	private CoreWebView2Environment? _env;
@@ -46,8 +48,10 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private Task _sendTail = Task.CompletedTask;
 	private int _generation;
 
-	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, TranscriptMediaBroker broker, WebRequestPolicy requests, IAppearanceService appearance, ILogger<WebView2TranscriptSurface> logger)
+	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, TranscriptMediaBroker broker, WebRequestPolicy requests, IAppearanceService appearance, ScreensaverController screensaver, ILogger<WebView2TranscriptSurface> logger)
 	{
+		_screensaver = screensaver;
+		_appearanceCoalescer = new UiCoalescer(ApplyAppearance);
 		_broker = broker;
 		_appearance = appearance;
 		_requests = requests;
@@ -58,7 +62,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		_media = media;
 		_logger = logger;
 		_media.Changed += (_, _) => PostPolicy();
-		_appearance.Changed += (_, _) => (_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher)?.BeginInvoke(new Action(ApplyAppearance));
+		_appearance.Changed += (_, _) => _appearanceCoalescer.Request(_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher);
 	}
 
 	public event EventHandler<ViewAnchorEventArgs>? ViewChanged;
@@ -367,7 +371,10 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 				case "expand" when TokenMatches(root):
 					ExpandRequested?.Invoke(this, root.GetProperty("i").GetInt32());
 					break;
-				case "zoom":
+				case "activity":
+						_screensaver.NotePageActivity(DateTime.UtcNow);   // the page sees pointer, wheel and keys that WPF never does
+						break;
+					case "zoom":
 					OnZoom(root);
 					break;
 				case "link":

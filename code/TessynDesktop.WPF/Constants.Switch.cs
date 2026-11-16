@@ -1,4 +1,4 @@
-﻿namespace TessynDesktop.WPF;
+namespace TessynDesktop.WPF;
 
 public static partial class Constants
 {

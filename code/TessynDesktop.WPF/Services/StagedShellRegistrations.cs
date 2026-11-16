@@ -58,7 +58,7 @@ internal sealed class StagedShellRegistrations : IShellSlots, IShellCommands
 
 	public ShellCommand? FindByGesture(Key key, ModifierKeys modifiers) => _commands.FindByGesture(key, modifiers);
 
-	public bool TryExecuteGesture(Key key, ModifierKeys modifiers, bool textInputFocused, bool isRepeat = false) => _commands.TryExecuteGesture(key, modifiers, textInputFocused, isRepeat);
+	public bool TryExecuteGesture(Key key, ModifierKeys modifiers, bool textInputFocused, bool isRepeat = false, object? focused = null) => _commands.TryExecuteGesture(key, modifiers, textInputFocused, isRepeat, focused);
 
 	public IReadOnlyList<GestureConflict> GetConflicts() => _commands.GetConflicts();
 

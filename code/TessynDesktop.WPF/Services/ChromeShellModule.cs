@@ -62,6 +62,7 @@ public sealed class ChromeShellModule : IShellModule
 			DefaultGesture = Constants.Appearance.SendCommandGesture,
 			AllowInTextInput = true,
 			IgnoreRepeat = true,   // a held key must not send the same prompt twice
+			AllowsFocus = SendFocusPolicy.Allows,   // not from the Find box or the suggestion list
 			CanExecute = _ => _main.Session?.SendCommand.CanExecute(null) == true,
 			ExecuteAsync = _ => _main.Session?.SendCommand.ExecuteAsync(null) ?? Task.CompletedTask,
 		});

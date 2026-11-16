@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using TessynDesktop.Client;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;

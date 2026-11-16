@@ -112,10 +112,13 @@ public sealed class ShellCommands : IShellCommands
 
 	public IReadOnlyList<GestureConflict> GetConflicts() => GetTable().Conflicts;
 
-	public bool TryExecuteGesture(Key key, ModifierKeys modifiers, bool textInputFocused, bool isRepeat = false)
+	public bool TryExecuteGesture(Key key, ModifierKeys modifiers, bool textInputFocused, bool isRepeat = false, object? focused = null)
 	{
 		var command = FindByGesture(key, modifiers);
 		if (command == null || ShellKeyPolicy.Blocks(command, key, modifiers, textInputFocused))
+			return false;
+
+		if (command.AllowsFocus != null && !command.AllowsFocus(focused))
 			return false;
 
 		// A held key fires again and again: a command that must not repeat takes the key (so the text box does not get it) but does nothing.

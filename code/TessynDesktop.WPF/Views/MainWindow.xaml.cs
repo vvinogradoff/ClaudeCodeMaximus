@@ -1,7 +1,8 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
@@ -42,6 +43,7 @@ public partial class MainWindow : Window
 			PrepareTestWindow();
 
 		TitleBarView.DataContext = titleBar;
+		Screensaver.Covered = ContentGrid;   // the WebView2 windows cannot be painted over, so the content under the cover is hidden while it is up
 		Screensaver.Attach(screensaver, logger);
 		_treeWidth = JsonClientStateStore.ClampTreeWidth(stateStore.State.TreeWidth);
 		titleBar.TreeVisibilityChanged += (_, _) => ApplyTreeVisibility();
@@ -62,6 +64,7 @@ public partial class MainWindow : Window
 			RestartPlacementTimer();
 			FitMaximized();
 		};
+		DpiChanged += (_, _) => FitMaximized();   // dragged to a monitor with another scale while maximised
 		Closing += (_, _) => CapturePlacement();
 		Closed += (_, _) => _lifetime.Cancel();
 		Splitter.DragCompleted += (_, _) =>
@@ -85,7 +88,7 @@ public partial class MainWindow : Window
 	}
 
 	/// <summary>A maximized window with a custom frame reaches over the screen edge by the resize border; pull the content back in.</summary>
-	private void FitMaximized() => Root.Margin = WindowState == WindowState.Maximized ? SystemParameters.WindowResizeBorderThickness : new Thickness(0);
+	private void FitMaximized() => Root.Margin = WindowState == WindowState.Maximized ? FrameMetrics.MaximizedMargin(VisualTreeHelper.GetDpi(this).DpiScaleX) : new Thickness(0);
 
 	/// <summary>Test mode: shown but never activated, off every monitor, hidden from the taskbar.</summary>
 	private void PrepareTestWindow()
@@ -125,7 +128,7 @@ public partial class MainWindow : Window
 			return;
 
 		var key = e.Key == Key.System ? e.SystemKey : e.Key;
-		if (_commands.TryExecuteGesture(key, Keyboard.Modifiers, ShellKeyPolicy.IsTextInput(Keyboard.FocusedElement), e.IsRepeat))
+		if (_commands.TryExecuteGesture(key, Keyboard.Modifiers, ShellKeyPolicy.IsTextInput(Keyboard.FocusedElement), e.IsRepeat, Keyboard.FocusedElement))
 			e.Handled = true;
 	}
 

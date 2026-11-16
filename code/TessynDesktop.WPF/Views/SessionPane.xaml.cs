@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -333,17 +333,19 @@ public partial class SessionPane : UserControl
 
 	private void OnInputLostFocus(object sender, KeyboardFocusChangedEventArgs e) => _subscribed?.Autocomplete.Close();
 
-	/// <summary>Up, Down, Tab, Enter and Esc drive the popup while it is open; Ctrl+Enter still sends, every other key types as usual.</summary>
+	private Services.IAppearanceService? _appearance;
+
 	/// <summary>Ctrl+wheel over the prompt box changes its font size by a point (as in the Avalonia client).</summary>
 	private void OnInputWheel(object sender, MouseWheelEventArgs e)
 	{
 		if ((Keyboard.Modifiers & ModifierKeys.Control) == 0 || e.Delta == 0)
 			return;
 
-		new ShellServiceProvider().Get<Services.IAppearanceService>()?.AdjustFont(Services.FontTarget.Input, e.Delta > 0 ? 1 : -1);
+		(_appearance ??= new ShellServiceProvider().Get<Services.IAppearanceService>())?.AdjustFont(Services.FontTarget.Input, e.Delta > 0 ? 1 : -1);
 		e.Handled = true;
 	}
 
+	/// <summary>Up, Down, Tab, Enter and Esc drive the popup while it is open; Ctrl+Enter still sends, every other key types as usual.</summary>
 	private void OnInputPreviewKeyDown(object sender, KeyEventArgs e)
 	{
 		var autocomplete = _subscribed?.Autocomplete;

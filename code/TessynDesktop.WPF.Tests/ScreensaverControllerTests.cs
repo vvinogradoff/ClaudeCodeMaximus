@@ -170,7 +170,7 @@ public sealed class ScreensaverControllerTests : IDisposable
 
 			var listed = new FolderScreensaverImages().List(dir).Select(Path.GetFileName).ToList();
 
-			Assert.Equal(["a.png", "b.JPG", "c.webp"], listed);
+			Assert.Equal(["a.png", "b.JPG"], listed);   // webp is not offered: WPF cannot decode it without a codec
 			Assert.Empty(new FolderScreensaverImages().List(Path.Combine(dir, "missing")));
 			Assert.Empty(new FolderScreensaverImages().List(string.Empty));
 		}

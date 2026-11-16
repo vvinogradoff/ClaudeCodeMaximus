@@ -9,7 +9,7 @@ public interface IScreensaverImages
 	IReadOnlyList<string> List(string directory);
 }
 
-/// <summary>Lists the image files of a folder (png, jpg, jpeg, bmp, gif, webp), sorted by path; a missing or empty folder gives none.</summary>
+/// <summary>Lists the image files of a folder (png, jpg, jpeg, bmp, gif; webp is left out, WPF cannot decode it without a codec), sorted by path; a missing or empty folder gives none.</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class FolderScreensaverImages : IScreensaverImages
 {
@@ -76,6 +76,16 @@ public sealed class ScreensaverController
 		_list = [];
 		Changed?.Invoke(this, EventArgs.Empty);
 		return true;
+	}
+
+	/// <summary>
+	/// Activity seen by a web page (pointer, wheel or key inside the transcript or the preview, which WPF's input system never sees). It only postpones the
+	/// start; it never ends a running screensaver, because the pages are hidden then and a message that was already on its way must not wake the screen.
+	/// </summary>
+	public void NotePageActivity(DateTime now)
+	{
+		if (!IsActive)
+			_lastActivity = now;
 	}
 
 	/// <summary>Called about once a second.</summary>

@@ -34,7 +34,7 @@ public interface IShellCommands
 	/// Runs the command bound to a key press (with <see cref="ShellCommand.ResolveParameter"/> as its parameter) and returns true when the key was
 	/// taken. False when nothing is bound, the command does not apply, or a text input has the focus and the command did not opt in.
 	/// </summary>
-	bool TryExecuteGesture(Key key, ModifierKeys modifiers, bool textInputFocused, bool isRepeat = false);
+	bool TryExecuteGesture(Key key, ModifierKeys modifiers, bool textInputFocused, bool isRepeat = false, object? focused = null);
 
 	/// <summary>Gestures claimed by more than one command; the winner is the user's override over a default, else the first registered.</summary>
 	IReadOnlyList<GestureConflict> GetConflicts();

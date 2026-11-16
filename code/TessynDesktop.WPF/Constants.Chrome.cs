@@ -18,6 +18,9 @@ public static partial class Constants
 		public const string SendCommandTitle = "Send the prompt";
 		public const string SendCommandGesture = "Ctrl+Enter";
 
+		/// <summary>The x:Name of the prompt box; Send's gesture runs from there, but not from the Find box or the suggestions.</summary>
+		public const string PromptBoxName = "InputBox";
+
 		/// <summary>The theme dictionaries swapped into the application resources.</summary>
 		public const string LightThemeUri = "pack://application:,,,/TessynDesktop.WPF;component/Styles/Theme.Light.xaml";
 		public const string DarkThemeUri = "pack://application:,,,/TessynDesktop.WPF;component/Styles/Theme.Dark.xaml";
@@ -68,7 +71,11 @@ public static partial class Constants
 
 	public static class Screensaver
 	{
-		public static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"];
+		/// <summary>What WPF decodes without an extra codec (webp needs one, so it is not offered).</summary>
+		public static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif"];
+
+		/// <summary>The mouse must travel this many device pixels from where it last counted before it is "activity" (a resting hand and a vibrating desk do not wake the screen).</summary>
+		public const double MouseMoveThresholdPixels = 6;
 
 		/// <summary>The slideshow decodes an image no wider than this many pixels, so one 8K photo cannot take hundreds of megabytes.</summary>
 		public const int MaxDecodePixels = 3840;

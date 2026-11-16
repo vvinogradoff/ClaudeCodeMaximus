@@ -26,18 +26,38 @@ public sealed class AppearanceApplier
 		_appearance.Changed += (_, _) => _ui.Post(() => Apply(Application.Current.Resources));
 	}
 
+	/// <summary>
+	/// Puts <paramref name="uri"/> in as the one theme dictionary. When it already is the one in place nothing is touched: a font change (a Ctrl+wheel spin raises one per
+	/// notch) must not tear down and re-load the whole colour dictionary, which re-evaluates every DynamicResource of the window.
+	/// </summary>
+	private static void SwapThemeDictionary(ResourceDictionary resources, Uri uri)
+	{
+		var found = false;
+		for (var i = resources.MergedDictionaries.Count - 1; i >= 0; i--)
+		{
+			var source = resources.MergedDictionaries[i].Source;
+			if (source?.OriginalString.Contains(Constants.Appearance.ThemeDictionaryMarker, StringComparison.OrdinalIgnoreCase) != true)
+				continue;
+
+			if (!found && source == uri)
+			{
+				found = true;
+				continue;
+			}
+
+			resources.MergedDictionaries.RemoveAt(i);
+		}
+
+		if (!found)
+			resources.MergedDictionaries.Add(new ResourceDictionary { Source = uri });
+	}
+
 	/// <summary>Swaps the colour dictionary in <paramref name="resources"/> and sets the font resource; the application's ThemeMode follows when there is an application.</summary>
 	public void Apply(ResourceDictionary resources)
 	{
 		var dark = _appearance.IsDark;
 		var uri = new Uri(dark ? Constants.Appearance.DarkThemeUri : Constants.Appearance.LightThemeUri, UriKind.Absolute);
-		for (var i = resources.MergedDictionaries.Count - 1; i >= 0; i--)
-		{
-			if (resources.MergedDictionaries[i].Source?.OriginalString.Contains(Constants.Appearance.ThemeDictionaryMarker, StringComparison.OrdinalIgnoreCase) == true)
-				resources.MergedDictionaries.RemoveAt(i);
-		}
-
-		resources.MergedDictionaries.Add(new ResourceDictionary { Source = uri });
+		SwapThemeDictionary(resources, uri);
 		resources[Constants.Appearance.InputFontSizeKey] = _appearance.Current.InputFontSize;
 
 		if (Application.Current is { } app && ReferenceEquals(app.Resources, resources))
