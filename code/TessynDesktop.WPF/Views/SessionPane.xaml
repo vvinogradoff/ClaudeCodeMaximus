@@ -109,6 +109,16 @@
                         </ItemsPanelTemplate>
                     </v:SlotHost.ItemsPanel>
                 </v:SlotHost>
+                <!-- "Send answers (n)" (FR.23.14): in the header so it never scrolls away; shown only while Focus is selected. Declared after the switch = docked left of it. -->
+                <Button DockPanel.Dock="Right" x:Name="SendAnswersButton" Command="{Binding Focus.SendAnswersCommand}" Margin="8,0,0,0" Padding="10,6"
+                        Style="{DynamicResource AccentButtonStyle}" VerticalAlignment="Center" AutomationProperties.Name="Send answers"
+                        ToolTip="Send every filled reply box in one prompt (Ctrl+Enter in a reply box)"
+                        Visibility="{Binding IsFocusSelected, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />
+                        <TextBlock Text="{Binding Focus.SendAnswersText}" Margin="8,0,0,0" />
+                    </StackPanel>
+                </Button>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding Title}" Style="{DynamicResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding StateText}" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />

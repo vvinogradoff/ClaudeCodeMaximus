@@ -85,14 +85,8 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Header: title and "Send answers (n)" -->
+        <!-- Header: title. "Send answers (n)" lives in the session header (FR.23.14). -->
         <DockPanel Grid.Row="0" Margin="12,10,12,8">
-            <Button DockPanel.Dock="Right" Command="{Binding SendAnswersCommand}" Style="{DynamicResource AccentButtonStyle}" AutomationProperties.Name="Send answers">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />
-                    <TextBlock Text="{Binding SendAnswersText}" Margin="8,0,0,0" />
-                </StackPanel>
-            </Button>
             <TextBlock Text="Focus" Style="{DynamicResource SubtitleTextBlockStyle}" VerticalAlignment="Center" />
         </DockPanel>
 

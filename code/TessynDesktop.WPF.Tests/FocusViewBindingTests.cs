@@ -108,6 +108,7 @@ public sealed class FocusViewBindingTests
 			sideWidth = ((ColumnDefinition)view.FindName("SideColumn")).ActualWidth;
 			var panel = Descendants<FocusPanel>(view).Single();
 			cardTexts.AddRange(Descendants<TextBlock>(panel).Select(t => t.Text));
+			cardTexts.AddRange(Descendants<TextBlock>((DependencyObject)view.FindName("SendAnswersButton")).Select(t => t.Text));   // "Send answers (n)" now lives in the session header (FR.23.14)
 			markdownBlocks = Descendants<StackPanel>(panel).Count(p => MarkdownText.GetSource(p) != null);
 		});
 
@@ -125,6 +126,69 @@ public sealed class FocusViewBindingTests
 		Assert.Contains("Send answers (1)", cardTexts);
 		Assert.Equal(1, markdownBlocks);      // only the item with a body has one
 	}
+
+	[Fact]
+	public void SendAnswersButton_SitsInTheHeader_VisibleOnlyInFocus_AndCtrlEnterInAReplyBoxSendsIt()
+	{
+		var visibleInFocus = Visibility.Collapsed;
+		var visibleInSession = Visibility.Visible;
+		var insideFocusPanel = true;
+		var plainEnterHandled = true;
+		var ctrlEnterHandled = false;
+		var calls = new List<string>();
+		StaTestRunner.Run(() =>
+		{
+			var client = new FakeTessynClient();
+			client.Sessions["a"] = FakeSession.WithEntries(3);
+			client.Attention["a"] =
+			[
+				new AttentionItemDto { Id = "A1", Number = 1, Kind = AttentionKind.Ask, Status = AttentionStatus.Open, Title = "Which database?", CreatedUtc = DateTimeOffset.UnixEpoch },
+			];
+			var ui = new ImmediateUiDispatcher();
+			var pane = new SessionPaneViewModel(
+				client, new FakeTranscriptSurface(), new MarkdigEntryRenderer(new UrlPolicy()), new FakeUrlLauncher(), ui,
+				new SwitchLatencyTracker(NullLogger<SwitchLatencyTracker>.Instance), NullLogger<SessionPaneViewModel>.Instance, Constants.Limits.MaxCachedTranscripts,
+				new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance), null!, new MediaPreviewPolicy());
+			pane.OpenAsync("a", "A").GetAwaiter().GetResult();
+			pane.Focus.WhenIdleAsync().GetAwaiter().GetResult();
+			var view = new SessionPane { DataContext = pane };
+			Layout(view);
+			var button = (Button)view.FindName("SendAnswersButton");
+			var panel = Descendants<FocusPanel>(view).Single();
+			insideFocusPanel = Descendants<Button>(panel).Contains(button);
+
+			pane.IsFocusSelected = false;
+			Layout(view);
+			visibleInSession = button.Visibility;
+			pane.IsFocusSelected = true;
+			Layout(view);
+			visibleInFocus = button.Visibility;
+
+			var reply = Descendants<TextBox>(panel).First();
+			plainEnterHandled = panel.HandleReplyKey(reply, System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.None);
+			Assert.False(button.Command.CanExecute(null));   // nothing typed: disabled like the button
+			ctrlEnterHandled = panel.HandleReplyKey(reply, System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.Control);
+			reply.Text = "Postgres";
+			panel.HandleReplyKey(reply, System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.Control);
+			calls.AddRange(client.Calls);
+		});
+
+		Assert.False(insideFocusPanel);
+		Assert.Equal(Visibility.Collapsed, visibleInSession);
+		Assert.Equal(Visibility.Visible, visibleInFocus);
+		Assert.False(plainEnterHandled);
+		Assert.True(ctrlEnterHandled);
+		Assert.Contains(calls, c => c.StartsWith("attention.reply:a:A1=Postgres", StringComparison.Ordinal));
+	}
+
+	[Theory]
+	[InlineData(System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.Control, true)]
+	[InlineData(System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.None, false)]
+	[InlineData(System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.Shift, false)]
+	[InlineData(System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, false)]
+	[InlineData(System.Windows.Input.Key.Space, System.Windows.Input.ModifierKeys.Control, false)]
+	public void SendShortcut_IsExactlyCtrlEnter(System.Windows.Input.Key key, System.Windows.Input.ModifierKeys modifiers, bool expected) =>
+		Assert.Equal(expected, FocusSendShortcut.Matches(key, modifiers));
 
 	[Fact]
 	public void FocusPanel_ShowsTheEmptyState_WhenNothingIsOpen()
