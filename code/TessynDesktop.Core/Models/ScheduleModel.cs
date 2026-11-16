@@ -42,4 +42,13 @@ public sealed class ScheduleModel
 	/// their supervisor. Such a schedule is merged into while pending and held while its target is busy.
 	/// </summary>
 	public bool IsMailboxDelivery { get; set; }
+
+	/// <summary>The profile the user picked when the send was scheduled (A14, FR.12.27): <c>"default"</c> or a stored profile id; null = none picked, the session's own resolution applies. Absent in schedules stored before this field existed.</summary>
+	public string? ProfileId { get; set; }
+
+	/// <summary>The model picked when the send was scheduled (<c>"default"</c> = no --model flag); null = none picked.</summary>
+	public string? ModelId { get; set; }
+
+	/// <summary>The effort picked when the send was scheduled (<c>"default"</c> = no --effort flag); null = none picked.</summary>
+	public string? Effort { get; set; }
 }

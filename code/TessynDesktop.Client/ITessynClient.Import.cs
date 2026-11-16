@@ -34,9 +34,10 @@ public partial interface ITessynClient
 
 	/// <summary>
 	/// <c>schedules.add</c>: <see cref="ScheduleKindDto.Delay"/> and <see cref="ScheduleKindDto.At"/> need <paramref name="fireAtUtc"/>, <see cref="ScheduleKindDto.Cron"/> needs
-	/// <paramref name="cron"/>. An invalid schedule is a <see cref="TessynRpcException"/> naming the field.
+	/// <paramref name="cron"/>. An invalid schedule is a <see cref="TessynRpcException"/> naming the field. <paramref name="profileId"/>, <paramref name="modelId"/> and
+	/// <paramref name="effort"/> are what the user picked when scheduling (A14): the turn runs on them when it fires; null = not picked, not sent.
 	/// </summary>
-	Task<ScheduleDto> SchedulesAddAsync(string nodeId, string prompt, ScheduleKindDto kind, DateTimeOffset? fireAtUtc = null, string? cron = null, MissedFireDto? missedFire = null, string? note = null, int? maxFires = null, CancellationToken cancellationToken = default);
+	Task<ScheduleDto> SchedulesAddAsync(string nodeId, string prompt, ScheduleKindDto kind, DateTimeOffset? fireAtUtc = null, string? cron = null, MissedFireDto? missedFire = null, string? note = null, int? maxFires = null, string? profileId = null, string? modelId = null, string? effort = null, CancellationToken cancellationToken = default);
 
 	/// <summary><c>schedules.remove</c>.</summary>
 	Task<SchedulesRemoveResult> SchedulesRemoveAsync(string scheduleId, CancellationToken cancellationToken = default);

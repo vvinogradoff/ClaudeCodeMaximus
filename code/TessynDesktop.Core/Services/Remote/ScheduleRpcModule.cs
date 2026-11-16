@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json.Nodes;
+using System.Threading.Tasks;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
 
@@ -13,22 +14,31 @@ namespace TessynDesktop.Services;
 public sealed class ScheduleRpcModule : IRemoteRpcModule
 {
 	private readonly IScheduleApiService _schedules;
+	private readonly ITurnOptionsResolver? _options;
 
-	public ScheduleRpcModule(IScheduleApiService schedules)
+	/// <param name="schedules">The schedule logic.</param>
+	/// <param name="options">Validates the optional <c>profileId</c>, <c>modelId</c> and <c>effort</c> of <c>schedules.add</c> exactly as <c>session.send</c> does; without it they are stored unchecked (tests).</param>
+	public ScheduleRpcModule(IScheduleApiService schedules, ITurnOptionsResolver? options = null)
 	{
 		_schedules = schedules;
+		_options   = options;
 	}
 
 	/// <inheritdoc />
 	public void Register(TdcpMethodRegistry registry)
 	{
 		registry.AddSync(RemoteProtocol.Schedules.ListMethod,   p => _schedules.List(TdcpParams.OptionalString(p, "nodeId")), remoteCallable: false);
-		registry.AddSync(RemoteProtocol.Schedules.AddMethod,    Add,                                                           remoteCallable: false);
+		registry.Add    (RemoteProtocol.Schedules.AddMethod,    async (p, _) => await AddAsync(p),                              remoteCallable: false);
 		registry.AddSync(RemoteProtocol.Schedules.RemoveMethod, p => _schedules.Remove(TdcpParams.RequireString(p, "scheduleId")), remoteCallable: false);
 	}
 
-	private object? Add(JsonNode? @params) =>
-		_schedules.Add(new ScheduleAddRequestModel(
+	private async Task<object?> AddAsync(JsonNode? @params)
+	{
+		// A14: an unknown model, effort or profile is refused now, not when the schedule fires hours later.
+		if (_options != null)
+			await _options.ResolveAsync(@params);
+
+		return _schedules.Add(new ScheduleAddRequestModel(
 			TdcpParams.RequireString(@params, "nodeId"),
 			TdcpParams.RequireString(@params, "prompt"),
 			TdcpParams.RequireString(@params, "kind"),
@@ -36,7 +46,11 @@ public sealed class ScheduleRpcModule : IRemoteRpcModule
 			TdcpParams.OptionalString(@params, "cron"),
 			TdcpParams.OptionalString(@params, "missedFire"),
 			TdcpParams.OptionalString(@params, "note"),
-			TdcpParams.OptionalInt(@params, "maxFires")));
+			TdcpParams.OptionalInt(@params, "maxFires"),
+			TdcpParams.OptionalString(@params, "profileId"),
+			TdcpParams.OptionalString(@params, "modelId"),
+			TdcpParams.OptionalString(@params, "effort")));
+	}
 
 	private static DateTimeOffset? ReadFireAt(JsonNode? @params)
 	{

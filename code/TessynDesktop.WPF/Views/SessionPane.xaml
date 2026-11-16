@@ -265,7 +265,7 @@
                         <TextBlock Text="Settings" Margin="8,0,0,0" />
                     </StackPanel>
                 </ToggleButton>
-                <Button x:Name="SendButton" Command="{Binding SendCommand}" Margin="0,0,0,4" Style="{DynamicResource AccentButtonStyle}" ToolTip="Send (Ctrl+Enter)" AutomationProperties.Name="Send"
+                <Button x:Name="SendButton" Command="{Binding SendCommand}" PreviewMouseRightButtonUp="OnSendRightClick" Margin="0,0,0,4" Style="{DynamicResource AccentButtonStyle}" ToolTip="Send (Ctrl+Enter)" AutomationProperties.Name="Send"
                         Visibility="{Binding ShowSendButton, Converter={StaticResource BoolToVis}}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />

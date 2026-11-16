@@ -16,6 +16,9 @@ namespace TessynDesktop.Tests.Services;
 internal sealed class FakeTurnService : ISessionTurnService
 {
     public List<(string nodeId, string prompt)> Calls { get; } = new();
+
+    /// <summary>The per-turn options of every turn, in order of the calls: null for a turn started without options.</summary>
+    public List<TurnOptionsModel?> OptionsSeen { get; } = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     /// <summary>What every turn returns.</summary>
@@ -29,13 +32,16 @@ internal sealed class FakeTurnService : ISessionTurnService
     public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt,
         TurnSource source, CancellationToken cancellationToken = default)
     {
-        lock (Calls) Calls.Add((node.NodeId, prompt));
+        lock (Calls) { Calls.Add((node.NodeId, prompt)); OptionsSeen.Add(null); }
         return Task.FromResult(Result);
     }
 
     public Task<TurnResultModel> RunTurnAsync(SessionNodeModel node, string prompt,
-        TurnSource source, TurnOptionsModel? options, CancellationToken cancellationToken = default) =>
-        RunTurnAsync(node, prompt, source, cancellationToken);
+        TurnSource source, TurnOptionsModel? options, CancellationToken cancellationToken = default)
+    {
+        lock (Calls) { Calls.Add((node.NodeId, prompt)); OptionsSeen.Add(options); }
+        return Task.FromResult(Result);
+    }
 
     public bool CancelTurn(string nodeId) => false;
     public string? ResolveProfileName(SessionNodeModel node) => null;

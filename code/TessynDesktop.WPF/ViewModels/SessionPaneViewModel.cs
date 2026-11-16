@@ -129,6 +129,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		InitializeToolbar();
 		InitializeDrafts();
 		InitializeAutocomplete();
+		InitializeSchedules();
 		Focus = focus ?? new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance);
 		Preview = preview;
 		Focus.RefActivated += OnRefActivated;
@@ -816,6 +817,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		DraftSync.Merged -= OnDraftMerged;
 		DraftSync.Dispose();
 		DisposeAutocomplete();
+		DisposeSchedules();
 		_client.NotificationReceived -= OnNotification;
 		_client.Resynced -= OnResynced;
 		_surface.Painted -= OnPainted;

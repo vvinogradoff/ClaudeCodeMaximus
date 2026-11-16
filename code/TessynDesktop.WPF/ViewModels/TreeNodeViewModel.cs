@@ -17,7 +17,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	private bool _isExpanded;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(ProfileName), nameof(HasProfile), nameof(SwitchingToProfileName), nameof(HasSwitching), nameof(ShowProfileBadge), nameof(HasProfileMismatch), nameof(ProfileToolTip))]
+	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(HasSchedules), nameof(ProfileName), nameof(HasProfile), nameof(SwitchingToProfileName), nameof(HasSwitching), nameof(ShowProfileBadge), nameof(HasProfileMismatch), nameof(ProfileToolTip))]
 	private SessionStateDto? _state;
 
 	[ObservableProperty]
@@ -88,6 +88,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	public bool IsRunning => State?.Running == true;
 
 	public bool IsFavorite => State?.Favorite == true;
+
+	/// <summary>A schedule (a delayed send, a cron job, a mailbox delivery) targets the session: the clock on its row (W8).</summary>
+	public bool HasSchedules => IsSessionLike && State?.HasSchedules == true;
 
 	public int AttentionCount => State?.Attention?.Count ?? 0;
 

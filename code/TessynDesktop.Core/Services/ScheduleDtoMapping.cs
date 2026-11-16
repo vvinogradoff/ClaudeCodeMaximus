@@ -18,5 +18,8 @@ public static class ScheduleDtoMapping
 		model.MissedFirePolicy == MissedFirePolicy.Skip ? MissedFireDto.Skip : MissedFireDto.FireOnce,
 		model.FireCount,
 		model.MaxFires,
-		model.IsMailboxDelivery);
+		model.IsMailboxDelivery,
+		model.ProfileId,
+		model.ModelId,
+		model.Effort);
 }

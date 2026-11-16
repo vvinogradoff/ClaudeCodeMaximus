@@ -115,6 +115,11 @@ public sealed class ServiceRegistration
 		services.AddSingleton<ProfileHost>();
 		services.AddSingleton<IShellModule, ProfileShellModule>();
 		services.AddSingleton<IShellModule, ComposerShellModule>();
+		services.AddSingleton<IShellModule, ScheduleShellModule>();
+
+		// W7: the import picker (and global search).
+		services.AddSingleton<ImportPickerHost>();
+		services.AddSingleton<IShellModule, ImportShellModule>();
 
 		// W6: the Settings window. The editor window of an MCP server is shown by its own presenter, a test window has no folder dialog to click either.
 		services.AddSingleton<IMcpServerEditorPresenter, WpfMcpServerEditorPresenter>();

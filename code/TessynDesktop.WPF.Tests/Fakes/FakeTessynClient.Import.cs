@@ -24,6 +24,9 @@ public sealed partial class FakeTessynClient
 
 	public Func<string, string, ScheduleKindDto, DateTimeOffset?, string?, MissedFireDto?, string?, int?, ScheduleDto>? SchedulesAddHandler { get; set; }
 
+	/// <summary>The profile, model and effort of every <c>schedules.add</c> call, in order (null = not sent).</summary>
+	public List<(string? ProfileId, string? ModelId, string? Effort)> SchedulesAddPicks { get; } = [];
+
 	public Func<string, SchedulesRemoveResult>? SchedulesRemoveHandler { get; set; }
 
 	public Func<AttentionStatus?, IReadOnlyList<AttentionKind>?, int?, string?, AttentionListAllResult>? AttentionListAllHandler { get; set; }
@@ -49,10 +52,13 @@ public sealed partial class FakeTessynClient
 	public Task<SchedulesListResult> SchedulesListAsync(string? nodeId = null, CancellationToken cancellationToken = default) =>
 		Record($"schedules.list:{nodeId}", () => SchedulesListHandler?.Invoke(nodeId) ?? new SchedulesListResult([]));
 
-	public Task<ScheduleDto> SchedulesAddAsync(string nodeId, string prompt, ScheduleKindDto kind, DateTimeOffset? fireAtUtc = null, string? cron = null, MissedFireDto? missedFire = null, string? note = null, int? maxFires = null, CancellationToken cancellationToken = default) =>
+	public Task<ScheduleDto> SchedulesAddAsync(string nodeId, string prompt, ScheduleKindDto kind, DateTimeOffset? fireAtUtc = null, string? cron = null, MissedFireDto? missedFire = null, string? note = null, int? maxFires = null, string? profileId = null, string? modelId = null, string? effort = null, CancellationToken cancellationToken = default) =>
 		Record($"schedules.add:{nodeId}:{kind}", () =>
-			SchedulesAddHandler?.Invoke(nodeId, prompt, kind, fireAtUtc, cron, missedFire, note, maxFires)
-			?? new ScheduleDto("sched-1", nodeId, kind, prompt, note ?? string.Empty, fireAtUtc, cron, missedFire ?? MissedFireDto.FireOnce, 0, maxFires ?? 0, false));
+		{
+			SchedulesAddPicks.Add((profileId, modelId, effort));
+			return SchedulesAddHandler?.Invoke(nodeId, prompt, kind, fireAtUtc, cron, missedFire, note, maxFires)
+			?? new ScheduleDto("sched-1", nodeId, kind, prompt, note ?? string.Empty, fireAtUtc, cron, missedFire ?? MissedFireDto.FireOnce, 0, maxFires ?? 0, false, profileId, modelId, effort);
+		});
 
 	public Task<SchedulesRemoveResult> SchedulesRemoveAsync(string scheduleId, CancellationToken cancellationToken = default) =>
 		Record($"schedules.remove:{scheduleId}", () => SchedulesRemoveHandler?.Invoke(scheduleId) ?? new SchedulesRemoveResult(true));
