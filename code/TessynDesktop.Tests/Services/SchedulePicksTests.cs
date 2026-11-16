@@ -41,6 +41,7 @@ public sealed class SchedulePicksTests : IDisposable
 	{
 		public JsonNode? LastParams { get; private set; }
 		public bool RefuseProfile { get; set; }
+		public bool FailWithIo { get; set; }
 
 		public Task<TurnOptionsModel?> ResolveAsync(JsonNode? @params)
 		{
@@ -51,6 +52,8 @@ public sealed class SchedulePicksTests : IDisposable
 			if (model == null && effort == null && profile == null)
 				return Task.FromResult<TurnOptionsModel?>(null);
 
+			if (FailWithIo)
+				throw new System.IO.IOException("profile store unreadable");
 			if (profile != null && (RefuseProfile || profile == "gone"))
 				throw new TdcpInvalidParamsException($"Unknown profile '{profile}'");
 
@@ -141,6 +144,17 @@ public sealed class SchedulePicksTests : IDisposable
 		await FireDueAsync(_scheduler.GetSchedules().Single());
 
 		Assert.Null(Assert.Single(_turns.OptionsSeen));   // the message is not lost
+	}
+
+	[Fact]
+	public async Task AnUnexpectedFailureWhileResolvingThePicks_StillRunsTheTurn()
+	{
+		_api.Add(Request(profile: "work"));
+		_resolver.FailWithIo = true;
+
+		await FireDueAsync(_scheduler.GetSchedules().Single());
+
+		Assert.Null(Assert.Single(_turns.OptionsSeen));   // the one-shot schedule is already gone: the message must still run
 	}
 
 	[Fact]

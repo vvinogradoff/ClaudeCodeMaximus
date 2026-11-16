@@ -299,6 +299,13 @@ public sealed class SchedulerService : ISchedulerService
 			NotifySupervisor(schedule, targetNode, $"Scheduled turn ran on the session's own settings: {ex.Message}.");
 			return null;
 		}
+		catch (Exception ex)
+		{
+			// The one-shot schedule is already removed: a failure while resolving must never lose the message.
+			_log.Warning(ex, "Schedule {Id}: resolving the picked profile/model/effort failed; the turn runs on the session's own settings", schedule.ScheduleId);
+			NotifySupervisor(schedule, targetNode, "Scheduled turn ran on the session's own settings: the picked profile, model or effort could not be read.");
+			return null;
+		}
 	}
 
 	private async Task FireScheduleAsync(ScheduleModel schedule)
