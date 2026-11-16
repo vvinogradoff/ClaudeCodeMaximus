@@ -59,6 +59,9 @@ public static partial class Constants
 		/// <summary>The banner when the daemon runs an older build than the newest host build.</summary>
 		public const string DaemonOlderText = "The daemon is older than the build.";
 
+		/// <summary>The banner while no daemon runs and starting one is switched off (side-by-side with the Avalonia app).</summary>
+		public const string WaitingText = "Waiting for Tessyn to start…";
+
 		/// <summary>How long the client waits for the host it started to publish daemon.json before it says so.</summary>
 		public static readonly TimeSpan StartingTimeout = TimeSpan.FromSeconds(45);
 

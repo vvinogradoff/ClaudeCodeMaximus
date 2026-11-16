@@ -38,6 +38,7 @@
             <TabItem Header="Models and profiles" AutomationProperties.Name="Models and profiles tab"><s:ModelsProfilesSettingsView DataContext="{Binding ModelsProfiles}" /></TabItem>
             <TabItem Header="Appearance" AutomationProperties.Name="Appearance tab"><s:AppearanceSettingsView DataContext="{Binding Appearance}" /></TabItem>
             <TabItem Header="Screensaver" AutomationProperties.Name="Screensaver tab"><s:ScreensaverSettingsView DataContext="{Binding Screensaver}" /></TabItem>
+            <TabItem Header="Startup" AutomationProperties.Name="Startup tab"><s:StartupSettingsView DataContext="{Binding Startup}" /></TabItem>
             <TabItem Header="Keyboard shortcuts" AutomationProperties.Name="Keyboard shortcuts tab"><s:KeyboardSettingsView DataContext="{Binding Keyboard}" /></TabItem>
         </TabControl>
     </DockPanel>

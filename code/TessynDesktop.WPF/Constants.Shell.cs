@@ -49,6 +49,7 @@ public static partial class Constants
 		public const string KeyBindings = "keyBindings";
 		public const string Screensaver = "screensaver";
 		public const string Layout = "layout";
+		public const string DaemonHost = "daemonHost";
 	}
 
 	/// <summary>Defaults of the client settings sections; they mirror the Avalonia client's.</summary>
@@ -57,6 +58,9 @@ public static partial class Constants
 		public const double FontSize = 13.0;
 		public const int ScreensaverTimeoutSeconds = 120;
 		public const int ScreensaverSlideshowIntervalSeconds = 10;
+
+		/// <summary>The client waits for a daemon instead of starting the background host (side-by-side with the Avalonia window).</summary>
+		public const bool StartBackgroundDaemon = false;
 	}
 
 	/// <summary>Labels of the dialogs.</summary>

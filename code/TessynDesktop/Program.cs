@@ -21,18 +21,34 @@ sealed class Program
         using var guard = new DaemonHostGuard();
         if (!guard.TryAcquire())
         {
-            if (!options.IsBackground)
-                ShowAlreadyRunning();
-            return 0;
+            // A background host never takes over from anything. A visible window takes over from a BACKGROUND host only (side-by-side, WPF started first):
+            // it asks that host to exit through the named exit event, waits for the guard and starts normally; the WPF client reconnects by itself.
+            // A holder that does not listen on the event (another visible window, an older host) is left alone.
+            if (options.IsBackground)
+                return 0;
+
+            var outcome = BackgroundHostTakeover.TryTakeOver(
+                guard, TessynDesktop.Models.Remote.RemoteProtocol.Discovery.HostExitEventName,
+                TakeoverSignalWindow, TakeoverExitTimeout, TimeSpan.FromMilliseconds(200));
+            if (outcome != TakeoverOutcome.Acquired)
+            {
+                ShowAlreadyRunning(outcome);
+                return 0;
+            }
         }
 
         App.IsBackgroundHost = options.IsBackground;
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
-    private static void ShowAlreadyRunning()
+    private static readonly TimeSpan TakeoverSignalWindow = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan TakeoverExitTimeout = TimeSpan.FromSeconds(40);
+
+    private static void ShowAlreadyRunning(TakeoverOutcome outcome)
     {
-        const string text = "Tessyn is already running (the daemon host is started). Open the Tessyn WPF client, or exit the running host from its tray icon before starting this window.";
+        var text = outcome == TakeoverOutcome.DidNotExit
+            ? "Tessyn's background daemon was asked to exit but is still running. Exit it from its tray icon, then start this window again."
+            : "Tessyn is already running in another window (or in an older background host). Use that one, or exit it first, then start this window.";
         if (OperatingSystem.IsWindows())
             MessageBoxW(IntPtr.Zero, text, "Tessyn", 0x40);
     }

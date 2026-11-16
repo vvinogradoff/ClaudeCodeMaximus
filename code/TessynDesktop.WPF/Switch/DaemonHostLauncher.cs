@@ -26,6 +26,9 @@ public enum HostLaunchOutcome
 
 	/// <summary>The process could not be started.</summary>
 	Failed,
+
+	/// <summary>No daemon runs but the setting "Start the background daemon when none is running" is off: the client waits for Tessyn (the Avalonia app) to come up.</summary>
+	Disabled,
 }
 
 /// <summary>Starts the Avalonia daemon host when no daemon answers (A23 Q6).</summary>
@@ -153,12 +156,15 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 	private readonly object _gate = new();
 
 	private readonly Func<string, string, BuildCopyResult> _copier;
+	private readonly Func<bool> _isEnabled;
 	private IHostProcess? _started;
 	private bool _starting;
 	private DateTimeOffset _lastAttempt = DateTimeOffset.MinValue;
 
-	public DaemonHostLauncher(string runFolder, string? sourceLocation, IHostProcessStarter starter, IHostPresence presence, TimeProvider time, TimeSpan cooldown, ILogger logger, Func<string, string, BuildCopyResult>? copier = null)
+	/// <param name="isEnabled">The setting "Start the background daemon when none is running", read at every call (a change takes effect at once); null = always on.</param>
+	public DaemonHostLauncher(string runFolder, string? sourceLocation, IHostProcessStarter starter, IHostPresence presence, TimeProvider time, TimeSpan cooldown, ILogger logger, Func<string, string, BuildCopyResult>? copier = null, Func<bool>? isEnabled = null)
 	{
+		_isEnabled = isEnabled ?? (() => true);
 		_copier = copier ?? BuildCopier.Copy;
 		_runFolder = runFolder.TrimEnd('\\', '/');
 		_sourceLocation = sourceLocation;
@@ -183,6 +189,10 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 	{
 		if (!NeedsHost(status))
 			return HostLaunchOutcome.NotNeeded;
+
+		// Side-by-side: with the setting off this client never starts a host, whatever the state of the guard. It waits for Tessyn (the Avalonia app) to come up.
+		if (!_isEnabled())
+			return HostLaunchOutcome.Disabled;
 
 		lock (_gate)
 		{

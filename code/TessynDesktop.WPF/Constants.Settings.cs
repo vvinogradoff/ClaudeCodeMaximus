@@ -20,6 +20,8 @@ public static partial class Constants
 		public const string NotConnected = "Tessyn is not connected to the daemon yet; open Settings again when the connection is up.";
 		public const string Unavailable = "This daemon does not offer this part of Settings (it does not announce '{0}').";
 
+		public const string StartBackgroundDaemonHint = "Off (the default): when no daemon runs, this window waits for the Tessyn (Avalonia) app and connects as soon as it is up, so the Avalonia window can be started after this one. On: this window starts the daemon in the background itself. Takes effect at once.";
+
 		public const string Saved = "Saved.";
 		public const string NothingToSave = "No changes to save.";
 		public const string SaveFailedFormat = "Not saved: {0}";

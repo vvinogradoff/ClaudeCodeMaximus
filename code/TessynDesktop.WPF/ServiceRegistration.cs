@@ -191,6 +191,10 @@ public sealed class ServiceRegistration
 
 		var sourceLocation = new SourceBuilds(Path.Combine(paths.DataRoot, Constants.Switch.AppSettingsFileName)).ReadSourceLocation();
 		return new DaemonHostLauncher(runFolder, sourceLocation, new ProcessHostStarter(), new MutexHostPresence(), TimeProvider.System,
-			Constants.Switch.HostStartCooldown, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonHostLauncher>());
+			Constants.Switch.HostStartCooldown, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonHostLauncher>(),
+			isEnabled: IsHostStartEnabled(sp.GetRequiredService<IClientSettingsStore>()));
 	}
+
+	/// <summary>The setting "Start the background daemon when none is running", read at every call so a change in Settings counts at once (off by default).</summary>
+	public static Func<bool> IsHostStartEnabled(IClientSettingsStore store) => () => store.Get<DaemonHostSettings>().StartBackgroundDaemon;
 }

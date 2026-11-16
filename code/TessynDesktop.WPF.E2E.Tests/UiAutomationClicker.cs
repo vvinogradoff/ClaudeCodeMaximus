@@ -285,6 +285,54 @@ public sealed class UiAutomationClicker
 			new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.RadioButton),
 			new PropertyCondition(AutomationElement.NameProperty, name)));
 
+	private static AutomationElement? FindCheckBox(IntPtr hwnd, string name) =>
+		AutomationElement.FromHandle(hwnd).FindFirst(TreeScope.Descendants, new AndCondition(
+			new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.CheckBox),
+			new PropertyCondition(AutomationElement.NameProperty, name)));
+
+	/// <summary>Waits for a check box with this name and flips it through its TogglePattern; false on timeout.</summary>
+	public async Task<bool> ToggleCheckBoxAsync(Process process, string name, TimeSpan timeout)
+	{
+		var finder = new AppWindowFinder();
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			var hwnd = finder.Find(process.Id);
+			try
+			{
+				var box = hwnd == IntPtr.Zero ? null : FindCheckBox(hwnd, name);
+				if (box != null && box.TryGetCurrentPattern(TogglePattern.Pattern, out var pattern))
+				{
+					((TogglePattern)pattern).Toggle();
+					return true;
+				}
+			}
+			catch (Exception ex) when (ex is ElementNotAvailableException or ElementNotEnabledException)
+			{
+				// the window is changing: look again
+			}
+
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
+
+	/// <summary>True when the check box with this name exists and is checked.</summary>
+	public bool IsCheckBoxChecked(Process process, string name)
+	{
+		var hwnd = new AppWindowFinder().Find(process.Id);
+		try
+		{
+			var box = hwnd == IntPtr.Zero ? null : FindCheckBox(hwnd, name);
+			return box != null && box.TryGetCurrentPattern(TogglePattern.Pattern, out var pattern) && ((TogglePattern)pattern).Current.ToggleState == ToggleState.On;
+		}
+		catch (Exception ex) when (ex is ElementNotAvailableException or ElementNotEnabledException)
+		{
+			return false;
+		}
+	}
+
 	/// <summary>True when the radio button with this name exists and is selected.</summary>
 	public bool IsRadioSelected(Process process, string name)
 	{
