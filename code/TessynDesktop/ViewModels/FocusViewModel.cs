@@ -135,6 +135,15 @@ public sealed class FocusViewModel : ViewModelBase, IDisposable, IFlushesDrafts
 		}
 	}
 
+	/// <summary>Ctrl+Enter in a reply box: does what clicking "Send answers" does, under the same enabling rule. Returns false when nothing was sent.</summary>
+	public bool TrySendAnswers()
+	{
+		if (_replyCount <= 0)
+			return false;
+		SendAnswers();
+		return true;
+	}
+
 	public string SendAnswersText => string.Format(Constants.Focus.SendAnswersFormat, _replyCount);
 
 	/// <summary>Nothing needs attention: no open item other than Decided (FR.23.14).</summary>

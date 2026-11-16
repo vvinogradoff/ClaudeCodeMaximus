@@ -140,6 +140,14 @@
                          Width="180" Margin="0,0,8,0"
                          Padding="6,3" FontSize="12"
                          VerticalAlignment="Center"/>
+                <!-- "Send answers (n)" (FR.23.14): left of the search box, only while Focus is selected. Declared after the search box = docked left of it. -->
+                <Button DockPanel.Dock="Right"
+                        Content="{Binding FocusVm.SendAnswersText}"
+                        Command="{Binding FocusVm.SendAnswersCommand}"
+                        IsVisible="{Binding FocusVm.IsFocusSelected}"
+                        ToolTip.Tip="Send every filled reply box in one prompt (Ctrl+Enter in a reply box)"
+                        Padding="10,3" FontSize="11" Margin="0,0,8,0"
+                        VerticalAlignment="Center"/>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{Binding LocationDisplay}"
                                FontSize="11" Opacity="0.5"
