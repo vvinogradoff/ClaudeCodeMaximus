@@ -36,7 +36,7 @@ public sealed partial class TessynClient
 		CallAsync<SchedulesListResult>(RemoteProtocol.Schedules.ListMethod, Params(("nodeId", Node(nodeId))), cancellationToken);
 
 	/// <inheritdoc />
-	public Task<ScheduleDto> SchedulesAddAsync(string nodeId, string prompt, ScheduleKindDto kind, DateTimeOffset? fireAtUtc = null, string? cron = null, MissedFireDto? missedFire = null, string? note = null, int? maxFires = null, CancellationToken cancellationToken = default) =>
+	public Task<ScheduleDto> SchedulesAddAsync(string nodeId, string prompt, ScheduleKindDto kind, DateTimeOffset? fireAtUtc = null, string? cron = null, MissedFireDto? missedFire = null, string? note = null, int? maxFires = null, string? profileId = null, string? modelId = null, string? effort = null, CancellationToken cancellationToken = default) =>
 		CallAsync<ScheduleDto>(
 			RemoteProtocol.Schedules.AddMethod,
 			Params(
@@ -47,7 +47,10 @@ public sealed partial class TessynClient
 				("cron", Node(cron)),
 				("missedFire", Node(missedFire is { } policy ? WireName(policy) : null)),
 				("note", Node(note)),
-				("maxFires", Node(maxFires))),
+				("maxFires", Node(maxFires)),
+				("profileId", Node(profileId)),
+				("modelId", Node(modelId)),
+				("effort", Node(effort))),
 			cancellationToken);
 
 	/// <inheritdoc />

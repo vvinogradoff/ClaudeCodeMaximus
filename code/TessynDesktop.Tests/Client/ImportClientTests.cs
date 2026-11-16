@@ -148,6 +148,21 @@ public sealed class ImportClientTests : IDisposable
 	}
 
 	[Fact]
+	public async Task SchedulesAddAsync_ThePicksTravelOverTheWire_AndComeBackInTheList_OnlyWhenPicked()
+	{
+		await using var client = NewClient();
+		await client.ConnectAsync();
+
+		var picked = await client.SchedulesAddAsync(_env.Session.NodeId, "wake", ScheduleKindDto.At, fireAtUtc: FireAt, profileId: "work", modelId: "claude-opus-5-5", effort: "high");
+		var plain = await client.SchedulesAddAsync(_env.Session.NodeId, "tick", ScheduleKindDto.At, fireAtUtc: FireAt);
+		var listed = (await client.SchedulesListAsync(_env.Session.NodeId)).Schedules;
+
+		Assert.Equal(("work", "claude-opus-5-5", "high"), (picked.ProfileId, picked.ModelId, picked.Effort));
+		Assert.Equal((null, null, null), (plain.ProfileId, plain.ModelId, plain.Effort));
+		Assert.Equal(("work", "claude-opus-5-5", "high"), listed.Where(s => s.Id == picked.Id).Select(s => (s.ProfileId, s.ModelId, s.Effort)).Single());
+	}
+
+	[Fact]
 	public async Task SchedulesAddAsync_AnInvalidSchedule_IsATessynRpcException_NamingTheField()
 	{
 		await using var client = NewClient();

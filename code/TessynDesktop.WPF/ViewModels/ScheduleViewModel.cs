@@ -41,6 +41,7 @@ public sealed partial class ScheduleViewModel : ObservableObject, IDisposable
 		_logger = logger;
 		_zone = zone ?? TimeZoneInfo.Local;
 		_client.NotificationReceived += OnNotification;
+		_client.Resynced += OnResynced;
 	}
 
 	/// <summary>The schedules a user made (delayed sends, cron).</summary>
@@ -153,5 +154,12 @@ public sealed partial class ScheduleViewModel : ObservableObject, IDisposable
 		});
 	}
 
-	public void Dispose() => _client.NotificationReceived -= OnNotification;
+	/// <summary>After a resync (a reconnect, maybe to another daemon with other capabilities) the list is read again; <see cref="IsSupported"/> is evaluated then.</summary>
+	private void OnResynced(object? sender, ResyncedEventArgs e) => _ui.Post(() => _ = RefreshAsync());
+
+	public void Dispose()
+	{
+		_client.NotificationReceived -= OnNotification;
+		_client.Resynced -= OnResynced;
+	}
 }

@@ -6,7 +6,8 @@ namespace TessynDesktop.WPF.ViewModels;
 
 /// <summary>
 /// The schedules of the session pane (W8, FR.14): the list behind the header indicator, and the delayed send ("Send later…", right-click on Send). The message is
-/// scheduled with <c>schedules.add</c> and leaves the box only when the daemon accepted it; the daemon sends it as a turn when the time comes.
+/// scheduled with <c>schedules.add</c>, together with the profile, model and effort picked now, and leaves the box only when the daemon accepted it; the daemon
+/// sends it as a turn with those picks when the time comes.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class SessionPaneViewModel
@@ -58,6 +59,14 @@ public sealed partial class SessionPaneViewModel
 			return;
 		}
 
+		// New Branch and Auto-Compact are one-shot flags of a send made now (FR.11.4, FR.11.6); a schedule cannot carry them. Refused with a notice, not dropped silently.
+		// Attached files need nothing here: in file mode their paths are already lines of the text, so they travel with it.
+		if (Instruction?.NewBranch == true || Instruction?.AutoCompact == true)
+		{
+			Notice = Constants.Schedules.OneShotsNotScheduled;
+			return;
+		}
+
 		var answer = await dialogs.InputAsync(new InputDialogRequest(
 			Constants.Schedules.DialogTitle, Constants.Schedules.DialogPrompt, Constants.Schedules.DefaultAnswer, Constants.Schedules.DialogConfirm,
 			value => ScheduleTimeParser.TryParse(value, ScheduleClock.GetUtcNow(), ScheduleZone, out var error) == null ? error : null));
@@ -72,9 +81,12 @@ public sealed partial class SessionPaneViewModel
 			return;
 		}
 
+		// A14: the delayed send keeps what the user picked now, as a queued send does. A field not picked is not sent (tdcp-spec 9.8).
+		var picks = PicksOfOpenSession();
 		try
 		{
-			await _client.SchedulesAddAsync(id, text, time.Kind, time.FireAtUtc, note: Constants.Schedules.DelayedSendNote);
+			await _client.SchedulesAddAsync(id, text, time.Kind, time.FireAtUtc, note: Constants.Schedules.DelayedSendNote,
+				profileId: picks.ProfileId, modelId: picks.ModelId, effort: picks.EffortId);
 		}
 		catch (Exception ex) when (ex is not OperationCanceledException)
 		{

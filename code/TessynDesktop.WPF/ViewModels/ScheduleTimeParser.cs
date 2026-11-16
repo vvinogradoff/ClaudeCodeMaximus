@@ -65,7 +65,8 @@ public static partial class ScheduleTimeParser
 		var total = TimeSpan.Zero;
 		foreach (Match part in parts)
 		{
-			if (!double.TryParse(part.Groups["n"].Value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var amount) || amount <= 0)
+			// A very long run of digits parses to infinity (never fails); only NaN and non-positive amounts are not a delay.
+			if (!double.TryParse(part.Groups["n"].Value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var amount) || double.IsNaN(amount) || amount <= 0)
 				return null;
 
 			var unit = part.Groups["u"].Value.ToLowerInvariant();
@@ -74,20 +75,25 @@ public static partial class ScheduleTimeParser
 			if (unit.Length == 0 && parts.Count > 1)
 				return null;
 
-			switch (unit)
+			var unitMinutes = unit switch
 			{
-				case "" or "m" or "min" or "mins" or "minute" or "minutes":
-					total += TimeSpan.FromMinutes(amount);
-					break;
-				case "h" or "hr" or "hrs" or "hour" or "hours":
-					total += TimeSpan.FromHours(amount);
-					break;
-				case "d" or "day" or "days":
-					total += TimeSpan.FromDays(amount);
-					break;
-				default:
-					return null;
-			}
+				"" or "m" or "min" or "mins" or "minute" or "minutes" => 1d,
+				"h" or "hr" or "hrs" or "hour" or "hours" => 60d,
+				"d" or "day" or "days" => 1440d,
+				_ => 0d,
+			};
+			if (unitMinutes == 0)
+				return null;
+
+			// Too far ahead is judged before anything is converted: TimeSpan.FromDays(1e20) and now + a huge span throw. An amount (or a running total) beyond the
+			// limit answers a time just past it, which TryParse then reports as "too far ahead".
+			var minutes = amount * unitMinutes;
+			if (!double.IsFinite(minutes) || minutes > Constants.Schedules.MaxAhead.TotalMinutes)
+				return new ScheduleTime(ScheduleKindDto.Delay, now + Constants.Schedules.MaxAhead + TimeSpan.FromMinutes(1));
+
+			total += TimeSpan.FromMinutes(minutes);
+			if (total > Constants.Schedules.MaxAhead)
+				return new ScheduleTime(ScheduleKindDto.Delay, now + Constants.Schedules.MaxAhead + TimeSpan.FromMinutes(1));
 		}
 
 		return total > TimeSpan.Zero ? new ScheduleTime(ScheduleKindDto.Delay, now + total) : null;
@@ -112,6 +118,13 @@ public static partial class ScheduleTimeParser
 	private static DateTimeOffset ToUtc(DateTime local, TimeZoneInfo zone)
 	{
 		var unspecified = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
-		return new DateTimeOffset(unspecified, zone.GetUtcOffset(unspecified)).ToUniversalTime();
+
+		// A wall-clock time inside the spring-forward gap does not exist: it is read an hour later (02:30 -> 03:30), as a calendar does. An ambiguous
+		// time of the autumn hour (it happens twice) is read as its first occurrence. Everything else has the one offset of that moment.
+		if (zone.IsInvalidTime(unspecified))
+			unspecified = unspecified.AddHours(1);
+
+		var offset = zone.IsAmbiguousTime(unspecified) ? zone.GetAmbiguousTimeOffsets(unspecified).Max() : zone.GetUtcOffset(unspecified);
+		return new DateTimeOffset(unspecified, offset).ToUniversalTime();
 	}
 }

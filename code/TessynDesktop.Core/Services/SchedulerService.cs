@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +24,7 @@ public sealed class SchedulerService : ISchedulerService
 	private readonly IAppSettingsService    _appSettings;
 	private readonly ISessionTurnService    _turnService;
 	private readonly ISessionRegistry       _registry;
+	private readonly ITurnOptionsResolver?  _options;
 
 	private Timer? _timer;
 	// No private lock: Settings.Schedules is part of the settings graph that Save() serializes under
@@ -34,11 +36,13 @@ public sealed class SchedulerService : ISchedulerService
 	public SchedulerService(
 		IAppSettingsService appSettings,
 		ISessionTurnService turnService,
-		ISessionRegistry registry)
+		ISessionRegistry registry,
+		ITurnOptionsResolver? options = null)
 	{
 		_appSettings   = appSettings;
 		_turnService   = turnService;
 		_registry      = registry;
+		_options       = options;
 	}
 
 	public void Start()
@@ -270,6 +274,33 @@ public sealed class SchedulerService : ISchedulerService
 			_ = FireScheduleAsync(s);
 	}
 
+	/// <summary>
+	/// The per-turn options of the picks stored with the schedule, or null when it has none (every schedule stored before the picks existed, mailbox
+	/// deliveries, agent schedules) so the turn runs exactly as before. Only what was picked is sent. When a pick no longer resolves (the profile
+	/// was deleted, the model left the catalog) the turn still runs on the session's own settings and the supervisor is told, rather than the message being lost.
+	/// </summary>
+	private async Task<TurnOptionsModel?> ResolvePicksAsync(ScheduleModel schedule, SessionNodeModel targetNode)
+	{
+		if (_options == null || (schedule.ProfileId == null && schedule.ModelId == null && schedule.Effort == null))
+			return null;
+
+		var picks = new JsonObject();
+		if (schedule.ModelId != null)   picks["modelId"]   = schedule.ModelId;
+		if (schedule.Effort != null)    picks["effort"]    = schedule.Effort;
+		if (schedule.ProfileId != null) picks["profileId"] = schedule.ProfileId;
+
+		try
+		{
+			return await _options.ResolveAsync(picks);
+		}
+		catch (TdcpInvalidParamsException ex)
+		{
+			_log.Warning(ex, "Schedule {Id}: the picked profile/model/effort no longer resolves; the turn runs on the session's own settings", schedule.ScheduleId);
+			NotifySupervisor(schedule, targetNode, $"Scheduled turn ran on the session's own settings: {ex.Message}.");
+			return null;
+		}
+	}
+
 	private async Task FireScheduleAsync(ScheduleModel schedule)
 	{
 		_log.Information("Firing schedule {Id} → node {Target}", schedule.ScheduleId, schedule.TargetNodeId);
@@ -331,7 +362,11 @@ public sealed class SchedulerService : ISchedulerService
 		using var cts = new CancellationTokenSource(Constants.Agent.ScheduledTurnTimeoutMs);
 		try
 		{
-			var result = await _turnService.RunTurnAsync(targetNode, prompt, TurnSource.Scheduled, cts.Token);
+			// A14: a delayed send keeps the profile, model and effort the user picked when scheduling it, through the path an interactive send uses.
+			var options = await ResolvePicksAsync(schedule, targetNode);
+			var result = options == null
+				? await _turnService.RunTurnAsync(targetNode, prompt, TurnSource.Scheduled, cts.Token)
+				: await _turnService.RunTurnAsync(targetNode, prompt, TurnSource.Scheduled, options, cts.Token);
 
 			// ISSUE.013: a refused turn (its pinned profile does not exist) is logged and reported to the supervisor's mailbox, not lost.
 			if (result?.Refused == true)

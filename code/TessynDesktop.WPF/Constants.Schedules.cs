@@ -31,6 +31,7 @@ public static partial class Constants
 		public const string MailboxName = "Mailbox deliveries";
 		public const string ScheduleRowPrefix = "Schedule ";
 
+		public const string OneShotsNotScheduled = "New Branch and Auto-Compact apply to a send made now and cannot be scheduled. Switch them off, or send now.";
 		public const string NothingToSend = "Type the message to send later first.";
 		public const string NotSupported = "This daemon does not offer schedules.";
 		public const string ScheduledNotice = "Scheduled for {0}";

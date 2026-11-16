@@ -257,7 +257,9 @@ public sealed class ScheduleImportViewTests
 			Assert.True(command.AllowInTextInput);
 			Assert.False(command.CanExecute!(null));
 			Assert.True(command.CanExecute!(pane));
-			Assert.Single(slots.For(Constants.Slots.SessionHeaderToolbar));
+			// The indicator (20) and the "Send later" button (30) are both in the session header; the command bar got no extra button (it wrapped and shortened the transcript).
+			Assert.Equal([Constants.Schedules.IndicatorOrder, Constants.Schedules.SendLaterButtonOrder], slots.For(Constants.Slots.SessionHeaderToolbar).Select(s => s.Order));
+			Assert.Empty(slots.For(Constants.Slots.CommandBar));
 
 			Assert.True(commands.ExecuteAsync(Constants.Schedules.SendLaterCommandId, pane).GetAwaiter().GetResult());
 

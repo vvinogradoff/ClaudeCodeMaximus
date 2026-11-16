@@ -59,7 +59,8 @@ public sealed class ImportPickerHost
 
 		var container = TreeOperations.ContainerOf(near ?? tree.SelectedNode);
 		var viewModel = new ImportPickerViewModel(client, _loggers.CreateLogger<ImportPickerViewModel>());
-		viewModel.Imported += async (_, nodeIds) => await ShowImportedAsync(tree, nodeIds);
+		var logger = _loggers.CreateLogger<ImportPickerHost>();
+		viewModel.Imported += async (_, nodeIds) => await ShowImportedAsync(tree, nodeIds, logger);   // async void: ShowImportedAsync catches everything
 		var window = new ImportPickerWindow(viewModel);
 		var owner = Application.Current?.MainWindow;
 		if (owner is { IsLoaded: true })
@@ -72,10 +73,19 @@ public sealed class ImportPickerHost
 	}
 
 	/// <summary>The daemon announces the new sessions with <c>tree.changed</c>; this makes sure they are there and shows the first.</summary>
-	private static async Task ShowImportedAsync(TreeViewModel tree, IReadOnlyList<string> nodeIds)
+	public static async Task ShowImportedAsync(TreeViewModel tree, IReadOnlyList<string> nodeIds, ILogger logger)
 	{
-		await tree.RefreshAsync();
-		if (nodeIds.Count > 0)
-			tree.RevealNode(nodeIds[0]);
+		// This runs from an async-void event handler: an exception here (the daemon dropped right after the import) would reach the dispatcher and end the app,
+		// although the import itself succeeded. The tree catches up on the next tree.changed.
+		try
+		{
+			await tree.RefreshAsync();
+			if (nodeIds.Count > 0)
+				tree.RevealNode(nodeIds[0]);
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning(ex, "Showing the imported sessions in the tree failed");
+		}
 	}
 }

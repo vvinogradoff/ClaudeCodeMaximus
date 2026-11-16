@@ -23,6 +23,7 @@ public sealed partial class ImportPickerViewModel : ObservableObject, IDisposabl
 	private readonly int _pageSize;
 	private CancellationTokenSource _titles = new();
 	private int _loadToken;
+	private bool _recountSuspended;
 	private bool _targetChosenByUser;
 	private string _query = string.Empty;
 
@@ -177,8 +178,18 @@ public sealed partial class ImportPickerViewModel : ObservableObject, IDisposabl
 	[RelayCommand]
 	private void SelectAll()
 	{
-		foreach (var item in Items.Where(i => i.IsSelectable))
-			item.IsSelected = true;
+		// One recount at the end, not one per ticked row (each recount walks the whole list).
+		_recountSuspended = true;
+		try
+		{
+			foreach (var item in Items.Where(i => i.IsSelectable))
+				item.IsSelected = true;
+		}
+		finally
+		{
+			_recountSuspended = false;
+		}
+
 		RecountSelection();
 	}
 
@@ -310,15 +321,22 @@ public sealed partial class ImportPickerViewModel : ObservableObject, IDisposabl
 	{
 		if (replace)
 			Cancel();
+		else
+			RestartTitles();   // Load more: the title polling of the list so far is stopped now; LoadTitlesAsync of the new load starts one polling for all untitled rows
 
 		return Interlocked.Increment(ref _loadToken);
 	}
 
-	private void Cancel()
+	private void RestartTitles()
 	{
 		_titles.Cancel();
 		_titles.Dispose();
 		_titles = new CancellationTokenSource();
+	}
+
+	private void Cancel()
+	{
+		RestartTitles();
 		Interlocked.Increment(ref _loadToken);
 		IsBusy = false;
 		IsGeneratingTitles = false;
@@ -346,7 +364,7 @@ public sealed partial class ImportPickerViewModel : ObservableObject, IDisposabl
 
 	private void OnItemChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
-		if (e.PropertyName == nameof(ImportItemViewModel.IsSelected))
+		if (e.PropertyName == nameof(ImportItemViewModel.IsSelected) && !_recountSuspended)
 			RecountSelection();
 	}
 

@@ -80,6 +80,9 @@ public sealed class ScheduleApiService : IScheduleApiService
 			CronExpression   = kind == ScheduleKind.Cron ? request.Cron!.Trim() : null,
 			MissedFirePolicy = missed,
 			MaxFires         = kind == ScheduleKind.Cron ? request.MaxFires ?? Constants.Agent.MaxTurnsPerLoop : 0,
+			ProfileId        = NullIfBlank(request.ProfileId),
+			ModelId          = NullIfBlank(request.ModelId),
+			Effort           = NullIfBlank(request.Effort),
 		};
 
 		try
@@ -137,6 +140,8 @@ public sealed class ScheduleApiService : IScheduleApiService
 		if (fireAt > now.AddYears(Constants.ScheduleApi.MaxYearsAhead))
 			throw new TdcpInvalidParamsException(Constants.ScheduleApi.FireAtTooFar);
 	}
+
+	private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
 	private static ScheduleKind ParseKind(string? kind) => kind?.ToLowerInvariant() switch
 	{
