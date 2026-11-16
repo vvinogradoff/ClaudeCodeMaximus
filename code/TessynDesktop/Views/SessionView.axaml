@@ -195,8 +195,7 @@
                                             <StackPanel>
                                                 <DockPanel Margin="0,0,0,3">
                                                     <TextBlock DockPanel.Dock="Left" Text="{Binding UserLabel}" FontSize="11"
-                                                               Classes.automatedLabel="{Binding IsAutomated}"
-                                                               Opacity="0.6"/>
+                                                               Classes="userLabel" Classes.automatedLabel="{Binding IsAutomated}"/>
                                                     <TextBlock DockPanel.Dock="Right"
                                                                Text="{Binding ProfileName}"
                                                                FontSize="11"

@@ -93,6 +93,60 @@ public sealed class TagAreaLayoutCalculatorTests
 		Assert.Equal(1, m.HiddenCount);
 	}
 
+	/// <summary>Chips 20 high with a 4 px margin between lines: the pitch is 24 and the chips sit 24 apart.</summary>
+	private static List<TagChipBox> MarginLines(int lines)
+	{
+		var boxes = new List<TagChipBox>();
+		for (var line = 0; line < lines; line++)
+			boxes.Add(new TagChipBox(line * 24, 20, 50));
+		return boxes;
+	}
+
+	[Fact]
+	public void Full_UsesTheLinePitchIncludingTheMargin_SoTenLinesReallyFit()
+	{
+		var m = _calc.Compute(MarginLines(14), expanded: true);
+
+		Assert.Equal(24, m.LineHeight);
+		Assert.Equal(10 * 24, m.AreaHeight);
+	}
+
+	[Fact]
+	public void Full_WithFewLines_StopsAtTheLastChip()
+	{
+		var m = _calc.Compute(MarginLines(3), expanded: true);
+
+		Assert.Equal(2 * 24 + 20, m.AreaHeight);
+	}
+
+	[Fact]
+	public void Mini_UsesThePitchToCountHiddenChips()
+	{
+		var m = _calc.Compute(MarginLines(4), expanded: false);
+
+		Assert.Equal(24, m.AreaHeight);
+		Assert.Equal(3, m.HiddenCount);
+	}
+
+	[Fact]
+	public void TheHint_IsDropped_WhenTheChipsFitTheLineWithoutItsReserve()
+	{
+		// Two 50 px chips: the second was pushed down by a 20 px reserve on a 110 px line, but fits in the 130 px the line has without it.
+		var chips = new List<TagChipBox> { new(0, 20, 50), new(24, 20, 50) };
+
+		Assert.Equal(1, _calc.Compute(chips, expanded: false).HiddenCount);
+		Assert.Equal(1, _calc.Compute(chips, expanded: false, unreservedWidth: 90).HiddenCount);
+		Assert.Equal(0, _calc.Compute(chips, expanded: false, unreservedWidth: 130).HiddenCount);
+	}
+
+	[Fact]
+	public void TheHint_StaysWhenTheChipsDoNotFitEvenWithoutTheReserve()
+	{
+		var chips = new List<TagChipBox> { new(0, 20, 60), new(24, 20, 60) };
+
+		Assert.Equal(1, _calc.Compute(chips, expanded: false, unreservedWidth: 100).HiddenCount);
+	}
+
 	[Fact]
 	public void LineHeight_IsTheTallestChipOfTheFirstLine()
 	{

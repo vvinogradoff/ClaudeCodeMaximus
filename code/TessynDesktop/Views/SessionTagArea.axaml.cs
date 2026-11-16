@@ -87,10 +87,12 @@ public partial class SessionTagArea : UserControl
 		if (Chips.ItemsPanelRoot is { } panel)
 		{
 			foreach (var child in panel.Children)
-				boxes.Add(new TagChipBox(child.Bounds.Top, child.Bounds.Height));
+				boxes.Add(new TagChipBox(child.Bounds.Top, child.Bounds.Height, child.Bounds.Width));
 		}
 
-		var metrics = _layout.Compute(boxes, IsExpanded);
+		// The line the chips would have without the hint's reserve: the current width plus what is reserved now.
+		var unreservedWidth = Scroller.Bounds.Width + Scroller.Margin.Right;
+		var metrics = _layout.Compute(boxes, IsExpanded, unreservedWidth);
 		Apply(metrics);
 	}
 

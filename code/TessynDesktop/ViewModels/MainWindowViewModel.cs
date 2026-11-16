@@ -20,6 +20,7 @@ namespace TessynDesktop.ViewModels;
 public sealed class MainWindowViewModel : ViewModelBase
 {
 	private readonly IAppSettingsService _appSettings;
+	private readonly TagAreaModeStore _tagAreaMode;
 	private readonly ISessionFileService _fileService;
 	private readonly IClaudeProcessManager _processManager;
 	private readonly IClaudeStreamingSessionManager _streamingManager;
@@ -264,6 +265,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	{
 		_timer            = timer ?? new OperationTimer(new UiThreadTracker());
 		_appSettings      = appSettings;
+		_tagAreaMode      = new TagAreaModeStore(appSettings);
 		_fileService      = fileService;
 		_processManager   = processManager;
 		_streamingManager = streamingManager;
@@ -421,7 +423,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _turnEngine, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _profileAdmin, _importService, _modelService, _daemonClient, _soundService, _compaction, _uiDispatcher);
+				vm = new SessionViewModel(node, _fileService, _turnEngine, _streamingManager, _appSettings, _draftService, _codeIndexService, _profileService, _profileAdmin, _importService, _modelService, _daemonClient, _soundService, _compaction, _uiDispatcher, _tagAreaMode);
 				vm.LoadFromFile();
 				vm.ResolveDefaultProfileEmail();
 				_sessionCache.Set(cacheKey, vm);

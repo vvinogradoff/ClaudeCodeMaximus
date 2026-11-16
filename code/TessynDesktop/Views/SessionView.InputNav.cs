@@ -51,9 +51,13 @@ public partial class SessionView
 			return;
 		}
 
-		MessageScroller.Focus();
 		_pressPoint = e.GetPosition(MessageScroller);
 		_pressedBlock = source?.FindAncestorOfType<SelectableTextBlock>(includeSelf: true);
+
+		// A press on selectable text focuses that text block itself (it may start a text selection); only a press elsewhere moves focus to the
+		// transcript so the keys work.
+		if (_pressedBlock == null)
+			MessageScroller.Focus();
 		_pressedInput = InputAt(source);
 
 		// A click outside every input bubble is a click elsewhere in the transcript.
@@ -119,6 +123,11 @@ public partial class SessionView
 
 	private void OnTranscriptKeyDown(object? sender, KeyEventArgs e)
 	{
+		// The keys are ours only while the transcript itself (or its selectable text) has focus: a focusable control inside it (a text box, a combo
+		// box, a button of a card) keeps its own arrow keys.
+		if (!IsTranscriptKeyTarget(e.Source))
+			return;
+
 		var key = e.Key switch
 		{
 			Key.Up       => (InputNavKey?)InputNavKey.Up,
@@ -150,6 +159,9 @@ public partial class SessionView
 				break;
 		}
 	}
+
+	private bool IsTranscriptKeyTarget(object? source) =>
+		ReferenceEquals(source, MessageScroller) || source is SelectableTextBlock;
 
 	private void NavigateInputs(int direction)
 	{

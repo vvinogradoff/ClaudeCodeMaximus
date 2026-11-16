@@ -49,6 +49,10 @@
        <Style Selector="Border.inputBubble.automated :is(TextBlock)">
            <Setter Property="Foreground" Value="{DynamicResource CmxAutoBubbleFg}"/>
        </Style>
+       <!-- The label's opacity is a style, not a local value, so the automated label can override it (full opacity keeps it readable on teal) -->
+       <Style Selector="Border.inputBubble TextBlock.userLabel">
+           <Setter Property="Opacity" Value="0.6"/>
+       </Style>
        <Style Selector="Border.inputBubble.automated TextBlock.automatedLabel">
            <Setter Property="Foreground" Value="{DynamicResource CmxAutoLabelFg}"/>
            <Setter Property="FontWeight" Value="SemiBold"/>
