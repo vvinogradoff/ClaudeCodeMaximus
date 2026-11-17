@@ -1,4 +1,4 @@
-using System.Windows.Input;
+﻿using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TessynDesktop.Models.Remote;
 
@@ -113,7 +113,13 @@ public sealed partial class SessionRowViewModel : ObservableObject
 	{
 		OnPropertyChanged(nameof(RecencyLevel));
 		OnPropertyChanged(nameof(IsRecentlyActive));
+		OnPropertyChanged(nameof(LastPromptText));   // an age ("5m") grows with the clock
 	}
+
+	/// <summary>The lists show no worker count (the face is shared with the tree).</summary>
+	public string WorkerCountText => string.Empty;
+
+	public bool HasWorkers => false;
 
 	/// <summary>Re-reads the date text (the date format setting changed).</summary>
 	public void RefreshDisplay() => OnPropertyChanged(nameof(LastPromptText));
