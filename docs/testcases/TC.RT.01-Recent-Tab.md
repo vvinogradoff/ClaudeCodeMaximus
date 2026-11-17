@@ -2,7 +2,7 @@
 
 Related requirements: FR.1.15, FR.1.16 in [requirements.md](/docs/requirements.md). Related use cases: [UC.RT.01](/docs/usecases/UC.RT.01-Recent-Tab.md).
 
-**Legend.** AUTOMATED = a Core unit test in `code/TessynDesktop.Tests` (xUnit); the intended test class is named in the case. MANUAL = a UI test in Avalonia. Exact strings are expected results.
+**Legend.** AUTOMATED = a Core unit test in `code/TessynDesktop.Tests` (xUnit); the intended test class is named in the case. MANUAL = a manual UI test in the WPF client (the steps were written for the previous desktop client; where WPF differs in a detail, the requirement wins and the step is corrected at the first run). Exact strings are expected results.
 
 ## Summary
 

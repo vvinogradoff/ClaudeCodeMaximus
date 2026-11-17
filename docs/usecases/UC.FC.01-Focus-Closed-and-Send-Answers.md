@@ -3,7 +3,7 @@
 Related requirements: FR.23.20–FR.23.23 (see `docs/requirements/`), FR.23.14, FR.23.15. Related: [UC.FV.01](/docs/usecases/UC.FV.01-Focus-View.md), [UC.FD.01](/docs/usecases/UC.FD.01-Focus-Reply-Drafts.md). Test cases: [TC.FC.01](/docs/testcases/TC.FC.01-Focus-Closed-and-Send-Answers.md).
 
 ## Actors
-- **User**. **Tessyn** (WPF and Avalonia clients).
+- **User**. **Tessyn** (WPF client).
 
 ## Preconditions (common)
 - A session with open, Decided and closed Attention Items.

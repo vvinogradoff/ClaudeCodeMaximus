@@ -12,7 +12,7 @@
 - System message bubble background color
 - Session recency bar colors (3 tiers: 15 min, 30 min, 60 min)
 
-**FR.9.3 — Color application:** Custom colors are applied as application-level theme resources (named `Cmx*` colour keys: `CmxInputBg`, `CmxInputFg`, `CmxUserBubbleBg`, `CmxUserBubbleFg`, `CmxCodeBg`, `CmxCodeFg`, `CmxInlineCodeBg`, `CmxInlineCodeFg`, `CmxSystemBubbleBg`, `CmxRecency15Min`, `CmxRecency30Min`, `CmxRecency60Min`). These are consumed by the session view, the markdown/transcript renderer and the session-tree rows (recency colours). The editable colour palette is dropped at WPF parity (decision A8); the WPF client may revisit theming later. Colors are re-applied immediately when the theme is toggled or when settings are saved.
+**FR.9.3 — Color application:** Custom colors are applied as application-level theme resources (named `Cmx*` colour keys: `CmxInputBg`, `CmxInputFg`, `CmxUserBubbleBg`, `CmxUserBubbleFg`, `CmxCodeBg`, `CmxCodeFg`, `CmxInlineCodeBg`, `CmxInlineCodeFg`, `CmxSystemBubbleBg`, `CmxRecency15Min`, `CmxRecency30Min`, `CmxRecency60Min`). These are consumed by the session view, the markdown/transcript renderer and the session-tree rows (recency colours). The editable colour palette is the **Colours tab** of FR.9.9 (decision A8 is withdrawn). Colors are re-applied immediately when the theme is toggled or when settings are saved.
 
 **FR.9.5 — Session recency bars:** Session nodes in the tree display a colored background bar indicating how recently the last user prompt was sent:
 - **Light green** (customizable): last prompt within 15 minutes
@@ -55,7 +55,7 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 |---|---|---|
 | FR.9.2 Per-theme custom colours | FR.9.9 | The list of editable colours grows from 12 to the full palette; **every** colour has a Light and a Dark value. |
 | FR.9.3 Colour application | FR.9.9 | The sentence "the editable colour palette is dropped at WPF parity" is **withdrawn**: the Colours tab is that editor (it replaces decision A8). |
-| FR.9.4 Sensible defaults | FR.9.9 | Defaults are the Avalonia colours, separately for Light and Dark. |
+| FR.9.4 Sensible defaults | FR.9.9 | Defaults are the colours of the catalogue (FR.9.9), separately for Light and Dark. |
 | **FR.9.5 Session recency bars** | **FR.9.10** | **Replaced.** Three tiers (15/30/60 min, last prompt) become four tiers on the latest activity, plus the dotted border. FR.9.5 stays as an ID and points to FR.9.10. |
 | FR.9.6 Recent-dropdown hide | FR.9.11 | A row keeps its recency colour in every state of the dropdown. |
 | FR.9.8 Pinned sessions and order | FR.1.20 | Row content and layout in the dropdown. |
@@ -68,7 +68,7 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 - **Scope.** The palette covers every themed colour of the client, in groups: *Session output* (input box background and text, user bubble, code block, inline code, **system rows** `SystemRow`, automated input teal), *Session lists* (the four recency tiers, the 24-hour border, running and resumable squares, the selected row), *Focus* (kinds Critical, Question, Todo, Alert, Decided: background and text each) and *Window* (accent, button, toggle-on states, title bar checked state).
 - **Colour picker.** Each row shows a **swatch** that opens a **colour picker** (hue, saturation and brightness area, an opacity slider, previews of the old and the new colour). **The hex text is not shown** in the row and not typed by the user; the picker is the only way to edit. A **Reset** per row returns that colour to the theme's default, and **Reset all** returns every colour of the theme shown.
 - **Storage.** A value equal to the theme's default is not stored. A theme never inherits from the other theme.
-- **Defaults** are the Avalonia colours: Green, LightGreen, HoneyDew, MintCream, DarkGreen, DarkRed, DodgerBlue, `#8B0000`, `#DAA520`, `#707070` and the pale blue `#CDE6F7` (dark `#264F78`) for the selected row; Todo and Alert follow the theme; each has its light and dark default.
+- **Defaults** are: Green, LightGreen, HoneyDew, MintCream, DarkGreen, DarkRed, DodgerBlue, `#8B0000`, `#DAA520`, `#707070` and the pale blue `#CDE6F7` (dark `#264F78`) for the selected row; Todo and Alert follow the theme; each has its light and dark default.
 - **Live.** Changing a colour, or the theme, shows at once everywhere (brushes are dynamic resources; the transcript page gets the new palette in its `appearance` message).
 - The Focus chips and the count pill in lists use the same palette keys.
 
@@ -90,7 +90,7 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 **FR.9.11 — The Recent dropdown keeps its colours when open.** The dropdown's header button is **flat**: no accent fill and no dark-blue checked state while the popup is open (only a faint hover or open tint). The rows in the popup are flat buttons with only a faint hover overlay over the row's **own recency colour**, so a row looks the same open, hovered or pressed.
 
 
-**FR.9.12 — Line spacing.** One setting, **Line spacing**, in Settings › Appearance next to the font sizes, drives the line height of **both** the session output and the Focus view. It is a **multiplier of the font size**, from **1.0 to 1.8** (steps of 0.05), default **1.25**, stored in the WPF client state (`appearance` section, `lineSpacing`). The default is tighter than the earlier WPF look (1.45 on the transcript page; about 1.33 natural in the Focus cards) and close to Avalonia's natural Segoe UI line (about 1.33).
+**FR.9.12 — Line spacing.** One setting, **Line spacing**, in Settings › Appearance next to the font sizes, drives the line height of **both** the session output and the Focus view. It is a **multiplier of the font size**, from **1.0 to 1.8** (steps of 0.05), default **1.25**, stored in the WPF client state (`appearance` section, `lineSpacing`). The default is tighter than the earlier WPF look (1.45 on the transcript page; about 1.33 natural in the Focus cards) and close to the natural Segoe UI line (about 1.33).
 - **Session output:** every row and markdown block of the transcript page (assistant, user, system, compaction, the live row) uses the one value through the CSS variable `--lh`, sent in the `appearance` message (`lh`). The small fixed-size labels (time, date) keep their own line height.
 - **Focus view:** the card text (title, body, outcome of open, decided and closed cards) gets a fixed line height of font size × the value.
 - **Live.** A change applies at once to both, without a restart; the virtualised transcript is measured again, as for a font size change.

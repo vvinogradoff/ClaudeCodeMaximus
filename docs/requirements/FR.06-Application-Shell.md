@@ -30,7 +30,7 @@
 
 ### New requirements
 
-**FR.6.5 — Application icon.** The window, the taskbar button, the tray icon (background host) and the executable use **one icon: the Tessyn Web app icon** (`code/Tessyn.Web/ClientApp/public/icon.svg`, rendered to the sizes Windows needs, 16 to 256 px). The old Avalonia logo is not used by the WPF client. The same artwork serves the web (`icon-192`, `icon-512`) and the desktop, so the product looks one across clients.
+**FR.6.5 — Application icon.** The window, the taskbar button, the tray icon (background host) and the executable use **one icon: the Tessyn Web app icon** (`code/Tessyn.Web/ClientApp/public/icon.svg`, rendered to the sizes Windows needs, 16 to 256 px). The earlier logo is not used. The same artwork serves the web (`icon-192`, `icon-512`) and the desktop, so the product looks one across clients.
 
 **FR.6.6 — Version text.** The version text is a plain label: **not focusable**, no tab stop, no focus rectangle, no selection. A press on it starts a window **drag**, as a press on the empty title bar does (FR.6.4); a double-click maximises or restores.
 

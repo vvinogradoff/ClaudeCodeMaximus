@@ -1,5 +1,7 @@
 # ClaudeMaximus — Structure Notes for Refactoring
 
+> **Sunset note (2026-11-17).** Snapshot of 2026-07-17, kept as history. The UI layer described here is retired; WPF is the only desktop client and `code/TessynDesktop` remains only as the daemon host (`TessynDesktop.exe --background`).
+
 > Working notes (not authoritative documentation). Author: Developer/Claude.
 > Purpose: give enough structural understanding to plan a general refactoring.
 > Scope: `code/ClaudeMaximus` (~20.2k LOC C#, net9.0, Avalonia + ReactiveUI, MVVM).

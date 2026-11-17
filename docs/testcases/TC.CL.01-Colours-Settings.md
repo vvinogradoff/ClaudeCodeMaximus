@@ -6,7 +6,7 @@ Related requirements: FR.9.9, FR.9.10, FR.2.8. Use cases: [UC.CL.01](/docs/useca
 
 | TC | Title | Kind | UC | FR |
 |---|---|---|---|---|
-| TC.CL.01 | Catalogue holds every palette key with a Light and a Dark default (Avalonia values) | AUTOMATED | UC.CL.03 | FR.9.9 |
+| TC.CL.01 | Catalogue holds every palette key with a Light and a Dark default (the original default values) | AUTOMATED | UC.CL.03 | FR.9.9 |
 | TC.CL.02 | A row shows a swatch and no hex text; the swatch opens the picker | AUTOMATED | UC.CL.01 | FR.9.9 |
 | TC.CL.03 | Picking a colour updates the application resource at once | AUTOMATED | UC.CL.01 | FR.9.9 |
 | TC.CL.04 | Reset per row and Reset all (of the theme shown) | AUTOMATED | UC.CL.01 | FR.9.9 |

@@ -2,7 +2,7 @@
 
 Related requirements: FR.23.1–FR.23.17 and FR.9.8 in [requirements.md](/docs/requirements.md). Related use cases: [UC.FV.01](/docs/usecases/UC.FV.01-Focus-View.md).
 
-**Legend.** AUTOMATED = a Core integration test in `code/TessynDesktop.Tests` (xUnit); the intended test class is named in each case. MANUAL = a UI test in Avalonia (the UI has no automated tests). Notification tests use fake Telegram and desktop notifiers; the server is built the way `AgentMcpServerNotifyUserTests` builds it. File-based tests use a temp-dir root. Exact strings below are the expected results; assert them verbatim.
+**Legend.** AUTOMATED = a Core integration test in `code/TessynDesktop.Tests` (xUnit); the intended test class is named in each case. MANUAL = a manual UI test in the WPF client (the steps were written for the previous desktop client; where WPF differs in a detail, the requirement wins and the step is corrected at the first run). Notification tests use fake Telegram and desktop notifiers; the server is built the way `AgentMcpServerNotifyUserTests` builds it. File-based tests use a temp-dir root. Exact strings below are the expected results; assert them verbatim.
 
 Notation: `<t>` = title, `<b>` = body.
 
@@ -29,7 +29,7 @@ Notation: `<t>` = title, `<b>` = body.
 | TC.FV.17 | `ExtractToolDescription` | AUTOMATED | UC.FV.01 | FR.23.8 |
 | TC.FV.18 | `AttentionPromptBuilder` | AUTOMATED | UC.FV.05 | FR.23.15 |
 | TC.FV.19 | `InProcDaemonClient` | AUTOMATED | UC.FV.05, UC.FV.13 | FR.23.15, FR.23.16 |
-| TC.FV.20 | Switch placement and default | MANUAL | UC.FV.11 | FR.23.12 |
+| TC.FV.20 | **WITHDRAWN 2026-11-17.** Switch placement and default in the previous desktop header; WPF placement is FR.23.12 / FR.23.21 (covered by the WPF Focus end-to-end tests) | WITHDRAWN | UC.FV.11 | FR.23.12 |
 | TC.FV.21 | Focus hides MD/JSONL, keeps busy indicator | MANUAL | UC.FV.11 | FR.23.12 |
 | TC.FV.22 | Enter in search returns to Session | MANUAL | UC.FV.12 | FR.23.12 |
 | TC.FV.23 | Badge colour per top kind | MANUAL | UC.FV.10 | FR.23.1, FR.23.13 |
@@ -257,16 +257,13 @@ For a server built with `OrchestrationDepth = 1`:
 
 ---
 
-## Manual UI tests (Avalonia)
+## Manual UI tests (WPF)
 
 Common set-up: a top-level session with agent tools enabled. To create items without waiting for a model, ask the session "post three test items to my Focus view with post_attention: a critical, an ask and a todo" or call the tools from an MCP test client. Try both the dark and the light theme where stated.
 
-### TC.FV.20 — Switch placement and default — FR.23.12 (UC.FV.11)
+### TC.FV.20 — WITHDRAWN 2026-11-17 — FR.23.12 (UC.FV.11)
 
-1. Open a session. **Expected:** the header reads, left to right, `[Search output...] [Session][Focus] [MD] [JSONL]`; Session is checked, Focus unchecked; Padding and font look like MD/JSONL.
-2. Click Focus. **Expected:** Focus checked, Session unchecked; exactly one is checked at all times.
-3. Click Focus again. **Expected:** it stays checked.
-4. Click Session. **Expected:** Session checked, output as before.
+The step list described the header order of the previous desktop client and is dropped with it. The switch's WPF placement is FR.23.12 and FR.23.21; the default (Session checked, exactly one checked, Focus again stays checked) is part of the WPF Focus end-to-end tests (`WpfFocusE2ETests`).
 
 ### TC.FV.21 — Focus replaces output; MD/JSONL hidden; busy indicator stays — FR.23.12 (UC.FV.11)
 

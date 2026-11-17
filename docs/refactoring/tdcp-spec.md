@@ -1,5 +1,7 @@
 # Tessyn Daemon Control Protocol (TDCP) — Draft Spec
 
+> **Sunset note (2026-11-17).** Draft of 2026-07-18, kept as history. Where it names the former desktop UI, the client of the `Loopback` surface is now the WPF client; the daemon host is `TessynDesktop.exe --background`.
+
 > Working document (not authoritative, not committed). Author: Developer/Claude.
 > Companion to `refactoring-plan.md` (Stage 4) and `structure-notes.md`. Snapshot: 2026-07-18.
 > Purpose: define the UI↔daemon contract so (a) the Avalonia UI can swap in-process → wire
@@ -181,7 +183,7 @@ decomposition, Stage 7, and the still-undesigned turn-streaming work):
 
 | Transport | Carrier | Who calls | Methods accepted |
 |---|---|---|---|
-| `Loopback` | `POST /tdcp` on `127.0.0.1`, `X-CMX-Token` | the Avalonia UI (Wire client), local tools | every registered method |
+| `Loopback` | `POST /tdcp` on `127.0.0.1`, `X-CMX-Token` | the WPF client (Wire client), local tools | every registered method |
 | `Relay` | the Daemon Link (§8.5): requests arrive on `GET /link/stream` of the web server, replies go to `POST /link/reply` | Tessyn Web through the Web Relay | only methods flagged **remote-callable** (the 21 below) |
 
 One dispatcher (`TdcpDispatcher`) serves both. On `Relay` any other method gets `-32601`. The Web Relay also keeps its own allowlist of the same names. Feature modules register methods through `IRemoteRpcModule`.

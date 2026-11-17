@@ -1175,3 +1175,14 @@ Status copied from the plan and the worker reports in `.wpf-work/` as of 2026-11
 - [DONE] FR.24.18 range (8-40), defaults (WPF 14, Avalonia 11), where and when it applies, import not carried; FR.24.16 and TC.TA.01 aligned with the built tag area (branch `docs/tag-font-size`)
 - [ ] Open questions (see `.wpf-work/486-docs-plan.md` section 4): dropdown project placement, automated-input label, colours per theme, FR.24.16 number
 - [ ] Copy NR.6 (E2E running) into `CLAUDE.md` if wanted (Architect's file)
+
+## Sunset of the previous desktop client (2026-11-17, branch `docs/sunset-avalonia`)
+
+- [DONE] Requirements, use cases, test cases, glossary and features reworded: WPF is the desktop client; `code/TessynDesktop` is described only as the daemon host (`TessynDesktop.exe --background`)
+- [DONE] Dropped items listed in `docs/requirements/Out-of-Scope.md`; withdrawn IDs marked: UC.HS.02, TC.HS.08, TC.TA.10, TC.TA.14, TC.FC.10, TC.FV.20, TC.TG.19, TC.TG.20, TC.TG.21 (no ID renumbered)
+- [DONE] Sunset notes added to `docs/refactoring/wpf-programme-plan.md`, `refactoring-plan.md`, `structure-notes.md`, `tdcp-spec.md`
+- [ ] Architect: confirm the dropped list (the `--chrome` toggle, host takeover, key bindings without a WPF command, tag cloud default 11, Send answers placement)
+- [ ] Architect: take the proposed `CLAUDE.md` text from `.wpf-work/494-sunset-docs.md` (E2E section, build and run-folder notes, `[Publish-WPF]`)
+- [ ] Architect: decide whether the one-time settings import (FR.32.4, UC.HS.05, TC.HS.11) stays or is removed now that the previous client is gone; its wire section keeps a legacy name (`avalonia-ui`)
+- [ ] Manual list for WPF: Ctrl+Enter in Decisions cards and the narrow-window title check (was TC.FC.10); the tooltip wording of TC.TG.21 steps 3–5; confirm the carried-over manual steps of TC.FV.21–40, TC.TG.22–54 and TC.RT.02–10 against WPF
+- [ ] Code follow-ups (not done here): tests that still assert the second tag cloud default (TC.TA.16) or the host takeover (TC.HS.08); retire `TessynDesktop.Tests` cases of the previous window; `docs/session_resume_notes.md`, `docs/shell_commands.md` and `docs/issues/*` still carry the old UI's name as history

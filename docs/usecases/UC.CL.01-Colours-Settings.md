@@ -20,5 +20,5 @@ Related requirements: FR.9.9, FR.9.10, FR.2.8 (see `docs/requirements/`). Test c
 **Covers:** FR.9.9, FR.2.8.
 
 ## UC.CL.03 — Every themed colour is there
-**Main flow:** the User scrolls the tab and finds the groups Session output, Session lists, Focus and Window; each key has a Light and a Dark default equal to the Avalonia colours.
+**Main flow:** the User scrolls the tab and finds the groups Session output, Session lists, Focus and Window; each key has a Light and a Dark default of the catalogue (FR.9.9).
 **Covers:** FR.9.9, FR.9.10.

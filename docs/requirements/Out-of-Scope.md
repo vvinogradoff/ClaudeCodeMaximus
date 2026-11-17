@@ -16,3 +16,15 @@
 - Detecting Session Tags from conversation text, adding/removing tags by hand in the UI, Phase 2 status colours (FR.24.9), multiple focus panels, related tags between Linear issues and pull requests (FR.24.14), TDCP methods and owner-less PR references — see FR.24.10
 
 ---
+
+## Dropped with the previous desktop client (2026-11-17)
+
+On 2026-11-17 the Architect made WPF the only desktop client. The previous desktop UI is retired; the project `code/TessynDesktop` remains only as the daemon host (`TessynDesktop.exe --background`, FR.32.1). Nothing below was silently lost. **For the Architect to confirm** (the full list with reasons is in `.wpf-work/494-sunset-docs.md`):
+
+- The **`--chrome` browser-control toggle** in the command bar (Claude drives Chrome through the Claude-in-Chrome extension). WPF has no such toggle; the replacement is the reserved embedded browser pane (FR.27, `docs/refactoring/browser-control-cdp-plan.md`). The Core still accepts the `Chrome` turn setting.
+- **Takeover of a background host by a visible window** of the previous client, and the "second visible window is refused" check (parts of FR.32.2 and FR.32.6; UC.HS.02, UC.HS.03 A1–A2; TC.HS.08).
+- **Key bindings without a WPF command**: the one-time import (FR.32.4) carries only bindings that have a WPF command; the others are dropped.
+- **The second tag cloud default (11) and its apply-on-Save behaviour** (FR.24.18).
+- **Placement of "Send answers (n)" left of the search box** and the previous header order (FR.23.12, FR.23.21; TC.FC.10, TC.FV.20).
+- **Manual test cases written for the previous window**: TC.TA.10, TC.TA.14, TC.FC.10, TC.FV.20, TC.TG.19, TC.TG.20, TC.TG.21, TC.HS.08. Each ID is kept and marked withdrawn; where WPF has the same behaviour the case points to its WPF equivalent.
+- **Self-update of the previous client** (FR.8.1–8.5 as written for it): the WPF client's rules are FR.32.3, see the note in FR.8.
