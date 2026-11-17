@@ -59,6 +59,7 @@ client-side concerns.
   daemon stays the JSON-RPC *server* though it opened the connection (standard reverse-tunnel-over-
   HTTPS). Only the connection-establishing side differs from S2; the message schema is identical.
   (S3 is a future stage, not built during the split — but the transport choice makes it free.)
+  **Realised 2026-11-12** for the web client: see §8 (Remote API v1 and the S3 relay) and FR.25.
 
 ## 4. Method map (IDaemonClient → TDCP)
 
@@ -168,9 +169,121 @@ decomposition, Stage 7, and the still-undesigned turn-streaming work):
 1. ✅ **D4 confirmed (2026-07-19):** TDCP as its **own** protocol — JSON-RPC 2.0 over Streamable
    HTTP — co-hosted with the MCP server. Settled; §3 updated.
 2. **Streaming:** `turn.event` push model for live assistant output — §5 (rides SSE per §3).
-3. **S3 (future):** the daemon→web-server link reuses this same TDCP JSON-RPC schema over an
+3. **S3 (realised 2026-11-12, §8):** the daemon→web-server link reuses this same TDCP JSON-RPC schema over an
    outbound HTTPS connection with an SSE downstream (design implication only; not built during
    the split) — see refactoring-plan.md §0.2.
+
+## 8. Remote API v1 and the S3 relay (2026-11-12)
+
+> Realises the S3 topology of §3 for the web client (FR.25 in `requirements.md`). This section is the reference for clients. The loopback `/tdcp` endpoint is unchanged.
+
+### 8.1 Transports and the remote-callable flag
+
+| Transport | Carrier | Who calls | Methods accepted |
+|---|---|---|---|
+| `Loopback` | `POST /tdcp` on `127.0.0.1`, `X-CMX-Token` | the Avalonia UI (Wire client), local tools | every registered method |
+| `Relay` | the Daemon Link (§8.5): requests arrive on `GET /link/stream` of the web server, replies go to `POST /link/reply` | Tessyn Web through the Web Relay | only methods flagged **remote-callable** (the 21 below) |
+
+One dispatcher (`TdcpDispatcher`) serves both. On `Relay` any other method gets `-32601`. The Web Relay also keeps its own allowlist of the same names. Feature modules register methods through `IRemoteRpcModule`.
+
+### 8.2 Conventions
+
+- JSON-RPC 2.0. camelCase properties, enums as camelCase strings, nulls omitted, times UTC ISO-8601.
+- Every tree node has a 32-hex-digit `id` (`Guid.ToString("N")`); sessions use their `NodeId`, directories and groups their new persisted `NodeId`. No path, token, file name or profile config directory is sent.
+- Errors: `-32700` parse, `-32600` invalid request, `-32601` method not found or not remote-callable, `-32602` invalid params, `-32000` daemon error (user-facing message), `-32603` internal. Server-made: `-32001` daemon offline, `-32002` daemon timeout.
+
+Shared types:
+
+```
+SessionStateDto     { id, running, streamingAlive, attention?: RowAttentionDto, favorite, lastActivityUtc?, lastPromptUtc?, hasDraft, profileName? }
+RowAttentionDto     { count, topKind }                    // all open items, Decided included; omitted when 0
+AttentionSummaryDto { openCount, topKind?, allOpenCount, allOpenTopKind? }   // openCount excludes Decided
+AttentionKindWire   "critical" | "ask" | "todo" | "alert" | "decided"
+TreeSessionDto      { id, name, workerCount, supervisorId?, state }
+SessionRowDto       { id, name, state }
+SessionGroupDto     { directoryId, directoryLabel, sessions: SessionRowDto[] }
+```
+
+### 8.3 Methods
+
+| Method | Params | Result |
+|---|---|---|
+| `client.hello` | — | `{ protocolVersion: 1, daemonVersion, machineName, runId, serverTimeUtc }` |
+| `tree.snapshot` | `{ sinceVersion?: long }` | `{ version, unchanged?: true, directories?: TreeDirectoryDto[] }`; `TreeDirectoryDto { id, label, isExpanded, groups, sessions }`, `TreeGroupDto { id, name, isExpanded, groups, sessions }`; top-level sessions only |
+| `tree.workers` | `{ supervisorId }` | `{ supervisorId, workers: TreeSessionDto[] }` |
+| `tree.search` | `{ query, exact?: bool or null, scopeNodeId?: string or null }` | `{ query, effectiveExact, autoExact, usedFallback, matches: [{ id, strict, loose, matchedSelf, workerIds }] }` ranked best first |
+| `tree.createSession` | `{ anchorId, name }` | `{ session: TreeSessionDto, directoryId, groupId? }` — anchor session: right after it; group or directory: first |
+| `recent.list` | — | `{ serverTimeUtc, sessions: [{ id, name, directoryLabel, state, hasSchedules, pinned, canHide }] }` (Recent dropdown rules) |
+| `recent.hide` | `{ nodeId }` | `{ hidden }` (refuses pinned sessions) |
+| `tags.search` | `{ text, scopeNodeId?, selected: TagRefDto[] }` | `{ emptyReason?, chips: TagChipDto[], sessionsEmptyReason?, groups: SessionGroupDto[] }`; `TagRefDto { key, label, url, kind }`, `TagChipDto { …, sessionCount, selected }`, `kind` = `linearIssue`, `gitHubPullRequest`, `gitHubRepository` |
+| `session.get` | `{ nodeId }` | `{ id, name, directoryId, groupId?, location: { directoryLabel, treePath }, supervisorId?, state, tags: SessionTagDto[], attention: AttentionSummaryDto, lastUsed: { modelId, effort, profileId, profileName }, isStreamingMode, entryCount, epoch }` |
+| `session.entries` | `{ nodeId, beforeIndex?, afterIndex?, limit? }` | `{ nodeId, epoch, total, entries: SessionEntryDto[] }`; `SessionEntryDto { index, timestamp, role, content, truncated?, fullLength?, profileName?, modelId?, effort? }`; limit default 50, max 200; content cap 32,768 |
+| `session.entry` | `{ nodeId, index, epoch }` | `SessionEntryDto` (full); `-32000 "Session history changed"` on epoch mismatch |
+| `session.send` | `{ nodeId, text, modelId?, effort?, profileId? }` | `{ accepted: true, queued }`; returns at once, the turn runs headless with `TurnSource.Web` |
+| `session.stop` | `{ nodeId }` | `{ stopped }` (kills a live Persistent Session Process, cancels a headless turn; cannot cancel a desktop-interactive one-shot turn nor a compaction) |
+| `session.compact` | `{ nodeId, modelId?, effort?, profileId? }` | `{ accepted: true, queued }` |
+| `session.setFavorite` | `{ nodeId, value }` | `{ value }` |
+| `session.setStreaming` | `{ nodeId, enabled, force? }` | `{ enabled, needsConfirm }` |
+| `attention.list` | `{ nodeId }` | `{ nodeId, summary, items: AttentionItemDto[] }`; `AttentionItemDto { id, number, kind, title, body?, options, recommendation?, status, answer?, resolutionNote?, createdUtc, updatedUtc, closedUtc? }` |
+| `attention.reply` | `{ nodeId, answers: [{ itemId, text }], modelId?, effort?, profileId? }` | `{ answeredIds, skippedIds, turnStarted }` |
+| `attention.dismiss` | `{ nodeId, itemId }` | `{ dismissed }` |
+| `catalog.get` | — | `{ models: [{ id, displayName, provider }], efforts: ["default","max","high","medium","low"], profiles: [{ id, displayName }] }`; `default` entries first |
+| `usage.get` | `{ profileId? }` | `{ profileId, profileName, state: "ok", "pending", "unauthorized" or "unavailable", fiveHour?, sevenDay?, fetchedAtUtc? }`; window `{ utilization, resetsAtUtc, isStale }` |
+
+Notes: `lastUsed.modelId` and `profileId` are `"default"` when unset (the Default profile's `profileName` is `[Sys] <email>`, or `[Sys] Default` until the email is known); `effort` is `default`, `max`, `high`, `medium` or `low`. Entry `index` is the position in the parsed list (all entries, empty ones included). `epoch` increases when the session file is rewritten.
+
+### 8.3a As built: where the implementation refines the contract (2026-11-13)
+
+- **Parameters.** A missing or mistyped param is `-32602` (also for the 17 legacy loopback methods, which used to answer `-32000`). `params` must be a JSON object or absent. A user-facing failure is `TdcpException` → `-32000` with its message; a parameter problem is `-32602` (`TdcpInvalidParamsException`); any other exception, including a stray `FormatException`/`JsonException`/`InvalidCastException` from a handler, is `-32603 "Internal error"` (logged, message not leaked). `DateTimeOffset` values serialise as `…+00:00` (valid ISO-8601).
+- **`client.hello`.** `daemonVersion` is the entry assembly's informational version without the `+commit` suffix. `serverTimeUtc` lets the client correct its clock (the web uses the offset for recency).
+- **`tree.snapshot`.** `version` is read **before** the snapshot is built; `sinceVersion == version` gives `{ version, unchanged: true }`. The web always sends a full snapshot request (no `sinceVersion`) after a gap. Workers and sessions with a resolvable supervisor are excluded from the top-level lists; supervisor cycles stop at the first repeated session.
+- **`tree.workers`** returns **direct** workers only, in the desktop display order (groups first, then sessions per container).
+- **`tree.search`.** The file-scan fallback is not strict-filtered (it yields loose hits only), as on the desktop; if the index and the fallback both fail, `-32000 "Search is unavailable"`. An unknown `scopeNodeId` (here and in `tags.search`) gives `-32000 "Session not found"`. The web always sends `exact` explicitly.
+- **`tree.createSession`.** One registry call, one `Save()`; the event carries the index and the preceding session. An unknown anchor creates nothing (`-32000`). Empty name: `-32602`.
+- **`recent.hide`.** A web hide is persisted and visible in `recent.list`, and raises `SessionSettingsChanged` so the desktop's node refreshes its own `RecentIgnoredAt` at once (the first build needed a restart). Pinned: `{ hidden: false }`.
+- **`tags.search`.** Built from the same tree snapshot as the scope resolution (`SessionTagIndexBuilder`); chips whose URL is outside the allowed policy carry `url: ""`; `TagChipDto` has no `source`; selected tags are de-duplicated case-insensitively.
+- **`session.send`, `attention.reply`, `session.compact`.** `queued` = the session's running flag is set **or** another web turn was accepted and has not finished. Per-turn `modelId` / `effort` / `profileId` are validated (`-32602`); `"default"` = none. When the turn is redirected into a live streaming process the options are ignored (logged). Every headless USER entry is stamped `profile="<display name>"`.
+- **`session.compact` options.** Resolved by the shared `ITurnOptionsResolver`; an unknown `modelId` is `-32602` like in `session.send`.
+- **`session.compact` outcomes.** `Nothing to compact` and `Failed` append a SYSTEM line (remote path only) and publish `turn.completed`; success rewrites the file (`session.reset`) and also publishes `turn.completed`.
+- **`session.setStreaming`.** `needsConfirm` answers `enabled` = the current value and raises no event; a change publishes `session.changed`.
+- **`attention.reply`.** Open Decided items count as answerable (as the desktop's reply cards do); blank, repeated, unknown and closed answers go to `skippedIds`; invalid options are rejected before anything is marked.
+- **`usage.get`.** No `profileId` means `"default"`. A fetch longer than 8 s answers `state: "pending"` and continues (then `usage.changed`); failures retry after 1 min, 401 after 5 min; `unauthorized` with an older reading returns that reading as `ok`. The default profile and the stored profile ids behave as in `catalog.get`.
+- **`session.entries` / `session.get`.** Parsed lists are cached per file (validated by length and write time, 16 files). Activity is cached per file stamp: an append-only change is parsed from the cached length and merged; a cold entry reads the 64 KB tail, widened once to 4 MB when it holds no USER entry (then the prompt is null); the draft file is read only when its stamp changes. `lastActivityUtc` = max(last USER timestamp, last ASSISTANT timestamp, non-blank draft timestamp) from real entry timestamps; `lastResponseUtc`/`lastPromptUtc` come from the 64 KB tail and can read as null when older than the tail.
+- **`session.get.lastUsed`** is built by one resolver that mirrors the three desktop `RestoreFromEntry` methods.
+
+### 8.4 Notifications (daemon → relay → browsers)
+
+Sent as JSON-RPC notifications (`method`, `params`, no `id`); the Relay Connector posts them in batches to `/link/events`; the server fans them out on `GET /api/events`.
+
+| Method | Params | Trigger |
+|---|---|---|
+| `tree.changed` | `{ version }` | structural tree change (debounce 300 ms) |
+| `session.changed` | `{ state: SessionStateDto }` | running flag, attention, favourite/streaming, entry appended (debounce 250 ms per session) |
+| `session.appended` | `{ nodeId, epoch }` | entry appended (debounce 250 ms per session) |
+| `session.reset` | `{ nodeId, epoch }` | session file rewritten |
+| `turn.completed` | `{ nodeId, cancelled, error? }` | turn ended |
+| `attention.changed` | `{ nodeId, summary }` | Focus items changed |
+| `tags.changed` | `{ nodeId? }` | tags changed |
+| `usage.changed` | `{ profileId }` | usage fetched with new data |
+| `index.changed` | `{}` | search index updated (debounce 2 s) |
+
+Server-made, never sent by the daemon: `link.status { online, since }` (first frame of every browser stream) and `resync {}`.
+
+**Ordering and coalescing.** `turn.completed` and `session.reset` use a zero window (published at once, off the calling thread); `session.appended` / `session.changed` use 250 ms, but the daemon **flushes** the session's pending `session.appended`/`session.changed` before it sends `turn.completed` (`IRemoteEventBus.FlushPending`), so they normally arrive first; a timer already firing at that moment can still land just after it. A client refreshes on `turn.completed` and still handles a late `session.appended`. `session.reset` reads the epoch after the bump. Windows: tree 300 ms, session 250 ms, attention 250 ms, tags 250 ms, index 2 s. `usage.changed` is published by the usage service.
+
+### 8.5 Link protocol (Web Relay ⇄ Relay Connector)
+
+- `GET /link/stream` — headers `Authorization: Bearer <link token>`, `X-Tessyn-Daemon: <machine name>`, `X-Tessyn-Protocol: 1`. `text/event-stream` with `X-Accel-Buffering: no`; each frame `data: <JSON-RPC request>`; a `: ping` comment every 15 s. One link at a time: a new connection supersedes the old one (the old stream ends, its pending requests fail `-32001`). 401 for a wrong token.
+- `POST /link/reply` — bearer token; body = JSON array of JSON-RPC responses; 204.
+- `POST /link/events` — bearer token; body `{ "events": [ { "method", "params" } ] }`; 204.
+- Request ids on the link are server-generated (`r-<n>`) and mapped back to the browser's id. Server timeout 30 s (60 s for `session.entries`, `tree.snapshot`, `tags.search`, `tree.search`).
+- Connector: backoff 1, 2, 5, 10, then 30 s (cap), reset after 60 s connected; 45 s without any frame = dead link; at most 8 requests at once; notifications coalesced for 250 ms per POST; notifications made while offline are dropped (browsers resync on `link.status`).
+- Frames as built: requests are `data: {"jsonrpc":"2.0","id":"r-N","method":…,"params":…}` (no `event:` line, `params` omitted when absent); `resync` is a normal data frame `{"method":"resync","params":{}}` carrying `id:` = the latest sequence number; the first `link.status` frame has no `id:`. `/link/events` ignores daemon-posted `link.status`/`resync` and any `seq`. The connector replies with a one-element array per request; frames without an `id` get no reply. Events are posted after 250 ms as one `{ "events": [...] }`; a failed POST is logged and dropped.
+- The token is compared as SHA-256 (of the UTF-8 bytes of the token text exactly as sent in the `Bearer` header, lowercase hex) against the configured hash, in constant time. On the PC the config is `%AppData%\TessynDesktop\web-relay.dat` (DPAPI, current user): `{ "enabled", "url", "token" }`.
+
+### 8.6 Browser API (Tessyn.Web)
+
+`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`; `POST /api/rpc` (cookie plus header `X-Tessyn-Client: web`); `GET /api/events` (cookie; `id:` = server sequence, ring buffer of 1,000 events or 10 minutes, `Last-Event-ID` replay or `resync`); `GET /healthz` (no auth: `{ ok }`; `linkOnline` only for a loopback caller). Every `POST /api/*`, login and logout included, needs `X-Tessyn-Client: web` (else 400). Cookies are `__Host-Tessyn.Auth` and `__Host-Tessyn.Device`; logout logs out every device; body limits 4 KB login, 1 MB rpc, 4 MB link. Details: FR.25.03–FR.25.06, FR.25.28.
 
 ---
 
