@@ -3,7 +3,7 @@
 Related requirements: FR.24.16, FR.24.18 (see `docs/requirements/`), FR.24.7. Test cases: [TC.TA.01](/docs/testcases/TC.TA.01-Tag-Area.md).
 
 ## Actors
-- **User**. **Tessyn** (WPF client and Tessyn Web).
+- **User**. **Tessyn** (WPF and Avalonia clients).
 
 ## Preconditions (common)
 - A session with more chips than fit one line; a second session with a few tags.
