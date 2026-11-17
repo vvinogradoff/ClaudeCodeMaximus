@@ -548,7 +548,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task A_click_on_a_link_inside_an_input_opens_the_link_and_does_not_select_the_input()
+	public async Task A_ctrl_click_on_a_link_inside_an_input_opens_the_link_and_does_not_select_the_input()
 	{
 		var (process, page) = await StartAsync();
 		try
@@ -561,7 +561,10 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 			await SettleAsync(page);
 			var rect = await page.EvalAsync("(() => { const r = document.getElementById('lk').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()");
 
-			await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>());
+			await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>());   // FR.26.6: a plain click opens nothing
+			await Task.Delay(600);
+			Assert.Equal(0, await PostsAsync(page, "link"));
+			await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>(), modifiers: 2);   // Ctrl+click opens
 			await ExpectPostAsync(page, "link");
 			Assert.Equal(-1, await SelectedAsync(page));   // nothing was selected before, and the click on the link selected nothing
 
@@ -571,7 +574,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 			await ShowEntryAsync(page, 254);
 			await SettleAsync(page);
 			rect = await page.EvalAsync("(() => { const r = document.getElementById('lk').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()");
-			await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>());
+			await page.ClickAsync(rect![0]!.GetValue<double>(), rect[1]!.GetValue<double>(), modifiers: 2);
 			await WaitAsync("a second link post", async () => await PostsAsync(page, "link") >= 2);
 			Assert.Equal(252, await SelectedAsync(page));
 		}

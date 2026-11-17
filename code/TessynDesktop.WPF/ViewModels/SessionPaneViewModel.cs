@@ -138,6 +138,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			Preview.PropertyChanged += OnSideContentChanged;
 		_surface.ViewChanged += OnViewChanged;
 		_surface.PathClicked += OnPathClicked;
+		_surface.PathImageRequested += OnPathImageRequested;
 
 		_client.NotificationReceived += OnNotification;
 		_client.Resynced += OnResynced;
@@ -834,6 +835,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_surface.PageRestarted -= OnPageRestarted;
 		_surface.ViewChanged -= OnViewChanged;
 		_surface.PathClicked -= OnPathClicked;
+		_surface.PathImageRequested -= OnPathImageRequested;
 		Focus.RefActivated -= OnRefActivated;
 		Focus.PropertyChanged -= OnSideContentChanged;
 		if (Preview != null)

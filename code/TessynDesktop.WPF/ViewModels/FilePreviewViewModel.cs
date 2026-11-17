@@ -113,6 +113,16 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 		return _loadTask;
 	}
 
+	/// <summary>
+	/// Copies the image behind a handle into the preview cache for the transcript's inline image (FR.26.5) and returns its cache URL; null when
+	/// the file is not an image the cache accepts, is over the image limit or could not be read. The preview pane is not touched.
+	/// </summary>
+	public async Task<string?> CacheImageAsync(string handle, CancellationToken cancellationToken)
+	{
+		var loaded = await _loader.LoadAsync(handle, saveToFile: true, progress: null, cancellationToken);
+		return loaded.Refusal == null && loaded.Kind == PreviewKind.Image && loaded.FilePath != null ? _store.UrlOf(loaded.FilePath) : null;
+	}
+
 	/// <summary>Shows a failure instead of a file (for example <c>file.preview</c> refused the path).</summary>
 	public void ShowError(string name, string message)
 	{

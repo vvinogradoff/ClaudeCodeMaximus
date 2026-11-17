@@ -26,6 +26,7 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer, IMarkdownRenderer
 	private readonly MediaLinkDetector? _media;
 	private readonly LocalPathDetector? _paths;
 	private readonly HtmlAllowlistSanitizer _sanitizer;
+	private readonly InlinePathMarker _pathMarker = new();
 
 	public MarkdigEntryRenderer(UrlPolicy urlPolicy, MediaLinkDetector? media = null, LocalPathDetector? paths = null)
 	{
@@ -45,16 +46,21 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer, IMarkdownRenderer
 	{
 		var truncated = entry.Truncated == true;
 		var assistant = entry.Role == AssistantRole;
+		var paths = assistant ? _paths?.Detect(entry.Content) : null;
+		var html = RenderMarkdown(entry.Content);
+		if (paths is { Count: > 0 })
+			html = _pathMarker.Mark(html, paths);   // FR.26.5: the paths stay inline in the text (Ctrl+click opens), image paths get a preview slot
+
 		return new TranscriptEntryView(
 			entry.Index,
 			RoleCode(entry.Role),
 			HeaderText(entry),
-			RenderMarkdown(entry.Content),
+			html,
 			truncated,
 			entry.FullLength ?? entry.Content.Length,
 			EstimateHeight(entry.Content),
 			assistant ? _media?.Detect(entry.Content) : null,
-			assistant ? _paths?.Detect(entry.Content) : null,
+			paths,
 			entry.Source);
 	}
 

@@ -39,7 +39,7 @@ function entryHtml(k) {
   const more = it.trunc ? '<a class="more" data-i="' + it.i + '">Show full entry (' + it.full + ' chars)</a>' : '';
   const media = it.m.length ? MediaGate.previewHtml(it.m, ALLOW, it.i, S.loaded) : '';
   const cls = '<div class="e ' + esc(it.r) + (InputNav.isAuto(it) ? ' auto' : '') + '" data-k="' + k + '"><div class="c' + (it.i === SEL ? ' sel' : '') + '">';
-  const tail = '<div class="b">' + it.html + '</div>' + more + media + chipsHtml(it) + '</div>';
+  const tail = '<div class="b">' + withSlots(it) + '</div>' + more + media + '</div>';
   if (it.r === 'A' || it.r === 'S') {   // an assistant response sits on the view background: no role word, the model beside nothing, the time on the right (as in the Avalonia client)
     const cut = it.ts.indexOf(' · '), time = cut < 0 ? it.ts : it.ts.substring(0, cut), model = cut < 0 ? '' : it.ts.substring(cut + 3);
     return cls + (model ? '<div class="h">' + esc(model) + '</div>' : '') + tail + '<div class="t">' + esc(time) + '</div></div>';
@@ -52,12 +52,19 @@ function entryHtml(k) {
   }
   return cls + '<div class="h">' + esc(InputNav.labelOf(it) || ROLE[it.r] || it.r) + ' &middot; ' + esc(it.ts) + '</div>' + tail + '</div>';
 }
-// Local-file chips (FR.26.5): the path is kept in S.items, the DOM carries only its index and the escaped file name.
-function chipsHtml(it) {
-  if (!it.p.length) return '';
-  let s = '<div class="chips">';
-  it.p.forEach((path, j) => { s += '<button class="chip" type="button" data-i="' + it.i + '" data-j="' + j + '" title="' + esc(path) + '">' + esc(path.substring(path.lastIndexOf('\\') + 1)) + '</button>'; });
-  return s + '</div>';
+// Local paths (FR.26.5, pathslots.js): the host marks each path inline (span.pth, data-j = index into it.p) and puts an empty span.pslot after the
+// first occurrence of an image path. The slot becomes the image preview, directly under the path, once the host answered (state in S.pimg).
+// The path itself is kept in S.items; the DOM carries only its index.
+let PQ = [];                // image requests collected while building entries, posted after the build
+function withSlots(it) {
+  if (!S || !it.p.length) return it.html;
+  const r = PathSlots.fill(it.html, it.i, it.p, path => S.pimg.get(it.i + '|' + path));
+  for (const path of r.wanted) { S.pimg.set(it.i + '|' + path, { st: 'wait', src: '' }); if (!PQ.length) queueMicrotask(flushPathImages); PQ.push({ i: it.i, path: path, tok: S.tok }); }
+  return r.html;
+}
+function flushPathImages() {
+  const q = PQ; PQ = [];
+  for (const r of q) if (S && r.tok === S.tok) post({ ev: 'pathImage', tok: r.tok, i: r.i, path: r.path });
 }
 function rangeHtml(a, b) { let s = ''; for (let k = a; k < b; k++) s += entryHtml(k); return s; }
 function fragmentOf(a, b) { const t = document.createElement('div'); t.innerHTML = rangeHtml(a, b); const f = document.createDocumentFragment(); while (t.firstChild) f.appendChild(t.firstChild); return f; }
@@ -135,12 +142,16 @@ items.addEventListener('error', e => {
 
 function entryOf(i) { if (!S) return null; const n = parseInt(i, 10), k = posOfEntry(n); return S.items[k] && S.items[k].i === n ? S.items[k] : null; }
 
-// Links: never navigate in the page; post the click to the host.
+// Links and local paths open on Ctrl+left-click only; a plain click does nothing, so text and images can be selected and copied.
+function pathOf(el) {
+  const row = el.closest('.e'), it = row && S ? S.items[parseInt(row.getAttribute('data-k'), 10)] : null;
+  const path = it && it.p[parseInt(el.getAttribute('data-j'), 10)];
+  return path ? { i: it.i, path: path } : null;
+}
+// Never navigate in the page; post the click to the host.
 function onLinkClick(e) {
   const more = e.target.closest && e.target.closest('a.more');
   if (more) { e.preventDefault(); post({ ev: 'expand', tok: S ? S.tok : 0, i: parseInt(more.getAttribute('data-i'), 10) }); return; }
-  const chip = e.target.closest && e.target.closest('button.chip');
-  if (chip) { const it = entryOf(chip.getAttribute('data-i')); const path = it && it.p[parseInt(chip.getAttribute('data-j'), 10)]; if (path) post({ ev: 'path', tok: S.tok, i: it.i, path: path }); return; }
   const load = e.target.closest && e.target.closest('button.mload');
   if (load) {
     // Click-to-load: ask the host first; only its "mediaOk" lets this page create the element (the URL is not in the DOM until then).
@@ -149,15 +160,22 @@ function onLinkClick(e) {
     if (p && !p.auto) post({ ev: 'mediaLoad', tok: S.tok, i: it.i, j: j, url: p.url });
     return;
   }
+  const pth = e.target.closest && e.target.closest('.pth, img.pimg');
+  if (pth) { if (PathSlots.opens(e)) { const p = pathOf(pth); if (p) { e.preventDefault(); post({ ev: 'path', tok: S.tok, i: p.i, path: p.path }); } } return; }
   const a = e.target.closest && e.target.closest('a');
   if (!a) return;
   e.preventDefault();
-  if (a.classList.contains('blocked')) return;
+  if (a.classList.contains('blocked') || !PathSlots.opens(e)) return;
   const href = a.getAttribute('href') || '';
   if (/^https?:\/\//i.test(href)) post({ ev: 'link', href: href });
 }
 vp.addEventListener('click', onLinkClick);
-vp.addEventListener('auxclick', onLinkClick);
+// Ctrl held: paths, images and links show the pointer cursor (they are only clickable then).
+function setCtrl(on) { document.documentElement.classList.toggle('ctrl', on); }
+document.addEventListener('keydown', e => { if (e.key === 'Control') setCtrl(true); }, true);
+document.addEventListener('keyup', e => { if (e.key === 'Control') setCtrl(false); }, true);
+window.addEventListener('blur', () => setCtrl(false));
+vp.addEventListener('pointermove', e => { if (e.ctrlKey !== document.documentElement.classList.contains('ctrl')) setCtrl(e.ctrlKey); }, { passive: true });
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); post({ ev: 'findRequested' }); }
   else if (e.key === 'F3') { e.preventDefault(); post({ ev: 'findStep', dir: e.shiftKey ? -1 : 1 }); }
@@ -315,7 +333,7 @@ function stepFind(dir) { if (!F || !F.idx.length) return; F.cur = (F.cur + dir +
 function onLoad(m) {
   showLive(null);
   SEL = InputNav.selectionOnLoad(SEL, S ? S.key : null, m.key);   // a reload of the same session keeps its selection; another session clears it
-  S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, hasNewer: !!m.hasNewer, loaded: new Map() };
+  S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, hasNewer: !!m.hasNewer, loaded: new Map(), pimg: new Map() };
   olderPending = false; NG = PagingGate.create(); F = null; H = null; NAV = null; recomputeOff(); items.replaceChildren();
   padTop.style.height = '0px'; padBot.style.height = S.off[S.items.length] + 'px';
   const t0 = performance.now();
@@ -431,6 +449,24 @@ function onMediaOk(m) {
   remeasure();
 }
 
+// The host answered a pathImage request: src (a preview-cache URL) or why not ('denied' = the access rules refuse it, otherwise it failed).
+function onPathImage(m) {
+  if (!S || m.tok !== S.tok || typeof m.path !== 'string') return;
+  const key = m.i + '|' + m.path;
+  if (!S.pimg.has(key)) return;
+  S.pimg.set(key, typeof m.src === 'string' && m.src ? { st: 'ok', src: m.src } : { st: m.reason === 'denied' ? 'denied' : 'fail', src: '' });
+  const k = posOfEntry(m.i); if (!S.items[k] || S.items[k].i !== m.i) return;
+  if (k >= S.a && k < S.b) {   // only the slots change: a selection in the rest of the entry survives
+    const it = S.items[k];
+    items.children[k - S.a].querySelectorAll('.pslot').forEach(slot => {
+      const j = parseInt(slot.getAttribute('data-j'), 10);
+      if (it.p[j] !== m.path) return;
+      const t = document.createElement('div'); t.innerHTML = PathSlots.slotHtml(it.i, j, m.path, S.pimg.get(key)); slot.replaceWith(t.firstChild);
+    });
+  }
+  remeasure();
+}
+
 // Theme and fonts from the host (W10a): the theme name and the three font sizes and the line spacing (--lh, FR.9.12) become attributes and CSS variables on the root; entry heights change with the font, so the list is measured again.
 // The colours the user changed (Settings > Colours) are set as inline CSS variables over the page's own; the ones no longer listed are dropped again.
 let colourVars = [];
@@ -478,6 +514,7 @@ chrome.webview.addEventListener('message', e => {
     case 'appearance': onAppearance(m); break;
     case 'policy': ALLOW = Array.isArray(m.hosts) ? m.hosts.filter(h => typeof h === 'string') : []; break;
     case 'mediaOk': case 'mediaFail': onMediaOk(m); break;
+    case 'pathImage': onPathImage(m); break;
   }
 });
 // Pointer, wheel and key activity goes to the host (W10a screensaver): WPF never sees input that lands in a web page. Throttled; a pointer move counts after it travelled 6 px.

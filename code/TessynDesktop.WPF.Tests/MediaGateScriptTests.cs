@@ -170,7 +170,7 @@ public sealed class MediaGateScriptTests
 
 		Assert.Contains("default-src 'none'", html);
 		Assert.Contains("script-src 'self'", html);
-		Assert.Contains("img-src https://media.local;", html);
+		Assert.Contains("img-src https://media.local https://preview.local;", html);   // the media proxy, and the cache that holds an inline local image (FR.26.5)
 		Assert.Contains("media-src https://preview.local;", html);
 		Assert.Contains("connect-src 'none'", html);
 		Assert.Contains("frame-src 'none'", html);

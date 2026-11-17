@@ -175,7 +175,7 @@ public sealed class WpfFocusE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task Transcript_previews_a_local_path_chip_and_loads_a_remote_image_only_after_a_click()
+	public async Task Transcript_previews_a_local_path_on_ctrl_click_and_loads_a_remote_image_only_after_a_click()
 	{
 		var port = CdpPage.FreePort();
 		using var process = _app.Start(CdpPage.EnvironmentFor(port));
@@ -196,9 +196,11 @@ public sealed class WpfFocusE2ETests : IDisposable
 			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "Media load approved by a click for host tracker.example"), _app.ReadLog());
 			Assert.DoesNotContain("Blocked a request to a foreign host", _app.ReadLog());
 
-			// FR.26.5: the chip asks the daemon for a handle, then the preview pane shows the file.
-			Assert.True(await page.ClickButtonAsync("chip.md", StepTimeout), "The path chip was not found. Log:\n" + _app.ReadLog());
-			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "Preview opened: chip.md (\"Markdown\",", "Preview page rendered markdown: true"), "The chip did not open the preview. Log:\n" + _app.ReadLog());
+			// FR.26.5: the path stays inline in the text; Ctrl+click asks the daemon for a handle, then the preview pane shows the file.
+			Assert.Null(await page.EvalAsync("document.querySelector('.chips, button.chip')"));
+			var point = (JsonArray)(await page.EvalAsync("(() => { const p = document.querySelector('.pth'); p.scrollIntoView({ block: 'center' }); const r = p.getBoundingClientRect(); return [r.left + 4, r.top + r.height / 2]; })()"))!;
+			await page.ClickAsync(point[0]!.GetValue<double>(), point[1]!.GetValue<double>(), modifiers: 2);
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "Preview opened: chip.md (\"Markdown\",", "Preview page rendered markdown: true"), "The Ctrl+click on the path did not open the preview. Log:\n" + _app.ReadLog());
 			AssertNoErrors();
 		}
 		finally

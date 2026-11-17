@@ -273,6 +273,68 @@ public sealed partial class SessionPaneViewModel
 
 	private void OnPathClicked(object? sender, PathClickedEventArgs e) => _ui.Post(() => _ = PreviewLocalPathAsync(e.EntryIndex, e.Path));
 
+	private readonly Dictionary<string, string> _inlineImages = new(StringComparer.Ordinal);
+	private readonly SemaphoreSlim _inlineImageSlots = new(3);
+
+	private void OnPathImageRequested(object? sender, PathClickedEventArgs e) => _ui.Post(() => _ = ShowPathImageAsync(e.EntryIndex, e.Path));
+
+	/// <summary>
+	/// The page shows an image path inline and asks for the image (FR.26.5): the same daemon check as a click (the path must occur in that entry, and
+	/// the file-access rules apply), then the image is copied into the preview cache and its URL goes back to the page. A refusal by the access rules
+	/// answers "not allowed"; a missing file or any other failure answers "unavailable".
+	/// </summary>
+	public async Task ShowPathImageAsync(int entryIndex, string path)
+	{
+		var nodeId = NodeId;
+		var entry = _current?.Entries.FirstOrDefault(e => e.Index == entryIndex);
+		if (nodeId == null || Preview == null || entry?.EntryId == null || !_pathDetector.IsPathShaped(path))
+		{
+			_surface.ShowPathImage(entryIndex, path, null, denied: false);
+			return;
+		}
+
+		var key = nodeId + "|" + entry.EntryId + "|" + path;
+		if (_inlineImages.TryGetValue(key, out var known))
+		{
+			_surface.ShowPathImage(entryIndex, path, known, denied: false);
+			return;
+		}
+
+		FilePreviewResult result;
+		try
+		{
+			result = await _client.FilePreviewAsync(nodeId, entry.EntryId, path);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogInformation(ex, "file.preview refused an inline image of {NodeId}", nodeId);
+			if (NodeId == nodeId)
+				_surface.ShowPathImage(entryIndex, path, null, denied: ex.Message.Contains(Constants.Texts.FileAccessRefusalFragment, StringComparison.OrdinalIgnoreCase));
+			return;
+		}
+
+		string? src = null;
+		await _inlineImageSlots.WaitAsync();
+		try
+		{
+			src = await Preview.CacheImageAsync(result.Handle, CancellationToken.None);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogInformation(ex, "An inline image of {NodeId} could not be read", nodeId);
+		}
+		finally
+		{
+			_inlineImageSlots.Release();
+		}
+
+		if (src != null)
+			_inlineImages[key] = src;
+
+		if (NodeId == nodeId)
+			_surface.ShowPathImage(entryIndex, path, src, denied: false);
+	}
+
 	/// <summary>A path chip was clicked: ask the daemon for a handle (it checks that the path occurs in that entry), then open the preview.</summary>
 	public async Task PreviewLocalPathAsync(int entryIndex, string path)
 	{
