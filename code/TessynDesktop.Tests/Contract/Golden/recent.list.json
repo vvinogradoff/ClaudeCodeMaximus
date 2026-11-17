@@ -14,7 +14,8 @@
         "lastPromptUtc": "2026-11-12T10:00:00+00:00",
         "hasDraft": true,
         "authError": false,
-        "hasSchedules": false
+        "hasSchedules": false,
+        "resumable": true
       },
       "hasSchedules": false,
       "pinned": true,

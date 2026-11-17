@@ -301,7 +301,7 @@ public sealed class TreeFeedbackTests
 		_client.Directories =
 		[
 			_b.Directory("d", "NicheScan",
-				[_b.Group("g1", "scale-research"), _b.Group("g2", "pilot-run"), _b.Group("g3", "full-run"), _b.Group("g4", "Notes", _b.Session("n1", "A real note"))],
+				[_b.Husk("g1", "scale-research"), _b.Husk("g2", "pilot-run"), _b.Husk("g3", "full-run"), _b.Group("g4", "Notes", _b.Session("n1", "A real note"))],
 				_b.Session("s1", "Scan business niches", workers: 747)),
 		];
 		_client.Workers["s1"] = [_b.Session("w1", "pilot-1", supervisor: "s1")];
@@ -326,16 +326,18 @@ public sealed class TreeFeedbackTests
 	}
 
 	[Fact]
-	public async Task ADirectoryWithOnlyHusks_HasNoExpander_AndAGroupCreatedHereStaysVisibleWhileEmpty()
+	public async Task ADirectoryWithOnlyHusks_HasNoExpander_AndAnEmptyGroupTheDaemonDoesNotFlagStaysVisible()
 	{
-		var tree = await LoadAsync(_b.Directory("d", "Only husks", [_b.Group("g1", "pilot-run")]));
+		var tree = await LoadAsync(_b.Directory("d", "Only husks", [_b.Husk("g1", "pilot-run")]));
 		Assert.False(tree.FindNode("d")!.CanExpand);
 
-		tree.NoteCreatedGroup("g1");
-		await tree.LoadAsync();   // a forced reload rebuilds the nodes from the snapshot
-
+		// An empty group of the user's (no HoldsOnlyWorkers): shown, also after a restart, because the daemon tells it from a husk.
+		tree = await LoadAsync(_b.Directory("d", "Mine", [_b.Husk("g1", "pilot-run"), _b.Group("g2", "Ideas")]));
 		Assert.True(tree.FindNode("d")!.CanExpand);
-		Assert.False(tree.FindNode("g1")!.IsHusk);
+		Assert.True(tree.FindNode("g1")!.IsHusk);
+		Assert.False(tree.FindNode("g2")!.IsHusk);
+		await tree.ToggleExpandCommand.ExecuteAsync(tree.Rows[0]);
+		Assert.Equal(["d", "g2"], tree.Rows.Select(r => r.Id));
 	}
 
 	// ---- Tags ----
@@ -549,7 +551,7 @@ public sealed class TreeFeedbackTests
 	public async Task TheTreeAndTheRecentList_RenderTheRowFaceWithoutBindingErrors()
 	{
 		var state = State("s1", activity: DateTimeOffset.UtcNow.AddMinutes(-5), prompt: DateTimeOffset.UtcNow.AddMinutes(-5), resumable: true, pinned: "Work", attention: 2, kind: AttentionKind.Critical, running: true);
-		var tree = await LoadAsync(_b.Directory("d1", "Repo", [_b.Group("g1", "Husk")], _b.SessionWith(state, "Session one"), _b.Session("s2", "Session two", workers: 2)));
+		var tree = await LoadAsync(_b.Directory("d1", "Repo", [_b.Husk("g1", "Husk")], _b.SessionWith(state, "Session one"), _b.Session("s2", "Session two", workers: 2)));
 		await tree.ToggleExpandCommand.ExecuteAsync(tree.Rows[0]);
 		var store = SettingsTestSupport.NewStore();
 		var applier = new ColourApplier(store, new AppearanceService(store, new FixedProbe()), _ui);

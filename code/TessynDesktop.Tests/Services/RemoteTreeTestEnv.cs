@@ -50,6 +50,8 @@ internal sealed class RemoteTreeTestEnv : IDisposable
 	public FakeSessionSearchService FileSearch { get; } = new();
 	public TreeVersionTracker Version { get; } = new();
 	public SessionStateBuilder States { get; }
+	public FakeClaudeSessionStatusService Status { get; } = new();
+	public SessionResumabilityCache Resumable { get; }
 	public TdcpDispatcher Dispatcher { get; }
 
 	public RemoteTreeTestEnv()
@@ -58,9 +60,10 @@ internal sealed class RemoteTreeTestEnv : IDisposable
 		Directory.CreateDirectory(Root);
 		Settings = new AppSettingsService(Root);
 		Registry = new SessionRegistry(Settings, new FakeSessionFileService(), new FakeDirectoryLabelService(), new FakeClaudeSessionStatusService());
-		States   = new SessionStateBuilder(Registry, new FakeStreamingManagerForTurnService(), Attention, Activity);
-
 		var reader = new RemoteTreeReader(Settings);
+		Resumable = new SessionResumabilityCache(reader, Status);
+		States   = new SessionStateBuilder(Registry, new FakeStreamingManagerForTurnService(), Attention, Activity, resumable: Resumable);
+
 		Dispatcher = new TdcpDispatcher(
 		[
 			new TreeRemoteRpcModule(reader, Registry, States, Activity, Version, new FakeDirectoryLabelService(), Index, FileSearch),
@@ -69,7 +72,11 @@ internal sealed class RemoteTreeTestEnv : IDisposable
 		]);
 	}
 
-	public void Dispose() => Directory.Delete(Root, recursive: true);
+	public void Dispose()
+	{
+		Resumable.Dispose();
+		Directory.Delete(Root, recursive: true);
+	}
 
 	public DirectoryNodeModel AddDirectory(string name) => Registry.AddDirectory(Path.Combine(Root, name));
 

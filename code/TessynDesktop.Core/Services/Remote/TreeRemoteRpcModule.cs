@@ -89,7 +89,14 @@ public sealed class TreeRemoteRpcModule : IRemoteRpcModule
 	{
 		var result = new List<TreeGroupDto>(groups.Count);
 		foreach (var g in groups)
-			result.Add(new TreeGroupDto(g.Id, g.Name, g.IsExpanded, MapGroups(g.Groups, snapshot, workerCounts), MapSessions(g.Sessions, snapshot, workerCounts)));
+		{
+			var children = MapGroups(g.Groups, snapshot, workerCounts);
+			var sessions = MapSessions(g.Sessions, snapshot, workerCounts);
+
+			// What the Avalonia tree prunes (PruneGroupsEmptiedByReorg): a group that held sessions, all of them workers, and has nothing else to show.
+			var holdsOnlyWorkers = g.Sessions.Count > 0 && sessions.Count == 0 && children.All(c => c.HoldsOnlyWorkers);
+			result.Add(new TreeGroupDto(g.Id, g.Name, g.IsExpanded, children, sessions, holdsOnlyWorkers));
+		}
 		return result;
 	}
 

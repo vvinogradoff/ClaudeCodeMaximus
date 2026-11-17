@@ -100,6 +100,7 @@ public partial class App : Application
 		try
 		{
 			Services.GetRequiredService<IRemoteNotificationPublisher>().Start();
+			Services.GetRequiredService<ISessionResumabilityCache>().Start();
 		}
 		catch (Exception ex)
 		{
@@ -380,6 +381,8 @@ public partial class App : Application
 		services.AddSingleton<ITreeVersionTracker, TreeVersionTracker>();
 		services.AddSingleton<ISessionEpochTracker, SessionEpochTracker>();
 		services.AddSingleton<ISessionActivityService, SessionActivityService>();
+		// One sweep of the whole tree on an interval tells which sessions Claude Code can still resume; the state builder reads it, the publisher announces flips.
+		services.AddSingleton<ISessionResumabilityCache, SessionResumabilityCache>();
 		services.AddTransient<ISessionStateBuilder, SessionStateBuilder>();
 		services.AddTransient<IRemoteTreeReader, RemoteTreeReader>();
 		services.AddTransient<IRemoteRpcModule, TreeRemoteRpcModule>();
