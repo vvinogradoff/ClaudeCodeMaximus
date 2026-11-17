@@ -198,9 +198,10 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 		{
 			// Every user entry the page has rendered: [entry index, source, has the auto class, header label, background colour].
 			var rows = (await page.EvalAsync(@"Array.from(document.querySelectorAll('.e.U')).map(e => { const it = S.items[parseInt(e.dataset.k, 10)];
-				return [it.i, it.s, e.classList.contains('auto'), (e.querySelector('.h') ? e.querySelector('.h').textContent.split(' ')[0] : ''), getComputedStyle(e.querySelector('.c')).backgroundColor]; })"))!.AsArray();
+				return [it.i, it.s, e.classList.contains('auto'), (e.querySelector('.h .lb') ? e.querySelector('.h .lb').textContent : ''), getComputedStyle(e.querySelector('.c')).backgroundColor]; })"))!.AsArray();
 
 			Assert.NotEmpty(rows);
+			Assert.Equal(0, await Num("document.querySelectorAll('.e .e').length", page));   // every row closes its own div: no row nests in the one before (an unclosed user row broke the first paint)
 			string? teal = null, plain = null;
 			foreach (var row in rows)
 			{
