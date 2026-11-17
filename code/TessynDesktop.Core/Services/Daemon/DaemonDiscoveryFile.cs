@@ -36,8 +36,7 @@ public sealed class DaemonDiscoveryFile
 
 	private static string GetDefaultPath()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, Constants.Remote.Discovery.FileName);
+		return Path.Combine(Constants.DataRoot, Constants.Remote.Discovery.FileName);
 	}
 
 	/// <summary>Writes the file for the listener on <paramref name="port"/>. Never throws: discovery is a convenience, not a startup requirement.</summary>

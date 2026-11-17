@@ -53,7 +53,7 @@ public sealed class FileAccessService : IFileAccessService
 		_attention = attention;
 		_entries   = entries;
 		_settings  = settings;
-		_dataRoot  = dataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.AppDataFolderName);
+		_dataRoot  = dataRoot ?? Constants.DataRoot;
 		_userProfiles = FileAccessPolicy.WithCanonical(profile);
 		_dataRoots    = FileAccessPolicy.WithCanonical(_dataRoot);
 		_broad        = new BroadDirectoryRules(_dataRoots, _userProfiles);

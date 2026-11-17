@@ -31,8 +31,7 @@ public sealed class TdcpTokenStore : ITdcpTokenStore
 
 	private static string GetDefaultPath()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, Constants.Remote.Discovery.TokenFileName);
+		return Path.Combine(Constants.DataRoot, Constants.Remote.Discovery.TokenFileName);
 	}
 
 	/// <inheritdoc />

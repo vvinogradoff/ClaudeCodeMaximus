@@ -35,8 +35,7 @@ public sealed class SessionContentStore : ISessionContentStore, IDisposable
 
 	private static string GetDefaultDirectory()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, Constants.ContentStore.FolderName);
+		return Path.Combine(Constants.DataRoot, Constants.ContentStore.FolderName);
 	}
 
 	/// <inheritdoc />

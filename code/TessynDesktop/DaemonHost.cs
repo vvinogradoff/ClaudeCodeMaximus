@@ -20,21 +20,29 @@ public sealed class DaemonHost
 {
 	public static IServiceProvider Services { get; private set; } = null!;
 
-	private readonly bool _startedWithoutBackgroundFlag;
+	private readonly BackgroundHostOptions _options;
+	private static string? _daemonFileOverride;
 	private HostTray? _tray; // kept so the tray icon is not collected
 	private DaemonHostExitListener? _exitListener;
 
-	/// <param name="startedWithoutBackgroundFlag">True when the process was started without <c>--background</c> (an old shortcut); it starts as the host anyway and says so in the log.</param>
-	public DaemonHost(bool startedWithoutBackgroundFlag)
+	/// <param name="options">The start options. Without <c>--background</c> (an old shortcut) the host starts anyway and says so in the log; <c>--data-root</c> and <c>--daemon-file</c> move all its data.</param>
+	public DaemonHost(BackgroundHostOptions options)
 	{
-		_startedWithoutBackgroundFlag = startedWithoutBackgroundFlag;
+		_options = options;
 	}
 
 	/// <summary>Starts everything and runs the message loop until the host exits. Call on the main (STA) thread.</summary>
 	public int Run()
 	{
+		// First of all: the unhandled-exception mode cannot be changed once any Control exists on the thread (the dispatcher below creates one).
+		Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 		Application.EnableVisualStyles();
 		Application.SetCompatibleTextRenderingDefault(false);
+
+		// Before any service or log file: every path of the daemon's data hangs off the data root.
+		if (!string.IsNullOrEmpty(_options.DataRoot))
+			Constants.DataRoot = Path.GetFullPath(_options.DataRoot);
+		_daemonFileOverride = string.IsNullOrEmpty(_options.DaemonFile) ? null : Path.GetFullPath(_options.DaemonFile);
 
 		// The message loop thread is the host's "UI thread": the tray lives on it, and the log enricher, watchdog and inspector refer to it.
 		var uiThread = new UiThreadTracker();
@@ -44,7 +52,7 @@ public sealed class DaemonHost
 		var logLevel = new LoggingLevelSwitch(LogEventLevel.Information);
 		ConfigureLogging(uiThread, logLevel);
 		ConfigureGlobalExceptionHandlers();
-		if (_startedWithoutBackgroundFlag)
+		if (!_options.IsBackground)
 			Log.Information("Started without --background; starting as the background daemon host (an old shortcut still works)");
 
 		var services = new ServiceCollection();
@@ -70,6 +78,10 @@ public sealed class DaemonHost
 
 		// The registry backfills NodeId/AgentToken from the saved tree before any client asks for it.
 		Services.GetRequiredService<IDaemonClient>().LoadFromSettings();
+
+		// A click on a toast of this host has nothing to open: the host has no window. Registering a handler keeps Windows from treating the click as an
+		// activation nobody listens to (it could start a second host, which the guard would end at once); the WPF client shows its own toasts when it is connected.
+		Services.GetRequiredService<INotificationService>().RegisterActivationHandler(nodeId => Log.Debug("Toast clicked for {NodeId}; the host has no window to show it in", nodeId));
 
 		var selfUpdate = Services.GetRequiredService<ISelfUpdateService>();
 		selfUpdate.Initialize();
@@ -156,7 +168,7 @@ public sealed class DaemonHost
 			() => dispatcher.Post(context.ExitThread),
 			ex => Log.Error(ex, "Terminating the sessions failed; shutting down anyway"));
 		_tray = new HostTray(exit);
-		_exitListener = new DaemonHostExitListener();
+		_exitListener = new DaemonHostExitListener(_options.ExitEventName);
 		_exitListener.Start(() => dispatcher.Post(exit.Exit));
 		Log.Information("Running as the background daemon host (no main window)");
 
@@ -208,16 +220,13 @@ public sealed class DaemonHost
 		AppDomain.CurrentDomain.UnhandledException += exceptions.OnAppDomainUnhandled;
 		TaskScheduler.UnobservedTaskException += exceptions.OnUnobservedTaskException;
 		// Log only: the exception is deliberately not marked Handled, so behaviour is unchanged.
-		Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+		// The unhandled-exception mode is set at the very start of Run (it cannot change once a Control exists).
 		Application.ThreadException += (_, e) => exceptions.OnUiThreadException(e.Exception);
 	}
 
 	private static void ConfigureLogging(IUiThreadTracker uiThread, LoggingLevelSwitch logLevel)
 	{
-		var logDir = Path.Combine(
-			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-			Constants.AppDataFolderName,
-			Constants.Diagnostics.LogsFolderName);
+		var logDir = Path.Combine(Constants.DataRoot, Constants.Diagnostics.LogsFolderName);
 
 		Directory.CreateDirectory(logDir);
 
@@ -332,7 +341,9 @@ public sealed class DaemonHost
 		// The token is generated once on first run and kept in a DPAPI-protected file (never in appsettings.json); a token from an
 		// older appsettings.json is moved there once so it does not change. daemon.json tells client processes where to connect.
 		services.AddSingleton<ITdcpTokenStore, TdcpTokenStore>();
-		services.AddSingleton<DaemonDiscoveryFile>();
+		services.AddSingleton(sp => _daemonFileOverride == null
+			? new DaemonDiscoveryFile(sp.GetRequiredService<IDaemonRunInfo>(), sp.GetRequiredService<ITdcpTokenStore>())
+			: new DaemonDiscoveryFile(sp.GetRequiredService<IDaemonRunInfo>(), sp.GetRequiredService<ITdcpTokenStore>(), _daemonFileOverride));
 		services.AddSingleton(sp =>
 		{
 			var token = TdcpTokenProvider.GetOrCreate(sp.GetRequiredService<ITdcpTokenStore>(), sp.GetRequiredService<IAppSettingsService>());

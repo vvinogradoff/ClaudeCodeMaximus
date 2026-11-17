@@ -58,7 +58,7 @@ public sealed class AttachmentService : IAttachmentService
 		_settings     = settings;
 		_profileName  = profileName;
 		_blobs        = blobs;
-		_dataRoot     = dataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.AppDataFolderName);
+		_dataRoot     = dataRoot ?? Constants.DataRoot;
 		_dataRoots    = FileAccessPolicy.WithCanonical(_dataRoot);
 		_userProfiles = FileAccessPolicy.WithCanonical(userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 		_time         = time ?? TimeProvider.System;

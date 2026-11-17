@@ -29,8 +29,7 @@ public sealed class AttentionLedgerStore
 
 	private static string GetDefaultRootDir()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, Constants.Attention.FolderName);
+		return Path.Combine(Constants.DataRoot, Constants.Attention.FolderName);
 	}
 
 	/// <summary>

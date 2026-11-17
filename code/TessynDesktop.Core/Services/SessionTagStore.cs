@@ -29,8 +29,7 @@ public sealed class SessionTagStore
 
 	private static string GetDefaultRootDir()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, Constants.SessionTags.FolderName);
+		return Path.Combine(Constants.DataRoot, Constants.SessionTags.FolderName);
 	}
 
 	/// <summary>The declared tags of a session; missing or unreadable (moved aside) means none.</summary>

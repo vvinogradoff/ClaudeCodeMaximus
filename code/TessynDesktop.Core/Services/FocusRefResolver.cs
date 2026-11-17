@@ -24,7 +24,7 @@ public sealed class FocusRefResolver : IFocusRefResolver
 		var profile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 		_registry = registry;
 		_store    = store;
-		_dataRoot = dataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.AppDataFolderName);
+		_dataRoot = dataRoot ?? Constants.DataRoot;
 		_userProfiles = FileAccessPolicy.WithCanonical(profile);
 		_dataRoots    = FileAccessPolicy.WithCanonical(_dataRoot);
 	}
