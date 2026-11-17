@@ -154,13 +154,6 @@ public sealed class ServiceRegistration
 
 		services.AddSingleton<IHostedService, CompletionSoundHost>();
 
-		// A23 Q8: the one-time Avalonia settings import. A test window never asks it: its scripted dialog answers belong to the test.
-		if (options.IsRealEnvironment)
-		{
-			services.AddSingleton<AvaloniaImportHost>();
-			services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<AvaloniaImportHost>());
-		}
-
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();
 		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));

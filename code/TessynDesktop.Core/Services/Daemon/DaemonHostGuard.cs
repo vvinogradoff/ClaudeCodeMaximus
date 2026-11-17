@@ -4,10 +4,9 @@ using System.Threading;
 namespace TessynDesktop.Services;
 
 /// <summary>
-/// One daemon host per Windows user session. The Avalonia process hosts the daemon (MCP server, scheduler, relay, Telegram, sessions); a second host would
+/// One daemon host per Windows user session. The daemon host process (<c>TessynDesktop.exe --background</c>) hosts the daemon (MCP server, scheduler, relay, Telegram, sessions); a second host would
 /// fight the first over the listener port and overwrite <c>daemon.json</c>. The first process holds a named mutex for its whole life; a later one finds it
-/// taken and must exit. The same guard protects a visible Avalonia window, a <c>--background</c> host started by the WPF client and a rollback start of
-/// <c>[Publish]\TessynDesktop.exe</c>: whichever started first is the daemon, and the others leave it alone.
+/// taken and must exit. Whichever host started first is the daemon, and a later start (the WPF client's, or an old shortcut) leaves it alone.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class DaemonHostGuard : IDisposable

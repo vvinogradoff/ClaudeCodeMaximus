@@ -55,8 +55,7 @@ public sealed class AppSettingsService : IAppSettingsService
 
 	private static string GetDefaultAppDataDir()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName);
+		return Constants.DataRoot;
 	}
 
 	public void Load()

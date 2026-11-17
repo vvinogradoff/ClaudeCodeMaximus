@@ -86,4 +86,24 @@ public sealed class DaemonHostGuardTests
 	{
 		Assert.Equal(expected, BackgroundHostOptions.Parse(args).IsBackground);
 	}
+
+	[Fact]
+	public void TheIsolationOptions_AreParsed_AndTheNamesGetTheInstanceSuffix()
+	{
+		var options = BackgroundHostOptions.Parse(["--background", "--data-root", "D:/root", "--daemon-file", "D:/d.json", "--instance", "abc"]);
+
+		Assert.Equal(("D:/root", "D:/d.json", "abc"), (options.DataRoot, options.DaemonFile, options.Instance));
+		Assert.Equal(RemoteProtocol.Discovery.HostMutexName + ".abc", options.GuardName);
+		Assert.Equal(RemoteProtocol.Discovery.HostExitEventName + ".abc", options.ExitEventName);
+	}
+
+	[Fact]
+	public void WithoutIsolationOptions_TheNamesAreTheRealHostsNames()
+	{
+		var options = BackgroundHostOptions.Parse(["--background", "--data-root"]);   // a value is missing: ignored
+
+		Assert.Null(options.DataRoot);
+		Assert.Equal(RemoteProtocol.Discovery.HostMutexName, options.GuardName);
+		Assert.Equal(RemoteProtocol.Discovery.HostExitEventName, options.ExitEventName);
+	}
 }

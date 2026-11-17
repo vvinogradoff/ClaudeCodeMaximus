@@ -20,8 +20,7 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 
 	public ClaudeProfileService()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		ProfilesRootDirectory = Path.Combine(appData, Constants.AppDataFolderName, Constants.ProfilesFolderName);
+		ProfilesRootDirectory = Path.Combine(Constants.DataRoot, Constants.ProfilesFolderName);
 	}
 
 	public async Task<string?> GetAccountEmailAsync(string claudePath, string? configDir)

@@ -174,7 +174,6 @@ public sealed class DraftService : IDraftService
 
 	private static string GetDefaultDraftsDir()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, Constants.DraftsFolderName);
+		return Path.Combine(Constants.DataRoot, Constants.DraftsFolderName);
 	}
 }

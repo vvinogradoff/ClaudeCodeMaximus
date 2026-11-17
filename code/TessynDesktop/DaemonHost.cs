@@ -1,48 +1,62 @@
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Markup.Xaml;
-using TessynDesktop.Services;
-using TessynDesktop.ViewModels;
-using TessynDesktop.Views;
+﻿using System;
+using System.IO;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
 using TessynDesktop.Models;
-using System;
-using System.IO;
-using System.Threading.Tasks;
+using TessynDesktop.Services;
 
 namespace TessynDesktop;
 
-public partial class App : Application
+/// <summary>
+/// The windowless daemon host (<c>TessynDesktop.exe --background</c>, decision A23 Q6, A47): builds the services, starts the daemon pieces and runs a
+/// message loop that owns only the tray icon (tooltip and Exit). The process lives until the tray's Exit, a client's request through the named exit event,
+/// or a system shutdown. The WPF client is the only user interface; this host has none.
+/// </summary>
+public sealed class DaemonHost
 {
 	public static IServiceProvider Services { get; private set; } = null!;
 
-	/// <summary>True when started with <c>--background</c> (set by <c>Program.Main</c>): no main window, a tray icon with Exit instead.</summary>
-	public static bool IsBackgroundHost { get; set; }
-
-	private TrayIcons? _trayIcons; // kept so the tray icon is not collected
+	private readonly BackgroundHostOptions _options;
+	private static string? _daemonFileOverride;
+	private HostTray? _tray; // kept so the tray icon is not collected
 	private DaemonHostExitListener? _exitListener;
 
-	public override void Initialize()
+	/// <param name="options">The start options. Without <c>--background</c> (an old shortcut) the host starts anyway and says so in the log; <c>--data-root</c> and <c>--daemon-file</c> move all its data.</param>
+	public DaemonHost(BackgroundHostOptions options)
 	{
-		AvaloniaXamlLoader.Load(this);
+		_options = options;
 	}
 
-	public override void OnFrameworkInitializationCompleted()
+	/// <summary>Starts everything and runs the message loop until the host exits. Call on the main (STA) thread.</summary>
+	public int Run()
 	{
-		// OnFrameworkInitializationCompleted runs on the UI thread; remember it for the log enricher, watchdog and inspector.
+		// First of all: the unhandled-exception mode cannot be changed once any Control exists on the thread (the dispatcher below creates one).
+		Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+		Application.EnableVisualStyles();
+		Application.SetCompatibleTextRenderingDefault(false);
+
+		// Before any service or log file: every path of the daemon's data hangs off the data root.
+		if (!string.IsNullOrEmpty(_options.DataRoot))
+			Constants.DataRoot = Path.GetFullPath(_options.DataRoot);
+		_daemonFileOverride = string.IsNullOrEmpty(_options.DaemonFile) ? null : Path.GetFullPath(_options.DaemonFile);
+
+		// The message loop thread is the host's "UI thread": the tray lives on it, and the log enricher, watchdog and inspector refer to it.
 		var uiThread = new UiThreadTracker();
 		uiThread.CaptureCurrentThread();
+		var dispatcher = new WinFormsUiDispatcher();
 
 		var logLevel = new LoggingLevelSwitch(LogEventLevel.Information);
 		ConfigureLogging(uiThread, logLevel);
 		ConfigureGlobalExceptionHandlers();
+		if (!_options.IsBackground)
+			Log.Information("Started without --background; starting as the background daemon host (an old shortcut still works)");
 
 		var services = new ServiceCollection();
-		ConfigureServices(services, uiThread);
+		ConfigureServices(services, uiThread, dispatcher);
 		Services = services.BuildServiceProvider();
 
 		var appSettings = Services.GetRequiredService<IAppSettingsService>();
@@ -58,14 +72,16 @@ public partial class App : Application
 			Services.GetRequiredService<IUiHangWatchdog>().Start();
 		}
 
-		var keyBindings = Services.GetRequiredService<IKeyBindingService>();
-		keyBindings.EnsureDefaults();
-
 		// One-time identity migration: populate ExternalId from ClaudeSessionId
-		var migration = new Services.SessionIdentityMigration(appSettings);
+		var migration = new SessionIdentityMigration(appSettings);
 		migration.MigrateAll();
 
-		ThemeApplicator.Apply(appSettings.Settings);
+		// The registry backfills NodeId/AgentToken from the saved tree before any client asks for it.
+		Services.GetRequiredService<IDaemonClient>().LoadFromSettings();
+
+		// A click on a toast of this host has nothing to open: the host has no window. Registering a handler keeps Windows from treating the click as an
+		// activation nobody listens to (it could start a second host, which the guard would end at once); the WPF client shows its own toasts when it is connected.
+		Services.GetRequiredService<INotificationService>().RegisterActivationHandler(nodeId => Log.Debug("Toast clicked for {NodeId}; the host has no window to show it in", nodeId));
 
 		var selfUpdate = Services.GetRequiredService<ISelfUpdateService>();
 		selfUpdate.Initialize();
@@ -117,83 +133,85 @@ public partial class App : Application
 			Log.Error(ex, "Could not start the relay connector");
 		}
 
-		// Wire toast click-to-activate before the window opens so early clicks are not missed (FR.16).
-		var mainVm = Services.GetRequiredService<MainWindowViewModel>();
-		var notifications = Services.GetRequiredService<INotificationService>();
-		notifications.RegisterActivationHandler(nodeId =>
-			Avalonia.Threading.Dispatcher.UIThread.Post(() => mainVm.SelectSessionByNodeId(nodeId)));
-
-		if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+		// Repair session files corrupted by the auto-compaction bug (one-time on startup). It reads every session file (15-30 s cold, ISSUE.016),
+		// so it runs off the message loop thread; a repaired file only had zero parseable entries.
+		var fileService = Services.GetRequiredService<ISessionFileService>();
+		var timer = Services.GetRequiredService<IOperationTimer>();
+		_ = Task.Run(() =>
 		{
-			if (IsBackgroundHost)
+			try
 			{
-				// A23 Q6: the daemon without a window or taskbar entry. The process lives until the tray icon's Exit (or a system shutdown).
-				desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-				// Exit (tray, or a client's request through the named event) terminates the active sessions the way the window's close does.
-				var exit = new DaemonHostExit(
-					() => mainVm.ActiveSessionCount, BackgroundTray.ConfirmAsync,
-					mainVm.TerminateAllSessions, () => Avalonia.Threading.Dispatcher.UIThread.Post(() => desktop.Shutdown()),
-					ex => Log.Error(ex, "Terminating the sessions failed; shutting down anyway"));
-				_trayIcons = BackgroundTray.Create(exit);
-				TrayIcon.SetIcons(this, _trayIcons);
-				_exitListener = new DaemonHostExitListener();
-				_exitListener.Start(() => Avalonia.Threading.Dispatcher.UIThread.Post(exit.Exit));
-				Log.Information("Running as the background daemon host (no main window)");
+				int repaired;
+				using (timer.Measure(Constants.Diagnostics.Operation.RepairCompactions, Constants.Diagnostics.WarnThresholds.UiLoadMs))
+					repaired = fileService.RepairCorruptedCompactions();
+				if (repaired > 0)
+					Log.Information("Repaired {Count} session file(s) with corrupted compaction format", repaired);
 			}
-			else
+			catch (Exception ex)
 			{
-				desktop.MainWindow = new MainWindow
-				{
-					DataContext = mainVm,
-				};
+				Log.Warning(ex, "Session file compaction repair failed");
 			}
+		});
 
-			desktop.Exit += (_, _) =>
+		// A23 Q6: the daemon without a window or taskbar entry. The process lives until the tray icon's Exit (or a system shutdown).
+		var processManager = Services.GetRequiredService<IClaudeProcessManager>();
+		var streamingManager = Services.GetRequiredService<IClaudeStreamingSessionManager>();
+		var context = new ApplicationContext();
+		// Exit (tray, or a client's request through the named event) terminates the active sessions the way the old window's close did.
+		var exit = new DaemonHostExit(
+			() => processManager.ActiveProcessCount, HostTray.ConfirmAsync,
+			() =>
 			{
-				// FR.23.19: the last moments of typing sit in debounce timers that die with the process.
-				try
-				{
-					mainVm.FlushAllDrafts();
-				}
-				catch (Exception ex)
-				{
-					Log.Error(ex, "Could not flush the drafts on exit");
-				}
-				if (diagnosticsSettings.Enabled)
-				{
-					Services.GetRequiredService<IUiHangWatchdog>().Dispose();
-					Services.GetRequiredService<IProcessMetricsSampler>().Dispose();
-				}
-				mainVm.SessionTree.CancelBackgroundWork();
-				selfUpdate.CheckAndTriggerUpdate();
-				Services.GetRequiredService<ISessionIndexUpdater>().Stop();
-				if (appSettings.Settings.AgentToolsEnabled)
-				{
-					Services.GetRequiredService<DaemonDiscoveryFile>().Clear();
-					Services.GetRequiredService<IAgentMcpServer>().Stop();
-					Services.GetRequiredService<ISchedulerService>().Stop();
-				}
-				if (appSettings.Settings.TelegramEnabled)
-					Services.GetRequiredService<ITelegramBridgeService>().Stop();
-				try
-				{
-					Services.GetRequiredService<IRelayConnectorService>().Stop();
-				}
-				catch (Exception ex)
-				{
-					Log.Error(ex, "Could not stop the relay connector");
-				}
-			};
+				processManager.TerminateAll();
+				streamingManager.TerminateAll();
+			},
+			() => dispatcher.Post(context.ExitThread),
+			ex => Log.Error(ex, "Terminating the sessions failed; shutting down anyway"));
+		_tray = new HostTray(exit);
+		_exitListener = new DaemonHostExitListener(_options.ExitEventName);
+		_exitListener.Start(() => dispatcher.Post(exit.Exit));
+		Log.Information("Running as the background daemon host (no main window)");
 
-			// Build/refresh the cross-project session search index in the background (Stage 6).
-			// Runs the throttled upkeep (migrate, reindex, purge, optimize); any failure is logged, never left unobserved.
-			_ = Services.GetRequiredService<IDaemonClient>().ReindexSessionsAsync().ContinueWith(
-				t => Log.Error(t.Exception!.GetBaseException(), "Session index upkeep failed at startup"),
-				System.Threading.CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
-			Services.GetRequiredService<ISessionIndexUpdater>().Start();
+		// Build/refresh the cross-project session search index in the background (Stage 6).
+		// Runs the throttled upkeep (migrate, reindex, purge, optimize); any failure is logged, never left unobserved.
+		_ = Services.GetRequiredService<IDaemonClient>().ReindexSessionsAsync().ContinueWith(
+			t => Log.Error(t.Exception!.GetBaseException(), "Session index upkeep failed at startup"),
+			System.Threading.CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+		Services.GetRequiredService<ISessionIndexUpdater>().Start();
+
+		Application.Run(context);
+
+		_exitListener.Dispose();
+		_tray.Dispose();
+		StopServices(appSettings, diagnosticsSettings.Enabled, selfUpdate);
+		return 0;
+	}
+
+	private static void StopServices(IAppSettingsService appSettings, bool diagnosticsEnabled, ISelfUpdateService selfUpdate)
+	{
+		if (diagnosticsEnabled)
+		{
+			Services.GetRequiredService<IUiHangWatchdog>().Dispose();
+			Services.GetRequiredService<IProcessMetricsSampler>().Dispose();
 		}
-
-		base.OnFrameworkInitializationCompleted();
+		selfUpdate.CheckAndTriggerUpdate();
+		Services.GetRequiredService<ISessionIndexUpdater>().Stop();
+		if (appSettings.Settings.AgentToolsEnabled)
+		{
+			Services.GetRequiredService<DaemonDiscoveryFile>().Clear();
+			Services.GetRequiredService<IAgentMcpServer>().Stop();
+			Services.GetRequiredService<ISchedulerService>().Stop();
+		}
+		if (appSettings.Settings.TelegramEnabled)
+			Services.GetRequiredService<ITelegramBridgeService>().Stop();
+		try
+		{
+			Services.GetRequiredService<IRelayConnectorService>().Stop();
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Could not stop the relay connector");
+		}
 	}
 
 	private static void ConfigureGlobalExceptionHandlers()
@@ -202,15 +220,13 @@ public partial class App : Application
 		AppDomain.CurrentDomain.UnhandledException += exceptions.OnAppDomainUnhandled;
 		TaskScheduler.UnobservedTaskException += exceptions.OnUnobservedTaskException;
 		// Log only: the exception is deliberately not marked Handled, so behaviour is unchanged.
-		Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, e) => exceptions.OnUiThreadException(e.Exception);
+		// The unhandled-exception mode is set at the very start of Run (it cannot change once a Control exists).
+		Application.ThreadException += (_, e) => exceptions.OnUiThreadException(e.Exception);
 	}
 
 	private static void ConfigureLogging(IUiThreadTracker uiThread, LoggingLevelSwitch logLevel)
 	{
-		var logDir = Path.Combine(
-			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-			Constants.AppDataFolderName,
-			Constants.Diagnostics.LogsFolderName);
+		var logDir = Path.Combine(Constants.DataRoot, Constants.Diagnostics.LogsFolderName);
 
 		Directory.CreateDirectory(logDir);
 
@@ -229,9 +245,9 @@ public partial class App : Application
 		Log.Information("TessynDesktop starting up. Logs: {LogDir}", logDir);
 	}
 
-	private static void ConfigureServices(IServiceCollection services, IUiThreadTracker uiThread)
+	private static void ConfigureServices(IServiceCollection services, IUiThreadTracker uiThread, IUiDispatcher dispatcher)
 	{
-		services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
+		services.AddSingleton(dispatcher);
 
 		// D1 diagnostics. Singletons because each owns shared state or a background thread/timer: the UI-thread id holder
 		// (read by the log enricher, watchdog, timer and inspector), the operation timer (the current UI operation), the
@@ -266,9 +282,8 @@ public partial class App : Application
 		services.AddSingleton<IGitOriginService, GitOriginService>();
 		services.AddSingleton<ICodeIndexService, CodeIndexService>();
 		services.AddSingleton<IClaudeSessionImportService, ClaudeSessionImportService>();
-		services.AddSingleton<IImportService, ImportService>(); // J4: the one import implementation (Avalonia picker and import.* methods)
+		services.AddSingleton<IImportService, ImportService>(); // J4: the one import implementation (the import.* methods)
 		services.AddSingleton<IClaudeAssistService, ClaudeAssistService>();
-		services.AddSingleton<IKeyBindingService, KeyBindingService>();
 		services.AddSingleton<IClaudeProfileService, ClaudeProfileService>();
 		services.AddSingleton<IOllamaModelService, OllamaModelService>();
 		services.AddSingleton<IClaudeModelService, ClaudeModelService>();
@@ -281,7 +296,6 @@ public partial class App : Application
 		services.AddSingleton<IProfileResolver, ProfileResolver>();
 		services.AddSingleton<IClaudeSessionMigrator, ClaudeSessionMigrator>();
 		services.AddSingleton<IProfileSwitchService, ProfileSwitchService>();
-		services.AddSingleton<SessionTreeViewModel>();
 
 		// External MCP Server Registry (FR.20).
 		services.AddSingleton<System.Net.Http.HttpClient>();
@@ -327,7 +341,9 @@ public partial class App : Application
 		// The token is generated once on first run and kept in a DPAPI-protected file (never in appsettings.json); a token from an
 		// older appsettings.json is moved there once so it does not change. daemon.json tells client processes where to connect.
 		services.AddSingleton<ITdcpTokenStore, TdcpTokenStore>();
-		services.AddSingleton<DaemonDiscoveryFile>();
+		services.AddSingleton(sp => _daemonFileOverride == null
+			? new DaemonDiscoveryFile(sp.GetRequiredService<IDaemonRunInfo>(), sp.GetRequiredService<ITdcpTokenStore>())
+			: new DaemonDiscoveryFile(sp.GetRequiredService<IDaemonRunInfo>(), sp.GetRequiredService<ITdcpTokenStore>(), _daemonFileOverride));
 		services.AddSingleton(sp =>
 		{
 			var token = TdcpTokenProvider.GetOrCreate(sp.GetRequiredService<ITdcpTokenStore>(), sp.GetRequiredService<IAppSettingsService>());
@@ -345,7 +361,7 @@ public partial class App : Application
 		services.AddSingleton<TdcpDispatcher>();
 		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
 		services.AddTransient<IRemoteRpcModule, ProfileRpcModule>();
-		// Package J3: settings sections, profile administration and sounds. The profile service is shared with the Avalonia profile dropdown;
+		// Package J3: settings sections, profile administration and sounds. The profile service is shared with the settings modules;
 		// the three modules are loopback only. The section service is a singleton: it owns the per-section versions and the Saved subscription.
 		services.AddSingleton<IProfileAdminService, ProfileAdminService>();
 		services.AddSingleton<ISettingsSection, GeneralSettingsSection>();
@@ -355,9 +371,8 @@ public partial class App : Application
 		services.AddTransient<IRemoteRpcModule, SettingsRpcModule>();
 		services.AddTransient<IRemoteRpcModule, ProfileAdminRpcModule>();
 		services.AddTransient<IRemoteRpcModule, SoundRpcModule>();
-		// Package J3 part 2: the read-only avalonia-ui section, the MCP registry (a singleton: it guards the running authorizations), Telegram, relay and
+		// Package J3 part 2: the MCP registry (a singleton: it guards the running authorizations), Telegram, relay and
 		// model refresh methods; every module is loopback only.
-		services.AddSingleton<ISettingsSection, AvaloniaUiSettingsSection>();
 		services.AddSingleton<IMcpRegistryService, McpRegistryService>();
 		services.AddTransient<IRemoteRpcModule, McpRegistryRpcModule>();
 		services.AddTransient<IRemoteRpcModule, TelegramSettingsRpcModule>();
@@ -391,7 +406,7 @@ public partial class App : Application
 		services.AddSingleton<IRemoteNotificationPublisher, RemoteNotificationPublisher>();
 
 		// Web relay link. Singletons: the connector owns the connect loop, its status and its bus subscription;
-		// the config store and HTTP factory are stateless but shared with the Settings window.
+		// the config store and HTTP factory are stateless but shared with the relay settings module.
 		services.AddSingleton<IRelayConfigStore, RelayConfigStore>();
 		services.AddSingleton<IRelayHttpClientFactory, RelayHttpClientFactory>();
 		services.AddSingleton<IRelayConnectorService, RelayConnectorService>();
@@ -438,8 +453,5 @@ public partial class App : Application
 		services.AddTransient<IRemoteRpcModule, TreeMutationRpcModule>();
 		services.AddTransient<IRemoteRpcModule, SessionOptionsRpcModule>();
 		services.AddTransient<IRemoteRpcModule, LocalToolsRpcModule>();
-
-		services.AddSingleton<MainWindowViewModel>();
-		services.AddTransient<SettingsViewModel>();
 	}
 }

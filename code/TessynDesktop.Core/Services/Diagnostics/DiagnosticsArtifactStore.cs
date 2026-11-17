@@ -17,10 +17,7 @@ public sealed class DiagnosticsArtifactStore : IDiagnosticsArtifactStore
 
 	/// <summary>Production folder: <c>%AppData%\TessynDesktop\diag</c>.</summary>
 	public DiagnosticsArtifactStore(DiagnosticsSettingsModel settings, TimeProvider? time = null, ILogger? log = null)
-		: this(Path.Combine(
-			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-			Constants.AppDataFolderName,
-			Constants.Diagnostics.DiagFolderName), settings, time, log)
+		: this(Path.Combine(Constants.DataRoot, Constants.Diagnostics.DiagFolderName), settings, time, log)
 	{
 	}
 

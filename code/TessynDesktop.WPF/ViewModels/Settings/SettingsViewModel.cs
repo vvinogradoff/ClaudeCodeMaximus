@@ -20,7 +20,6 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 	private readonly ITessynClient _client;
 	private readonly IDialogService _dialogs;
 	private readonly IUiDispatcher _ui;
-	private readonly AvaloniaImporter _importer;
 	private readonly ILogger<SettingsViewModel> _logger;
 
 	[ObservableProperty]
@@ -30,9 +29,6 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(HasError))]
 	private string? _errorText;
-
-	[ObservableProperty]
-	private bool _importOffered;
 
 	[ObservableProperty]
 	private bool _isSaving;
@@ -53,7 +49,6 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		_dialogs = dialogs;
 		_ui = ui;
 		_logger = loggers.CreateLogger<SettingsViewModel>();
-		_importer = new AvaloniaImporter(store, commands);
 
 		General = new GeneralSectionViewModel(client, loggers.CreateLogger<GeneralSectionViewModel>());
 		Notifications = new NotificationsSectionViewModel(client, loggers.CreateLogger<NotificationsSectionViewModel>());
@@ -96,8 +91,6 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
 	public bool HasError => !string.IsNullOrEmpty(ErrorText);
 
-	public string ImportOfferText => Constants.Settings.ImportOffer;
-
 	/// <summary>The sections the window's Save button applies.</summary>
 	private IEnumerable<ISettingsEditor> Editors => [General, Notifications, Telegram, Appearance, Colours, Screensaver, Keyboard, Startup];
 
@@ -106,7 +99,6 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 	/// <summary>Reads every section; one that fails shows its own error and does not stop the others.</summary>
 	public async Task InitializeAsync()
 	{
-		ImportOffered = !_importer.IsDone && HasCapability(RemoteProtocol.SettingsApi.Capability);
 		await Task.WhenAll(
 			General.InitializeAsync(RemoteProtocol.SettingsApi.Capability),
 			Notifications.InitializeAsync(RemoteProtocol.SettingsApi.Capability),
@@ -146,48 +138,6 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		finally
 		{
 			IsSaving = false;
-		}
-	}
-
-	/// <summary>Copies the Avalonia client's theme, fonts, key bindings and screensaver, after a confirmation (once is enough, but it may be repeated).</summary>
-	[RelayCommand]
-	public async Task ImportFromAvaloniaAsync()
-	{
-		StatusText = null;
-		ErrorText = null;
-		if (!HasCapability(RemoteProtocol.SettingsApi.Capability))
-			return;
-
-		AvaloniaUiSettingsDto values;
-		try
-		{
-			values = (await _client.SettingsGetAsync<AvaloniaUiSettingsDto>(RemoteProtocol.SettingsApi.AvaloniaUiSection)).Values;
-		}
-		catch (Exception ex)
-		{
-			_logger.LogWarning(ex, "Reading the Avalonia settings failed");
-			ErrorText = string.Format(Constants.Settings.ImportFailedFormat, ex.Message);
-			return;
-		}
-
-		var confirmed = await _dialogs.ConfirmAsync(new ConfirmDialogRequest(Constants.Settings.ImportTitle, Constants.Settings.ImportPrompt, Constants.Settings.ImportConfirm));
-		if (!confirmed)
-			return;
-
-		try
-		{
-			var result = _importer.Apply(values);
-			Appearance.Read();
-			Screensaver.Read();
-			Keyboard.Read();
-			ImportOffered = false;
-			StatusText = string.Format(Constants.Settings.ImportDone, string.Join(", ", result.Imported))
-				+ (result.SkippedBindings.Count > 0 ? " " + string.Format(Constants.Settings.ImportSkippedFormat, string.Join(", ", result.SkippedBindings)) : string.Empty);
-		}
-		catch (Exception ex)
-		{
-			_logger.LogWarning(ex, "Importing the Avalonia settings failed");
-			ErrorText = string.Format(Constants.Settings.ImportFailedFormat, ex.Message);
 		}
 	}
 

@@ -35,8 +35,7 @@ public sealed class RelayConfigStore : IRelayConfigStore
 
 	private static string GetDefaultPath()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, Constants.Remote.Link.ConfigFileName);
+		return Path.Combine(Constants.DataRoot, Constants.Remote.Link.ConfigFileName);
 	}
 
 	public RelayConfigModel? Load()

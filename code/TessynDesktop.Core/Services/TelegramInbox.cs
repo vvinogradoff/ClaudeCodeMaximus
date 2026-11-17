@@ -64,10 +64,7 @@ public sealed class TelegramInbox
 
 	/// <summary><c>%AppData%\TessynDesktop\telegram-inbox</c> (FR.21.14).</summary>
 	public static string DefaultRootDirectory() =>
-		Path.Combine(
-			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-			Constants.AppDataFolderName,
-			Constants.Telegram.InboxFolderName);
+		Path.Combine(Constants.DataRoot, Constants.Telegram.InboxFolderName);
 
 	/// <summary>Message text, then one line per attachment line (FR.21.15).</summary>
 	public static string BuildTurnText(string text, IReadOnlyList<string> attachmentLines)

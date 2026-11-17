@@ -34,8 +34,7 @@ public sealed class McpTokenStore : IMcpTokenStore
 
 	private static string GetDefaultTokensDir()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, Constants.ExternalMcp.TokenStoreFolderName);
+		return Path.Combine(Constants.DataRoot, Constants.ExternalMcp.TokenStoreFolderName);
 	}
 
 	public McpTokenRecord? Load(string serverId)

@@ -75,8 +75,7 @@ public sealed class ClaudeSessionIndexService : IClaudeSessionIndexService, ISes
 
 	private static string GetDefaultDbPath()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, "session-index.db");
+		return Path.Combine(Constants.DataRoot, "session-index.db");
 	}
 
 	/// <summary>

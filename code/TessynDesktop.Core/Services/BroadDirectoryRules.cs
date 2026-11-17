@@ -17,7 +17,7 @@ public sealed partial class BroadDirectoryRules
 	/// <summary>The rules for this machine: the data root and the user profile in every form they are known by.</summary>
 	public BroadDirectoryRules()
 		: this(
-			FileAccessPolicy.WithCanonical(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.AppDataFolderName)),
+			FileAccessPolicy.WithCanonical(Constants.DataRoot),
 			FileAccessPolicy.WithCanonical(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)))
 	{
 	}

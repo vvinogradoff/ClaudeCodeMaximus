@@ -83,9 +83,6 @@ internal sealed class SettingsAdminEnv : IDisposable
 		Settings.Settings.TelegramTopicThreadIdsByNodeId["node-1"] = 42;
 		Settings.Settings.TelegramTopicNamesByNodeId["node-1"] = Secrets[3];
 		Settings.Settings.SessionCompletionSoundFile = Path.Combine(_dir, "ding.wav");
-		Settings.Settings.Theme = "Light";                                          // the avalonia-ui section serves these as they are
-		Settings.Settings.ScreensaverDirectory = Path.Combine(_dir, "pictures");
-		Settings.Settings.KeyBindings.Bindings[Constants.KeyBindings.Send] = "Ctrl+Enter, Shift+Enter";
 
 		ProfileService = new ScriptedProfileService(Path.Combine(_dir, "profiles"));
 		ProfileService.SetEmail(null, DefaultAccountEmail);
@@ -98,7 +95,7 @@ internal sealed class SettingsAdminEnv : IDisposable
 		Mcp            = new McpRegistryService(Settings, McpTokens, McpOAuth, Bus, discoverTimeout: TimeSpan.FromMilliseconds(400));
 		TelegramBridge = new IntegrationTelegramBridge(Settings);
 
-		Sections     = new SettingsSectionService(Settings, [new GeneralSettingsSection(), new NotificationsSettingsSection(), new TelegramSettingsSection(), new AvaloniaUiSettingsSection()], Bus);
+		Sections     = new SettingsSectionService(Settings, [new GeneralSettingsSection(), new NotificationsSettingsSection(), new TelegramSettingsSection()], Bus);
 		ProfileAdmin = new ProfileAdminService(ProfileService, Settings, Bus);
 
 		var runInfo  = new DaemonRunInfo();

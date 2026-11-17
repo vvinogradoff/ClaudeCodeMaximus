@@ -8,6 +8,18 @@ namespace TessynDesktop;
 public static partial class Constants
 {
 	public const string AppDataFolderName = "TessynDesktop";
+
+	private static string? _dataRoot;
+
+	/// <summary>
+	/// The folder that holds all of the daemon's data (settings, logs, sessions, tokens, <c>daemon.json</c>): <c>%AppData%\TessynDesktop</c> unless the host was started with
+	/// <c>--data-root</c>. Set once at start-up, before any service is built; every service reads it here instead of building the path itself.
+	/// </summary>
+	public static string DataRoot
+	{
+		get => _dataRoot ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppDataFolderName);
+		set => _dataRoot = value;
+	}
 	public const string SettingsFileName = "appsettings.json";
 	public const string DefaultSessionsFolderName = "sessions";
 	public const string DraftsFolderName = "drafts";
@@ -1111,8 +1123,7 @@ SESSION TRANSCRIPT TO COMPACT:
 			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 			dirs.Add(Path.Combine(userProfile, ClaudeHomeFolderName, ProjectsFolderName));
 
-			var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-			var profilesRoot = Path.Combine(appData, AppDataFolderName, ProfilesFolderName);
+			var profilesRoot = Path.Combine(Constants.DataRoot, ProfilesFolderName);
 			if (Directory.Exists(profilesRoot))
 			{
 				foreach (var profileDir in Directory.GetDirectories(profilesRoot))

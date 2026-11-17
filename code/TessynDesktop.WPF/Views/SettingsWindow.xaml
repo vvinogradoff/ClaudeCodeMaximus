@@ -23,12 +23,6 @@
                 </StackPanel>
             </DockPanel>
         </Border>
-        <Border DockPanel.Dock="Top" Padding="16,8" Background="{DynamicResource SystemFillColorAttentionBackgroundBrush}" Visibility="{Binding ImportOffered, Converter={StaticResource BoolToVis}}">
-            <DockPanel>
-                <Button DockPanel.Dock="Right" Padding="10,3" Margin="12,0,0,0" Content="Import from Avalonia" Command="{Binding ImportFromAvaloniaCommand}" AutomationProperties.Name="Import from Avalonia" />
-                <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding ImportOfferText}" />
-            </DockPanel>
-        </Border>
         <TabControl x:Name="Tabs" Margin="8" AutomationProperties.Name="Settings sections">
             <TabItem Header="General" AutomationProperties.Name="General tab"><s:GeneralSettingsView DataContext="{Binding General}" /></TabItem>
             <TabItem Header="Notifications" AutomationProperties.Name="Notifications tab"><s:NotificationsSettingsView DataContext="{Binding Notifications}" /></TabItem>

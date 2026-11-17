@@ -8,7 +8,7 @@ using Xunit;
 namespace TessynDesktop.Tests.Contract;
 
 /// <summary>
-/// Package J3 part 2 on the wire (MCP registry and OAuth, Telegram token, relay link, model refresh, the read-only <c>avalonia-ui</c> section): the error codes,
+/// Package J3 part 2 on the wire (MCP registry and OAuth, Telegram token, relay link, model refresh): the error codes,
 /// the rule that an error never echoes a secret, the notifications, and the behaviours that need the whole daemon stack (the discovery limit, one authorization
 /// at a time, the bridge starting and stopping with the token). The result shapes and the secrecy scan are in the main part of this class.
 /// </summary>
@@ -115,26 +115,6 @@ public sealed partial class SettingsAdminContractTests
 			Assert.DoesNotContain(secretValue, response.ToJsonString());
 			Assert.DoesNotContain(SettingsAdminEnv.TelegramBotToken, response.ToJsonString());
 		}
-	}
-
-	// ── The read-only avalonia-ui section ────────────────────────────────────────────────────
-
-	[Fact]
-	public async Task AvaloniaUi_IsServedWithTheClientsOwnValues_ButNeverWritten_AndNeverChanges()
-	{
-		using var sse = await _env.Host.OpenStreamAsync();
-
-		var get = await _env.Host.CallAsync("settings.get", JsonNode.Parse("""{"section":"avalonia-ui"}"""));
-		var update = await _env.Host.CallAsync("settings.update", JsonNode.Parse("""{"section":"avalonia-ui","baseVersion":1,"patch":{"theme":"Dark"}}"""));
-		_env.Settings.Settings.Theme = "Dark";                               // what the Avalonia Settings window does
-		_env.Settings.Save();
-		var again = await _env.Host.CallAsync("settings.get", JsonNode.Parse("""{"section":"avalonia-ui"}"""));
-
-		Assert.Equal("Light", get["result"]!["values"]!["theme"]!.GetValue<string>());
-		Assert.Equal(-32602, update["error"]!["code"]!.GetValue<int>());
-		Assert.Contains("read-only", update["error"]!["message"]!.GetValue<string>());
-		Assert.Equal(1, again["result"]!["version"]!.GetValue<int>());                   // no version bump, no settings.changed for it
-		await Assert.ThrowsAnyAsync<Exception>(async () => await NextAsync(sse, "settings.changed", TimeSpan.FromMilliseconds(400)));
 	}
 
 	// ── Notifications on the local stream ────────────────────────────────────────────────────

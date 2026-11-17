@@ -15,7 +15,7 @@ public interface ISettingsSection
 	string Name { get; }
 
 	/// <summary>
-	/// True for a section a client may only read (the <c>avalonia-ui</c> import): <c>settings.update</c> refuses it before anything else, and it is left
+	/// True for a section a client may only read: <c>settings.update</c> refuses it before anything else, and it is left
 	/// out of change detection, so its version stays at the first one and no <c>settings.changed</c> is published for it.
 	/// </summary>
 	bool IsReadOnly => false;

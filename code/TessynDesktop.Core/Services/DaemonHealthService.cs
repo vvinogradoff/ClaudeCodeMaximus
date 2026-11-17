@@ -35,8 +35,7 @@ public sealed class DaemonHealthService : IDaemonHealthService
 		_indexActivity = indexActivity;
 		_time          = time ?? TimeProvider.System;
 		_startedUtc    = startedUtc ?? new DateTimeOffset(Process.GetCurrentProcess().StartTime.ToUniversalTime());
-		_logDirectory  = logDirectory ?? Path.Combine(
-			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.AppDataFolderName, Constants.Diagnostics.LogsFolderName);
+		_logDirectory  = logDirectory ?? Path.Combine(Constants.DataRoot, Constants.Diagnostics.LogsFolderName);
 	}
 
 	/// <inheritdoc />

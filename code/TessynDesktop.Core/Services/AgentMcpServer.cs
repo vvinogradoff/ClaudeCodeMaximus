@@ -159,10 +159,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		    || string.IsNullOrEmpty(nodeId) || string.IsNullOrEmpty(agentToken))
 			return null;
 
-		var dir  = Path.Combine(
-			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-			Constants.AppDataFolderName,
-			Constants.Agent.McpConfigFolderName);
+		var dir  = Path.Combine(Constants.DataRoot, Constants.Agent.McpConfigFolderName);
 		Directory.CreateDirectory(dir);
 
 		var path    = Path.Combine(dir, $"{nodeId}.json");
@@ -186,10 +183,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		if (!effectiveIncludeCmx && externalServerIds.Count == 0)
 			return null; // nothing selected — caller omits --mcp-config entirely
 
-		var dir = Path.Combine(
-			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-			Constants.AppDataFolderName,
-			Constants.Agent.McpConfigFolderName);
+		var dir = Path.Combine(Constants.DataRoot, Constants.Agent.McpConfigFolderName);
 		Directory.CreateDirectory(dir);
 
 		var path    = Path.Combine(dir, $"{nodeId}.local.json");

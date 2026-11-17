@@ -170,21 +170,6 @@ public sealed class SettingsViewTests
 	}
 
 	[Fact]
-	public async Task TheImportBanner_IsShownUntilTheImportWasDone()
-	{
-		var settings = await LoadedSettingsAsync(RichClient());
-		Assert.True(settings.ImportOffered);
-
-		WithoutBindingErrors(() =>
-		{
-			var window = new SettingsWindow(settings);
-			Layout(window, 880, 720);
-
-			Assert.Contains(FindAll<Button>(ContentOf(window)), b => b.Content as string == "Import from Avalonia" && IsShown(b));
-		});
-	}
-
-	[Fact]
 	public async Task ASectionWithoutItsCapability_ShowsTheNote_AndHidesTheControls()
 	{
 		var client = new FakeTessynClient().AnnouncingSettings(RemoteProtocol.ProfilesAdmin.Capability);

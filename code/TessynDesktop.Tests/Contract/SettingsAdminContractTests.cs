@@ -51,7 +51,6 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 		{ "settings.get.general", "settings.get", """{"section":"general"}""" },
 		{ "settings.get.notifications", "settings.get", """{"section":"notifications"}""" },
 		{ "settings.get.telegram", "settings.get", """{"section":"telegram"}""" },
-		{ "settings.get.avaloniaUi", "settings.get", """{"section":"avalonia-ui"}""" },
 		{ "settings.update", "settings.update", """{"section":"telegram","baseVersion":1,"patch":{"telegramChatId":-1001,"telegramMirrorMode":"off"}}""" },
 		{ "profile.list", "profile.list", "{}" },
 		{ "profile.add", "profile.add", """{"displayName":"Work"}""" },
@@ -160,8 +159,7 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 	[Theory]
 	[InlineData("settings.get", """{}""")]
 	[InlineData("settings.get", """{"section":"nope"}""")]
-	[InlineData("settings.update", """{"section":"avalonia-ui","baseVersion":1,"patch":{"theme":"Light"}}""")]   // read-only, whatever the patch
-	[InlineData("settings.update", """{"section":"avalonia-ui","baseVersion":1,"patch":{}}""")]
+	[InlineData("settings.update", """{"section":"nope","baseVersion":1,"patch":{}}""")]                      // unknown section
 	[InlineData("settings.update", """{"section":"general","patch":{}}""")]                                   // baseVersion missing
 	[InlineData("settings.update", """{"section":"general","baseVersion":1}""")]                             // patch missing
 	[InlineData("settings.update", """{"section":"general","baseVersion":1,"patch":{"tree":[]}}""")]         // outside the whitelist

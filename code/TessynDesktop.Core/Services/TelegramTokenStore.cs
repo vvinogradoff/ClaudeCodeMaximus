@@ -33,8 +33,7 @@ public sealed class TelegramTokenStore : ITelegramTokenStore
 
 	private static string GetDefaultPath()
 	{
-		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(appData, Constants.AppDataFolderName, Constants.Telegram.TokenFileName);
+		return Path.Combine(Constants.DataRoot, Constants.Telegram.TokenFileName);
 	}
 
 	public string? Load()

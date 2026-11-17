@@ -78,27 +78,8 @@ public static partial class Constants
 
 		public static readonly TimeSpan DaemonExitTimeout = TimeSpan.FromSeconds(40);
 
-		public const string StartingTimedOutDetail = "the host started but did not publish daemon.json; are the agent tools switched off in the Avalonia settings?";
+		public const string StartingTimedOutDetail = "the host started but did not publish daemon.json; are the agent tools switched off in the settings?";
 
 		public const string TokenUnavailableDetail = "daemon.json is there but its token cannot be read (another Windows user?)";
-
-		public const string ImportsSection = "imports";
-
-		public const string ImportTitle = "Import Avalonia settings";
-
-		public const string ImportMessage =
-			"Import your Avalonia settings (theme, font sizes, key bindings and screensaver) into this client? This asks only once.";
-
-		public const string ImportConfirm = "Import";
-
-		public const string ImportSkip = "Not now";
-
-		/// <summary>Avalonia key actions that have a WPF command, by Avalonia action name.</summary>
-		public static readonly IReadOnlyDictionary<string, string> KeyActionToCommand = new Dictionary<string, string>(StringComparer.Ordinal)
-		{
-			["AddDirectory"] = TreeCommands.AddDirectory,
-			["OpenSettings"] = Constants.Settings.OpenCommandId,
-			["Send"] = Constants.Appearance.SendCommandId,
-		};
 	}
 }

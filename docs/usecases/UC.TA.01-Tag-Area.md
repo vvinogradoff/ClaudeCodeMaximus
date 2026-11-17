@@ -25,5 +25,5 @@ Related requirements: FR.24.16, FR.24.18 (see `docs/requirements/`), FR.24.7. Te
 
 ## UC.TA.04 — Change the tag cloud font size
 **Main flow:** 1. The User opens Settings › Appearance › **Tag cloud** and enters a number from 8 to 40. 2. Every visible chip, in the tag area and the Tags tab, changes size at once. 3. The collapsed area is still exactly one chip line high.
-**Alternative flows:** **A1** — The area is expanded: it keeps up to 10 lines of the new chip height. **A2** — Restart: the size is kept. **A3** — A number outside 8–40, or text, is refused and nothing changes. **A4** — The one-time settings import (FR.32.4) does not change the WPF value.
+**Alternative flows:** **A1** — The area is expanded: it keeps up to 10 lines of the new chip height. **A2** — Restart: the size is kept. **A3** — A number outside 8–40, or text, is refused and nothing changes. **A4** — (WITHDRAWN 2026-11-17 (decision A47).) The one-time settings import (FR.32.4) does not exist any more.
 **Covers:** FR.24.18.

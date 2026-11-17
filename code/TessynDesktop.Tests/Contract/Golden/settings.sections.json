@@ -11,10 +11,6 @@
     {
       "name": "telegram",
       "version": 1
-    },
-    {
-      "name": "avalonia-ui",
-      "version": 1
     }
   ]
 }

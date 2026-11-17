@@ -34,6 +34,8 @@
     <ProjectReference Include="..\TessynDesktop.Tests\TessynDesktop.Tests.csproj" />
     <!-- Build-order only: the tests launch the built exe; nothing from the app is referenced. -->
     <ProjectReference Include="..\TessynDesktop.WPF\TessynDesktop.WPF.csproj" ReferenceOutputAssembly="false" />
+    <!-- Build-order only: HostProcessE2ETests start the built daemon host exe. -->
+    <ProjectReference Include="..\TessynDesktop\TessynDesktop.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

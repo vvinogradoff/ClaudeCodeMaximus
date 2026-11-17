@@ -26,9 +26,9 @@ Was: the previous client hosting the daemon in its window while WPF attached. Th
 **Alternative flows:** **A1** — A failed copy is logged at the next start.
 **Covers:** FR.32.3, FR.32.7.
 
-## UC.HS.05 — Import the previous client's settings
-**Main flow:** on the first start against a daemon serving the previous client's settings section, a dialog offers Import; the answer is remembered.
-**Covers:** FR.32.4.
+## UC.HS.05 — WITHDRAWN 2026-11-17 (decision A47). Import the previous client's settings
+**Main flow (withdrawn):** on the first start against a daemon serving the previous client's settings section, a dialog offered Import; the answer was remembered. The import is removed with the previous desktop client; an old `wpf.json` with its sections still loads without error (TC.HS.13).
+**Covers:** FR.32.4 (withdrawn).
 
 ## UC.HS.06 — Exit the background host
 **Main flow:** the User picks *Exit Tessyn daemon* in the tray; with running sessions a question appears; confirming terminates them and shuts down, even if the termination throws.

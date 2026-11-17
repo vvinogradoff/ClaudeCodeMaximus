@@ -36,8 +36,8 @@ public sealed class LoopbackOnlyJ3bMethodsRelayTransportTests : IDisposable
 		("relay.status", "{}"),
 		("relay.configure", """{"enabled":true,"url":"https://attacker.example.com","linkToken":"attacker-token-0001"}"""),
 		("models.refresh", "{}"),
-		("settings.get", """{"section":"avalonia-ui"}"""),
-		("settings.update", """{"section":"avalonia-ui","baseVersion":1,"patch":{}}"""),
+		("settings.get", """{"section":"general"}"""),
+		("settings.update", """{"section":"general","baseVersion":1,"patch":{}}"""),
 	];
 
 	private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "TessynJ3bRelayTests_" + Guid.NewGuid().ToString("N"));

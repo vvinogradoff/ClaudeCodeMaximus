@@ -70,42 +70,4 @@ public sealed class ChromeModuleTests
 
 		Assert.False(taken);   // nothing to send: Ctrl+Enter is left alone
 	}
-
-	[Fact]
-	public void SendBinding_OfTheAvaloniaClient_IsCarriedOver_WithCmdBecomingCtrl()
-	{
-		var importer = new AvaloniaImporter(_store, _commands);
-		var result = importer.Apply(Dto(new KeyBindingDto("Send", "Cmd+Enter")));
-
-		Assert.DoesNotContain("Send", result.SkippedBindings);
-		Assert.Equal(Constants.Appearance.SendCommandId, _commands.FindByGesture(Key.Enter, ModifierKeys.Control)?.Id);
-		Assert.DoesNotContain(Constants.Appearance.SendCommandId, _store.Get<KeyBindingSettings>().Gestures.Keys);   // same as the default: no override stored
-	}
-
-	[Fact]
-	public void SendBinding_WithAnotherCombination_RebindsTheCommand()
-	{
-		new AvaloniaImporter(_store, _commands).Apply(Dto(new KeyBindingDto("Send", "Ctrl+Shift+Enter")));
-
-		Assert.Equal(Constants.Appearance.SendCommandId, _commands.FindByGesture(Key.Enter, ModifierKeys.Control | ModifierKeys.Shift)?.Id);
-		Assert.Null(_commands.FindByGesture(Key.Enter, ModifierKeys.Control));
-	}
-
-	[Fact]
-	public void TheImport_AppliesThemeFontsAndScreensaverToWhatTheWindowReads()
-	{
-		new AvaloniaImporter(_store, _commands).Apply(Dto());
-
-		Assert.True(_appearance.IsDark);
-		Assert.Equal(15, _appearance.Current.AssistantFontSize);
-		Assert.Equal(16, _appearance.Current.InputFontSize);
-		var saver = _store.Get<ScreensaverSettings>();
-		Assert.Equal((@"D:\pictures", 300, 20), (saver.Directory, saver.TimeoutSeconds, saver.SlideshowIntervalSeconds));
-	}
-
-	private static AvaloniaUiSettingsDto Dto(params KeyBindingDto[] bindings)
-	{
-		var colors = new ThemeColorsDto("#111111", "#eeeeee", "#222222", "#ffffff", "#333333", "#dddddd", "#444444", "#cccccc", "#555555", "#666666", "#777777", "#888888");
-		return new AvaloniaUiSettingsDto("Dark", 15, 14, 12, 16, colors, colors, bindings, new ScreensaverSettingsDto(@"D:\pictures", 300, 20));
-	}
 }

@@ -103,7 +103,7 @@ public sealed class DaemonHostExitListener : IDisposable
 		_wait = ThreadPool.RegisterWaitForSingleObject(_event, (_, _) => onRequest(), null, Timeout.Infinite, executeOnlyOnce: false);
 	}
 
-	/// <summary>Asks the host that listens on <paramref name="name"/> to exit. False when no host listens (an older host, or a visible Avalonia window).</summary>
+	/// <summary>Asks the host that listens on <paramref name="name"/> to exit. False when no host listens (an older host).</summary>
 	public static bool Signal(string name)
 	{
 		try
