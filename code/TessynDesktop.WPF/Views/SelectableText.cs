@@ -59,6 +59,24 @@ public sealed class SelectableText : RichTextBox
 		set => SetValue(TextProperty, value);
 	}
 
+	/// <summary>A fixed line height for the paragraph (FR.9.12, see <see cref="LineSpacing"/>); null returns to the natural one.</summary>
+	public void SetLineHeight(double? height)
+	{
+		if (height is { } value)
+		{
+			_paragraph.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+			_paragraph.LineHeight = value;
+		}
+		else
+		{
+			_paragraph.ClearValue(Block.LineHeightProperty);
+			_paragraph.ClearValue(Block.LineStackingStrategyProperty);
+		}
+	}
+
+	/// <summary>The line height of the paragraph (NaN = natural) and its stacking strategy.</summary>
+	public (double Height, LineStackingStrategy Strategy) LineMetrics => (_paragraph.LineHeight, _paragraph.LineStackingStrategy);
+
 	/// <summary>The text as shown, whichever way it was filled.</summary>
 	public string PlainText => new TextRange(Document.ContentStart, Document.ContentEnd).Text.TrimEnd('\r', '\n');
 
