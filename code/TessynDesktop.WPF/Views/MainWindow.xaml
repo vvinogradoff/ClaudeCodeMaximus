@@ -1,4 +1,4 @@
-﻿<Window x:Class="TessynDesktop.WPF.Views.MainWindow"
+<Window x:Class="TessynDesktop.WPF.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:TessynDesktop.WPF.Views"
@@ -34,6 +34,17 @@
                     <TextBlock Text="{Binding Connection.DaemonOlderText}" Foreground="{DynamicResource TextFillColorPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
                     <Button Content="Restart daemon" Command="{Binding Connection.RestartDaemonCommand}" Margin="12,0,0,0" Padding="10,2" />
                     <TextBlock Text="{Binding Connection.RestartNote, StringFormat=  ({0})}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
+            <!-- A newer build was made while this client runs: it is installed when the client closes (or now, with the link) -->
+            <Border DockPanel.Dock="Top" Padding="16,4" Background="{DynamicResource SystemFillColorSolidNeutralBackgroundBrush}"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding UpdateNotice.IsVisible, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Update notice">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding UpdateNotice.Text}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center">
+                        <Hyperlink Command="{Binding UpdateNotice.RestartNowCommand}" AutomationProperties.Name="Restart now"><Run Text="{Binding UpdateNotice.RestartNowText, Mode=OneWay}" /></Hyperlink>
+                    </TextBlock>
                 </StackPanel>
             </Border>
             <!-- Status bar: no padding, so the usage meters touch its top and bottom. The session count and the error sit on the left, the Profiles button on the

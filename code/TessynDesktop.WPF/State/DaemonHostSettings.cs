@@ -1,8 +1,8 @@
 namespace TessynDesktop.WPF.State;
 
 /// <summary>
-/// Whether this client may start the Avalonia background daemon host when no daemon runs (settings section <c>daemonHost</c>). Off by default: the client then waits
-/// ("Waiting for Tessyn to start...") and connects as soon as the Avalonia app (or any host) comes up, so a visible Avalonia window can start after this client.
+/// Whether this client may start the Avalonia background daemon host when no daemon runs (settings section <c>daemonHost</c>). On by default (WPF is the only client); a stored
+/// file without the key gets the default. Off: the client waits ("Waiting for Tessyn to start...") and connects as soon as the Avalonia app (or any host) comes up.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 [ClientSettingsSection(Constants.SettingsSections.DaemonHost)]

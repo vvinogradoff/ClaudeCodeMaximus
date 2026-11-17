@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Switch;
 using TessynDesktop.WPF.Tests.Fakes;
@@ -319,7 +319,8 @@ public sealed class WpfSelfUpdaterTests : IDisposable
 	[Theory]
 	[InlineData(new string[0], true)]
 	[InlineData(new[] { "--test-window" }, false)]
-	[InlineData(new[] { "--data-root", @"C:	mpoot" }, false)]
+	[InlineData(new[] { "--data-root", @"C:	mp
+oot" }, false)]
 	[InlineData(new[] { "--daemon-file", @"C:	mp\daemon.json" }, false)]
 	public void StartupOptions_TheRealEnvironmentIsTheOnlyOneThatImportsUpdatesAndStartsAHost(string[] args, bool real)
 	{
@@ -335,4 +336,141 @@ public sealed class WpfSelfUpdaterTests : IDisposable
 		Assert.False(options.SelfUpdateEnabled);
 		Assert.False(options.AutoStartHostEnabled);
 	}
-}
+
+	private sealed class FixedPresence(bool running) : IHostPresence
+	{
+		public bool IsHostRunning() => running;
+	}
+
+	private string MakeHostBuild(DateTime stamp)
+	{
+		var dir = Path.Combine(_root, "src", "code", "TessynDesktop", "bin", "Debug", "net10.0-windows10.0.17763.0");
+		Directory.CreateDirectory(dir);
+		var path = Path.Combine(dir, "TessynDesktop.dll");
+		File.WriteAllText(path, "avalonia");
+		File.SetLastWriteTimeUtc(path, stamp);
+		return dir;
+	}
+
+	private WpfSelfUpdater CreateWithHost(bool hostRunning) => new(RunFolder, Path.Combine(_root, "src"), _launcher, ScriptDir, NullLogger.Instance, new FixedPresence(hostRunning));
+
+	[Fact]
+	public void FindPendingClientBuild_SeesANewerBuildAndNothingElse()
+	{
+		MakeAssembly(RunFolder, DateTime.UtcNow.AddHours(-2));
+		var build = MakeBuild(DateTime.UtcNow);
+		Assert.Equal(build, Create(RunFolder, Path.Combine(_root, "src")).FindPendingClientBuild());
+
+		File.SetLastWriteTimeUtc(Path.Combine(RunFolder, "TessynDesktop.WPF.dll"), DateTime.UtcNow.AddMinutes(1));
+		Assert.Null(Create(RunFolder, Path.Combine(_root, "src")).FindPendingClientBuild());
+		Assert.Null(Create(RunFolder, null).FindPendingClientBuild());
+		Assert.Null(Create(build, Path.Combine(_root, "src")).FindPendingClientBuild()); // running from a build output: never
+	}
+
+	[Fact]
+	public void OnExit_ANewerClientBuild_SchedulesACopyThatStartsNothing()
+	{
+		MakeAssembly(RunFolder, DateTime.UtcNow.AddHours(-2));
+		var build = MakeBuild(DateTime.UtcNow);
+
+		var outcome = Create(RunFolder, Path.Combine(_root, "src")).ScheduleCopyOnExit(4242);
+
+		Assert.Equal(SelfUpdateOutcome.CopyScheduledOnExit, outcome);
+		var path = Assert.Single(_launcher.Scripts);
+		Assert.Contains("_exit_update_4242.ps1", path);
+		var script = File.ReadAllText(path);
+		Assert.Contains($"Copy-Build '{build}' '{RunFolder}'", script);
+		Assert.Contains("Wait-Process -Id 4242", script);
+		Assert.DoesNotContain("Process]::Start", script);
+		Assert.DoesNotContain("--no-self-update", script);
+		Assert.DoesNotContain("/MIR", script);
+	}
+
+	[Fact]
+	public void OnExit_NothingNewer_SchedulesNothing()
+	{
+		var stamp = DateTime.UtcNow.AddMinutes(-5);
+		MakeAssembly(RunFolder, stamp);
+		MakeBuild(stamp);
+
+		Assert.Equal(SelfUpdateOutcome.NothingToCopy, CreateWithHost(false).ScheduleCopyOnExit(1));
+		Assert.Empty(_launcher.Scripts);
+	}
+
+	[Fact]
+	public void OnExit_TheHostFolderIsRefreshedFromTheNewestAvaloniaBuild_WhenNoHostRuns()
+	{
+		var stamp = DateTime.UtcNow.AddMinutes(-5);
+		MakeAssembly(RunFolder, stamp);
+		var clientBuild = MakeBuild(stamp);
+		var hostBuild = MakeHostBuild(DateTime.UtcNow);
+		Directory.CreateDirectory(Path.Combine(RunFolder, "host"));
+		File.WriteAllText(Path.Combine(RunFolder, "host", "TessynDesktop.dll"), "old host");
+		File.SetLastWriteTimeUtc(Path.Combine(RunFolder, "host", "TessynDesktop.dll"), DateTime.UtcNow.AddHours(-3));
+
+		Assert.Equal(SelfUpdateOutcome.CopyScheduledOnExit, CreateWithHost(false).ScheduleCopyOnExit(7));
+
+		var script = File.ReadAllText(Assert.Single(_launcher.Scripts));
+		Assert.Contains($"Copy-Build '{hostBuild}' '{Path.Combine(RunFolder, "host")}'", script);
+		Assert.DoesNotContain($"Copy-Build '{clientBuild}'", script); // the client is current: no client copy
+	}
+
+	[Fact]
+	public void OnExit_ARunningHostIsNeverRefreshed()
+	{
+		var stamp = DateTime.UtcNow.AddMinutes(-5);
+		MakeAssembly(RunFolder, stamp);
+		MakeBuild(stamp);
+		MakeHostBuild(DateTime.UtcNow);
+		Directory.CreateDirectory(Path.Combine(RunFolder, "host"));
+		File.WriteAllText(Path.Combine(RunFolder, "host", "TessynDesktop.dll"), "old host");
+		File.SetLastWriteTimeUtc(Path.Combine(RunFolder, "host", "TessynDesktop.dll"), DateTime.UtcNow.AddHours(-3));
+
+		Assert.Equal(SelfUpdateOutcome.NothingToCopy, CreateWithHost(true).ScheduleCopyOnExit(7));
+		Assert.Empty(_launcher.Scripts);
+	}
+
+	[Fact]
+	public async Task TheExitScript_CopiesClientAndHost_IntoFoldersWithBrackets_AndStartsNothing()
+	{
+		// The real script, run by real PowerShell, in a run folder literally named [Publish-WPF] with a nested host folder.
+		var client = Path.Combine(_root, "wpf build");
+		var avalonia = Path.Combine(_root, "avalonia build");
+		var run = Path.Combine(_root, "[Publish-WPF]");
+		var host = Path.Combine(run, "host");
+		Directory.CreateDirectory(Path.Combine(client, "Web"));
+		Directory.CreateDirectory(avalonia);
+		Directory.CreateDirectory(host);
+		File.WriteAllText(Path.Combine(client, "TessynDesktop.WPF.dll"), "new wpf");
+		File.WriteAllText(Path.Combine(client, "Web", "page.html"), "page");
+		File.WriteAllText(Path.Combine(avalonia, "TessynDesktop.dll"), "new host");
+		File.WriteAllText(Path.Combine(run, "TessynDesktop.WPF.dll"), "old wpf, stale");
+		File.WriteAllText(Path.Combine(host, "TessynDesktop.dll"), "old host, stale"); // a different size: robocopy skips files whose size and write time match
+		File.WriteAllText(Path.Combine(host, "keep.txt"), "kept");
+		var result = Path.Combine(ScriptDir, "exit-result.txt");
+
+		var output = await RunScriptAsync(WpfSelfUpdater.BuildExitScript([(client, run), (avalonia, host)], ExitedProcessId(), result, [0]));
+
+		Assert.Equal("new wpf", File.ReadAllText(Path.Combine(run, "TessynDesktop.WPF.dll")));
+		Assert.Equal("page", File.ReadAllText(Path.Combine(run, "Web", "page.html")));
+		Assert.Equal("new host", File.ReadAllText(Path.Combine(host, "TessynDesktop.dll")));
+		Assert.Equal("kept", File.ReadAllText(Path.Combine(host, "keep.txt"))); // nothing is deleted
+		Assert.False(Directory.Exists(Path.Combine(run, "host", "host")), output);
+		Assert.Equal("ok", File.ReadAllText(result).Trim());
+		Assert.Equal(new[] { "TessynDesktop.WPF.dll", "Web", "host" }.Order(), Directory.GetFileSystemEntries(run).Select(Path.GetFileName).Order());
+	}
+
+	[Fact]
+	public async Task TheExitScript_AFailedCopyIsRecorded_AndTheWorstResultWins()
+	{
+		var run = Path.Combine(_root, "[Publish-WPF]");
+		var good = Path.Combine(_root, "good");
+		Directory.CreateDirectory(good);
+		File.WriteAllText(Path.Combine(good, "a.dll"), "a");
+		var result = Path.Combine(ScriptDir, "exit-failed.txt");
+
+		await RunScriptAsync(WpfSelfUpdater.BuildExitScript([(good, run), (Path.Combine(_root, "missing"), Path.Combine(run, "host"))], ExitedProcessId(), result, [0, 0]));
+
+		Assert.True(File.Exists(Path.Combine(run, "a.dll")));
+		Assert.StartsWith("failed: robocopy exit code 16", File.ReadAllText(result).Trim());
+	}}

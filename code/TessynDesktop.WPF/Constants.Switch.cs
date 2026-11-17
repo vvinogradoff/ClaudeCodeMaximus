@@ -39,6 +39,17 @@ public static partial class Constants
 		/// <summary>The updater script's file name in the temp folder.</summary>
 		public const string UpdateScriptFileFormat = "TessynDesktop_WPF_update_{0}.ps1";
 
+		/// <summary>The copy-on-exit script's file name in the temp folder (it starts nothing).</summary>
+		public const string ExitUpdateScriptFileFormat = "TessynDesktop_WPF_exit_update_{0}.ps1";
+
+		/// <summary>How often the running client looks for a newer build.</summary>
+		public static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromSeconds(60);
+
+		/// <summary>The notice while a newer build is ready (the "Restart now" link follows it).</summary>
+		public const string UpdateReadyText = "A newer build is ready — it is installed when you close Tessyn.";
+
+		public const string RestartNowText = "Restart now";
+
 		/// <summary>Where the update script records "ok" or "failed ..." for the next start.</summary>
 		public const string UpdateResultFileName = "TessynDesktop_WPF_update.result.txt";
 

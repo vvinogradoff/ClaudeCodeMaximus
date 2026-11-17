@@ -54,6 +54,7 @@ public sealed class SideBySideTests : IDisposable
 		Directory.CreateDirectory(host);
 		File.WriteAllText(Path.Combine(host, "TessynDesktop.exe"), "exe");
 		_store = SettingsTestSupport.NewStore(new MemoryClientState());
+		_store.Update<DaemonHostSettings>(s => s.StartBackgroundDaemon = false); // these tests are about the side-by-side mode; the default (on) is tested on its own
 	}
 
 	public void Dispose() => TestDirectory.Delete(_root);
@@ -65,10 +66,23 @@ public sealed class SideBySideTests : IDisposable
 		new(locator, new FixedClientFactory(new FakeTessynClient()), new ImmediateUiDispatcher(), NullLogger<ConnectionViewModel>.Instance, TimeSpan.FromMilliseconds(5), launcher);
 
 	[Fact]
-	public void TheSettingIsOffByDefault()
+	public void TheSettingIsOnByDefault()
 	{
-		Assert.False(_store.Get<DaemonHostSettings>().StartBackgroundDaemon);
-		Assert.False(ServiceRegistration.IsHostStartEnabled(_store)());
+		var fresh = SettingsTestSupport.NewStore(new MemoryClientState());
+		Assert.True(fresh.Get<DaemonHostSettings>().StartBackgroundDaemon);
+		Assert.True(ServiceRegistration.IsHostStartEnabled(fresh)());
+	}
+
+	[Fact]
+	public void AStoredFileWithoutTheKey_GetsTheDefaultOn_AndAnExplicitOffStaysOff()
+	{
+		var missing = new MemoryClientState();
+		missing.State.Sections["appearance"] = new ClientSectionModel { Version = 1, Data = System.Text.Json.JsonDocument.Parse("{\"theme\":\"Light\"}").RootElement.Clone() }; // other sections, no daemonHost
+		Assert.True(SettingsTestSupport.NewStore(missing).Get<DaemonHostSettings>().StartBackgroundDaemon);
+
+		var off = new MemoryClientState();
+		off.State.Sections["daemonHost"] = new ClientSectionModel { Version = 1, Data = System.Text.Json.JsonDocument.Parse("{\"startBackgroundDaemon\":false}").RootElement.Clone() };
+		Assert.False(SettingsTestSupport.NewStore(off).Get<DaemonHostSettings>().StartBackgroundDaemon);
 	}
 
 	[Theory]

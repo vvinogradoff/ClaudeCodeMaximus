@@ -31,6 +31,9 @@ public sealed class ServiceRegistration
 		services.AddSingleton<ITessynClientFactory, TessynClientFactory>();
 		services.AddSingleton<IDaemonHostLauncher>(sp => CreateHostLauncher(sp, paths, options));
 		services.AddSingleton<DaemonRestarter>(sp => CreateRestarter(sp, paths, options));
+		services.AddSingleton<UpdateNoticeViewModel>();
+		if (options.IsRealEnvironment && !SourceBuilds.IsBuildOutput(AppContext.BaseDirectory))
+			services.AddSingleton<LiveUpdateService>(sp => CreateLiveUpdate(sp, paths, options));
 		services.AddSingleton<ConnectionViewModel>(sp => new ConnectionViewModel(
 			sp.GetRequiredService<IDaemonLocator>(), sp.GetRequiredService<ITessynClientFactory>(), sp.GetRequiredService<IUiDispatcher>(),
 			sp.GetRequiredService<ILogger<ConnectionViewModel>>(), sp.GetRequiredService<IDaemonHostLauncher>(),
@@ -178,10 +181,25 @@ public sealed class ServiceRegistration
 		var scriptDirectory = Path.GetTempPath();
 		var exe = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, Constants.Switch.WpfExeName);
 		var restarter = new ScriptClientRestarter(new PowerShellScriptLauncher(), scriptDirectory, exe, options.Arguments, Environment.ProcessId,
-			() => System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() => System.Windows.Application.Current.Shutdown())));
+			() =>
+			{
+				sp.GetService<LiveUpdateService>()?.MarkRestarting(); // a restart script is waiting: the exit must not start a copy-only script beside it
+				System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() => System.Windows.Application.Current.Shutdown()));
+			});
 		return new DaemonRestarter(sourceLocation, new ProcessDaemonBuildProbe(), sp.GetRequiredService<IDialogService>(), new NamedEventHostExitSignal(),
 			new ProcessExitWaiter(), restarter, Constants.Switch.DaemonExitTimeout, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonRestarter>(),
 			Path.Combine(AppContext.BaseDirectory.TrimEnd('\\', '/'), Constants.Switch.HostFolderName));
+	}
+
+	/// <summary>The running client's update check, notice and copy-on-exit: only in the real environment and from the run folder.</summary>
+	private static LiveUpdateService CreateLiveUpdate(IServiceProvider sp, AppPaths paths, StartupOptions options)
+	{
+		var sourceLocation = new SourceBuilds(Path.Combine(paths.DataRoot, Constants.Switch.AppSettingsFileName)).ReadSourceLocation();
+		var loggers = sp.GetRequiredService<ILoggerFactory>();
+		var updater = new WpfSelfUpdater(AppContext.BaseDirectory, sourceLocation, new PowerShellScriptLauncher(), Path.GetTempPath(), loggers.CreateLogger<WpfSelfUpdater>(), new MutexHostPresence());
+		return new LiveUpdateService(updater, sp.GetRequiredService<UpdateNoticeViewModel>(), sp.GetRequiredService<IUiDispatcher>(), options.Arguments,
+			() => System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() => System.Windows.Application.Current.Shutdown())),
+			Constants.Switch.UpdateCheckInterval, Environment.ProcessId, loggers.CreateLogger<LiveUpdateService>());
 	}
 
 	/// <summary>The launcher of the Avalonia background host (A23 Q6): real only in the real environment and only when running from the run folder (rule A15).</summary>

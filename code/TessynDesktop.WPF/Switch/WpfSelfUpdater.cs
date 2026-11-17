@@ -25,6 +25,12 @@ public enum SelfUpdateOutcome
 
 	/// <summary>A newer build exists, but the script could not be started; the client carries on with the old build.</summary>
 	ScriptFailed,
+
+	/// <summary>(Exit check) Nothing newer to copy: neither the client nor a host that is not running.</summary>
+	NothingToCopy,
+
+	/// <summary>(Exit check) A script was started that waits for this process to exit and copies the newer build (and the host's, when it is not running) without starting anything.</summary>
+	CopyScheduledOnExit,
 }
 
 /// <summary>Starts the updater script (a seam for tests).</summary>
@@ -63,9 +69,12 @@ public sealed class WpfSelfUpdater
 	private readonly IUpdateScriptLauncher _launcher;
 	private readonly string _scriptDirectory;
 	private readonly ILogger _logger;
+	private readonly IHostPresence _hostPresence;
 
-	public WpfSelfUpdater(string runFolder, string? sourceLocation, IUpdateScriptLauncher launcher, string scriptDirectory, ILogger logger)
+	/// <param name="hostPresence">Tells whether a daemon host runs (its folder is then not refreshed at exit); null = no host is assumed to run.</param>
+	public WpfSelfUpdater(string runFolder, string? sourceLocation, IUpdateScriptLauncher launcher, string scriptDirectory, ILogger logger, IHostPresence? hostPresence = null)
 	{
+		_hostPresence = hostPresence ?? new NoHostPresence();
 		_runFolder = runFolder.TrimEnd('\\', '/');
 		_sourceLocation = sourceLocation;
 		_launcher = launcher;
@@ -121,6 +130,119 @@ public sealed class WpfSelfUpdater
 		}
 	}
 
+	private sealed class NoHostPresence : IHostPresence
+	{
+		public bool IsHostRunning() => false;
+	}
+
+	/// <summary>
+	/// The newest WPF build folder when it holds something this run folder does not (the same test as the start-up check, <see cref="NeedsUpdate"/>); null when there is no source
+	/// location, no build, the run folder is current, or this process runs from a build output (never updated, rule A15). Cheap: file stats only, no copying. Never throws.
+	/// </summary>
+	public string? FindPendingClientBuild()
+	{
+		try
+		{
+			if (SourceBuilds.IsBuildOutput(_runFolder) || string.IsNullOrWhiteSpace(_sourceLocation))
+				return null;
+
+			var buildDir = SourceBuilds.FindNewestBuild(_sourceLocation, Constants.Switch.WpfProjectFolder, Constants.Switch.WpfAssemblyName);
+			return buildDir != null && NeedsUpdate(buildDir, _runFolder) ? buildDir : null;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		{
+			_logger.LogDebug(ex, "Self-update: the check for a newer build failed");
+			return null;
+		}
+	}
+
+	/// <summary>The newest Avalonia (host) build folder when the <c>host</c> folder lacks something of it and no host runs; null otherwise. A running host is never refreshed (its files are locked); the stale-daemon banner covers that case.</summary>
+	public string? FindPendingHostBuild()
+	{
+		try
+		{
+			if (SourceBuilds.IsBuildOutput(_runFolder) || string.IsNullOrWhiteSpace(_sourceLocation))
+				return null;
+
+			var buildDir = SourceBuilds.FindNewestBuild(_sourceLocation, Constants.Switch.HostProjectFolder, Constants.Switch.HostAssemblyName);
+			if (buildDir == null)
+				return null;
+
+			var hostFolder = Path.Combine(_runFolder, Constants.Switch.HostFolderName);
+			if (Directory.Exists(hostFolder) && !NeedsUpdate(buildDir, hostFolder))
+				return null;
+
+			return _hostPresence.IsHostRunning() ? null : buildDir;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		{
+			_logger.LogDebug(ex, "Self-update: the check for a newer host build failed");
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// The exit check: when a newer client build (or a newer host build, with no host running) exists, starts a hidden script that waits for this process to exit and copies it, and starts
+	/// nothing (the user is closing). Never throws.
+	/// </summary>
+	public SelfUpdateOutcome ScheduleCopyOnExit(int processId)
+	{
+		try
+		{
+			var copies = new List<(string Source, string Destination)>();
+			var clientBuild = FindPendingClientBuild();
+			if (clientBuild != null)
+				copies.Add((clientBuild, _runFolder));
+
+			var hostBuild = FindPendingHostBuild();
+			if (hostBuild != null)
+				copies.Add((hostBuild, Path.Combine(_runFolder, Constants.Switch.HostFolderName)));
+
+			if (copies.Count == 0)
+				return SelfUpdateOutcome.NothingToCopy;
+
+			_logger.LogInformation("Self-update: copying {Count} newer build(s) after exit: {Builds}", copies.Count, string.Join(", ", copies.Select(c => c.Source)));
+			var scriptPath = Path.Combine(_scriptDirectory, string.Format(Constants.Switch.ExitUpdateScriptFileFormat, processId));
+			File.WriteAllText(scriptPath, BuildExitScript(copies, processId, ResultPath), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+			_launcher.Start(scriptPath);
+			return SelfUpdateOutcome.CopyScheduledOnExit;
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Self-update on exit failed");
+			return SelfUpdateOutcome.ScriptFailed;
+		}
+	}
+
+	/// <summary>
+	/// The exit script: wait for the process, then copy each (source, destination) pair with retries (robocopy, nothing deleted) and record the worst result; nothing is started.
+	/// Paths are literal PowerShell strings, so a run folder named <c>[Publish-WPF]</c> is no wildcard problem.
+	/// </summary>
+	public static string BuildExitScript(IReadOnlyList<(string Source, string Destination)> copies, int processId, string resultPath, IReadOnlyList<int>? retryDelays = null)
+	{
+		var delays = string.Join(", ", retryDelays ?? Constants.Switch.ScriptRetryDelaysSeconds);
+		var calls = string.Join("\n", copies.Select(c => $"$code = Copy-Build {Quote(c.Source)} {Quote(c.Destination)}\nif ($code -gt $worst) {{ $worst = $code }}"));
+		return
+$@"$result = {Quote(resultPath)}
+$delays = @({delays})
+function Copy-Build($source, $dest) {{
+    $code = 16
+    foreach ($delay in $delays) {{
+        robocopy $source $dest /E /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+        $code = $LASTEXITCODE
+        if ($code -lt 8) {{ break }}
+        Start-Sleep -Seconds $delay
+    }}
+    return $code
+}}
+try {{ Wait-Process -Id {processId} -Timeout {Constants.Switch.ScriptWaitForExitSeconds} -ErrorAction SilentlyContinue }} catch {{ }}
+$worst = 0
+{calls}
+try {{
+    if ($worst -lt 8) {{ Set-Content -LiteralPath $result -Value 'ok' }} else {{ Set-Content -LiteralPath $result -Value ('failed: robocopy exit code ' + $worst) }}
+}} catch {{ }}
+";
+	}
 	/// <summary>Where the script records how the copy ended ("ok" or "failed ..."); the next start reads and deletes it.</summary>
 	public string ResultPath => Path.Combine(_scriptDirectory, Constants.Switch.UpdateResultFileName);
 
