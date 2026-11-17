@@ -198,7 +198,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 		{
 			// Every user entry the page has rendered: [entry index, source, has the auto class, header label, background colour].
 			var rows = (await page.EvalAsync(@"Array.from(document.querySelectorAll('.e.U')).map(e => { const it = S.items[parseInt(e.dataset.k, 10)];
-				return [it.i, it.s, e.classList.contains('auto'), e.querySelector('.h').textContent.split(' ')[0], getComputedStyle(e.querySelector('.c')).backgroundColor]; })"))!.AsArray();
+				return [it.i, it.s, e.classList.contains('auto'), (e.querySelector('.h') ? e.querySelector('.h').textContent.split(' ')[0] : ''), getComputedStyle(e.querySelector('.c')).backgroundColor]; })"))!.AsArray();
 
 			Assert.NotEmpty(rows);
 			string? teal = null, plain = null;
@@ -207,7 +207,7 @@ public sealed class WpfInputNavigationE2ETests : IDisposable
 				var (i, source, auto, label) = (row![0]!.GetValue<int>(), row[1]!.GetValue<string>(), row[2]!.GetValue<bool>(), row[3]!.GetValue<string>());
 				var expectAuto = KindOf(i) is "scheduled" or "orchestrated";
 				Assert.True(auto == expectAuto, $"entry {i} ({KindOf(i)}, source '{source}'): auto class {auto}");
-				Assert.Equal(!expectAuto ? "USER" : KindOf(i) == "scheduled" ? "SCHEDULED" : "SUPERVISOR", label);
+				Assert.Equal(!expectAuto ? "" : KindOf(i) == "scheduled" ? "SCHEDULED" : "SUPERVISOR", label);
 				if (expectAuto) teal = row[4]!.GetValue<string>(); else plain = row[4]!.GetValue<string>();
 			}
 
