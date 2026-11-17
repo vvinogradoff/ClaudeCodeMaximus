@@ -40,3 +40,5 @@
 - The dropdown button shows the **open session's name** ("Recent" when none is open); its popup is as wide as the button.
 
 **FR.6.8 — Status bar (WPF).** The two plan-usage meters (FR.18) fill the bar's full height and take all the width left by the other items. The Profiles button is at the far right.
+
+**FR.6.9 — Screensaver picture mode: fill (WPF).** The screensaver (idle cover with a slideshow of the pictures of its folder) shows each picture in **fill** mode: the picture **covers the whole screen**, keeps its **aspect ratio** and is **cropped** where the ratio differs from the screen's (centre crop), instead of being fitted inside the screen with bars. The folder, idle time and slide interval settings are unchanged.

@@ -42,6 +42,19 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 	[NotifyPropertyChangedFor(nameof(ButtonText))]
 	private string _currentName = string.Empty;
 
+	/// <summary>The recency level (0 to 4, FR.9.5) of the session open in the pane; 0 when none is or it is not known.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(RecencyLevel))]
+	private int _currentRecencyLevel;
+
+	/// <summary>The "Show recency colour in the closed Recent dropdown" setting (FR.9.13); the button is plain while it is off.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(RecencyLevel))]
+	private bool _showRecencyColour = true;
+
+	/// <summary>The recency level the closed dropdown button takes its background from (the same tiers as a session row); 0 = no tint.</summary>
+	public int RecencyLevel => ShowRecencyColour ? CurrentRecencyLevel : 0;
+
 	/// <summary>What the dropdown button says: the open session's name, else "Recent".</summary>
 	public string ButtonText => string.IsNullOrEmpty(CurrentName) ? Constants.SessionLists.RecentTabTitle : CurrentName;
 

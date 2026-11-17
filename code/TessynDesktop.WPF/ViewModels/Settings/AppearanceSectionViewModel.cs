@@ -38,6 +38,9 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 	[ObservableProperty]
 	private string _lineSpacing = string.Empty;
 
+	[ObservableProperty]
+	private bool _showRecencyInRecentDropdown = true;
+
 	public AppearanceSectionViewModel(IClientSettingsStore store)
 	{
 		_store = store;
@@ -74,7 +77,8 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 					|| edited.UserFontSize != stored.UserFontSize
 					|| edited.InputFontSize != stored.InputFontSize
 					|| edited.TagFontSize != stored.TagFontSize
-					|| edited.LineSpacing != stored.LineSpacing;
+					|| edited.LineSpacing != stored.LineSpacing
+					|| edited.ShowRecencyInRecentDropdown != stored.ShowRecencyInRecentDropdown;
 			}
 			catch (SettingsInputException)
 			{
@@ -99,6 +103,7 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 				a.InputFontSize = edited.InputFontSize;
 				a.TagFontSize = edited.TagFontSize;
 				a.LineSpacing = edited.LineSpacing;
+				a.ShowRecencyInRecentDropdown = edited.ShowRecencyInRecentDropdown;
 			});
 			StatusText = Constants.Settings.Saved;
 			return Task.FromResult(true);
@@ -130,6 +135,7 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 		InputFontSize = Format(stored.InputFontSize);
 		TagFontSize = Format(stored.TagFontSize);
 		LineSpacing = Format(stored.LineSpacing);
+		ShowRecencyInRecentDropdown = stored.ShowRecencyInRecentDropdown;
 	}
 
 	private AppearanceSettings Build(AppearanceSettings stored) => new()
@@ -142,6 +148,7 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 		InputFontSize = ParseSize(InputFontSize, stored.InputFontSize),
 		TagFontSize = ParseSize(TagFontSize, stored.TagFontSize),
 		LineSpacing = ParseLineSpacing(LineSpacing, stored.LineSpacing),
+		ShowRecencyInRecentDropdown = ShowRecencyInRecentDropdown,
 	};
 
 	private static double ParseSize(string text, double fallback)

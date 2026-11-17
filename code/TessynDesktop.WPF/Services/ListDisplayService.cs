@@ -20,23 +20,29 @@ public sealed class ListDisplayService
 		_ui = ui;
 	}
 
-	/// <summary>The date format changed; raised on the UI thread.</summary>
+	/// <summary>The date format or the recency colour of the closed Recent dropdown changed; raised on the UI thread.</summary>
 	public event EventHandler? Changed;
+
+	/// <summary>Whether the closed Recent dropdown shows the open session's recency colour (Settings, Appearance; on by default).</summary>
+	public bool ShowRecencyInRecentDropdown { get; private set; } = true;
 
 	/// <summary>Reads the stored format and follows it; call once before the window is shown.</summary>
 	public void Start()
 	{
-		SessionDisplay.DateFormat = _store.Get<AppearanceSettings>().DateFormat;
+		var stored = _store.Get<AppearanceSettings>();
+		SessionDisplay.DateFormat = stored.DateFormat;
+		ShowRecencyInRecentDropdown = stored.ShowRecencyInRecentDropdown;
 		_store.Changed += (_, e) =>
 		{
 			if (e.Section != Constants.SettingsSections.Appearance)
 				return;
 
-			var format = _store.Get<AppearanceSettings>().DateFormat;
-			if (format == SessionDisplay.DateFormat)
+			var settings = _store.Get<AppearanceSettings>();
+			if (settings.DateFormat == SessionDisplay.DateFormat && settings.ShowRecencyInRecentDropdown == ShowRecencyInRecentDropdown)
 				return;
 
-			SessionDisplay.DateFormat = format;
+			SessionDisplay.DateFormat = settings.DateFormat;
+			ShowRecencyInRecentDropdown = settings.ShowRecencyInRecentDropdown;
 			_ui.Post(() => Changed?.Invoke(this, EventArgs.Empty));
 		};
 	}

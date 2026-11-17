@@ -95,3 +95,9 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 - **Focus view:** the card text (title, body, outcome of open, decided and closed cards) gets a fixed line height of font size × the value.
 - **Live.** A change applies at once to both, without a restart; the virtualised transcript is measured again, as for a font size change.
 - A value outside 1.0–1.8 or not a number is refused with a message and nothing is stored.
+
+**FR.9.13 — Recency colour on the closed Recent dropdown (WPF).** The dropdown's button in the title bar (FR.6.7) shows the **open session's recency colour** (the four tiers of FR.9.10, the same colours as its row in the tree and the lists) behind the session name, so the age of the session you are working in is visible without opening the list. With no open session, or a session with no recent activity (tier 0), the button stays plain.
+- **Setting.** Settings › Appearance has a checkbox **"Show recency colour in the closed Recent dropdown"**, **on by default**; stored in the client settings (`appearance` section, `showRecencyInRecentDropdown`). A file without the value reads as on.
+- **Live.** Toggling it applies at once (no restart, no reopening); the tint also follows the open session and ages with the 60-second clock (FR.9.10). It concerns only the closed button: the popup's rows keep their own colours (FR.9.11).
+
+**FR.9.14 — First paint of the stored theme.** The window is in the stored theme (Light or Dark, or the system's for System) **from its first paint**, not only after the theme has been switched back and forth: the frame, the backdrop behind the controls and the controls agree, in both themes. A stored Light theme on a system that is dark never shows a dark window, and the reverse. The window is styled for the stored theme when it is created, again once its first frame is on screen, and on every theme change, for every open window.

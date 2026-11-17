@@ -23,9 +23,14 @@ Related requirements: FR.24.16, FR.24.18. Use cases: [UC.TA.01](/docs/usecases/U
 | TC.TA.15 | The range is 8 to 40: 8 and 40 accepted; 7, 41, empty and non-numeric text refused, nothing stored | AUTOMATED | UC.TA.04 | FR.24.18 |
 | TC.TA.16 | The default is 14 (the second default, 11, is WITHDRAWN 2026-11-17) | AUTOMATED | UC.TA.04 | FR.24.18 |
 | TC.TA.17 | **WITHDRAWN 2026-11-17 (decision A47).** The one-time settings import leaves the WPF tag cloud size unchanged; the import is removed | WITHDRAWN | UC.TA.04 | FR.24.18, FR.32.4 |
+| TC.TA.18 | The built app with the Architect's appearance settings (Light, line spacing 1.25, 12 pt tags) and many tags: one line collapsed, taller expanded, one line again | E2E | UC.TA.01 | FR.24.16 |
+| TC.TA.19 | Eight mixed tags (Linear, repositories, pull requests) that need two lines: collapsed is one line, expanded is more | E2E | UC.TA.01 | FR.24.16 |
+| TC.TA.20 | A session switch (chips cleared, laid out empty, then replaced): the new chips collapse to one line with a `+N` count, whatever was shown before | AUTOMATED | UC.TA.02 | FR.24.16 |
+| TC.TA.21 | The mini line and the `+N` count hold at monitor scales 100%, 150% and 200% (layout rounding), for 2, 8, 12 and 63 chips | AUTOMATED | UC.TA.01 | FR.24.16 |
+| TC.TA.22 | Switching the theme (title bar button) while a session with many tags is open, twice: the collapsed area stays one line high, still reports collapsed, and expands and collapses again (the area follows the rebuilt chip panel) | E2E | UC.TA.01 | FR.24.16 |
 
 ## FR → TC coverage
 | FR | Test cases |
 |---|---|
-| FR.24.16 | TC.TA.01–10 |
+| FR.24.16 | TC.TA.01–10, TC.TA.18–22 |
 | FR.24.18 | TC.TA.11–17 |

@@ -27,6 +27,13 @@
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
+                <Style.Triggers>
+                    <!-- The open session's recency tier (FR.9.5) behind its name, the same colours as its row; off with the Appearance setting (RecencyLevel is 0 then). -->
+                    <DataTrigger Binding="{Binding RecencyLevel}" Value="1"><Setter Property="Background" Value="{DynamicResource Colour.RecentTier4}" /></DataTrigger>
+                    <DataTrigger Binding="{Binding RecencyLevel}" Value="2"><Setter Property="Background" Value="{DynamicResource Colour.RecentTier3}" /></DataTrigger>
+                    <DataTrigger Binding="{Binding RecencyLevel}" Value="3"><Setter Property="Background" Value="{DynamicResource Colour.RecentTier2}" /></DataTrigger>
+                    <DataTrigger Binding="{Binding RecencyLevel}" Value="4"><Setter Property="Background" Value="{DynamicResource Colour.RecentTier1}" /></DataTrigger>
+                </Style.Triggers>
             </Style>        </ResourceDictionary>
     </UserControl.Resources>
     <Grid>

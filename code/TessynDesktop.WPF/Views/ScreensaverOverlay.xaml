@@ -4,6 +4,6 @@
              Visibility="Collapsed" Focusable="False">
     <!-- Covers the whole window while the screensaver runs; any input on it ends the screensaver. -->
     <Grid Background="Black">
-        <Image x:Name="Picture" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+        <Image x:Name="Picture" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" />
     </Grid>
 </UserControl>
