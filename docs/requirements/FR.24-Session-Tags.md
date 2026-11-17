@@ -251,6 +251,7 @@ An unknown `scope` is a tool error (the same strict parsing as `list_sessions`).
 6. **Nothing persists.** The state is saved neither in the client state nor in the daemon; a restart starts collapsed. An older client state that still holds the earlier `tagAreaExpanded` value is read and the value dropped; it is never written back.
 7. With no tags the area is empty and expanding does nothing.
 8. The area exposes an expand/collapse action for accessibility (WPF: UI Automation ExpandCollapse, name "Session tags").
+9. **The collapsed height holds after every change of chips (WPF).** However the chips arrive (a session opens, another session replaces them, the tag font size, line spacing or monitor scale changes, **the theme is switched** and every template under the area is rebuilt), the collapsed area ends **one chip line high** with the `+N` hint whenever chips are hidden; it is never left showing every line while the mode says collapsed (observed in the running app 2026-11-17: after a theme switch the area stayed as high as all its chips, with no `+N`, and could not be collapsed). The area always reads the chips from the panel that is currently shown, never from one kept from before a template was rebuilt.
 
 Applies to **both desktop clients, WPF and Avalonia**. **Tessyn Web is not covered** by FR.24.16 or FR.24.18; its tag row keeps its own behaviour (FR.25).
 
