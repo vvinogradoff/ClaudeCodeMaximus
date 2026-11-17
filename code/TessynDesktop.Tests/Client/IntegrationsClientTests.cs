@@ -8,8 +8,7 @@ using TessynDesktop.Tests.Services;
 namespace TessynDesktop.Tests.Client;
 
 /// <summary>
-/// The package J3 part 2 wrappers of <see cref="TessynClient"/> (MCP registry and OAuth, Telegram token, relay link, model refresh, the read-only
-/// <c>avalonia-ui</c> section) and the typed <c>mcp.changed</c> / <c>catalog.changed</c> notifications, against a real loopback daemon.
+/// The package J3 part 2 wrappers of <see cref="TessynClient"/> (MCP registry and OAuth, Telegram token, relay link, model refresh) and the typed <c>mcp.changed</c> / <c>catalog.changed</c> notifications, against a real loopback daemon.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class IntegrationsClientTests : IDisposable
@@ -30,22 +29,6 @@ public sealed class IntegrationsClientTests : IDisposable
 
 		foreach (var capability in new[] { "mcp.registry", "telegram.settings", "relay.settings", "models.admin" })
 			Assert.Contains(capability, client.ServerInfo!.Capabilities);
-	}
-
-	[Fact]
-	public async Task AvaloniaUi_IsReadThroughTheTypedSectionCall_AndAnUpdateIsRefused()
-	{
-		await using var client = NewClient();
-		await client.ConnectAsync();
-
-		var ui = await client.SettingsGetAsync<AvaloniaUiSettingsDto>(RemoteProtocol.SettingsApi.AvaloniaUiSection);
-		var ex = await Assert.ThrowsAsync<TessynRpcException>(() => client.SettingsUpdateAsync(RemoteProtocol.SettingsApi.AvaloniaUiSection, new { theme = "Dark" }, ui.Version));
-
-		Assert.Equal(("avalonia-ui", 1L, "Light"), (ui.Section, ui.Version, ui.Values.Theme));
-		Assert.Contains(ui.Values.KeyBindings, b => b is { Action: "Send", Binding: "Ctrl+Enter, Shift+Enter" });
-		Assert.Equal((120, 10, "pictures"), (ui.Values.Screensaver.TimeoutSeconds, ui.Values.Screensaver.SlideshowIntervalSeconds, Path.GetFileName(ui.Values.Screensaver.Directory)));
-		Assert.Equal("#1E3A5F", ui.Values.DarkColors.UserBubbleBackground);
-		Assert.Equal(RemoteProtocol.ErrorCodes.InvalidParams, ex.Code);
 	}
 
 	[Fact]

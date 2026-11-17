@@ -353,7 +353,7 @@ public sealed class SettingsSectionServiceTests : IDisposable
 	{
 		Assert.Throws<TdcpInvalidParamsException>(() => _service.Update("general", Patch("[1]"), 1));
 		Assert.Throws<TdcpInvalidParamsException>(() => _service.Update("general", Patch("\"x\""), 1));
-		Assert.Throws<TdcpInvalidParamsException>(() => _service.Update("avalonia-ui", Patch("{}"), 1));
+		Assert.Throws<TdcpInvalidParamsException>(() => _service.Update("nope", Patch("{}"), 1));
 		Assert.Throws<TdcpInvalidParamsException>(() => _service.Get("mcp"));
 	}
 

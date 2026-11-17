@@ -98,22 +98,4 @@ public sealed class FakeTessynClientIntegrationsTests
 		Assert.Equal(14, result.Count);
 		Assert.Equal(["models.refresh"], fake.Calls);
 	}
-
-	[Fact]
-	public async Task TheAvaloniaUiSection_IsScriptedLikeTheOthers_AndRefusesAnUpdate()
-	{
-		var fake = new FakeTessynClient();
-		fake.SettingsValues["avalonia-ui"] = new AvaloniaUiSettingsDto("Dark", 13, 13, 13, 13, Colors(), Colors(), [new KeyBindingDto("Send", "Ctrl+Enter")], new ScreensaverSettingsDto(@"D:\pics", 120, 10));
-		ITessynClient client = fake;
-
-		var ui = await client.SettingsGetAsync<AvaloniaUiSettingsDto>(RemoteProtocol.SettingsApi.AvaloniaUiSection);
-		var refused = await Assert.ThrowsAsync<TessynRpcException>(() => client.SettingsUpdateAsync("avalonia-ui", new { theme = "Light" }, ui.Version));
-
-		Assert.Equal(("Dark", "Send"), (ui.Values.Theme, ui.Values.KeyBindings[0].Action));
-		Assert.Equal(RemoteProtocol.ErrorCodes.InvalidParams, refused.Code);
-		Assert.Empty(fake.SettingsUpdates);                                       // the refused update was not recorded as applied
-		Assert.Contains(fake.SettingsSections, s => s.Name == "avalonia-ui");
-	}
-
-	private static ThemeColorsDto Colors() => new("#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000");
 }

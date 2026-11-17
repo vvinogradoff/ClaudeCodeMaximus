@@ -8,7 +8,6 @@ public static partial class Constants
 	{
 		public const string OpenCommandId = "app.openSettings";
 		/// <summary>Name of the client settings section that remembers the one-time Avalonia import.</summary>
-		public const string AvaloniaImportSection = "avaloniaImport";
 		public const string OpenCommandTitle = "Settings…";
 		public const string OpenCommandGesture = "Ctrl+OemComma";
 		/// <summary>Position of the entry in the hamburger menu (after Import).</summary>
@@ -98,14 +97,5 @@ public static partial class Constants
 		public const string McpSecretNotSet = "Nothing stored.";
 		public const string McpUrlQueryHidden = "The stored URL has a query string (it is not shown); the query is kept unless you change the URL.";
 		public const string McpArgumentsHidden = "Arguments are stored (not shown); the stored arguments are kept unless you type new ones.";
-
-		public const string ImportTitle = "Import from the Avalonia client";
-		public const string ImportPrompt = "Copy the theme, font sizes, key bindings and screensaver of the Avalonia client into this client? Your current values here are replaced.";
-		public const string ImportConfirm = "Import";
-		public const string ImportDone = "Imported {0}.";
-		public const string ImportSkippedFormat = "Not imported (no matching command here): {0}.";
-		public const string ImportFailedFormat = "Import failed: {0}";
-		public const string ImportNothing = "The Avalonia client has no settings to import.";
-		public const string ImportOffer = "Settings of the Avalonia client are available. Use 'Import from Avalonia' to carry them over once.";
 	}
 }

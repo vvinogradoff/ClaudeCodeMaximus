@@ -179,4 +179,24 @@ public sealed class ClientStateStoreTests : IDisposable
 
 		Assert.Equal("k", store.State.LastSelectedNodeId);
 	}
+
+	[Fact]
+	public async Task TheRemovedAvaloniaImportSections_InAnOldFile_AreReadWithoutErrors_AndNothingElseIsLost()
+	{
+		// A47: the one-time Avalonia import is gone. Old files still carry its two sections (imports, avaloniaImport); they are kept as plain data and nobody reads them.
+		var path = new AppPaths(_root).ClientStateFilePath;
+		Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+		await File.WriteAllTextAsync(path,
+			"{\"version\":1,\"lastSelectedNodeId\":\"k\",\"sections\":{"
+			+ "\"imports\":{\"version\":1,\"data\":{\"avaloniaUiHandled\":true,\"avaloniaUiOutcome\":\"imported\"}},"
+			+ "\"avaloniaImport\":{\"version\":1,\"data\":{\"done\":true}},"
+			+ "\"appearance\":{\"version\":1,\"data\":{\"theme\":\"Dark\"}}}}");
+		var store = Create();
+
+		await store.LoadAsync();
+		var settings = new ClientSettingsStore(store, NullLogger<ClientSettingsStore>.Instance);
+
+		Assert.Equal("k", store.State.LastSelectedNodeId);
+		Assert.Equal(ClientTheme.Dark, settings.Get<AppearanceSettings>().Theme);
+	}
 }

@@ -9,7 +9,7 @@ public sealed partial class FakeTessynClient
 {
 	/// <summary>The sections <see cref="SettingsSectionsAsync"/> reports.</summary>
 	public List<SettingsSectionInfoDto> SettingsSections { get; set; } =
-		[new(RemoteProtocol.SettingsApi.GeneralSection, 1), new(RemoteProtocol.SettingsApi.NotificationsSection, 1), new(RemoteProtocol.SettingsApi.TelegramSection, 1), new(RemoteProtocol.SettingsApi.AvaloniaUiSection, 1)];
+		[new(RemoteProtocol.SettingsApi.GeneralSection, 1), new(RemoteProtocol.SettingsApi.NotificationsSection, 1), new(RemoteProtocol.SettingsApi.TelegramSection, 1)];
 
 	/// <summary>The values <see cref="SettingsGetAsync{TValues}"/> answers, by section name (the section's DTO).</summary>
 	public Dictionary<string, object> SettingsValues { get; } = [];
@@ -70,9 +70,6 @@ public sealed partial class FakeTessynClient
 			SettingsUpdateException = null;
 			throw failure;
 		}
-
-		if (section == RemoteProtocol.SettingsApi.AvaloniaUiSection)
-			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, $"Settings section '{section}' is read-only");
 
 		lock (SettingsUpdates)
 			SettingsUpdates.Add((section, patch, baseVersion));

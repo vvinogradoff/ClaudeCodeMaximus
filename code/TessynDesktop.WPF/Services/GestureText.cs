@@ -30,26 +30,4 @@ public static class GestureText
 			return false;
 		}
 	}
-
-	/// <summary>
-	/// Converts one Avalonia key combination (<c>Cmd+I</c>, <c>Ctrl+Enter</c>, <c>Escape</c>; several separated by commas) into WPF notation: <c>Cmd</c> and <c>Meta</c> become <c>Ctrl</c>
-	/// (the macOS shortcuts are dropped, decision A8) and the first combination WPF accepts is returned; null when none is.
-	/// </summary>
-	public static string? FromAvalonia(string? binding)
-	{
-		if (string.IsNullOrWhiteSpace(binding))
-			return null;
-
-		foreach (var combo in binding.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-		{
-			var parts = combo.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-				.Select(p => p.ToLowerInvariant() is "cmd" or "meta" or "control" ? "Ctrl" : p)
-				.ToList();
-			var text = string.Join('+', parts);
-			if (TryParse(text, out _, out _))
-				return text;
-		}
-
-		return null;
-	}
 }

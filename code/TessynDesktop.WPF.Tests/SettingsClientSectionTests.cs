@@ -24,13 +24,6 @@ public sealed class SettingsClientSectionTests
 		_commands = SettingsTestSupport.NewCommands(_store);
 	}
 
-	private static AvaloniaUiSettingsDto AvaloniaValues(string theme = "Dark", IReadOnlyList<KeyBindingDto>? bindings = null) => new(
-		theme, 14, 15, 16, 17, EmptyColors(), EmptyColors(),
-		bindings ?? [new("OpenSettings", "Cmd+OemComma"), new("AddDirectory", "Ctrl+Shift+D"), new("Send", "Ctrl+Enter"), new("ImportSessions", "Ctrl+I"), new("CloseDialog", "Escape, Cmd+W")],
-		new ScreensaverSettingsDto(@"D:\Pics", 300, 7));
-
-	private static ThemeColorsDto EmptyColors() => new("#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000");
-
 	[Fact]
 	public async Task Appearance_SavesThemeAndFonts_ToTheClientSettings_NotTheDaemon()
 	{
@@ -207,99 +200,6 @@ public sealed class SettingsClientSectionTests
 
 		Assert.All(keyboard.Rows.Where(r => r.CommandId is Constants.TreeCommands.AddDirectory or Constants.TreeCommands.Rename), r => Assert.True(r.HasProblem));
 		Assert.False(keyboard.Rows.Single(r => r.CommandId == Constants.Settings.OpenCommandId).HasProblem);
-	}
-
-	[Theory]
-	[InlineData("Cmd+OemComma", "Ctrl+OemComma")]
-	[InlineData("Cmd+I", "Ctrl+I")]
-	[InlineData("Ctrl+Enter", "Ctrl+Enter")]
-	[InlineData("Escape, Cmd+W", "Escape")]
-	[InlineData("Meta+Shift+K", "Ctrl+Shift+K")]
-	[InlineData("", null)]
-	[InlineData("Ctrl+Banana", null)]
-	public void AvaloniaBindings_AreConvertedToTheRegistrysNotation(string avalonia, string? expected) =>
-		Assert.Equal(expected, GestureText.FromAvalonia(avalonia));
-
-	[Fact]
-	public async Task Import_CopiesThemeFontsScreensaverAndTheBindingsThatHaveACommand()
-	{
-		var settings = SettingsTestSupport.NewSettings(_client, _store, _commands, _presenter);
-		await settings.InitializeAsync();
-		Assert.True(settings.ImportOffered);
-		_presenter.Answer = dialog =>
-		{
-			dialog.AcceptCommand.Execute(null);
-			return Task.CompletedTask;
-		};
-		_client.SettingsValues[RemoteProtocol.SettingsApi.AvaloniaUiSection] = AvaloniaValues();
-
-		await settings.ImportFromAvaloniaAsync();
-
-		var appearance = _store.Get<AppearanceSettings>();
-		Assert.Equal(ClientTheme.Dark, appearance.Theme);
-		Assert.Equal(new double[] { 14, 15, 16, 17 }, new[] { appearance.AssistantFontSize, appearance.AssistantMarkdownFontSize, appearance.UserFontSize, appearance.InputFontSize });
-		var saver = _store.Get<ScreensaverSettings>();
-		Assert.Equal((@"D:\Pics", 300, 7), (saver.Directory, saver.TimeoutSeconds, saver.SlideshowIntervalSeconds));
-		var gestures = _store.Get<KeyBindingSettings>().Gestures;
-		Assert.Equal("Ctrl+Shift+D", gestures[Constants.TreeCommands.AddDirectory]);
-		Assert.DoesNotContain(Constants.Settings.OpenCommandId, gestures.Keys);   // Cmd+, became Ctrl+, which is the default: no entry needed
-		Assert.True(_store.Get<AvaloniaImportSettings>().Done);
-		Assert.False(settings.ImportOffered);
-		Assert.Contains("Send", settings.StatusText);   // the bindings that have no command here are named, not silently dropped
-		Assert.Contains("ImportSessions", settings.StatusText);
-		// The editors show what was imported.
-		Assert.Equal(ClientTheme.Dark, settings.Appearance.Theme);
-		Assert.Equal("300", settings.Screensaver.TimeoutText);
-		Assert.Equal("Ctrl+Shift+D", settings.Keyboard.Rows.Single(r => r.CommandId == Constants.TreeCommands.AddDirectory).Text);
-	}
-
-	[Fact]
-	public async Task Import_NeedsAConfirmation_AndTouchesNothingWithout()
-	{
-		var settings = SettingsTestSupport.NewSettings(_client, _store, _commands, _presenter);
-		_client.SettingsValues[RemoteProtocol.SettingsApi.AvaloniaUiSection] = AvaloniaValues();
-
-		await settings.ImportFromAvaloniaAsync();   // the fake presenter cancels
-
-		Assert.Equal(ClientTheme.System, _store.Get<AppearanceSettings>().Theme);
-		Assert.False(_store.Get<AvaloniaImportSettings>().Done);
-	}
-
-	[Fact]
-	public async Task Import_OutOfRangeFontSizes_KeepTheDefaults_AndAnUnknownThemeFollowsWindows()
-	{
-		var importer = new AvaloniaImporter(_store, _commands);
-
-		importer.Apply(AvaloniaValues("Solarized") with { AssistantFontSize = 2, UserFontSize = 500 });
-
-		var appearance = _store.Get<AppearanceSettings>();
-		Assert.Equal(ClientTheme.System, appearance.Theme);
-		Assert.Equal(Constants.Defaults.FontSize, appearance.AssistantFontSize);
-		Assert.Equal(Constants.Defaults.FontSize, appearance.UserFontSize);
-		Assert.Equal(15, appearance.AssistantMarkdownFontSize);
-		await Task.CompletedTask;
-	}
-
-	[Fact]
-	public async Task Import_ADaemonThatRefusesTheSection_ShowsTheError()
-	{
-		var settings = SettingsTestSupport.NewSettings(_client, _store, _commands, _presenter);   // no scripted avalonia-ui values: the fake throws
-
-		await settings.ImportFromAvaloniaAsync();
-
-		Assert.StartsWith("Import failed", settings.ErrorText);
-		Assert.False(_store.Get<AvaloniaImportSettings>().Done);
-	}
-
-	[Fact]
-	public async Task Import_IsNotOffered_OnceItWasDone()
-	{
-		_store.Update<AvaloniaImportSettings>(m => m.Done = true);
-		var settings = SettingsTestSupport.NewSettings(_client, _store, _commands, _presenter);
-
-		await settings.InitializeAsync();
-
-		Assert.False(settings.ImportOffered);
 	}
 
 	[Fact]
