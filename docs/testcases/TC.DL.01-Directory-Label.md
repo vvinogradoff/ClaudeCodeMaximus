@@ -2,7 +2,7 @@
 
 Related requirement: [FR.1.3](/docs/requirements.md). Related use case: [UC.DL.01](/docs/usecases/UC.DL.01-Directory-Label.md).
 
-The rule is pure string logic, so the unit tests need no filesystem. Avalonia ViewModels are not unit-testable (test project references Core only); the tree itself is verified manually.
+The rule is pure string logic, so the unit tests need no filesystem. The tree itself (a WPF view) is verified manually.
 
 ## Integration tests (xUnit, `TessynDesktop.Tests`)
 

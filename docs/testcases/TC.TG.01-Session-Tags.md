@@ -2,7 +2,7 @@
 
 Related requirements: FR.24.1–FR.24.14 in [requirements.md](/docs/requirements.md). Related use cases: [UC.TG.01](/docs/usecases/UC.TG.01-Session-Tags.md).
 
-**Legend.** AUTOMATED = a Core integration test in `code/TessynDesktop.Tests` (xUnit); the intended test class is named in each case. MANUAL = a UI test in Avalonia. File-based tests use a temp-dir root passed through the constructor. The server is built the way `AgentMcpServerNotifyUserTests` builds it, with a fake session-file service that records `AppendMessage(…, Constants.SessionFile.RoleSystem)` calls. Exact strings below are the expected results; assert them verbatim.
+**Legend.** AUTOMATED = a Core integration test in `code/TessynDesktop.Tests` (xUnit); the intended test class is named in each case. MANUAL = a manual UI test in the WPF client (the steps were written for the previous desktop client; where WPF differs in a detail, the requirement wins and the step is corrected at the first run). File-based tests use a temp-dir root passed through the constructor. The server is built the way `AgentMcpServerNotifyUserTests` builds it, with a fake session-file service that records `AppendMessage(…, Constants.SessionFile.RoleSystem)` calls. Exact strings below are the expected results; assert them verbatim.
 
 ## Summary
 
@@ -26,9 +26,9 @@ Related requirements: FR.24.1–FR.24.14 in [requirements.md](/docs/requirements
 | TC.TG.16 | Guidance text, suffix and placement | AUTOMATED | UC.TG.09 | FR.24.6 |
 | TC.TG.17 | `SessionTagUrlPolicy` | AUTOMATED | UC.TG.06 | FR.24.7 |
 | TC.TG.18 | `InProcDaemonClient` | AUTOMATED | UC.TG.08 | FR.24.8 |
-| TC.TG.19 | Tag row placement and visibility | MANUAL | UC.TG.07 | FR.24.7 |
-| TC.TG.20 | Wrapping with many tags | MANUAL | UC.TG.07 | FR.24.7 |
-| TC.TG.21 | Chip look and tooltip | MANUAL | UC.TG.06, UC.TG.07 | FR.24.7 |
+| TC.TG.19 | **WITHDRAWN 2026-11-17.** Tag row placement in the previous desktop header; WPF: FR.24.16 and TC.TA.01–09 | WITHDRAWN | UC.TG.07 | FR.24.7 |
+| TC.TG.20 | **WITHDRAWN 2026-11-17.** Wrapping of all chips in the previous desktop header; WPF shows one line and expands (FR.24.16, TC.TA.01–05) | WITHDRAWN | UC.TG.07 | FR.24.7 |
+| TC.TG.21 | **WITHDRAWN 2026-11-17.** Chip look of the previous desktop client (radius, font 11); WPF chip size is FR.24.18, TC.TA.11–16 | WITHDRAWN | UC.TG.06, UC.TG.07 | FR.24.7 |
 | TC.TG.22 | Click opens the browser | MANUAL | UC.TG.06 | FR.24.7 |
 | TC.TG.23 | Chip order | MANUAL | UC.TG.07 | FR.24.1, FR.24.7 |
 | TC.TG.24 | Live refresh on `tag_session` | MANUAL | UC.TG.08 | FR.24.7, FR.24.8 |
@@ -232,30 +232,21 @@ The entry is appended with role `Constants.SessionFile.RoleSystem`, ASCII.
 
 ---
 
-## Manual UI tests (Avalonia)
+## Manual UI tests (WPF)
 
 Common set-up: a top-level session with agent tools enabled. Create tags by asking the session "tag this session with <urls> using tag_session", or by calling the tool from an MCP test client. Name-derived tags need `HSE → hardstop` learned (tag any `https://linear.app/hardstop/issue/HSE-…` URL once).
 
-### TC.TG.19 — Tag row placement and visibility — FR.24.7 (UC.TG.07)
+### TC.TG.19 — WITHDRAWN 2026-11-17 — FR.24.7 (UC.TG.07)
 
-1. Open a session with no tags. **Expected:** the header shows the DockPanel row (name and location, search box, Session/Focus switch, MD, JSONL) and **no** extra row or empty space below it.
-2. Have the session tag `https://linear.app/hardstop/issue/HSE-230`. **Expected:** a row appears directly **below** the header row, inside the same bordered header, so the header's bottom rule is under the chips; the chip reads `HSE-230`.
-3. Remove the tag (`remove: ["HSE-230"]`). **Expected:** the row disappears and the space is reclaimed.
-4. Open a different session. **Expected:** its own tags only.
+Dropped with the previous desktop client's header layout. WPF: FR.24.16, TC.TA.01–09.
 
-### TC.TG.20 — Wrapping — FR.24.7 (UC.TG.07)
+### TC.TG.20 — WITHDRAWN 2026-11-17 — FR.24.7 (UC.TG.07)
 
-1. Tag 12 PRs/issues/repos in one session. **Expected:** the chips flow left to right and wrap onto further lines; the header grows taller; nothing is clipped or overlaps the output area.
-2. Narrow the window. **Expected:** chips re-wrap.
-3. Remove all but two. **Expected:** the row shrinks to one line.
+Dropped: it showed every chip wrapped in the header. WPF shows one line and expands on click (FR.24.16, TC.TA.01–05).
 
-### TC.TG.21 — Chip look and tooltip — FR.24.7 (UC.TG.06, UC.TG.07)
+### TC.TG.21 — WITHDRAWN 2026-11-17 — FR.24.7 (UC.TG.06, UC.TG.07)
 
-1. Inspect a chip. **Expected:** rounded (radius ≈ 9), 1 px border in the theme's low foreground colour, padding ≈ 8,1, font size 11, neutral colours; check dark and light theme.
-2. Hover a chip. **Expected:** hand cursor; a subtle hover highlight.
-3. Hover a declared tag. **Expected:** tooltip line 1 is the URL; line 2 is `Tagged by the session HH:mm` for a tag added today or `Tagged by the session yyyy-MM-dd HH:mm` for an older one (local time).
-4. Hover a name-derived tag. **Expected:** line 1 the URL, line 2 `From the session name`.
-5. Labels: Linear `HSE-230`; PR `windows-app PR #215`; repo `windows-app`.
+Dropped: it fixed the chip look of the previous desktop client (radius ≈ 9, font size 11). WPF chip size is FR.24.18 (TC.TA.11–16). The tooltip wording of steps 3–5 (declared tag: URL and `Tagged by the session …`; name-derived tag: `From the session name`; labels `HSE-230`, `windows-app PR #215`, `windows-app`) is carried over to the WPF manual list (todo).
 
 ### TC.TG.22 — Click opens the browser — FR.24.7 (UC.TG.06)
 

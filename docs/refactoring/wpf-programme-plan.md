@@ -1,5 +1,7 @@
 # Tessyn WPF Programme — Plan
 
+> **Sunset done 2026-11-17.** WPF is the only desktop client (Phase 3.4 happened). The former desktop UI is retired; the project `code/TessynDesktop` stays **only as the daemon host** (`TessynDesktop.exe --background`), which WPF launches (FR.32.5). So P1 is done, the P12 UI freeze is moot, and the first half of 4.5 (delete the former UI) is replaced by this host role until the daemon moves out of process. The rest of this plan is kept as the record of the programme; where it names the former UI, read it as history. Requirements, use cases and test cases were updated in the branch `docs/sunset-avalonia`; the list of dropped items is in `docs/requirements/Out-of-Scope.md`.
+
 > **Draft for Architect review, 2026-11-04.** Working document, not committed. Author: Developer/Claude.
 > Inputs: the seven intel reports in `.wpf-intel/` (2026-11-03, untracked scratch) and the Architect's
 > decisions of 2026-11-03/04.

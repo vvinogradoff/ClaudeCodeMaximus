@@ -1,5 +1,7 @@
 # ClaudeMaximus — General Refactoring Plan (UI / Daemon Split)
 
+> **Sunset note (2026-11-17).** Historical plan. The former desktop UI named below is retired; WPF is the only desktop client and `code/TessynDesktop` remains only as the daemon host (`TessynDesktop.exe --background`). See `wpf-programme-plan.md`.
+
 > Working document (not authoritative, not committed). Author: Developer/Claude.
 > Companion to `structure-notes.md`. Snapshot: 2026-07-18.
 

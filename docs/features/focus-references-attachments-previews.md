@@ -105,7 +105,7 @@
   - An attach button in the input.
   - Inline media previews and local-file chips in the transcript.
 - **WPF:** the same features in the WPF Focus view and transcript; the WebView2 transcript makes previews cheap.
-- **Avalonia:** nothing new. Decision A9: new desktop UI goes into WPF only, and Avalonia is being sunset.
+- **Desktop client:** WPF only (decision A9). The previous desktop client is retired (2026-11-17).
 
 ## 6. Native WPF look (separate task)
 

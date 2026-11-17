@@ -2,7 +2,7 @@
 
 Related requirements: FR.23.20–FR.23.23. Use cases: [UC.FC.01](/docs/usecases/UC.FC.01-Focus-Closed-and-Send-Answers.md).
 
-**Legend.** AUTOMATED = view-model / STA view test; E2E = WPF end-to-end (NR.6, class `WpfFocusE2ETests`); MANUAL = Avalonia (no UI tests).
+**Legend.** AUTOMATED = view-model / STA view test; E2E = WPF end-to-end (NR.6, class `WpfFocusE2ETests`); MANUAL = checked by hand in the WPF client.
 
 | TC | Title | Kind | UC | FR |
 |---|---|---|---|---|
@@ -15,7 +15,7 @@ Related requirements: FR.23.20–FR.23.23. Use cases: [UC.FC.01](/docs/usecases/
 | TC.FC.07 | Send answers is in the header, hidden in Session, not inside the Focus panel | AUTOMATED | UC.FC.03 | FR.23.21 |
 | TC.FC.08 | Ctrl+Enter sends; empty boxes: nothing and no newline; Enter, Shift+Enter, Ctrl+Shift+Enter do not send | AUTOMATED | UC.FC.03 | FR.23.22 |
 | TC.FC.09 | The header button marks the item Answered in the ledger (UIA name "Send answers") | E2E | UC.FC.03 | FR.23.21, FR.23.15 |
-| TC.FC.10 | Avalonia: button left of the search box; Ctrl+Enter in Decisions cards; narrow window truncates the title first | MANUAL | UC.FC.03 | FR.23.21, FR.23.22 |
+| TC.FC.10 | **WITHDRAWN 2026-11-17.** Placement of the button left of the search box in the previous desktop client. In WPF the button is left of the Session/Focus switch (FR.23.21); the Ctrl+Enter-in-Decisions and narrow-window checks move to the WPF manual list (todo) | WITHDRAWN | UC.FC.03 | FR.23.21, FR.23.22 |
 
 ## FR → TC coverage
 | FR | Test cases |

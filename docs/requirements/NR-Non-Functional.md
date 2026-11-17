@@ -2,7 +2,7 @@
 
 ## Non-Functional Requirements
 
-**NR.1 — Platform:** The desktop client is a Windows application (WPF). The daemon logic (sessions, turns, orchestration, remote API) stays free of UI types and becomes cross-platform when the daemon moves out of the desktop process (Phase 4 of the WPF programme, `docs/refactoring/wpf-programme-plan.md`). Platform-specific code (path resolution, process launching, app data directory) is isolated behind interfaces. New desktop UI is built in WPF only (decision A9, 2026-11-15); the Avalonia client receives no new UI features and is removed once WPF reaches parity.
+**NR.1 — Platform:** The desktop client is a Windows application (WPF). The daemon logic (sessions, turns, orchestration, remote API) stays free of UI types and becomes cross-platform when the daemon moves out of the desktop process (Phase 4 of the WPF programme, `docs/refactoring/wpf-programme-plan.md`). Platform-specific code (path resolution, process launching, app data directory) is isolated behind interfaces. The desktop UI is WPF only (decision A9, 2026-11-15; the previous desktop client was retired on 2026-11-17). `code/TessynDesktop` remains only as the daemon host (`TessynDesktop.exe --background`).
 
 **NR.2 — Performance:** The budgets below are measured with the Phase 0 benchmark (`docs/refactoring/wpf-programme-plan.md` section 6). The session tree holds about 2,700 sessions today.
 - First paint after a session switch: cold at most 100 ms (small sessions), 400 ms (1,600 entries) and 600 ms (5,000 entries); warm at most 150 ms for every size.
@@ -29,4 +29,4 @@
 - **Gotchas.** In a non-interactive session UI Automation cannot see WebView2 page content (drive it over CDP, `CdpPage`). `IsWindowVisible` is always false (test `WS_VISIBLE`). WebView2 ignores the DevTools-port argument in an **elevated** process (never run CDP tests elevated with `-AsCurrentUser`). A test that simulates a host reply must not also forward the request to the real host. Every UI Automation name is **unique per window** ("Settings" is the input area's toggle; the title-bar button is "Open Settings").
 - E2E windows must not take the foreground repeatedly (guard `a1d85c4`).
 
-**NR.7 — Stretching rule for panels.** On any panel the **text area stretches** to take the free space and **buttons keep their places and sizes**. A long text must never push a button out of view. Avalonia is the visual reference for WPF. (The Architect's standing UI rule; applied in FR.12.31 and FR.1.25.)
+**NR.7 — Stretching rule for panels.** On any panel the **text area stretches** to take the free space and **buttons keep their places and sizes**. A long text must never push a button out of view. (The Architect's standing UI rule; applied in FR.12.31 and FR.1.25.)

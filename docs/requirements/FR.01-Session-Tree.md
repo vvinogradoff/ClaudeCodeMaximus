@@ -93,7 +93,7 @@ The selected tab isn't persisted: the app starts on Tree. Picking a session in t
 
 ## Amendments and additions (batch 2026-11-17)
 
-> Clients: the rules are client-neutral unless a line says WPF. Avalonia is the visual reference (decision of the Architect); where WPF differed, WPF was changed.
+> Clients: the rules are for the WPF desktop client and are client-neutral unless a line says otherwise.
 
 New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Directory and Group nodes).
 

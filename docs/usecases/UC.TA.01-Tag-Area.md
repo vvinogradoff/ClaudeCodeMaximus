@@ -3,7 +3,7 @@
 Related requirements: FR.24.16, FR.24.18 (see `docs/requirements/`), FR.24.7. Test cases: [TC.TA.01](/docs/testcases/TC.TA.01-Tag-Area.md).
 
 ## Actors
-- **User**. **Tessyn** (WPF and Avalonia clients).
+- **User**. **Tessyn** (WPF client).
 
 ## Preconditions (common)
 - A session with more chips than fit one line; a second session with a few tags.
@@ -24,6 +24,6 @@ Related requirements: FR.24.16, FR.24.18 (see `docs/requirements/`), FR.24.7. Te
 **Covers:** FR.24.16 (8).
 
 ## UC.TA.04 — Change the tag cloud font size
-**Main flow:** 1. The User opens Settings › Appearance › **Tag cloud** (WPF) or the Avalonia Settings › Appearance tab, **Tag cloud font size**, and enters a number from 8 to 40. 2. WPF: every visible chip, in the tag area and the Tags tab, changes size at once. Avalonia: the size changes on Save. 3. The collapsed area is still exactly one chip line high.
-**Alternative flows:** **A1** — The area is expanded: it keeps up to 10 lines of the new chip height. **A2** — Restart: the size is kept. **A3** — A number outside 8–40, or text, is refused and nothing changes. **A4** — The Avalonia-to-WPF import does not change the WPF value.
+**Main flow:** 1. The User opens Settings › Appearance › **Tag cloud** and enters a number from 8 to 40. 2. Every visible chip, in the tag area and the Tags tab, changes size at once. 3. The collapsed area is still exactly one chip line high.
+**Alternative flows:** **A1** — The area is expanded: it keeps up to 10 lines of the new chip height. **A2** — Restart: the size is kept. **A3** — A number outside 8–40, or text, is refused and nothing changes. **A4** — The one-time settings import (FR.32.4) does not change the WPF value.
 **Covers:** FR.24.18.

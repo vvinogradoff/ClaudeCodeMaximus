@@ -2,6 +2,8 @@
 
 ### FR.8 — Self-Update on Exit
 
+> **Sunset note (2026-11-17).** FR.8.1–8.5 described the self-update of the earlier desktop client. The WPF client does the same job and its rules are **FR.32.3** (run folder `[Publish-WPF]`, hidden copy script, the daemon host's `host\` folder kept, results logged at the next start). Where FR.8.2–8.4 name the `bin/Debug/net9.0/` output, `TessynDesktop.dll` and the title-bar warning, read the WPF equivalent: the newest build under `SourceCodesLocation`, and no update when WPF runs from a build output. The retry schedule of FR.8.4 and the empty-`SourceCodesLocation` rule of FR.8.5 stand.
+
 **FR.8.1 — Source codes location:** The application stores a `SourceCodesLocation` setting (the solution root directory) in `appsettings.json`. On startup, if the setting is empty, the app auto-detects it by walking up the directory tree from its base directory looking for a `*.sln` file. If found, the path is persisted. The setting is also editable in the Settings window.
 
 **FR.8.2 — Build output detection:** On startup, the app checks whether it is running from the project's build output directory (`bin/Debug/net9.0/` under the source location). If so, an internal `IsRunningFromBuildOutput` flag is set and the self-update is disabled for that session. A warning icon (⚠) is displayed in the title bar with a tooltip explaining that the app will not be updated on restart.

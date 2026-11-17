@@ -213,7 +213,7 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 - **Implemented on the web (2026-11-15, merge `b59b14f`, live since the A19 deploy; reports `.wpf-work/290-web-refs-ui.md` and `290b-web-refs-fixes.md`).** Focus cards list their refs. An entry ref loads `session.entries { aroundEntryId, limit: 40 }`, scrolls to the entry and marks the quote (the CSS Custom Highlight API for rendered entries, exact offsets for user entries). The window is anchored: live appends are not fetched, "Load later" and "Jump to latest" appear, and sending from an anchored window reloads the tail first. Back is a stack of 40 (across sessions) with a "Back to <session>" bar. A file ref opens the preview sheet (a dialog with a focus trap; `file.read` chunks with progress; limits text and markdown 2 MB, image 30 MB, video 60 MB, PDF 50 MB; markdown sanitised, svg and html only as text; the blob type follows the file kind and the daemon's mime; a PDF needs a click to load). A url ref is a link (`rel=noopener noreferrer`).
 - **Web contract.** `file.read`, `file.preview`, `session.entries` with `aroundEntryId` and `attachment.list` are open on the relay; the web contract is 24 methods (`docs/refactoring/tdcp-spec.md` section 9.8). The FR.25 text is not amended by this change.
 - **Attachment handles** (FR.31.5) are built.
-- **Not built yet.** In WPF: the Closed history and the collapsed Decisions expander of FR.23.14 (Decided items show in the single list, styled grey), a cross-session Focus list, a Settings screen for the media allowlist, The WPF attach UI (FR.31.2) is built. The Avalonia client gets none of this (decision A9).
+- **Not built yet.** In WPF: the Closed history and the collapsed Decisions expander of FR.23.14 (Decided items show in the single list, styled grey), a cross-session Focus list, a Settings screen for the media allowlist, The WPF attach UI (FR.31.2) is built.
 
 **FR.23.19 — Reply drafts (kept across restarts):** The unsent text in a Focus card's reply box is a draft, kept like the session's composer draft, so closing the app does not lose it.
 - **Key.** One draft per (session, item id). The item id is the Attention Item id (FR.23.2, e.g. `a12`, compared case-insensitively). A session's composer draft and its reply drafts are independent; none overwrites another.
@@ -245,7 +245,7 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 | Existing | Amended by | Change |
 |---|---|---|
 | **FR.23.14** item 1 | FR.23.21 | **"Send answers (n)" moves out of the Focus list into the session header.** The list now starts with Open items; items renumber (Open 1, Decisions 2, Closed 3, Empty state 4). |
-| FR.23.12 Placement | FR.23.21 | The Avalonia header order becomes `[Send answers (n)] [Search box] [Session][Focus <badge>] [MD] [JSONL]`, with Send answers shown only in Focus. WPF: left of the Session/Focus switch (its find bar is a separate row). |
+| FR.23.12 Placement | FR.23.21 | Send answers is shown only in Focus; in the WPF header it is left of the Session/Focus switch (its find bar is a separate row). |
 | **FR.23.15** | FR.23.22 | Adds Ctrl+Enter. |
 | FR.23.14 items 3–5, "Not built yet" status line | FR.23.23 | The WPF Closed history, the collapsed Decisions expander and the empty state are **built** (WPF, 2026-11-17); the "Not built yet" sentence for them is deleted. Still not built in WPF: a cross-session Focus list, the media-allowlist Settings screen. |
 | FR.2.3.2 | FR.23.20 | Text selectability reaches the Focus cards. |
@@ -254,7 +254,7 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 
 **FR.23.20 — Selectable Focus text, open and closed.** On every Focus card, **open, Decided and closed**, all rendered text is **selectable and copyable**: the id, the title, the body, the outcome line (`Answered: …`), the options' text and the reply box. A press that ends a selection does not trigger a card action. On a closed card the click that **expands the body** is on the header row; a text drag inside the body never collapses it.
 
-**FR.23.21 — "Send answers (n)" in the header.** The button lives in the **session header**, visible **only while Focus is selected** (hidden in Session), always visible (it never scrolls with the list). It is enabled when n ≥ 1 reply boxes hold text and the session can send (the rule of the main Send button). Avalonia: immediately **left of the search box**. WPF: left of the Session/Focus switch. Its UI Automation name stays **"Send answers"**.
+**FR.23.21 — "Send answers (n)" in the header.** The button lives in the **session header**, visible **only while Focus is selected** (hidden in Session), always visible (it never scrolls with the list). It is enabled when n ≥ 1 reply boxes hold text and the session can send (the rule of the main Send button). WPF: left of the Session/Focus switch. Its UI Automation name stays **"Send answers"**.
 
 **FR.23.22 — Ctrl+Enter sends the answers.** **Ctrl+Enter in any card's reply box** (including Decisions cards) does exactly what the button does: the same command, the same mark-first order, the same enabling rule (nothing happens, and no newline is inserted, when n = 0). **Plain Enter inserts a newline**; Shift, Alt and Ctrl+Shift chords are not shortcuts.
 

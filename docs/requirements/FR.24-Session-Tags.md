@@ -242,7 +242,7 @@ An unknown `scope` is a tool error (the same strict parsing as `list_sessions`).
 
 ### New requirements
 
-**FR.24.16 — Tag area: collapsed by default, expand on click (WPF and Avalonia).**
+**FR.24.16 — Tag area: collapsed by default, expand on click (WPF).**
 1. **Collapsed by default.** The tag area of a session shows **one line** of chips; overflow is hidden without a scrollbar, with a `+N` hint at the right end while chips are hidden (the hint never covers a chip).
 2. **Expand.** A **click on empty space** of the tag area (or on the `+N` hint) **expands** it to up to **10 lines**, then it scrolls vertically. A click on a chip keeps its meaning (opens its link at once).
 3. **Collapse.** A **double-click on empty space** of the area collapses it, **only on empty space**: a double-click on a chip (it opens its link) or on the area's scrollbar does not collapse it, and the scrollbar press is not swallowed.
@@ -252,14 +252,14 @@ An unknown `scope` is a tool error (the same strict parsing as `list_sessions`).
 7. With no tags the area is empty and expanding does nothing.
 8. The area exposes an expand/collapse action for accessibility (WPF: UI Automation ExpandCollapse, name "Session tags").
 
-Applies to **both desktop clients, WPF and Avalonia**. **Tessyn Web is not covered** by FR.24.16 or FR.24.18; its tag row keeps its own behaviour (FR.25).
+Applies to the **WPF desktop client**. **Tessyn Web is not covered** by FR.24.16 or FR.24.18; its tag row keeps its own behaviour (FR.25).
 
 **FR.24.17 — Tags tab results.** The tab finds tags: the search rules, the scope and the empty text are FR.1.24. With the real index (hundreds of chips) the chips wrap and scroll; chips and the session list share the height as FR.1.23 says.
 
-**FR.24.18 — Tag cloud font size (WPF and Avalonia).** A setting, **Tag cloud font size**, sets the text size of the tag chips. It exists in **both desktop clients** (not in Tessyn Web): WPF under Settings › **Appearance**, Avalonia in its settings window.
-- **Where.** WPF: Settings › **Appearance** › **Tag cloud** (a number box). Avalonia: its Settings window, **Appearance** tab, **Tag cloud font size** (a number box).
+**FR.24.18 — Tag cloud font size (WPF).** A setting, **Tag cloud font size**, sets the text size of the tag chips. It exists in the **WPF client** (not in Tessyn Web), under Settings › **Appearance**.
+- **Where.** Settings › **Appearance** › **Tag cloud** (a number box).
 - **The mini line follows the chip size.** The collapsed one-line area (FR.24.16 item 1) is exactly one chip line high at the chosen size, so a larger size never clips a chip and a smaller one leaves no empty band. The 10-line limit of the expanded area and the `+N` hint follow the same chip height.
-- **Range and defaults.** The value is a whole number of **8 to 40**. A value outside the range, or text that is not a number, is refused and nothing is stored. The default is **each client's previous chip size**: **WPF 14, Avalonia 11**.
-- **When it applies.** WPF: **live**, every visible chip, in the tag area (FR.24.16) and in the Tags tab chips (FR.24.11), and the `+N` hint, restyles at once, with no restart and no reopening of the session. Avalonia: **on Save** of the Settings window.
-- The value is a client setting (not per session, not in the daemon); each client keeps its own.
-- **Not imported.** The Avalonia-to-WPF settings import (FR.32.4) does **not** carry it; WPF keeps its own value (default 14).
+- **Range and defaults.** The value is a whole number of **8 to 40**. A value outside the range, or text that is not a number, is refused and nothing is stored. The default is **14**. (The second default, 11 for the earlier desktop client, is **withdrawn** with that client.)
+- **When it applies.** **Live**: every visible chip, in the tag area (FR.24.16) and in the Tags tab chips (FR.24.11), and the `+N` hint, restyles at once, with no restart and no reopening of the session.
+- The value is a client setting (not per session, not in the daemon).
+- **Not imported.** The one-time settings import of the previous client (FR.32.4) does **not** carry it; WPF keeps its own value (default 14).

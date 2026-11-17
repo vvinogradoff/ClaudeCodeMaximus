@@ -3,7 +3,7 @@
 Related requirements: FR.32.1–FR.32.8 (see `docs/requirements/`). Test cases: [TC.HS.01](/docs/testcases/TC.HS.01-Client-Hosting.md).
 
 ## Actors
-- **User** (the Architect). **WPF client**, **Avalonia app**, **Background host**.
+- **User** (the Architect). **WPF client**, **Background host** (the daemon host, `TessynDesktop.exe --background`).
 
 ---
 
@@ -12,13 +12,13 @@ Related requirements: FR.32.1–FR.32.8 (see `docs/requirements/`). Test cases: 
 **Alternative flows:** **A1** — The host does not publish in 45 s: the banner explains. **A2** — A daemon exists: no host is started.
 **Covers:** FR.32.1, FR.32.5, FR.32.8.
 
-## UC.HS.02 — Avalonia first, WPF second
-**Main flow:** the User starts Avalonia (it hosts the daemon), then WPF; WPF attaches, starts no host, shows no stale banner.
-**Covers:** FR.32.6, FR.32.7.
+## UC.HS.02 — WITHDRAWN 2026-11-17 (dropped with the previous desktop client)
+Was: the previous client hosting the daemon in its window while WPF attached. The part that still holds is in UC.HS.01 A2: when a daemon exists, WPF attaches and starts no host.
+**Covers:** FR.32.6 (withdrawn part).
 
-## UC.HS.03 — WPF first, Avalonia second
-**Main flow:** 1. Setting off: WPF shows "Waiting for Tessyn to start…". 2. The User starts Avalonia; WPF connects in seconds. 3. With a background host already running, Avalonia asks it to exit, waits up to 40 s and starts; WPF reconnects and registers its sound again.
-**Alternative flows:** **A1** — A second visible Avalonia window is refused. **A2** — The host does not leave: the message names the tray Exit.
+## UC.HS.03 — WPF first, daemon later
+**Main flow:** 1. Setting off: WPF shows "Waiting for Tessyn to start…". 2. The User starts a host by hand (`TessynDesktop.exe --background`); WPF connects in seconds. 3. After a daemon restart WPF reconnects by itself and registers its sound again.
+**Alternative flows:** **A1** — A second host exits at once (FR.32.2). **(Withdrawn 2026-11-17: the former A1 "a second visible window is refused", A2 "the host does not leave", and the takeover of a background host by a visible window.)**
 **Covers:** FR.32.5, FR.32.6, FR.32.2.
 
 ## UC.HS.04 — Update and restart
@@ -26,8 +26,8 @@ Related requirements: FR.32.1–FR.32.8 (see `docs/requirements/`). Test cases: 
 **Alternative flows:** **A1** — A failed copy is logged at the next start.
 **Covers:** FR.32.3, FR.32.7.
 
-## UC.HS.05 — Import Avalonia settings
-**Main flow:** on the first start against a daemon serving `avalonia-ui`, a dialog offers Import; the answer is remembered.
+## UC.HS.05 — Import the previous client's settings
+**Main flow:** on the first start against a daemon serving the previous client's settings section, a dialog offers Import; the answer is remembered.
 **Covers:** FR.32.4.
 
 ## UC.HS.06 — Exit the background host

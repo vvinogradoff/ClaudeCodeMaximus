@@ -44,7 +44,7 @@ Old session files without metadata are parsed correctly (backward-compatible). T
 
 ## Amendments and additions (batch 2026-11-17)
 
-> Rows are described for the **WPF transcript** (a WebView2 page); Avalonia already looks like this and is the visual reference.
+> Rows are described for the **WPF transcript** (a WebView2 page).
 
 New IDs start at **FR.2.6**.
 
@@ -72,9 +72,9 @@ Wire: `SessionEntryDto.source` (`tdcp-spec` additions §A1).
 
 **FR.2.7 — Assistant rows.** No border, no background: the text sits on the view background. No role word. The time (`HH:mm:ss`) is in a fixed 48 px column at the **right**, bottom-aligned, small and faint. Model, effort and profile (FR.2.3.5) are one small italic line above the text.
 
-**FR.2.8 — System rows.** System rows (tool calls, status lines) use the assistant layout (FR.2.7): no role word, the time in the right column. Their background is the palette key **`SystemRow`** (FR.9.9), default **pale blue**: light `#BFE0F7`, dark `#1A3A50` (the Avalonia values), editable in the Colours tab per theme.
+**FR.2.8 — System rows.** System rows (tool calls, status lines) use the assistant layout (FR.2.7): no role word, the time in the right column. Their background is the palette key **`SystemRow`** (FR.9.9), default **pale blue**: light `#BFE0F7`, dark `#1A3A50`, editable in the Colours tab per theme.
 
-**FR.2.9 — User rows.** A user row has **no role word** (no "USER", no "You"). The date (`yyyy-MM-dd`) and the time (`HH:mm`) are at the **left, on two lines**, the date above the time, as in Avalonia. The profile name (FR.2.3.4) is on the right of the row. The bubble colours are the palette keys of FR.9.2; automated inputs are teal (FR.2.6).
+**FR.2.9 — User rows.** A user row has **no role word** (no "USER", no "You"). The date (`yyyy-MM-dd`) and the time (`HH:mm`) are at the **left, on two lines**, the date above the time. The profile name (FR.2.3.4) is on the right of the row. The bubble colours are the palette keys of FR.9.2; automated inputs are teal (FR.2.6).
 
 **FR.2.10 — Selectable text.** Every piece of rendered text in the transcript is selectable and copyable (FR.2.3.2), in every row type, in plain and markdown modes. A click that only ends a text selection never triggers the row's own click action (select an input, FR.2.6; open a link).
 
