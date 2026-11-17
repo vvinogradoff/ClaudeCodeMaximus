@@ -158,9 +158,14 @@ public sealed class WpfTranscriptScrollE2ETests : IDisposable
 			Assert.True(a[5]!.GetValue<double>() >= -0.5, "the time is not to the right of the text: " + a[5]);
 			Assert.True(a[6]!.GetValue<double>() > a[7]!.GetValue<double>() * 0.8, "the time is not at the right edge: " + a[6] + " of " + a[7]);
 
-			var u = (await page.EvalAsync(@"(() => { const e = document.querySelector('.e.U'); const c = e.querySelector('.c'), cs = getComputedStyle(c); return [cs.backgroundColor, e.querySelector('.h').textContent.split(' ')[0]]; })()"))!.AsArray();
+			var u = (await page.EvalAsync(@"(() => { const e = document.querySelector('.e.U'); const c = e.querySelector('.c'), cs = getComputedStyle(c), ts = e.querySelector('.ts'), d = ts.querySelector('.d'), tm = ts.querySelector('.tm');
+				return [cs.backgroundColor, e.textContent.includes('USER'), d.textContent, tm.textContent, ts.getBoundingClientRect().right <= c.getBoundingClientRect().left + 0.5, tm.getBoundingClientRect().top >= d.getBoundingClientRect().bottom - 0.5]; })()"))!.AsArray();
 			Assert.NotEqual("rgba(0, 0, 0, 0)", u[0]!.GetValue<string>());
-			Assert.Equal("USER", u[1]!.GetValue<string>());
+			Assert.False(u[1]!.GetValue<bool>(), "the word USER is printed");
+			Assert.Matches(@"^\d{4}-\d\d-\d\d$", u[2]!.GetValue<string>());
+			Assert.Matches(@"^\d\d:\d\d$", u[3]!.GetValue<string>());
+			Assert.True(u[4]!.GetValue<bool>(), "the date and time are not left of the bubble");
+			Assert.True(u[5]!.GetValue<bool>(), "the time is not under the date");
 		}
 		finally
 		{
