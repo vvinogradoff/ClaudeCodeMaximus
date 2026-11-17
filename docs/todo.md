@@ -1046,10 +1046,12 @@ Requirements: FR.24 in `docs/requirements.md` (Architect request 2026-11-04). Ph
 - [DONE] D2.1 Resumability sweep off the UI thread, one directory listing per sweep
 - [DONE] D2.2 JSONL entry-count baseline computed off the UI thread (ISSUE.009/014 ordering preserved)
 - D1.x `diag_*` tools still authenticate through `SessionRegistry.FindModelByAgentToken`, which takes `SyncRoot`, so they block during a SyncRoot convoy; needs a lock-free token check
-- Collect 1–2 days of `MEM` / `SLOW-UI` / hang data, then file ISSUE.016 with the measured causes
-- D2.3 `SessionView` unsubscribes from VM events when detached (suspected transcript visual-tree leak per switch); confirm with `diag_heap` first
-- D2.4 Bounded session VM cache (LRU 5) with Dispose (WPF plan 0.4)
-- D2.5 Avalonia 11.3.9 → latest 11.3.x (ItemsControl leak fixes in 11.3.13); csproj change, needs the Architect's approval
+- [DONE] Collect `MEM` / `SLOW-UI` / hang data and file ISSUE.016 (measured causes; follow-up 2026-11-15)
+- [DONE] Startup compaction repair off the UI thread, one read per file (bf44890, ISSUE.016)
+- [DONE] Code index built lazily on the first `#` / `##` autocomplete (Architect chose option 1, cap unchanged; ISSUE.016)
+- [DONE] D2.3 (ruled out in ISSUE.016: the view already unsubscribes; the leak was on the VM side, fixed in 36b7286) `SessionView` unsubscribes from VM events when detached (suspected transcript visual-tree leak per switch); confirm with `diag_heap` first
+- [DONE] D2.4 (36b7286) Bounded session VM cache (LRU 5) with Dispose (WPF plan 0.4)
+- [DONE] D2.5 (db8913d, 11.3.23) Avalonia 11.3.9 → latest 11.3.x (ItemsControl leak fixes in 11.3.13); csproj change, needs the Architect's approval
 - Docs: FR section for diagnostics + settings keys (docs-first waived; document after the fact on request)
 
 ## Phase 39 — Tags tab and Recent-tab collapse (FR.1.15–FR.1.16, FR.24.11–FR.24.14)
@@ -1070,6 +1072,48 @@ Brief: `.tagsearch-work/00-brief.md` (Architect request 2026-11-11).
 - [DONE] UI: fix the re-click on a Recent row that doesn't select the session (FR.1.16)
 - [DONE] Manual UI pass TC.TG.37–47 and TC.RT.02–10 — the Architect confirmed in the running app on 2026-11-12 that the Tags tab and the Recent collapse work as expected (FR.1.16, FR.24.11–FR.24.13)
 - [ ] FR.24.14 Related tags (ticket ↔ PR): decide the route (a/b/c in FR.24.14) — NOT STARTED
+
+## Phase 40 — Web client (FR.25)
+
+Brief and plan: `.web-work/00-plan.md`, binding contract `.web-work/10-contract.md` (Architect request 2026-11-12). Code work happens in the worktree `Tessyn-web` (branch `web-client`). Docs: `docs/requirements.md` FR.25, `docs/usecases/UC.WEB.01-Web-Client.md`, `docs/testcases/TC.WEB.01-Web-Client.md`, `docs/refactoring/tdcp-spec.md` §8, `docs/features/web-client.md`.
+
+- [ ] Docs: FR.25 and amendments (FR.1.8, FR.1.17, FR.3.3, FR.11.6, FR.19.11, Out of Scope), glossary, UC.WEB.01–24, TC.WEB.01–105, tdcp-spec §8, operations guide — drafted 2026-11-12, **synced with the built system 2026-11-13** (DOC-SYNC: cookies and revocation, trusted device, body limits, healthz, CSP, service user and sandbox, queued, Default profile label, usage pending, compact outcomes, insert position rule, FR.25.40); awaiting Architect review (not committed)
+- [DONE] CORE-A foundation (FR.25.06, FR.25.07, FR.25.31–FR.25.34, FR.1.8, FR.1.17, FR.3.3)
+  - [DONE] `TdcpDispatcher` extracted from `TdcpServer`, remote-callable flag, `TdcpTransport`, `IRemoteRpcModule`, shared JSON options, `client.hello`
+  - [DONE] `IRemoteEventBus` (publish, coalesce) and `RemoteNotificationPublisher`, `ITreeVersionTracker`
+  - [DONE] Stable `NodeId` for Directory and Group nodes (FR.1.17)
+  - [DONE] Parser fix: only real headers end an entry (FR.3.3 amended); `JsonlWriteBackPlanner` tests unchanged and green
+  - [DONE] Reference-counted running flag, `TurnController` reports desktop turns (FR.1.8 amended) — the two `TurnController` calls are not unit-tested; see the manual desktop checks below
+  - [DONE] `ISessionActivityService`, `ISessionStateBuilder`, state DTOs
+  - [DONE] `SessionFileRewritten`, `ISessionEpochTracker`, `IDaemonClient.SessionSettingsChanged`
+  - [DONE] `Constants.Remote`, DI in `App.axaml.cs` (minimal, never throws at start)
+- [DONE] Tree and lists (FR.25.09–FR.25.15): `tree.snapshot`, `tree.workers`, `tree.search`, `tree.createSession` (placement, one save, desktop inserts after the preceding session), `recent.list`, `recent.hide`, `tags.search`
+- [DONE] Session and turns (FR.25.16–FR.25.25, FR.25.33): `session.get` (`lastUsed`), `session.entries`, `session.entry`, `session.send`, `session.stop`, `session.setFavorite`, `session.setStreaming`, `attention.list/reply/dismiss` (service moved to Core), `catalog.get`, `usage.get`; `TurnSource.Web`, per-turn model/effort/profile, profile stamp on every headless USER entry
+- [DONE] Compaction to Core (FR.25.26, FR.11.6): `ISessionCompactionService` moved out of `TurnController`, `session.compact`, desktop Auto-Compact uses it; behaviour unchanged
+- [DONE] Relay Connector (FR.25.35–FR.25.37): `RelayConnectorService`, `IRelayConfigStore` (DPAPI `web-relay.dat`), status, Settings section "Web access", start/stop without restart
+- [DONE] Tessyn.Web server (FR.25.03–FR.25.06, FR.25.28, FR.25.29, FR.25.35, FR.25.38): auth, throttling, CSRF header, allowlist, `DaemonLinkHub`, `/api/rpc`, `/api/events`, link endpoints, headers, `/healthz`, CLI verbs, `Tessyn.Web.Tests`, `deploy/` assets
+- [DONE] SPA (FR.25.08–FR.25.30): React app, mock mode, Tree/Recent/Tags tabs, Session and Focus views, Settings sheet, usage strip, offline and resync, PWA; Vitest and Playwright tests, screenshots
+- [DONE] E2E tests (TC.WEB.69–TC.WEB.71, TC.WEB.96): `code/Tessyn.Web.E2E.Tests` (real connector, real server, real Core, fake `claude`; full-stack UI run with `TESSYN_FULLSTACK=1`); the three web projects added to `TessynDesktop.sln`
+- [DONE] Deployment (FR.25.38): DNS A record, nginx vhost, certbot (expires 2027-02-10), directories, systemd unit, first publish and upload, health check; fleet `server-matrix.md` updated
+- [DONE] Security review and hardening (FR.25.03–FR.25.05, FR.25.38; review `96-review-security`): login/logout CSRF header fix, dedicated `tessyn-web` service user and unit sandbox, markdown/CSP hardening, `__Host-` cookies with 14-day idle and 30-day absolute lifetime, security stamp and logout-everywhere, trusted-device cookie, atomic throttle, body limits, public vs loopback `/healthz`, nginx `X-Forwarded-For` overwrite and 4 MB limit, drafts cleared on logout, https-only tag links; redeployed and verified (95/95 server tests)
+- [DONE] Core review (`97-review-core`) and its fixes (`101-core-fix`): activity cache parses only new bytes (cold parse capped at 4 MB), draft stamp cache, `turn.completed` flushes pending session notifications, `OpenDaemonRunning` moved before the `try`, dispatcher no longer maps stray Format/Json/Cast exceptions to `-32602`, `recent.hide` refreshes the desktop dropdown, `session.compact` uses `ITurnOptionsResolver` (unknown model `-32602`); six flaky tests made deterministic; 1,640 core tests green, 12 loaded runs stable
+- [DONE] Merge the `web-client` branch work (Core, `Tessyn.Web`, `Tessyn.Web.Tests`, `Tessyn.Web.E2E.Tests`, ClientApp, deploy assets) into master — merged locally 2026-11-13 (`46d5e9d`, not pushed) so the next app restart picks the build up; done before the Architect's review of these docs, which is still open below
+- [DONE] Final redeploy of the server and SPA (after the polish pass); live site serves the final bundle
+- [DONE] Desktop restarted by the Architect 2026-11-13; relay link online; web app confirmed working
+- [DONE] Portrait overflow on iPhone (Architect's report 2026-11-13; FR.25.08): WebKit grids grew to their widest child (tag chips, long URLs, wide blocks) and the settings sheet took its selects' width — `minmax(0,1fr)` columns + `min-width: 0`, wrapping, self-scrolling code/tables, one-row scrolling tag strip under 600 px, sheet fits the screen; Playwright webkit 390/375 + chromium 390 projects assert no horizontal overflow after every step (`a718eab`); live check over 52 real sessions at 390 and 375 px: no overflow
+- [ ] Review of these documents by the Architect (FR.25, UC.WEB.01, TC.WEB.01, tdcp-spec §8, operations guide, glossary)
+- [ ] Desktop restart with the connector (full suite green; web access is pre-provisioned in `%AppData%\TessynDesktop\web-relay.dat`, so nothing needs enabling — Settings → Web access should show "Connected since …")
+- [ ] Manual desktop checks of the UI-project changes that have no unit tests (TC.WEB.101–TC.WEB.105): favourite and streaming refresh, tree insert position, interactive turn running flag (also two queued sends), profile name on scheduled/Telegram USER bubbles, Focus Reply/Send answers, Settings → Web access, auto-compact
+- [ ] Manual pass on the iPhone (TC.WEB.72–TC.WEB.83, TC.WEB.97–TC.WEB.100) against the deployed site, including the first positive login on the live site, logout-everywhere and the device cookie
+- [ ] Follow-ups to decide with the Architect: second factor (TOTP) at login (FR.25.39); push notifications to the phone; wrap the SPA as an iOS app
+- [ ] Follow-up: nginx `limit_req` on `/api/auth/login` and `/link/` (needs an `http`-level zone in the shared nginx config)
+- [ ] Follow-up: encrypt the Data Protection keys at rest (today only `tessyn-web` can read them; startup warns "No XML encryptor configured")
+- [ ] Follow-up: write-back of tool lines in Core (the TXT/JSONL write-back stays desktop-side)
+- [ ] Follow-up: stop a desktop-interactive one-shot turn from the web (`session.stop` cannot cancel it; its cancellation lives in `TurnController`)
+- [ ] Follow-up: virtualise long transcripts in the SPA (today 50-entry pages with **Load earlier**)
+- [ ] Manual check of the UI-project parts of the core fix (not unit-tested): hide a session in the web Recent and confirm the desktop's Recent dropdown updates (`SessionNodeViewModel.RefreshSettingsFromModel`); the `TurnController` move of `OpenDaemonRunning` (TC.WEB.103)
+- [ ] Follow-up: a coalesced `session.changed` already firing while `turn.completed` flushes can still land just after it (small known gap; clients handle it, FR.25.32)
+- [ ] Follow-up: add `InternalsVisibleTo Tessyn.Web.E2E.Tests` to `Tessyn.Web.csproj` (the E2E project reaches `Program` through `PasswordHasher`); decide on `RaiseSessionSettingsChanged` for desktop-UI favourite/streaming changes (today only the daemon setters and `recent.hide` raise it)
 
 ## Phase 41 — Tag search for sessions as cmx MCP tools (FR.24.15, FR.15.13)
 
