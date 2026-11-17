@@ -14,7 +14,8 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:SessionTagViewModel}">
-                        <Button Command="{Binding OpenCommand}" Margin="0,0,6,4" Padding="8,3" ToolTip="{Binding Url}">
+                        <Button Command="{Binding OpenCommand}" Margin="0,0,6,4" Padding="8,3" ToolTip="{Binding Url}"
+                                FontSize="{Binding TagFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding KindText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,6,0" />
                                 <TextBlock Text="{Binding Label}" />
@@ -27,7 +28,7 @@
         <!-- Mini mode: how many chips the single line hides; a click on it expands like any other empty space. -->
         <Border x:Name="HiddenHint" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,0,4" Padding="8,3" CornerRadius="4"
                 Background="{DynamicResource ControlFillColorDefaultBrush}" Visibility="Collapsed">
-            <TextBlock x:Name="HiddenHintText" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="HiddenHintText" FontSize="{Binding TagFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
         </Border>
     </Grid>
 </UserControl>

@@ -148,6 +148,18 @@ public sealed class AppearanceServiceTests
 	}
 
 	[Fact]
+	public void TagFontSize_DefaultsToTheSizeTheChipsHad_AndAChangeIsAnnounced()
+	{
+		Assert.Equal(14, _service.Current.TagFontSize);
+		Assert.Equal(Constants.Defaults.TagFontSize, _service.Current.TagFontSize);
+
+		_store.Update<AppearanceSettings>(a => a.TagFontSize = 18);
+
+		Assert.Equal(18, _service.Current.TagFontSize);
+		Assert.Equal(1, _changes);
+	}
+
+	[Fact]
 	public void PageMessage_CarriesTheThemeAndTheThreeSizes()
 	{
 		var json = new PageAppearance("dark", 15, 14, 12).ToMessage();

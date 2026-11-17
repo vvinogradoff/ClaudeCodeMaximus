@@ -80,6 +80,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	/// </summary>
 	public bool IsHusk { get; set; }
 
+	/// <summary>How many workers a session supervises, written out ("104 workers"): shown inside the session's row. This is a count, not an age; empty for a session without workers.</summary>
+	public string WorkerCountText => IsSessionLike && WorkerCount > 0
+		? string.Format(Constants.SessionLists.WorkerCountFormat, WorkerCount, WorkerCount == 1 ? Constants.SessionLists.WorkerNoun : Constants.SessionLists.WorkersNoun)
+		: string.Empty;
+
+	public bool HasWorkers => WorkerCountText.Length > 0;
+
 	/// <summary>Whether the row shows an expander.</summary>
 	public bool CanExpand => IsSessionLike ? WorkerCount > 0 : Children.Any(c => !c.IsHusk);
 
@@ -119,6 +126,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	{
 		OnPropertyChanged(nameof(RecencyLevel));
 		OnPropertyChanged(nameof(IsRecentlyActive));
+		OnPropertyChanged(nameof(LastPromptText));   // an age ("5m") grows with the clock
 	}
 
 	/// <summary>Re-reads the date text (the date format setting changed).</summary>
@@ -167,6 +175,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	public void RefreshExpander()
 	{
 		OnPropertyChanged(nameof(CanExpand));
+		OnPropertyChanged(nameof(WorkerCountText));
+		OnPropertyChanged(nameof(HasWorkers));
 		RefreshProfileMismatch();
 	}
 

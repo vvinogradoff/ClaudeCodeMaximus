@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Services;
@@ -49,7 +49,7 @@ public class SlotTabControl : TabControl
 			if (view == null)
 				continue;
 
-			Items.Add(new TabItem { Header = contribution.Title ?? contribution.SlotId, Content = view });
+			Items.Add(new TabItem { Header = contribution.Title ?? contribution.SlotId, Content = view, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center });
 			added++;
 		}
 

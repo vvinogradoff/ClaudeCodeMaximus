@@ -51,6 +51,43 @@ public sealed class SettingsClientSectionTests
 		Assert.Empty(_client.Calls);
 	}
 
+	[Fact]
+	public async Task Appearance_TheTagCloudFontSize_DefaultsToTheCurrentSize_SavesAndIsReportedAsAChange()
+	{
+		var appearance = new AppearanceSectionViewModel(_store);
+		Assert.Equal("14", appearance.TagFontSize);
+		Assert.False(appearance.HasChanges);
+
+		appearance.TagFontSize = "17.5";
+		Assert.True(appearance.HasChanges);
+		Assert.True(await appearance.SaveAsync());
+
+		Assert.Equal(17.5, _store.Get<AppearanceSettings>().TagFontSize);
+		Assert.Equal(13, _store.Get<AppearanceSettings>().InputFontSize);
+		Assert.False(appearance.HasChanges);
+
+		appearance.TagFontSize = "9";
+		await appearance.ReloadAsync();
+		Assert.Equal("17.5", appearance.TagFontSize);
+	}
+
+	[Theory]
+	[InlineData("7")]
+	[InlineData("41")]
+	[InlineData("big")]
+	public async Task Appearance_AnInvalidTagCloudFontSize_IsRefused_AndNothingIsStored(string text)
+	{
+		var appearance = new AppearanceSectionViewModel(_store);
+		appearance.Theme = ClientTheme.Light;
+		appearance.TagFontSize = text;
+
+		Assert.False(await appearance.SaveAsync());
+
+		Assert.Equal(14, _store.Get<AppearanceSettings>().TagFontSize);
+		Assert.Equal(ClientTheme.System, _store.Get<AppearanceSettings>().Theme);
+		Assert.NotNull(appearance.ErrorText);
+	}
+
 	[Theory]
 	[InlineData("7")]
 	[InlineData("41")]

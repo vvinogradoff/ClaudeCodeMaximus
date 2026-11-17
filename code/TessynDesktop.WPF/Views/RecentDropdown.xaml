@@ -1,4 +1,4 @@
-<UserControl x:Class="TessynDesktop.WPF.Views.RecentDropdown"
+﻿<UserControl x:Class="TessynDesktop.WPF.Views.RecentDropdown"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
@@ -6,11 +6,32 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/SessionListStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
+            <!-- The header button keeps its own look while the list is open (a Fluent checked toggle turns accent blue); open is shown by a faint fill. -->
+            <Style x:Key="RecentToggle" TargetType="ToggleButton">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border x:Name="Chrome" CornerRadius="4" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>        </ResourceDictionary>
     </UserControl.Resources>
     <Grid>
         <!-- Fills the width it is given (the title bar's middle); the label is the open session's name, "Recent" with none. -->
-        <ToggleButton x:Name="Toggle" Margin="0,2" Padding="10,3" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Recent dropdown" ToolTip="Recent sessions"
+        <ToggleButton x:Name="Toggle" Style="{StaticResource RecentToggle}" Margin="0,2" Padding="10,3" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Recent dropdown" ToolTip="Recent sessions"
                       IsChecked="{Binding IsOpen, ElementName=Menu, Mode=TwoWay}">
             <DockPanel LastChildFill="True">
                 <TextBlock DockPanel.Dock="Right" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphChevronDown}" />
@@ -23,7 +44,7 @@
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="8,6" Text="{Binding EmptyText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                Visibility="{Binding IsEmpty, Converter={StaticResource SessionListBoolToVis}}" />
-                    <ListBox ItemsSource="{Binding Rows}" Style="{StaticResource SessionFlatListBox}" MaxHeight="460" />
+                    <ListBox ItemsSource="{Binding Rows}" Style="{StaticResource SessionFlatListBox}" ItemTemplate="{StaticResource DropdownRowTemplate}" MaxHeight="460" />
                 </DockPanel>
             </Border>
         </Popup>

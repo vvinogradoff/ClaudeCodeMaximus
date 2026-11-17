@@ -1,0 +1,22 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The coloured box of a session row: the recency tier of the last activity (Settings, Colours), as in the Avalonia client. DataContext: a tree node or a list row. -->
+    <Style x:Key="RecencyTint" TargetType="Border">
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="Margin" Value="2,1" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding RecencyLevel}" Value="1">
+                <Setter Property="Background" Value="{DynamicResource Colour.RecentTier4}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding RecencyLevel}" Value="2">
+                <Setter Property="Background" Value="{DynamicResource Colour.RecentTier3}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding RecencyLevel}" Value="3">
+                <Setter Property="Background" Value="{DynamicResource Colour.RecentTier2}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding RecencyLevel}" Value="4">
+                <Setter Property="Background" Value="{DynamicResource Colour.RecentTier1}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+</ResourceDictionary>

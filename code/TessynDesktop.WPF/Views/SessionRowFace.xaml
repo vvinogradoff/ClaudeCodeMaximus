@@ -1,4 +1,4 @@
-<UserControl x:Class="TessynDesktop.WPF.Views.SessionRowFace"
+﻿<UserControl x:Class="TessynDesktop.WPF.Views.SessionRowFace"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- What a session looks like in the tree and in the Recent and Tags lists, as in the Avalonia client: two status squares (upper: running, lower: resumable in Claude Code),
@@ -10,36 +10,19 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/KindPill.xaml" />
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/RecencyTint.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
         </ResourceDictionary>
     </UserControl.Resources>
-    <Border CornerRadius="3" Margin="2,1" MinHeight="34">
-        <Border.Style>
-            <Style TargetType="Border">
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding RecencyLevel}" Value="1">
-                        <Setter Property="Background" Value="{DynamicResource Colour.RecentTier4}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding RecencyLevel}" Value="2">
-                        <Setter Property="Background" Value="{DynamicResource Colour.RecentTier3}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding RecencyLevel}" Value="3">
-                        <Setter Property="Background" Value="{DynamicResource Colour.RecentTier2}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding RecencyLevel}" Value="4">
-                        <Setter Property="Background" Value="{DynamicResource Colour.RecentTier1}" />
-                    </DataTrigger>
-                </Style.Triggers>
-            </Style>
-        </Border.Style>
+    <Border Style="{StaticResource RecencyTint}" MinHeight="34">
         <Grid>
             <Grid Margin="2,2,4,3">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <DockPanel Grid.Row="0">
+                <DockPanel Grid.Row="0" x:Name="FirstLine">
                     <Grid DockPanel.Dock="Left" Width="8" Height="16" Margin="0,0,6,0" VerticalAlignment="Center" AutomationProperties.Name="Session status">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="8" />
@@ -54,6 +37,8 @@
                             Visibility="{Binding HasAttention, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Focus items">
                         <TextBlock Text="{Binding AttentionCount}" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
+                    <TextBlock DockPanel.Dock="Right" FontSize="10" Margin="6,0,0,0" Opacity="0.7" Text="{Binding WorkerCountText}" ToolTip="Sessions this session supervises"
+                               Visibility="{Binding HasWorkers, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Worker count" />
                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="&#xE735;" Foreground="Gold" ToolTip="Favourite"
                                Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Favourite mark" />
                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphClock}" ToolTip="This session has a schedule"
