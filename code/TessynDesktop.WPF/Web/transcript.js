@@ -8,7 +8,7 @@ const vp = document.getElementById('vp'), padTop = document.getElementById('padT
 const BUF = 1.5;            // viewports of buffer above and below the visible area
 const NEAR_TOP_PX = 300;    // scroll distance from the top that requests an older page
 const BOTTOM_SLACK_PX = 60; // "at the bottom" tolerance for following appends
-const ROLE = { U: 'USER', A: 'ASSISTANT', S: 'SYSTEM', C: 'COMPACTION' };
+const ROLE = { U: 'USER', S: 'SYSTEM', C: 'COMPACTION' };   // the assistant has no role word
 
 let S = null;               // { key, tok, items[], off[], a, b, hasOlder }
 let olderPending = false;
@@ -38,7 +38,13 @@ function entryHtml(k) {
   const it = S.items[k];
   const more = it.trunc ? '<a class="more" data-i="' + it.i + '">Show full entry (' + it.full + ' chars)</a>' : '';
   const media = it.m.length ? MediaGate.previewHtml(it.m, ALLOW, it.i, S.loaded) : '';
-  return '<div class="e ' + esc(it.r) + (InputNav.isAuto(it) ? ' auto' : '') + '" data-k="' + k + '"><div class="c' + (it.i === SEL ? ' sel' : '') + '"><div class="h">' + esc(InputNav.labelOf(it) || ROLE[it.r] || it.r) + ' &middot; ' + esc(it.ts) + '</div><div class="b">' + it.html + '</div>' + more + media + chipsHtml(it) + '</div></div>';
+  const cls = '<div class="e ' + esc(it.r) + (InputNav.isAuto(it) ? ' auto' : '') + '" data-k="' + k + '"><div class="c' + (it.i === SEL ? ' sel' : '') + '">';
+  const tail = '<div class="b">' + it.html + '</div>' + more + media + chipsHtml(it) + '</div>';
+  if (it.r === 'A') {   // an assistant response sits on the view background: no role word, the model beside nothing, the time on the right (as in the Avalonia client)
+    const cut = it.ts.indexOf(' · '), time = cut < 0 ? it.ts : it.ts.substring(0, cut), model = cut < 0 ? '' : it.ts.substring(cut + 3);
+    return cls + (model ? '<div class="h">' + esc(model) + '</div>' : '') + tail + '<div class="t">' + esc(time) + '</div></div>';
+  }
+  return cls + '<div class="h">' + esc(InputNav.labelOf(it) || ROLE[it.r] || it.r) + ' &middot; ' + esc(it.ts) + '</div>' + tail + '</div>';
 }
 // Local-file chips (FR.26.5): the path is kept in S.items, the DOM carries only its index and the escaped file name.
 function chipsHtml(it) {
@@ -85,6 +91,7 @@ function render(pin) {
     if (!changed) break;
   }
   if (H) applyRefHl();
+  syncThumb();
 }
 // Reports the entry at the top of the view (debounced), for the host's Back stack.
 function reportView() {
@@ -95,11 +102,12 @@ function reportView() {
 function remeasure() {
   if (!S || !S.items.length) return;
   const anchorK = findK(vp.scrollTop), d = vp.scrollTop - S.off[anchorK];
-  if (measure()) { recomputeOff(); padTop.style.height = S.off[S.a] + 'px'; padBot.style.height = (S.off[S.items.length] - S.off[S.b]) + 'px'; vp.scrollTop = S.off[anchorK] + d; }
+  if (measure()) { recomputeOff(); padTop.style.height = S.off[S.a] + 'px'; padBot.style.height = (S.off[S.items.length] - S.off[S.b]) + 'px'; vp.scrollTop = S.off[anchorK] + d; syncThumb(); }
 }
 function atBottom() { return vp.scrollTop + vp.clientHeight >= vp.scrollHeight - BOTTOM_SLACK_PX; }
 
 vp.addEventListener('scroll', () => {
+  syncThumb();
   if (rafPending) return; rafPending = true;
   requestAnimationFrame(() => {
     rafPending = false; render(null); reportView(); PagingGate.onUserScroll(NG, vp.scrollTop);
@@ -210,6 +218,58 @@ function reveal(k) {
   applySel(); reportView();
 }
 
+// ---- scrollbar (scrollmap.js) ----
+// The native bar is hidden: its thumb is proportional to pixels, and unmeasured entries only have estimated heights, so dragging it moved the content by
+// a varying amount. This thumb is proportional to the entry index; the drag maps the mouse to an entry (and the part of it) and anchors the view on that,
+// so the content tracks the mouse and measuring other entries moves nothing.
+const sb = document.getElementById('sb'), sbt = document.getElementById('sbt');
+const SB = { drag: null, thumbLen: 0 };
+function maxScroll() { return Math.max(0, vp.scrollHeight - vp.clientHeight); }
+function trackPx() { return sb.clientHeight; }
+function placeThumb(f, len) { const travel = Math.max(0, trackPx() - len); sbt.style.height = len + 'px'; sbt.style.transform = 'translateY(' + (f * travel) + 'px)'; }
+function syncThumb() {
+  if (!S || !S.items.length || maxScroll() <= 0) { sb.classList.add('off'); return; }
+  sb.classList.remove('off');
+  if (SB.drag) return;   // under the mouse the thumb is where the mouse put it, whatever the content does
+  const len = ScrollMap.thumbLength(trackPx(), vp.clientHeight, S.off[S.items.length]);
+  SB.thumbLen = len; placeThumb(ScrollMap.fractionOf(S.off, vp.scrollTop, maxScroll()), len);
+}
+function thumbFraction() { const travel = trackPx() - SB.thumbLen; return travel > 0 ? Math.min(1, Math.max(0, sbt.getBoundingClientRect().top - sb.getBoundingClientRect().top) / travel) : 0; }
+function dragTo(y) {
+  const d = SB.drag, travel = trackPx() - d.len;
+  if (travel <= 0 || !S) return;
+  const f = Math.min(1, Math.max(0, (d.startF * travel + (y - d.startY)) / travel));
+  placeThumb(f, d.len);
+  // Render the entries under the new position, then aim again: measuring them changed the heights the position was computed from (up to one entry's worth).
+  for (let pass = 0; pass < 4; pass++) {
+    const want = ScrollMap.scrollForFraction(S.off, f, maxScroll());
+    if (pass > 0 && Math.abs(vp.scrollTop - want) < 1) break;
+    vp.scrollTop = want; render(null);
+  }
+  d.lastY = y;
+}
+sbt.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !S) return;
+  e.preventDefault();
+  sbt.setPointerCapture(e.pointerId);
+  SB.drag = { startY: e.clientY, startF: thumbFraction(), len: SB.thumbLen, lastY: e.clientY, id: e.pointerId };
+  sb.classList.add('drag');
+});
+sbt.addEventListener('pointermove', e => { if (SB.drag && e.pointerId === SB.drag.id) dragTo(e.clientY); });
+function endDrag(e) { if (!SB.drag || e.pointerId !== SB.drag.id) return; SB.drag = null; sb.classList.remove('drag'); syncThumb(); }
+sbt.addEventListener('pointerup', endDrag);
+sbt.addEventListener('pointercancel', endDrag);
+// Entries were added above the view (a page of older ones) while dragging: the content stays put, so the drag restarts from the thumb's new place.
+function rebaseDrag() { if (SB.drag && S) { SB.drag.startY = SB.drag.lastY; SB.drag.startF = ScrollMap.fractionOf(S.off, vp.scrollTop, maxScroll()); placeThumb(SB.drag.startF, SB.drag.len); } }
+// A click in the track outside the thumb pages toward it; the wheel over the bar scrolls as over the list.
+sb.addEventListener('pointerdown', e => {
+  if (e.target !== sb || e.button !== 0) return;
+  e.preventDefault();
+  vp.scrollTop += (e.clientY < sbt.getBoundingClientRect().top ? -1 : 1) * vp.clientHeight * 0.9;
+});
+sb.addEventListener('wheel', e => { e.preventDefault(); vp.scrollTop += e.deltaY; }, { passive: false });
+new ResizeObserver(() => syncThumb()).observe(vp);
+
 // ---- find ----
 function hlRange(root) {
   if (!F || !F.term) return;
@@ -268,6 +328,7 @@ function onPrepend(m) {
   const k = posOfEntry(anchorEntry);
   vp.scrollTop = S.off[k] + anchorD; render(null);
   vp.scrollTop = S.off[posOfEntry(anchorEntry)] + anchorD;
+  rebaseDrag();
   resumeNav();
 }
 function onAppend(m) {
@@ -278,6 +339,7 @@ function onAppend(m) {
   for (const e of m.entries) S.items.push(mk(e));
   recomputeOff();
   if (follow) render('bottom'); else { padBot.style.height = (S.off[S.items.length] - S.off[S.b]) + 'px'; render(null); }
+  rebaseDrag();
   checkNewer();
   resumeNav(m.entries.length === 0);
 }

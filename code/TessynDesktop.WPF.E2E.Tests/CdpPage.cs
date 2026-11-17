@@ -158,6 +158,19 @@ public sealed class CdpPage : IDisposable
 		await MouseAsync("mouseReleased", toX, toY, 1);
 	}
 
+	/// <summary>Presses the left button at a point (no release), for a drag a test steps through itself.</summary>
+	public async Task MouseDownAsync(double x, double y)
+	{
+		await MouseAsync("mouseMoved", x, y, 0);
+		await MouseAsync("mousePressed", x, y, 1);
+	}
+
+	/// <summary>Moves the mouse with the left button held.</summary>
+	public Task MouseMoveHeldAsync(double x, double y) => MouseAsync("mouseMoved", x, y, 0, buttons: 1);
+
+	/// <summary>Releases the left button at a point.</summary>
+	public Task MouseUpAsync(double x, double y) => MouseAsync("mouseReleased", x, y, 1);
+
 	private Task MouseAsync(string type, double x, double y, int clickCount, int buttons = 0) =>
 		SendAsync("Input.dispatchMouseEvent", new JsonObject
 		{
