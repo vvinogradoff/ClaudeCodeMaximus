@@ -51,6 +51,19 @@ public sealed class MiscFeedbackTests
 	}
 
 	[Fact]
+	public void SelectableText_IsTextForUiAutomation_NamedByItsContent()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var text = new SelectableText { Text = "Answered: Yes" };
+			var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(text);
+
+			Assert.Equal(System.Windows.Automation.Peers.AutomationControlType.Text, peer.GetAutomationControlType());
+			Assert.Equal("Answered: Yes", peer.GetName());
+		});
+	}
+
+	[Fact]
 	public void TheBuildStamp_IsPartOfTheCaption_ButTheWindowButtonsStayClickable()
 	{
 		StaTestRunner.Run(() =>

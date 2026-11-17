@@ -57,7 +57,7 @@
                                 </Border>
                                 <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                 <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                                        <v:SelectableText Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" AutomationProperties.Name="Item title" />
+                                        <v:SelectableText Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
                             </DockPanel>
 
                             <StackPanel Margin="0,8,0,0" v:MarkdownText.Source="{Binding Body}" Visibility="{Binding HasBody, Converter={StaticResource BoolToVis}}" />
@@ -126,9 +126,9 @@
                             </Border>
                             <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                            <v:SelectableText Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" AutomationProperties.Name="Item title" />
+                            <v:SelectableText Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </DockPanel>
-                        <v:SelectableText Text="{Binding OutcomeText}" Margin="0,4,0,0" AutomationProperties.Name="Item outcome" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <v:SelectableText Text="{Binding OutcomeText}" Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                         <StackPanel Margin="0,8,0,0" v:MarkdownText.Source="{Binding Body}" Visibility="{Binding IsBodyVisible, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </Border>

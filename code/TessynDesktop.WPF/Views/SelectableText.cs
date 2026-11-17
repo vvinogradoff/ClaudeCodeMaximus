@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Automation.Peers;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -73,6 +74,18 @@ public sealed class SelectableText : RichTextBox
 		e.Handled = true;
 		var forwarded = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta) { RoutedEvent = MouseWheelEvent, Source = this };
 		(Parent as UIElement)?.RaiseEvent(forwarded);
+	}
+
+	/// <summary>For UI Automation (and screen readers) this is plain text, named by what it shows, as the text block it replaces was.</summary>
+	protected override AutomationPeer OnCreateAutomationPeer() => new SelectableTextPeer(this);
+
+	private sealed class SelectableTextPeer(SelectableText owner) : RichTextBoxAutomationPeer(owner)
+	{
+		protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Text;
+
+		protected override string GetNameCore() => owner.PlainText;
+
+		protected override string GetClassNameCore() => nameof(SelectableText);
 	}
 
 	private static void OnTextChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e)
