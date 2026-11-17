@@ -192,10 +192,10 @@ public sealed class WpfTranscriptScrollE2ETests : IDisposable
 			Assert.True(s[3]!.GetValue<double>() >= -0.5, "the time is not to the right of the text: " + s[3]);
 			Assert.True(s[4]!.GetValue<double>() > s[5]!.GetValue<double>() * 0.8, "the time is not at the right edge");
 
-			// The page takes the palette colour from the host's appearance message, for either theme.
-			await page.EvalAsync("onAppearance({ theme: 'dark', sys: '#112233' }); 0");
+			// The page takes the changed palette colour from the host's appearance message (the generic colours map: --sysbg), and drops it again when the message no longer lists it.
+			await page.EvalAsync("onAppearance({ theme: 'dark', colours: { '--sysbg': '#112233' } }); 0");
 			Assert.Equal("rgb(17, 34, 51)", (await page.EvalAsync("getComputedStyle(document.querySelector('.e.S .c')).backgroundColor"))!.GetValue<string>());
-			await page.EvalAsync("onAppearance({ theme: 'light', sys: '#BFE0F7' }); 0");
+			await page.EvalAsync("onAppearance({ theme: 'light' }); 0");
 			Assert.Equal("rgb(191, 224, 247)", (await page.EvalAsync("getComputedStyle(document.querySelector('.e.S .c')).backgroundColor"))!.GetValue<string>());
 		}
 		finally
