@@ -24,22 +24,10 @@ public sealed class SessionTagAreaViewTests
 {
 	private const double Width = 400;
 
-	private sealed class MemoryState : IClientStateStore
-	{
-		public ClientStateModel State { get; } = new();
-
-		public Task LoadAsync() => Task.CompletedTask;
-
-		public void Update(Action<ClientStateModel> change) => change(State);
-
-		public Task FlushAsync() => Task.CompletedTask;
-	}
-
 	private sealed class Fixture
 	{
 		public required FakeUrlLauncher Launcher { get; init; }
 		public required ObservableCollection<SessionTagViewModel> Tags { get; init; }
-		public required MemoryState State { get; init; }
 		public required TagAreaViewModel Model { get; init; }
 		public required SessionTagArea Area { get; init; }
 
@@ -73,13 +61,11 @@ public sealed class SessionTagAreaViewTests
 	private static Fixture Create(int tags, bool expanded = false)
 	{
 		var launcher = new FakeUrlLauncher();
-		var state = new MemoryState();
-		state.State.TagAreaExpanded = expanded;
 		var collection = new ObservableCollection<SessionTagViewModel>(Enumerable.Range(0, tags).Select(i => Chip(i, launcher)));
-		var model = new TagAreaViewModel(collection, state);
+		var model = new TagAreaViewModel(collection) { IsExpanded = expanded };
 		var area = new SessionTagArea { DataContext = model };
 		Host(area);
-		var fixture = new Fixture { Launcher = launcher, Tags = collection, State = state, Model = model, Area = area };
+		var fixture = new Fixture { Launcher = launcher, Tags = collection, Model = model, Area = area };
 		fixture.Settle();
 		return fixture;
 	}
@@ -340,7 +326,6 @@ public sealed class SessionTagAreaViewTests
 
 			Assert.True(f.Model.IsExpanded);
 			Assert.True(f.Area.AreaHeight > f.Area.LineHeight);
-			Assert.True(f.State.State.TagAreaExpanded);
 		});
 	}
 
@@ -404,12 +389,11 @@ public sealed class SessionTagAreaViewTests
 
 			Assert.False(f.Model.IsExpanded);
 			Assert.Equal(f.Area.LineHeight, f.Area.AreaHeight, 1);
-			Assert.False(f.State.State.TagAreaExpanded);
 		});
 	}
 
 	[Fact]
-	public void A_double_click_on_a_chip_in_full_mode_collapses_and_the_chip_is_not_pressed_again()
+	public void A_double_click_on_a_chip_in_full_mode_does_not_collapse_only_empty_space_does()
 	{
 		Run(() =>
 		{
@@ -419,8 +403,8 @@ public sealed class SessionTagAreaViewTests
 			Press(chip, 1);
 			var second = Press(chip, 2);
 
-			Assert.False(f.Model.IsExpanded);
-			Assert.True(second.Handled, "the second press must not reach the chip, so the link opens once (from the first click)");
+			Assert.True(f.Model.IsExpanded);
+			Assert.False(second.Handled, "a chip press keeps its own meaning");
 		});
 	}
 
@@ -510,7 +494,6 @@ public sealed class SessionTagAreaViewTests
 			provider.Expand();
 
 			Assert.False(f.Model.IsExpanded);
-			Assert.False(f.State.State.TagAreaExpanded);
 		});
 	}
 

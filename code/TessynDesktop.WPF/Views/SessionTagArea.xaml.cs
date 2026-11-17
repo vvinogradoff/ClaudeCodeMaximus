@@ -13,7 +13,7 @@ namespace TessynDesktop.WPF.Views;
 /// <summary>
 /// The session tag area (FR.24): the chips under the session header in two modes. "Mini" shows exactly one line of chips (the rest is
 /// clipped, a "+N" hint counts them); "full" grows to fit the chips up to ten lines and scrolls beyond that. A click on empty space (or the
-/// hint) expands, a double-click anywhere in full mode collapses. The line height is measured from the laid-out chips, not hard-coded.
+/// hint) expands, a double-click on empty space (not on a chip) collapses. The line height is measured from the laid-out chips, not hard-coded.
 /// DataContext: <see cref="TagAreaViewModel"/>.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -52,7 +52,7 @@ public partial class SessionTagArea : UserControl
 
 	public void Expand()
 	{
-		// Without tags there is nothing to expand, and the global mode must not be changed (and persisted) by a stray automation call.
+		// Without tags there is nothing to expand.
 		if (_model != null && HasTags)
 			_model.IsExpanded = true;
 	}
@@ -208,19 +208,20 @@ public partial class SessionTagArea : UserControl
 		if (_model == null || !HasTags)
 			return;
 
+		// The WPF client does not reference Core, so this mirrors Core's TagAreaGestureInterpreter (the Avalonia client's, unit tested there).
 		// The vertical scrollbar belongs to the scrolling, not to the mode gestures: a quick double-click on its arrow or track must scroll.
-		if (IsInScrollBar(e.OriginalSource as DependencyObject))
+		var source = e.OriginalSource as DependencyObject;
+		if (IsInScrollBar(source))
 			return;
 
 		if (e.ClickCount >= 2)
 		{
 			// Every further press of the click that just expanded the area (second, third, ...) is part of that gesture, not a request to
-			// fold it again; the flag is cleared only by the next first press.
+			// fold it again; the flag is cleared only by the next first press. A double-click collapses only on empty space (FR.24: "on the
+			// white space"), never on a chip: a chip press keeps its own meaning.
 			if (_expandedByThisClick)
-			{
 				e.Handled = true;
-			}
-			else if (IsExpanded)
+			else if (IsExpanded && !IsOnChip(source))
 			{
 				_model.IsExpanded = false;
 				e.Handled = true;
@@ -230,7 +231,7 @@ public partial class SessionTagArea : UserControl
 		}
 
 		_expandedByThisClick = false;
-		if (!IsExpanded && !IsOnChip(e.OriginalSource as DependencyObject))
+		if (!IsExpanded && !IsOnChip(source))
 		{
 			_model.IsExpanded = true;
 			_expandedByThisClick = true;
