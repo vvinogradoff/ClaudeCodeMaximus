@@ -22,7 +22,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	private ITessynClient? _client;
 	private TreeViewModel? _tree;
 
-	public SessionListsHost(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILoggerFactory loggers, IUrlLauncher? launcher = null)
+	public SessionListsHost(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILoggerFactory loggers, IUrlLauncher? launcher = null, ListDisplayService? display = null)
 	{
 		_main = main;
 		_ui = ui;
@@ -31,6 +31,8 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 		Recent = new RecentViewModel(this, ui, loggers.CreateLogger<RecentViewModel>());
 		Tags = new TagSearchViewModel(this, ui, loggers.CreateLogger<TagSearchViewModel>(), Constants.Timeouts.SearchDebounce, launcher);
 		connection.ClientReady += OnClientReady;
+		if (display != null)
+			display.Changed += (_, _) => RefreshDisplay();
 		main.PropertyChanged += OnMainChanged;
 
 		// The order of construction and of the first ClientReady is not guaranteed: pick up what is already there.
@@ -76,6 +78,21 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 		Tags.AttachTree(tree);
 	}
 
+	/// <summary>The recency of every row (the lists and the tree) ages with the clock.</summary>
+	private void RefreshClock()
+	{
+		RecentTab.RefreshClock();
+		_tree?.RefreshClock();
+	}
+
+	/// <summary>The date format changed: every row re-reads its date text.</summary>
+	private void RefreshDisplay()
+	{
+		RecentTab.RefreshDisplay();
+		Tags.RefreshDisplay();
+		_tree?.RefreshDisplay();
+	}
+
 	/// <summary>The recency colours age with time (FR.9.5): re-read them every minute.</summary>
 	private async Task RunClockAsync(CancellationToken token)
 	{
@@ -83,7 +100,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 		{
 			using var timer = new PeriodicTimer(Constants.Timeouts.RecencyRefresh);
 			while (await timer.WaitForNextTickAsync(token))
-				_ui.Post(RecentTab.RefreshClock);
+				_ui.Post(RefreshClock);
 		}
 		catch (OperationCanceledException)
 		{

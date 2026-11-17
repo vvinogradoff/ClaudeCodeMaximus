@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="TessynDesktop.WPF.Views.TreePanel"
+<UserControl x:Class="TessynDesktop.WPF.Views.TreePanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels"
@@ -7,6 +7,7 @@
         <ResourceDictionary>
         <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/TreeRowStyles.xaml" /></ResourceDictionary.MergedDictionaries>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <v:InvertedBooleanToVisibilityConverter x:Key="InvertedBoolToVis" />
         <Style x:Key="ExpanderButton" TargetType="Button">
             <Setter Property="Width" Value="20" />
             <Setter Property="Height" Value="20" />
@@ -42,7 +43,7 @@
             </Setter>
         </Style>
         <DataTemplate DataType="{x:Type vm:TreeNodeViewModel}">
-            <Grid Height="30" ToolTip="{Binding ToolTipText}" Background="Transparent">
+            <Grid MinHeight="26" ToolTip="{Binding ToolTipText}" Background="Transparent">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="20" />
@@ -71,32 +72,27 @@
                         Visibility="{Binding CanExpand, Converter={StaticResource BoolToVis}}"
                         Command="{Binding DataContext.ToggleExpandCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                         CommandParameter="{Binding}" />
-                <TextBlock Grid.Column="2" Text="{Binding Label}" VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis">
+                <!-- A directory or a group: its label (a directory in bold). -->
+                <TextBlock Grid.Column="2" Text="{Binding Label}" VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" FontWeight="SemiBold"
+                           Visibility="{Binding IsSessionLike, Converter={StaticResource InvertedBoolToVis}}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding Kind}" Value="Directory">
-                                    <Setter Property="FontWeight" Value="SemiBold" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                    <Setter Property="FontStyle" Value="Italic" />
+                                <DataTrigger Binding="{Binding Kind}" Value="Group">
+                                    <Setter Property="FontWeight" Value="Normal" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
+                <!-- A session or a worker: the shared row face (status squares, name, profile and date below it, recency colour). -->
+                <v:SessionRowFace Grid.Column="2" Visibility="{Binding IsSessionLike, Converter={StaticResource BoolToVis}}" />
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="{Binding GitOriginLabel}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" Margin="0,0,8,0"
                                TextTrimming="CharacterEllipsis" MaxWidth="140" Visibility="{Binding HasGitOrigin, Converter={StaticResource BoolToVis}}" />
-                    <!-- ISSUE.013 R5: the profile the session runs on; a caution mark when a worker runs on another one. -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,8,0" ToolTip="{Binding ProfileToolTip}" AutomationProperties.Name="Profile badge"
-                                Visibility="{Binding ShowProfileBadge, Converter={StaticResource BoolToVis}}">
-                        <TextBlock Text="{Binding ProfileName}" FontSize="11" MaxWidth="110" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Text="{Binding SwitchingToProfileName, StringFormat=→ {0}}" FontSize="11" MaxWidth="110" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
-                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" Visibility="{Binding HasSwitching, Converter={StaticResource BoolToVis}}" />
-                        <TextBlock Style="{StaticResource IconText}" FontSize="11" Margin="3,0,0,0" Text="{StaticResource GlyphWarning}"
-                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" Visibility="{Binding HasProfileMismatch, Converter={StaticResource BoolToVis}}" />
-                    </StackPanel>
+                    <!-- ISSUE.013 R5: a caution mark when a worker runs on another profile than its supervisor. -->
+                    <TextBlock Style="{StaticResource IconText}" FontSize="12" Margin="0,0,6,0" Text="{StaticResource GlyphWarning}" ToolTip="{Binding ProfileToolTip}"
+                               AutomationProperties.Name="Profile badge" Foreground="{DynamicResource SystemFillColorCautionBrush}" Visibility="{Binding HasProfileMismatch, Converter={StaticResource BoolToVis}}" />
                     <TextBlock Text="{Binding MatchSummary}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,8,0" />
                     <TextBlock Text="{Binding WorkerCount, StringFormat={}{0}w}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,8,0">
                         <TextBlock.Style>
@@ -114,24 +110,13 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,8,0" Visibility="{Binding HasAttention, Converter={StaticResource BoolToVis}}">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphWarning}"
-                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" />
-                        <TextBlock Text="{Binding AttentionCount}" FontWeight="SemiBold" FontSize="12" Margin="3,0,0,0"
-                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" />
-                    </StackPanel>
-                    <TextBlock Style="{StaticResource IconText}" FontSize="12" Margin="0,0,8,0" Text="{StaticResource GlyphClock}" ToolTip="This session has a schedule"
-                               AutomationProperties.Name="Schedule indicator" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Visibility="{Binding HasSchedules, Converter={StaticResource BoolToVis}}" />
-                    <Ellipse Width="8" Height="8" Fill="{DynamicResource SystemFillColorSuccessBrush}" ToolTip="Running"
-                             Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
             </Grid>
         </DataTemplate>    </ResourceDictionary>
     </UserControl.Resources>
     <DockPanel>
-        <!-- Slots: a toolbar above the search box and a footer below the rows -->
-        <v:SlotHost DockPanel.Dock="Top" SlotId="tree.toolbar" />
+        <!-- Slots: the toolbar (Add directory, New session, New group, Refresh) in one line at the bottom of the panel, a footer above it -->
+        <v:SlotHost DockPanel.Dock="Bottom" SlotId="tree.toolbar" />
         <v:SlotHost DockPanel.Dock="Bottom" SlotId="tree.footer" />
         <Grid DockPanel.Dock="Top" Margin="8,8,8,4">
             <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Search sessions" Padding="8,5,30,5" />

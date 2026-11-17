@@ -10,6 +10,10 @@ public sealed class AppearanceSettings
 	[JsonConverter(typeof(JsonStringEnumConverter))]
 	public ClientTheme Theme { get; set; } = ClientTheme.System;
 
+	/// <summary>How the session rows show the date of the last prompt.</summary>
+	[JsonConverter(typeof(JsonStringEnumConverter))]
+	public SessionDateFormat DateFormat { get; set; } = SessionDateFormat.Absolute;
+
 	public double AssistantFontSize { get; set; } = Constants.Defaults.FontSize;
 
 	public double AssistantMarkdownFontSize { get; set; } = Constants.Defaults.FontSize;

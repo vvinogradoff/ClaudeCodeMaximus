@@ -76,6 +76,8 @@ public partial class App : Application
 
 		_host.Services.GetRequiredService<ShellModuleLoader>().Load();
 		_host.Services.GetRequiredService<AppearanceApplier>().Start();   // the stored theme and fonts, before any window exists
+		_host.Services.GetRequiredService<ListDisplayService>().Start();    // the date format of the session rows
+		_host.Services.GetRequiredService<ColourApplier>().Start();       // the colour palette (Settings, Colours), likewise
 		var window = _host.Services.GetRequiredService<MainWindow>();
 		var windowCreated = startup.ElapsedMilliseconds;
 		MainWindow = window;

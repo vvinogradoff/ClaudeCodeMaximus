@@ -17,7 +17,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	private bool _isExpanded;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(HasSchedules), nameof(ProfileName), nameof(HasProfile), nameof(SwitchingToProfileName), nameof(HasSwitching), nameof(ShowProfileBadge), nameof(HasProfileMismatch), nameof(ProfileToolTip))]
+	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(AttentionKey), nameof(HasDraft), nameof(IsResumable), nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(HasSchedules), nameof(ProfileName), nameof(HasProfile), nameof(SwitchingToProfileName), nameof(HasSwitching), nameof(ShowProfileBadge), nameof(HasProfileMismatch), nameof(ProfileToolTip))]
 	private SessionStateDto? _state;
 
 	[ObservableProperty]
@@ -74,8 +74,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
 	public bool IsSessionLike => Kind is TreeNodeKind.Session or TreeNodeKind.Worker;
 
+	/// <summary>
+	/// A group that holds nothing to show: the daemon lists the group an orchestration spawned its workers into, but not the workers (they nest under their supervisor), so
+	/// it is empty. Husks are not rows of the tree, as in the Avalonia client.
+	/// </summary>
+	public bool IsHusk { get; set; }
+
 	/// <summary>Whether the row shows an expander.</summary>
-	public bool CanExpand => IsSessionLike ? WorkerCount > 0 : Children.Count > 0;
+	public bool CanExpand => IsSessionLike ? WorkerCount > 0 : Children.Any(c => !c.IsHusk);
 
 	/// <summary>True once <c>tree.nodeInfo</c> answered for this node (so a tooltip needs no second call).</summary>
 	public bool InfoLoaded { get; set; }
@@ -86,6 +92,37 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	public string GitOriginLabel => GitOrigin == null ? string.Empty : GitOriginText.Short(GitOrigin);
 
 	public bool IsRunning => State?.Running == true;
+
+	/// <summary>The session has an unsent draft (the pencil by its name).</summary>
+	public bool HasDraft => IsSessionLike && State?.HasDraft == true;
+
+	/// <summary>Claude Code still has the session for <c>--resume</c> (the lower blue square, as the Avalonia client's <c>IsResumable</c>).</summary>
+	public bool IsResumable => IsSessionLike && State?.Resumable == true;
+
+	/// <summary>Date of the last prompt in the format of the Appearance setting; empty for directories and groups and without a prompt.</summary>
+	public string LastPromptText => IsSessionLike ? SessionDisplay.DateText(State?.LastPromptUtc, TimeProvider.System.GetLocalNow()) : string.Empty;
+
+	/// <summary>The most recent activity of the session (prompt, response or draft edit).</summary>
+	private DateTimeOffset? LastActivity => State?.LastActivityUtc ?? State?.LastPromptUtc;
+
+	/// <summary>The recency tier of the row (see <see cref="SessionDisplay.RecencyLevel"/>); 0 for directories and groups.</summary>
+	public int RecencyLevel => IsSessionLike ? SessionDisplay.RecencyLevel(LastActivity, State?.HasDraft == true, TimeProvider.System.GetUtcNow()) : 0;
+
+	/// <summary>Activity within the last 24 hours: the dotted border.</summary>
+	public bool IsRecentlyActive => IsSessionLike && SessionDisplay.IsRecentlyActive(LastActivity, TimeProvider.System.GetUtcNow());
+
+	/// <summary>The kind of the most severe open Focus item in lower case; empty without one. Colours the count pill.</summary>
+	public string AttentionKey => IsSessionLike ? State?.Attention?.TopKind.ToString().ToLowerInvariant() ?? string.Empty : string.Empty;
+
+	/// <summary>Re-reads the marks that age with the clock (the 60 second refresh): the recency tier and the dotted border.</summary>
+	public void RefreshClock()
+	{
+		OnPropertyChanged(nameof(RecencyLevel));
+		OnPropertyChanged(nameof(IsRecentlyActive));
+	}
+
+	/// <summary>Re-reads the date text (the date format setting changed).</summary>
+	public void RefreshDisplay() => OnPropertyChanged(nameof(LastPromptText));
 
 	public bool IsFavorite => State?.Favorite == true;
 

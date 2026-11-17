@@ -81,6 +81,13 @@ public sealed class RecentTabViewModel : IDisposable
 			row.RefreshClock();
 	}
 
+	/// <summary>Re-reads the date text of the rows (the date format setting changed).</summary>
+	public void RefreshDisplay()
+	{
+		foreach (var row in List.Items.OfType<SessionRowViewModel>())
+			row.RefreshDisplay();
+	}
+
 	public void Rebuild()
 	{
 		var tree = _tree;

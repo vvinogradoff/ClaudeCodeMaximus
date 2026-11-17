@@ -64,7 +64,8 @@ public sealed class ProfileViewTests
 
 		Assert.Single(slots.For(Constants.Slots.StatusBarItems));
 		Assert.Empty(slots.For(Constants.Slots.ComposerAccessory));   // the auth banner is W1b's ComposerNotices, not W5's
-		Assert.Single(slots.For(Constants.Slots.TreeFooter));
+		Assert.Empty(slots.For(Constants.Slots.TreeFooter));   // the switch button moved to the session header, right of "Send later"
+		Assert.Single(slots.For(Constants.Slots.SessionHeaderToolbar));
 		Assert.NotNull(commands.Find(Constants.Profiles.SwitchCommandId));
 
 		var listener = new BindingErrors();
@@ -78,7 +79,7 @@ public sealed class ProfileViewTests
 				var views = new FrameworkElement[]
 				{
 					new ProfileFlyout { DataContext = flyout },
-					new ProfileSwitchButton(commands, switcher) { DataContext = tree },
+					new ProfileSwitchButton(commands, context, switcher) { DataContext = new object() },
 					new TreePanel { DataContext = tree },
 				};
 				foreach (var element in views)

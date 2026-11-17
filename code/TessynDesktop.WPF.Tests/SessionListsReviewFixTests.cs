@@ -175,13 +175,23 @@ public sealed class SessionListsReviewFixTests
 
 		Assert.True(row.HasDraft);
 		Assert.Equal("work", row.ProfileName);
-		Assert.Equal(3, row.RecencyLevel);
 		Assert.Equal(2, row.AttentionCount);
 		Assert.NotEqual(string.Empty, row.LastPromptText);
-		Assert.Equal(2, new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddMinutes(-20)), clock: clock).RecencyLevel);
-		Assert.Equal(1, new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddMinutes(-45)), clock: clock).RecencyLevel);
-		Assert.Equal(0, new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddMinutes(-90)), clock: clock).RecencyLevel);
+
+		// Recency tiers as the Avalonia client: 15 minutes, 1 hour, 4 hours, 12 hours (4 .. 1); older or none is 0, a draft keeps the palest tier.
+		Assert.Equal(4, row.RecencyLevel);
+		Assert.Equal(3, new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddMinutes(-20)), clock: clock).RecencyLevel);
+		Assert.Equal(3, new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddMinutes(-45)), clock: clock).RecencyLevel);
+		Assert.Equal(2, new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddMinutes(-90)), clock: clock).RecencyLevel);
+		Assert.Equal(1, new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddHours(-6)), clock: clock).RecencyLevel);
+		Assert.Equal(0, new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddHours(-13)), clock: clock).RecencyLevel);
+		Assert.Equal(1, new SessionRowViewModel("s", "N", "d", State("s", draft: true, prompt: Now.AddHours(-30)), clock: clock).RecencyLevel);
 		Assert.Equal(0, new SessionRowViewModel("s", "N", "d", State("s"), clock: clock).RecencyLevel);
+		Assert.Equal(1, new SessionRowViewModel("s", "N", "d", State("s", draft: true), clock: clock).RecencyLevel);
+
+		// The dotted border marks the last 24 hours.
+		Assert.True(new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddHours(-23)), clock: clock).IsRecentlyActive);
+		Assert.False(new SessionRowViewModel("s", "N", "d", State("s", prompt: Now.AddHours(-25)), clock: clock).IsRecentlyActive);
 	}
 
 	[Fact]

@@ -133,6 +133,7 @@ public sealed class SettingsViewTests
 				new McpSettingsView { DataContext = settings.Mcp },
 				new ModelsProfilesSettingsView { DataContext = settings.ModelsProfiles },
 				new AppearanceSettingsView { DataContext = settings.Appearance },
+				new ColoursSettingsView { DataContext = settings.Colours },
 				new ScreensaverSettingsView { DataContext = settings.Screensaver },
 				new KeyboardSettingsView { DataContext = settings.Keyboard },
 			};
@@ -156,7 +157,7 @@ public sealed class SettingsViewTests
 
 			var tabs = FindAll<TabControl>(ContentOf(window)).Single();
 			Assert.Equal(
-				["General", "Notifications", "Telegram", "Web access", "MCP servers", "Models and profiles", "Appearance", "Screensaver", "Startup", "Keyboard shortcuts"],
+				["General", "Notifications", "Telegram", "Web access", "MCP servers", "Models and profiles", "Appearance", "Colours", "Screensaver", "Startup", "Keyboard shortcuts"],
 				tabs.Items.OfType<TabItem>().Select(t => (string)t.Header));
 
 			// Every tab, one after the other: a tab's content is only built when it is selected.

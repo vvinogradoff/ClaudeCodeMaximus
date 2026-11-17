@@ -1,0 +1,35 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The pill of a Focus kind (the AttentionKindPill of the Avalonia client): the count badge of a session row and the kind chip of a Focus card.
+         The kind (critical, ask, todo, alert, decided) comes in the Tag; the colours are the palette's (Settings, Colours). The text colour is inherited by the TextBlock inside. -->
+    <Style x:Key="KindPill" TargetType="Border">
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="MinWidth" Value="16" />
+        <Setter Property="Padding" Value="5,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Style.Triggers>
+            <Trigger Property="Tag" Value="critical">
+                <Setter Property="Background" Value="{DynamicResource Colour.FocusCritical}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource Colour.FocusCriticalText}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="ask">
+                <Setter Property="Background" Value="{DynamicResource Colour.FocusAsk}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource Colour.FocusAskText}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="todo">
+                <Setter Property="Background" Value="{DynamicResource Colour.FocusTodo}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource Colour.FocusTodoText}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="alert">
+                <Setter Property="Background" Value="{DynamicResource Colour.FocusAlert}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource Colour.FocusAlertText}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="decided">
+                <Setter Property="Background" Value="{DynamicResource Colour.FocusDecided}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource Colour.FocusDecidedText}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+</ResourceDictionary>

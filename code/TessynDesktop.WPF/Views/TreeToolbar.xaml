@@ -7,29 +7,37 @@
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <Style x:Key="ToolbarButton" TargetType="Button">
-                <Setter Property="Padding" Value="8,4" />
-                <Setter Property="Margin" Value="0,0,4,4" />
+                <Setter Property="Padding" Value="4,5" />
+                <Setter Property="Margin" Value="0,0,4,0" />
                 <Setter Property="FontSize" Value="12" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
             </Style>
         </ResourceDictionary>
     </UserControl.Resources>
-    <!-- The commands act on the selected node; each button carries its automation name (UI Automation and the E2E tests find it by it). -->
-    <WrapPanel Margin="8,6,8,0">
-        <Button Style="{StaticResource ToolbarButton}" Content="Add directory" Command="{Binding AddDirectoryCommand}"
-                AutomationProperties.Name="Add directory" ToolTip="Add a folder to the tree" />
-        <Button Style="{StaticResource ToolbarButton}" Content="New session" Command="{Binding AddSessionCommand}"
-                AutomationProperties.Name="New session" ToolTip="New session in the selected directory or group" />
-        <Button Style="{StaticResource ToolbarButton}" Content="New group" Command="{Binding AddGroupCommand}"
-                AutomationProperties.Name="New group" ToolTip="New group under the selected directory or group" />
-        <Button Style="{StaticResource ToolbarButton}" Content="Rename" Command="{Binding RenameCommand}"
-                AutomationProperties.Name="Rename" ToolTip="Rename the selected session or group (F2)" />
-        <Button Style="{StaticResource ToolbarButton}" Content="Delete" Command="{Binding DeleteCommand}"
-                AutomationProperties.Name="Delete" ToolTip="Delete the selected node (Delete)" />
-        <Button Style="{StaticResource ToolbarButton}" Content="Move to…" Command="{Binding MoveToCommand}"
-                AutomationProperties.Name="Move to" ToolTip="Move the selected session into another directory or group" />
-        <Button Style="{StaticResource ToolbarButton}" Command="{Binding RefreshGitOriginsCommand}"
+    <!-- One line of buttons at the bottom of the panel. They act on the selected node; each carries its automation name (UI Automation and the E2E tests find it by it).
+         Rename is a double click on the title of the session pane, Delete an icon beside it; Move to is in the context menu of a session. -->
+    <Grid Margin="8,6,4,8">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <Button Grid.Column="0" Style="{StaticResource ToolbarButton}" Command="{Binding AddDirectoryCommand}"
+                AutomationProperties.Name="Add directory" ToolTip="Add a folder to the tree">
+            <TextBlock Text="Add directory" TextTrimming="CharacterEllipsis" />
+        </Button>
+        <Button Grid.Column="1" Style="{StaticResource ToolbarButton}" Command="{Binding AddSessionCommand}"
+                AutomationProperties.Name="New session" ToolTip="New session in the selected directory or group">
+            <TextBlock Text="New session" TextTrimming="CharacterEllipsis" />
+        </Button>
+        <Button Grid.Column="2" Style="{StaticResource ToolbarButton}" Command="{Binding AddGroupCommand}"
+                AutomationProperties.Name="New group" ToolTip="New group under the selected directory or group">
+            <TextBlock Text="New group" TextTrimming="CharacterEllipsis" />
+        </Button>
+        <Button Grid.Column="3" Style="{StaticResource ToolbarButton}" Margin="0" Padding="9,5" Command="{Binding RefreshGitOriginsCommand}"
                 AutomationProperties.Name="Refresh git origins" ToolTip="Read the git origins of the directories again">
             <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphRefresh}" FontSize="12" />
         </Button>
-    </WrapPanel>
+    </Grid>
 </UserControl>
