@@ -217,7 +217,7 @@ public sealed class LeftPanel2Tests
 			tabs.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/TessynDesktop.WPF;component/Styles/LeftTabs.xaml", UriKind.Relative) });
 			tabs.SetResourceReference(FrameworkElement.StyleProperty, "LeftTabControl");
 			foreach (var title in new[] { "Tree", "Recent", "Tags" })
-				tabs.Items.Add(new TabItem { Header = title, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center, Content = new Grid() });
+				tabs.Items.Add(new TabItem { Header = title, Content = new Grid() });
 
 			Layout(tabs, 321, 200);
 

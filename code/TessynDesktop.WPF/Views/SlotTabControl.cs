@@ -49,7 +49,7 @@ public class SlotTabControl : TabControl
 			if (view == null)
 				continue;
 
-			Items.Add(new TabItem { Header = contribution.Title ?? contribution.SlotId, Content = view, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center });
+			Items.Add(new TabItem { Header = contribution.Title ?? contribution.SlotId, Content = view });
 			added++;
 		}
 

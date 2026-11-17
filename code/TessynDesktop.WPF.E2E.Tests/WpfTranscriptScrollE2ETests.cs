@@ -239,6 +239,32 @@ public sealed class WpfTranscriptScrollE2ETests : IDisposable
 	}
 
 	[Fact]
+	public async Task The_scrollbar_is_wide_enough_to_grab_and_its_thumb_has_a_hover_state()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			Assert.True(await Num("document.querySelectorAll('#sb:not(.off)').length", page) == 1, "the scrollbar is not shown");
+
+			// The track is the theme width (12 to 14 px; the WPF client's Constants.Appearance.ScrollBarWidth, which ScrollBarWidthTests ties to the page's --sbw), the thumb a comfortable bar inside it, not a thin line.
+			Assert.InRange(await Num("sb.getBoundingClientRect().width", page), 12, 14);
+			var thumbWidth = await Num("sbt.getBoundingClientRect().width", page);
+			Assert.InRange(thumbWidth, 12, 14);
+
+			// Hover: the thumb gets darker while the mouse is over it (and the track gets a faint fill), and is darker again while dragged.
+			var rest = (await page.EvalAsync("getComputedStyle(sbt).backgroundColor"))?.ToString();
+			var thumb = (await page.EvalAsync("(() => { const r = sbt.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()"))!.AsArray();
+			double x = thumb[0]!.GetValue<double>(), y = thumb[1]!.GetValue<double>();
+			await page.MouseMoveAsync(x, y);
+			await WaitAsync("the thumb to show its hover colour", async () => (await page.EvalAsync("getComputedStyle(sbt).backgroundColor"))?.ToString() != rest);
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
 	public async Task Dragging_the_scrollbar_thumb_follows_the_mouse_one_to_one_and_the_content_does_not_jump_when_entries_get_measured()
 	{
 		var (process, page) = await StartAsync();

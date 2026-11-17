@@ -71,7 +71,7 @@
                 </Grid.ColumnDefinitions>
                 <!-- Left panel: the Tree tab, plus the tabs later packages contribute (Recent, Tags); the tab strip stays hidden until one exists -->
                 <v:SlotTabControl Grid.Column="0" x:Name="LeftTabs" SlotId="main.leftPanelTabs" Style="{StaticResource LeftTabControl}" Padding="0" BorderThickness="0" Background="Transparent">
-                    <TabItem Header="Tree" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                    <TabItem Header="Tree">
                         <v:TreePanel DataContext="{Binding Tree}" />
                     </TabItem>
                 </v:SlotTabControl>

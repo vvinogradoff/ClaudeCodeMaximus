@@ -26,6 +26,13 @@ public static partial class Constants
 		public const string DarkThemeUri = "pack://application:,,,/TessynDesktop.WPF;component/Styles/Theme.Dark.xaml";
 		public const string ThemeDictionaryMarker = "/Styles/Theme.";
 
+		/// <summary>Width of every vertical scrollbar (height of a horizontal one) in DIPs/CSS px: the Styles/ScrollBars.xaml resource <see cref="ScrollBarWidthKey"/> and the transcript page's
+		/// <c>--sbw</c> custom property both carry this value (ScrollBarWidthTests keeps the three equal).</summary>
+		public const double ScrollBarWidth = 14;
+
+		/// <summary>Application resource key of the scrollbar width.</summary>
+		public const string ScrollBarWidthKey = "ScrollBarWidth";
+
 		/// <summary>Application resource key of the prompt box font size (DIPs).</summary>
 		public const string InputFontSizeKey = "InputFontSize";
 
