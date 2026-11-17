@@ -4,18 +4,18 @@
              xmlns:v="clr-namespace:TessynDesktop.WPF.Views">
     <UserControl.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /></ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/PlainToggle.xaml" /></ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>
     <!-- The toggles of the command bar (W4): Streaming Session Mode, completion sound and the local-tools button, as icons with tooltips so they stay on the line of the selectors.
          The DataContext is the SessionPaneViewModel. -->
-    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+    <StackPanel Orientation="Horizontal" Margin="12,6,0,0">
         <StackPanel DataContext="{Binding Toggles}" Orientation="Horizontal">
-            <ToggleButton Padding="8,5" Margin="0,0,6,0" IsEnabled="{Binding IsStreamingKnown}" IsChecked="{Binding StreamingChecked, Mode=TwoWay}"
+            <ToggleButton Style="{StaticResource PlainToggle}" Padding="8,5" Margin="0,0,6,0" IsEnabled="{Binding IsStreamingKnown}" IsChecked="{Binding StreamingChecked, Mode=TwoWay}"
                           ToolTip="Streaming Session Mode: keep one claude process alive for the session's turns." AutomationProperties.Name="Streaming Session Mode">
                 <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphStreaming}" />
             </ToggleButton>
-            <ToggleButton Padding="8,5" Margin="0,0,6,0" IsEnabled="{Binding IsSoundKnown}" IsChecked="{Binding SoundChecked, Mode=TwoWay}"
+            <ToggleButton Style="{StaticResource PlainToggle}" Padding="8,5" Margin="0,0,6,0" IsEnabled="{Binding IsSoundKnown}" IsChecked="{Binding SoundChecked, Mode=TwoWay}"
                           ToolTip="Play a sound when a turn of this session completes." AutomationProperties.Name="Completion sound">
                 <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSound}" />
             </ToggleButton>

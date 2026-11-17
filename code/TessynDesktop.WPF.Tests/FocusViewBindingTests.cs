@@ -53,6 +53,11 @@ public sealed class FocusViewBindingTests
 		}
 	}
 
+	/// <summary>The texts shown in a Focus panel: text blocks plus the selectable texts (titles, outcomes, body paragraphs).</summary>
+	private static IEnumerable<string> Texts(DependencyObject panel, bool visibleOnly = false) =>
+		Descendants<TextBlock>(panel).Where(t => !visibleOnly || t.Visibility == Visibility.Visible).Select(t => t.Text)
+			.Concat(Descendants<SelectableText>(panel).Where(t => !visibleOnly || t.Visibility == Visibility.Visible).Select(t => t.PlainText));
+
 	[Fact]
 	public void SessionPane_WithFocusItemsAndAPreview_BindsWithoutBindingErrors_AndShowsTheSideColumn()
 	{
@@ -107,7 +112,7 @@ public sealed class FocusViewBindingTests
 			sideVisible = side.Visibility == Visibility.Visible;
 			sideWidth = ((ColumnDefinition)view.FindName("SideColumn")).ActualWidth;
 			var panel = Descendants<FocusPanel>(view).Single();
-			cardTexts.AddRange(Descendants<TextBlock>(panel).Select(t => t.Text));
+			cardTexts.AddRange(Texts(panel));
 			cardTexts.AddRange(Descendants<TextBlock>((DependencyObject)view.FindName("SendAnswersButton")).Select(t => t.Text));   // "Send answers (n)" now lives in the session header (FR.23.14)
 			markdownBlocks = Descendants<StackPanel>(panel).Count(p => MarkdownText.GetSource(p) != null);
 		});
@@ -200,7 +205,7 @@ public sealed class FocusViewBindingTests
 			var focus = new FocusViewModel(client, new ImmediateUiDispatcher(), NullLogger<FocusViewModel>.Instance);
 			var panel = new FocusPanel { DataContext = focus };
 			Layout(panel);
-			texts.AddRange(Descendants<TextBlock>(panel).Where(t => t.Visibility == Visibility.Visible).Select(t => t.Text));
+			texts.AddRange(Texts(panel, visibleOnly: true));
 		});
 
 		Assert.Contains(Constants.Texts.NoOpenItems, texts);
@@ -241,12 +246,12 @@ public sealed class FocusViewBindingTests
 			decisionsHeader = expanders.Select(e => e.Header as string).FirstOrDefault(h => h?.StartsWith("Decisions", StringComparison.Ordinal) == true);
 			closedHeader = expanders.Select(e => e.Header as string).FirstOrDefault(h => h?.StartsWith("Closed", StringComparison.Ordinal) == true);
 			emptyShown = Descendants<TextBlock>(panel).Any(t => t.Text == Constants.Texts.NoOpenItems && t.Visibility == Visibility.Visible);
-			collapsedTexts.AddRange(Descendants<TextBlock>(panel).Select(t => t.Text));
+			collapsedTexts.AddRange(Texts(panel));
 
 			var closed = expanders.Single(e => (e.Header as string)?.StartsWith("Closed", StringComparison.Ordinal) == true);
 			closed.IsExpanded = true;
 			Layout(panel);
-			expandedTexts.AddRange(Descendants<TextBlock>(panel).Select(t => t.Text));
+			expandedTexts.AddRange(Texts(panel));
 			var bodyPanelsBefore = Descendants<StackPanel>(panel).Count(p => MarkdownText.GetSource(p) != null && p.Visibility == Visibility.Visible);
 			bodyHiddenAtFirst = bodyPanelsBefore == 0;
 

@@ -10,6 +10,7 @@
     <RootNamespace>TessynDesktop.WPF</RootNamespace>
     <AssemblyName>TessynDesktop.WPF</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Tessyn.ico</ApplicationIcon>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
     <!-- The built-in Fluent theme (ThemeMode) is still marked experimental in .NET 10. -->
@@ -36,6 +37,10 @@
     <!-- The WPF SDK drops these two implicit usings. -->
     <Using Include="System.IO" />
     <Using Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Tessyn.ico" />
   </ItemGroup>
 
   <ItemGroup>

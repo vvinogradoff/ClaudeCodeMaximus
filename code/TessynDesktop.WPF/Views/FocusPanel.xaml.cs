@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using TessynDesktop.WPF.ViewModels;
@@ -13,6 +14,34 @@ public partial class FocusPanel : UserControl
 		InitializeComponent();
 		PreviewKeyDown += OnPreviewKeyDown;
 		IsVisibleChanged += OnIsVisibleChanged;
+	}
+
+	private Point _headerDown;
+	private bool _headerClickArmed;
+
+	/// <summary>
+	/// The title of a closed card is selectable text, which takes the mouse for selecting, so the header toggle is a click detected here:
+	/// a single press and release without dragging (a drag is a selection and must not toggle).
+	/// </summary>
+	private void OnClosedHeaderDown(object sender, MouseButtonEventArgs e)
+	{
+		_headerDown = e.GetPosition((IInputElement)sender);
+		_headerClickArmed = e.ClickCount == 1;
+	}
+
+	private void OnClosedHeaderUp(object sender, MouseButtonEventArgs e)
+	{
+		var armed = _headerClickArmed;
+		_headerClickArmed = false;
+		if (!armed || sender is not FrameworkElement { DataContext: FocusItemViewModel item })
+			return;
+
+		var moved = e.GetPosition((IInputElement)sender) - _headerDown;
+		if (Math.Abs(moved.X) > SystemParameters.MinimumHorizontalDragDistance || Math.Abs(moved.Y) > SystemParameters.MinimumVerticalDragDistance)
+			return;
+
+		if (item.ToggleBodyCommand.CanExecute(null))
+			item.ToggleBodyCommand.Execute(null);
 	}
 
 	/// <summary>The panel shows when Focus is selected (its host is collapsed under Session): the Closed expander collapses again (FR.23.14).</summary>
