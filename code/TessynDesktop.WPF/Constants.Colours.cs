@@ -1,4 +1,4 @@
-namespace TessynDesktop.WPF;
+﻿namespace TessynDesktop.WPF;
 
 /// <summary>Names and texts of the colour palette (the Colours settings tab and the brushes the views use).</summary>
 /// <remarks>Created by Claude</remarks>
@@ -16,13 +16,18 @@ public static partial class Constants
 		public const string ResetOne = "Reset";
 	}
 
-	/// <summary>The Appearance tab's choice of the date format in the session rows.</summary>
+	/// <summary>The Appearance tab's choice of the date format in the session rows: exactly two forms.</summary>
 	public static class DateFormats
 	{
-		public const string Absolute = "yyyy-MM-dd HH:mm";
-		public const string AbsoluteLabel = "Date and time (yyyy-MM-dd HH:mm), as in the Avalonia client";
-		public const string RelativeLabel = "Relative (clock time today, otherwise 'MMM d')";
-		public const string TodayFormat = "HH:mm";
-		public const string OtherDayFormat = "MMM d";
+		public const string Absolute = "yyyy-MM-dd";
+		public const string AbsoluteLabel = "Date (yyyy-MM-dd)";
+		public const string RelativeLabel = "Relative (for example 107w)";
+		public const string NowText = "now";
+		public const string MinutesUnit = "m";
+		public const string HoursUnit = "h";
+		public const string DaysUnit = "d";
+		public const string WeeksUnit = "w";
+		public const int MaxDaysAsDays = 14;
+		public const int DaysPerWeek = 7;
 	}
 }

@@ -1,4 +1,4 @@
-namespace TessynDesktop.WPF;
+﻿namespace TessynDesktop.WPF;
 
 /// <summary>Names used by the Recent and Tags tabs, the Recent dropdown and the favourite toggles (W3).</summary>
 /// <remarks>Created by Claude</remarks>
@@ -26,6 +26,9 @@ public static partial class Constants
 		/// <summary>The Tag of the open button of a row; the dropdown closes when it is clicked.</summary>
 		public const string OpenTag = "open";
 		public const string OpenButtonPrefix = "Open ";
+		public const string WorkerCountFormat = "{0} {1}";
+		public const string WorkerNoun = "worker";
+		public const string WorkersNoun = "workers";
 		public const string TagChipPrefix = "Tag ";
 		public const string RecentDropdownName = "Recent dropdown";
 
@@ -47,6 +50,8 @@ public static partial class Constants
 		public const string TagsNoSessionsText = "No sessions carry the selected tags.";
 		public const string TagsNoTagsText = "No session has any tag yet.";
 		public const string TagsNoMatchText = "No tag matches.";
+		public const string TagsScopeNotice = "Only the tags of the selected session's directory are shown.";
+		public const string TagsShowAll = "Show all directories";
 		/// <summary>The project scope is on: the tag may exist in another directory.</summary>
 		public const string TagsNoMatchScopedText = "No tag matches in this directory. Switch off the project scope (the folder button) to search every directory.";
 		public const string DaemonErrorFormat = "{0}";

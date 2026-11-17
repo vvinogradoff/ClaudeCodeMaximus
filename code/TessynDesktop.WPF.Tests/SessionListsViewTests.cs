@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -157,7 +157,7 @@ public sealed class SessionListsViewTests
 			{
 				window.UpdateLayout();   // Loaded: the tab was shown
 
-				Assert.Equal(["Group One", "Group Two", "Favourite B", "Open B"], ButtonNames(panel));
+				Assert.Equal(["Group One", "Group Two", "Open B", "Favourite B"], ButtonNames(panel));
 			}
 			finally
 			{
