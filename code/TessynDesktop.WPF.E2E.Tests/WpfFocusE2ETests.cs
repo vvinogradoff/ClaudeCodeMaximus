@@ -30,6 +30,7 @@ public sealed class WpfFocusE2ETests : IDisposable
 	private readonly SessionNodeModel _second;
 	private readonly AppProcessHarness _app;
 	private readonly UiAutomationClicker _clicker = new();
+	private readonly UiAutomationExpander _expander = new();
 	private readonly string _main;
 
 	public WpfFocusE2ETests()
@@ -261,7 +262,8 @@ public sealed class WpfFocusE2ETests : IDisposable
 			Assert.True(await WaitForTextAsync(process, "Nothing needs your attention in this session."), "The empty state was not shown. Log:\n" + _app.ReadLog());   // FR.23.14: nothing is open any more
 			Assert.False(_clicker.TextExists(process, "Answered: Yes, go ahead"), "Closed is collapsed by default, so the outcome line must not show yet.");
 
-			Assert.True(await _clicker.ClickAsync(process, "Closed (1)", StepTimeout), "The Closed expander header was not found. Log:\n" + _app.ReadLog());
+			Assert.Equal(System.Windows.Automation.ExpandCollapseState.Collapsed, _expander.GetState(process, "FocusClosedExpander"));
+			Assert.True(_expander.TrySet(process, "FocusClosedExpander", expand: true), "The Closed expander was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await WaitForTextAsync(process, "Answered: Yes, go ahead"), "The outcome line did not show after expanding. Log:\n" + _app.ReadLog());
 			Assert.True(_clicker.TextExists(process, "Proceed with the migration?"));
 			AssertNoErrors();

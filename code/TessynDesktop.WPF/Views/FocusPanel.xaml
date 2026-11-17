@@ -160,7 +160,7 @@
                             <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
                         </DockPanel>
-                        <TextBlock Text="{Binding OutcomeText}" TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" AutomationProperties.Name="Outcome" />
+                        <TextBlock Text="{Binding OutcomeText}" TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                         <StackPanel Margin="0,8,0,0" v:MarkdownText.Source="{Binding Body}" Visibility="{Binding IsBodyVisible, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </Border>
@@ -198,12 +198,12 @@
                            Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}" />
                 <ItemsControl ItemsSource="{Binding OpenItems}" ItemTemplate="{StaticResource OpenCardTemplate}" Focusable="False" />
 
-                <Expander Header="{Binding DecisionsHeader}" IsExpanded="{Binding IsDecisionsExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.Name="Decisions"
+                <Expander Header="{Binding DecisionsHeader}" IsExpanded="{Binding IsDecisionsExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.AutomationId="FocusDecisionsExpander"
                           Visibility="{Binding HasDecisions, Converter={StaticResource BoolToVis}}">
                     <ItemsControl ItemsSource="{Binding DecidedItems}" ItemTemplate="{StaticResource OpenCardTemplate}" Focusable="False" Margin="0,8,0,0" />
                 </Expander>
 
-                <Expander Header="{Binding ClosedHeader}" IsExpanded="{Binding IsClosedExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.Name="Closed"
+                <Expander Header="{Binding ClosedHeader}" IsExpanded="{Binding IsClosedExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.AutomationId="FocusClosedExpander"
                           Visibility="{Binding HasClosed, Converter={StaticResource BoolToVis}}">
                     <ItemsControl ItemsSource="{Binding ClosedItems}" ItemTemplate="{StaticResource ClosedCardTemplate}" Focusable="False" Margin="0,8,0,0" />
                 </Expander>
