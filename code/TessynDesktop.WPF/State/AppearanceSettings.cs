@@ -21,4 +21,7 @@ public sealed class AppearanceSettings
 	public double UserFontSize { get; set; } = Constants.Defaults.FontSize;
 
 	public double InputFontSize { get; set; } = Constants.Defaults.FontSize;
+
+	/// <summary>The tag chips and the "+N" hint of the session tag area (FR.24).</summary>
+	public double TagFontSize { get; set; } = Constants.Defaults.TagFontSize;
 }

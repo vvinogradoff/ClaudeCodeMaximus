@@ -191,6 +191,25 @@ public sealed class ChromeViewTests
 	}
 
 	[Fact]
+	public void TheApplier_PutsTheTagCloudFontSizeIntoTheResources_NowAndOnEveryChange()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var rig = new Rig();
+			var applier = new AppearanceApplier(rig.Appearance, new ImmediateUiDispatcher());
+			var resources = new ResourceDictionary();
+
+			applier.Apply(resources);
+			Assert.Equal(Constants.Defaults.TagFontSize, resources[Constants.Appearance.TagFontSizeKey]);
+
+			rig.Store.Update<AppearanceSettings>(a => a.TagFontSize = 20);
+			applier.Apply(resources);
+
+			Assert.Equal(20.0, resources[Constants.Appearance.TagFontSizeKey]);
+		});
+	}
+
+	[Fact]
 	public void ThemeDictionaries_DefineTheSameKeys()
 	{
 		StaTestRunner.Run(() =>

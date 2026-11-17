@@ -63,6 +63,9 @@ public static partial class Constants
 	public static class Defaults
 	{
 		public const double FontSize = 13.0;
+
+		/// <summary>The tag chips and the "+N" hint of the session tag area: the size they had (Fluent's 14) before it became a setting.</summary>
+		public const double TagFontSize = 14.0;
 		public const int ScreensaverTimeoutSeconds = 120;
 		public const int ScreensaverSlideshowIntervalSeconds = 10;
 

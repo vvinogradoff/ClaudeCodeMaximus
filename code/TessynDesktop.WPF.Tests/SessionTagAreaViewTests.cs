@@ -463,6 +463,77 @@ public sealed class SessionTagAreaViewTests
 	}
 
 	[Fact]
+	public void The_chips_and_the_hint_use_the_default_tag_font_size_of_the_setting()
+	{
+		Run(() =>
+		{
+			var f = Create(60);
+
+			Assert.Equal(Constants.Defaults.TagFontSize, f.Area.TagFontSize);
+			Assert.All(f.Chips(), chip => Assert.Equal(Constants.Defaults.TagFontSize, chip.FontSize));
+			Assert.Equal(Constants.Defaults.TagFontSize, Named(f.Area, "HiddenHintText") is TextBlock hint ? hint.FontSize : double.NaN);
+		});
+	}
+
+	[Fact]
+	public void A_new_tag_font_size_applies_live_to_the_chips_and_the_hint_and_the_mini_line_follows_the_chip_height()
+	{
+		Run(() =>
+		{
+			var f = Create(60);
+			var smallLine = f.Area.LineHeight;
+			Assert.Equal(smallLine, f.Area.AreaHeight, 1);
+
+			f.Area.TagFontSize = 28;
+			f.Settle();
+
+			Assert.All(f.Chips(), chip => Assert.Equal(28, chip.FontSize));
+			Assert.Equal(28, ((TextBlock)Named(f.Area, "HiddenHintText")).FontSize);
+			Assert.True(f.Area.LineHeight > smallLine + 8, $"line {f.Area.LineHeight} did not grow from {smallLine}");
+			Assert.Equal(f.Area.LineHeight, f.Area.AreaHeight, 1);   // mini: exactly one line of the new chips
+
+			f.Area.TagFontSize = 9;
+			f.Settle();
+
+			Assert.True(f.Area.LineHeight < smallLine, $"line {f.Area.LineHeight} did not shrink from {smallLine}");
+			Assert.Equal(f.Area.LineHeight, f.Area.AreaHeight, 1);
+		});
+	}
+
+	[Fact]
+	public void The_area_follows_the_tag_font_size_application_resource()
+	{
+		Run(() =>
+		{
+			var f = Create(60);
+			f.Area.Resources[Constants.Appearance.TagFontSizeKey] = 22.0;
+			f.Settle();
+
+			Assert.Equal(22, f.Area.TagFontSize);
+			Assert.All(f.Chips(), chip => Assert.Equal(22, chip.FontSize));
+
+			f.Area.Resources[Constants.Appearance.TagFontSizeKey] = 12.0;
+			f.Settle();
+
+			Assert.All(f.Chips(), chip => Assert.Equal(12, chip.FontSize));
+			Assert.Equal(f.Area.LineHeight, f.Area.AreaHeight, 1);
+		});
+	}
+
+	[Fact]
+	public void A_bigger_tag_font_size_in_full_mode_grows_the_area_to_the_ten_line_cap_of_the_bigger_lines()
+	{
+		Run(() =>
+		{
+			var f = Create(200, expanded: true);
+			f.Area.TagFontSize = 24;
+			f.Settle();
+
+			Assert.Equal(f.Area.LineHeight * Constants.TagArea.MaxFullLines, f.Area.AreaHeight, 1);
+		});
+	}
+
+	[Fact]
 	public void The_plus_hint_never_covers_a_chip_of_the_line()
 	{
 		Run(() =>
