@@ -30,6 +30,8 @@ public sealed class AppearanceService : IAppearanceService
 
 	public AppearanceSettings Current => _store.Get<AppearanceSettings>();
 
+	public IReadOnlyDictionary<string, string> PageColours => ColourCatalog.PageVariables(_store.Get<ColourSettings>(), IsDark);
+
 	public void ToggleTheme() => _store.Update<AppearanceSettings>(a => a.Theme = ComputeDark(a.Theme) ? ClientTheme.Light : ClientTheme.Dark);
 
 	public void AdjustFont(FontTarget target, int delta) => _store.Update<AppearanceSettings>(a =>
@@ -56,6 +58,8 @@ public sealed class AppearanceService : IAppearanceService
 	{
 		if (e.Section == Constants.SettingsSections.Appearance)
 			Recompute();
+		else if (e.Section == Constants.SettingsSections.Colours)
+			Changed?.Invoke(this, EventArgs.Empty);   // the transcript page takes its colours with the appearance message
 	}
 
 	private void Recompute()

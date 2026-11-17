@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
@@ -5,71 +6,50 @@ using TessynDesktop.WPF.State;
 namespace TessynDesktop.WPF.ViewModels.Settings;
 
 /// <summary>
-/// The Colours tab: every colour of <see cref="ColourCatalog"/> (recent and active sessions, session status, Focus kinds, tree selection) with its entry. An empty entry
-/// means the default (the Avalonia client's); a colour is stored only when it differs from the default of the current theme. Contains no WPF types.
+/// The Colours tab: every colour of <see cref="ColourCatalog"/> (the application, the transcript page, recent and active sessions, session status, Focus kinds, tree selection)
+/// for the theme chosen with the Light/Dark switch, which starts on the current theme. Light and Dark keep their colours separately. A colour changed in the picker is stored
+/// at once, so the application shows it live (there is nothing to save); only a colour that differs from its theme's default is stored. Contains no WPF types.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class ColoursSectionViewModel : SettingsSectionViewModel, ISettingsEditor
 {
 	private readonly IClientSettingsStore _store;
-	private readonly Func<bool> _isDark;
+
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(EditingLight), nameof(ResetAllText))]
+	private bool _editingDark;
 
 	public ColoursSectionViewModel(IClientSettingsStore store, IAppearanceService? appearance = null)
 	{
 		_store = store;
-		_isDark = () => appearance?.IsDark ?? false;
+		_editingDark = appearance?.IsDark ?? false;
 		Read();
 	}
 
 	public override string Title => Constants.Colours.TabTitle;
 
-	/// <summary>The rows in catalog order.</summary>
+	/// <summary>The rows in catalog order, for the edited theme.</summary>
 	public List<ColourRowViewModel> Rows { get; private set; } = [];
 
 	public string Hint => Constants.Colours.Hint;
 
-	public bool HasChanges
+	/// <summary>Two-way for the Light radio button of the switch.</summary>
+	public bool EditingLight
 	{
-		get
+		get => !EditingDark;
+		set
 		{
-			var stored = _store.Get<ColourSettings>().Overrides;
-			foreach (var row in Rows)
-			{
-				if (!row.IsValid)
-					return true;
-
-				var edited = row.IsOverridden ? ColourCatalog.Normalize(row.Text) : null;
-				var current = stored.TryGetValue(row.Key, out var value) && ColourCatalog.IsValid(value) ? ColourCatalog.Normalize(value) : null;
-				if (edited != current)
-					return true;
-			}
-
-			return false;
+			if (value)
+				EditingDark = false;
 		}
 	}
 
-	public Task<bool> SaveAsync()
-	{
-		ClearMessages();
-		var invalid = Rows.FirstOrDefault(r => !r.IsValid);
-		if (invalid != null)
-		{
-			ErrorText = string.Format(Constants.Settings.SaveFailedFormat, string.Format(Constants.Colours.InvalidFormat, invalid.Label, invalid.Text));
-			return Task.FromResult(false);
-		}
+	public string ResetAllText => string.Format(Constants.Colours.ResetAllFormat, EditingDark ? Constants.Colours.DarkName : Constants.Colours.LightName);
 
-		var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
-		foreach (var row in Rows.Where(r => r.IsOverridden))
-		{
-			var hex = ColourCatalog.Normalize(row.Text);
-			if (hex != row.DefaultHex)
-				overrides[row.Key] = hex;
-		}
+	/// <summary>Colours are stored as they change, so there is never anything left for the window's Save.</summary>
+	public bool HasChanges => false;
 
-		_store.Update<ColourSettings>(s => s.Overrides = overrides);
-		StatusText = Constants.Settings.Saved;
-		return Task.FromResult(true);
-	}
+	public Task<bool> SaveAsync() => Task.FromResult(true);
 
 	[RelayCommand]
 	public Task ReloadAsync()
@@ -79,22 +59,43 @@ public sealed partial class ColoursSectionViewModel : SettingsSectionViewModel, 
 		return Task.CompletedTask;
 	}
 
-	/// <summary>Every colour back to its default (applied with Save).</summary>
+	/// <summary>Every colour of the edited theme back to its default; the other theme is left alone.</summary>
 	[RelayCommand]
 	private void ResetAll()
 	{
-		foreach (var row in Rows)
-			row.Text = string.Empty;
+		var dark = EditingDark;
+		_store.Update<ColourSettings>(s =>
+		{
+			s.Migrate();
+			s.Of(dark).Clear();
+		});
+		Read();
 	}
 
-	/// <summary>Reads the stored colours into the rows.</summary>
+	partial void OnEditingDarkChanged(bool value) => Read();
+
+	/// <summary>Reads the stored colours of the edited theme into the rows.</summary>
 	public void Read()
 	{
-		var stored = _store.Get<ColourSettings>().Overrides;
-		var dark = _isDark();
+		var dark = EditingDark;
+		var changed = _store.Get<ColourSettings>().For(dark);
 		Rows = ColourCatalog.All
-			.Select(d => new ColourRowViewModel(d, dark ? d.DarkDefault : d.LightDefault, stored.TryGetValue(d.Key, out var value) && ColourCatalog.IsValid(value) ? ColourCatalog.Normalize(value) : string.Empty))
+			.Select(d => new ColourRowViewModel(d, dark ? d.DarkDefault : d.LightDefault, changed.TryGetValue(d.Key, out var value) && ColourCatalog.IsValid(value) ? ColourCatalog.Normalize(value) : null, Commit))
 			.ToList();
 		OnPropertyChanged(nameof(Rows));
+	}
+
+	/// <summary>Stores (or, for null, drops) one colour of the edited theme.</summary>
+	private void Commit(ColourRowViewModel row, string? hex)
+	{
+		var dark = EditingDark;
+		_store.Update<ColourSettings>(s =>
+		{
+			s.Migrate();
+			if (hex == null)
+				s.Of(dark).Remove(row.Key);
+			else
+				s.Of(dark)[row.Key] = hex;
+		});
 	}
 }

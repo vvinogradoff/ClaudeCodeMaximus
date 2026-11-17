@@ -4,20 +4,32 @@ using TessynDesktop.WPF.State;
 
 namespace TessynDesktop.WPF.ViewModels.Settings;
 
-/// <summary>One colour of the Colours tab: the text being edited (empty = the default) next to the default of the current theme.</summary>
+/// <summary>
+/// One colour of the Colours tab, for the theme being edited: the colour it has now (the user's, else the theme's default), whether the user changed it, and the picker the swatch
+/// opens. A change made in the picker goes to the section at once (the application shows it live); there is no text entry.
+/// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class ColourRowViewModel : ObservableObject
 {
-	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsOverridden), nameof(IsValid), nameof(SwatchHex))]
-	private string _text;
+	private readonly Action<ColourRowViewModel, string?> _commit;
 
-	public ColourRowViewModel(ColourDefinition definition, string defaultHex, string text)
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsOverridden))]
+	private string _hex;
+
+	[ObservableProperty]
+	private bool _isPickerOpen;
+
+	public ColourRowViewModel(ColourDefinition definition, string defaultHex, string? changedHex, Action<ColourRowViewModel, string?> commit)
 	{
 		Definition = definition;
 		DefaultHex = defaultHex;
-		_text = text;
-		ResetCommand = new RelayCommand(() => Text = string.Empty);
+		_commit = commit;
+		_hex = changedHex ?? defaultHex;
+		Picker = new ColourPickerViewModel(_hex);
+		Picker.Picked += (_, hex) => Set(hex);
+		Picker.PalettePicked += (_, _) => IsPickerOpen = false;
+		ResetCommand = new RelayCommand(Reset);
 	}
 
 	public ColourDefinition Definition { get; }
@@ -29,20 +41,46 @@ public sealed partial class ColourRowViewModel : ObservableObject
 	/// <summary>The group of the row in the tab.</summary>
 	public string Group => Definition.Group;
 
-	/// <summary>The default of the current theme, as <c>#RRGGBB</c> / <c>#AARRGGBB</c>.</summary>
+	/// <summary>The default of the theme being edited, as <c>#RRGGBB</c> / <c>#AARRGGBB</c>.</summary>
 	public string DefaultHex { get; }
 
-	public bool IsOverridden => Text.Trim().Length > 0;
+	public ColourPickerViewModel Picker { get; }
 
-	/// <summary>Empty counts as valid (the default applies).</summary>
-	public bool IsValid => !IsOverridden || ColourCatalog.IsValid(Text);
-
-	/// <summary>The colour the swatch shows: the entry while it is a colour, else the default.</summary>
-	public string SwatchHex => IsOverridden && ColourCatalog.IsValid(Text) ? ColourCatalog.Normalize(Text) : DefaultHex;
+	/// <summary>True when the colour differs from the default of the theme (and so is stored).</summary>
+	public bool IsOverridden => !string.Equals(Hex, DefaultHex, StringComparison.OrdinalIgnoreCase);
 
 	public string AutomationName => "Colour " + Label;
 
 	public string ResetAutomationName => "Reset " + Label;
 
 	public RelayCommand ResetCommand { get; }
+
+	/// <summary>The swatch was clicked: the picker opens.</summary>
+	[RelayCommand]
+	private void OpenPicker() => IsPickerOpen = true;
+
+	/// <summary>Takes a colour from the picker (or a script): it is the row's colour and goes to the section.</summary>
+	public void Set(string hex)
+	{
+		if (!ColourCatalog.IsValid(hex))
+			return;
+
+		var normal = ColourCatalog.Normalize(hex);
+		if (string.Equals(normal, Hex, StringComparison.OrdinalIgnoreCase))
+			return;
+
+		Hex = normal;
+		_commit(this, IsOverridden ? normal : null);
+	}
+
+	/// <summary>Back to the default of the theme.</summary>
+	public void Reset()
+	{
+		if (!IsOverridden)
+			return;
+
+		Hex = DefaultHex;
+		Picker.Show(DefaultHex);
+		_commit(this, null);
+	}
 }

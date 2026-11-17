@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Tests.Fakes;
@@ -168,11 +168,15 @@ public sealed class AppearanceServiceTests
 	}
 
 	[Fact]
-	public void PageMessage_CarriesTheSystemRowColourWhenGiven()
+	public void PageMessage_CarriesTheSystemRowColour_AsAPageVariable_OnlyWhenTheUserChangedIt()
 	{
-		var json = new PageAppearance("light", 15, 14, 12, "#BFE0F7").ToMessage();
+		var settings = new ColourSettings();
+		Assert.DoesNotContain("sys", new PageAppearance("light", 15, 14, 12, ColourCatalog.PageVariables(settings, false)).ToMessage());
 
-		Assert.Equal("""{"cmd":"appearance","theme":"light","asst":15,"md":14,"user":12,"sys":"#BFE0F7","lh":1.25}""", json);
+		settings.Light[ColourCatalog.SystemRow] = "#BFE0F8";
+		var json = new PageAppearance("light", 15, 14, 12, ColourCatalog.PageVariables(settings, false)).ToMessage();
+
+		Assert.Equal("""{"cmd":"appearance","theme":"light","asst":15,"md":14,"user":12,"colours":{"--sysbg":"#BFE0F8"},"lh":1.25}""", json);
 	}
 
 	[Theory]

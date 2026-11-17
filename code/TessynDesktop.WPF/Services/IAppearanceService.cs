@@ -18,7 +18,10 @@ public interface IAppearanceService
 	/// <summary>The current font sizes and theme choice (a copy).</summary>
 	AppearanceSettings Current { get; }
 
-	/// <summary>The effective theme or a font size changed. Raised on the thread that caused it; views marshal to the UI thread.</summary>
+	/// <summary>The colours the user changed in the effective theme that the transcript page takes as CSS variables (<c>--bg</c> to <c>#RRGGBB</c>); empty when none.</summary>
+	IReadOnlyDictionary<string, string> PageColours { get; }
+
+	/// <summary>The effective theme, a font size or a page colour changed. Raised on the thread that caused it; views marshal to the UI thread.</summary>
 	event EventHandler? Changed;
 
 	/// <summary>The day/night button: switches to the opposite of the effective theme and remembers it as the explicit choice.</summary>

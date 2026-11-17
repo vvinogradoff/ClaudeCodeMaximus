@@ -10,9 +10,12 @@ public static partial class Constants
 		public const string ResourcePrefix = "Colour.";
 
 		public const string TabTitle = "Colours";
-		public const string Hint = "Colours as #RRGGBB (or #AARRGGBB). Light and dark themes have their own defaults, which follow the Avalonia client; a colour you set is used in both.";
-		public const string InvalidFormat = "{0}: '{1}' is not a colour (use #RRGGBB or #AARRGGBB).";
-		public const string ResetAll = "Reset all colours";
+		public const string Hint = "Pick the theme to edit, then click a swatch to choose a colour. Light and Dark keep their colours separately, and every change shows at once. "
+			+ "A colour you have not changed follows the theme's own default (the session colours follow the Avalonia client).";
+		public const string LightName = "Light";
+		public const string DarkName = "Dark";
+		public const string ThemeLabel = "Theme to edit";
+		public const string ResetAllFormat = "Reset all {0} colours";
 		public const string ResetOne = "Reset";
 	}
 

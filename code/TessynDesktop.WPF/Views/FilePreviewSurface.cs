@@ -36,7 +36,7 @@ public sealed class FilePreviewSurface : IPreviewSurface
 	private CoreWebView2Environment? _env;
 	private bool _ready;
 	private string? _pending;
-	private bool? _postedDark;
+	private string? _posted;
 
 	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, WebRequestPolicy requests, IAppearanceService appearance, ScreensaverController screensaver, ILogger<FilePreviewSurface> logger)
 	{
@@ -179,19 +179,25 @@ public sealed class FilePreviewSurface : IPreviewSurface
 		if (_control?.CoreWebView2 == null || !_ready)
 			return;
 
-		// The preview page only uses the theme: a font change (Ctrl+wheel) is no reason to send it again.
+		// The preview page only uses the theme and the page colours: a font change (Ctrl+wheel) is no reason to send it again.
 		var dark = _appearance.IsDark;
-		if (_postedDark == dark)
+		var colours = _appearance.PageColours;
+		var signature = (dark ? "dark" : "light") + string.Concat(colours.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => $"|{c.Key}={c.Value}"));
+		if (_posted == signature)
 			return;
 
-		_postedDark = dark;
-		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(dark, _appearance.Current).ToMessage());
+		_posted = signature;
+		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(dark, _appearance.Current, colours).ToMessage());
+		ApplyAccent();   // the Windows accent again when the user's accent was just reset (a no-op while it is set)
 	}
 
 	private void ApplyAccent()
 	{
 		if (_control?.CoreWebView2 == null || !_ready)
 			return;
+
+		if (_appearance.PageColours.ContainsKey("--accent"))
+			return;   // the user's accent comes with the appearance message
 
 		var accent = SystemParameters.WindowGlassColor;
 		_ = _control.CoreWebView2.ExecuteScriptAsync($"document.documentElement.style.setProperty('--accent','#{accent.R:X2}{accent.G:X2}{accent.B:X2}')");

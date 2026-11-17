@@ -38,18 +38,48 @@ public sealed class ColourApplier
 	/// <summary>Sets one frozen brush per colour in <paramref name="resources"/>; a key whose brush already has that colour is left alone.</summary>
 	public void Apply(ResourceDictionary resources)
 	{
-		var overrides = _store.Get<ColourSettings>().Overrides;
 		var dark = _appearance.IsDark;
+		var changed = _store.Get<ColourSettings>().For(dark);
 		foreach (var definition in ColourCatalog.All)
 		{
-			var color = Parse(ColourCatalog.Effective(definition, overrides, dark));
-			if (resources[definition.ResourceKey] is SolidColorBrush existing && existing.Color == color)
-				continue;
-
-			var brush = new SolidColorBrush(color);
-			brush.Freeze();
-			resources[definition.ResourceKey] = brush;
+			var color = Parse(ColourCatalog.Effective(definition, changed, dark));
+			SetBrush(resources, definition.ResourceKey, color);
+			ApplyTargets(resources, definition, changed.TryGetValue(definition.Key, out var value) && ColourCatalog.IsValid(value) ? Parse(ColourCatalog.Normalize(value)) : null);
 		}
+	}
+
+	/// <summary>
+	/// A changed colour sets the application's own brushes it drives (and their colours, where the theme has them) at the top of the application resources, which win over
+	/// Fluent's and the theme dictionary; an unchanged one takes them out again, so the theme's own value shows.
+	/// </summary>
+	private static void ApplyTargets(ResourceDictionary resources, ColourDefinition definition, Color? changed)
+	{
+		foreach (var target in definition.TargetBrushes)
+		{
+			var colourKey = target.EndsWith("Brush", StringComparison.Ordinal) ? target[..^"Brush".Length] : null;
+			if (changed is { } color)
+			{
+				SetBrush(resources, target, color);
+				if (colourKey != null && Application.Current?.TryFindResource(colourKey) is Color)
+					resources[colourKey] = color;
+			}
+			else
+			{
+				resources.Remove(target);
+				if (colourKey != null && resources[colourKey] is Color)
+					resources.Remove(colourKey);
+			}
+		}
+	}
+
+	private static void SetBrush(ResourceDictionary resources, string key, Color color)
+	{
+		if (resources[key] is SolidColorBrush existing && existing.Color == color)
+			return;
+
+		var brush = new SolidColorBrush(color);
+		brush.Freeze();
+		resources[key] = brush;
 	}
 
 	/// <summary>Parses a validated hex colour (<c>#RRGGBB</c> or <c>#AARRGGBB</c>).</summary>
