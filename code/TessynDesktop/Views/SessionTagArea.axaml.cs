@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Collections.Specialized;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using TessynDesktop.Models;
 using TessynDesktop.Services;
@@ -26,16 +28,42 @@ public partial class SessionTagArea : UserControl
 {
 	private readonly TagAreaLayoutCalculator _layout = new();
 	private readonly TagAreaGestureInterpreter _gestures = new();
+	/// <summary>The tag cloud font size (Settings › Appearance), followed from the application resources. The chips and the hint pick it up through
+	/// their own DynamicResource; this property only re-runs the measure, because the area's height is set from the measured chips.</summary>
+	public static readonly StyledProperty<double> TagFontSizeProperty =
+		AvaloniaProperty.Register<SessionTagArea, double>(nameof(TagFontSize), TagFontSizeRules.Default);
+
 	private SessionTagsViewModel? _model;
+	private double _measuredChipFont = double.NaN;
 
 	public SessionTagArea()
 	{
 		InitializeComponent();
+		this.Bind(TagFontSizeProperty, this.GetResourceObservable(ThemeApplicator.KeyTagFontSize, value => value is double size ? TagFontSizeRules.Normalize(size) : TagFontSizeRules.Default));
 
 		// Tunnel, so the area sees a press on a chip before the chip does (the interpreter then leaves a chip press alone).
 		AddHandler(PointerPressedEvent, OnAreaPointerPressed, RoutingStrategies.Tunnel);
 		AddHandler(KeyDownEvent, OnAreaKeyDown, RoutingStrategies.Bubble);
 		AttachedToVisualTree += (_, _) => _model?.RefreshMode();
+	}
+
+	public double TagFontSize
+	{
+		get => GetValue(TagFontSizeProperty);
+		set => SetValue(TagFontSizeProperty, value);
+	}
+
+	protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+	{
+		base.OnPropertyChanged(change);
+		if (change.Property != TagFontSizeProperty)
+			return;
+
+		// The mini line's fixed height also clips the chips' own measure, so a bigger font could never grow them: drop the clip first, the next
+		// arrange pass reads the chips' natural height and sets the line height again (mini line height follows the chip size).
+		Scroller.Height = double.NaN;
+		InvalidateMeasure();
+		Dispatcher.UIThread.Post(InvalidateMeasure, DispatcherPriority.Loaded);
 	}
 
 	private bool IsExpanded => _model?.IsExpanded ?? false;
@@ -88,6 +116,20 @@ public partial class SessionTagArea : UserControl
 		{
 			foreach (var child in panel.Children)
 				boxes.Add(new TagChipBox(child.Bounds.Top, child.Bounds.Height, child.Bounds.Width));
+		}
+
+		// The mini line's fixed height clips the chips' own measure, so chips that grew after it was set (the DynamicResource font arrives with the
+		// first layout, or the setting changed) would stay clipped to the old line. Drop the clip when their real font changed; this pass is redone.
+		var chipFont = Chips.ItemsPanelRoot?.Children.FirstOrDefault()?.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault()?.FontSize ?? double.NaN;
+		if (!chipFont.Equals(_measuredChipFont))
+		{
+			_measuredChipFont = chipFont;
+			if (!double.IsNaN(Scroller.Height))
+			{
+				Scroller.Height = double.NaN;
+				InvalidateMeasure();
+				return;
+			}
 		}
 
 		// The line the chips would have without the hint's reserve: the current width plus what is reserved now.

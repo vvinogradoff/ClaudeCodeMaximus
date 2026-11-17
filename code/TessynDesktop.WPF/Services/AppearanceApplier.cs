@@ -5,7 +5,7 @@ namespace TessynDesktop.WPF.Services;
 
 /// <summary>
 /// Puts the theme into the running application: Fluent's own light/dark (<see cref="Application.ThemeMode"/>), the app's colour dictionary
-/// (<c>Theme.Light.xaml</c> / <c>Theme.Dark.xaml</c>) and the prompt box font size, now and on every change.
+/// (<c>Theme.Light.xaml</c> / <c>Theme.Dark.xaml</c>) and the prompt box and tag cloud font sizes, now and on every change.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class AppearanceApplier
@@ -58,7 +58,9 @@ public sealed class AppearanceApplier
 		var dark = _appearance.IsDark;
 		var uri = new Uri(dark ? Constants.Appearance.DarkThemeUri : Constants.Appearance.LightThemeUri, UriKind.Absolute);
 		SwapThemeDictionary(resources, uri);
-		resources[Constants.Appearance.InputFontSizeKey] = _appearance.Current.InputFontSize;
+		var current = _appearance.Current;
+		resources[Constants.Appearance.InputFontSizeKey] = current.InputFontSize;
+		resources[Constants.Appearance.TagFontSizeKey] = current.TagFontSize;
 
 		if (Application.Current is { } app && ReferenceEquals(app.Resources, resources))
 		{

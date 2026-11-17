@@ -142,4 +142,38 @@ public sealed class WpfTagAreaE2ETests : IDisposable
 
 		Assert.Null(StoredMode());
 	}
-}
+
+	[Fact]
+	public async Task A_stored_tag_cloud_font_size_makes_the_mini_line_follow_the_chip_size()
+	{
+		double defaultMini;
+		using (var baseline = await StartAsync())
+		{
+			try
+			{
+				Assert.True(await _area.WaitForStateAsync(baseline, AreaId, ExpandCollapseState.Collapsed, StepTimeout), "Log:\n" + _app.ReadLog());
+				defaultMini = _area.GetHeight(baseline, AreaId) ?? 0;
+				Assert.True(defaultMini > 0);
+			}
+			finally
+			{
+				_app.Stop(baseline);
+			}
+		}
+
+		// The same session with a much bigger tag cloud size in the appearance section: the one mini line must be taller.
+		File.WriteAllText(StateFile,
+			$"{{\"lastSelectedNodeId\":\"{_main}\",\"expandedNodeIds\":[\"{_env.Base.Directory.NodeId}\"],\"sections\":{{\"appearance\":{{\"version\":1,\"data\":{{\"tagFontSize\":28}}}}}}}}");
+		using var big = await StartAsync();
+		try
+		{
+			Assert.True(await _area.WaitForStateAsync(big, AreaId, ExpandCollapseState.Collapsed, StepTimeout), "Log:\n" + _app.ReadLog());
+			var bigMini = _area.GetHeight(big, AreaId) ?? 0;
+			Assert.True(bigMini > defaultMini + 8, $"mini line {bigMini} did not grow from {defaultMini} with a 28 pt tag cloud");
+			AssertNoErrors();
+		}
+		finally
+		{
+			_app.Stop(big);
+		}
+	}}

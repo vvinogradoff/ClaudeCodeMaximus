@@ -33,6 +33,9 @@ public sealed class AppSettingsModel
 	public double UserFontSize { get; set; } = 13.0;
 	public double InputFontSize { get; set; } = 13.0;
 
+	/// <summary>Font size of the tag chips and the "+N" hint of the session tag area (Settings › Appearance); see TagFontSizeRules.</summary>
+	public double TagFontSize { get; set; } = Services.TagFontSizeRules.Default;
+
 	public string Theme { get; set; } = "Dark";
 	public ThemeColorsModel LightColors { get; set; } = new();
 	public ThemeColorsModel DarkColors { get; set; } = ThemeColorsModel.DefaultDark();

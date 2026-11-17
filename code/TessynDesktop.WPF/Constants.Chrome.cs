@@ -29,6 +29,9 @@ public static partial class Constants
 		/// <summary>Application resource key of the prompt box font size (DIPs).</summary>
 		public const string InputFontSizeKey = "InputFontSize";
 
+		/// <summary>Application resource key of the tag cloud font size (DIPs): the chips and the "+N" hint of the tag area.</summary>
+		public const string TagFontSizeKey = "TagFontSize";
+
 	}
 
 	public static class TitleBar

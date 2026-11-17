@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Views;
@@ -22,14 +23,39 @@ public partial class SessionTagArea : UserControl
 	public static readonly DependencyProperty HiddenCountProperty = DependencyProperty.Register(
 		nameof(HiddenCount), typeof(int), typeof(SessionTagArea), new PropertyMetadata(0));
 
+	/// <summary>The tag cloud font size (Settings › Appearance, application resource <c>TagFontSize</c>) of the chips and the hint. A change re-measures the
+	/// area: its height is set from the laid-out chips, so the mini line height follows the chip size.</summary>
+	public static readonly DependencyProperty TagFontSizeProperty = DependencyProperty.Register(
+		nameof(TagFontSize), typeof(double), typeof(SessionTagArea),
+		new FrameworkPropertyMetadata(Constants.Defaults.TagFontSize, OnTagFontSizeChanged));
+
 	private TagAreaViewModel? _model;
 	private Panel? _chipsPanel;
 	private bool _expandedByThisClick;
+	private double _measuredChipFont = double.NaN;
 
 	public SessionTagArea()
 	{
 		InitializeComponent();
+		SetResourceReference(TagFontSizeProperty, Constants.Appearance.TagFontSizeKey);   // follows the application resource live; the default stays when there is none
 		DataContextChanged += (_, _) => Attach(DataContext as TagAreaViewModel);
+	}
+
+	public double TagFontSize
+	{
+		get => (double)GetValue(TagFontSizeProperty);
+		set => SetValue(TagFontSizeProperty, value);
+	}
+
+	private static void OnTagFontSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+	{
+		var area = (SessionTagArea)d;
+
+		// The mini line's fixed height also clips the chips' own measure, so a bigger font could never grow them: drop the clip first, the next
+		// arrange pass reads the chips' natural height and sets the line height again.
+		area.Scroller.Height = double.NaN;
+		area.InvalidateMeasure();
+		area.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, area.InvalidateMeasure);
 	}
 
 	/// <summary>In mini mode: how many chips the single line hides; 0 in full mode.</summary>
@@ -120,6 +146,20 @@ public partial class SessionTagArea : UserControl
 			return;
 		}
 
+		// The mini line's fixed height clips the chips' own measure, so chips that grew after it was set (the font size binding arrives with the
+		// first layout, or the setting changed) would stay clipped to the old line. Drop the clip when their real font changed; this pass is redone.
+		var chipFont = FirstButton(chips[0])?.FontSize ?? double.NaN;
+		if (!chipFont.Equals(_measuredChipFont))
+		{
+			_measuredChipFont = chipFont;
+			if (!double.IsNaN(Scroller.Height))
+			{
+				Scroller.Height = double.NaN;
+				InvalidateMeasure();
+				return;
+			}
+		}
+
 		var tops = chips.Select(c => c.TranslatePoint(default, _chipsPanel!).Y).ToList();
 		var lineHeight = 0.0;
 		var contentBottom = 0.0;
@@ -183,6 +223,22 @@ public partial class SessionTagArea : UserControl
 
 	private static bool SameHeight(double current, double wanted) =>
 		double.IsNaN(current) || double.IsNaN(wanted) ? double.IsNaN(current) && double.IsNaN(wanted) : Math.Abs(current - wanted) < 0.01;
+
+	private static Button? FirstButton(DependencyObject root)
+	{
+		for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+		{
+			var child = VisualTreeHelper.GetChild(root, i);
+			if (child is Button button)
+				return button;
+
+			var nested = FirstButton(child);
+			if (nested != null)
+				return nested;
+		}
+
+		return null;
+	}
 
 	private static Panel? FindPanel(DependencyObject root)
 	{
