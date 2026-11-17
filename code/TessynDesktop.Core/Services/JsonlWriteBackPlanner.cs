@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using TessynDesktop.Models;
@@ -45,7 +46,8 @@ public sealed class JsonlWriteBackPlanner
 		var toWrite   = new List<SessionEntryModel>();
 		foreach (var candidate in candidates)
 		{
-			var match = remaining.FindIndex(e => e.Role == candidate.Role && e.Content.Trim() == candidate.Content.Trim());
+			var candidateKey = IdentityOf(candidate.Content);
+			var match = remaining.FindIndex(e => e.Role == candidate.Role && IdentityOf(e.Content) == candidateKey);
 			if (match >= 0)
 				remaining.RemoveAt(match);
 			else
@@ -54,4 +56,11 @@ public sealed class JsonlWriteBackPlanner
 
 		return new JsonlWriteBackPlanModel { EntriesToWrite = toWrite, NewBaselineCount = jsonlEntries.Count };
 	}
+
+	/// <summary>
+	/// The comparison form of an entry's content: trimmed, with line endings normalised to LF. The .txt reader rebuilds a multi-line
+	/// entry with <see cref="Environment.NewLine"/> (CRLF on Windows) while the JSONL text carries LF, so without this a multi-line entry
+	/// the Core already wrote never matched its JSONL twin and was appended a second time (the duplicate final answer).
+	/// </summary>
+	internal static string IdentityOf(string content) => content.ReplaceLineEndings("\n").Trim();
 }
