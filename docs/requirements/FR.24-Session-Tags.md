@@ -24,7 +24,7 @@
 7. With no tags the area is empty and expanding does nothing.
 8. The area exposes an expand/collapse action for accessibility (WPF: UI Automation ExpandCollapse, name "Session tags").
 
-Applies to the WPF client and Tessyn Web. Avalonia keeps the row of FR.24.7 (not part of this change).
+Applies to both clients named by the Architect, **WPF and Avalonia** (the two that have the tag font size setting, FR.24.18). *Whether Tessyn Web follows the same rule is not stated; phase 1 text had assumed so. To confirm.*
 
 **FR.24.17 — Tags tab results.** The tab finds tags: the search rules, the scope and the empty text are FR.1.24. With the real index (hundreds of chips) the chips wrap and scroll; chips and the session list share the height as FR.1.23 says.
 
