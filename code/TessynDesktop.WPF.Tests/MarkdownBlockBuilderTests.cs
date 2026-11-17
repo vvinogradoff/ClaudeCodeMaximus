@@ -20,6 +20,8 @@ public sealed class MarkdownBlockBuilderTests
 
 	private static string TextOf(UIElement element) => element switch
 	{
+		SelectableText selectable => selectable.PlainText,
+		TextBox box => box.Text,
 		TextBlock block => new TextRange(block.ContentStart ?? throw new InvalidOperationException(), block.ContentEnd).Text,
 		Panel panel => string.Concat(panel.Children.Cast<UIElement>().Select(TextOf)),
 		Border { Child: { } child } => TextOf(child),
@@ -62,7 +64,7 @@ public sealed class MarkdownBlockBuilderTests
 			var blocks = new MarkdownBlockBuilder(new UrlPolicy(), clicks.Add).Build(
 				"![pic](https://evil.example/x.png) [ok](https://example.com/a) [bad](javascript:alert(1)) [file](file:///C:/Windows/System32/cmd.exe) <https://auto.example/z>");
 			text = string.Concat(blocks.Select(TextOf));
-			foreach (var tb in blocks.OfType<TextBlock>())
+			foreach (var tb in blocks.OfType<SelectableText>())
 				foreach (var link in Descendants(tb.Inlines).OfType<Hyperlink>())
 				{
 					hyperlinks.Add((string.Concat(Descendants(link.Inlines).OfType<Run>().Select(r => r.Text)), link.ToolTip as string));

@@ -134,12 +134,12 @@
                 </Style>
             </v:SlotHost.ItemContainerStyle>
         </v:SlotHost>
-        <!-- Right: build stamp and the window buttons; the empty middle is the caption the window is dragged by -->
-        <StackPanel Grid.Column="2" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+        <!-- Right: build stamp and the window buttons; the empty middle and the build stamp are the caption the window is dragged by (only the buttons are hit-testable in the chrome) -->
+        <StackPanel Grid.Column="2" Orientation="Horizontal">
             <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphWarning}" Foreground="Orange" Margin="0,0,6,0"
                        Visibility="{Binding IsBuildOutput, Converter={StaticResource BoolToVis}}" ToolTip="{Binding BuildOutputWarning}"
                        AutomationProperties.Name="Running from build output" />
-            <TextBlock x:Name="BuildNumberText" Text="{Binding BuildNumber}" VerticalAlignment="Center" FontSize="10" Margin="0,0,10,0"
+            <TextBlock x:Name="BuildNumberText" Text="{Binding BuildNumber}" VerticalAlignment="Center" FontSize="10" Margin="0,0,10,0" Focusable="False"
                        Foreground="{DynamicResource TitleBarSubtleBrush}" AutomationProperties.Name="Build number" />
             <Button x:Name="MinimizeButton" Style="{StaticResource CaptionButton}" Click="OnMinimizeClick" ToolTip="Minimize" AutomationProperties.Name="Minimize">
                 <TextBlock Style="{StaticResource IconText}" FontSize="10" Text="&#xE921;" />

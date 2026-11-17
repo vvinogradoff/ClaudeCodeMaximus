@@ -158,9 +158,13 @@ public sealed class LineSpacingTests
 			Layout(panel);
 
 			static string Shown(TextBlock t) => new System.Windows.Documents.TextRange(t.ContentStart, t.ContentEnd).Text;
-			bool Wanted(TextBlock t) => Shown(t) is "Which database?" or "Closed question" or "Answered: Postgres" || Shown(t).StartsWith("Pick", StringComparison.Ordinal) || Shown(t).StartsWith("Closed body", StringComparison.Ordinal);
+			static bool WantedText(string s) => s is "Which database?" or "Closed question" or "Answered: Postgres" || s.StartsWith("Pick", StringComparison.Ordinal) || s.StartsWith("Closed body", StringComparison.Ordinal);
+			bool Wanted(TextBlock t) => WantedText(Shown(t));
+			// The card texts are selectable texts (a RichTextBox paragraph each); text blocks stay for the rest.
 			foreach (var t in Descendants<TextBlock>(panel).Where(Wanted))
 				rows.Add((Shown(t), t.FontSize, t.LineHeight, t.LineStackingStrategy));
+			foreach (var t in Descendants<SelectableText>(panel).Where(t => WantedText(t.PlainText)))
+				rows.Add((t.PlainText, t.FontSize, t.LineMetrics.Height, t.LineMetrics.Strategy));
 			bodyParagraphs = rows.Count(r => r.Text.StartsWith("Pick", StringComparison.Ordinal) || r.Text.StartsWith("Closed body", StringComparison.Ordinal));
 			wideHeight = panel.DesiredSize.Height;
 
@@ -168,6 +172,8 @@ public sealed class LineSpacingTests
 			Layout(panel);
 			foreach (var t in Descendants<TextBlock>(panel).Where(Wanted))
 				narrow.Add((Shown(t), t.FontSize, t.LineHeight));
+			foreach (var t in Descendants<SelectableText>(panel).Where(t => WantedText(t.PlainText)))
+				narrow.Add((t.PlainText, t.FontSize, t.LineMetrics.Height));
 			tightHeight = panel.DesiredSize.Height;
 		});
 

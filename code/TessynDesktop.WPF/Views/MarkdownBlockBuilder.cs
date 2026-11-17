@@ -53,7 +53,7 @@ public sealed class MarkdownBlockBuilder
 		{
 			// Pathological input (for example thousands of nested quotes) must not make the card body vanish: show the text as it is (V6).
 			result.Clear();
-			result.Add(new TextBlock { Text = markdown, TextWrapping = TextWrapping.Wrap });
+			result.Add(new SelectableText { Text = markdown });
 		}
 
 		return result;
@@ -135,9 +135,9 @@ public sealed class MarkdownBlockBuilder
 		return panel;
 	}
 
-	private TextBlock TextOf(ContainerInline? inline, FontWeight? fontWeight = null, double? fontSize = null)
+	private SelectableText TextOf(ContainerInline? inline, FontWeight? fontWeight = null, double? fontSize = null)
 	{
-		var text = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, BlockGap) };
+		var text = new SelectableText { Margin = new Thickness(0, 0, 0, BlockGap) };
 		if (fontWeight != null)
 			text.FontWeight = fontWeight.Value;
 		if (fontSize != null)
@@ -224,7 +224,7 @@ public sealed class MarkdownBlockBuilder
 
 	private static Border CodeBox(string code)
 	{
-		var text = new TextBlock { Text = code, FontFamily = new FontFamily(CodeFont), TextWrapping = TextWrapping.NoWrap };
+		var text = new TextBox { Text = code, FontFamily = new FontFamily(CodeFont), IsReadOnly = true, BorderThickness = new Thickness(0), Padding = new Thickness(0), Background = System.Windows.Media.Brushes.Transparent, TextWrapping = TextWrapping.NoWrap };
 		var scroll = new ScrollViewer { Content = text, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
 		var border = new Border { Padding = new Thickness(8, 6, 8, 6), CornerRadius = new CornerRadius(4), Child = scroll, Margin = new Thickness(0, 0, 0, BlockGap) };
 		border.SetResourceReference(Border.BackgroundProperty, "ControlFillColorSecondaryBrush");
