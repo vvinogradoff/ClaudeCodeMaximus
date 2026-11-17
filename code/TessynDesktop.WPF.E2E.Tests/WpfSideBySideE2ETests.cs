@@ -147,7 +147,7 @@ public sealed class WpfSideBySideE2ETests : IDisposable
 		try
 		{
 			Assert.True(await _app.WaitForLogAsync(process, StartTimeout, "Connected to daemon run", "Tree loaded:"), "The app did not connect. Log:\n" + _app.ReadLog());
-			Assert.True(await _clicker.ClickAsync(process, "Open Settings", StepTimeout), "The Settings button was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Settings…", StepTimeout), "The Settings entry of the main menu was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await _clicker.SelectTabAsync(process, "Startup tab", StepTimeout), "The Startup tab was not found. Log:\n" + _app.ReadLog());
 
 			await WaitForAsync(() => _clicker.TextExists(process, "Takes effect at once"), "The Startup tab did not show");

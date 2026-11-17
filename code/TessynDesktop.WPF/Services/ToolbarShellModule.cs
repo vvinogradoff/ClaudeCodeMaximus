@@ -2,7 +2,7 @@ using TessynDesktop.WPF.Views;
 
 namespace TessynDesktop.WPF.Services;
 
-/// <summary>Puts the instruction toolbar (W4) above the prompt box and the toggles with the local-tools button into the command bar, after the selectors.</summary>
+/// <summary>Puts the instruction toolbar (W4) into the title bar and the toggles with the local-tools button into the command bar, after the selectors.</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class ToolbarShellModule : IShellModule
 {
@@ -13,7 +13,7 @@ public sealed class ToolbarShellModule : IShellModule
 
 	public void Register(IShellSlots slots, IShellCommands commands)
 	{
-		slots.Add(new ShellSlotContribution { SlotId = Constants.Slots.InstructionToolbar, Order = ToolbarOrder, Create = () => new InstructionToolbar() });
+		slots.Add(new ShellSlotContribution { SlotId = Constants.Slots.TitleBarToolbar, Order = ToolbarOrder, Create = () => new InstructionToolbar() });
 		slots.Add(new ShellSlotContribution { SlotId = Constants.Slots.CommandBar, Order = TogglesOrder, Create = () => new CommandToggles() });
 	}
 }

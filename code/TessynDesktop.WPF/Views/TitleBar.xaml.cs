@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Shell;
+using TessynDesktop.WPF.Services;
 
 namespace TessynDesktop.WPF.Views;
 
@@ -44,14 +45,35 @@ public partial class TitleBar : UserControl
 		AutomationProperties.SetName(MaximizeButton, maximized ? Constants.TitleBar.RestoreAutomationName : Constants.TitleBar.MaximizeAutomationName);
 	}
 
+	/// <summary>Fills the menu afresh each time: the entries registered for <see cref="Constants.Menus.Main"/> (Import, Settings), then Exit after a separator.</summary>
 	private void OnMenuClick(object sender, RoutedEventArgs e)
 	{
-		if (MenuButton.ContextMenu is not { } menu)
+		var entries = new List<ShellMenuItemModel>();
+		if (new ShellServiceProvider().Get<IShellCommands>() is { } commands)
+			entries.AddRange(commands.BuildMenu(Constants.Menus.Main, null));
+
+		entries.Add(new ShellMenuItemModel { CommandId = ExitEntryId, Title = Constants.TitleBar.ExitMenuText, IsEnabled = true, BeginsGroup = entries.Count > 0 });
+		MenuEntries.ItemsSource = entries;
+		MenuPopup.IsOpen = true;
+	}
+
+	/// <summary>The command id of the Exit entry, which is not a registered command.</summary>
+	private const string ExitEntryId = "app.exit";
+
+	private void OnMenuEntryClick(object sender, RoutedEventArgs e)
+	{
+		MenuPopup.IsOpen = false;
+		if (sender is not FrameworkElement { Tag: string commandId })
 			return;
 
-		menu.PlacementTarget = MenuButton;
-		menu.DataContext = DataContext;
-		menu.IsOpen = true;
+		if (commandId == ExitEntryId)
+		{
+			_window?.Close();
+			return;
+		}
+
+		if (new ShellServiceProvider().Get<IShellCommands>() is { } commands)
+			_ = commands.ExecuteAsync(commandId, null);
 	}
 
 	private void OnMinimizeClick(object sender, RoutedEventArgs e)
@@ -72,6 +94,4 @@ public partial class TitleBar : UserControl
 	}
 
 	private void OnCloseClick(object sender, RoutedEventArgs e) => _window?.Close();
-
-	private void OnExitClick(object sender, RoutedEventArgs e) => _window?.Close();
 }

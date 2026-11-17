@@ -21,6 +21,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	private readonly CancellationTokenSource _lifetime = new();
 	private ITessynClient? _client;
 	private TreeViewModel? _tree;
+	private SessionPaneViewModel? _observed;
 
 	public SessionListsHost(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILoggerFactory loggers, IUrlLauncher? launcher = null)
 	{
@@ -38,6 +39,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 			OnClientReady(connection.Client);
 
 		AttachTree();
+		ObserveSession();
 		_ = RunClockAsync(_lifetime.Token);
 	}
 
@@ -63,7 +65,30 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	{
 		if (e.PropertyName == nameof(MainViewModel.Tree))
 			AttachTree();
+		else if (e.PropertyName == nameof(MainViewModel.Session))
+			ObserveSession();
 	}
+
+	/// <summary>The Recent dropdown's button shows the name of the open session: follow the pane's title.</summary>
+	private void ObserveSession()
+	{
+		if (_observed != null)
+			_observed.PropertyChanged -= OnSessionChanged;
+
+		_observed = _main.Session;
+		if (_observed != null)
+			_observed.PropertyChanged += OnSessionChanged;
+
+		ShowSessionName();
+	}
+
+	private void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName is nameof(SessionPaneViewModel.Title) or nameof(SessionPaneViewModel.NodeId))
+			ShowSessionName();
+	}
+
+	private void ShowSessionName() => Recent.CurrentName = _observed is { NodeId: not null } pane ? pane.Title : string.Empty;
 
 	private void AttachTree()
 	{
@@ -93,6 +118,9 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 
 	public void Dispose()
 	{
+		if (_observed != null)
+			_observed.PropertyChanged -= OnSessionChanged;
+
 		_lifetime.Cancel();
 		_lifetime.Dispose();
 	}

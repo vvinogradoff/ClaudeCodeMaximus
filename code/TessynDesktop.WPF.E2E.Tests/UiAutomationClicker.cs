@@ -27,6 +27,22 @@ public sealed class UiAutomationClicker
 		return false;
 	}
 
+	/// <summary>Opens the title bar's hamburger menu (the "Main menu" button) and invokes its entry with this name; false on timeout. The entries are buttons of a popup, filled afresh on each open.</summary>
+	public async Task<bool> ClickMainMenuItemAsync(Process process, string itemName, TimeSpan timeout)
+	{
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			if (!Exists(process, itemName) && !await ClickAsync(process, "Main menu", TimeSpan.FromSeconds(5)))
+				return false;
+
+			if (await ClickAsync(process, itemName, TimeSpan.FromSeconds(3)))
+				return true;
+		}
+
+		return false;
+	}
+
 	/// <summary>Waits for a text box with this automation name and sets its text; false on timeout.</summary>
 	public async Task<bool> SetTextAsync(Process process, string textBoxName, string text, TimeSpan timeout)
 	{

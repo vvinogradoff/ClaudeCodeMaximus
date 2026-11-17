@@ -303,7 +303,7 @@ public sealed class SettingsViewTests
 	}
 
 	[Fact]
-	public void TheShellModule_RegistersTheCommandAndTheTitleBarButton()
+	public void TheShellModule_RegistersTheCommandAndTheMenuEntry()
 	{
 		var store = SettingsTestSupport.NewStore();
 		var commands = new ShellCommands(store, NullLogger<ShellCommands>.Instance);
@@ -318,12 +318,10 @@ public sealed class SettingsViewTests
 		Assert.NotNull(command);
 		Assert.Equal("Ctrl+OemComma", commands.GetGesture(Constants.Settings.OpenCommandId));
 		Assert.True(command.AllowInTextInput);
-		var contribution = Assert.Single(slots.For(Constants.Slots.TitleBarToolbar));
-		StaTestRunner.Run(() =>
-		{
-			var button = Assert.IsType<Button>(contribution.Create());
-			Assert.Equal(Constants.Settings.OpenButtonText, button.Content);
-		});
+		Assert.Empty(slots.For(Constants.Slots.TitleBarToolbar));   // under the hamburger menu, not a title-bar button
+		var entry = Assert.Single(commands.BuildMenu(Constants.Menus.Main, null));
+		Assert.Equal(Constants.Settings.OpenCommandId, entry.CommandId);
+		Assert.Equal(Constants.Settings.OpenCommandTitle, entry.Title);
 
 		// The default gesture is a valid one and reaches the command.
 		Assert.True(GestureText.TryParse(Constants.Settings.OpenCommandGesture, out var key, out var modifiers));

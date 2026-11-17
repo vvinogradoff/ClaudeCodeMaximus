@@ -35,7 +35,7 @@ public sealed class SessionListsModule : IShellModule
 		});
 		slots.Add(new ShellSlotContribution
 		{
-			SlotId = Constants.Slots.TitleBarToolbar,
+			SlotId = Constants.Slots.TitleBarCenter,
 			Order = Constants.SessionLists.RecentDropdownOrder,
 			Create = () => new RecentDropdown { DataContext = _host.Recent },
 		});

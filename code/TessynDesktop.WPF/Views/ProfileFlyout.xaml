@@ -10,7 +10,7 @@
         </Style>
     </UserControl.Resources>
     <Grid Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVis}}">
-        <ToggleButton x:Name="Toggle" Margin="8,2" Padding="8,2" FontSize="12" Content="Profiles" AutomationProperties.Name="Profiles" ToolTip="Profiles and sign-in"
+        <ToggleButton x:Name="Toggle" Margin="2,0" Padding="8,2" FontSize="12" Content="Profiles" AutomationProperties.Name="Profiles" ToolTip="Profiles and sign-in"
                       IsChecked="{Binding IsOpen, Mode=TwoWay}" />
         <Popup PlacementTarget="{Binding ElementName=Toggle}" Placement="Top" StaysOpen="False" IsOpen="{Binding IsOpen, Mode=TwoWay}">
             <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="1"

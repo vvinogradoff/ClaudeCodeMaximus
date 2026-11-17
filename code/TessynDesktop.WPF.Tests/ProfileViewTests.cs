@@ -62,7 +62,7 @@ public sealed class ProfileViewTests
 		var host = new ProfileHost(connection, flyout, switcher);
 		new ProfileShellModule(host).Register(slots, commands);
 
-		Assert.Single(slots.For(Constants.Slots.StatusBarItems));
+		Assert.Single(slots.For(Constants.Slots.StatusBarRight));   // the Profiles button sits at the far right
 		Assert.Empty(slots.For(Constants.Slots.ComposerAccessory));   // the auth banner is W1b's ComposerNotices, not W5's
 		Assert.Single(slots.For(Constants.Slots.TreeFooter));
 		Assert.NotNull(commands.Find(Constants.Profiles.SwitchCommandId));

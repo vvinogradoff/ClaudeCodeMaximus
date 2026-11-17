@@ -603,7 +603,7 @@ public sealed class ToolbarViewModelTests
 		var slots = new ShellSlots();
 		new ToolbarShellModule().Register(slots, null!);
 
-		Assert.Single(slots.For(Constants.Slots.InstructionToolbar));
+		Assert.Single(slots.For(Constants.Slots.TitleBarToolbar));   // the toolbar is in the title bar
 		var bar = slots.For(Constants.Slots.CommandBar);
 		Assert.Single(bar);
 		Assert.True(bar[0].Order > 10);   // after the selectors

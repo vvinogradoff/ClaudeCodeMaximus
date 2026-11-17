@@ -70,7 +70,7 @@
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <!-- Left: chevron, menu, day/night, then the toolbar slot (Recent dropdown, Settings, ...) -->
+        <!-- Left: chevron, menu, day/night, then the toolbar slot (the instruction toolbar); the Recent dropdown takes the space left in the middle column -->
         <StackPanel Grid.Column="0" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
             <Button x:Name="TreeToggle" Style="{StaticResource ToolButton}" Command="{Binding ToggleTreeCommand}" ToolTip="Show or hide the session tree"
                     AutomationProperties.Name="Toggle session tree">
@@ -81,14 +81,30 @@
             </Button>
             <Button x:Name="MenuButton" Style="{StaticResource ToolButton}" Click="OnMenuClick" ToolTip="Menu" AutomationProperties.Name="Main menu">
                 <TextBlock Style="{StaticResource IconText}" Text="&#xE700;" />
-                <Button.ContextMenu>
-                    <ContextMenu Placement="Bottom">
-                        <MenuItem Header="Settings" Command="{Binding OpenSettingsCommand}" AutomationProperties.Name="Settings menu entry" />
-                        <Separator />
-                        <MenuItem Header="Exit" Click="OnExitClick" AutomationProperties.Name="Exit" />
-                    </ContextMenu>
-                </Button.ContextMenu>
             </Button>
+            <!-- The hamburger menu: a popup of flat buttons (not MenuItems: UI Automation cannot invoke the items of a WPF menu popup reliably), filled afresh each time it opens.
+                 The entries come from the command registry (menu "main.menu"); Exit is always last. See OnMenuClick. -->
+            <Popup x:Name="MenuPopup" PlacementTarget="{Binding ElementName=MenuButton}" Placement="Bottom" StaysOpen="False" AllowsTransparency="False">
+                <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="1" Padding="2" MinWidth="200"
+                        TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+                    <ItemsControl x:Name="MenuEntries" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <Separator Visibility="{Binding BeginsGroup, Converter={StaticResource BoolToVis}}" Margin="2,2" />
+                                    <Button Click="OnMenuEntryClick" Tag="{Binding CommandId}" IsEnabled="{Binding IsEnabled}" AutomationProperties.Name="{Binding Title}"
+                                            Background="Transparent" BorderThickness="0" Padding="12,5" HorizontalContentAlignment="Stretch" Focusable="True">
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Right" Margin="24,0,0,0" Text="{Binding Gesture}" Opacity="0.6" />
+                                            <TextBlock Text="{Binding Title}" />
+                                        </DockPanel>
+                                    </Button>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+            </Popup>
             <Button x:Name="ThemeToggle" Style="{StaticResource ToolButton}" Command="{Binding ToggleThemeCommand}" ToolTip="Toggle light/dark theme"
                     AutomationProperties.Name="Toggle theme">
                 <Grid>
@@ -108,6 +124,16 @@
                 </v:SlotHost.ItemsPanel>
             </v:SlotHost>
         </StackPanel>
+        <!-- Middle: the Recent dropdown fills all the width between the toolbar and the build stamp; the right margin keeps some caption to drag the window by -->
+        <v:SlotHost x:Name="CenterSlot" Grid.Column="1" SlotId="main.titleBarCenter" VerticalAlignment="Center" Margin="4,0,48,0" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+            <v:SlotHost.ItemContainerStyle>
+                <Style TargetType="ContentControl">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="IsTabStop" Value="False" />
+                </Style>
+            </v:SlotHost.ItemContainerStyle>
+        </v:SlotHost>
         <!-- Right: build stamp and the window buttons; the empty middle is the caption the window is dragged by -->
         <StackPanel Grid.Column="2" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
             <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphWarning}" Foreground="Orange" Margin="0,0,6,0"

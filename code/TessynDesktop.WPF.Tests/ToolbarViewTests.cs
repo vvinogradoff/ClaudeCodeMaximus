@@ -80,7 +80,7 @@ public sealed class ToolbarViewTests
 			PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
 			var client = new FakeTessynClient();
 			using var pane = Pane(client);
-			var bar = new InstructionToolbar { DataContext = pane };
+			var bar = new InstructionToolbar { DataContext = new { Session = pane } };   // the title-bar slot's DataContext is the MainViewModel
 			Layout(bar);
 
 			var toggles = FindAll<ToggleButton>(bar);
@@ -193,7 +193,7 @@ public sealed class ToolbarViewTests
 			var slots = new ShellSlots();
 			new ToolbarShellModule().Register(slots, null!);
 
-			Assert.IsType<InstructionToolbar>(Assert.Single(slots.For(Constants.Slots.InstructionToolbar)).Create());
+			Assert.IsType<InstructionToolbar>(Assert.Single(slots.For(Constants.Slots.TitleBarToolbar)).Create());
 			Assert.IsType<CommandToggles>(Assert.Single(slots.For(Constants.Slots.CommandBar)).Create());
 		});
 	}
