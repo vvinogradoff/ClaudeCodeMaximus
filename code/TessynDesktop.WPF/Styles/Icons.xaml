@@ -24,6 +24,8 @@
     <sys:String x:Key="GlyphAttach">&#xE723;</sys:String>
     <sys:String x:Key="GlyphSettings">&#xE713;</sys:String>
     <sys:String x:Key="GlyphClock">&#xE121;</sys:String>
+    <sys:String x:Key="GlyphStreaming">&#xE945;</sys:String>
+    <sys:String x:Key="GlyphSound">&#xE767;</sys:String>
 
     <Style x:Key="IconText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource IconFont}" />

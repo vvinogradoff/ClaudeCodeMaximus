@@ -115,7 +115,7 @@ public sealed class ToolbarViewTests
 			var tools = FindAll<LocalToolsButton>(toggles).Single();
 			var grid = (Grid)tools.Content;
 			Assert.Equal(Visibility.Collapsed, grid.Visibility);
-			Assert.Equal(2, FindAll<ToggleButton>(toggles).Count(t => t.Content is string s && s is "Streaming" or "Sound"));
+			Assert.Equal(2, FindAll<ToggleButton>(toggles).Count(t => System.Windows.Automation.AutomationProperties.GetName(t) is "Streaming Session Mode" or "Completion sound"));
 
 			pane.SelectedModel = pane.Models.Single(m => m.Id == "llama");
 			Layout(toggles);
