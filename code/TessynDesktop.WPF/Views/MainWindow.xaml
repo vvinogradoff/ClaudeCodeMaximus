@@ -1,4 +1,4 @@
-﻿<Window x:Class="TessynDesktop.WPF.Views.MainWindow"
+<Window x:Class="TessynDesktop.WPF.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:TessynDesktop.WPF.Views"
@@ -36,17 +36,30 @@
                     <TextBlock Text="{Binding Connection.RestartNote, StringFormat=  ({0})}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
-            <StatusBar DockPanel.Dock="Bottom">
-                <StatusBarItem Content="{Binding StatusText}" />
-                <StatusBarItem Content="{Binding ErrorText}" Foreground="{DynamicResource SystemFillColorCriticalBrush}" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
-                <!-- Slot: items at the right of the status bar -->
-                <StatusBarItem DockPanel.Dock="Right">
-                    <v:SlotHost SlotId="main.statusBarItems">
+            <!-- Status bar: no padding, so the usage meters touch its top and bottom. The session count and the error sit on the left, the Profiles button on the
+                 far right, and the middle item (model line, usage meters) takes all the width between. DockPanel: the last child fills. -->
+            <StatusBar DockPanel.Dock="Bottom" Padding="0" MinHeight="0">
+                <StatusBarItem Padding="8,0,4,0" Content="{Binding StatusText}" />
+                <StatusBarItem Padding="4,0" Content="{Binding ErrorText}" Foreground="{DynamicResource SystemFillColorCriticalBrush}" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
+                <StatusBarItem DockPanel.Dock="Right" Padding="0" VerticalContentAlignment="Stretch">
+                    <v:SlotHost SlotId="main.statusBarRight">
                         <v:SlotHost.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" />
                             </ItemsPanelTemplate>
                         </v:SlotHost.ItemsPanel>
+                    </v:SlotHost>
+                </StatusBarItem>
+                <StatusBarItem Padding="0" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                    <v:SlotHost SlotId="main.statusBarItems">
+                        <v:SlotHost.ItemContainerStyle>
+                            <Style TargetType="ContentControl">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                <Setter Property="Focusable" Value="False" />
+                                <Setter Property="IsTabStop" Value="False" />
+                            </Style>
+                        </v:SlotHost.ItemContainerStyle>
                     </v:SlotHost>
                 </StatusBarItem>
             </StatusBar>

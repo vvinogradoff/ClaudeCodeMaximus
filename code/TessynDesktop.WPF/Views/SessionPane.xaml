@@ -219,8 +219,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <StackPanel Grid.Row="0">
-        <!-- Slots: instruction toggles above the prompt box, accessories (autocomplete hints, draft and auth notices) right above it -->
-        <v:SlotHost SlotId="session.instructionToolbar" Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}" />
+        <!-- Slot: accessories (autocomplete hints, draft and auth notices) right above the prompt box. The instruction toolbar lives in the title bar. -->
         <v:SlotHost SlotId="session.composerAccessory" />
         <!-- Progress of a file-mode drop: one copy per file, cancellable -->
         <Border Margin="0,0,0,6" Padding="10,6" CornerRadius="4" Background="{DynamicResource SubtleFillColorSecondaryBrush}"

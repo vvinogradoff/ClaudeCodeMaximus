@@ -11,9 +11,7 @@ public static partial class Constants
 		public const string AvaloniaImportSection = "avaloniaImport";
 		public const string OpenCommandTitle = "Settings…";
 		public const string OpenCommandGesture = "Ctrl+OemComma";
-		public const string OpenButtonText = "Settings";
-		/// <summary>The accessible name of the title-bar button. Not "Settings": the input area's settings toggle (FR.12.29) has that name, and two buttons with one name cannot be told apart by assistive technology.</summary>
-		public const string OpenButtonAutomationName = "Open Settings";
+		/// <summary>Position of the entry in the hamburger menu (after Import).</summary>
 		public const int OpenButtonOrder = 900;
 
 		public const string WindowTitle = "Settings";

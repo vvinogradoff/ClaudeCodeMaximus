@@ -37,6 +37,14 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 	[NotifyPropertyChangedFor(nameof(IsEmpty), nameof(EmptyText))]
 	private bool _loaded;
 
+	/// <summary>The name of the session open in the pane; empty when none is.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(ButtonText))]
+	private string _currentName = string.Empty;
+
+	/// <summary>What the dropdown button says: the open session's name, else "Recent".</summary>
+	public string ButtonText => string.IsNullOrEmpty(CurrentName) ? Constants.SessionLists.RecentTabTitle : CurrentName;
+
 	public RecentViewModel(ISessionListActions actions, IUiDispatcher ui, ILogger<RecentViewModel> logger)
 		: this(actions, ui, logger, Constants.Timeouts.ListRebuildThrottle)
 	{

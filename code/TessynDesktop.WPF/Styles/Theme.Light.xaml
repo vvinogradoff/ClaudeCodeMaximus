@@ -4,6 +4,7 @@
     <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#F3F3F3" />
     <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#1A1A1A" />
     <SolidColorBrush x:Key="TitleBarHoverBrush" Color="#1F000000" />
+    <SolidColorBrush x:Key="TitleBarCheckedBrush" Color="#A9C7EE" />
     <SolidColorBrush x:Key="TitleBarCloseHoverBrush" Color="#C42B1C" />
     <SolidColorBrush x:Key="TitleBarSubtleBrush" Color="#6B6B6B" />
     <SolidColorBrush x:Key="MeterTrackBrush" Color="#E3E3E3" />

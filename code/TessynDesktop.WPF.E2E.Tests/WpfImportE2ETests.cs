@@ -129,7 +129,7 @@ public sealed class WpfImportE2ETests : IDisposable
 
 	private async Task OpenPickerAsync(Process process)
 	{
-		Assert.True(await _clicker.ClickAsync(process, Constants.ImportButton, StepTimeout), "The Import button was not found. Log:\n" + _app.ReadLog());
+		Assert.True(await _clicker.ClickMainMenuItemAsync(process, Constants.ImportMenuItem, StepTimeout), "The Import entry of the main menu was not found. Log:\n" + _app.ReadLog());
 		Assert.True(await WaitForAsync(() => FindControl(process, ControlType.Button, "Import selected") != null), "The picker did not open. Log:\n" + _app.ReadLog());
 	}
 
@@ -260,7 +260,7 @@ public sealed class WpfImportE2ETests : IDisposable
 
 	private static class Constants
 	{
-		public const string ImportButton = "Import sessions";
+		public const string ImportMenuItem = "Import sessions…";
 
 		public static class ClaudeSessions
 		{

@@ -21,7 +21,7 @@ public sealed class ProfileShellModule : IShellModule
 	{
 		slots.Add(new ShellSlotContribution
 		{
-			SlotId = Constants.Slots.StatusBarItems,
+			SlotId = Constants.Slots.StatusBarRight,
 			Order = Constants.Profiles.FlyoutOrder,
 			Create = () => new ProfileFlyout { DataContext = _host.Flyout },
 		});
