@@ -46,8 +46,9 @@ public sealed class AppSettingsModel
 	/// <summary>Whether the tree panel is collapsed (auto-hidden).</summary>
 	public bool IsTreePanelCollapsed { get; set; }
 
-	/// <summary>Whether the session tag area is in "full" mode (FR.24.16); false = "mini", one line. One global mode, not per session.</summary>
-	public bool TagAreaExpanded { get; set; }
+	/// <summary>Obsolete: the tag area mode is no longer remembered (FR.24.16: every opened session starts collapsed). Read and dropped (the setter discards it), so old settings files load, it is never written back.</summary>
+	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+	public bool TagAreaExpanded { get => false; set { } }
 
 	/// <summary>
 	/// Path to the TessynDesktop source codes root (solution directory).

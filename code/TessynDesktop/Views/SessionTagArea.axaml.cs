@@ -17,7 +17,7 @@ namespace TessynDesktop.Views;
 /// <summary>
 /// The session tag area (FR.24.16): the chips under the session header in two modes. "Mini" shows exactly one line of chips (the rest is
 /// clipped, a "+N" hint counts them); "full" grows to fit the chips up to ten lines and scrolls beyond that. A click on empty space (or the hint)
-/// expands, a double-click anywhere in full mode collapses; a chip click opens its link. The decisions live in <see cref="TagAreaLayoutCalculator"/>
+/// expands, a double-click on empty space (not on a chip) collapses; a chip click opens its link. The decisions live in <see cref="TagAreaLayoutCalculator"/>
 /// and <see cref="TagAreaGestureInterpreter"/>; this control only measures the laid-out chips and applies the result.
 /// DataContext: <see cref="SessionTagsViewModel"/>.
 /// </summary>
@@ -32,7 +32,7 @@ public partial class SessionTagArea : UserControl
 	{
 		InitializeComponent();
 
-		// Tunnel, so the area sees a press on a chip before the chip does: a double-click on a chip must collapse.
+		// Tunnel, so the area sees a press on a chip before the chip does (the interpreter then leaves a chip press alone).
 		AddHandler(PointerPressedEvent, OnAreaPointerPressed, RoutingStrategies.Tunnel);
 		AddHandler(KeyDownEvent, OnAreaKeyDown, RoutingStrategies.Bubble);
 		AttachedToVisualTree += (_, _) => _model?.RefreshMode();

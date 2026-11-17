@@ -11,7 +11,7 @@ namespace TessynDesktop.WPF.E2E.Tests;
 /// <summary>
 /// End to end for the session tag area (FR.24 mini/full): the BUILT WPF app against a real loopback daemon whose session carries many tags.
 /// The area is expanded and collapsed through UI Automation (its ExpandCollapse pattern; the mouse gestures are covered with real layout by
-/// <c>SessionTagAreaViewTests</c>), and the mode is read back from the client state file and from the area after a restart.
+/// <c>SessionTagAreaViewTests</c>), and the mode is read back from the client state file: it is not remembered (an old "tagAreaExpanded": true is ignored, a restart starts collapsed).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 [Collection("wpf-app-e2e")]
@@ -57,7 +57,7 @@ public sealed class WpfTagAreaE2ETests : IDisposable
 
 		var clients = Directory.CreateDirectory(Path.Combine(_root, "clients"));
 		File.WriteAllText(Path.Combine(clients.FullName, "wpf.json"),
-			$"{{\"lastSelectedNodeId\":\"{_main}\",\"expandedNodeIds\":[\"{_env.Base.Directory.NodeId}\"]}}");
+			$"{{\"lastSelectedNodeId\":\"{_main}\",\"tagAreaExpanded\":true,\"expandedNodeIds\":[\"{_env.Base.Directory.NodeId}\"]}}");   // the old remembered mode must be ignored
 	}
 
 	public void Dispose()
@@ -98,13 +98,13 @@ public sealed class WpfTagAreaE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task The_tag_area_expands_and_collapses_through_automation_and_the_mode_is_remembered_across_a_restart()
+	public async Task The_tag_area_starts_collapsed_expands_and_collapses_through_automation_and_is_not_remembered_across_a_restart()
 	{
 		using (var first = await StartAsync())
 		{
 			try
 			{
-				Assert.True(await _area.WaitForStateAsync(first, AreaId, ExpandCollapseState.Collapsed, StepTimeout), "The tag area did not show up in mini mode. Log:\n" + _app.ReadLog());
+				Assert.True(await _area.WaitForStateAsync(first, AreaId, ExpandCollapseState.Collapsed, StepTimeout), "The tag area did not show up in mini mode (the old stored full mode must be ignored). Log:\n" + _app.ReadLog());
 				var mini = _area.GetHeight(first, AreaId) ?? 0;
 				Assert.True(mini > 0);
 
@@ -126,15 +126,13 @@ public sealed class WpfTagAreaE2ETests : IDisposable
 			}
 		}
 
-		Assert.True(StoredMode(), "The mode was not written to the client state.");
+		// The first run ended expanded, but nothing was written: a second run opens the session collapsed again.
+		Assert.Null(StoredMode());
 
-		// A second run starts in full mode, then folds and remembers that too.
 		using var second = await StartAsync();
 		try
 		{
-			Assert.True(await _area.WaitForStateAsync(second, AreaId, ExpandCollapseState.Expanded, StepTimeout), "The mode was not restored. Log:\n" + _app.ReadLog());
-			Assert.True(_area.TrySet(second, AreaId, expand: false));
-			Assert.True(await _area.WaitForStateAsync(second, AreaId, ExpandCollapseState.Collapsed, StepTimeout));
+			Assert.True(await _area.WaitForStateAsync(second, AreaId, ExpandCollapseState.Collapsed, StepTimeout), "The area did not start collapsed. Log:\n" + _app.ReadLog());
 			AssertNoErrors();
 		}
 		finally
@@ -142,6 +140,6 @@ public sealed class WpfTagAreaE2ETests : IDisposable
 			_app.Stop(second);
 		}
 
-		Assert.False(StoredMode());
+		Assert.Null(StoredMode());
 	}
 }

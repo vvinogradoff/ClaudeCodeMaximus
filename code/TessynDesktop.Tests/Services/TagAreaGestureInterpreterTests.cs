@@ -25,13 +25,17 @@ public sealed class TagAreaGestureInterpreterTests
 		Assert.Equal(TagAreaGestureAction.None, Press(1, expanded: true));
 
 	[Fact]
-	public void DoubleClick_InFull_CollapsesOnEmptySpaceAndOnAChip()
+	public void DoubleClick_InFull_CollapsesOnEmptySpace()
 	{
 		Assert.Equal(TagAreaGestureAction.None, Press(1, expanded: true));
 		Assert.Equal(TagAreaGestureAction.Collapse, Press(2, expanded: true));
+	}
 
+	[Fact]
+	public void DoubleClick_OnAChip_InFull_DoesNotCollapse()
+	{
 		Assert.Equal(TagAreaGestureAction.None, Press(1, onChip: true, expanded: true));
-		Assert.Equal(TagAreaGestureAction.Collapse, Press(2, onChip: true, expanded: true));
+		Assert.Equal(TagAreaGestureAction.None, Press(2, onChip: true, expanded: true));
 	}
 
 	[Fact]

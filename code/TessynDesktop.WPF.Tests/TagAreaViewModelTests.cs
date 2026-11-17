@@ -1,4 +1,5 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.WPF.Infrastructure;
@@ -10,42 +11,31 @@ using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Tests;
 
-/// <summary>The mini/full mode of the session tag area (FR.24): toggling and its persistence in the client state.</summary>
+/// <summary>
+/// The mini/full mode of the session tag area (FR.24): collapsed by default, never remembered; opening another session (also one expanded
+/// earlier) collapses it, switching between the Session and Focus views keeps it.
+/// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class TagAreaViewModelTests
 {
-	private sealed class MemoryState : IClientStateStore
-	{
-		public ClientStateModel State { get; } = new();
-
-		public int Updates { get; private set; }
-
-		public Task LoadAsync() => Task.CompletedTask;
-
-		public void Update(Action<ClientStateModel> change)
-		{
-			Updates++;
-			change(State);
-		}
-
-		public Task FlushAsync() => Task.CompletedTask;
-	}
-
 	private static ObservableCollection<SessionTagViewModel> Tags(int count) =>
 		new(Enumerable.Range(0, count).Select(i => new SessionTagViewModel(new SessionTagDto { Label = "tag" + i, Url = "https://example.com/" + i }, new FakeUrlLauncher())));
+
+	private static SessionPaneViewModel Pane() =>
+		new(new FakeTessynClient(), new FakeTranscriptSurface(), new MarkdigEntryRenderer(new UrlPolicy()), new FakeUrlLauncher(),
+			new ImmediateUiDispatcher(), new SwitchLatencyTracker(NullLogger<SwitchLatencyTracker>.Instance), NullLogger<SessionPaneViewModel>.Instance,
+			Constants.Limits.MaxCachedTranscripts);
 
 	[Fact]
 	public void It_starts_mini_by_default()
 	{
-		var model = new TagAreaViewModel(Tags(3), new MemoryState());
-
-		Assert.False(model.IsExpanded);
+		Assert.False(new TagAreaViewModel(Tags(3)).IsExpanded);
 	}
 
 	[Fact]
 	public void The_toggle_command_flips_between_mini_and_full()
 	{
-		var model = new TagAreaViewModel(Tags(3), new MemoryState());
+		var model = new TagAreaViewModel(Tags(3));
 
 		model.ToggleCommand.Execute(null);
 		Assert.True(model.IsExpanded);
@@ -54,94 +44,109 @@ public sealed class TagAreaViewModelTests
 	}
 
 	[Fact]
-	public void A_mode_change_is_written_to_the_client_state()
+	public void A_new_view_model_never_restores_an_earlier_mode()
 	{
-		var state = new MemoryState();
-		var model = new TagAreaViewModel(Tags(3), state);
+		new TagAreaViewModel(Tags(1)).IsExpanded = true;
 
-		model.IsExpanded = true;
-		Assert.True(state.State.TagAreaExpanded);
-
-		model.IsExpanded = false;
-		Assert.False(state.State.TagAreaExpanded);
-		Assert.Equal(2, state.Updates);
+		Assert.False(new TagAreaViewModel(Tags(1)).IsExpanded);
 	}
 
 	[Fact]
-	public void The_remembered_mode_is_restored_by_a_new_view_model()
+	public void The_session_pane_exposes_its_tags_collapsed()
 	{
-		var state = new MemoryState();
-		new TagAreaViewModel(Tags(1), state).IsExpanded = true;
+		var pane = Pane();
 
-		var restored = new TagAreaViewModel(Tags(1), state);
-
-		Assert.True(restored.IsExpanded);
-		Assert.Equal(1, state.Updates);
-	}
-
-	[Fact]
-	public void Without_a_state_store_the_mode_still_toggles()
-	{
-		var model = new TagAreaViewModel(Tags(1), null);
-
-		model.IsExpanded = true;
-
-		Assert.True(model.IsExpanded);
-	}
-
-	[Fact]
-	public void The_mode_is_global_not_per_session()
-	{
-		var state = new MemoryState();
-		var first = new TagAreaViewModel(Tags(2), state);
-		first.IsExpanded = true;
-
-		// Another session's tags, the same client state: the same mode.
-		var second = new TagAreaViewModel(Tags(5), state);
-
-		Assert.True(second.IsExpanded);
-	}
-
-	[Fact]
-	public void The_session_pane_exposes_its_tags_and_the_stored_mode()
-	{
-		var state = new MemoryState();
-		state.State.TagAreaExpanded = true;
-		var pane = new SessionPaneViewModel(new FakeTessynClient(), new FakeTranscriptSurface(), new MarkdigEntryRenderer(new UrlPolicy()), new FakeUrlLauncher(),
-			new ImmediateUiDispatcher(), new SwitchLatencyTracker(NullLogger<SwitchLatencyTracker>.Instance), NullLogger<SessionPaneViewModel>.Instance,
-			Constants.Limits.MaxCachedTranscripts, stateStore: state);
-
-		Assert.True(pane.TagArea.IsExpanded);
+		Assert.False(pane.TagArea.IsExpanded);
 		Assert.Same(pane.Tags, pane.TagArea.Tags);
 		Assert.Same(pane.TagArea, pane.TagArea);
 	}
 
 	[Fact]
-	public async Task The_state_file_round_trips_the_mode()
+	public async Task Opening_a_session_starts_collapsed_even_when_the_area_was_expanded_before()
+	{
+		var pane = Pane();
+		pane.TagArea.IsExpanded = true;
+
+		await pane.OpenAsync("a");
+
+		Assert.False(pane.TagArea.IsExpanded);
+	}
+
+	[Fact]
+	public async Task Switching_sessions_collapses_and_switching_back_to_an_expanded_one_collapses_again()
+	{
+		var pane = Pane();
+		await pane.OpenAsync("a");
+		pane.TagArea.IsExpanded = true;
+
+		await pane.OpenAsync("b");
+		Assert.False(pane.TagArea.IsExpanded);
+
+		pane.TagArea.IsExpanded = true;
+		await pane.OpenAsync("a");
+		Assert.False(pane.TagArea.IsExpanded);
+	}
+
+	[Fact]
+	public async Task Switching_between_the_session_and_focus_views_keeps_the_state()
+	{
+		var pane = Pane();
+		await pane.OpenAsync("a");
+		pane.TagArea.IsExpanded = true;
+
+		pane.SelectFocusViewCommand.Execute(null);
+		Assert.True(pane.IsFocusSelected);
+		Assert.True(pane.TagArea.IsExpanded);
+
+		pane.SelectSessionViewCommand.Execute(null);
+		Assert.False(pane.IsFocusSelected);
+		Assert.True(pane.TagArea.IsExpanded);
+	}
+
+	[Fact]
+	public async Task Reopening_the_shown_session_keeps_the_state()
+	{
+		var pane = Pane();
+		await pane.OpenAsync("a");
+		pane.TagArea.IsExpanded = true;
+
+		await pane.OpenAsync("a");
+
+		Assert.True(pane.TagArea.IsExpanded);
+	}
+
+	[Fact]
+	public async Task Closing_the_session_collapses_the_area()
+	{
+		var pane = Pane();
+		await pane.OpenAsync("a");
+		pane.TagArea.IsExpanded = true;
+
+		pane.Close();
+
+		Assert.False(pane.TagArea.IsExpanded);
+	}
+
+	[Fact]
+	public async Task An_old_state_file_with_the_remembered_mode_loads_and_is_ignored_and_not_written_back()
 	{
 		var root = Path.Combine(Path.GetTempPath(), "tessyn-tagarea-" + Guid.NewGuid().ToString("N"));
 		try
 		{
 			var paths = new AppPaths(root);
-			var first = new JsonClientStateStore(paths, NullLogger<JsonClientStateStore>.Instance, TimeSpan.Zero);
-			await first.LoadAsync();
-			new TagAreaViewModel(Tags(1), first).IsExpanded = true;
-			await first.FlushAsync();
+			Directory.CreateDirectory(Path.GetDirectoryName(paths.ClientStateFilePath)!);
+			await File.WriteAllTextAsync(paths.ClientStateFilePath, "{ \"tagAreaExpanded\": true, \"attachAsFiles\": true }");
 
-			var second = new JsonClientStateStore(paths, NullLogger<JsonClientStateStore>.Instance, TimeSpan.Zero);
-			await second.LoadAsync();
+			var store = new JsonClientStateStore(paths, NullLogger<JsonClientStateStore>.Instance, TimeSpan.Zero);
+			await store.LoadAsync();
 
-			Assert.True(new TagAreaViewModel(Tags(1), second).IsExpanded);
+			Assert.True(store.Read(s => s.AttachAsFiles));   // the rest of the file still loads
+			Assert.False(new TagAreaViewModel(Tags(1)).IsExpanded);
 
-			// The mode is really in wpf.json, and collapsing it is persisted as well.
-			Assert.Contains("\"tagAreaExpanded\": true", File.ReadAllText(paths.ClientStateFilePath));
-			var model = new TagAreaViewModel(Tags(1), second);
-			model.ToggleCommand.Execute(null);
-			await second.FlushAsync();
-			Assert.Contains("\"tagAreaExpanded\": false", File.ReadAllText(paths.ClientStateFilePath));
-			var third = new JsonClientStateStore(paths, NullLogger<JsonClientStateStore>.Instance, TimeSpan.Zero);
-			await third.LoadAsync();
-			Assert.False(new TagAreaViewModel(Tags(1), third).IsExpanded);
+			store.Update(s => s.AttachAsFiles = false);
+			await store.FlushAsync();
+			using var document = JsonDocument.Parse(await File.ReadAllTextAsync(paths.ClientStateFilePath));
+			Assert.False(document.RootElement.TryGetProperty("tagAreaExpanded", out _));
 		}
 		finally
 		{
