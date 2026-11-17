@@ -608,11 +608,23 @@ public partial class MainWindow : Window
 	{
 		try
 		{
+			// Always the latest build: run-wpf.ps1 builds, refreshes [Publish-WPF] and starts the client (a console window shows the build).
+			var script = WpfClientLocator.FindScript(AppContext.BaseDirectory);
+			if (script != null)
+			{
+				System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("powershell.exe", WpfClientLocator.BuildScriptArguments(script))
+				{
+					UseShellExecute = false,
+					WorkingDirectory = Path.GetDirectoryName(script)!,
+				});
+				return;
+			}
+
 			var exe = WpfClientLocator.Find(AppContext.BaseDirectory);
 			if (exe == null)
 			{
 				await ShowConfirmOverlayAsync(
-					"The WPF client is not installed yet. Run run-wpf.ps1 in the repository once to create [Publish-WPF].", "OK");
+					"The WPF client is not installed yet and run-wpf.ps1 was not found next to this app's folder.", "OK");
 				return;
 			}
 

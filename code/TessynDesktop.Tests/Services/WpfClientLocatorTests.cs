@@ -30,6 +30,19 @@ public sealed class WpfClientLocatorTests : IDisposable
 	}
 
 	[Fact]
+	public void TheScript_IsFoundInTheRepositoryRoot_AndItsCommandQuotesThePath()
+	{
+		var script = Path.Combine(_root, WpfClientLocator.ScriptName);
+		Assert.Null(WpfClientLocator.FindScript(Path.Combine(_root, "[Publish]")));
+		File.WriteAllText(script, "");
+
+		Assert.Equal(script, WpfClientLocator.FindScript(Path.Combine(_root, "[Publish]")));
+		var args = WpfClientLocator.BuildScriptArguments(@"C:\it's\[Publish]\run-wpf.ps1");
+		Assert.Contains(@"& 'C:\it''s\[Publish]\run-wpf.ps1'", args);
+		Assert.Contains("-ExecutionPolicy Bypass", args);
+	}
+
+	[Fact]
 	public void WithoutTheRunFolder_NothingIsFound()
 	{
 		Assert.Null(WpfClientLocator.Find(Path.Combine(_root, "[Publish]")));

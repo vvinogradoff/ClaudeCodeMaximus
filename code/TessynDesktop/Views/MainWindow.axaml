@@ -171,7 +171,7 @@
                             Background="Transparent" BorderThickness="1"
                             BorderBrush="Transparent"
                             VerticalContentAlignment="Center"
-                            ToolTip.Tip="Start the WPF client next to this window (it attaches to this daemon)">
+                            ToolTip.Tip="Build and start the latest WPF client next to this window (runs run-wpf.ps1; the client attaches to this daemon)">
                         <TextBlock Text="WPF" FontSize="11" VerticalAlignment="Center"/>
                     </Button>
                 </StackPanel>
