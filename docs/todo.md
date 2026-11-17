@@ -1183,6 +1183,6 @@ Status copied from the plan and the worker reports in `.wpf-work/` as of 2026-11
 - [DONE] Sunset notes added to `docs/refactoring/wpf-programme-plan.md`, `refactoring-plan.md`, `structure-notes.md`, `tdcp-spec.md`
 - [ ] Architect: confirm the dropped list (the `--chrome` toggle, host takeover, key bindings without a WPF command, tag cloud default 11, Send answers placement)
 - [ ] Architect: take the proposed `CLAUDE.md` text from `.wpf-work/494-sunset-docs.md` (E2E section, build and run-folder notes, `[Publish-WPF]`)
-- [ ] Architect: decide whether the one-time settings import (FR.32.4, UC.HS.05, TC.HS.11) stays or is removed now that the previous client is gone; its wire section keeps a legacy name (`avalonia-ui`)
+- [DONE] Architect decided (A47): the one-time settings import (FR.32.4, UC.HS.05, TC.HS.11) and the `avalonia-ui` section are removed; branch `chore/remove-avalonia-window`
 - [ ] Manual list for WPF: Ctrl+Enter in Decisions cards and the narrow-window title check (was TC.FC.10); the tooltip wording of TC.TG.21 steps 3–5; confirm the carried-over manual steps of TC.FV.21–40, TC.TG.22–54 and TC.RT.02–10 against WPF
 - [ ] Code follow-ups (not done here): tests that still assert the second tag cloud default (TC.TA.16) or the host takeover (TC.HS.08); retire `TessynDesktop.Tests` cases of the previous window; `docs/session_resume_notes.md`, `docs/shell_commands.md` and `docs/issues/*` still carry the old UI's name as history

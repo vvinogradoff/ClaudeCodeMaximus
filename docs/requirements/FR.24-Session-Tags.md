@@ -262,4 +262,4 @@ Applies to the **WPF desktop client**. **Tessyn Web is not covered** by FR.24.16
 - **Range and defaults.** The value is a whole number of **8 to 40**. A value outside the range, or text that is not a number, is refused and nothing is stored. The default is **14**. (The second default, 11 for the earlier desktop client, is **withdrawn** with that client.)
 - **When it applies.** **Live**: every visible chip, in the tag area (FR.24.16) and in the Tags tab chips (FR.24.11), and the `+N` hint, restyles at once, with no restart and no reopening of the session.
 - The value is a client setting (not per session, not in the daemon).
-- **Not imported.** The one-time settings import of the previous client (FR.32.4) does **not** carry it; WPF keeps its own value (default 14).
+- **Not imported.** (The one-time settings import of the previous client, FR.32.4, is WITHDRAWN 2026-11-17 (decision A47); WPF keeps its own value, default 14.)

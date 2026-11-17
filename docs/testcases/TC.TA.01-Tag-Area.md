@@ -22,7 +22,7 @@ Related requirements: FR.24.16, FR.24.18. Use cases: [UC.TA.01](/docs/usecases/U
 | TC.TA.14 | **WITHDRAWN 2026-11-17.** Manual check of the tag cloud font size setting in the previous desktop client; covered for WPF by TC.TA.11–13 | WITHDRAWN | UC.TA.04 | FR.24.18 |
 | TC.TA.15 | The range is 8 to 40: 8 and 40 accepted; 7, 41, empty and non-numeric text refused, nothing stored | AUTOMATED | UC.TA.04 | FR.24.18 |
 | TC.TA.16 | The default is 14 (the second default, 11, is WITHDRAWN 2026-11-17) | AUTOMATED | UC.TA.04 | FR.24.18 |
-| TC.TA.17 | The one-time settings import leaves the WPF tag cloud size unchanged | AUTOMATED | UC.TA.04 | FR.24.18, FR.32.4 |
+| TC.TA.17 | **WITHDRAWN 2026-11-17 (decision A47).** The one-time settings import leaves the WPF tag cloud size unchanged; the import is removed | WITHDRAWN | UC.TA.04 | FR.24.18, FR.32.4 |
 
 ## FR → TC coverage
 | FR | Test cases |

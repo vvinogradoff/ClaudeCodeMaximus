@@ -133,7 +133,7 @@
 | **Legacy profile label** | A profile display name recorded on a session (older versions, transcript history) without a `ProfileId` pin. If it matches no stored profile, the turn runs on Default with a visible note, and the first turn pins the session by id (FR.12.27, decision A18). |
 | **Write-only secret** | A value a client can set but never read; results carry a `has…` flag (FR.20.10). |
 | **Origin binding** | A stored secret is dropped, or must be sent again, when the URL or token endpoint it was given for changes origin (FR.20.10, FR.25.41). |
-| **avalonia-ui section** | A legacy wire identifier: the read-only settings section of the previous desktop client (theme, colours, font sizes, key bindings, screensaver), kept for the one-time import into WPF (FR.20.10, FR.32.4). |
+| **avalonia-ui section** | **WITHDRAWN 2026-11-17 (decision A47).** Was a legacy wire identifier: the read-only settings section of the previous desktop client, served for the one-time import into WPF (FR.20.10, FR.32.4). The daemon no longer serves it. |
 | **Recency box** | The tinted background of a session row (FR.9.10); it also holds the row's date text and worker count (FR.1.18, FR.1.21). |
 | **Husk group** | A Group that held only Workers, flagged `holdsOnlyWorkers` and hidden by clients (FR.1.26). |
 | **Tag area** | The chip row under the session header; collapsed by default, expands on click (FR.24.16). |
