@@ -11,6 +11,20 @@ public sealed partial class TreeViewModel
 
 	private void RaiseListsChanged() => ListsChanged?.Invoke(this, EventArgs.Empty);
 
+	/// <summary>Re-reads the recency tier and the dotted border of every row (called every 60 seconds).</summary>
+	public void RefreshClock()
+	{
+		foreach (var node in _byId.Values)
+			node.RefreshClock();
+	}
+
+	/// <summary>Re-reads the date text of every row (the date format setting changed).</summary>
+	public void RefreshDisplay()
+	{
+		foreach (var node in _byId.Values)
+			node.RefreshDisplay();
+	}
+
 	/// <summary>
 	/// The top-level sessions (directly under a directory or inside its groups; workers stay nested) of every directory, directories in tree
 	/// order, sessions in tree order. The data is the tree snapshot plus the pushed states: no extra call.

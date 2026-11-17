@@ -46,7 +46,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		IMcpServerEditorPresenter editorPresenter,
 		ProfileViewModel profiles,
 		IUiDispatcher ui,
-		ILoggerFactory loggers)
+		ILoggerFactory loggers,
+		IAppearanceService? appearance = null)
 	{
 		_client = client;
 		_dialogs = dialogs;
@@ -64,6 +65,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		Screensaver = new ScreensaverSectionViewModel(store, picker);
 		Keyboard = new KeyboardSectionViewModel(store, commands);
 		Startup = new StartupSectionViewModel(store);
+		Colours = new ColoursSectionViewModel(store, appearance);
 
 		client.NotificationReceived += OnNotification;
 	}
@@ -88,6 +90,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
 	public StartupSectionViewModel Startup { get; }
 
+	public ColoursSectionViewModel Colours { get; }
+
 	public bool HasStatus => !string.IsNullOrEmpty(StatusText);
 
 	public bool HasError => !string.IsNullOrEmpty(ErrorText);
@@ -95,7 +99,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 	public string ImportOfferText => Constants.Settings.ImportOffer;
 
 	/// <summary>The sections the window's Save button applies.</summary>
-	private IEnumerable<ISettingsEditor> Editors => [General, Notifications, Telegram, Appearance, Screensaver, Keyboard, Startup];
+	private IEnumerable<ISettingsEditor> Editors => [General, Notifications, Telegram, Appearance, Colours, Screensaver, Keyboard, Startup];
 
 	public bool HasChanges => Editors.Any(e => e.HasChanges);
 

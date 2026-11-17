@@ -8,26 +8,29 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <v:InvertedBooleanToVisibilityConverter x:Key="InvertedBoolToVis" />
     </Window.Resources>
-    <StackPanel Margin="20,18,20,16">
+    <StackPanel Margin="{Binding DialogMargin}">
         <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
         <TextBox x:Name="InputBox" Margin="0,12,0,0" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
                  Visibility="{Binding IsInput, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Dialog input" />
         <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding Error}" Foreground="{DynamicResource SystemFillColorCriticalBrush}"
                    Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Dialog error" />
-        <ScrollViewer Margin="0,12,0,0" MaxHeight="360" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsChoice, Converter={StaticResource BoolToVis}}">
-        <ItemsControl ItemsSource="{Binding Choices}">
+        <!-- A choice dialog: one button per option, each as wide as the dialog, with Cancel below them (generous margins left and right). -->
+        <ScrollViewer Margin="0,14,0,0" MaxHeight="360" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsChoice, Converter={StaticResource BoolToVis}}">
+        <ItemsControl ItemsSource="{Binding Choices}" Focusable="False">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <Button Content="{Binding Label}" Margin="0,0,0,6" Padding="10,6" HorizontalContentAlignment="Left"
+                    <Button Content="{Binding Label}" Margin="0,0,0,8" Padding="12,10" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{Binding DataContext.ChooseCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
         </ScrollViewer>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0" Visibility="{Binding IsChoice, Converter={StaticResource InvertedBoolToVis}}">
             <Button x:Name="AcceptButton" Content="{Binding ConfirmText}" Command="{Binding AcceptCommand}" MinWidth="88" Margin="0,0,8,0"
-                    Style="{DynamicResource AccentButtonStyle}" Visibility="{Binding IsChoice, Converter={StaticResource InvertedBoolToVis}}" />
+                    Style="{DynamicResource AccentButtonStyle}" />
             <Button x:Name="CancelButton" Content="{Binding CancelText}" Command="{Binding CancelCommand}" MinWidth="88" IsCancel="True" />
         </StackPanel>
+        <Button x:Name="ChoiceCancelButton" Content="{Binding CancelText}" Command="{Binding CancelCommand}" Margin="0,8,0,0" Padding="12,10" HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center" IsCancel="True" Visibility="{Binding IsChoice, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Cancel" />
     </StackPanel>
 </Window>

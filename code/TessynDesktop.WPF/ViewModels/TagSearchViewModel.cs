@@ -224,6 +224,12 @@ public sealed partial class TagSearchViewModel : ObservableObject, IDisposable
 			row.State = row.State with { Favorite = value.Value };
 	}
 
+	/// <summary>
+	/// What the daemon is asked for. A tag matches when every word of the query occurs in its label or key, so a wildcard has nothing to match: <c>HSE-*</c> would find no tag.
+	/// A star or a question mark is therefore a word separator (<c>HSE-*</c> is <c>HSE-</c>, <c>HSE*240</c> is <c>HSE 240</c>).
+	/// </summary>
+	public static string NormalizeQuery(string text) => text.Replace('*', ' ').Replace('?', ' ').Trim();
+
 	private Task StartSearch(TimeSpan delay)
 	{
 		_searchCts?.Cancel();
@@ -245,7 +251,7 @@ public sealed partial class TagSearchViewModel : ObservableObject, IDisposable
 				await Task.Delay(delay, cts.Token);
 
 			var scoped = IsScoped;
-			var result = await client.TagsSearchAsync(SearchText, _selected.ToList(), scoped ? _scopeSessionId : null, cts.Token);
+			var result = await client.TagsSearchAsync(NormalizeQuery(SearchText), _selected.ToList(), scoped ? _scopeSessionId : null, cts.Token);
 			if (!cts.IsCancellationRequested)
 				Apply(result, scoped);
 		}
@@ -290,7 +296,7 @@ public sealed partial class TagSearchViewModel : ObservableObject, IDisposable
 		{
 			TagEmptyReason.NoTagsScoped => scoped ? Constants.SessionLists.TagsNoTagsScopedText : Constants.SessionLists.TagsNoTagsText,
 			TagEmptyReason.NoTagsUnscoped => Constants.SessionLists.TagsNoTagsText,
-			TagEmptyReason.NoMatchingTags => Constants.SessionLists.TagsNoMatchText,
+			TagEmptyReason.NoMatchingTags => scoped ? Constants.SessionLists.TagsNoMatchScopedText : Constants.SessionLists.TagsNoMatchText,
 			_ => null,
 		};
 
@@ -304,6 +310,13 @@ public sealed partial class TagSearchViewModel : ObservableObject, IDisposable
 			TagSessionsEmptyReason.NoSessions => Constants.SessionLists.TagsNoSessionsText,
 			_ => null,
 		};
+	}
+
+	/// <summary>Re-reads the date text of the rows (the date format setting changed).</summary>
+	public void RefreshDisplay()
+	{
+		foreach (var row in Sessions.Items.OfType<SessionRowViewModel>())
+			row.RefreshDisplay();
 	}
 
 	private void OnResynced(object? sender, ResyncedEventArgs e) => _ui.Post(() => _ = StartSearch(TimeSpan.Zero));

@@ -17,6 +17,7 @@ namespace TessynDesktop.Models.Remote;
 /// <param name="PinnedProfileId">The profile the session is pinned to (ISSUE.013 R5): <c>"default"</c> or a stored profile's id; omitted while the session is not pinned. Unlike <paramref name="ProfileName"/> it follows a profile switch at once.</param>
 /// <param name="PinnedProfileName">The display name of the pinned profile (the <c>profile=</c> label of <c>list_sessions</c>; <c>"default"</c> for the Default profile; a missing profile carries the missing suffix); omitted without a pin.</param>
 /// <param name="SwitchingToProfileName">The display name of the profile a queued switch will move the session to when its turn ends (the <c>switching-to=</c> label of <c>list_sessions</c>); omitted when no switch is queued.</param>
+/// <param name="Resumable">Claude Code still has the session available for <c>--resume</c> (the blue square of the Avalonia tree); omitted (null) while the daemon does not report it. The daemon does not fill it yet: see .wpf-work/477-tree.md.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record SessionStateDto(
 	string Id,
@@ -32,4 +33,5 @@ public sealed record SessionStateDto(
 	bool HasSchedules = false,
 	string? PinnedProfileId = null,
 	string? PinnedProfileName = null,
-	string? SwitchingToProfileName = null);
+	string? SwitchingToProfileName = null,
+	bool? Resumable = null);

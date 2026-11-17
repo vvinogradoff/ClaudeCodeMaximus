@@ -26,6 +26,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 
 	private readonly Dictionary<string, TreeNodeViewModel> _byId = new();
 	private readonly HashSet<string> _expanded = new();
+	private readonly HashSet<string> _createdGroups = new();
 	private List<TreeNodeViewModel> _roots = [];
 	private List<TreeNodeViewModel>? _searchRoots;
 	private bool _expansionSeeded;
@@ -134,6 +135,9 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		RequestRefresh(force: false);
 		await WhenIdleAsync();
 	}
+
+	/// <summary>Remembers a group this client created: it stays in the tree while empty (the daemon's empty worker husks are hidden).</summary>
+	public void NoteCreatedGroup(string groupId) => _createdGroups.Add(groupId);
 
 	/// <summary>The node with this id, or null when it is not in the tree (a worker that was not loaded yet).</summary>
 	public TreeNodeViewModel? FindNode(string nodeId) => _byId.GetValueOrDefault(nodeId);
@@ -460,10 +464,15 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		{
 			var node = new TreeNodeViewModel(group.Id, TreeNodeKind.Group, group.Name, parent);
 			Register(node);
+			AddGroupsAndSessions(node, group.Groups, group.Sessions, serverExpanded, ref sessionCount);
+
+			// The daemon keeps the group an orchestration spawned its workers into, although the workers are not listed in it (they nest under their supervisor): an empty
+			// husk. The Avalonia tree prunes these (PruneGroupsEmptiedByReorg), so a husk is not shown as a row; it stays a node (an empty group is still a place to import into).
+			// An empty group this client created is shown until the next start, when nothing tells it from a husk.
+			node.IsHusk = node.Children.All(c => c.IsHusk) && !_createdGroups.Contains(group.Id);
 			parent.Children.Add(node);
 			if (group.IsExpanded)
 				serverExpanded.Add(group.Id);
-			AddGroupsAndSessions(node, group.Groups, group.Sessions, serverExpanded, ref sessionCount);
 		}
 
 		foreach (var session in sessions)
@@ -561,7 +570,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		if (!node.IsExpanded)
 			return;
 
-		foreach (var child in node.Children)
+		foreach (var child in node.Children.Where(c => !c.IsHusk))
 			Flatten(child, output);
 	}
 

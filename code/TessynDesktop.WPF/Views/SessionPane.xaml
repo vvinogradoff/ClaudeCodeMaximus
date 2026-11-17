@@ -119,10 +119,11 @@
                         <TextBlock Text="{Binding Focus.SendAnswersText}" Margin="8,0,0,0" />
                     </StackPanel>
                 </Button>
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding Title}" Style="{DynamicResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding StateText}" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
+                <!-- The title fills the row, so the rename text box stretches. -->
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding StateText}" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <v:SessionTitle />
+                </DockPanel>
             </DockPanel>
             <v:SessionTagArea DataContext="{Binding TagArea}" Margin="0,4,0,0" />
             <TextBlock Text="{Binding Error}" Foreground="{DynamicResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Margin="0,4,0,0">

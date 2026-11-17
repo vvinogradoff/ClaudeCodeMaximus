@@ -1,4 +1,4 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Container of the flat, virtualized session tree: the look of a Fluent TreeViewItem (rounded hover/selected fill, accent
          selection pill, theme focus visual) on top of a ListBoxItem, so rows stay virtualized. -->
@@ -26,8 +26,9 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
                         </Trigger>
+                        <!-- The selection is the pale blue of the Avalonia tree (Settings, Colours: "Selected row"), with the accent pill on its left edge. -->
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource Colour.TreeSelection}" />
                             <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <MultiTrigger>
@@ -35,7 +36,7 @@
                                 <Condition Property="IsSelected" Value="True" />
                                 <Condition Property="IsMouseOver" Value="True" />
                             </MultiTrigger.Conditions>
-                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource Colour.TreeSelection}" />
                         </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
@@ -44,5 +45,25 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+    <!-- The expand/collapse mark of a group header in the Recent and Tags lists: the chevron of the tree's expander button, turned down while expanded. -->
+    <Style x:Key="ChevronGlyph" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Text" Value="&#xE76C;" />
+        <Setter Property="Width" Value="20" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                <Setter Property="RenderTransform">
+                    <Setter.Value>
+                        <RotateTransform Angle="90" />
+                    </Setter.Value>
+                </Setter>
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
 </ResourceDictionary>

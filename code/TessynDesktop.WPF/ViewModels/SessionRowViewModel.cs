@@ -14,12 +14,12 @@ public sealed partial class SessionRowViewModel : ObservableObject
 	private readonly TimeProvider _clock;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(OpenAutomationName), nameof(FavoriteAutomationName), nameof(HideAutomationName))]
+	[NotifyPropertyChangedFor(nameof(Label), nameof(OpenAutomationName), nameof(FavoriteAutomationName), nameof(HideAutomationName))]
 	private string _name;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(HasDraft), nameof(ProfileName),
-		nameof(LastPromptText), nameof(RecencyLevel), nameof(ShowStar), nameof(ShowHide), nameof(ShowStarToggle))]
+	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(HasDraft), nameof(ProfileName), nameof(HasSwitching), nameof(SwitchingToProfileName),
+		nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(IsResumable), nameof(AttentionKey), nameof(ShowStar), nameof(ShowHide), nameof(ShowStarToggle))]
 	private SessionStateDto _state;
 
 	[ObservableProperty]
@@ -72,35 +72,34 @@ public sealed partial class SessionRowViewModel : ObservableObject
 
 	public bool HasDraft => State.HasDraft;
 
-	public string ProfileName => State.ProfileName ?? string.Empty;
+	/// <summary>The profile the session is pinned to, else the one stamped on its last prompt; empty while unknown (as the tree row shows it).</summary>
+	public string ProfileName => State.PinnedProfileName ?? State.ProfileName ?? string.Empty;
 
-	/// <summary>Time of the last prompt: the clock time today, else the date; empty without a prompt.</summary>
-	public string LastPromptText
-	{
-		get
-		{
-			if (State.LastPromptUtc is not { } at)
-				return string.Empty;
+	/// <summary>The profile a queued switch moves the session to when its turn ends; empty when none is queued.</summary>
+	public string SwitchingToProfileName => State.SwitchingToProfileName ?? string.Empty;
 
-			var local = at.ToLocalTime();
-			return local.Date == _clock.GetLocalNow().Date ? local.ToString("HH:mm") : local.ToString("MMM d");
-		}
-	}
+	public bool HasSwitching => SwitchingToProfileName.Length > 0;
 
-	/// <summary>FR.9.5: 3 = last prompt within 15 minutes, 2 = within 30, 1 = within an hour, 0 = none.</summary>
-	public int RecencyLevel
-	{
-		get
-		{
-			if (State.LastPromptUtc is not { } at)
-				return 0;
+	/// <summary>The session's name; the shared row face binds the same name for a tree node and a list row.</summary>
+	public string Label => Name;
 
-			var age = _clock.GetUtcNow() - at;
-			return age <= TimeSpan.FromMinutes(Constants.SessionLists.RecencyLightMinutes) ? 3
-				: age <= TimeSpan.FromMinutes(Constants.SessionLists.RecencyMediumMinutes) ? 2
-				: age <= TimeSpan.FromMinutes(Constants.SessionLists.RecencyDarkMinutes) ? 1 : 0;
-		}
-	}
+	/// <summary>Date of the last prompt in the format of the Appearance setting (<c>yyyy-MM-dd HH:mm</c> by default, as the Avalonia client); empty without a prompt.</summary>
+	public string LastPromptText => SessionDisplay.DateText(State.LastPromptUtc, _clock.GetLocalNow());
+
+	/// <summary>The most recent activity (prompt, response or draft edit); the last prompt when the daemon did not say.</summary>
+	private DateTimeOffset? LastActivity => State.LastActivityUtc ?? State.LastPromptUtc;
+
+	/// <summary>FR.9.5, as the Avalonia client: 4 = activity within 15 minutes, 3 = within an hour, 2 = within 4 hours, 1 = within 12 hours or an unsent draft, 0 = none.</summary>
+	public int RecencyLevel => SessionDisplay.RecencyLevel(LastActivity, HasDraft, _clock.GetUtcNow());
+
+	/// <summary>Activity within the last 24 hours: the dotted border.</summary>
+	public bool IsRecentlyActive => SessionDisplay.IsRecentlyActive(LastActivity, _clock.GetUtcNow());
+
+	/// <summary>Claude Code still has the session for <c>--resume</c>: the lower blue square.</summary>
+	public bool IsResumable => State.Resumable == true;
+
+	/// <summary>The kind of the most severe open Focus item in lower case (<c>critical</c>, <c>ask</c>, ...); empty without one. Colours the count pill.</summary>
+	public string AttentionKey => State.Attention?.TopKind.ToString().ToLowerInvariant() ?? string.Empty;
 
 	/// <summary>The one icon slot (FR.9.7): the filled star of a favourite, else Hide, else (tabs) a star to set.</summary>
 	public bool ShowStar => IsFavorite;
@@ -110,7 +109,14 @@ public sealed partial class SessionRowViewModel : ObservableObject
 	public bool ShowStarToggle => !IsFavorite && !CanHide && CanToggleFavorite;
 
 	/// <summary>Re-reads the time-dependent marks (the 60 second recency refresh).</summary>
-	public void RefreshClock() => OnPropertyChanged(nameof(RecencyLevel));
+	public void RefreshClock()
+	{
+		OnPropertyChanged(nameof(RecencyLevel));
+		OnPropertyChanged(nameof(IsRecentlyActive));
+	}
+
+	/// <summary>Re-reads the date text (the date format setting changed).</summary>
+	public void RefreshDisplay() => OnPropertyChanged(nameof(LastPromptText));
 
 	/// <summary>Opens the session; the list that owns the row sets it (parameter: the row).</summary>
 	public ICommand? OpenCommand { get; set; }

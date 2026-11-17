@@ -14,6 +14,9 @@
             <TextBlock Style="{StaticResource SettingsLabel}" Text="Theme" />
             <ComboBox ItemsSource="{Binding Themes}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Theme}" AutomationProperties.Name="Theme" />
 
+            <TextBlock Style="{StaticResource SettingsLabel}" Text="Date in the session rows" />
+            <ComboBox ItemsSource="{Binding DateFormats}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding DateFormat}" AutomationProperties.Name="Date format" />
+
             <TextBlock Style="{StaticResource SettingsLabel}" Text="Font sizes" />
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -35,7 +38,7 @@
                 <TextBlock Grid.Row="3" Margin="0,0,16,6" VerticalAlignment="Center" Text="Prompt box" />
                 <TextBox Grid.Row="3" Grid.Column="1" Margin="0,0,0,6" Text="{Binding InputFontSize, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Input font size" />
             </Grid>
-            <TextBlock Style="{StaticResource SettingsHint}" Text="Sizes in points, 8 to 40. The colour palette editor of the Avalonia client is not part of this client." />
+            <TextBlock Style="{StaticResource SettingsHint}" Text="Sizes in points, 8 to 40. Colours have their own tab." />
 
             <s:SectionMessages Margin="0,8,0,0" />
         </StackPanel>

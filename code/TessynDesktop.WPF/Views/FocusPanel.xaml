@@ -7,48 +7,18 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/KindPill.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-            <!-- Kind chip: colours come from the Fluent theme brushes so light and dark both work. -->
-            <Style x:Key="KindChip" TargetType="Border">
+            <!-- Kind chip: the pill of the Avalonia client (AttentionKindPill) in the palette's colours (Settings, Colours); the kind comes in the Tag. -->
+            <Style x:Key="KindChip" TargetType="Border" BasedOn="{StaticResource KindPill}">
                 <Setter Property="CornerRadius" Value="10" />
                 <Setter Property="Padding" Value="8,1" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-                <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding KindKey}" Value="critical">
-                        <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="ask">
-                        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="todo">
-                        <Setter Property="Background" Value="{DynamicResource ControlStrongFillColorDefaultBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="alert">
-                        <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBackgroundBrush}" />
-                    </DataTrigger>
-                </Style.Triggers>
             </Style>
             <Style x:Key="KindChipText" TargetType="TextBlock">
                 <Setter Property="FontSize" Value="12" />
                 <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding KindKey}" Value="critical">
-                        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="ask">
-                        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="todo">
-                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="alert">
-                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-                    </DataTrigger>
-                </Style.Triggers>
             </Style>
             <Style x:Key="RefGlyph" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
                 <Setter Property="FontSize" Value="12" />
@@ -82,7 +52,7 @@
                         <StackPanel>
                             <!-- kind chip, item id, title -->
                             <DockPanel LastChildFill="True">
-                                <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Margin="0,0,8,0">
+                                <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Tag="{Binding KindKey}" Margin="0,0,8,0">
                                     <TextBlock Style="{StaticResource KindChipText}" Text="{Binding KindText}" />
                                 </Border>
                                 <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -153,7 +123,7 @@
                             <DockPanel.InputBindings>
                                 <MouseBinding MouseAction="LeftClick" Command="{Binding ToggleBodyCommand}" />
                             </DockPanel.InputBindings>
-                            <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Margin="0,0,8,0">
+                            <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Tag="{Binding KindKey}" Margin="0,0,8,0">
                                 <TextBlock Style="{StaticResource KindChipText}" Text="{Binding KindText}" />
                             </Border>
                             <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />

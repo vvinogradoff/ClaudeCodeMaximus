@@ -56,6 +56,7 @@ public static partial class Constants
 		public const string Screensaver = "screensaver";
 		public const string Layout = "layout";
 		public const string DaemonHost = "daemonHost";
+		public const string Colours = "colours";
 	}
 
 	/// <summary>Defaults of the client settings sections; they mirror the Avalonia client's.</summary>

@@ -1,9 +1,11 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime"
-                    xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels">
+                    xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels"
+                    xmlns:v="clr-namespace:TessynDesktop.WPF.Views">
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
+        <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/TreeRowStyles.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
     <sys:String x:Key="GlyphStar">&#xE734;</sys:String>
@@ -13,11 +15,6 @@
     <sys:String x:Key="GlyphFolder">&#xE8B7;</sys:String>
     <sys:String x:Key="GlyphClock">&#xE823;</sys:String>
     <BooleanToVisibilityConverter x:Key="SessionListBoolToVis" />
-
-    <!-- Recency backgrounds (FR.9.5): last prompt within 15 / 30 / 60 minutes. The colours move to the theme settings with W10a. -->
-    <SolidColorBrush x:Key="RecencyLightBrush" Color="#4081C784" />
-    <SolidColorBrush x:Key="RecencyMediumBrush" Color="#4D4CAF50" />
-    <SolidColorBrush x:Key="RecencyDarkBrush" Color="#5C2E7D32" />
 
     <!-- A flat icon button used by the icon slot of a row. -->
     <Style x:Key="RowIconButton" TargetType="Button">
@@ -64,72 +61,40 @@
         <Button Command="{Binding ToggleCommand}" CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Padding="6,5"
                 HorizontalContentAlignment="Stretch" AutomationProperties.Name="{Binding AutomationName}">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Left" Width="14" Text="{Binding Chevron}" />
-                <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="12" Margin="0,0,6,0" Text="{StaticResource GlyphFolder}" />
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource ChevronGlyph}" />
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="12" Margin="2,0,6,0" Text="{StaticResource GlyphFolder}" />
                 <TextBlock DockPanel.Dock="Right" Margin="6,0,0,0" Text="{Binding Count}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
             </DockPanel>
         </Button>
     </DataTemplate>
 
-    <!-- One session row (FR.1.16, FR.9.7): status, name, draft mark, profile, last prompt, attention, schedule; the icon slot on the right shows one of: star (favourite), Hide, star to set. -->
+    <!-- One session row (FR.1.16, FR.9.7): the shared row face (status squares, Focus pill, name, draft, schedule, profile and date below, recency colour), and the icon slot on the right
+         that shows one of: star (favourite), Hide, star to set. -->
     <DataTemplate DataType="{x:Type vm:SessionRowViewModel}">
-        <Border Margin="0,1">
-            <Border.Style>
-                <Style TargetType="Border">
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding RecencyLevel}" Value="3">
-                            <Setter Property="Background" Value="{StaticResource RecencyLightBrush}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding RecencyLevel}" Value="2">
-                            <Setter Property="Background" Value="{StaticResource RecencyMediumBrush}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding RecencyLevel}" Value="1">
-                            <Setter Property="Background" Value="{StaticResource RecencyDarkBrush}" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
-            <DockPanel LastChildFill="True">
-                <Grid DockPanel.Dock="Right" Width="30">
-                    <Button Style="{StaticResource RowIconButton}" Command="{Binding ToggleFavoriteCommand}" CommandParameter="{Binding}" ToolTip="Favourite"
-                            Visibility="{Binding ShowStar, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="{Binding FavoriteAutomationName}">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphStarFilled}" Foreground="{DynamicResource SystemFillColorCautionBrush}" />
-                    </Button>
-                    <Button Style="{StaticResource RowIconButton}" Command="{Binding HideCommand}" CommandParameter="{Binding}" ToolTip="Hide from Recent"
-                            Visibility="{Binding ShowHide, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="{Binding HideAutomationName}">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphHide}" />
-                    </Button>
-                    <Button Style="{StaticResource RowIconButton}" Command="{Binding ToggleFavoriteCommand}" CommandParameter="{Binding}" ToolTip="Make a favourite"
-                            Visibility="{Binding ShowStarToggle, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="{Binding FavoriteAutomationName}">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphStar}" />
-                    </Button>
-                </Grid>
-                <Button Command="{Binding OpenCommand}" CommandParameter="{Binding}" Tag="open" Background="Transparent" BorderThickness="0" Padding="6,3"
-                        HorizontalContentAlignment="Stretch" AutomationProperties.Name="{Binding OpenAutomationName}">
-                    <StackPanel>
-                        <DockPanel>
-                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="9" Margin="0,0,6,0" Text="&#xE768;"
-                                       Foreground="{DynamicResource SystemFillColorSuccessBrush}"
-                                       Visibility="{Binding IsRunning, Converter={StaticResource SessionListBoolToVis}}" />
-                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="10" Margin="0,0,6,0" Text="{StaticResource GlyphEdit}" ToolTip="Unsent draft"
-                                       Visibility="{Binding HasDraft, Converter={StaticResource SessionListBoolToVis}}" />
-                            <Border DockPanel.Dock="Right" CornerRadius="8" Padding="6,0" Margin="6,0,0,0" Background="{DynamicResource SystemFillColorAttentionBrush}"
-                                    Visibility="{Binding HasAttention, Converter={StaticResource SessionListBoolToVis}}" ToolTip="Open Focus items">
-                                <TextBlock Text="{Binding AttentionCount}" FontSize="11" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
-                            </Border>
-                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphClock}" ToolTip="Scheduled"
-                                       Visibility="{Binding HasSchedules, Converter={StaticResource SessionListBoolToVis}}" />
-                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                        </DockPanel>
-                        <TextBlock FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
-                            <Run Text="{Binding ProfileName, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding LastPromptText, Mode=OneWay}" />
-                        </TextBlock>
-                        <TextBlock Text="{Binding DirectoryLabel}" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                   Visibility="{Binding ShowDirectory, Converter={StaticResource SessionListBoolToVis}}" />
-                    </StackPanel>
+        <DockPanel LastChildFill="True" Margin="0,1">
+            <Grid DockPanel.Dock="Right" Width="30">
+                <Button Style="{StaticResource RowIconButton}" Command="{Binding ToggleFavoriteCommand}" CommandParameter="{Binding}" ToolTip="Favourite"
+                        Visibility="{Binding ShowStar, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="{Binding FavoriteAutomationName}">
+                    <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphStarFilled}" Foreground="{DynamicResource SystemFillColorCautionBrush}" />
                 </Button>
-            </DockPanel>
-        </Border>
+                <Button Style="{StaticResource RowIconButton}" Command="{Binding HideCommand}" CommandParameter="{Binding}" ToolTip="Hide from Recent"
+                        Visibility="{Binding ShowHide, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="{Binding HideAutomationName}">
+                    <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphHide}" />
+                </Button>
+                <Button Style="{StaticResource RowIconButton}" Command="{Binding ToggleFavoriteCommand}" CommandParameter="{Binding}" ToolTip="Make a favourite"
+                        Visibility="{Binding ShowStarToggle, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="{Binding FavoriteAutomationName}">
+                    <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphStar}" />
+                </Button>
+            </Grid>
+            <Button Command="{Binding OpenCommand}" CommandParameter="{Binding}" Tag="open" Background="Transparent" BorderThickness="0" Padding="0"
+                    HorizontalContentAlignment="Stretch" AutomationProperties.Name="{Binding OpenAutomationName}">
+                <StackPanel>
+                    <v:SessionRowFace />
+                    <TextBlock Text="{Binding DirectoryLabel}" FontSize="11" Margin="8,0,0,2" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Visibility="{Binding ShowDirectory, Converter={StaticResource SessionListBoolToVis}}" />
+                </StackPanel>
+            </Button>
+        </DockPanel>
     </DataTemplate>
 </ResourceDictionary>
