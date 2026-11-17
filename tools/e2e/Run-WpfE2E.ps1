@@ -203,6 +203,13 @@ while (-not $owned) {
 	}
 }
 
+# run.started marker, written first (before any cleanup or build): removed when the run ends normally (see the finally blocks), so a marker
+# found at the start of a run means the previous run was interrupted (crash, reboot, killed), not failed.
+$startedMarker = Join-Path $repo '.e2e-run\run.started'
+New-Item -ItemType Directory -Force (Split-Path $startedMarker -Parent) | Out-Null
+if (Test-Path $startedMarker) { Write-Host ("[Run-WpfE2E] NOTE: the previous run was INTERRUPTED (run.started left behind): " + ((Get-Content $startedMarker -ErrorAction SilentlyContinue) -join ' ')) }
+Set-Content $startedMarker ("started {0:o} pid {1}" -f [DateTime]::UtcNow, $PID) -Encoding Ascii
+
 if ($useTestUser) {
 	$taskName = "TessynE2E-$PID"
 	$runDir = Join-Path $repo ".e2e-run\$PID"
@@ -291,7 +298,7 @@ if ($useTestUser) {
 		Remove-StaleTestUserRuns
 		if ((Test-Path $runDir) -and -not $env:TESSYN_E2E_KEEPRUN) { Remove-Item $runDir -Recurse -Force -ErrorAction SilentlyContinue }
 		Remove-Item Env:\TESSYN_E2E_DESKTOP -ErrorAction SilentlyContinue
-		if ($owned) { $gate.ReleaseMutex() }
+		Remove-Item $startedMarker -ErrorAction SilentlyContinue; if ($owned) { $gate.ReleaseMutex() }
 	}
 	Write-Host "[Run-WpfE2E] exit code $exit"
 	exit $exit
@@ -323,7 +330,7 @@ finally {
 	if ($run) { $run.Dispose() }
 	Remove-Item $log -ErrorAction SilentlyContinue
 	Remove-Item Env:\TESSYN_E2E_DESKTOP, Env:\TESSYN_E2E_RUNNER -ErrorAction SilentlyContinue
-	if ($owned) { $gate.ReleaseMutex() }
+	Remove-Item $startedMarker -ErrorAction SilentlyContinue; if ($owned) { $gate.ReleaseMutex() }
 }
 Write-Host "[Run-WpfE2E] exit code $exit"
 exit $exit
