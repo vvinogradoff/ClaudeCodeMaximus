@@ -20,7 +20,7 @@ Related requirements: FR.32.1–FR.32.8. Use cases: [UC.HS.01](/docs/usecases/UC
 | TC.HS.12 | WPF started before the daemon connects through a real `daemon.json` and token (E2E) | E2E | UC.HS.03 | FR.32.6 |
 | TC.HS.13 | Real windowless host, tray icon, tray confirm and exit listener | MANUAL | UC.HS.06 | FR.32.1 |
 | TC.HS.14 | An old `wpf.json` with the removed `imports` and `avaloniaImport` sections loads without error; other sections are kept | AUTOMATED | UC.HS.05 | FR.32.4 |
-| TC.HS.15 | A start of `TessynDesktop.exe` without `--background` starts the windowless host and logs a note; a second start exits at once | MANUAL | UC.HS.06 | FR.32.1, FR.32.2 |
+| TC.HS.15 | The built host exe, isolated (`--data-root`, `--daemon-file`, `--instance`): starts, publishes `daemon.json`, answers `tree.snapshot`, ends cleanly on the exit event and removes `daemon.json`; a start without `--background` runs as the host and logs a note; a second start with the same instance ends at once | E2E | UC.HS.06 | FR.32.1, FR.32.2 |
 
 ## FR → TC coverage
 | FR | Test cases |
