@@ -1,0 +1,67 @@
+# ID preservation map
+
+IDs are never renumbered and never reused. This table is the contract of the restructure: where each existing section of `docs/requirements.md` (committed version, line numbers of heading rows at commit `7733302`) lives after phase 2. **Every ID keeps its exact text form.**
+
+## Old sections → new files
+
+| Old heading (line) | ID range | New file |
+|---|---|---|
+| Project Overview (3), Anthropic T&C note (9) | — | `docs/requirements.md` entry page (stays) |
+| FR.1 Session Tree (23) | FR.1.1–FR.1.16 (+ FR.1.17 from the draft) | FR.01-Session-Tree |
+| FR.2 Session View (108) | FR.2.1–FR.2.5, FR.2.3.1–FR.2.3.5 | FR.02-Session-View |
+| FR.3 Session Files (146) | FR.3.1–FR.3.6 | FR.03-Session-Files |
+| FR.4 Application Configuration (178) | FR.4.1–FR.4.6 | FR.04-Application-Configuration |
+| FR.5 Claude Code Process Management (202) | FR.5.1–FR.5.5 | FR.05-Claude-Process-Management |
+| FR.6 Application Shell (216) | FR.6.1–FR.6.4 | FR.06-Application-Shell |
+| **Non-Functional Requirements (233)**, which sits between FR.6 and FR.7 | NR.1–NR.5 | NR-Non-Functional |
+| FR.7 Code Reference Autocomplete (253) | FR.7.x | FR.07-Code-Reference-Autocomplete |
+| FR.8 Self-Update on Exit (301) | FR.8.x | FR.08-Self-Update |
+| FR.9 Theme & Color Customization (315) | FR.9.1–FR.9.8 | FR.09-Theme-and-Colours |
+| FR.10 Output Search (358) | FR.10.x | FR.10-Output-Search |
+| FR.11 Session Instruction Toolbar (384) | FR.11.x | FR.11-Session-Instruction-Toolbar |
+| FR.12 Input Command Bar & Model Selection (472) | FR.12.1–FR.12.29 | FR.12-Input-and-Composer |
+| FR.13 Session Import (640) | FR.13.x | FR.13-Session-Import |
+| FR.14 Scheduled Turns (743) | FR.14.x | FR.14-Scheduled-Turns |
+| FR.15 Agent Orchestration (781) | FR.15.x | FR.15-Agent-Orchestration |
+| FR.16 Model Tier Governance (910) | FR.16.x | FR.16-Model-Tier-Governance |
+| FR.17 Token Capture in Non-Daemon Path (935) | FR.17.x | FR.17-Token-Capture |
+| FR.18 Status Bar (945) | FR.18.x | FR.18-Status-Bar |
+| FR.19 Streaming Session Mode (995) | FR.19.x | FR.19-Streaming-Mode |
+| FR.20 External MCP Server Registry (1030) | FR.20.x | FR.20-External-MCP-Registry |
+| FR.21 Telegram Notification Bridge (1077) | FR.21.x | FR.21-Telegram-Bridge |
+| FR.22 Session Completion Sound (1206) | FR.22.x | FR.22-Completion-Sound |
+| FR.23 Focus View (1222) | FR.23.1–FR.23.19 | FR.23-Focus-View |
+| FR.24 Session Tags (1456) | FR.24.1–FR.24.15 | FR.24-Session-Tags |
+| FR.25 Web Client (draft, main tree) | FR.25.01–FR.25.40 | FR.25-Web-Client |
+| FR.26 Link Fidelity… (1682) | FR.26.x | FR.26-Links-and-Previews |
+| FR.31 Attachments (1699) | FR.31.x | FR.31-Attachments |
+| Out of Scope (1724), Glossary Reference (1740) | — | Out-of-Scope; the glossary reference moves to the README |
+
+The draft's amendment paragraphs (FR.1.8 amendment, FR.1.17, FR.3.3 parse rule, FR.11.6 compaction service text, FR.19.11 amendment) go to **their own area files** next to the paragraph they amend, in phase 2, from the main-tree text after A38.
+
+## IDs reserved or newly allocated by this batch
+| ID | Meaning | Note |
+|---|---|---|
+| FR.1.18–FR.1.27 | date switch, equal tabs, rows, worker count, squares, no dead space, tags scope, tree toolbar, resumable and husks, switch profile | FR.1.17 belongs to the draft |
+| FR.2.6–FR.2.11 | input sources, assistant, system, user rows, selectable text, scrollbar | FR.2.6 was the number proposed in report 451 |
+| FR.6.5–FR.6.8 | icon, version text, title bar, status bar | |
+| FR.9.9–FR.9.11 | colours tab, recency (replaces FR.9.5), dropdown colours | |
+| FR.11.14 | profile on the row | |
+| FR.12.30–FR.12.34 | toggles, composer layout, Send later picks, pointer, catalogue refresh | |
+| FR.14.13 | schedule picks | |
+| FR.20.10, FR.21.25, FR.25.41 | settings through the Remote API | FR.25 ends at 25.40 in the draft |
+| FR.23.20–FR.23.23 | selectable Focus text, Send answers placement, Ctrl+Enter, Closed in WPF | |
+| FR.24.16–FR.24.17 | tag-area rule, Tags tab results | FR.24.16 was only a proposal in report 452, never in the docs |
+| **FR.32.1–FR.32.8** | **new area** hosting and coexistence | FR.27–FR.30 reserved |
+| NR.6, NR.7 | E2E running, stretching rule | |
+| UC/TC codes | LP, TR, IN, CL, SH, TA, FC, HS | no clash with 15, 21, DL, FD, FV, IC, LC, RT, TG, WEB |
+
+## Superseded
+| ID | Status | By |
+|---|---|---|
+| FR.9.5 (three recency tiers 15/30/60 min) | **Superseded**; the ID stays with a pointer | FR.9.10 |
+| FR.9.2 colour list (12 colours), FR.9.3 "palette dropped" sentence | **Amended / withdrawn** | FR.9.9 |
+| FR.24.16 of report 452 (mini/full, persisted) | **Never entered; superseded before entry** | FR.24.16 (new rule) |
+| FR.23.14 item 1 (Send answers in the list) | **Moved** | FR.23.21 |
+| FR.23.14 "Not built yet" sentence for Closed and Decisions in WPF | **Obsolete** | FR.23.23 |
+| FR.2.3.4 "You" label | **Amended** | FR.2.9 |
