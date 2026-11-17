@@ -1,121 +1,22 @@
-﻿using System;
-using System.Runtime.InteropServices;
-using Avalonia;
+using System;
 using TessynDesktop.Services;
-using Avalonia.ReactiveUI;
 
 namespace TessynDesktop;
 
+/// <summary>Entry point of the headless daemon host (<c>TessynDesktop.exe --background</c>). The desktop window is gone; WPF is the only client (A47).</summary>
 sealed class Program
 {
-    // Initialization code. Don't use any Avalonia, third-party APIs or any
-    // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
-    // yet and stuff might break.
-    [STAThread]
-    public static int Main(string[] args)
-    {
-        var options = BackgroundHostOptions.Parse(args);
+	[STAThread]
+	public static int Main(string[] args)
+	{
+		// One daemon host per user session (A23 Q6): a WPF-started host and any other start share this guard, so two of them never run side by side
+		// and fight over the port and daemon.json. A second start never takes over from the first; it ends quietly.
+		using var guard = new DaemonHostGuard();
+		if (!guard.TryAcquire())
+			return 0;
 
-        // One daemon host per user session (A23 Q6): a WPF-started --background host, a visible Avalonia window and a rollback start of
-        // [Publish]\TessynDesktop.exe all share this guard, so two of them never run side by side and fight over the port and daemon.json.
-        using var guard = new DaemonHostGuard();
-        if (!guard.TryAcquire())
-        {
-            // A background host never takes over from anything. A visible window takes over from a BACKGROUND host only (side-by-side, WPF started first):
-            // it asks that host to exit through the named exit event, waits for the guard and starts normally; the WPF client reconnects by itself.
-            // A holder that does not listen on the event (another visible window, an older host) is left alone.
-            if (options.IsBackground)
-                return 0;
-
-            var outcome = BackgroundHostTakeover.TryTakeOver(
-                guard, TessynDesktop.Models.Remote.RemoteProtocol.Discovery.HostExitEventName,
-                TakeoverSignalWindow, TakeoverExitTimeout, TimeSpan.FromMilliseconds(200),
-                confirm: AskTakeOver, onWaiting: ShowTakingOver, onDone: HideTakingOver);
-            if (outcome == TakeoverOutcome.Declined)
-                return 0;
-
-            if (outcome != TakeoverOutcome.Acquired)
-            {
-                ShowAlreadyRunning(outcome);
-                return 0;
-            }
-        }
-
-        App.IsBackgroundHost = options.IsBackground;
-        return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-    }
-
-    private static readonly TimeSpan TakeoverSignalWindow = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan TakeoverExitTimeout = TimeSpan.FromSeconds(40);
-
-    private const string TakeOverQuestion = "A background Tessyn daemon is running (started by WPF). Take over? Turns running there will be stopped.";
-    private const string TakingOverCaption = "Tessyn - taking over";
-
-    private static bool AskTakeOver() =>
-        !OperatingSystem.IsWindows() || MessageBoxW(IntPtr.Zero, TakeOverQuestion, "Tessyn", 0x24 /* MB_YESNO | MB_ICONQUESTION */) == 6 /* IDYES */;
-
-    /// <summary>A small non-blocking notice while the background daemon shuts down (up to 40 s), so a double-click does not look dead.</summary>
-    private static void ShowTakingOver()
-    {
-        if (!OperatingSystem.IsWindows())
-            return;
-
-        new System.Threading.Thread(() => MessageBoxW(IntPtr.Zero, "Taking over from the background daemon…", TakingOverCaption, 0x40)) { IsBackground = true }.Start();
-    }
-
-    private static void HideTakingOver()
-    {
-        if (!OperatingSystem.IsWindows())
-            return;
-
-        var window = FindWindowW(null, TakingOverCaption);
-        if (window != IntPtr.Zero)
-            PostMessageW(window, 0x0010 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero);
-    }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr FindWindowW(string? className, string windowName);
-
-    [DllImport("user32.dll")]
-    private static extern bool PostMessageW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-    private static void ShowAlreadyRunning(TakeoverOutcome outcome)
-    {
-        var text = outcome == TakeoverOutcome.DidNotExit
-            ? "Tessyn's background daemon was asked to exit but is still running. Exit it from its tray icon, then start this window again."
-            : "Tessyn is already running in another window. Use that one, or exit it first, then start this window.";
-        if (OperatingSystem.IsWindows())
-            MessageBoxW(IntPtr.Zero, text, "Tessyn", 0x40);
-    }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
-
-    // Avalonia configuration, don't remove; also used by visual designer.
-    public static AppBuilder BuildAvaloniaApp()
-    {
-        var builder = AppBuilder.Configure<App>()
-            .UsePlatformDetect()
-            .WithInterFont()
-            .LogToTrace()
-            .UseReactiveUI();
-
-        // Force OpenGL on macOS to avoid Metal memory leak (Avalonia issue #17025).
-        // Metal leaks ~10MB/s during resize/drag, ballooning to 9+ GB before crash.
-        // OpenGL is deprecated by Apple but functional on all current macOS versions.
-        // This option is ignored on Windows/Linux.
-        if (OperatingSystem.IsMacOS())
-        {
-            builder = builder.With(new AvaloniaNativePlatformOptions
-            {
-                RenderingMode = new[]
-                {
-                    AvaloniaNativeRenderingMode.OpenGl,
-                    AvaloniaNativeRenderingMode.Software,
-                }
-            });
-        }
-
-        return builder;
-    }
+		// A start without --background (an old shortcut) behaves as --background; the host logs a note about it.
+		var options = BackgroundHostOptions.Parse(args);
+		return new DaemonHost(startedWithoutBackgroundFlag: !options.IsBackground).Run();
+	}
 }

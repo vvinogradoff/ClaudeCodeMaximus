@@ -5,8 +5,8 @@ using System.Linq;
 namespace TessynDesktop.Services;
 
 /// <summary>
-/// The start mode of the Avalonia process. <c>--background</c> (decision A23 Q6) hosts the daemon with no main window and no taskbar entry; only a tray icon
-/// (Exit) remains. It does everything the daemon does today. The WPF client starts the host this way when no daemon answers.
+/// The start mode of the daemon host process. <c>--background</c> (decision A23 Q6) hosts the daemon with no main window and no taskbar entry; only a tray icon
+/// (Exit) remains. Since A47 it is the only mode: a start without it behaves the same (the host logs a note). The WPF client starts the host this way when no daemon answers.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class BackgroundHostOptions
