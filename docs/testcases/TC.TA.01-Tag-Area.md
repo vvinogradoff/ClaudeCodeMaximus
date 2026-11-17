@@ -8,21 +8,24 @@ Related requirements: FR.24.16, FR.24.18. Use cases: [UC.TA.01](/docs/usecases/U
 |---|---|---|---|---|
 | TC.TA.01 | Collapsed by default: one line, no scrollbar, `+N` hint | AUTOMATED | UC.TA.01 | FR.24.16 |
 | TC.TA.02 | Click on empty space expands to at most 10 lines, then scrolls | AUTOMATED | UC.TA.01 | FR.24.16 |
-| TC.TA.03 | Double-click on empty space collapses | AUTOMATED | UC.TA.01 | FR.24.16 |
+| TC.TA.03 | Double-click on empty space collapses; a double-click on a chip or on the scrollbar does not | AUTOMATED | UC.TA.01 | FR.24.16 |
 | TC.TA.04 | Chip click opens the link and keeps the state; scrollbar double-click does nothing | AUTOMATED | UC.TA.01 | FR.24.16 |
 | TC.TA.05 | The `+N` hint never covers a chip | AUTOMATED | UC.TA.01 | FR.24.16 |
 | TC.TA.06 | Session/Focus switch keeps the state | AUTOMATED | UC.TA.02 | FR.24.16 |
-| TC.TA.07 | Switching session resets to collapsed; returning stays collapsed | AUTOMATED | UC.TA.02 | FR.24.16 |
-| TC.TA.08 | Nothing persists: the client state file has no tag-area value; a restart starts collapsed | E2E | UC.TA.02 | FR.24.16 |
+| TC.TA.07 | Every session switch resets to collapsed, including returning to the session just left; closing the session collapses | AUTOMATED | UC.TA.02 | FR.24.16 |
+| TC.TA.08 | Nothing persists: the client state file gets no tag-area value (an old `tagAreaExpanded` is read and dropped, never written back); a restart starts collapsed | E2E | UC.TA.02 | FR.24.16 |
 | TC.TA.09 | Expand through UI Automation; no effect without tags | E2E | UC.TA.03 | FR.24.16 |
 | TC.TA.10 | Avalonia: collapsed by default, click expands, double-click collapses, Session/Focus keeps, session change resets | MANUAL | UC.TA.01 | FR.24.16 |
-| TC.TA.11 | WPF: the Appearance tab offers Tag cloud font size; changing it restyles chips in the tag area and the Tags tab at once | AUTOMATED | UC.TA.04 | FR.24.18 |
+| TC.TA.11 | WPF: Settings › Appearance › Tag cloud; changing it restyles chips, the `+N` hint and the Tags tab chips at once | AUTOMATED | UC.TA.04 | FR.24.18 |
 | TC.TA.12 | The mini line is one chip line high at the smallest, default and largest size (no clipped chip, no empty band); expanded keeps the 10-line limit | AUTOMATED | UC.TA.04 | FR.24.18 |
 | TC.TA.13 | The size survives a restart | E2E | UC.TA.04 | FR.24.18 |
-| TC.TA.14 | Avalonia: the setting exists and applies live; the chip row follows | MANUAL | UC.TA.04 | FR.24.18 |
+| TC.TA.14 | Avalonia: Settings › Appearance › Tag cloud font size exists; the new size applies on Save and the chip row follows | MANUAL | UC.TA.04 | FR.24.18 |
+| TC.TA.15 | The range is 8 to 40: 8 and 40 accepted; 7, 41, empty and non-numeric text refused, nothing stored | AUTOMATED | UC.TA.04 | FR.24.18 |
+| TC.TA.16 | Defaults are WPF 14 and Avalonia 11 | AUTOMATED | UC.TA.04 | FR.24.18 |
+| TC.TA.17 | The Avalonia-to-WPF settings import leaves the WPF tag cloud size unchanged | AUTOMATED | UC.TA.04 | FR.24.18, FR.32.4 |
 
 ## FR → TC coverage
 | FR | Test cases |
 |---|---|
 | FR.24.16 | TC.TA.01–10 |
-| FR.24.18 | TC.TA.11–14 |
+| FR.24.18 | TC.TA.11–17 |
