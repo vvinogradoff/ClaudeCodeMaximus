@@ -165,6 +165,9 @@ public sealed class CdpPage : IDisposable
 		await MouseAsync("mousePressed", x, y, 1);
 	}
 
+	/// <summary>Moves the mouse (no button), for hover states.</summary>
+	public Task MouseMoveAsync(double x, double y) => MouseAsync("mouseMoved", x, y, 0);
+
 	/// <summary>Moves the mouse with the left button held.</summary>
 	public Task MouseMoveHeldAsync(double x, double y) => MouseAsync("mouseMoved", x, y, 0, buttons: 1);
 

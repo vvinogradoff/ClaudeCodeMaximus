@@ -9,6 +9,8 @@
             <ResourceDictionary.MergedDictionaries>
                 <!-- The light colours until the stored theme is applied (AppearanceApplier swaps this dictionary) -->
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Theme.Light.xaml" />
+                <!-- The one scrollbar style and width of every list, tree and text area -->
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/ScrollBars.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <sys:Double x:Key="InputFontSize">13</sys:Double>
             <sys:Double x:Key="LineSpacing">1.25</sys:Double>

@@ -5,16 +5,18 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https://media.local; media-src https://preview.local; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="referrer" content="no-referrer">
 <style>
-:root{color-scheme:light dark;--accent:#0078d4;--fg:#1a1a1a;--bg:#f9f9f9;--asst:#ffffff;--sys:#616161;--sysbg:#bfe0f7;--comp:#fff4ce;--compb:#d6b656;--code:#f3f3f3;--icode:#ebebeb;--line:#e0e0e0;--hdr:#616161;--user:color-mix(in srgb,var(--accent) 14%,var(--bg));--auto:color-mix(in srgb,#00897b 20%,var(--bg));--autoh:#00695c;--link:color-mix(in srgb,var(--accent) 80%,#000);--fs-a:14px;--fs-m:14px;--fs-u:14px;--lh:1.25}
+:root{color-scheme:light dark;--sbw:14px;--accent:#0078d4;--fg:#1a1a1a;--bg:#f9f9f9;--asst:#ffffff;--sys:#616161;--sysbg:#bfe0f7;--comp:#fff4ce;--compb:#d6b656;--code:#f3f3f3;--icode:#ebebeb;--line:#e0e0e0;--hdr:#616161;--user:color-mix(in srgb,var(--accent) 14%,var(--bg));--auto:color-mix(in srgb,#00897b 20%,var(--bg));--autoh:#00695c;--link:color-mix(in srgb,var(--accent) 80%,#000);--fs-a:14px;--fs-m:14px;--fs-u:14px;--lh:1.25}
 @media (prefers-color-scheme: dark){:root:not([data-theme]){--fg:#ffffff;--bg:#202020;--asst:#2b2b2b;--sys:#adadad;--sysbg:#1a3a50;--comp:#433519;--compb:#8a6d1c;--code:#1a1a1a;--icode:#383838;--line:#404040;--hdr:#adadad;--user:color-mix(in srgb,var(--accent) 28%,var(--bg));--auto:color-mix(in srgb,#26a69a 30%,var(--bg));--autoh:#80cbc4;--link:color-mix(in srgb,var(--accent) 55%,#fff)}}
 :root[data-theme=dark]{color-scheme:dark;--fg:#ffffff;--bg:#202020;--asst:#2b2b2b;--sys:#adadad;--sysbg:#1a3a50;--comp:#433519;--compb:#8a6d1c;--code:#1a1a1a;--icode:#383838;--line:#404040;--hdr:#adadad;--user:color-mix(in srgb,var(--accent) 28%,var(--bg));--auto:color-mix(in srgb,#26a69a 30%,var(--bg));--autoh:#80cbc4;--link:color-mix(in srgb,var(--accent) 55%,#fff)}
 :root[data-theme=light]{color-scheme:light}
 html,body{margin:0;height:100%;overflow:hidden;font:14px/var(--lh) "Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--fg);background:var(--bg)}
 #vp{position:absolute;inset:0;overflow-y:auto;overflow-anchor:none;scrollbar-width:none}
 #vp::-webkit-scrollbar{display:none}
-#sb{position:absolute;top:0;right:0;bottom:0;width:12px;z-index:5;user-select:none;-webkit-user-select:none}#sb.off{display:none}
-#sbt{position:absolute;left:2px;right:2px;top:0;min-height:28px;border-radius:4px;background:color-mix(in srgb,var(--fg) 30%,transparent)}
-#sb:hover #sbt,#sb.drag #sbt{background:color-mix(in srgb,var(--fg) 50%,transparent)}
+#sb{position:absolute;top:0;right:0;bottom:0;width:var(--sbw);z-index:5;user-select:none;-webkit-user-select:none}#sb.off{display:none}
+#sb:hover,#sb.drag{background:color-mix(in srgb,var(--fg) 8%,transparent)}
+#sbt{position:absolute;left:1px;right:1px;top:0;min-height:28px;border-radius:4px;background:color-mix(in srgb,var(--fg) 40%,transparent)}
+#sbt:hover,#sb:hover #sbt{background:color-mix(in srgb,var(--fg) 60%,transparent)}
+#sb.drag #sbt{background:color-mix(in srgb,var(--fg) 80%,transparent)}
 .e{padding:4px 10px}
 .e .c{border-radius:8px;border:1px solid var(--line);padding:5px 10px;overflow-wrap:anywhere}
 .e.U{display:flex;align-items:flex-end}
