@@ -131,3 +131,10 @@
 | **Media proxy** | The WPF host component that fetches remote images and videos for the transcript page, so the page never requests a remote URL itself. It allows https only, public addresses only, re-checks every redirect hop, accepts only image and video content and caps size and time (FR.26.4). |
 | **Profile pin** | The binding of a session to a profile by `ProfileId` (`"default"` or a stored profile id) on the session node, with `PendingProfileId` for a switch that waits for the running turn. A pin that does not resolve is an error; it never falls back to Default (FR.12.27, ISSUE.013). |
 | **Legacy profile label** | A profile display name recorded on a session (older versions, transcript history) without a `ProfileId` pin. If it matches no stored profile, the turn runs on Default with a visible note, and the first turn pins the session by id (FR.12.27, decision A18). |
+| **Write-only secret** | A value a client can set but never read; results carry a `has…` flag (FR.20.10). |
+| **Origin binding** | A stored secret is dropped, or must be sent again, when the URL or token endpoint it was given for changes origin (FR.20.10, FR.25.41). |
+| **avalonia-ui section** | The read-only settings section for the one-time import of the Avalonia client's theme, colours, font sizes, key bindings and screensaver (FR.32.4). |
+| **Recency box** | The tinted background of a session row (FR.9.10); it also holds the row's date text and worker count (FR.1.18, FR.1.21). |
+| **Husk group** | A Group that held only Workers, flagged `holdsOnlyWorkers` and hidden by clients (FR.1.26). |
+| **Tag area** | The chip row under the session header; collapsed by default, expands on click (FR.24.16). |
+| **Background host** | The windowless daemon process started with `--background`, reached through its tray icon (FR.32.1). |

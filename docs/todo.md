@@ -1166,3 +1166,11 @@ Status copied from the plan and the worker reports in `.wpf-work/` as of 2026-11
 - [ ] Phase 3 parity (3.1, keeping the screensaver and Recent tab and dropping the items listed in A8), browser pane (3.2), link chips (3.3, FR.26.2-26.3)
 - [ ] Phase 4 daemon out of process, a per-user process at logon (A6); remove Avalonia (4.1-4.5)
 - [ ] Phase 5: multi-screen (A7), output modes, helper LLM, agent-driven browser pane
+
+## Requirements batch and restructure (2026-11-17, branch `docs/requirements-batch`)
+- [DONE] Requirements split into `docs/requirements/` (index, ID-MAP, one file per area); `requirements.md` is the entry page; every existing ID and paragraph preserved (script output in `.wpf-work/486-docs.md`)
+- [DONE] Batch text: FR.1.18-1.27, FR.2.6-2.11, FR.6.5-6.8, FR.9.9-9.11 (FR.9.5 superseded), FR.11.14, FR.12.30-12.34, FR.14.13, FR.20.10, FR.21.25, FR.23.20-23.23, FR.24.16-24.18, FR.25.41, FR.32 (new area), NR.6-7; tdcp-spec section 10; glossary terms
+- [DONE] Use cases and test cases: LP, TR, IN, CL, SH, TA, FC, HS
+- [ ] Architect review and merge of the branch
+- [ ] Open questions (see `.wpf-work/486-docs-plan.md` section 4): dropdown project placement, automated-input label, colours per theme, FR.24.16 number, FR.24.18 range and default (fill from `feat/tag-area-session-reset` once merged)
+- [ ] Copy NR.6 (E2E running) into `CLAUDE.md` if wanted (Architect's file)

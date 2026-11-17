@@ -1,6 +1,6 @@
 # TC.15 — Agent Orchestration
 
-Related requirement: [FR.15](/docs/requirements.md#fr15--agent-orchestration-persistent-worker-sessions). Related use cases: [UC.15](/docs/usecases/UC.15-Agent-Orchestration.md).
+Related requirement: [FR.15](/docs/requirements/FR.15-Agent-Orchestration.md#fr15--agent-orchestration-persistent-worker-sessions). Related use cases: [UC.15](/docs/usecases/UC.15-Agent-Orchestration.md).
 
 This file covers Mailbox Delivery coalescing (FR.15.12, ISSUE.012) and the session listing (FR.15.13).
 
