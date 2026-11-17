@@ -7,48 +7,18 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/KindPill.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-            <!-- Kind chip: colours come from the Fluent theme brushes so light and dark both work. -->
-            <Style x:Key="KindChip" TargetType="Border">
+            <!-- Kind chip: the pill of the Avalonia client (AttentionKindPill) in the palette's colours (Settings, Colours); the kind comes in the Tag. -->
+            <Style x:Key="KindChip" TargetType="Border" BasedOn="{StaticResource KindPill}">
                 <Setter Property="CornerRadius" Value="10" />
                 <Setter Property="Padding" Value="8,1" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-                <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding KindKey}" Value="critical">
-                        <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="ask">
-                        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="todo">
-                        <Setter Property="Background" Value="{DynamicResource ControlStrongFillColorDefaultBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="alert">
-                        <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBackgroundBrush}" />
-                    </DataTrigger>
-                </Style.Triggers>
             </Style>
             <Style x:Key="KindChipText" TargetType="TextBlock">
                 <Setter Property="FontSize" Value="12" />
                 <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding KindKey}" Value="critical">
-                        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="ask">
-                        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="todo">
-                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding KindKey}" Value="alert">
-                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-                    </DataTrigger>
-                </Style.Triggers>
             </Style>
             <Style x:Key="RefGlyph" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
                 <Setter Property="FontSize" Value="12" />
@@ -76,6 +46,95 @@
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
+            <DataTemplate x:Key="OpenCardTemplate" DataType="{x:Type vm:FocusItemViewModel}">
+
+                    <Border Style="{StaticResource CardBorder}">
+                        <StackPanel>
+                            <!-- kind chip, item id, title -->
+                            <DockPanel LastChildFill="True">
+                                <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Tag="{Binding KindKey}" Margin="0,0,8,0">
+                                    <TextBlock Style="{StaticResource KindChipText}" Text="{Binding KindText}" />
+                                </Border>
+                                <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            </DockPanel>
+
+                            <StackPanel Margin="0,8,0,0" v:MarkdownText.Source="{Binding Body}" Visibility="{Binding HasBody, Converter={StaticResource BoolToVis}}" />
+
+                            <!-- references (FR.23.18) -->
+                            <ItemsControl ItemsSource="{Binding Refs}" Margin="0,4,0,0" Visibility="{Binding HasRefs, Converter={StaticResource BoolToVis}}" Focusable="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:FocusRefViewModel}">
+                                        <Button Command="{Binding OpenCommand}" ToolTip="{Binding ToolTip}" Margin="0,0,6,6" Padding="8,3" AutomationProperties.Name="{Binding Label}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Style="{StaticResource RefGlyph}" />
+
+                                                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" MaxWidth="240" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- options and recommendation -->
+                            <ItemsControl ItemsSource="{Binding Options}" Margin="0,4,0,0" Visibility="{Binding HasOptions, Converter={StaticResource BoolToVis}}" Focusable="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:FocusOptionViewModel}">
+                                        <Button Command="{Binding PickCommand}" Margin="0,0,6,6" Padding="10,4" Content="{Binding Text}" ToolTip="Use this as your answer" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Command="{Binding AcceptRecommendationCommand}" HorizontalAlignment="Left" Margin="0,0,0,6" Padding="10,4"
+                                    Visibility="{Binding HasRecommendation, Converter={StaticResource BoolToVis}}" ToolTip="Answer with the recommendation">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource IconText}" FontSize="12" Margin="0,0,6,0" Text="{StaticResource GlyphCheck}" />
+                                    <TextBlock Text="{Binding Recommendation, StringFormat=Recommended: {0}}" TextWrapping="Wrap" MaxWidth="280" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- free-text answer -->
+                            <TextBox Text="{Binding ReplyText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="160"
+                                     VerticalScrollBarVisibility="Auto" ToolTip="Your answer; sent with Reply or Send answers" AutomationProperties.Name="Your answer" />
+                            <DockPanel Margin="0,8,0,0">
+                                <Button DockPanel.Dock="Right" Command="{Binding DismissCommand}" Content="{Binding CloseText}" ToolTip="Closes the item without sending anything" />
+                                <Button HorizontalAlignment="Left" Command="{Binding ReplyCommand}" Content="Reply" Style="{DynamicResource AccentButtonStyle}" />
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+            </DataTemplate>
+
+            <!-- Closed card (FR.23.14): compact, header row plus the outcome line; a click on the header shows or hides the body. -->
+            <DataTemplate x:Key="ClosedCardTemplate" DataType="{x:Type vm:FocusItemViewModel}">
+                <Border Style="{StaticResource CardBorder}" Padding="12,8">
+                    <StackPanel>
+                        <DockPanel LastChildFill="True" Background="Transparent" Cursor="Hand" ToolTip="Show or hide the details"
+                                   AutomationProperties.Name="Closed item header">
+                            <DockPanel.InputBindings>
+                                <MouseBinding MouseAction="LeftClick" Command="{Binding ToggleBodyCommand}" />
+                            </DockPanel.InputBindings>
+                            <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Tag="{Binding KindKey}" Margin="0,0,8,0">
+                                <TextBlock Style="{StaticResource KindChipText}" Text="{Binding KindText}" />
+                            </Border>
+                            <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TextBlock Text="{Binding OutcomeText}" TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <StackPanel Margin="0,8,0,0" v:MarkdownText.Source="{Binding Body}" Visibility="{Binding IsBodyVisible, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
     <Grid>
@@ -107,75 +166,17 @@
             <StackPanel Margin="12,0,12,12">
                 <TextBlock Text="Nothing needs your attention in this session." TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                            Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}" />
-                <ItemsControl ItemsSource="{Binding Items}" Focusable="False">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:FocusItemViewModel}">
-                            <Border Style="{StaticResource CardBorder}">
-                                <StackPanel>
-                                    <!-- kind chip, item id, title -->
-                                    <DockPanel LastChildFill="True">
-                                        <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Margin="0,0,8,0">
-                                            <TextBlock Style="{StaticResource KindChipText}" Text="{Binding KindText}" />
-                                        </Border>
-                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
-                                    </DockPanel>
+                <ItemsControl ItemsSource="{Binding OpenItems}" ItemTemplate="{StaticResource OpenCardTemplate}" Focusable="False" />
 
-                                    <StackPanel Margin="0,8,0,0" v:MarkdownText.Source="{Binding Body}" Visibility="{Binding HasBody, Converter={StaticResource BoolToVis}}" />
+                <Expander Header="{Binding DecisionsHeader}" IsExpanded="{Binding IsDecisionsExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.AutomationId="FocusDecisionsExpander"
+                          Visibility="{Binding HasDecisions, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl ItemsSource="{Binding DecidedItems}" ItemTemplate="{StaticResource OpenCardTemplate}" Focusable="False" Margin="0,8,0,0" />
+                </Expander>
 
-                                    <!-- references (FR.23.18) -->
-                                    <ItemsControl ItemsSource="{Binding Refs}" Margin="0,4,0,0" Visibility="{Binding HasRefs, Converter={StaticResource BoolToVis}}" Focusable="False">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate DataType="{x:Type vm:FocusRefViewModel}">
-                                                <Button Command="{Binding OpenCommand}" ToolTip="{Binding ToolTip}" Margin="0,0,6,6" Padding="8,3" AutomationProperties.Name="{Binding Label}">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Style="{StaticResource RefGlyph}" />
-
-                                                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" MaxWidth="240" />
-                                                    </StackPanel>
-                                                </Button>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-
-                                    <!-- options and recommendation -->
-                                    <ItemsControl ItemsSource="{Binding Options}" Margin="0,4,0,0" Visibility="{Binding HasOptions, Converter={StaticResource BoolToVis}}" Focusable="False">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate DataType="{x:Type vm:FocusOptionViewModel}">
-                                                <Button Command="{Binding PickCommand}" Margin="0,0,6,6" Padding="10,4" Content="{Binding Text}" ToolTip="Use this as your answer" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    <Button Command="{Binding AcceptRecommendationCommand}" HorizontalAlignment="Left" Margin="0,0,0,6" Padding="10,4"
-                                            Visibility="{Binding HasRecommendation, Converter={StaticResource BoolToVis}}" ToolTip="Answer with the recommendation">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Style="{StaticResource IconText}" FontSize="12" Margin="0,0,6,0" Text="{StaticResource GlyphCheck}" />
-                                            <TextBlock Text="{Binding Recommendation, StringFormat=Recommended: {0}}" TextWrapping="Wrap" MaxWidth="280" />
-                                        </StackPanel>
-                                    </Button>
-
-                                    <!-- free-text answer -->
-                                    <TextBox Text="{Binding ReplyText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="160"
-                                             VerticalScrollBarVisibility="Auto" ToolTip="Your answer; sent with Reply or Send answers" AutomationProperties.Name="Your answer" />
-                                    <DockPanel Margin="0,8,0,0">
-                                        <Button DockPanel.Dock="Right" Command="{Binding DismissCommand}" Content="{Binding CloseText}" ToolTip="Closes the item without sending anything" />
-                                        <Button HorizontalAlignment="Left" Command="{Binding ReplyCommand}" Content="Reply" Style="{DynamicResource AccentButtonStyle}" />
-                                    </DockPanel>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <Expander Header="{Binding ClosedHeader}" IsExpanded="{Binding IsClosedExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.AutomationId="FocusClosedExpander"
+                          Visibility="{Binding HasClosed, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl ItemsSource="{Binding ClosedItems}" ItemTemplate="{StaticResource ClosedCardTemplate}" Focusable="False" Margin="0,8,0,0" />
+                </Expander>
             </StackPanel>
         </ScrollViewer>
     </Grid>

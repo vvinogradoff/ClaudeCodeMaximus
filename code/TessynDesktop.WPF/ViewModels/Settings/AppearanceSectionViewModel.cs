@@ -18,6 +18,9 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 	private ClientTheme _theme;
 
 	[ObservableProperty]
+	private SessionDateFormat _dateFormat;
+
+	[ObservableProperty]
 	private string _assistantFontSize = string.Empty;
 
 	[ObservableProperty]
@@ -44,6 +47,12 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 		new(ClientTheme.Dark, Constants.Settings.ThemeDark),
 	];
 
+	public IReadOnlyList<SettingOption<SessionDateFormat>> DateFormats { get; } =
+	[
+		new(SessionDateFormat.Absolute, Constants.DateFormats.AbsoluteLabel),
+		new(SessionDateFormat.Relative, Constants.DateFormats.RelativeLabel),
+	];
+
 	public bool HasChanges
 	{
 		get
@@ -53,6 +62,7 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 				var stored = _store.Get<AppearanceSettings>();
 				var edited = Build(stored);
 				return edited.Theme != stored.Theme
+					|| edited.DateFormat != stored.DateFormat
 					|| edited.AssistantFontSize != stored.AssistantFontSize
 					|| edited.AssistantMarkdownFontSize != stored.AssistantMarkdownFontSize
 					|| edited.UserFontSize != stored.UserFontSize
@@ -74,6 +84,7 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 			_store.Update<AppearanceSettings>(a =>
 			{
 				a.Theme = edited.Theme;
+				a.DateFormat = edited.DateFormat;
 				a.AssistantFontSize = edited.AssistantFontSize;
 				a.AssistantMarkdownFontSize = edited.AssistantMarkdownFontSize;
 				a.UserFontSize = edited.UserFontSize;
@@ -102,6 +113,7 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 	{
 		var stored = _store.Get<AppearanceSettings>();
 		Theme = stored.Theme;
+		DateFormat = stored.DateFormat;
 		AssistantFontSize = Format(stored.AssistantFontSize);
 		AssistantMarkdownFontSize = Format(stored.AssistantMarkdownFontSize);
 		UserFontSize = Format(stored.UserFontSize);
@@ -111,6 +123,7 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 	private AppearanceSettings Build(AppearanceSettings stored) => new()
 	{
 		Theme = Theme,
+		DateFormat = DateFormat,
 		AssistantFontSize = ParseSize(AssistantFontSize, stored.AssistantFontSize),
 		AssistantMarkdownFontSize = ParseSize(AssistantMarkdownFontSize, stored.AssistantMarkdownFontSize),
 		UserFontSize = ParseSize(UserFontSize, stored.UserFontSize),

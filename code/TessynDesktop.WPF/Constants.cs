@@ -34,6 +34,12 @@ public static partial class Constants
 	public static class Texts
 	{
 		public const string NoOpenItems = "Nothing needs your attention in this session.";
+		public const string DecisionsHeaderFormat = "Decisions ({0})";
+		public const string ClosedHeaderFormat = "Closed ({0})";
+		public const string OutcomeAnswered = "Answered";
+		public const string OutcomeResolved = "Resolved";
+		public const string OutcomeDismissed = "Dismissed";
+		public const string OutcomeFormat = "{0}: {1}";
 		public const string AcceptedRecommendation = "Accepted your recommendation: ";
 		public const string EntryGone = "The referenced entry no longer exists in that session.";
 		public const string PreviewTooLarge = "This file is too large to preview";

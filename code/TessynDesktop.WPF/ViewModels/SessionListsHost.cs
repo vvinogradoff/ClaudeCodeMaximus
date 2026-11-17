@@ -21,8 +21,9 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	private readonly CancellationTokenSource _lifetime = new();
 	private ITessynClient? _client;
 	private TreeViewModel? _tree;
+	private SessionPaneViewModel? _observed;
 
-	public SessionListsHost(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILoggerFactory loggers, IUrlLauncher? launcher = null)
+	public SessionListsHost(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILoggerFactory loggers, IUrlLauncher? launcher = null, ListDisplayService? display = null)
 	{
 		_main = main;
 		_ui = ui;
@@ -31,6 +32,8 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 		Recent = new RecentViewModel(this, ui, loggers.CreateLogger<RecentViewModel>());
 		Tags = new TagSearchViewModel(this, ui, loggers.CreateLogger<TagSearchViewModel>(), Constants.Timeouts.SearchDebounce, launcher);
 		connection.ClientReady += OnClientReady;
+		if (display != null)
+			display.Changed += (_, _) => RefreshDisplay();
 		main.PropertyChanged += OnMainChanged;
 
 		// The order of construction and of the first ClientReady is not guaranteed: pick up what is already there.
@@ -38,6 +41,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 			OnClientReady(connection.Client);
 
 		AttachTree();
+		ObserveSession();
 		_ = RunClockAsync(_lifetime.Token);
 	}
 
@@ -63,7 +67,30 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	{
 		if (e.PropertyName == nameof(MainViewModel.Tree))
 			AttachTree();
+		else if (e.PropertyName == nameof(MainViewModel.Session))
+			ObserveSession();
 	}
+
+	/// <summary>The Recent dropdown's button shows the name of the open session: follow the pane's title.</summary>
+	private void ObserveSession()
+	{
+		if (_observed != null)
+			_observed.PropertyChanged -= OnSessionChanged;
+
+		_observed = _main.Session;
+		if (_observed != null)
+			_observed.PropertyChanged += OnSessionChanged;
+
+		ShowSessionName();
+	}
+
+	private void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName is nameof(SessionPaneViewModel.Title) or nameof(SessionPaneViewModel.NodeId))
+			ShowSessionName();
+	}
+
+	private void ShowSessionName() => Recent.CurrentName = _observed is { NodeId: not null } pane ? pane.Title : string.Empty;
 
 	private void AttachTree()
 	{
@@ -76,6 +103,21 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 		Tags.AttachTree(tree);
 	}
 
+	/// <summary>The recency of every row (the lists and the tree) ages with the clock.</summary>
+	private void RefreshClock()
+	{
+		RecentTab.RefreshClock();
+		_tree?.RefreshClock();
+	}
+
+	/// <summary>The date format changed: every row re-reads its date text.</summary>
+	private void RefreshDisplay()
+	{
+		RecentTab.RefreshDisplay();
+		Tags.RefreshDisplay();
+		_tree?.RefreshDisplay();
+	}
+
 	/// <summary>The recency colours age with time (FR.9.5): re-read them every minute.</summary>
 	private async Task RunClockAsync(CancellationToken token)
 	{
@@ -83,7 +125,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 		{
 			using var timer = new PeriodicTimer(Constants.Timeouts.RecencyRefresh);
 			while (await timer.WaitForNextTickAsync(token))
-				_ui.Post(RecentTab.RefreshClock);
+				_ui.Post(RefreshClock);
 		}
 		catch (OperationCanceledException)
 		{
@@ -93,6 +135,9 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 
 	public void Dispose()
 	{
+		if (_observed != null)
+			_observed.PropertyChanged -= OnSessionChanged;
+
 		_lifetime.Cancel();
 		_lifetime.Dispose();
 	}

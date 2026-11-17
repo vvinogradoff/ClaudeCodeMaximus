@@ -50,6 +50,9 @@ public sealed partial class DialogViewModel : ObservableObject
 
 	public bool IsChoice => Kind == DialogKind.Choice;
 
+	/// <summary>The margin inside the window: a choice dialog gets generous left and right margins around its full-width buttons.</summary>
+	public string DialogMargin => IsChoice ? "44,24,44,22" : "20,18,20,16";
+
 	public bool HasError => !string.IsNullOrEmpty(Error);
 
 	public Task<DialogOutcome> Outcome => _outcome.Task;

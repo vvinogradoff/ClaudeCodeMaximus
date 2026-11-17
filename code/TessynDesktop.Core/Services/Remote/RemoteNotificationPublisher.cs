@@ -35,6 +35,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	private readonly ISessionAuthErrorTracker? _authErrors;
 	private readonly IDraftService? _drafts;
 	private readonly ISchedulerService? _scheduler;
+	private readonly ISessionResumabilityCache? _resumable;
 	private readonly object _scheduleGate = new();
 	private Dictionary<string, string> _scheduleOwners = new(StringComparer.Ordinal);
 	private readonly DraftRevisions _revisions = new();
@@ -62,8 +63,10 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		ISessionContentStore? store = null,
 		ISessionAuthErrorTracker? authErrors = null,
 		IDraftService? drafts = null,
-		ISchedulerService? scheduler = null)
+		ISchedulerService? scheduler = null,
+		ISessionResumabilityCache? resumable = null)
 	{
+		_resumable   = resumable;
 		_scheduler   = scheduler;
 		_authErrors  = authErrors;
 		_drafts      = drafts;
@@ -96,6 +99,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 				_daemon.SessionSettingsChanged += OnSessionSettingsChanged;
 				_files.SessionFileRewritten    += OnSessionFileRewritten;
 				if (_authErrors != null) _authErrors.Changed += OnAuthErrorChanged;
+				if (_resumable != null) _resumable.Changed += OnResumabilityChanged;
 				if (_drafts != null) _drafts.DraftChanged += OnDraftChanged;
 				if (_scheduler != null)
 				{
@@ -129,6 +133,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			_daemon.SessionSettingsChanged -= OnSessionSettingsChanged;
 			_files.SessionFileRewritten    -= OnSessionFileRewritten;
 			if (_authErrors != null) _authErrors.Changed -= OnAuthErrorChanged;
+			if (_resumable != null) _resumable.Changed -= OnResumabilityChanged;
 			if (_drafts != null) _drafts.DraftChanged -= OnDraftChanged;
 			if (_scheduler != null) _daemon.ScheduleChanged -= OnScheduleChanged;
 		}
@@ -241,6 +246,9 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 
 	// The auth error is part of the session state, so a change publishes session.changed like a running-flag change does.
 	private void OnAuthErrorChanged(string nodeId) => Guard(() => PublishSessionChangedByNode(nodeId));
+
+	// The resumable flag is part of the session state too: a sweep that flipped some sessions publishes session.changed for each of them.
+	private void OnResumabilityChanged(IReadOnlyList<string> nodeIds) => Guard(() => { foreach (var nodeId in nodeIds) PublishSessionChangedByNode(nodeId); });
 
 	// draft.changed is local-stream only (the relay filters it). The revision is read when the window ends, so a burst of keystrokes saves announces the last text only.
 	private void OnDraftChanged(object? sender, DraftChangedEventArgs e) => Guard(() =>

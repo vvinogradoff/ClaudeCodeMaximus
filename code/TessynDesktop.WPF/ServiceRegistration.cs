@@ -126,7 +126,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<Func<ITessynClient, SettingsViewModel>>(sp => client => new SettingsViewModel(
 			client, sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(), sp.GetRequiredService<IDialogService>(),
 			sp.GetRequiredService<IFolderPicker>(), sp.GetRequiredService<IMcpServerEditorPresenter>(), sp.GetRequiredService<ProfileViewModel>(),
-			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILoggerFactory>()));
+			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILoggerFactory>(), sp.GetRequiredService<IAppearanceService>()));
 		services.AddSingleton<SettingsHost>();
 		services.AddSingleton<IShellModule, SettingsShellModule>();
 
@@ -134,6 +134,8 @@ public sealed class ServiceRegistration
 		services.AddSingleton<ISystemThemeProbe, RegistrySystemThemeProbe>();
 		services.AddSingleton<IAppearanceService, AppearanceService>();
 		services.AddSingleton<AppearanceApplier>();
+		services.AddSingleton<ColourApplier>();
+		services.AddSingleton<ListDisplayService>();
 		services.AddSingleton<IScreensaverImages, FolderScreensaverImages>();
 		services.AddSingleton(sp => new ScreensaverController(sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IScreensaverImages>(), DateTime.UtcNow));
 		services.AddSingleton(sp => new TitleBarViewModel(sp.GetRequiredService<IAppearanceService>(), sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(),

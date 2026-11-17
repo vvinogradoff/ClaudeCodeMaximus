@@ -272,7 +272,7 @@ public sealed class ScheduleImportViewTests
 	// ---- W7 ----
 
 	[Fact]
-	public void TheImportModule_RegistersTheCommands_TheTreeMenuEntryAndTheTitleBarButton_WithoutKeyConflicts()
+	public void TheImportModule_RegistersTheCommands_TheTreeMenuEntryAndTheMainMenuEntry_WithoutKeyConflicts()
 	{
 		StaTestRunner.Run(() =>
 		{
@@ -282,8 +282,10 @@ public sealed class ScheduleImportViewTests
 			Assert.Empty(commands.GetConflicts());
 			Assert.Contains(commands.BuildMenu(Constants.Menus.TreeNode, new TreeNodeViewModel("d", TreeNodeKind.Directory, "D", null)), m => m.Title == Constants.Import.TreeCommandTitle);
 			Assert.DoesNotContain(commands.BuildMenu(Constants.Menus.TreeNode, new TreeNodeViewModel("s", TreeNodeKind.Session, "S", null)).Where(m => m.Title == Constants.Import.TreeCommandTitle), m => m.IsEnabled);
-			var button = Assert.IsType<Button>(Assert.Single(slots.For(Constants.Slots.TitleBarToolbar)).Create());
-			Assert.Equal(Constants.Import.OpenButtonAutomationName, AutomationProperties.GetName(button));
+			Assert.Empty(slots.For(Constants.Slots.TitleBarToolbar));   // no title-bar button any more: the entry is under the hamburger menu
+			var entry = Assert.Single(commands.BuildMenu(Constants.Menus.Main, null));
+			Assert.Equal(Constants.Import.OpenCommandId, entry.CommandId);
+			Assert.Equal(Constants.Import.OpenCommandTitle, entry.Title);
 		});
 	}
 

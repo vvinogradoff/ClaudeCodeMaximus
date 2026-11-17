@@ -207,7 +207,7 @@ public sealed class TreeShellModuleTests
 
 				Collect(toolbar);
 				Assert.Equal(
-					[Constants.TreeAutomation.AddDirectory, Constants.TreeAutomation.AddSession, Constants.TreeAutomation.AddGroup, Constants.TreeAutomation.Rename, Constants.TreeAutomation.Delete, Constants.TreeAutomation.MoveTo, Constants.TreeAutomation.RefreshGitOrigins],
+					[Constants.TreeAutomation.AddDirectory, Constants.TreeAutomation.AddSession, Constants.TreeAutomation.AddGroup, Constants.TreeAutomation.RefreshGitOrigins],   // one line; Rename and Delete moved to the session header, Move to is in the context menu
 					names);
 			}
 			finally

@@ -460,10 +460,15 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		{
 			var node = new TreeNodeViewModel(group.Id, TreeNodeKind.Group, group.Name, parent);
 			Register(node);
+			AddGroupsAndSessions(node, group.Groups, group.Sessions, serverExpanded, ref sessionCount);
+
+			// The daemon keeps the group an orchestration spawned its workers into, although the workers are not listed in it (they nest under their supervisor), and says so
+			// (HoldsOnlyWorkers). The Avalonia tree prunes these (PruneGroupsEmptiedByReorg), so a husk is not shown as a row; it stays a node (an empty group is still a place to
+			// import into). A group that was empty when it was created is no husk, before and after a restart.
+			node.IsHusk = group.HoldsOnlyWorkers;
 			parent.Children.Add(node);
 			if (group.IsExpanded)
 				serverExpanded.Add(group.Id);
-			AddGroupsAndSessions(node, group.Groups, group.Sessions, serverExpanded, ref sessionCount);
 		}
 
 		foreach (var session in sessions)
@@ -561,7 +566,7 @@ public sealed partial class TreeViewModel : ObservableObject, IDisposable
 		if (!node.IsExpanded)
 			return;
 
-		foreach (var child in node.Children)
+		foreach (var child in node.Children.Where(c => !c.IsHusk))
 			Flatten(child, output);
 	}
 

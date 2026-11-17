@@ -51,6 +51,10 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 		_env.AddSession(dir, "Worker", supervisorNodeId: sup.NodeId);
 		var inGroup = _env.AddSession(dir, "InGroup", group);
 		inGroup.IsFavorite = true;
+		inGroup.ClaudeSessionId = "claude-in-group";   // the daemon reports it resumable after its first sweep; the Supervisor is not
+		sup.ClaudeSessionId = "claude-supervisor";
+		_env.Status.ResumableSessionIds.Add("claude-in-group");
+		_env.Resumable.Refresh();
 		_env.Activity.Set(sup.NodeId, new DateTimeOffset(2026, 11, 12, 9, 0, 0, TimeSpan.Zero));
 		_env.Activity.Set(inGroup.NodeId, new DateTimeOffset(2026, 11, 12, 10, 0, 0, TimeSpan.Zero), hasDraft: true);
 	}

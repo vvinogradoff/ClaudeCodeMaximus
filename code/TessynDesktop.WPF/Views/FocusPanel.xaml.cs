@@ -12,6 +12,14 @@ public partial class FocusPanel : UserControl
 	{
 		InitializeComponent();
 		PreviewKeyDown += OnPreviewKeyDown;
+		IsVisibleChanged += OnIsVisibleChanged;
+	}
+
+	/// <summary>The panel shows when Focus is selected (its host is collapsed under Session): the Closed expander collapses again (FR.23.14).</summary>
+	private void OnIsVisibleChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
+	{
+		if (e.NewValue is true && DataContext is FocusViewModel focus)
+			focus.OnFocusSelected();
 	}
 
 	/// <summary>Ctrl+Enter in a reply box = "Send answers" (FR.23.15), through the same command as the button and under its enabling rule. Plain Enter still inserts a newline.</summary>

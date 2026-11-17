@@ -4,12 +4,12 @@
              Focusable="False">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
-        <!-- A thin meter: a track, a fill and the label centred on it (as in the Avalonia status bar) -->
+        <!-- A thin meter: a track, a fill and the label centred on it (as in the Avalonia status bar). No fixed width: it takes all the width it is given. -->
         <Style x:Key="Meter" TargetType="ProgressBar">
             <Setter Property="Minimum" Value="0" />
             <Setter Property="Maximum" Value="100" />
             <Setter Property="Height" Value="13" />
-            <Setter Property="Width" Value="190" />
+            <Setter Property="MinWidth" Value="80" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="{DynamicResource MeterTrackBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource MeterFillBrush}" />
@@ -20,12 +20,18 @@
             </Style.Triggers>
         </Style>
     </UserControl.Resources>
-    <StackPanel Orientation="Horizontal">
-        <TextBlock x:Name="ModelLine" Text="{Binding ModelText}" VerticalAlignment="Center" FontSize="11" Margin="8,0" MaxWidth="420"
+    <!-- The model line and the note take what they need; the meters take all the rest, edge to edge. -->
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock x:Name="ModelLine" Grid.Column="0" Text="{Binding ModelText}" VerticalAlignment="Center" FontSize="11" Margin="4,0" MaxWidth="420"
                    TextTrimming="CharacterEllipsis" Opacity="0.85" ToolTip="{Binding ModelText}" />
-        <TextBlock Text="{Binding UsageNote}" VerticalAlignment="Center" FontSize="11" Margin="8,0" Opacity="0.85"
+        <TextBlock Grid.Column="1" Text="{Binding UsageNote}" VerticalAlignment="Center" FontSize="11" Margin="4,0" Opacity="0.85"
                    Visibility="{Binding HasNote, Converter={StaticResource BoolToVis}}" />
-        <StackPanel x:Name="Meters" Margin="8,0" VerticalAlignment="Center" Visibility="{Binding HasUsage, Converter={StaticResource BoolToVis}}">
+        <StackPanel x:Name="Meters" Grid.Column="2" Margin="4,0,0,0" VerticalAlignment="Stretch" Visibility="{Binding HasUsage, Converter={StaticResource BoolToVis}}">
             <Grid Height="13">
                 <ProgressBar x:Name="FiveHourMeter" Style="{StaticResource Meter}" Value="{Binding FiveHourPercent, Mode=OneWay}" AutomationProperties.Name="5-hour usage" />
                 <TextBlock Text="{Binding FiveHourLabel}" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MeterTextBrush}" />
@@ -35,5 +41,5 @@
                 <TextBlock Text="{Binding SevenDayLabel}" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MeterTextBrush}" />
             </Grid>
         </StackPanel>
-    </StackPanel>
+    </Grid>
 </UserControl>

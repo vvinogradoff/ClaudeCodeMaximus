@@ -174,7 +174,7 @@ public sealed class SessionListsModuleTests : IDisposable
 		new SessionListsModule(_host).Register(slots, commands);
 
 		Assert.Equal([Constants.SessionLists.RecentTabTitle, Constants.SessionLists.TagsTabTitle], slots.For(Constants.Slots.LeftPanelTabs).Select(c => c.Title));
-		Assert.Single(slots.For(Constants.Slots.TitleBarToolbar));
+		Assert.Single(slots.For(Constants.Slots.TitleBarCenter));   // the Recent dropdown fills the title bar's middle
 		Assert.Single(slots.For(Constants.Slots.SessionHeaderToolbar));
 		var node = new TreeNodeViewModel("s1", TreeNodeKind.Session, "Top", null) { State = new SessionStateDto("s1", false, false, null, false, null, null, false, null) };
 		var entry = Assert.Single(commands.BuildMenu(Constants.Menus.TreeNode, node));

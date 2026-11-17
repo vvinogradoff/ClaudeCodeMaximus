@@ -29,9 +29,12 @@ public static partial class Constants
 		public const string TagChipPrefix = "Tag ";
 		public const string RecentDropdownName = "Recent dropdown";
 
-		public const int RecencyLightMinutes = 15;
-		public const int RecencyMediumMinutes = 30;
-		public const int RecencyDarkMinutes = 60;
+		/// <summary>Recency tiers of the rows, as the Avalonia client: activity within 15 minutes, 1 hour, 4 hours, 12 hours; the dotted border within 24 hours.</summary>
+		public const int RecencyTier1Minutes = 15;
+		public const int RecencyTier2Minutes = 60;
+		public const int RecencyTier3Minutes = 240;
+		public const int RecencyTier4Minutes = 720;
+		public const int ActiveWithinHours = 24;
 		public const string ChevronExpanded = "▾";
 		public const string ChevronCollapsed = "▸";
 		public const string GroupPrefix = "Group ";
@@ -44,6 +47,8 @@ public static partial class Constants
 		public const string TagsNoSessionsText = "No sessions carry the selected tags.";
 		public const string TagsNoTagsText = "No session has any tag yet.";
 		public const string TagsNoMatchText = "No tag matches.";
+		/// <summary>The project scope is on: the tag may exist in another directory.</summary>
+		public const string TagsNoMatchScopedText = "No tag matches in this directory. Switch off the project scope (the folder button) to search every directory.";
 		public const string DaemonErrorFormat = "{0}";
 	}
 }

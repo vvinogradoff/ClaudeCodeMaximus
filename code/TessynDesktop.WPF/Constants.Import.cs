@@ -14,7 +14,6 @@ public static partial class Constants
 		public const string TreeMenuGroup = "add";
 		public const int TreeMenuOrder = 12;
 		public const int OpenButtonOrder = 30;
-		public const string OpenButtonText = "Import";
 
 		public const string WindowTitle = "Import sessions";
 		public const string NotConnected = "The daemon is not connected yet, so sessions cannot be imported.";
@@ -29,7 +28,6 @@ public static partial class Constants
 		public static readonly TimeSpan TitlePollInterval = TimeSpan.FromMilliseconds(1500);
 		public const int MaxTitlePolls = 40;
 
-		public const string OpenButtonAutomationName = "Import sessions";
 		public const string SourceName = "Import source";
 		public const string TargetName = "Import target";
 		public const string GlobalName = "Global search";

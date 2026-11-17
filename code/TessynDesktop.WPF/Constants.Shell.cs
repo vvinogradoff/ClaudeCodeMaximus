@@ -10,17 +10,20 @@ public static partial class Constants
 		/// <summary>Main window, a row between the connection banner and the content (DataContext: MainViewModel).</summary>
 		public const string TitleBarToolbar = "main.titleBarToolbar";
 
+		/// <summary>Main window, the title bar's middle: the one view in it takes all the width between the toolbar and the build stamp (the Recent dropdown) (DataContext: MainViewModel).</summary>
+		public const string TitleBarCenter = "main.titleBarCenter";
+
 		/// <summary>Main window, extra tabs of the left panel next to Tree: Recent, Tags (DataContext: MainViewModel).</summary>
 		public const string LeftPanelTabs = "main.leftPanelTabs";
 
-		/// <summary>Main window, items at the right of the status bar (DataContext: MainViewModel).</summary>
+		/// <summary>Main window, the status bar's middle: the one view in it takes all the width the session count leaves (model line, usage meters) (DataContext: MainViewModel).</summary>
 		public const string StatusBarItems = "main.statusBarItems";
+
+		/// <summary>Main window, the far right of the status bar, after the item that fills the width (the Profiles button) (DataContext: MainViewModel).</summary>
+		public const string StatusBarRight = "main.statusBarRight";
 
 		/// <summary>Session pane, buttons on the right of the header (DataContext: SessionPaneViewModel).</summary>
 		public const string SessionHeaderToolbar = "session.headerToolbar";
-
-		/// <summary>Session pane, the row of instruction toggles above the prompt input (DataContext: SessionPaneViewModel).</summary>
-		public const string InstructionToolbar = "session.instructionToolbar";
 
 		/// <summary>Session pane, above the prompt box: autocomplete hints, draft and auth notices (DataContext: SessionPaneViewModel).</summary>
 		public const string ComposerAccessory = "session.composerAccessory";
@@ -40,6 +43,9 @@ public static partial class Constants
 	{
 		/// <summary>The tree's context menu; the command parameter is the <c>TreeNodeViewModel</c> under the mouse.</summary>
 		public const string TreeNode = "tree.node";
+
+		/// <summary>The hamburger menu of the title bar (Import, Settings); Exit is added by the title bar itself. The command parameter is null.</summary>
+		public const string Main = "main.menu";
 	}
 
 	/// <summary>Names of the sections in the client settings store (<c>wpf.json</c>, <c>sections</c>).</summary>
@@ -50,6 +56,7 @@ public static partial class Constants
 		public const string Screensaver = "screensaver";
 		public const string Layout = "layout";
 		public const string DaemonHost = "daemonHost";
+		public const string Colours = "colours";
 	}
 
 	/// <summary>Defaults of the client settings sections; they mirror the Avalonia client's.</summary>

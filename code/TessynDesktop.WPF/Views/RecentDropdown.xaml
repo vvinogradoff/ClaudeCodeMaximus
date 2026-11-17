@@ -9,16 +9,17 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <Grid>
-        <ToggleButton x:Name="Toggle" Margin="8,4" Padding="10,4" AutomationProperties.Name="Recent dropdown" ToolTip="Recent sessions"
+        <!-- Fills the width it is given (the title bar's middle); the label is the open session's name, "Recent" with none. -->
+        <ToggleButton x:Name="Toggle" Margin="0,2" Padding="10,3" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Recent dropdown" ToolTip="Recent sessions"
                       IsChecked="{Binding IsOpen, ElementName=Menu, Mode=TwoWay}">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Recent" />
-                <TextBlock Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphChevronDown}" />
-            </StackPanel>
+            <DockPanel LastChildFill="True">
+                <TextBlock DockPanel.Dock="Right" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphChevronDown}" />
+                <TextBlock x:Name="Label" Text="{Binding ButtonText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </DockPanel>
         </ToggleButton>
         <Popup x:Name="Menu" PlacementTarget="{Binding ElementName=Toggle}" Placement="Bottom" StaysOpen="False" ButtonBase.Click="OnRowClick" Opened="OnOpened">
             <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="1"
-                    Padding="4" MinWidth="320" MaxHeight="480">
+                    Padding="4" MinWidth="320" Width="{Binding ActualWidth, ElementName=Toggle}" MaxHeight="480">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="8,6" Text="{Binding EmptyText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                Visibility="{Binding IsEmpty, Converter={StaticResource SessionListBoolToVis}}" />

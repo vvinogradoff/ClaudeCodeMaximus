@@ -37,6 +37,7 @@
             <TabItem Header="MCP servers" AutomationProperties.Name="MCP servers tab"><s:McpSettingsView DataContext="{Binding Mcp}" /></TabItem>
             <TabItem Header="Models and profiles" AutomationProperties.Name="Models and profiles tab"><s:ModelsProfilesSettingsView DataContext="{Binding ModelsProfiles}" /></TabItem>
             <TabItem Header="Appearance" AutomationProperties.Name="Appearance tab"><s:AppearanceSettingsView DataContext="{Binding Appearance}" /></TabItem>
+            <TabItem Header="Colours" AutomationProperties.Name="Colours tab"><s:ColoursSettingsView DataContext="{Binding Colours}" /></TabItem>
             <TabItem Header="Screensaver" AutomationProperties.Name="Screensaver tab"><s:ScreensaverSettingsView DataContext="{Binding Screensaver}" /></TabItem>
             <TabItem Header="Startup" AutomationProperties.Name="Startup tab"><s:StartupSettingsView DataContext="{Binding Startup}" /></TabItem>
             <TabItem Header="Keyboard shortcuts" AutomationProperties.Name="Keyboard shortcuts tab"><s:KeyboardSettingsView DataContext="{Binding Keyboard}" /></TabItem>

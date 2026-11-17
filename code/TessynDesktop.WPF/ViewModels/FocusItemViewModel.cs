@@ -74,9 +74,56 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	/// <summary>Decided items are a call the session already made; the close button reads "Got it" for them, like Critical and Alert.</summary>
 	public string CloseText => Kind is AttentionKind.Ask or AttentionKind.Todo ? "Dismiss" : "Got it";
 
+	/// <summary>True for an item that is no longer open: shown compact in the Closed expander (FR.23.14).</summary>
+	public bool IsClosed => _status != AttentionStatus.Open;
+
+	/// <summary>The outcome line of a closed card: <c>Answered: ...</c>, <c>Resolved: ...</c> or <c>Dismissed</c>.</summary>
+	public string OutcomeText => _status switch
+	{
+		AttentionStatus.Answered => FormatOutcome(Constants.Texts.OutcomeAnswered, _answer),
+		AttentionStatus.Resolved => FormatOutcome(Constants.Texts.OutcomeResolved, _resolutionNote),
+		AttentionStatus.Dismissed => Constants.Texts.OutcomeDismissed,
+		_ => string.Empty,
+	};
+
+	/// <summary>A closed card's body is hidden until the header row is clicked; an open card always shows it.</summary>
+	[ObservableProperty]
+	private bool _isBodyExpanded;
+
+	/// <summary>Whether the body shows: always on open cards, after a header click on closed ones.</summary>
+	public bool IsBodyVisible => HasBody && (!IsClosed || IsBodyExpanded);
+
+	/// <summary>Posted time in local time: <c>HH:mm</c> today, otherwise <c>yyyy-MM-dd HH:mm</c> (FR.23.14).</summary>
+	public string PostedText
+	{
+		get
+		{
+			var local = CreatedUtc.ToLocalTime();
+			return local.ToString(local.Date == DateTime.Today ? "HH:mm" : "yyyy-MM-dd HH:mm");
+		}
+	}
+
+	[RelayCommand]
+	private void ToggleBody() => IsBodyExpanded = !IsBodyExpanded;
+
+	partial void OnIsBodyExpandedChanged(bool value) => OnPropertyChanged(nameof(IsBodyVisible));
+
+	private static string FormatOutcome(string label, string? detail) =>
+		string.IsNullOrWhiteSpace(detail) ? label : string.Format(Constants.Texts.OutcomeFormat, label, detail);
+
+	private AttentionStatus _status;
+	private string? _answer;
+	private string? _resolutionNote;
+
 	/// <summary>Takes the fields the daemon may change (everything but the id and the reply box).</summary>
 	public void Update(AttentionItemDto item)
 	{
+		_status = item.Status;
+		_answer = item.Answer;
+		_resolutionNote = item.ResolutionNote;
+		OnPropertyChanged(nameof(IsClosed));
+		OnPropertyChanged(nameof(OutcomeText));
+		OnPropertyChanged(nameof(IsBodyVisible));
 		Title = item.Title;
 		Body = item.Body;
 		Kind = item.Kind;
@@ -102,7 +149,11 @@ public sealed partial class FocusItemViewModel : ObservableObject
 		}
 	}
 
-	partial void OnBodyChanged(string? value) => OnPropertyChanged(nameof(HasBody));
+	partial void OnBodyChanged(string? value)
+	{
+		OnPropertyChanged(nameof(HasBody));
+		OnPropertyChanged(nameof(IsBodyVisible));
+	}
 
 	partial void OnRecommendationChanged(string? value) => OnPropertyChanged(nameof(HasRecommendation));
 

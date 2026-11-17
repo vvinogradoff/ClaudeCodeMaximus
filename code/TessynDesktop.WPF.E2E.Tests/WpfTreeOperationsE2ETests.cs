@@ -143,18 +143,22 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task Rename_through_the_toolbar_renames_the_session_in_the_daemon_and_the_tree()
+	public async Task The_session_header_has_the_Delete_icon_and_the_toolbar_no_longer_has_Rename_Delete_or_Move_to()
 	{
-		using var process = await StartAsync(Dialogs("text:Renamed session"));
+		using var process = await StartAsync();
 		try
 		{
 			await SelectAsync(process, "No transcript");
-			await PressAsync(process, "Rename");
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, $"Session {_noFile.NodeId} opened"), "The session was not opened. Log:\n" + _app.ReadLog());
 
-			await AssertRowAsync(process, "Renamed session", shouldExist: true);
-			await AssertRowAsync(process, "No transcript", shouldExist: false);
-			await WaitForAsync(() => AllSessions().Any(s => s.NodeId == _noFile.NodeId && s.Name == "Renamed session"), "The daemon did not rename the session");
-			Assert.Contains("dialog 'Rename' (\"Input\") answered with text:Renamed session", _app.ReadLog());
+			Assert.True(_clicker.Exists(process, "Delete session"), "The delete icon of the header was not found");
+			foreach (var gone in new[] { "Rename", "Delete", "Move to" })
+				Assert.False(_clicker.Exists(process, gone), $"The '{gone}' toolbar button is still there");
+			foreach (var kept in new[] { "Add directory", "New session", "New group", "Refresh git origins" })
+				Assert.True(_clicker.Exists(process, kept), $"The '{kept}' toolbar button is missing");
+
+			// The double click on the title and the context menu cannot be driven from the never-activated test window (posted mouse messages are not delivered to it); both are
+			// covered by the view and view model tests (TreeFeedbackTests).
 			AssertNoErrors();
 		}
 		finally
@@ -172,13 +176,13 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 			await SelectAsync(process, "With transcript");
 
 			// First delete: the session has a transcript file, so the daemon refuses and the user is asked. The scripted answer is "cancel".
-			await PressAsync(process, "Delete");
+			await PressAsync(process, "Delete session");
 			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "dialog 'Delete' (\"Confirm\") answered with cancel"), "The delete was not asked about. Log:\n" + _app.ReadLog());
 			Assert.Contains(_withFile.NodeId, AllSessions().Select(s => s.NodeId));
 			await AssertRowAsync(process, "With transcript", shouldExist: true);
 
 			// Second delete: the scripted answer is "accept", so the delete is repeated with force.
-			await PressAsync(process, "Delete");
+			await PressAsync(process, "Delete session");
 			await AssertRowAsync(process, "With transcript", shouldExist: false);
 			await WaitForAsync(() => !AllSessions().Any(s => s.NodeId == _withFile.NodeId), "The daemon still has the session");
 			Assert.Contains("dialog 'Delete' (\"Confirm\") answered with accept", _app.ReadLog());
@@ -197,7 +201,7 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 		try
 		{
 			await SelectAsync(process, "No transcript");
-			await PressAsync(process, "Delete");
+			await PressAsync(process, "Delete session");
 
 			await AssertRowAsync(process, "No transcript", shouldExist: false);
 			await WaitForAsync(() => !AllSessions().Any(s => s.NodeId == _noFile.NodeId), "The daemon still has the session");
@@ -232,9 +236,9 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task NewGroup_and_MoveTo_create_a_group_and_move_a_session_into_it()
+	public async Task NewGroup_creates_a_group_in_the_daemon_and_shows_it()
 	{
-		using var process = await StartAsync(Dialogs("text:Fresh group", $"choice:{_archive.NodeId}"));
+		using var process = await StartAsync(Dialogs("text:Fresh group"));
 		try
 		{
 			await SelectAsync(process, "No transcript");
@@ -242,10 +246,8 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 			await AssertRowAsync(process, "Fresh group", shouldExist: true);
 			await WaitForAsync(() => { lock (_env.Settings.SyncRoot) return _env.Directory.Groups.Any(g => g.Name == "Fresh group"); }, "The daemon has no new group");
 
-			await SelectAsync(process, "No transcript");
-			await PressAsync(process, "Move to");
-			await WaitForAsync(() => { lock (_env.Settings.SyncRoot) return _archive.Sessions.Any(s => s.NodeId == _noFile.NodeId); }, "The session did not move into the group");
-			Assert.DoesNotContain(_env.Directory.Sessions, s => s.NodeId == _noFile.NodeId);
+			// Move to is an item of the context menu of a session now; the menu cannot be opened from the never-activated test window, its command is covered by the
+			// tree operation tests.
 			AssertNoErrors();
 		}
 		finally
