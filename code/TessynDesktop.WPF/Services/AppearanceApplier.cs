@@ -61,6 +61,7 @@ public sealed class AppearanceApplier
 		var current = _appearance.Current;
 		resources[Constants.Appearance.InputFontSizeKey] = current.InputFontSize;
 		resources[Constants.Appearance.TagFontSizeKey] = current.TagFontSize;
+		resources[Constants.Appearance.LineSpacingKey] = current.LineSpacing;
 
 		if (Application.Current is { } app && ReferenceEquals(app.Resources, resources))
 		{

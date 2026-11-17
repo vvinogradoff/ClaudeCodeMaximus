@@ -88,3 +88,10 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 - All five colours are per-theme palette keys (FR.9.9). The four tiers are the same in the tree, the Recent tab, the Tags tab and the Recent dropdown.
 
 **FR.9.11 — The Recent dropdown keeps its colours when open.** The dropdown's header button is **flat**: no accent fill and no dark-blue checked state while the popup is open (only a faint hover or open tint). The rows in the popup are flat buttons with only a faint hover overlay over the row's **own recency colour**, so a row looks the same open, hovered or pressed.
+
+
+**FR.9.12 — Line spacing.** One setting, **Line spacing**, in Settings › Appearance next to the font sizes, drives the line height of **both** the session output and the Focus view. It is a **multiplier of the font size**, from **1.0 to 1.8** (steps of 0.05), default **1.25**, stored in the WPF client state (`appearance` section, `lineSpacing`). The default is tighter than the earlier WPF look (1.45 on the transcript page; about 1.33 natural in the Focus cards) and close to Avalonia's natural Segoe UI line (about 1.33).
+- **Session output:** every row and markdown block of the transcript page (assistant, user, system, compaction, the live row) uses the one value through the CSS variable `--lh`, sent in the `appearance` message (`lh`). The small fixed-size labels (time, date) keep their own line height.
+- **Focus view:** the card text (title, body, outcome of open, decided and closed cards) gets a fixed line height of font size × the value.
+- **Live.** A change applies at once to both, without a restart; the virtualised transcript is measured again, as for a font size change.
+- A value outside 1.0–1.8 or not a number is refused with a message and nothing is stored.

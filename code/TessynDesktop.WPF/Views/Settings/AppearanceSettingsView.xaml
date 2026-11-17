@@ -43,6 +43,10 @@
             </Grid>
             <TextBlock Style="{StaticResource SettingsHint}" Text="Sizes in points, 8 to 40. Colours have their own tab." />
 
+            <TextBlock Style="{StaticResource SettingsLabel}" Text="Line spacing" />
+            <TextBox HorizontalAlignment="Left" Width="90" Text="{Binding LineSpacing, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Line spacing" />
+            <TextBlock Style="{StaticResource SettingsHint}" Text="A multiple of the font size, 1.0 to 1.8 (default 1.25). Applies to the session output and the Focus view." />
+
             <s:SectionMessages Margin="0,8,0,0" />
         </StackPanel>
     </ScrollViewer>

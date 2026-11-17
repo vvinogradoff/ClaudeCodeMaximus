@@ -21,7 +21,7 @@
 | FR.06-Application-Shell | Window chrome | FR.6.1–6.4 | FR.6.5–6.8 |
 | FR.07-Code-Reference-Autocomplete | Code references | FR.7.1–7.12 | — |
 | FR.08-Self-Update | Self-update on exit | FR.8.1–8.5 | — (see FR.32) |
-| FR.09-Theme-and-Colours | Theme, colours, recency | FR.9.1–9.8 | FR.9.9–9.11 (FR.9.5 replaced) |
+| FR.09-Theme-and-Colours | Theme, colours, recency | FR.9.1–9.8 | FR.9.9–9.12 (FR.9.5 replaced) |
 | FR.10-Output-Search | Output search | FR.10.1–10.6 | — |
 | FR.11-Session-Instruction-Toolbar | Instruction toolbar, profile adoption | FR.11.1–11.13 | FR.11.14 |
 | FR.12-Input-and-Composer | Input bar, model selection, composer | FR.12.1–12.29 | FR.12.30–12.34 |
