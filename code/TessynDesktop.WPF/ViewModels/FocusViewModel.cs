@@ -72,8 +72,38 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 	private static string ItemOf(string key) => key[(key.IndexOf(KeySeparator) + 1)..];
 
-	/// <summary>The open items of the session, newest first.</summary>
+	/// <summary>The open items of the session that can carry an answer (open and Decided), newest first. The view shows them split in <see cref="OpenItems"/> and <see cref="DecidedItems"/>.</summary>
 	public ObservableCollection<FocusItemViewModel> Items { get; } = [];
+
+	/// <summary>The open items other than Decided, newest first (FR.23.14).</summary>
+	public ObservableCollection<FocusItemViewModel> OpenItems { get; } = [];
+
+	/// <summary>The open Decided items, newest first: the collapsed "Decisions (n)" expander (FR.23.14).</summary>
+	public ObservableCollection<FocusItemViewModel> DecidedItems { get; } = [];
+
+	/// <summary>The closed items (answered, resolved, dismissed), newest closed first: the "Closed (n)" expander (FR.23.14).</summary>
+	public ObservableCollection<FocusItemViewModel> ClosedItems { get; } = [];
+
+	private readonly Dictionary<string, FocusItemViewModel> _closedById = new(StringComparer.OrdinalIgnoreCase);
+
+	public bool HasDecisions => DecidedItems.Count > 0;
+
+	public bool HasClosed => ClosedItems.Count > 0;
+
+	public string DecisionsHeader => string.Format(Constants.Texts.DecisionsHeaderFormat, DecidedItems.Count);
+
+	public string ClosedHeader => string.Format(Constants.Texts.ClosedHeaderFormat, ClosedItems.Count);
+
+	/// <summary>Closed expander: collapsed for every session and each time Focus is selected, left alone by refreshes (FR.23.14).</summary>
+	[ObservableProperty]
+	private bool _isClosedExpanded;
+
+	/// <summary>Decisions expander: collapsed by default (FR.23.14).</summary>
+	[ObservableProperty]
+	private bool _isDecisionsExpanded;
+
+	/// <summary>Focus was selected: the Closed expander collapses again (FR.23.14).</summary>
+	public void OnFocusSelected() => IsClosedExpanded = false;
 
 	/// <summary>A reference of an item was activated (the argument is the reference); the owner jumps, previews or opens it.</summary>
 	public event EventHandler<AttentionRefDto>? RefActivated;
@@ -81,7 +111,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	public bool HasItems => Items.Count > 0;
 
 	/// <summary>True when there is nothing open: the view shows <see cref="Constants.Texts.NoOpenItems"/>.</summary>
-	public bool IsEmpty => Items.Count == 0;
+	public bool IsEmpty => OpenItems.Count == 0;
 
 	public string SendAnswersText => AnswerCount > 0 ? $"Send answers ({AnswerCount})" : "Send answers";
 
@@ -98,6 +128,8 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		_token++;
 		NodeId = nodeId;
 		Error = null;
+		IsClosedExpanded = false;
+		IsDecisionsExpanded = false;
 		ClearItems();
 		return RequestRefresh();
 	}
@@ -211,14 +243,73 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 				Items.Insert(i, wanted[i]);
 		}
 
-		OpenCount = Items.Count(i => i.Kind != AttentionKind.Decided);
+		SyncList(OpenItems, Items.Where(i => i.Kind != AttentionKind.Decided).ToList());
+		SyncList(DecidedItems, Items.Where(i => i.Kind == AttentionKind.Decided).ToList());
+		ApplyClosed(dtos);
+
+		OpenCount = OpenItems.Count;
 		RaiseCountsChanged();
 		_logger.LogInformation("Focus: {Count} open item(s) for {NodeId}", Items.Count, nodeId);
+		_logger.LogInformation("Focus: {Closed} closed item(s) for {NodeId}", ClosedItems.Count, nodeId);
+	}
+
+	/// <summary>Closed items, newest closed first. Cards are rebuilt from the daemon's data; they hold no reply text.</summary>
+	private void ApplyClosed(IReadOnlyList<AttentionItemDto> dtos)
+	{
+		var closed = dtos
+			.Where(d => d.Status != AttentionStatus.Open)
+			.OrderByDescending(d => d.ClosedUtc ?? d.UpdatedUtc)
+			.ThenByDescending(d => d.Number)
+			.ToList();
+
+		var wanted = new List<FocusItemViewModel>(closed.Count);
+		var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		foreach (var dto in closed)
+		{
+			keep.Add(dto.Id);
+			if (_closedById.TryGetValue(dto.Id, out var existing))
+			{
+				existing.Update(dto);   // the expanded state of the body survives
+				wanted.Add(existing);
+				continue;
+			}
+
+			var card = new FocusItemViewModel(dto, this, NodeId ?? string.Empty);
+			_closedById[dto.Id] = card;
+			wanted.Add(card);
+		}
+
+		foreach (var id in _closedById.Keys.Where(k => !keep.Contains(k)).ToList())
+			_closedById.Remove(id);
+
+		SyncList(ClosedItems, wanted);
+	}
+
+	private static void SyncList(ObservableCollection<FocusItemViewModel> target, List<FocusItemViewModel> wanted)
+	{
+		foreach (var gone in target.Where(i => !wanted.Contains(i)).ToList())
+			target.Remove(gone);
+
+		for (var i = 0; i < wanted.Count; i++)
+		{
+			if (i < target.Count && ReferenceEquals(target[i], wanted[i]))
+				continue;
+
+			var from = target.IndexOf(wanted[i]);
+			if (from >= 0)
+				target.Move(from, i);
+			else
+				target.Insert(i, wanted[i]);
+		}
 	}
 
 	private void ClearItems()
 	{
 		Items.Clear();
+		OpenItems.Clear();
+		DecidedItems.Clear();
+		ClosedItems.Clear();
+		_closedById.Clear();
 		_byId.Clear();
 		OpenCount = 0;
 		AnswerCount = 0;
@@ -334,6 +425,10 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		AnswerCount = Items.Count(i => i.HasReply);
 		OnPropertyChanged(nameof(HasItems));
 		OnPropertyChanged(nameof(IsEmpty));
+		OnPropertyChanged(nameof(HasDecisions));
+		OnPropertyChanged(nameof(DecisionsHeader));
+		OnPropertyChanged(nameof(HasClosed));
+		OnPropertyChanged(nameof(ClosedHeader));
 		SendAnswersCommand.NotifyCanExecuteChanged();
 	}
 

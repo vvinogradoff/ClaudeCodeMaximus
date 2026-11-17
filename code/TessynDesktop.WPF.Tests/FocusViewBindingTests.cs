@@ -205,4 +205,75 @@ public sealed class FocusViewBindingTests
 
 		Assert.Contains(Constants.Texts.NoOpenItems, texts);
 	}
+
+	[Fact]
+	public void FocusPanel_ShowsDecisionsAndClosedCollapsed_WithEmptyStateWhenOnlyThoseExist_AndTheClosedCardsAreCompact()
+	{
+		var listener = new BindingErrorListener();
+		string? closedHeader = null, decisionsHeader = null;
+		var collapsedTexts = new List<string>();
+		var expandedTexts = new List<string>();
+		var emptyShown = false;
+		var bodyHiddenAtFirst = false;
+		var bodyShownAfterClick = false;
+		var stayedExpandedAcrossRefresh = false;
+		var collapsedOnReselect = false;
+		StaTestRunner.Run(() =>
+		{
+			PresentationTraceSources.Refresh();
+			PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
+			PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
+
+			var t0 = DateTimeOffset.UnixEpoch;
+			var client = new FakeTessynClient();
+			client.Attention["a"] =
+			[
+				new AttentionItemDto { Id = "A1", Number = 1, Kind = AttentionKind.Decided, Status = AttentionStatus.Open, Title = "Use SQLite", CreatedUtc = t0 },
+				new AttentionItemDto { Id = "A2", Number = 2, Kind = AttentionKind.Ask, Status = AttentionStatus.Answered, Title = "Which database?", Body = "Pick **one**", Answer = "Postgres", CreatedUtc = t0, ClosedUtc = t0.AddMinutes(5) },
+				new AttentionItemDto { Id = "A3", Number = 3, Kind = AttentionKind.Alert, Status = AttentionStatus.Dismissed, Title = "Disk is full", CreatedUtc = t0, ClosedUtc = t0.AddMinutes(9) },
+			];
+			var focus = new FocusViewModel(client, new ImmediateUiDispatcher(), NullLogger<FocusViewModel>.Instance);
+			focus.SetSessionAsync("a").GetAwaiter().GetResult();
+			var panel = new FocusPanel { DataContext = focus };
+			Layout(panel);
+
+			var expanders = Descendants<Expander>(panel).ToList();
+			decisionsHeader = expanders.Select(e => e.Header as string).FirstOrDefault(h => h?.StartsWith("Decisions", StringComparison.Ordinal) == true);
+			closedHeader = expanders.Select(e => e.Header as string).FirstOrDefault(h => h?.StartsWith("Closed", StringComparison.Ordinal) == true);
+			emptyShown = Descendants<TextBlock>(panel).Any(t => t.Text == Constants.Texts.NoOpenItems && t.Visibility == Visibility.Visible);
+			collapsedTexts.AddRange(Descendants<TextBlock>(panel).Select(t => t.Text));
+
+			var closed = expanders.Single(e => (e.Header as string)?.StartsWith("Closed", StringComparison.Ordinal) == true);
+			closed.IsExpanded = true;
+			Layout(panel);
+			expandedTexts.AddRange(Descendants<TextBlock>(panel).Select(t => t.Text));
+			var bodyPanelsBefore = Descendants<StackPanel>(panel).Count(p => MarkdownText.GetSource(p) != null && p.Visibility == Visibility.Visible);
+			bodyHiddenAtFirst = bodyPanelsBefore == 0;
+
+			focus.ClosedItems.Single(i => i.Id == "A2").ToggleBodyCommand.Execute(null);
+			Layout(panel);
+			bodyShownAfterClick = Descendants<StackPanel>(panel).Count(p => MarkdownText.GetSource(p) != null && p.Visibility == Visibility.Visible) == 1;
+
+			focus.RefreshAsync().GetAwaiter().GetResult();
+			Layout(panel);
+			stayedExpandedAcrossRefresh = focus.IsClosedExpanded && closed.IsExpanded;
+
+			focus.OnFocusSelected();
+			collapsedOnReselect = !focus.IsClosedExpanded;
+		});
+
+		Assert.Empty(listener.Errors);
+		Assert.Equal("Decisions (1)", decisionsHeader);
+		Assert.Equal("Closed (2)", closedHeader);
+		Assert.True(emptyShown);                                 // only a Decided and closed items: nothing else is open
+		Assert.DoesNotContain("Use SQLite", collapsedTexts);     // Decisions starts collapsed
+		Assert.DoesNotContain("Which database?", collapsedTexts); // so does Closed
+		Assert.Contains("Answered: Postgres", expandedTexts);
+		Assert.Contains("Dismissed", expandedTexts);
+		Assert.True(expandedTexts.IndexOf("Disk is full") < expandedTexts.IndexOf("Which database?"));   // newest closed first
+		Assert.True(bodyHiddenAtFirst);
+		Assert.True(bodyShownAfterClick);
+		Assert.True(stayedExpandedAcrossRefresh);
+		Assert.True(collapsedOnReselect);
+	}
 }

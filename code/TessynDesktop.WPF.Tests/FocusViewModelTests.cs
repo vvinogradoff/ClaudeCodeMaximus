@@ -50,6 +50,94 @@ public sealed class FocusViewModelTests
 	}
 
 	[Fact]
+	public async Task ClosedItems_AreListedNewestClosedFirst_WithTheirOutcomeLines_AndDecisionsAreSeparate()
+	{
+		var closedAt = (int n) => (DateTimeOffset?)T0.AddHours(n);
+		Seed("n",
+			Item(1, AttentionKind.Decided),
+			Item(2, AttentionKind.Ask, AttentionStatus.Answered) with { Answer = "Postgres", ClosedUtc = closedAt(1) },
+			Item(3, AttentionKind.Alert, AttentionStatus.Resolved) with { ResolutionNote = "Fixed", ClosedUtc = closedAt(3) },
+			Item(4, AttentionKind.Todo, AttentionStatus.Dismissed) with { ClosedUtc = closedAt(2) },
+			Item(5, AttentionKind.Ask, AttentionStatus.Answered) with { ClosedUtc = closedAt(0) },
+			Item(6, AttentionKind.Critical));
+		using var focus = Create();
+
+		await focus.SetSessionAsync("n");
+
+		Assert.Equal(["A6"], focus.OpenItems.Select(i => i.Id));
+		Assert.Equal(["A1"], focus.DecidedItems.Select(i => i.Id));
+		Assert.Equal(["A3", "A4", "A2", "A5"], focus.ClosedItems.Select(i => i.Id));
+		Assert.Equal(["Resolved: Fixed", "Dismissed", "Answered: Postgres", "Answered"], focus.ClosedItems.Select(i => i.OutcomeText));
+		Assert.Equal("Decisions (1)", focus.DecisionsHeader);
+		Assert.Equal("Closed (4)", focus.ClosedHeader);
+		Assert.True(focus.HasDecisions);
+		Assert.True(focus.HasClosed);
+		Assert.False(focus.IsEmpty);
+		Assert.All(focus.ClosedItems, i => Assert.True(i.IsClosed));
+	}
+
+	[Fact]
+	public async Task OnlyDecidedOrClosedItems_StillShowTheEmptyState()
+	{
+		Seed("n", Item(1, AttentionKind.Decided), Item(2, status: AttentionStatus.Dismissed));
+		using var focus = Create();
+
+		await focus.SetSessionAsync("n");
+
+		Assert.True(focus.IsEmpty);
+		Assert.True(focus.HasDecisions);
+		Assert.True(focus.HasClosed);
+	}
+
+	[Fact]
+	public async Task ClosedExpander_StartsCollapsed_SurvivesRefreshes_AndCollapsesOnFocusSelectedAndOnANewSession()
+	{
+		Seed("n", Item(1, status: AttentionStatus.Resolved));
+		Seed("m", Item(1, status: AttentionStatus.Resolved));
+		using var focus = Create();
+		await focus.SetSessionAsync("n");
+		Assert.False(focus.IsClosedExpanded);
+		Assert.False(focus.IsDecisionsExpanded);
+
+		focus.IsClosedExpanded = true;
+		focus.IsDecisionsExpanded = true;
+		_client.Attention["n"].Add(Item(2, status: AttentionStatus.Dismissed));
+		await focus.RefreshAsync();
+		Assert.True(focus.IsClosedExpanded);          // a refresh does not collapse it
+		Assert.Equal(2, focus.ClosedItems.Count);
+
+		focus.OnFocusSelected();
+		Assert.False(focus.IsClosedExpanded);
+		Assert.True(focus.IsDecisionsExpanded);       // only Closed resets on selection
+
+		focus.IsClosedExpanded = true;
+		await focus.SetSessionAsync("m");
+		Assert.False(focus.IsClosedExpanded);
+		Assert.False(focus.IsDecisionsExpanded);
+	}
+
+	[Fact]
+	public async Task AClosedCard_HidesItsBodyUntilItsHeaderIsClicked_AndAnItemClosingMovesToTheClosedList()
+	{
+		Seed("n", Item(1, body: "Details"), Item(2, status: AttentionStatus.Answered, body: "More") with { Answer = "Yes", ClosedUtc = T0 });
+		using var focus = Create();
+		await focus.SetSessionAsync("n");
+
+		var closed = focus.ClosedItems.Single();
+		Assert.False(closed.IsBodyVisible);
+		closed.ToggleBodyCommand.Execute(null);
+		Assert.True(closed.IsBodyVisible);
+		Assert.True(focus.OpenItems.Single().IsBodyVisible);   // open cards always show their body
+
+		_client.Attention["n"][0] = _client.Attention["n"][0] with { Status = AttentionStatus.Resolved, ResolutionNote = "Done", ClosedUtc = T0.AddHours(1) };
+		await focus.RefreshAsync();
+
+		Assert.Empty(focus.OpenItems);
+		Assert.Equal(["A1", "A2"], focus.ClosedItems.Select(i => i.Id));
+		Assert.True(focus.ClosedItems.Single(i => i.Id == "A2").IsBodyVisible);   // the toggled state survives the refresh
+	}
+
+	[Fact]
 	public async Task NoOpenItems_IsEmpty()
 	{
 		Seed("n", Item(1, status: AttentionStatus.Resolved));

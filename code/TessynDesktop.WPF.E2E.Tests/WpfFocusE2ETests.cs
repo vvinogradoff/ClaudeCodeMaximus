@@ -246,6 +246,45 @@ public sealed class WpfFocusE2ETests : IDisposable
 		}
 	}
 
+	[Fact]
+	public async Task An_answered_item_moves_to_the_collapsed_Closed_expander_which_shows_the_outcome_line_when_expanded()
+	{
+		await PostAsync(FocusRefsEnv.ItemWithRefs("Proceed with the migration?"));
+		using var process = await StartAndWaitForFocusAsync(1);
+		try
+		{
+			Assert.True(await _clicker.SetTextAsync(process, "Your answer", "Yes, go ahead", StepTimeout), "The reply box was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Send answers", StepTimeout), "Send answers was not available. Log:\n" + _app.ReadLog());
+
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, $"Focus: 0 open item(s) for {_main}", $"Focus: 1 closed item(s) for {_main}"), "The item did not move to Closed. Log:\n" + _app.ReadLog());
+			Assert.True(await WaitForTextAsync(process, "Closed (1)"), "The Closed (1) expander was not shown. Log:\n" + _app.ReadLog());
+			Assert.True(await WaitForTextAsync(process, "Nothing needs your attention in this session."), "The empty state was not shown. Log:\n" + _app.ReadLog());   // FR.23.14: nothing is open any more
+			Assert.False(_clicker.TextExists(process, "Answered: Yes, go ahead"), "Closed is collapsed by default, so the outcome line must not show yet.");
+
+			Assert.True(await _clicker.ClickAsync(process, "Closed (1)", StepTimeout), "The Closed expander header was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await WaitForTextAsync(process, "Answered: Yes, go ahead"), "The outcome line did not show after expanding. Log:\n" + _app.ReadLog());
+			Assert.True(_clicker.TextExists(process, "Proceed with the migration?"));
+			AssertNoErrors();
+		}
+		finally
+		{
+			_app.Stop(process);
+		}
+	}
+
+	private async Task<bool> WaitForTextAsync(Process process, string fragment)
+	{
+		var deadline = DateTime.UtcNow + StepTimeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			if (_clicker.TextExists(process, fragment))
+				return true;
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
+
 	private async Task<bool> WaitForCountAsync(Process process, string needle, int count)
 	{
 		var deadline = DateTime.UtcNow + StepTimeout;
