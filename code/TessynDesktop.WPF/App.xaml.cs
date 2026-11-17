@@ -86,6 +86,7 @@ public partial class App : Application
 		var windowCreated = startup.ElapsedMilliseconds;
 		MainWindow = window;
 		window.Show();
+		_host.Services.GetService<LiveUpdateService>()?.Start(); // the once-a-minute check for a newer build (real environment only)
 		if (_activationPending)
 			ActivateMainWindow(options); // a second start arrived while this one was still starting
 		logger.LogInformation("Startup: host built {Host} ms, state loaded {State} ms, window created {Created} ms, shown {Shown} ms",
@@ -107,6 +108,9 @@ public partial class App : Application
 		{
 			// A dialog still waiting for an answer would hold its caller forever.
 			_host.Services.GetService<IDialogService>()?.CancelPending();
+
+			// A newer build made while this client ran is copied by a script that waits for this process to end and starts nothing (the user is closing).
+			_host.Services.GetService<LiveUpdateService>()?.OnExit();
 
 			// Never block the UI thread on work that may need it: run the shutdown on the thread pool with a bounded wait.
 			var host = _host;

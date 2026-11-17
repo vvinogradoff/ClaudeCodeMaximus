@@ -10,7 +10,7 @@ namespace TessynDesktop.WPF.E2E.Tests;
 /// <summary>
 /// End to end for WPF beside the Avalonia app: the BUILT WPF app against a real loopback daemon (the Avalonia app is the daemon's host in real life; here a test daemon plays it).
 /// (1) WPF started first waits without a daemon and connects when one appears; (2) the daemon is replaced under the running app (the takeover: a new run on the same port with the same
-/// token) and the app follows it; (3) the Startup tab's "Start the background daemon when none is running" is off by default and is stored in the client settings. The real host start
+/// token) and the app follows it; (3) the Startup tab's "Start the background daemon when none is running" is on by default and is stored in the client settings when switched off. The real host start
 /// is off in these runs (a custom data root), so nothing here can launch a real daemon. <b>Explicitly-run project:</b> it opens an off-screen window.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -140,7 +140,7 @@ public sealed class WpfSideBySideE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task TheStartupSetting_IsOffByDefault_AndSavingItStoresItInTheClientSettings()
+	public async Task TheStartupSetting_IsOnByDefault_AndSwitchingItOffStoresItInTheClientSettings()
 	{
 		StartDaemon();
 		using var process = _app.Start();
@@ -151,15 +151,13 @@ public sealed class WpfSideBySideE2ETests : IDisposable
 			Assert.True(await _clicker.SelectTabAsync(process, "Startup tab", StepTimeout), "The Startup tab was not found. Log:\n" + _app.ReadLog());
 
 			await WaitForAsync(() => _clicker.TextExists(process, "Takes effect at once"), "The Startup tab did not show");
-			Assert.False(_clicker.IsCheckBoxChecked(process, "Start the background daemon"), "The setting must be off by default");
+			Assert.True(_clicker.IsCheckBoxChecked(process, "Start the background daemon"), "The setting must be on by default");
 
 			Assert.True(await _clicker.ToggleCheckBoxAsync(process, "Start the background daemon", StepTimeout));
 			Assert.True(await _clicker.ClickAsync(process, "Save settings", StepTimeout));
 
 			var file = Path.Combine(_root, "clients", "wpf.json");
-			await WaitForAsync(() => File.Exists(file) && File.ReadAllText(file).Contains("startBackgroundDaemon\":true", StringComparison.OrdinalIgnoreCase)
-				|| File.Exists(file) && File.ReadAllText(file).Replace(" ", "").Contains("\"startBackgroundDaemon\":true", StringComparison.OrdinalIgnoreCase),
-				"The client settings file did not get the setting");
+			await WaitForAsync(() => File.Exists(file) && File.ReadAllText(file).Replace(" ", "").Contains("\"startBackgroundDaemon\":false", StringComparison.OrdinalIgnoreCase), "The client settings file did not get the setting");
 			Assert.Contains("daemonHost", File.ReadAllText(file));
 		}
 		finally

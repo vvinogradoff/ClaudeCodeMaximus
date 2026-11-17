@@ -72,8 +72,8 @@ public static partial class Constants
 		public const int ScreensaverTimeoutSeconds = 120;
 		public const int ScreensaverSlideshowIntervalSeconds = 10;
 
-		/// <summary>The client waits for a daemon instead of starting the background host (side-by-side with the Avalonia window).</summary>
-		public const bool StartBackgroundDaemon = false;
+		/// <summary>WPF is the only client: it starts the background daemon host itself when none runs (it was off while the Avalonia window ran side by side). A stored file without the key gets this value too.</summary>
+		public const bool StartBackgroundDaemon = true;
 	}
 
 	/// <summary>Labels of the dialogs.</summary>

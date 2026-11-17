@@ -34,8 +34,9 @@ public sealed partial class MainViewModel : ObservableObject
 
 	public bool HasError => !string.IsNullOrEmpty(ErrorText);
 
-	public MainViewModel(ConnectionViewModel connection, Func<ITessynClient, TreeViewModel> treeFactory, Func<ITessynClient, SessionPaneViewModel> sessionFactory, IClientStateStore stateStore, ILogger<MainViewModel> logger)
+	public MainViewModel(ConnectionViewModel connection, Func<ITessynClient, TreeViewModel> treeFactory, Func<ITessynClient, SessionPaneViewModel> sessionFactory, IClientStateStore stateStore, ILogger<MainViewModel> logger, UpdateNoticeViewModel? updateNotice = null)
 	{
+		UpdateNotice = updateNotice ?? new UpdateNoticeViewModel();
 		Connection = connection;
 		_treeFactory = treeFactory;
 		_sessionFactory = sessionFactory;
@@ -46,6 +47,9 @@ public sealed partial class MainViewModel : ObservableObject
 	}
 
 	public ConnectionViewModel Connection { get; }
+
+	/// <summary>The "A newer build is ready" notice (hidden unless the live update check found one).</summary>
+	public UpdateNoticeViewModel UpdateNotice { get; }
 
 	/// <summary>Finds the daemon and connects; returns when connected or on a terminal state.</summary>
 	public Task StartAsync(CancellationToken cancellationToken) => Connection.RunAsync(cancellationToken);
