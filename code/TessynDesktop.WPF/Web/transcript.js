@@ -40,7 +40,7 @@ function entryHtml(k) {
   const media = it.m.length ? MediaGate.previewHtml(it.m, ALLOW, it.i, S.loaded) : '';
   const cls = '<div class="e ' + esc(it.r) + (InputNav.isAuto(it) ? ' auto' : '') + '" data-k="' + k + '"><div class="c' + (it.i === SEL ? ' sel' : '') + '">';
   const tail = '<div class="b">' + it.html + '</div>' + more + media + chipsHtml(it) + '</div>';
-  if (it.r === 'A') {   // an assistant response sits on the view background: no role word, the model beside nothing, the time on the right (as in the Avalonia client)
+  if (it.r === 'A' || it.r === 'S') {   // an assistant response sits on the view background: no role word, the model beside nothing, the time on the right (as in the Avalonia client)
     const cut = it.ts.indexOf(' · '), time = cut < 0 ? it.ts : it.ts.substring(0, cut), model = cut < 0 ? '' : it.ts.substring(cut + 3);
     return cls + (model ? '<div class="h">' + esc(model) + '</div>' : '') + tail + '<div class="t">' + esc(time) + '</div></div>';
   }
@@ -432,6 +432,7 @@ function onAppearance(m) {
   const px = v => (typeof v === 'number' && v >= 6 && v <= 80) ? v + 'px' : null;
   let sizeChanged = false;
   const set = (name, v) => { const x = px(v); if (x && r.style.getPropertyValue(name) !== x) { r.style.setProperty(name, x); sizeChanged = true; } };
+  if (typeof m.sys === 'string' && /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(m.sys)) r.style.setProperty('--sysbg', m.sys.length === 9 ? '#' + m.sys.substring(3) + m.sys.substring(1, 3) : m.sys);
   set('--fs-a', m.asst); set('--fs-m', m.md); set('--fs-u', m.user);
   if (S && sizeChanged) remeasure();   // the entries change height only with a font size, not with the theme
 }

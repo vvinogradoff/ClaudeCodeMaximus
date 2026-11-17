@@ -20,6 +20,7 @@ namespace TessynDesktop.WPF.E2E.Tests;
 public sealed class WpfTranscriptScrollE2ETests : IDisposable
 {
 	private const int Entries = 100;   // one page: no paging happens while the thumb is dragged
+	private const int SystemEntry = 20;   // a system entry among the user ones
 
 	private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
 	private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(20);
@@ -73,6 +74,12 @@ public sealed class WpfTranscriptScrollE2ETests : IDisposable
 		var sb = new StringBuilder();
 		for (var i = 0; i < Entries; i++)
 		{
+			if (i == SystemEntry)
+			{
+				sb.Append(EntryIdsEnv.EntryText("SYSTEM", i, "Read notes.md"));
+				continue;
+			}
+
 			if (i % 2 == 0)
 			{
 				sb.Append(EntryIdsEnv.EntryText("USER", i, $"input {i}", "profile=\"work\""));
@@ -154,6 +161,37 @@ public sealed class WpfTranscriptScrollE2ETests : IDisposable
 			var u = (await page.EvalAsync(@"(() => { const e = document.querySelector('.e.U'); const c = e.querySelector('.c'), cs = getComputedStyle(c); return [cs.backgroundColor, e.querySelector('.h').textContent.split(' ')[0]]; })()"))!.AsArray();
 			Assert.NotEqual("rgba(0, 0, 0, 0)", u[0]!.GetValue<string>());
 			Assert.Equal("USER", u[1]!.GetValue<string>());
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
+	public async Task System_rows_have_no_role_word_the_time_on_the_right_and_the_pale_blue_of_the_palette_in_both_themes()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			// The seeded system entry may be outside the rendered window: render it by scrolling there.
+			await page.EvalAsync($"vp.scrollTop = S.off[{SystemEntry} - S.items[0].i]; 0");
+			await WaitAsync("the system row to be rendered", async () => await Num("document.querySelectorAll('.e.S').length", page) >= 1);
+			const string Probe = @"(() => { const e = document.querySelector('.e.S'); const c = e.querySelector('.c'), t = e.querySelector('.t');
+				return [getComputedStyle(c).backgroundColor, e.textContent.toUpperCase().includes('SYSTEM'), t ? t.textContent : null, t ? t.getBoundingClientRect().left - c.getBoundingClientRect().right : -999, t ? t.getBoundingClientRect().left - e.getBoundingClientRect().left : -999, e.getBoundingClientRect().width, document.documentElement.getAttribute('data-theme')]; })()";
+			var s = (await page.EvalAsync(Probe))!.AsArray();
+			var dark = s[6]?.GetValue<string>() == "dark";
+			Assert.Equal(dark ? "rgb(26, 58, 80)" : "rgb(191, 224, 247)", s[0]!.GetValue<string>());
+			Assert.False(s[1]!.GetValue<bool>(), "the word SYSTEM is printed");
+			Assert.Matches(@"^\d\d:\d\d:\d\d$", s[2]!.GetValue<string>());
+			Assert.True(s[3]!.GetValue<double>() >= -0.5, "the time is not to the right of the text: " + s[3]);
+			Assert.True(s[4]!.GetValue<double>() > s[5]!.GetValue<double>() * 0.8, "the time is not at the right edge");
+
+			// The page takes the palette colour from the host's appearance message, for either theme.
+			await page.EvalAsync("onAppearance({ theme: 'dark', sys: '#112233' }); 0");
+			Assert.Equal("rgb(17, 34, 51)", (await page.EvalAsync("getComputedStyle(document.querySelector('.e.S .c')).backgroundColor"))!.GetValue<string>());
+			await page.EvalAsync("onAppearance({ theme: 'light', sys: '#BFE0F7' }); 0");
+			Assert.Equal("rgb(191, 224, 247)", (await page.EvalAsync("getComputedStyle(document.querySelector('.e.S .c')).backgroundColor"))!.GetValue<string>());
 		}
 		finally
 		{
