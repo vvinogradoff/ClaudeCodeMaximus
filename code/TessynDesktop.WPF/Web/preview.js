@@ -41,7 +41,16 @@ chrome.webview.addEventListener('message', e => {
     case 'image': showMedia('image', m.url); break;
     case 'video': showMedia('video', m.url); break;
     case 'clear': clear(); break;
-    case 'appearance': if (m.theme === 'dark' || m.theme === 'light') document.documentElement.setAttribute('data-theme', m.theme); break;
+    case 'appearance': {
+      const r = document.documentElement;
+      if (m.theme === 'dark' || m.theme === 'light') r.setAttribute('data-theme', m.theme);
+      // The colours the user changed (Settings > Colours) go over the page's own; the ones no longer listed are dropped again.
+      const next = (m.colours && typeof m.colours === 'object') ? Object.keys(m.colours).filter(k => /^--[a-z-]+$/.test(k) && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(m.colours[k])) : [];
+      for (const k of (window.__colourVars || [])) if (!next.includes(k)) r.style.removeProperty(k);
+      for (const k of next) r.style.setProperty(k, m.colours[k]);
+      window.__colourVars = next;
+      break;
+    }
   }
 });
 // Pointer, wheel and key activity goes to the host (W10a screensaver): WPF never sees input that lands in a web page. Throttled; a pointer move counts after it travelled 6 px.

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -111,7 +111,7 @@ public sealed class TreeFeedbackTests
 	}
 
 	[Fact]
-	public async Task TheColoursTab_StoresOnlyWhatDiffersFromTheDefault_AndResets()
+	public void TheColoursTab_StoresAtOnce_OnlyWhatDiffersFromTheDefault_AndResets()
 	{
 		var store = SettingsTestSupport.NewStore();
 		var settings = SettingsTestSupport.NewSettings(new FakeTessynClient(), store);
@@ -119,38 +119,22 @@ public sealed class TreeFeedbackTests
 		Assert.False(colours.HasChanges);
 		var tier1 = colours.Rows.Single(r => r.Key == ColourCatalog.RecentTier1);
 
-		tier1.Text = "#ff0000";
-		Assert.True(colours.HasChanges);
-		Assert.True(await colours.SaveAsync());
-		Assert.Equal("#FF0000", store.Get<ColourSettings>().Overrides[ColourCatalog.RecentTier1]);
+		tier1.Set("#ff0000");   // light is the edited theme: there is nothing to save, it is stored
+		Assert.Equal("#FF0000", store.Get<ColourSettings>().Light[ColourCatalog.RecentTier1]);
+		Assert.True(tier1.IsOverridden);
+		Assert.False(colours.HasChanges);
 
-		tier1.Text = ColourCatalog.Find(ColourCatalog.RecentTier1)!.LightDefault;   // the default again: nothing to store
-		Assert.True(await colours.SaveAsync());
-		Assert.Empty(store.Get<ColourSettings>().Overrides);
+		tier1.Set(ColourCatalog.Find(ColourCatalog.RecentTier1)!.LightDefault);   // the default again: nothing to store
+		Assert.Empty(store.Get<ColourSettings>().Light);
 
-		tier1.Text = "not a colour";
-		Assert.False(tier1.IsValid);
-		Assert.True(colours.HasChanges);
-		Assert.False(await colours.SaveAsync());
-		Assert.True(colours.HasError);
+		tier1.Set("not a colour");   // refused
+		Assert.False(tier1.IsOverridden);
 
+		tier1.Set("#00FF00");
 		colours.ResetAllCommand.Execute(null);
 		Assert.All(colours.Rows, r => Assert.False(r.IsOverridden));
+		Assert.Empty(store.Get<ColourSettings>().Light);
 	}
-
-	[Fact]
-	public async Task TheSettingsWindowSave_AppliesTheColours()
-	{
-		var store = SettingsTestSupport.NewStore();
-		var settings = SettingsTestSupport.NewSettings(new FakeTessynClient(), store);
-		settings.Colours.Rows.Single(r => r.Key == ColourCatalog.Selection).Text = "#112233";
-
-		Assert.True(settings.HasChanges);
-		await settings.SaveCommand.ExecuteAsync(null);
-
-		Assert.Equal("#112233", store.Get<ColourSettings>().Overrides[ColourCatalog.Selection]);
-	}
-
 	[Fact]
 	public void TheApplier_PutsOneBrushPerColourInTheResources_FollowingTheTheme_AndTheUserOverride()
 	{
@@ -169,7 +153,7 @@ public sealed class TreeFeedbackTests
 			Assert.Equal(Color.FromRgb(0xCD, 0xE6, 0xF7), ((SolidColorBrush)resources["Colour.TreeSelection"]).Color);   // light: pale blue
 
 			store.Update<AppearanceSettings>(a => a.Theme = ClientTheme.Dark);
-			store.Update<ColourSettings>(c => c.Overrides[ColourCatalog.RecentTier1] = "#FF0000");
+			store.Update<ColourSettings>(c => c.Dark[ColourCatalog.RecentTier1] = "#FF0000");
 			applier.Apply(resources);
 
 			Assert.Equal(Color.FromRgb(0xFF, 0x00, 0x00), ((SolidColorBrush)resources["Colour.RecentTier1"]).Color);

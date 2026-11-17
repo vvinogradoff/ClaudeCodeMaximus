@@ -426,8 +426,18 @@ function onMediaOk(m) {
 }
 
 // Theme and fonts from the host (W10a): the theme name and the three font sizes become attributes and CSS variables on the root; entry heights change with the font, so the list is measured again.
+// The colours the user changed (Settings > Colours) are set as inline CSS variables over the page's own; the ones no longer listed are dropped again.
+let colourVars = [];
+function onColours(m) {
+  const r = document.documentElement;
+  const next = (m && typeof m.colours === 'object' && m.colours) ? Object.keys(m.colours).filter(k => /^--[a-z-]+$/.test(k) && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(m.colours[k])) : [];
+  for (const k of colourVars) if (!next.includes(k)) r.style.removeProperty(k);
+  for (const k of next) r.style.setProperty(k, m.colours[k]);
+  colourVars = next;
+}
 function onAppearance(m) {
   const r = document.documentElement;
+  onColours(m);
   if (m.theme === 'dark' || m.theme === 'light') r.setAttribute('data-theme', m.theme);
   const px = v => (typeof v === 'number' && v >= 6 && v <= 80) ? v + 'px' : null;
   let sizeChanged = false;

@@ -464,7 +464,8 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		if (_control?.CoreWebView2 == null || !_ready)
 			return;
 
-		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(_appearance.IsDark, _appearance.Current).ToMessage());
+		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(_appearance.IsDark, _appearance.Current, _appearance.PageColours).ToMessage());
+		ApplyAccent();   // the Windows accent again when the user's accent was just reset (a no-op while it is set)
 	}
 
 	/// <summary>Hands the Windows accent colour to the page as the --accent CSS variable.</summary>
@@ -472,6 +473,9 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	{
 		if (_control?.CoreWebView2 == null || !_ready)
 			return;
+
+		if (_appearance.PageColours.ContainsKey("--accent"))
+			return;   // the user's accent is on the page already (the appearance message)
 
 		var accent = SystemParameters.WindowGlassColor;
 		_ = _control.CoreWebView2.ExecuteScriptAsync($"document.documentElement.style.setProperty('--accent','#{accent.R:X2}{accent.G:X2}{accent.B:X2}')");
