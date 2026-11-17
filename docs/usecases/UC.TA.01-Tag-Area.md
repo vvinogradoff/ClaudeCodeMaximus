@@ -1,6 +1,6 @@
 # UC.TA.01 — Tag Area
 
-Related requirements: FR.24.16 (see `docs/requirements/`), FR.24.7. Test cases: [TC.TA.01](/docs/testcases/TC.TA.01-Tag-Area.md).
+Related requirements: FR.24.16, FR.24.18 (see `docs/requirements/`), FR.24.7. Test cases: [TC.TA.01](/docs/testcases/TC.TA.01-Tag-Area.md).
 
 ## Actors
 - **User**. **Tessyn** (WPF client and Tessyn Web).
@@ -22,3 +22,8 @@ Related requirements: FR.24.16 (see `docs/requirements/`), FR.24.7. Test cases: 
 ## UC.TA.03 — Expand by accessibility action
 **Main flow:** an assistive tool invokes Expand on "Session tags"; the area expands (no effect without tags).
 **Covers:** FR.24.16 (8).
+
+## UC.TA.04 — Change the tag cloud font size
+**Main flow:** 1. The User opens Settings › Appearance (WPF) or the Avalonia settings and changes **Tag cloud font size**. 2. Every visible chip, in the tag area and the Tags tab, changes size at once. 3. The collapsed area is still exactly one chip line high.
+**Alternative flows:** **A1** — The area is expanded: it keeps up to 10 lines of the new chip height. **A2** — Restart: the size is kept.
+**Covers:** FR.24.18.

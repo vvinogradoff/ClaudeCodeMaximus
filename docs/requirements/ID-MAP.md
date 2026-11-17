@@ -51,7 +51,7 @@ The draft's amendment paragraphs (FR.1.8 amendment, FR.1.17, FR.3.3 parse rule, 
 | FR.14.13 | schedule picks | |
 | FR.20.10, FR.21.25, FR.25.41 | settings through the Remote API | FR.25 ends at 25.40 in the draft |
 | FR.23.20–FR.23.23 | selectable Focus text, Send answers placement, Ctrl+Enter, Closed in WPF | |
-| FR.24.16–FR.24.17 | tag-area rule, Tags tab results | FR.24.16 was only a proposal in report 452, never in the docs |
+| FR.24.16–FR.24.18 | tag-area rule, Tags tab results, tag cloud font size | FR.24.16 was only a proposal in report 452, never in the docs |
 | **FR.32.1–FR.32.8** | **new area** hosting and coexistence | FR.27–FR.30 reserved |
 | NR.6, NR.7 | E2E running, stretching rule | |
 | UC/TC codes | LP, TR, IN, CL, SH, TA, FC, HS | no clash with 15, 21, DL, FD, FV, IC, LC, RT, TG, WEB |

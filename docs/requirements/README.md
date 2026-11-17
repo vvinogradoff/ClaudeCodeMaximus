@@ -37,7 +37,7 @@
 | FR.21-Telegram-Bridge | Telegram | FR.21.1–21.24 | FR.21.25 | staged (same shared file) |
 | FR.22-Completion-Sound | Sound | FR.22.1–22.5 | — | phase 2 |
 | FR.23-Focus-View | Focus view | FR.23.1–23.19 | FR.23.20–23.23 | staged |
-| FR.24-Session-Tags | Session tags | FR.24.1–24.15 | FR.24.16–24.17 | staged |
+| FR.24-Session-Tags | Session tags | FR.24.1–24.15 | FR.24.16–24.18 | staged |
 | FR.25-Web-Client | Tessyn Web (from the draft in the main tree) | FR.25.01–25.40 | FR.25.41 | phase 2 |
 | FR.26-Links-and-Previews | Links and previews | FR.26.x | — | phase 2 |
 | FR.31-Attachments | Attachments | FR.31.1–31.9 | — | phase 2 |
