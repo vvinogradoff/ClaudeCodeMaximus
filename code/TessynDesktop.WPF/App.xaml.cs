@@ -85,6 +85,9 @@ public partial class App : Application
 		var window = _host.Services.GetRequiredService<MainWindow>();
 		var windowCreated = startup.ElapsedMilliseconds;
 		MainWindow = window;
+		var appearanceApplier = _host.Services.GetRequiredService<AppearanceApplier>();
+		appearanceApplier.ApplyToWindow(window);   // FR.9.14: the window is styled for the stored theme before it is shown ...
+		window.ContentRendered += (_, _) => appearanceApplier.ApplyToWindow(window);   // ... and again once its first frame is up
 		window.Show();
 		_host.Services.GetService<LiveUpdateService>()?.Start(); // the once-a-minute check for a newer build (real environment only)
 		if (_activationPending)

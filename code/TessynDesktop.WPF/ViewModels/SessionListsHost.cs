@@ -22,6 +22,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	private ITessynClient? _client;
 	private TreeViewModel? _tree;
 	private SessionPaneViewModel? _observed;
+	private readonly ListDisplayService? _display;
 
 	public SessionListsHost(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILoggerFactory loggers, IUrlLauncher? launcher = null, ListDisplayService? display = null)
 	{
@@ -30,6 +31,9 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 		_logger = loggers.CreateLogger<SessionListsHost>();
 		RecentTab = new RecentTabViewModel(this, ui, loggers.CreateLogger<RecentTabViewModel>());
 		Recent = new RecentViewModel(this, ui, loggers.CreateLogger<RecentViewModel>());
+		_display = display;
+		if (display != null)
+			Recent.ShowRecencyColour = display.ShowRecencyInRecentDropdown;
 		Tags = new TagSearchViewModel(this, ui, loggers.CreateLogger<TagSearchViewModel>(), Constants.Timeouts.SearchDebounce, launcher);
 		connection.ClientReady += OnClientReady;
 		if (display != null)
@@ -90,7 +94,15 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 			ShowSessionName();
 	}
 
-	private void ShowSessionName() => Recent.CurrentName = _observed is { NodeId: not null } pane ? pane.Title : string.Empty;
+	private void ShowSessionName()
+	{
+		Recent.CurrentName = _observed is { NodeId: not null } pane ? pane.Title : string.Empty;
+		ShowSessionRecency();
+	}
+
+	/// <summary>The closed dropdown button takes the recency tier of the open session, read from its tree node (the same level its row shows).</summary>
+	private void ShowSessionRecency() =>
+		Recent.CurrentRecencyLevel = _observed is { NodeId: { } id } && _tree?.FindNode(id) is { } node ? node.RecencyLevel : 0;
 
 	private void AttachTree()
 	{
@@ -99,6 +111,8 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 			return;
 
 		_tree = tree;
+		tree.ListsChanged += (_, _) => ShowSessionRecency();   // a session's activity changed: its tier may have too
+		ShowSessionRecency();
 		RecentTab.Attach(tree);
 		Tags.AttachTree(tree);
 	}
@@ -106,6 +120,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	/// <summary>The recency of every row (the lists and the tree) ages with the clock.</summary>
 	private void RefreshClock()
 	{
+		ShowSessionRecency();
 		RecentTab.RefreshClock();
 		_tree?.RefreshClock();
 	}
@@ -113,6 +128,9 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	/// <summary>The date format changed: every row re-reads its date text.</summary>
 	private void RefreshDisplay()
 	{
+		if (_display != null)
+			Recent.ShowRecencyColour = _display.ShowRecencyInRecentDropdown;
+
 		RecentTab.RefreshDisplay();
 		Tags.RefreshDisplay();
 		_tree?.RefreshDisplay();

@@ -67,13 +67,34 @@ public sealed class AppearanceApplier
 		{
 			// Fluent follows Windows by itself only for System; an explicit choice pins it.
 #pragma warning disable WPF0001 // ThemeMode is the supported way to select the Fluent variant
-			app.ThemeMode = _appearance.Chosen switch
-			{
-				State.ClientTheme.Dark => ThemeMode.Dark,
-				State.ClientTheme.Light => ThemeMode.Light,
-				_ => ThemeMode.System,
-			};
+			var mode = ModeOf(_appearance.Chosen);
+			app.ThemeMode = mode;
+
+			// Every open window is pinned to the same mode: Fluent styles a window (its frame, the dark/light of the caption and the backdrop behind the controls) when
+			// the window's own theme is set, and a window that only inherits the application's mode can be left with the look it was created under.
+			foreach (Window window in app.Windows)
+				window.ThemeMode = mode;
 #pragma warning restore WPF0001
 		}
 	}
+
+#pragma warning disable WPF0001
+	private static ThemeMode ModeOf(State.ClientTheme theme) => theme switch
+	{
+		State.ClientTheme.Dark => ThemeMode.Dark,
+		State.ClientTheme.Light => ThemeMode.Light,
+		_ => ThemeMode.System,
+	};
+
+	/// <summary>
+	/// Styles <paramref name="window"/> for the stored theme the way a theme switch does: from the first paint on, not only after the user flips the theme back and forth.
+	/// Run when the window has been created and again once its first frame is on screen (FR.9.14).
+	/// </summary>
+	public void ApplyToWindow(Window window)
+	{
+		var mode = ModeOf(_appearance.Chosen);
+		window.ThemeMode = ThemeMode.None;
+		window.ThemeMode = mode;
+	}
+#pragma warning restore WPF0001
 }

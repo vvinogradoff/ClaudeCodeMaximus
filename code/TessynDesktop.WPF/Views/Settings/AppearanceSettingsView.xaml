@@ -47,6 +47,9 @@
             <TextBox HorizontalAlignment="Left" Width="90" Text="{Binding LineSpacing, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Line spacing" />
             <TextBlock Style="{StaticResource SettingsHint}" Text="A multiple of the font size, 1.0 to 1.8 (default 1.25). Applies to the session output and the Focus view." />
 
+            <CheckBox Margin="0,16,0,0" Content="Show recency colour in the closed Recent dropdown" IsChecked="{Binding ShowRecencyInRecentDropdown}" AutomationProperties.Name="Show recency colour in the closed Recent dropdown" />
+            <TextBlock Style="{StaticResource SettingsHint}" Text="The dropdown button in the title bar takes the recency colour of the open session, as its row in the lists does." />
+
             <s:SectionMessages Margin="0,8,0,0" />
         </StackPanel>
     </ScrollViewer>

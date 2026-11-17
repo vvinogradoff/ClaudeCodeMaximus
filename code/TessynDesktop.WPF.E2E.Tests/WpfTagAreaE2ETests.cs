@@ -28,6 +28,7 @@ public sealed class WpfTagAreaE2ETests : IDisposable
 	private readonly ClientTestHost _host;
 	private readonly AppProcessHarness _app;
 	private readonly UiAutomationExpander _area = new();
+	private readonly UiAutomationClicker _clicker = new();
 	private readonly string _main;
 
 	public WpfTagAreaE2ETests()
@@ -141,6 +142,111 @@ public sealed class WpfTagAreaE2ETests : IDisposable
 		}
 
 		Assert.Null(StoredMode());
+	}
+
+	/// <summary>The Architect real appearance section (Light, line spacing 1.25, 12 pt tags): TC.TA.18.</summary>
+	[Fact]
+	public async Task With_the_Architects_appearance_settings_the_tag_area_is_one_line_when_collapsed_and_taller_when_expanded()
+	{
+		File.WriteAllText(StateFile,
+			$"{{\"lastSelectedNodeId\":\"{_main}\",\"expandedNodeIds\":[\"{_env.Base.Directory.NodeId}\"],\"sections\":{{\"appearance\":{{\"version\":1,\"data\":" +
+			"{\"theme\":\"Light\",\"dateFormat\":\"Absolute\",\"assistantFontSize\":12,\"assistantMarkdownFontSize\":13,\"userFontSize\":12,\"inputFontSize\":14,\"lineSpacing\":1.25,\"tagFontSize\":12}}}}");
+		using var app = await StartAsync();
+		try
+		{
+			Assert.True(await _area.WaitForStateAsync(app, AreaId, ExpandCollapseState.Collapsed, StepTimeout), "Log:\n" + _app.ReadLog());
+			await Task.Delay(1500);   // let any late layout pass settle: the mini height must hold, not just appear
+			var mini = _area.GetHeight(app, AreaId) ?? 0;
+			Assert.InRange(mini, 10, 60);
+
+			Assert.True(_area.TrySet(app, AreaId, expand: true));
+			Assert.True(await _area.WaitForStateAsync(app, AreaId, ExpandCollapseState.Expanded, StepTimeout));
+			await Task.Delay(500);
+			Assert.True((_area.GetHeight(app, AreaId) ?? 0) > mini * 3, "full mode must show several lines of chips");
+
+			Assert.True(_area.TrySet(app, AreaId, expand: false));
+			Assert.True(await _area.WaitForStateAsync(app, AreaId, ExpandCollapseState.Collapsed, StepTimeout));
+			await Task.Delay(500);
+			Assert.Equal(mini, _area.GetHeight(app, AreaId) ?? 0, 1);
+			AssertNoErrors();
+		}
+		finally
+		{
+			_app.Stop(app);
+		}
+	}
+
+	/// <summary>TC.TA.19: the Architect's real session (eight tags of mixed kinds that need two lines): collapsed is one line, with the hint.</summary>
+	[Fact]
+	public async Task Eight_mixed_tags_that_need_two_lines_collapse_to_one_line()
+	{
+		_env.Base.TagService.Tags.Clear();
+		foreach (var (kind, label) in new[]
+		{
+			(SessionTagKind.GitHubRepository, "windows-app"), (SessionTagKind.LinearIssue, "HSE-275"), (SessionTagKind.GitHubPullRequest, "windows-app PR #292"), (SessionTagKind.LinearIssue, "HSE-347"),
+			(SessionTagKind.GitHubRepository, "setup"), (SessionTagKind.GitHubRepository, "backend-v1"), (SessionTagKind.GitHubPullRequest, "backend-v1 PR #208"), (SessionTagKind.GitHubPullRequest, "windows-app PR #293"),
+		})
+			_env.Base.TagService.Tags.Add(new SessionTagModel { Kind = kind, Key = label, Label = label, Url = "https://example.com/" + label });
+
+		File.WriteAllText(StateFile,
+			$"{{\"lastSelectedNodeId\":\"{_main}\",\"expandedNodeIds\":[\"{_env.Base.Directory.NodeId}\"],\"sections\":{{\"appearance\":{{\"version\":1,\"data\":" +
+			"{\"theme\":\"Light\",\"lineSpacing\":1.25,\"tagFontSize\":12}}}}");
+		using var app = await StartAsync();
+		try
+		{
+			Assert.True(await _area.WaitForStateAsync(app, AreaId, ExpandCollapseState.Collapsed, StepTimeout), "Log: " + _app.ReadLog());
+			await Task.Delay(1500);
+			var mini = _area.GetHeight(app, AreaId) ?? 0;
+			Assert.True(_area.TrySet(app, AreaId, expand: true));
+			Assert.True(await _area.WaitForStateAsync(app, AreaId, ExpandCollapseState.Expanded, StepTimeout));
+			await Task.Delay(500);
+			var full = _area.GetHeight(app, AreaId) ?? 0;
+			Assert.True(full > mini * 1.5, $"collapsed {mini} vs expanded {full}: collapsed must be one line, expanded two");
+		}
+		finally
+		{
+			_app.Stop(app);
+		}
+	}
+
+	/// <summary>
+	/// TC.TA.22: switching the theme while a session with many tags is open (the title bar button, as the Architect does it) re-styles every chip; the collapsed area must stay
+	/// one line high and the mode must still work. Found 2026-11-17: after a theme switch the area stayed unclipped (every line shown) while reporting collapsed.
+	/// </summary>
+	[Fact]
+	public async Task Switching_the_theme_keeps_the_collapsed_tag_area_one_line_high()
+	{
+		File.WriteAllText(StateFile,
+			$"{{\"lastSelectedNodeId\":\"{_main}\",\"expandedNodeIds\":[\"{_env.Base.Directory.NodeId}\"],\"sections\":{{\"appearance\":{{\"version\":1,\"data\":" +
+			"{\"theme\":\"Light\",\"lineSpacing\":1.25,\"tagFontSize\":12}}}}");
+		using var app = await StartAsync();
+		try
+		{
+			Assert.True(await _area.WaitForStateAsync(app, AreaId, ExpandCollapseState.Collapsed, StepTimeout), "Log: " + _app.ReadLog());
+			await Task.Delay(1000);
+			var mini = _area.GetHeight(app, AreaId) ?? 0;
+			Assert.InRange(mini, 10, 60);
+
+			foreach (var _ in new[] { 1, 2 })   // Dark, then Light again
+			{
+				Assert.True(await _clicker.ClickAsync(app, "Toggle theme", StepTimeout), "The theme button was not found. Log: " + _app.ReadLog());
+				await Task.Delay(1500);
+				var height = _area.GetHeight(app, AreaId) ?? 0;
+				Assert.True(height <= mini + 1, $"after a theme switch the collapsed area is {height} high, was {mini}. TAGDIAG: " + string.Join(" || ", _app.ReadLog().Split((char)10).Where(l => l.Contains("TAGDIAG")).Select(l => l.Trim()).TakeLast(40)));
+				Assert.Equal(ExpandCollapseState.Collapsed, _area.GetState(app, AreaId));
+			}
+
+			Assert.True(_area.TrySet(app, AreaId, expand: true));
+			await Task.Delay(700);
+			Assert.True((_area.GetHeight(app, AreaId) ?? 0) > mini * 3, "expanded must show several lines");
+			Assert.True(_area.TrySet(app, AreaId, expand: false));
+			await Task.Delay(700);
+			Assert.Equal(mini, _area.GetHeight(app, AreaId) ?? 0, 1);
+		}
+		finally
+		{
+			_app.Stop(app);
+		}
 	}
 
 	[Fact]

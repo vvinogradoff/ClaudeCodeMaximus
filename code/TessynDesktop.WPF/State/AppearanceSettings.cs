@@ -27,4 +27,7 @@ public sealed class AppearanceSettings
 
 	/// <summary>The tag chips and the "+N" hint of the session tag area (FR.24).</summary>
 	public double TagFontSize { get; set; } = Constants.Defaults.TagFontSize;
+
+	/// <summary>Whether the closed Recent dropdown shows the open session's recency colour behind its name (FR.9.13); on by default.</summary>
+	public bool ShowRecencyInRecentDropdown { get; set; } = true;
 }

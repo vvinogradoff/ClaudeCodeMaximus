@@ -135,7 +135,10 @@ public partial class SessionTagArea : UserControl
 	/// <summary>Reads the chips' laid-out positions and sets the area's height, the scrollbar and the "+N" hint for the current mode.</summary>
 	private void UpdateMetrics()
 	{
-		_chipsPanel ??= FindPanel(Chips);
+		// The panel is looked up again on every pass, never kept: a theme switch (or any style change of the ScrollViewer or the ItemsControl) builds new templates and with
+		// them a new WrapPanel. A panel kept from before is detached and empty, so the area saw "no chips", dropped its clip and stayed unclipped (every line, no "+N")
+		// while it reported collapsed (the Architect's tag panel that never collapsed after a theme switch).
+		_chipsPanel = FindPanel(Chips);
 		var chips = _chipsPanel?.Children.OfType<FrameworkElement>().ToList() ?? [];
 		IsTabStop = chips.Count > 0;
 
