@@ -14,6 +14,7 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 	private readonly ISessionAuthErrorTracker? _authErrors;
 	private readonly ISchedulerService? _scheduler;
 	private readonly IProfileResolver? _profiles;
+	private readonly ISessionResumabilityCache? _resumable;
 
 	public SessionStateBuilder(
 		ISessionRegistry registry,
@@ -22,8 +23,10 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 		ISessionActivityService activity,
 		ISessionAuthErrorTracker? authErrors = null,
 		ISchedulerService? scheduler = null,
-		IProfileResolver? profiles = null)
+		IProfileResolver? profiles = null,
+		ISessionResumabilityCache? resumable = null)
 	{
+		_resumable = resumable;
 		_profiles  = profiles;
 		_scheduler = scheduler;
 		_registry  = registry;
@@ -61,7 +64,8 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 			HasSchedules:    _scheduler?.GetSchedules(nodeId).Count > 0,
 			PinnedProfileId:        pinnedId,
 			PinnedProfileName:      pinnedName,
-			SwitchingToProfileName: switchingTo);
+			SwitchingToProfileName: switchingTo,
+			Resumable:             _resumable?.TryGet(nodeId));
 	}
 
 	/// <summary>The pin and the queued switch of a session, labelled as <c>list_sessions</c> labels them (ISSUE.013 R5). All null without a resolver or a pin.</summary>

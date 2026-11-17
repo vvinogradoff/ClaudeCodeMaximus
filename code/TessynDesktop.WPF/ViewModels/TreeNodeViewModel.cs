@@ -75,8 +75,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	public bool IsSessionLike => Kind is TreeNodeKind.Session or TreeNodeKind.Worker;
 
 	/// <summary>
-	/// A group that holds nothing to show: the daemon lists the group an orchestration spawned its workers into, but not the workers (they nest under their supervisor), so
-	/// it is empty. Husks are not rows of the tree, as in the Avalonia client.
+	/// A group that holds nothing to show: the daemon lists the group an orchestration spawned its workers into, but not the workers (they nest under their supervisor), and flags
+	/// it (<c>TreeGroupDto.HoldsOnlyWorkers</c>). Husks are not rows of the tree, as in the Avalonia client.
 	/// </summary>
 	public bool IsHusk { get; set; }
 

@@ -16,6 +16,9 @@ public sealed class TreeBuilder
 	public TreeGroupDto Group(string id, string name, params TreeSessionDto[] sessions) =>
 		new(id, name, false, [], sessions);
 
+	/// <summary>A group the daemon flags as holding only workers (an orchestration husk).</summary>
+	public TreeGroupDto Husk(string id, string name) => new(id, name, false, [], [], HoldsOnlyWorkers: true);
+
 	public TreeDirectoryDto Directory(string id, string label, IReadOnlyList<TreeGroupDto> groups, params TreeSessionDto[] sessions) =>
 		new(id, label, false, groups, sessions);
 }

@@ -17,6 +17,8 @@ export interface SessionStateDto {
 	lastPromptUtc?: string;
 	hasDraft: boolean;
 	profileName?: string;
+	/** Claude Code can still resume the session (the blue square of the desktop tree); omitted until the daemon's first sweep. */
+	resumable?: boolean;
 }
 export interface TreeSessionDto { id: string; name: string; workerCount: number; supervisorId?: string; state: SessionStateDto }
 export interface SessionRowDto { id: string; name: string; state: SessionStateDto }
@@ -24,7 +26,8 @@ export interface SessionGroupDto { directoryId: string; directoryLabel: string; 
 
 export interface HelloResult { protocolVersion: number; daemonVersion: string; machineName: string; runId: string; serverTimeUtc: string }
 
-export interface TreeGroupDto { id: string; name: string; isExpanded: boolean; groups: TreeGroupDto[]; sessions: TreeSessionDto[] }
+/** holdsOnlyWorkers: the group an orchestration spawned its workers into; they nest under their supervisor, so it is an empty husk the desktop tree does not show. */
+export interface TreeGroupDto { id: string; name: string; isExpanded: boolean; groups: TreeGroupDto[]; sessions: TreeSessionDto[]; holdsOnlyWorkers?: boolean }
 export interface TreeDirectoryDto { id: string; label: string; isExpanded: boolean; groups: TreeGroupDto[]; sessions: TreeSessionDto[] }
 export interface TreeSnapshotResult { version: number; unchanged?: boolean; directories?: TreeDirectoryDto[] }
 export interface TreeWorkersResult { supervisorId: string; workers: TreeSessionDto[] }

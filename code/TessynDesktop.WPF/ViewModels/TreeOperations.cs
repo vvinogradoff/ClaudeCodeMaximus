@@ -96,7 +96,6 @@ public sealed class TreeOperations
 		await RunAsync(TreeTexts.NewGroupFailed, async () =>
 		{
 			var added = await _client.TreeAddGroupAsync(container.Id, name.Trim());
-			_tree?.NoteCreatedGroup(added.GroupId);
 			await RefreshAsync();
 			_tree?.SelectNodeById(added.GroupId);
 		});
