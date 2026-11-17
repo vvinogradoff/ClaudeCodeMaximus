@@ -48,6 +48,7 @@ public partial class MainWindow : Window
 		InitializeComponent();
 		BuildNumberText.Text = GetBuildNumber();
 		ClearSessionBtn.Click += OnClearSessionClick;
+		StartWpfBtn.Click += OnStartWpfClick;
 
 		// Global hotkey handler
 		KeyDown += OnGlobalKeyDown;
@@ -598,6 +599,35 @@ public partial class MainWindow : Window
 			: WindowState.Maximized;
 
 	private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+	/// <summary>
+	/// Starts the WPF client from the run folder next to this one (<c>[Publish-WPF]</c>, a sibling of the folder this app runs from).
+	/// The WPF client attaches to the daemon this window hosts; its single-instance guard brings an open WPF window to the front.
+	/// </summary>
+	private async void OnStartWpfClick(object? sender, RoutedEventArgs e)
+	{
+		try
+		{
+			var exe = WpfClientLocator.Find(AppContext.BaseDirectory);
+			if (exe == null)
+			{
+				await ShowConfirmOverlayAsync(
+					"The WPF client is not installed yet. Run run-wpf.ps1 in the repository once to create [Publish-WPF].", "OK");
+				return;
+			}
+
+			System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
+			{
+				UseShellExecute = false,
+				WorkingDirectory = Path.GetDirectoryName(exe)!,
+			});
+		}
+		catch (Exception ex)
+		{
+			Log.Warning(ex, "Starting the WPF client failed");
+			await ShowConfirmOverlayAsync($"Could not start the WPF client: {ex.Message}", "OK");
+		}
+	}
 
 	private async void OnClearSessionClick(object? sender, RoutedEventArgs e)
 	{
