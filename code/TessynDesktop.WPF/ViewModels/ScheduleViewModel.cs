@@ -24,7 +24,7 @@ public sealed partial class ScheduleViewModel : ObservableObject, IDisposable
 	private int _loadToken;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(HasSchedules), nameof(Count))]
+	[NotifyPropertyChangedFor(nameof(HasSchedules), nameof(Count), nameof(ToolTipText))]
 	private int _total;
 
 	/// <summary>The popup with the list is open.</summary>
@@ -56,6 +56,9 @@ public sealed partial class ScheduleViewModel : ObservableObject, IDisposable
 	public bool HasSchedules => Total > 0;
 
 	public int Count => Total;
+
+	/// <summary>The tooltip of the icon-only indicator: its name and the count.</summary>
+	public string ToolTipText => $"Schedules ({Total}): scheduled sends of this session";
 
 	public bool HasMailbox => Mailbox.Count > 0;
 

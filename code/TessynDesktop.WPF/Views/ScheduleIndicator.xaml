@@ -29,14 +29,12 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <Grid Visibility="{Binding Schedules.HasSchedules, Converter={StaticResource BoolToVis}}">
-        <ToggleButton x:Name="IndicatorButton" Margin="8,0,0,0" Padding="8,6" IsChecked="{Binding Schedules.IsOpen, Mode=TwoWay}"
-                      ToolTip="Scheduled sends of this session" AutomationProperties.Name="Schedules">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphClock}" />
-                <TextBlock Text="{Binding Schedules.Count}" Margin="6,0,0,0" FontSize="12" AutomationProperties.Name="Schedule count" />
-            </StackPanel>
+        <!-- Icon only, in the side column of the input area; the tooltip names it and gives the count. -->
+        <ToggleButton x:Name="IndicatorButton" Padding="8,6" HorizontalAlignment="Stretch" IsChecked="{Binding Schedules.IsOpen, Mode=TwoWay}"
+                      ToolTip="{Binding Schedules.ToolTipText}" AutomationProperties.Name="Schedules">
+            <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphClock}" />
         </ToggleButton>
-        <Popup IsOpen="{Binding Schedules.IsOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=IndicatorButton}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+        <Popup IsOpen="{Binding Schedules.IsOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=IndicatorButton}" Placement="Left" StaysOpen="False" AllowsTransparency="True">
             <Border Background="{DynamicResource ControlSolidFillColorDefaultBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
                     CornerRadius="4" Padding="12" MinWidth="320" MaxWidth="460" Margin="8">
                 <StackPanel>

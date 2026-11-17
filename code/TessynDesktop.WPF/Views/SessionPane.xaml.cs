@@ -141,11 +141,18 @@ public partial class SessionPane : UserControl
 	}
 
 	/// <summary>
-	/// A user-sized row (the splitter was dragged): the cap on the natural height is lifted, so the text box fills the row (the scroll viewer around the content gives it the row's
-	/// height) and the content scrolls when the row is smaller than it. A natural row (Auto): the content is as high as it is, capped at <see cref="NaturalInputMaxHeight"/>.
+	/// A user-sized row (the splitter was dragged): the cap on the natural height is lifted, so the text box fills the row (its own scrollbar shows when the text is longer;
+	/// the input panel never scrolls). A natural row (Auto): the content is as high as it is, capped at <see cref="NaturalInputMaxHeight"/>.
 	/// </summary>
-	private void SetInputSizing(bool userSized) =>
+	private void SetInputSizing(bool userSized)
+	{
 		InputBody.MaxHeight = userSized ? double.PositiveInfinity : NaturalInputMaxHeight;
+		// The side buttons keep their places: a row the user sizes cannot get smaller than they need (the splitter honours it), so the text box shrinks, never the buttons.
+		InputRow.MinHeight = userSized ? MinUserInputHeight : 0;
+	}
+
+	/// <summary>The least height of a user-sized input row: File, Send (its minimum), Settings and the margins; the text box takes what is left.</summary>
+	private const double MinUserInputHeight = 130;
 
 	/// <summary>A double click on the splitter collapses or expands the input area; the first press of it only starts a drag.</summary>
 	private void OnInputSplitterMouseDown(object sender, MouseButtonEventArgs e)

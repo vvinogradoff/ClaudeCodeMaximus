@@ -304,12 +304,11 @@ public sealed class InputAreaViewTests
 	}
 
 	[Fact]
-	public void TheTextBoxGrowsAndShrinksWithTheRow_AndAHeightSmallerThanTheContentScrollsInsteadOfClipping()
+	public void TheTextBoxGrowsAndShrinksWithTheRow_AndTheRowNeverGetsSmallerThanTheButtonsNeed()
 	{
 		StaTestRunner.Run(() =>
 		{
 			var f = Create();
-			var scroll = f.Find<ScrollViewer>("InputScroll");
 			DragStart(f.Splitter);
 
 			f.InputRow.Height = new GridLength(300);
@@ -319,12 +318,99 @@ public sealed class InputAreaViewTests
 			f.Settle();
 			var medium = f.Input.ActualHeight;
 			Assert.True(tall > medium, $"{tall} should be above {medium}");
-			Assert.Equal(0, scroll.ScrollableHeight, 1);
+			Assert.Equal(Visibility.Visible, f.Find<Button>("SendButton").Visibility);
 
-			f.InputRow.Height = new GridLength(30);
+			f.InputRow.Height = new GridLength(30);   // the splitter cannot go below the row's minimum
 			f.Settle();
-			Assert.True(scroll.ScrollableHeight > 0, "a row smaller than the content must scroll");
-			Assert.Equal(Visibility.Visible, scroll.ComputedVerticalScrollBarVisibility);
+			Assert.True(f.InputRow.ActualHeight >= 130, "the row keeps the room of the buttons: " + f.InputRow.ActualHeight);
+			Assert.True(f.Find<Button>("SendButton").ActualHeight >= 32);
+			Assert.True(f.Find<ToggleButton>("SettingsToggle").ActualHeight > 0);
+		});
+	}
+
+	[Fact]
+	public void ALongInput_KeepsSendVisible_AndScrollsInsideTheTextBox()
+	{
+		StaTestRunner.Run(() =>
+		{
+			foreach (var userSized in new[] { false, true })
+			{
+				var f = Create();
+				f.Model.InputText = string.Join(Environment.NewLine, Enumerable.Range(0, 200).Select(i => "line " + i));
+				if (userSized)
+				{
+					DragStart(f.Splitter);
+					f.InputRow.Height = new GridLength(240);
+				}
+
+				f.Settle();
+				var send = f.Find<Button>("SendButton");
+				var origin = send.TranslatePoint(new Point(0, 0), f.Pane);
+				Assert.True(send.ActualHeight >= 32, "Send keeps its minimum");
+				Assert.True(origin.Y >= 0 && origin.Y + send.ActualHeight <= f.Pane.ActualHeight + 0.5, $"Send is inside the pane (userSized={userSized}): {origin.Y}+{send.ActualHeight} of {f.Pane.ActualHeight}");
+				var settings = f.Find<ToggleButton>("SettingsToggle");
+				Assert.True(settings.TranslatePoint(new Point(0, settings.ActualHeight), f.Pane).Y <= f.Pane.ActualHeight + 0.5, "Settings is inside the pane");
+
+				var scrolls = Descendants<ScrollViewer>(f.Find<Grid>("InputContent")).Where(s => s.ComputedVerticalScrollBarVisibility == Visibility.Visible).ToList();
+				Assert.Single(scrolls);   // only the text box's own
+				Assert.True(f.Input.Template.FindName("PART_ContentHost", f.Input) is ScrollViewer own && scrolls.Contains(own));
+				Assert.True(f.Input.ActualHeight <= f.Find<Grid>("InputContent").ActualHeight);
+			}
+		});
+	}
+
+	private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+	{
+		var count = VisualTreeHelper.GetChildrenCount(root);
+		for (var i = 0; i < count; i++)
+		{
+			var child = VisualTreeHelper.GetChild(root, i);
+			if (child is T match)
+				yield return match;
+
+			foreach (var nested in Descendants<T>(child))
+				yield return nested;
+		}
+	}
+
+	[Fact]
+	public void TheSideButtons_AreIconsInOrder_FileSendStopSchedulesSettings()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var f = Create();
+			f.Model.IsRunning = true;
+			f.Settle();
+
+			var names = new[] { "FileModeToggle", "SendButton", "StopButton", "SettingsToggle" };
+			var tops = names.Select(n => f.Find<FrameworkElement>(n).TranslatePoint(new Point(0, 0), f.Pane).Y).ToList();
+			Assert.Equal(tops.OrderBy(t => t), tops);   // top to bottom in this order
+			Assert.All(names, n => Assert.True(Descendants<TextBlock>(f.Find<FrameworkElement>(n)).All(t => t.Text.Length == 1), n + " shows an icon only"));
+			Assert.True(f.Find<Button>("SendButton").ActualHeight > f.Find<Button>("StopButton").ActualHeight, "Send takes the remaining height");
+			Assert.Empty(Descendants<ToggleButton>(f.Find<FrameworkElement>("ScheduleButton")).Where(b => b.IsVisible));   // no schedules: no icon
+			foreach (var n in new[] { "FileModeToggle", "SendButton", "StopButton", "SettingsToggle" })
+				Assert.False(string.IsNullOrEmpty(f.Find<FrameworkElement>(n).ToolTip as string), n + " has a tooltip");
+		});
+	}
+
+	[Fact]
+	public void TheCommandBar_HoldsTheSelectorsAndTheToggles_OnOneLine()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var f = Create();
+			var shellSlots = new ShellSlots();
+			new TurnLoopShellModule().Register(shellSlots, null!);
+			new ToolbarShellModule().Register(shellSlots, null!);
+			f.CommandBar.Slots = shellSlots;
+			f.CommandBar.Populate();
+			f.Settle();
+			var combo =Descendants<ComboBox>(f.CommandBar).First();
+			var toggle = Descendants<ToggleButton>(f.CommandBar).First(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Streaming Session Mode");
+			var comboTop = combo.TranslatePoint(new Point(0, 0), f.Pane).Y;
+			var toggleTop = toggle.TranslatePoint(new Point(0, 0), f.Pane).Y;
+			Assert.True(Math.Abs(comboTop - toggleTop) < 8, $"selectors at {comboTop}, toggles at {toggleTop}");
+			Assert.True(Descendants<TextBlock>(toggle).All(t => t.Text.Length == 1), "an icon, no caption");
 		});
 	}
 

@@ -7,7 +7,7 @@ using TessynDesktop.WPF.Views;
 namespace TessynDesktop.WPF.Services;
 
 /// <summary>
-/// W8: the schedule indicator with its list in the session header, and the command <c>session.sendLater</c> (Ctrl+Shift+Enter by default, editable in the key bindings;
+/// W8: the "Send later" header button and the command <c>session.sendLater</c> (Ctrl+Shift+Enter by default, editable in the key bindings;
 /// a right-click on Send runs the same command). The command's parameter is the session pane; from a key it is the open one.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -22,12 +22,7 @@ public sealed class ScheduleShellModule : IShellModule
 
 	public void Register(IShellSlots slots, IShellCommands commands)
 	{
-		slots.Add(new ShellSlotContribution
-		{
-			SlotId = Constants.Slots.SessionHeaderToolbar,
-			Order = Constants.Schedules.IndicatorOrder,
-			Create = () => new ScheduleIndicator(),
-		});
+		// The schedule indicator is no longer a header contribution: it is an icon in the side column of the input area (SessionPane.xaml).
 
 		// A button as well as the right-click: a keyboard or assistive-technology user cannot right-click, and the key is not discoverable.
 		slots.Add(new ShellSlotContribution

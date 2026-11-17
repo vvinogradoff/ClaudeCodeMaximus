@@ -42,7 +42,7 @@
             <Setter Property="AcceptsReturn" Value="True" />
             <Setter Property="FontSize" Value="{DynamicResource InputFontSize}" />
             <Setter Property="TextWrapping" Value="Wrap" />
-            <Setter Property="MinHeight" Value="56" />
+            <Setter Property="MinHeight" Value="32" />
             <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
             <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
             <Style.Triggers>
@@ -211,9 +211,9 @@
                       PreviewMouseLeftButtonDown="OnInputSplitterMouseDown" PreviewKeyDown="OnInputSplitterKeyDown" DragStarted="OnInputSplitterDragStarted" DragDelta="OnInputSplitterDragDelta" DragCompleted="OnInputSplitterDragCompleted" />
 
         <!-- Input: expanded (FR.12.1/12.2) or collapsed (FR.12.29: the command bar only while it is shown, otherwise one line of text) -->
-        <!-- The content fills the row the splitter sets: the prompt grid takes the remaining height (the text box stretches); when the row is smaller than the content it scrolls. -->
-        <ScrollViewer Grid.Row="4" x:Name="InputScroll" Margin="16,2,16,12" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-        <Grid x:Name="InputContent">
+        <!-- The content fills the row the splitter sets and never scrolls as a whole: the text box is what stretches and shrinks (its own scrollbar shows inside it),
+             the side buttons keep their places (the row cannot get smaller than they need, see SessionPane.xaml.cs). -->
+        <Grid Grid.Row="4" x:Name="InputContent" Margin="16,2,16,12" ClipToBounds="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -242,7 +242,14 @@
             </Grid.ColumnDefinitions>
             <DockPanel x:Name="InputBody" LastChildFill="True" MaxHeight="260">
                 <!-- Slot: command bar below the prompt box (model, effort and profile selectors, toggles) -->
-                <v:SlotHost DockPanel.Dock="Bottom" SlotId="session.commandBar" Visibility="{Binding IsCommandBarVisible, Converter={StaticResource BoolToVis}}" />
+                <!-- Horizontal: the selectors and the toggles share one line (wrapping only when the pane is too narrow for both) -->
+                <v:SlotHost DockPanel.Dock="Bottom" SlotId="session.commandBar" Visibility="{Binding IsCommandBarVisible, Converter={StaticResource BoolToVis}}">
+                    <v:SlotHost.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </v:SlotHost.ItemsPanel>
+                </v:SlotHost>
                 <TextBox x:Name="InputBox" Style="{StaticResource PromptBox}" AllowDrop="True" AutomationProperties.Name="Prompt input"
                          Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
                          Visibility="{Binding ShowInputBox, Converter={StaticResource BoolToVis}}"
@@ -257,42 +264,42 @@
                 <v:AutocompletePopup x:Name="Suggestions" DataContext="{Binding Autocomplete}" />
             </Popup>
             <!-- The side column: expanded it holds the file-mode and settings toggles, Send, and Stop while a turn runs; collapsed it holds exactly one button, Send or Stop -->
-            <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Bottom">
-                <ToggleButton x:Name="FileModeToggle" IsChecked="{Binding AttachAsFiles, Mode=TwoWay}" Margin="0,0,0,4" Padding="8,6" HorizontalAlignment="Stretch"
+            <!-- Icons only (the tooltip names the button), top to bottom: File mode (stuck to the top), Send (takes all the remaining height, never less than its minimum),
+                 Stop (while a turn runs), Schedules (only when there are any), Settings (FR.12.29 toggle). Collapsed: exactly one button, Send or Stop. -->
+            <Grid x:Name="SideButtons" Grid.Column="1" Margin="8,0,0,0" MinWidth="40">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <ToggleButton x:Name="FileModeToggle" Grid.Row="0" IsChecked="{Binding AttachAsFiles, Mode=TwoWay}" Margin="0,0,0,4" Padding="8,6" HorizontalAlignment="Stretch" VerticalAlignment="Top"
                               Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}"
                               ToolTip="File mode: dropped files are copied into this session's attachments and 'Attached file: path' is inserted. Off: the file's own path is inserted."
                               AutomationProperties.Name="File mode">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphAttach}" />
-                        <TextBlock Text="File mode" Margin="8,0,0,0" />
-                    </StackPanel>
+                    <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphAttach}" />
                 </ToggleButton>
-                <ToggleButton x:Name="SettingsToggle" IsChecked="{Binding IsCommandBarVisible, Mode=TwoWay}" Margin="0,0,0,4" Padding="8,6" HorizontalAlignment="Stretch"
+                <Button x:Name="SendButton" Grid.Row="1" Command="{Binding SendCommand}" PreviewMouseRightButtonUp="OnSendRightClick" Margin="0,0,0,4" MinHeight="32" Padding="8,6"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        Style="{DynamicResource AccentButtonStyle}" ToolTip="Send (Ctrl+Enter)" AutomationProperties.Name="Send"
+                        Visibility="{Binding ShowSendButton, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />
+                </Button>
+                <Button x:Name="StopButton" Grid.Row="2" Command="{Binding StopCommand}" Margin="0,0,0,4" Padding="8,6" HorizontalAlignment="Stretch"
+                        ToolTip="Stop the running turn" AutomationProperties.Name="Stop"
+                        Visibility="{Binding ShowStopButton, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphStop}" />
+                </Button>
+                <v:ScheduleIndicator x:Name="ScheduleButton" Grid.Row="3" Margin="0,0,0,4" Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}" />
+                <ToggleButton x:Name="SettingsToggle" Grid.Row="4" IsChecked="{Binding IsCommandBarVisible, Mode=TwoWay}" Margin="0" Padding="8,6" HorizontalAlignment="Stretch"
                               Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}"
                               ToolTip="Show or hide the settings bar (model, effort, profile)" AutomationProperties.Name="Settings">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSettings}" />
-                        <TextBlock Text="Settings" Margin="8,0,0,0" />
-                    </StackPanel>
+                    <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSettings}" />
                 </ToggleButton>
-                <Button x:Name="SendButton" Command="{Binding SendCommand}" PreviewMouseRightButtonUp="OnSendRightClick" Margin="0,0,0,4" Style="{DynamicResource AccentButtonStyle}" ToolTip="Send (Ctrl+Enter)" AutomationProperties.Name="Send"
-                        Visibility="{Binding ShowSendButton, Converter={StaticResource BoolToVis}}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />
-                        <TextBlock Text="Send" Margin="8,0,0,0" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="StopButton" Command="{Binding StopCommand}" ToolTip="Stop the running turn" AutomationProperties.Name="Stop"
-                        Visibility="{Binding ShowStopButton, Converter={StaticResource BoolToVis}}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphStop}" />
-                        <TextBlock Text="Stop" Margin="8,0,0,0" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
+            </Grid>
         </Grid>
         </Grid>
-        </ScrollViewer>
     </Grid>
 </UserControl>
 

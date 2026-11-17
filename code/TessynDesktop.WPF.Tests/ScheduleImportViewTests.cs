@@ -137,7 +137,8 @@ public sealed class ScheduleImportViewTests
 
 			var button = Descendants<ToggleButton>(shown).Single(b => AutomationProperties.GetName(b) == Constants.Schedules.IndicatorName);
 			Assert.True(Shown(button));
-			Assert.Contains(Descendants<TextBlock>(button), t => t.Text == "2");
+			Assert.Empty(Descendants<TextBlock>(button).Where(t => t.Text == "2"));   // an icon only
+			Assert.Equal("Schedules (2): scheduled sends of this session", button.ToolTip);   // the tooltip names it and gives the count
 
 			button.IsChecked = true;   // opens the list
 			Assert.True(two.Schedules.IsOpen);
@@ -258,7 +259,7 @@ public sealed class ScheduleImportViewTests
 			Assert.False(command.CanExecute!(null));
 			Assert.True(command.CanExecute!(pane));
 			// The indicator (20) and the "Send later" button (30) are both in the session header; the command bar got no extra button (it wrapped and shortened the transcript).
-			Assert.Equal([Constants.Schedules.IndicatorOrder, Constants.Schedules.SendLaterButtonOrder], slots.For(Constants.Slots.SessionHeaderToolbar).Select(s => s.Order));
+			Assert.Equal([Constants.Schedules.SendLaterButtonOrder],slots.For(Constants.Slots.SessionHeaderToolbar).Select(s => s.Order));
 			Assert.Empty(slots.For(Constants.Slots.CommandBar));
 
 			Assert.True(commands.ExecuteAsync(Constants.Schedules.SendLaterCommandId, pane).GetAwaiter().GetResult());
