@@ -51,6 +51,12 @@ public interface ITranscriptSurface
 	/// <summary>The user clicked a local-path chip under an assistant entry (FR.26.5).</summary>
 	event EventHandler<PathClickedEventArgs>? PathClicked;
 
+	/// <summary>The page shows an image path inline and asks for the image (FR.26.5): answer with <see cref="ShowPathImage"/>.</summary>
+	event EventHandler<PathClickedEventArgs>? PathImageRequested;
+
+	/// <summary>Answers a <see cref="PathImageRequested"/>: <paramref name="src"/> is the preview-cache URL of the image, or null with <paramref name="denied"/> true when the access rules refuse the file (false: it could not be shown).</summary>
+	void ShowPathImage(int entryIndex, string path, string? src, bool denied);
+
 	/// <summary>The first paint after a <see cref="Load"/> happened.</summary>
 	event EventHandler<TranscriptPaintedEventArgs>? Painted;
 

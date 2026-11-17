@@ -77,6 +77,8 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	public event EventHandler<PathClickedEventArgs>? PathClicked;
 
+	public event EventHandler<PathClickedEventArgs>? PathImageRequested;
+
 	public event EventHandler<TranscriptPaintedEventArgs>? Painted;
 
 	public event EventHandler? OlderRequested;
@@ -221,6 +223,9 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	private static object ToPage(TranscriptEntryView view) =>
 		new { i = view.Index, r = view.Role, ts = view.Timestamp, html = view.Html, trunc = view.Truncated, full = view.FullLength, h = view.EstimatedHeight, m = view.Media ?? [], p = view.Paths ?? [], s = view.Source };
+
+	public void ShowPathImage(int entryIndex, string path, string? src, bool denied) =>
+		_control?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { cmd = "pathImage", tok = _token, i = entryIndex, path, src, reason = denied ? "denied" : "failed" }, Json));
 
 	/// <summary>Hands the media allowlist to the page, which decides auto-load versus click-to-load from it.</summary>
 	private void PostPolicy()
@@ -408,6 +413,10 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 				case "path" when TokenMatches(root):
 					if (root.GetProperty("path").GetString() is { Length: > 0 } path)
 						PathClicked?.Invoke(this, new PathClickedEventArgs(root.GetProperty("i").GetInt32(), path));
+					break;
+				case "pathImage" when TokenMatches(root):
+					if (root.GetProperty("path").GetString() is { Length: > 0 } imagePath)
+						PathImageRequested?.Invoke(this, new PathClickedEventArgs(root.GetProperty("i").GetInt32(), imagePath));
 					break;
 				case "refHl" when TokenMatches(root):
 					_logger.LogInformation("Reference jump: entry {Index} visible {Visible}, quote highlighted {Quote}, entry outlined {Entry}",

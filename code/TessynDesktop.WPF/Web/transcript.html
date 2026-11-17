@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https://media.local; media-src https://preview.local; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https://media.local https://preview.local; media-src https://preview.local; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="referrer" content="no-referrer">
 <style>
 :root{color-scheme:light dark;--sbw:14px;--accent:#0078d4;--fg:#1a1a1a;--bg:#f9f9f9;--asst:#ffffff;--sys:#616161;--sysbg:#bfe0f7;--comp:#fff4ce;--compb:#d6b656;--code:#f3f3f3;--icode:#ebebeb;--line:#e0e0e0;--hdr:#616161;--user:color-mix(in srgb,var(--accent) 14%,var(--bg));--auto:color-mix(in srgb,#00897b 20%,var(--bg));--autoh:#00695c;--link:color-mix(in srgb,var(--accent) 80%,#000);--fs-a:14px;--fs-m:14px;--fs-u:14px;--lh:1.25}
@@ -45,7 +45,7 @@ html,body{margin:0;height:100%;overflow:hidden;font:14px/var(--lh) "Segoe UI Var
 .b th{font-weight:600}.b .al-center{text-align:center}.b .al-right{text-align:right}.b .al-left{text-align:left}
 .b blockquote{margin:2px 0 4px 10px;color:var(--sys)}
 .b h1{font-size:19px;margin:6px 0 3px}.b h2{font-size:16px;margin:6px 0 3px}.b h3,.b h4{font-size:14px;margin:6px 0 3px}
-.b a{color:var(--link);cursor:pointer}.b a.blocked{color:inherit;text-decoration:none;cursor:default}
+.b a{color:var(--link);cursor:text}.ctrl .b a{cursor:pointer}.b a.blocked,.ctrl .b a.blocked{color:inherit;text-decoration:none;cursor:default}
 a.more{display:inline-block;margin-top:3px;color:var(--link);cursor:pointer;font-size:12px}
 mark{background:#ffeb3b;color:#000}mark.cur{background:var(--accent);color:#fff}
 mark.ref{background:color-mix(in srgb,var(--accent) 40%,transparent);color:inherit;border-radius:2px;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 40%,transparent)}
@@ -53,8 +53,11 @@ mark.ref{background:color-mix(in srgb,var(--accent) 40%,transparent);color:inher
 .mp{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}.ms{max-width:100%}
 .mimg{display:block;max-width:100%;max-height:360px;border-radius:6px;border:1px solid var(--line)}.mvid{display:block;max-width:100%;max-height:360px;border-radius:6px}
 .mfail{font-size:12px;color:var(--sys)}
-.mload,.chip{font:12px "Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:3px 10px;cursor:pointer}
-.mload:hover,.chip:hover{background:var(--icode)}
+.pth{text-decoration:underline dotted;text-decoration-color:color-mix(in srgb,var(--fg) 55%,transparent);text-underline-offset:2px}.ctrl .pth,.ctrl .pimg{cursor:pointer}
+.pslot{display:block;margin:3px 0 5px}.pimg{display:block;max-width:100%;max-height:360px;border-radius:6px;border:1px solid var(--line);object-fit:contain}
+.pnote{font-size:12px;color:var(--sys);font-style:italic}
+.mload{font:12px "Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:3px 10px;cursor:pointer}
+.mload:hover{background:var(--icode)}
 .lv{margin:4px 10px 12px;padding:6px 10px;border:1px dashed var(--line);border-radius:8px;color:var(--sys);font-size:13px}
 .lh{display:flex;align-items:center;gap:6px;font-size:12px}.ld{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:lp 1.2s ease-in-out infinite}
 @keyframes lp{50%{opacity:.25}}
@@ -63,13 +66,13 @@ mark.ref{background:color-mix(in srgb,var(--accent) 40%,transparent);color:inher
 .lk{font-style:italic;font-size:12px;margin-top:4px;max-height:calc(var(--lh)*3em);overflow:hidden;white-space:pre-wrap;opacity:.75}
 .ltx{font-size:var(--fs-a);margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg)}
 .lerr{margin-top:4px;color:#c42b1c;white-space:pre-wrap;overflow-wrap:anywhere}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.chip{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:Consolas,monospace}
 </style>
 </head>
 <body>
 <div id="vp"><div id="padTop"></div><div id="items"></div><div id="padBot"></div><div id="live"></div></div>
 <div id="sb"><div id="sbt"></div></div>
 <script src="media-gate.js"></script>
+<script src="pathslots.js"></script>
 <script src="paging.js"></script>
 <script src="inputnav.js"></script>
 <script src="scrollmap.js"></script>

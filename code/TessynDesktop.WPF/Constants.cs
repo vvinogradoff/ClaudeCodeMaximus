@@ -43,6 +43,9 @@ public static partial class Constants
 		public const string AcceptedRecommendation = "Accepted your recommendation: ";
 		public const string EntryGone = "The referenced entry no longer exists in that session.";
 		public const string PreviewTooLarge = "This file is too large to preview";
+		/// <summary>The part of the daemon's FileAccess refusal text ("That file cannot be read remotely. ...") that tells a refusal by the access rules from a missing file or a wrong path.</summary>
+		public const string FileAccessRefusalFragment = "cannot be read remotely";
+
 		public const string PreviewUnsupported = "This file type has no preview.";
 		public const string PreviewTruncated = "Showing the first part of a large file.";
 		public const string PdfHint = "PDF files open in your default PDF app.";

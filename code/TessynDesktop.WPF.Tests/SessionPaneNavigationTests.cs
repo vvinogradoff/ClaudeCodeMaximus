@@ -291,6 +291,109 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		Assert.NotNull(_pane.Notice);
 	}
 
+	private static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==");
+
+	[Fact]
+	public async Task InlineImage_AsksTheDaemonLikeAClick_ThenAnswersWithACacheUrl_WithoutOpeningThePreview()
+	{
+		const string image = @"C:\work\shot.png";
+		var session = AddSession("a", 10);
+		session.Entries[3] = session.Entries[3] with { Content = $"See {image} for it" };
+		_client.Files["img"] = ("shot.png", "image/png", Png);
+		_client.PreviewHandles[$"a|fa:3|{image}"] = "img";
+		await _pane.OpenAsync("a");
+
+		_surface.RaisePathImageRequested(3, image);
+		for (var i = 0; i < 200 && _surface.PathImages.Count == 0; i++)
+			await Task.Delay(25);
+
+		Assert.Contains($"file.preview:a:fa:3:{image}", _client.Calls);
+		var answer = Assert.Single(_surface.PathImages);
+		Assert.Equal((3, image, false), (answer.Entry, answer.Path, answer.Denied));
+		Assert.StartsWith("https://preview.local/", answer.Src);
+		Assert.EndsWith("/content.png", answer.Src);
+		Assert.False(_pane.Preview!.IsOpen);      // the preview pane is only for a Ctrl+click
+	}
+
+	[Fact]
+	public async Task InlineImage_TheSameImageAgain_IsServedFromTheCache()
+	{
+		const string image = @"C:\work\shot.png";
+		var session = AddSession("a", 10);
+		session.Entries[3] = session.Entries[3] with { Content = $"See {image} for it" };
+		_client.Files["img"] = ("shot.png", "image/png", Png);
+		_client.PreviewHandles[$"a|fa:3|{image}"] = "img";
+		await _pane.OpenAsync("a");
+
+		await _pane.ShowPathImageAsync(3, image);
+		await _pane.ShowPathImageAsync(3, image);
+
+		Assert.Equal(2, _surface.PathImages.Count);
+		Assert.Equal(_surface.PathImages[0].Src, _surface.PathImages[1].Src);
+		Assert.Single(_client.Calls, c => c.StartsWith("file.preview", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task InlineImage_WhenTheAccessRulesRefuse_AnswersNotAllowed_AndReadsNothing()
+	{
+		AddSession("a", 10);
+		_client.FilePreviewRefusal = "That file cannot be read remotely. It is in a credentials folder.";
+		await _pane.OpenAsync("a");
+
+		await _pane.ShowPathImageAsync(3, @"C:\secret\key.png");
+
+		var answer = Assert.Single(_surface.PathImages);
+		Assert.True(answer.Denied);
+		Assert.Null(answer.Src);
+		Assert.DoesNotContain(_client.Calls, c => c.StartsWith("file.read", StringComparison.Ordinal));
+		Assert.Null(_pane.Notice);                                       // a hint in the page, not a message of the pane
+	}
+
+	[Fact]
+	public async Task InlineImage_WhenTheFileIsMissing_AnswersUnavailable_NotNotAllowed()
+	{
+		AddSession("a", 10);
+		_client.FilePreviewRefusal = "File not found";
+		await _pane.OpenAsync("a");
+
+		await _pane.ShowPathImageAsync(3, @"C:\work\gone.png");
+
+		var answer = Assert.Single(_surface.PathImages);
+		Assert.False(answer.Denied);
+		Assert.Null(answer.Src);
+	}
+
+	[Theory]
+	[InlineData(@"C:\Windows\System32")]
+	[InlineData(@"relative\shot.png")]
+	public async Task InlineImage_WithAPathThatIsNotPathShaped_NeverReachesTheDaemon(string path)
+	{
+		AddSession("a", 10);
+		await _pane.OpenAsync("a");
+
+		await _pane.ShowPathImageAsync(3, path);
+
+		Assert.DoesNotContain(_client.Calls, c => c.StartsWith("file.", StringComparison.Ordinal));
+		Assert.False(Assert.Single(_surface.PathImages).Denied);
+	}
+
+	[Fact]
+	public async Task InlineImage_OfATypeThePreviewCacheRefuses_IsAnsweredAsUnavailable()
+	{
+		const string path = @"C:\work\logo.svg";      // svg is text here, never rendered: the cache refuses it
+		var session = AddSession("a", 10);
+		session.Entries[3] = session.Entries[3] with { Content = $"See {path}" };
+		_client.Files["x"] = ("logo.svg", "image/svg+xml", System.Text.Encoding.UTF8.GetBytes("hello"));
+		_client.PreviewHandles[$"a|fa:3|{path}"] = "x";
+		await _pane.OpenAsync("a");
+
+		await _pane.ShowPathImageAsync(3, path);
+
+		var answer = Assert.Single(_surface.PathImages);
+		Assert.Null(answer.Src);
+		Assert.False(answer.Denied);
+	}
+
 	[Fact]
 	public async Task SelectingAnotherSessionInTheTree_StartsAFreshTrail_AndClosesThePreview()
 	{

@@ -402,6 +402,9 @@ public sealed partial class FakeTessynClient : ITessynClient
 	/// <summary>Files by handle for <see cref="FileReadAsync"/>: name, MIME type and bytes.</summary>
 	public Dictionary<string, (string Name, string Mime, byte[] Bytes)> Files { get; } = [];
 
+	/// <summary>When set, every <see cref="FilePreviewAsync"/> is refused with this message (for example the daemon's FileAccess refusal).</summary>
+	public string? FilePreviewRefusal { get; set; }
+
 	/// <summary>Handles <see cref="FilePreviewAsync"/> issues, by "nodeId|entryId|path".</summary>
 	public Dictionary<string, string> PreviewHandles { get; } = [];
 
@@ -434,6 +437,9 @@ public sealed partial class FakeTessynClient : ITessynClient
 	public Task<FilePreviewResult> FilePreviewAsync(string nodeId, string entryId, string path, CancellationToken cancellationToken = default)
 	{
 		Record($"file.preview:{nodeId}:{entryId}:{path}");
+		if (FilePreviewRefusal != null)
+			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, FilePreviewRefusal);
+
 		if (!PreviewHandles.TryGetValue($"{nodeId}|{entryId}|{path}", out var handle))
 			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, "The path does not occur in this entry");
 

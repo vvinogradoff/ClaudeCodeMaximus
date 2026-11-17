@@ -141,11 +141,12 @@ public sealed class CdpPage : IDisposable
 	}
 
 	/// <summary>A left click at page coordinates (CSS pixels).</summary>
-	public async Task ClickAsync(double x, double y)
+	/// <param name="modifiers">DevTools modifier bits held during the click: 1 Alt, 2 Ctrl, 4 Meta, 8 Shift.</param>
+	public async Task ClickAsync(double x, double y, int modifiers = 0)
 	{
-		await MouseAsync("mouseMoved", x, y, 0);
-		await MouseAsync("mousePressed", x, y, 1);
-		await MouseAsync("mouseReleased", x, y, 1);
+		await MouseAsync("mouseMoved", x, y, 0, modifiers: modifiers);
+		await MouseAsync("mousePressed", x, y, 1, modifiers: modifiers);
+		await MouseAsync("mouseReleased", x, y, 1, modifiers: modifiers);
 	}
 
 	/// <summary>A drag from one point to another with the left button held (selects text under it).</summary>
@@ -166,7 +167,7 @@ public sealed class CdpPage : IDisposable
 	}
 
 	/// <summary>Moves the mouse (no button), for hover states.</summary>
-	public Task MouseMoveAsync(double x, double y) => MouseAsync("mouseMoved", x, y, 0);
+	public Task MouseMoveAsync(double x, double y, int modifiers = 0) => MouseAsync("mouseMoved", x, y, 0, modifiers: modifiers);
 
 	/// <summary>Moves the mouse with the left button held.</summary>
 	public Task MouseMoveHeldAsync(double x, double y) => MouseAsync("mouseMoved", x, y, 0, buttons: 1);
@@ -174,10 +175,10 @@ public sealed class CdpPage : IDisposable
 	/// <summary>Releases the left button at a point.</summary>
 	public Task MouseUpAsync(double x, double y) => MouseAsync("mouseReleased", x, y, 1);
 
-	private Task MouseAsync(string type, double x, double y, int clickCount, int buttons = 0) =>
+	private Task MouseAsync(string type, double x, double y, int clickCount, int buttons = 0, int modifiers = 0) =>
 		SendAsync("Input.dispatchMouseEvent", new JsonObject
 		{
-			["type"] = type, ["x"] = x, ["y"] = y, ["button"] = type == "mouseMoved" && buttons == 0 ? "none" : "left", ["buttons"] = type == "mousePressed" ? 1 : buttons, ["clickCount"] = clickCount,
+			["type"] = type, ["x"] = x, ["y"] = y, ["button"] = type == "mouseMoved" && buttons == 0 ? "none" : "left", ["buttons"] = type == "mousePressed" ? 1 : buttons, ["clickCount"] = clickCount, ["modifiers"] = modifiers,
 		});
 
 	/// <summary>A key press (down and up) with the Windows virtual key code the browser reports for it.</summary>

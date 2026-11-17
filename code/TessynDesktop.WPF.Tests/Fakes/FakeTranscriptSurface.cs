@@ -92,6 +92,14 @@ public sealed class FakeTranscriptSurface : ITranscriptSurface
 
 	public event EventHandler<PathClickedEventArgs>? PathClicked;
 
+	public event EventHandler<PathClickedEventArgs>? PathImageRequested;
+
+	public List<(int Entry, string Path, string? Src, bool Denied)> PathImages { get; } = [];
+
+	public void ShowPathImage(int entryIndex, string path, string? src, bool denied) => PathImages.Add((entryIndex, path, src, denied));
+
+	public void RaisePathImageRequested(int entryIndex, string path) => PathImageRequested?.Invoke(this, new PathClickedEventArgs(entryIndex, path));
+
 	public void GoToEntry(int index, string? quote, bool highlight) => Calls.Add($"goto:{index}:{quote ?? "-"}:{(highlight ? "hl" : "nohl")}");
 
 	public void RaiseViewChanged(int topIndex, bool atBottom) => ViewChanged?.Invoke(this, new ViewAnchorEventArgs(topIndex, atBottom));
