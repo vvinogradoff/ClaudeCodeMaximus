@@ -431,7 +431,7 @@ function onMediaOk(m) {
   remeasure();
 }
 
-// Theme and fonts from the host (W10a): the theme name and the three font sizes become attributes and CSS variables on the root; entry heights change with the font, so the list is measured again.
+// Theme and fonts from the host (W10a): the theme name and the three font sizes and the line spacing (--lh, FR.9.12) become attributes and CSS variables on the root; entry heights change with the font, so the list is measured again.
 function onAppearance(m) {
   const r = document.documentElement;
   if (m.theme === 'dark' || m.theme === 'light') r.setAttribute('data-theme', m.theme);
@@ -440,6 +440,7 @@ function onAppearance(m) {
   const set = (name, v) => { const x = px(v); if (x && r.style.getPropertyValue(name) !== x) { r.style.setProperty(name, x); sizeChanged = true; } };
   if (typeof m.sys === 'string' && /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(m.sys)) r.style.setProperty('--sysbg', m.sys.length === 9 ? '#' + m.sys.substring(3) + m.sys.substring(1, 3) : m.sys);
   set('--fs-a', m.asst); set('--fs-m', m.md); set('--fs-u', m.user);
+  if (typeof m.lh === 'number' && m.lh >= 1 && m.lh <= 2.5) { const x = String(m.lh); if (r.style.getPropertyValue('--lh') !== x) { r.style.setProperty('--lh', x); sizeChanged = true; } }
   if (S && sizeChanged) remeasure();   // the entries change height only with a font size, not with the theme
 }
 

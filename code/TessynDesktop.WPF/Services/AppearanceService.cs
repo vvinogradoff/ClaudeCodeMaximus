@@ -66,7 +66,7 @@ public sealed class AppearanceService : IAppearanceService
 		{
 			var dark = ComputeDark(now.Theme);
 			changed = dark != _lastDark || now.Theme != _last.Theme || now.AssistantFontSize != _last.AssistantFontSize || now.AssistantMarkdownFontSize != _last.AssistantMarkdownFontSize
-				|| now.UserFontSize != _last.UserFontSize || now.InputFontSize != _last.InputFontSize || now.TagFontSize != _last.TagFontSize;
+				|| now.UserFontSize != _last.UserFontSize || now.InputFontSize != _last.InputFontSize || now.TagFontSize != _last.TagFontSize || now.LineSpacing != _last.LineSpacing;
 			_last = now;
 			_lastDark = dark;
 		}

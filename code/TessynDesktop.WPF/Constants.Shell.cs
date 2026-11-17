@@ -64,6 +64,9 @@ public static partial class Constants
 	{
 		public const double FontSize = 13.0;
 
+		/// <summary>Line spacing multiplier (FR.9.12): the Avalonia client's natural Segoe UI line is about 1.33 and the transcript page used 1.45; the default is tighter than both.</summary>
+		public const double LineSpacing = 1.25;
+
 		/// <summary>The tag chips and the "+N" hint of the session tag area: the size they had (Fluent's 14) before it became a setting.</summary>
 		public const double TagFontSize = 14.0;
 		public const int ScreensaverTimeoutSeconds = 120;

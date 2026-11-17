@@ -11,6 +11,8 @@
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Theme.Light.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <sys:Double x:Key="InputFontSize">13</sys:Double>
+            <sys:Double x:Key="LineSpacing">1.25</sys:Double>
+
             <sys:Double x:Key="TagFontSize">14</sys:Double>
         </ResourceDictionary>
     </Application.Resources>
