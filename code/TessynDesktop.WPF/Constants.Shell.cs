@@ -63,6 +63,9 @@ public static partial class Constants
 	public static class Defaults
 	{
 		public const double FontSize = 13.0;
+
+		/// <summary>Line spacing multiplier (FR.9.12): the Avalonia client's natural Segoe UI line is about 1.33 and the transcript page used 1.45; the default is tighter than both.</summary>
+		public const double LineSpacing = 1.25;
 		public const int ScreensaverTimeoutSeconds = 120;
 		public const int ScreensaverSlideshowIntervalSeconds = 10;
 

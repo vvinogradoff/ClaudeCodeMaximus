@@ -137,7 +137,7 @@
             </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
-    <Grid>
+    <Grid v:LineSpacing.Factor="{DynamicResource LineSpacing}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />

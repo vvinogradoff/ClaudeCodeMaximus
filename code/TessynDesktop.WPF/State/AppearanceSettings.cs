@@ -21,4 +21,7 @@ public sealed class AppearanceSettings
 	public double UserFontSize { get; set; } = Constants.Defaults.FontSize;
 
 	public double InputFontSize { get; set; } = Constants.Defaults.FontSize;
+
+	/// <summary>Line height as a multiple of the font size (FR.9.12), for the session output and the Focus view.</summary>
+	public double LineSpacing { get; set; } = Constants.Defaults.LineSpacing;
 }

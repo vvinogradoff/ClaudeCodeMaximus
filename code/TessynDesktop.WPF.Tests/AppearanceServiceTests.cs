@@ -152,7 +152,7 @@ public sealed class AppearanceServiceTests
 	{
 		var json = new PageAppearance("dark", 15, 14, 12).ToMessage();
 
-		Assert.Equal("""{"cmd":"appearance","theme":"dark","asst":15,"md":14,"user":12}""", json);
+		Assert.Equal("""{"cmd":"appearance","theme":"dark","asst":15,"md":14,"user":12,"lh":1.25}""", json);
 	}
 
 	[Fact]
@@ -160,7 +160,7 @@ public sealed class AppearanceServiceTests
 	{
 		var json = new PageAppearance("light", 15, 14, 12, "#BFE0F7").ToMessage();
 
-		Assert.Equal("""{"cmd":"appearance","theme":"light","asst":15,"md":14,"user":12,"sys":"#BFE0F7"}""", json);
+		Assert.Equal("""{"cmd":"appearance","theme":"light","asst":15,"md":14,"user":12,"sys":"#BFE0F7","lh":1.25}""", json);
 	}
 
 	[Theory]

@@ -59,6 +59,7 @@ public sealed class AppearanceApplier
 		var uri = new Uri(dark ? Constants.Appearance.DarkThemeUri : Constants.Appearance.LightThemeUri, UriKind.Absolute);
 		SwapThemeDictionary(resources, uri);
 		resources[Constants.Appearance.InputFontSizeKey] = _appearance.Current.InputFontSize;
+		resources[Constants.Appearance.LineSpacingKey] = _appearance.Current.LineSpacing;
 
 		if (Application.Current is { } app && ReferenceEquals(app.Resources, resources))
 		{

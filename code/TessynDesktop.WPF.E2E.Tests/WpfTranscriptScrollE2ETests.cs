@@ -204,6 +204,40 @@ public sealed class WpfTranscriptScrollE2ETests : IDisposable
 		}
 	}
 
+	/// <summary>TC.LS.07 (FR.9.12): the one line-spacing value drives every row of the page; a change from the host re-measures the virtualised list.</summary>
+	[Fact]
+	public async Task Line_spacing_applies_to_every_row_kind_and_a_change_re_measures_the_list()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			// Ratio of the computed line height to the font size of the newest assistant text, a user bubble and the root.
+			const string Ratios = @"(() => { const r = el => { const cs = getComputedStyle(el); return parseFloat(cs.lineHeight) / parseFloat(cs.fontSize); };
+				const a = Array.from(document.querySelectorAll('.e.A .c')).pop(), u = document.querySelector('.e.U .c');
+				return [r(a), r(u), r(document.body)]; })()";
+			var first = (await page.EvalAsync(Ratios))!.AsArray();
+			foreach (var ratio in first)
+				Assert.Equal(1.25, ratio!.GetValue<double>(), 2);   // the stored default reached the page
+
+			const string AvgHeight = "items.getBoundingClientRect().height / items.children.length";   // the rendered entries, whatever the window of them is
+			var height0 = await Num(AvgHeight, page);
+			await page.EvalAsync("onAppearance({ theme: 'dark', asst: 14, md: 14, user: 14, lh: 1.6 }); 0");
+			foreach (var ratio in (await page.EvalAsync(Ratios))!.AsArray())
+				Assert.Equal(1.6, ratio!.GetValue<double>(), 2);
+			await WaitAsync("the list to be measured again with the wider spacing", async () => await Num(AvgHeight, page) > height0 * 1.05);
+
+			var height1 = await Num(AvgHeight, page);
+			await page.EvalAsync("onAppearance({ theme: 'dark', asst: 14, md: 14, user: 14, lh: 1.05 }); 0");
+			foreach (var ratio in (await page.EvalAsync(Ratios))!.AsArray())
+				Assert.Equal(1.05, ratio!.GetValue<double>(), 2);
+			await WaitAsync("the list to be measured again with the tighter spacing", async () => await Num(AvgHeight, page) < height1 * 0.9);
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
 	[Fact]
 	public async Task Dragging_the_scrollbar_thumb_follows_the_mouse_one_to_one_and_the_content_does_not_jump_when_entries_get_measured()
 	{

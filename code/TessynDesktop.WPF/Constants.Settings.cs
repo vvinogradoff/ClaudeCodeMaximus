@@ -52,6 +52,9 @@ public static partial class Constants
 
 		public const double MinFontSize = 8;
 		public const double MaxFontSize = 40;
+		public const double MinLineSpacing = 1.0;
+		public const double MaxLineSpacing = 1.8;
+		public const string LineSpacingInvalid = "Line spacing must be a number between {0} and {1}.";
 		public const int MinScreensaverSeconds = 1;
 		public const int MaxScreensaverSeconds = 86400;
 		public const string FontSizeInvalid = "Font sizes must be numbers between {0} and {1}.";
