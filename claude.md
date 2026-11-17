@@ -5,7 +5,8 @@
 **"ClaudeMaximus" is the former name of this project; it is now "TessynDesktop".** Any lingering reference to `ClaudeMaximus` — in docs, helper scripts, code comments, or older session notes — means **TessynDesktop**. C# namespaces, project/assembly names, and the `%AppData%` data root are already migrated to `TessynDesktop`; only some documentation and root scripts still carry the old name.
 
 Naming map (the product family is **Tessyn**):
-- **TessynDesktop** — the desktop app (was `ClaudeMaximus`).
+- **TessynDesktop.WPF** — the desktop client (WPF, the only one).
+- **TessynDesktop** — the daemon host (`TessynDesktop.exe --background`), launched by WPF (was the `ClaudeMaximus` desktop app).
 - **TessynDesktop.Core** — the cross-platform class library that encapsulates the daemon.
 - **Data root** — `%AppData%\TessynDesktop` (was `%AppData%\ClaudeMaximus`).
 - **Legacy MCP prefix** — the in-process agent MCP server is still named `cmx` (tools `mcp__cmx__*`, header `X-CMX-Token`, skill `cmx-orchestration`), an artifact of the old name; a Tessyn-branded rename is planned.
@@ -140,8 +141,8 @@ When a new session starts, and if the user indicates the session is a continuati
 4. Run these E2E tests when you assume a requirement implemented. What exists today:
    - `code/Tessyn.Web.E2E.Tests`: Tessyn Web (browser) end-to-end tests against a test daemon.
    - `code/TessynDesktop.WPF.E2E.Tests`: the WPF client end to end. It starts the built WPF app with `--test-window` (off-screen, not in the taskbar, window state neither restored nor saved) against a real `TdcpServer` on a temporary data root with a fake `claude` executable, and closes it by process id.
-   - Both are **explicitly-run projects**: run them by name (`dotnet test code/TessynDesktop.WPF.E2E.Tests`, `dotnet test code/Tessyn.Web.E2E.Tests`) after `dotnet build code/TessynDesktop.sln`. They manage the app instance themselves; no external process calls are needed.
-   - There are **no Avalonia UI tests**: the Avalonia client is covered only by unit and integration tests, and is being retired in favour of WPF.
+   - Run the WPF tests only through `tools\e2e\Run-WpfE2E.ps1` (NR.6), after `dotnet build code/TessynDesktop.sln`; it runs them as the `tessyn-e2e` user in its own session (no focus stealing) and needs an elevated shell. Run the web tests by name: `dotnet test code/Tessyn.Web.E2E.Tests`. Both manage the app instance themselves.
+   - WPF is the only desktop client. `code/TessynDesktop` is only the daemon host (`TessynDesktop.exe --background`); it has no UI tests and is covered by unit and integration tests.
 5. Do not report a requirement implemented till the solution passes all unit, integration and end to end tests.
 6. E2E tests output application logs the the console, so you can see errors happened on server side if any. Do read the test output when a test fails to understand the reason of failure.
 
@@ -214,13 +215,11 @@ Build normally without the `-o` flag:
 dotnet build code/TessynDesktop.sln
 ```
 
-The build output goes to `code/TessynDesktop/bin/Debug/net10.0-windows10.0.17763.0/` (platform-specific TFM).
+WPF client output: `code/TessynDesktop.WPF/bin/Debug/net10.0-windows10.0.17763.0/`. Daemon host output: `code/TessynDesktop/bin/Debug/net10.0-windows10.0.17763.0/`.
 
-The app runs from `C:\Projects\Personal\Tessyn\[Publish]`, NOT from the build output. Therefore the build output directory should NOT be locked during builds. If you encounter a file-lock error on the build output, investigate — it likely means the app was accidentally launched from the build output.
+The WPF client runs from `C:\Projects\Personal\Tessyn\[Publish-WPF]`, never from a build output (FR.32.3, decision A15). The daemon host is the `host\` subfolder of that folder (`[Publish-WPF]\host\TessynDesktop.exe --background`), which WPF launches (FR.32.5, setting Startup, default on). The build output folders must not be locked; a lock means the app was started from a build output.
 
-Do NOT use `-o` to redirect build output. On each startup the self-update mechanism (`SelfUpdateService`) scans `bin/Debug/net*/` (under `SourceCodesLocation` from appsettings) for the newest build and copies it into the directory the app runs from — i.e. `C:\Projects\Personal\Tessyn\[Publish]`. Because the copy target is the run directory, `SourceCodesLocation` must point at the tree containing `TessynDesktop.csproj` (e.g. `C:\Projects\Personal\Tessyn`); it is not auto-discovered from `[Publish]`, which is a sibling of `code/`, not an ancestor of the `.sln`.
-
-Do NOT use the `Tempcmx-build` folder — it is deprecated.
+Do NOT use `-o` to redirect build output. WPF self-updates from the newest build under `SourceCodesLocation` (appsettings; it must point at the tree that contains the `.sln`, e.g. `C:\Projects\Personal\Tessyn`): it checks for a newer build every minute while running and installs it on exit (FR.32.3). The old `[Publish]` folder (the retired Avalonia window) and `Tempcmx-build` are deprecated.
 
 ## Documentation ID Conventions
 
