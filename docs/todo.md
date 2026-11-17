@@ -1172,5 +1172,6 @@ Status copied from the plan and the worker reports in `.wpf-work/` as of 2026-11
 - [DONE] Batch text: FR.1.18-1.27, FR.2.6-2.11, FR.6.5-6.8, FR.9.9-9.11 (FR.9.5 superseded), FR.11.14, FR.12.30-12.34, FR.14.13, FR.20.10, FR.21.25, FR.23.20-23.23, FR.24.16-24.18, FR.25.41, FR.32 (new area), NR.6-7; tdcp-spec section 10; glossary terms
 - [DONE] Use cases and test cases: LP, TR, IN, CL, SH, TA, FC, HS
 - [ ] Architect review and merge of the branch
-- [ ] Open questions (see `.wpf-work/486-docs-plan.md` section 4): dropdown project placement, automated-input label, colours per theme, FR.24.16 number, FR.24.18 range and default (fill from `feat/tag-area-session-reset` once merged)
+- [DONE] FR.24.18 range (8-40), defaults (WPF 14, Avalonia 11), where and when it applies, import not carried; FR.24.16 and TC.TA.01 aligned with the built tag area (branch `docs/tag-font-size`)
+- [ ] Open questions (see `.wpf-work/486-docs-plan.md` section 4): dropdown project placement, automated-input label, colours per theme, FR.24.16 number
 - [ ] Copy NR.6 (E2E running) into `CLAUDE.md` if wanted (Architect's file)
