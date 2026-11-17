@@ -420,8 +420,12 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		SetReplyQuietly(item, merged.Merged);
 	});
 
+	/// <summary>The kind, in lower case (<c>critical</c>, <c>ask</c>, <c>todo</c>, <c>alert</c>), of the most severe open item that is not Decided: the colour of the Focus badge (FR.23.13). Empty without one.</summary>
+	public string TopOpenKind => OpenItems.Count == 0 ? string.Empty : OpenItems.Min(i => i.Kind).ToString().ToLowerInvariant();
+
 	private void RaiseCountsChanged()
 	{
+		OnPropertyChanged(nameof(TopOpenKind));
 		AnswerCount = Items.Count(i => i.HasReply);
 		OnPropertyChanged(nameof(HasItems));
 		OnPropertyChanged(nameof(IsEmpty));

@@ -6,7 +6,7 @@
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
     <UserControl.Resources>
         <ResourceDictionary>
-        <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/PlainToggle.xaml" /></ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/PlainToggle.xaml" /><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/KindPill.xaml" /></ResourceDictionary.MergedDictionaries>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <v:InvertedBooleanToVisibilityConverter x:Key="InvertedBoolToVis" />
         <v:BoolToGridLengthConverter x:Key="BoolToStarLength" />
@@ -96,8 +96,10 @@
                                  AutomationProperties.Name="Focus view" ToolTip="Show what needs your attention">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Focus" />
-                            <TextBlock x:Name="FocusBadgeText" Text="{Binding FocusBadge, StringFormat={}({0})}" Margin="4,0,0,0"
-                                       Visibility="{Binding IsFocusBadgeVisible, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Focus badge" />
+                            <Border x:Name="FocusBadgeText" Style="{StaticResource KindPill}" Tag="{Binding FocusBadgeKind}" Margin="6,0,0,0" MinWidth="16"
+                                    Visibility="{Binding IsFocusBadgeVisible, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Focus badge">
+                                <TextBlock Text="{Binding FocusBadge}" FontSize="11" HorizontalAlignment="Center" />
+                            </Border>
                         </StackPanel>
                     </RadioButton>
                 </StackPanel>

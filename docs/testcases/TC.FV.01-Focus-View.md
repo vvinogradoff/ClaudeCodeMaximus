@@ -34,6 +34,7 @@ Notation: `<t>` = title, `<b>` = body.
 | TC.FV.22 | Enter in search returns to Session | MANUAL | UC.FV.12 | FR.23.12 |
 | TC.FV.23 | Badge colour per top kind | MANUAL | UC.FV.10 | FR.23.1, FR.23.13 |
 | TC.FV.24 | Badge count and visibility | MANUAL | UC.FV.10 | FR.23.13 |
+| TC.FV.24-WPF | WPF Focus button: the count excludes Decided, hidden at 0 and while Focus is selected, kind colour of the most severe open item from the palette (automated twin of TC.FV.23 and TC.FV.24: `FocusBadgeTests`, real layout) | AUTOMATED | UC.FV.10 | FR.23.13 |
 | TC.FV.25 | Focus layout | MANUAL | UC.FV.01 | FR.23.14 |
 | TC.FV.26 | Options and recommendation | MANUAL | UC.FV.05 | FR.23.14 |
 | TC.FV.27 | Send answers | MANUAL | UC.FV.05 | FR.23.15 |
