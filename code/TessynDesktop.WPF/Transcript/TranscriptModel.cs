@@ -10,10 +10,11 @@ namespace TessynDesktop.WPF.Transcript;
 /// <remarks>Created by Claude</remarks>
 public sealed class TranscriptModel
 {
-	public TranscriptModel(string nodeId, int epoch, int total, IReadOnlyList<SessionEntryDto> entries, IReadOnlyList<TranscriptEntryView> views)
+	public TranscriptModel(string nodeId, int epoch, int total, IReadOnlyList<SessionEntryDto> entries, IReadOnlyList<TranscriptEntryView> views, string? fileId = null)
 	{
 		NodeId = nodeId;
 		Epoch = epoch;
+		FileId = fileId;
 		Total = total;
 		Entries = [.. entries];
 		Views = [.. views];
@@ -24,7 +25,20 @@ public sealed class TranscriptModel
 	/// <summary>Transcript epoch; a different epoch from the daemon means the history was rewritten and everything must reload.</summary>
 	public int Epoch { get; }
 
+	/// <summary>Content generation of the session file the entries came from (the daemon's content store changes it on every rewrite, including a rewrite made by another process); <c>null</c> without a content store.</summary>
+	public string? FileId { get; }
+
 	public int Total { get; private set; }
+
+	/// <summary>
+	/// Whether <paramref name="page"/>, read from the daemon now, belongs to a different history than the loaded entries: another epoch, another file
+	/// generation, or a file that now holds fewer entries than the newest loaded index. Entries are numbered from the start of the file, so after any of
+	/// these a read "after the last loaded index" finds nothing and everything appended since would stay invisible until the session is reopened.
+	/// </summary>
+	public bool HistoryChanged(SessionEntriesResult page) =>
+		page.Epoch != Epoch
+		|| (FileId != null && page.FileId != null && page.FileId != FileId)
+		|| page.Total <= LastIndex;
 
 	public List<SessionEntryDto> Entries { get; }
 

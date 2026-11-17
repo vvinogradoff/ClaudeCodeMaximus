@@ -73,7 +73,7 @@ Different directories may therefore share a label (e.g. `HardStop` and `HardStop
 - **Recent** (FR.1.16).
 - **Tags** (FR.24.11).
 
-The selected tab isn't persisted: the app starts on Tree. Picking a session in the top-bar recent-sessions dropdown switches to the Tree tab, as it does today.
+The selected tab isn't persisted: the app starts on Tree. Picking a session in the top-bar recent-sessions dropdown switches to the Tree tab, as it does today, and does what a click on the session's tree row does: the session is **selected in the tree**, its collapsed ancestors (groups, the directory, a supervisor session) are **expanded**, and the tree is **scrolled** so that its row is visible. The same applies to a session picked in the Recent tab or in a Tags list.
 
 **FR.1.16 — Recent tab:** Documents today's behaviour plus the new collapse rule:
 - **Content.** Every top-level session; Worker Sessions stay nested in the tree and aren't listed.
