@@ -6,7 +6,7 @@
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
     <UserControl.Resources>
         <ResourceDictionary>
-        <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /></ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/PlainToggle.xaml" /></ResourceDictionary.MergedDictionaries>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <v:InvertedBooleanToVisibilityConverter x:Key="InvertedBoolToVis" />
         <v:BoolToGridLengthConverter x:Key="BoolToStarLength" />
@@ -274,7 +274,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <ToggleButton x:Name="FileModeToggle" Grid.Row="0" IsChecked="{Binding AttachAsFiles, Mode=TwoWay}" Margin="0,0,0,4" Padding="8,6" HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                <ToggleButton x:Name="FileModeToggle" Style="{StaticResource PlainToggle}" Grid.Row="0" IsChecked="{Binding AttachAsFiles, Mode=TwoWay}" Margin="0,0,0,4" Padding="8,6" HorizontalAlignment="Stretch" VerticalAlignment="Top"
                               Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}"
                               ToolTip="File mode: dropped files are copied into this session's attachments and 'Attached file: path' is inserted. Off: the file's own path is inserted."
                               AutomationProperties.Name="File mode">
@@ -292,7 +292,7 @@
                     <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphStop}" />
                 </Button>
                 <v:ScheduleIndicator x:Name="ScheduleButton" Grid.Row="3" Margin="0,0,0,4" Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}" />
-                <ToggleButton x:Name="SettingsToggle" Grid.Row="4" IsChecked="{Binding IsCommandBarVisible, Mode=TwoWay}" Margin="0" Padding="8,6" HorizontalAlignment="Stretch"
+                <ToggleButton x:Name="SettingsToggle" Style="{StaticResource PlainToggle}" Grid.Row="4" IsChecked="{Binding IsCommandBarVisible, Mode=TwoWay}" Margin="0" Padding="8,6" HorizontalAlignment="Stretch"
                               Visibility="{Binding ShowExpandedExtras, Converter={StaticResource BoolToVis}}"
                               ToolTip="Show or hide the settings bar (model, effort, profile)" AutomationProperties.Name="Settings">
                     <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSettings}" />

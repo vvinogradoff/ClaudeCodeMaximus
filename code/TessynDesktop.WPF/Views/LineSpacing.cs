@@ -22,6 +22,17 @@ public static class LineSpacing
 	{
 		if (sender is TextBlock text)
 			Apply(text, (double)e.NewValue);
+		else if (sender is SelectableText selectable)
+			Apply(selectable, (double)e.NewValue);
+	}
+
+	/// <summary>The selectable text (a read-only RichTextBox) takes the same fixed line height on its paragraph.</summary>
+	private static void Apply(SelectableText text, double factor)
+	{
+		if (factor >= 1)
+			text.SetLineHeight(Math.Max(1, text.FontSize * factor));
+		else
+			text.SetLineHeight(null);
 	}
 
 	private static void Apply(TextBlock text, double factor)

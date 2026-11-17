@@ -57,7 +57,7 @@
                                 </Border>
                                 <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                 <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                        <v:SelectableText Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
                             </DockPanel>
 
                             <StackPanel Margin="0,8,0,0" v:MarkdownText.Source="{Binding Body}" Visibility="{Binding HasBody, Converter={StaticResource BoolToVis}}" />
@@ -119,18 +119,16 @@
                 <Border Style="{StaticResource CardBorder}" Padding="12,8">
                     <StackPanel>
                         <DockPanel LastChildFill="True" Background="Transparent" Cursor="Hand" ToolTip="Show or hide the details"
-                                   AutomationProperties.Name="Closed item header">
-                            <DockPanel.InputBindings>
-                                <MouseBinding MouseAction="LeftClick" Command="{Binding ToggleBodyCommand}" />
-                            </DockPanel.InputBindings>
+                                   AutomationProperties.Name="Closed item header"
+                                   PreviewMouseLeftButtonDown="OnClosedHeaderDown" PreviewMouseLeftButtonUp="OnClosedHeaderUp">
                             <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Tag="{Binding KindKey}" Margin="0,0,8,0">
                                 <TextBlock Style="{StaticResource KindChipText}" Text="{Binding KindText}" />
                             </Border>
                             <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <v:SelectableText Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </DockPanel>
-                        <TextBlock Text="{Binding OutcomeText}" TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <v:SelectableText Text="{Binding OutcomeText}" Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                         <StackPanel Margin="0,8,0,0" v:MarkdownText.Source="{Binding Body}" Visibility="{Binding IsBodyVisible, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </Border>

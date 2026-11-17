@@ -33,7 +33,11 @@ public partial class App : Application
 		var startup = System.Diagnostics.Stopwatch.StartNew();
 		var options = StartupOptions.Parse(e.Args);
 		if (options.TestWindow)
+		{
 			TestWindowFocusGuard.CaptureForegroundAtStart();
+			// Test windows are created and destroyed rapidly; keep them off the GPU (a bugcheck in the AMD display driver hit during a full E2E run).
+			System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+		}
 
 		_singleInstance = new SingleInstanceGuard(options.MutexName);
 		if (!_singleInstance.TryAcquire())
