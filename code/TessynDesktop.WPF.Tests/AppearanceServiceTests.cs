@@ -154,4 +154,23 @@ public sealed class AppearanceServiceTests
 
 		Assert.Equal("""{"cmd":"appearance","theme":"dark","asst":15,"md":14,"user":12}""", json);
 	}
+
+	[Fact]
+	public void PageMessage_CarriesTheSystemRowColourWhenGiven()
+	{
+		var json = new PageAppearance("light", 15, 14, 12, "#BFE0F7").ToMessage();
+
+		Assert.Equal("""{"cmd":"appearance","theme":"light","asst":15,"md":14,"user":12,"sys":"#BFE0F7"}""", json);
+	}
+
+	[Theory]
+	[InlineData(false, "#BFE0F7")]
+	[InlineData(true, "#1A3A50")]
+	public void SystemRowColour_DefaultsToAvaloniasPaleBlueInBothThemes(bool dark, string expected)
+	{
+		var definition = ColourCatalog.Find(ColourCatalog.SystemRow)!;
+
+		Assert.Equal(expected, ColourCatalog.Effective(definition, null, dark));
+		Assert.Equal("#445566", ColourCatalog.Effective(definition, new Dictionary<string, string> { [ColourCatalog.SystemRow] = "#445566" }, dark));
+	}
 }
