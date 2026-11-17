@@ -607,7 +607,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			if (token != _openToken || model != _current)
 				return;
 
-			if (page.Epoch != model.Epoch)
+			if (model.HistoryChanged(page))
 			{
 				await ReloadCoreAsync(token);
 				return;
@@ -672,7 +672,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			if (token != _openToken || model != _current)
 				return;
 
-			if (page.Epoch != model.Epoch)
+			if (model.HistoryChanged(page))
 			{
 				await ReloadCoreAsync(token);
 				return;
@@ -738,7 +738,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			if (token != _openToken || model != _current)
 				return;
 
-			if (page.Epoch != model.Epoch)
+			if (model.HistoryChanged(page))
 			{
 				await ReloadCoreAsync(token);
 				return;
@@ -808,7 +808,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private async Task<TranscriptModel> BuildModelAsync(string nodeId, SessionEntriesResult page)
 	{
 		var views = await RenderAsync(page.Entries);
-		return new TranscriptModel(nodeId, page.Epoch, page.Total, page.Entries, views);
+		return new TranscriptModel(nodeId, page.Epoch, page.Total, page.Entries, views, page.FileId);
 	}
 
 	private Task<List<TranscriptEntryView>> RenderAsync(IReadOnlyList<SessionEntryDto> entries) =>

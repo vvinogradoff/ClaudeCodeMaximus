@@ -13,6 +13,35 @@ public partial class TreePanel : UserControl
 	{
 		InitializeComponent();
 		_dragDrop = new TreeDragDrop(RowList, () => DataContext as TreeViewModel);
+		DataContextChanged += OnDataContextChanged;
+	}
+
+	private TreeViewModel? _observed;
+
+	private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+	{
+		if (_observed != null)
+			_observed.PropertyChanged -= OnTreePropertyChanged;
+
+		_observed = e.NewValue as TreeViewModel;
+		if (_observed != null)
+			_observed.PropertyChanged += OnTreePropertyChanged;
+	}
+
+	/// <summary>
+	/// A selection made from code (a session picked in the Recent dropdown or a list, a jump from a reference) scrolls the tree to the row, as a click on a
+	/// visible row never needs to. Deferred until the rows the selection expanded are in the list.
+	/// </summary>
+	private void OnTreePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName != nameof(TreeViewModel.SelectedNode))
+			return;
+
+		Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+		{
+			if (_observed?.SelectedNode is { } node && _observed.Rows.Contains(node))
+				RowList.ScrollIntoView(node);
+		});
 	}
 
 	private readonly TreeDragDrop _dragDrop;

@@ -1,0 +1,58 @@
+[2026-11-17T15:09:57Z] USER profile="[Sys] vvinogradoff@gmail.com"
+okay, I'm on WPF, I think you can sunset Avalonia. Few more changes for WPF client:
+1. I still see sesion's tag panel non-collapsed and can't collapse it. 
+2. Links and files display in output - I like how you did it, but at the moment clickable elements for files mentioned are displayed at the bottom of the turn's output block. Let's display inline. I.e. now you're showing me "Shortcut target: C:\Projects\Personal\Tessyn\[Publish-WPF]\TessynDesktop.WPF.exe" and at the bottom there's a button saying "TessynDesktop.WPF.exe". Let's do different - show me Shortcut target: C:\Projects\Personal\Tessyn\[Publish-WPF]\TessynDesktop.WPF.exe and make `C:\Projects\Personal\Tessyn\[Publish-WPF]\TessynDesktop.WPF.exe` Cltr-clickable so I can Ctrl-click it to open. Same for .md, .csv, .txt - i.e. for any text files. Now, for images - show me the path and right below it, next line, show me the image preview. No worries if it disrupts the text, I want to see which exactly image the session refers to. And make it Cltr clickable too. The reason for Cltr click (Cltr + mouse left button) instead of regular click is I might want to select text or the image from the output to copy into the clipboard, clickable element would mess with that.
+
+One more minor thing - whenever I start the WPF client its window color is black with the theme being light (all the controls are fro light theme). I switch themes back-n-forth and window becomes all good. Please address that too.
+
+And one more - recent sessions dropdown doesn't show recency backgroud color for the selected item when drop down is not expanded. I'm not sure I like it that way or the way it was before, please make me a checkbox in setting so I can toggle that on/off. 
+
+And one more - screensaver images are to be shown in "fill" mode not "fit" mode.
+
+[2026-11-17T15:10:14Z] ASSISTANT model="claude-opus-5-5" effort="default"
+Cleanup ran (1465 duplicates in 112 files, all backed up). Now the workers:
+
+[2026-11-17T15:10:15Z] SYSTEM
+[Attention A46 answered] Done: the Architect is on WPF. Cleanup removed 1465 duplicates in 112 files, all backed up.
+
+[2026-11-17T15:11:46Z] USER profile="[Sys] vvinogradoff@gmail.com"
+my input in this window isn't displayed. I've sent this:
+---
+okay, few more changes for WPF client:
+1. I still see sesion's tag panel non-collapsed and can't collapse it. 
+2. Links and files display in output - I like how you did it, but at the moment clickable elements for files mentioned are displayed at the bottom of the turn's output block. Let's display inline. I.e. now you're showing me "Shortcut target: C:\Projects\Personal\Tessyn\[Publish-WPF]\TessynDesktop.WPF.exe" and at the bottom there's a button saying "TessynDesktop.WPF.exe". Let's do different - show me Shortcut target: C:\Projects\Personal\Tessyn\[Publish-WPF]\TessynDesktop.WPF.exe and make `C:\Projects\Personal\Tessyn\[Publish-WPF]\TessynDesktop.WPF.exe` Cltr-clickable so I can Ctrl-click it to open. Same for .md, .csv, .txt - i.e. for any text files. Now, for images - show me the path and right below it, next line, show me the image preview. No worries if it disrupts the text, I want to see which exactly image the session refers to. And make it Cltr clickable too. The reason for Cltr click (Cltr + mouse left button) instead of regular click is I might want to select text or the image from the output to copy into the clipboard, clickable element would mess with that.
+
+One more minor thing - whenever I start the WPF client its window color is black with the theme being light (all the controls are fro light theme). I switch themes back-n-forth and window becomes all good. Please address that too.
+
+And one more - recent sessions dropdown doesn't show recency backgroud color for the selected item when drop down is not expanded. I'm not sure I like it that way or the way it was before, please make me a checkbox in setting so I can toggle that on/off. 
+
+And one more - screensaver images are to be shown in "fill" mode not "fit" mode.
+---
+and I don't see it, although I see you've started the work. If it's a one time issue it's okay, but if it's smething that can reoccur then let's fix it.
+
+[2026-11-17T15:12:22Z] USER profile="[Sys] vvinogradoff@gmail.com"
+yup, I don't see my inputs at all. Needs a fix
+
+[2026-11-17T15:13:43Z] ASSISTANT
+You're on WPF, and the duplicate cleanup ran when you closed Avalonia. It removed 1465 doubled entries from 112 session files. Each file it changed was backed up first, to `.wpf-work\dup-cleanup\backup-20261117-225859\`.
+
+Three workers are now running:
+
+1. **Retiring Avalonia in the docs.** Avalonia is crossed out of the requirements, use cases, test cases, glossary and plans. What remains is described only as the hidden background daemon (`TessynDesktop.exe --background`) that WPF starts. Anything that existed only in the Avalonia window gets listed as "dropped with the Avalonia client", so nothing disappears silently. You'll get that list to confirm. Proposed wording for `CLAUDE.md` comes separately, because that file is yours.
+
+2. **File paths inline in the session output.**
+   - Paths stay exactly where they are in the text and get a subtle underline. Ctrl+click opens them, and a plain click does nothing, so selecting and copying text keeps working. That covers `.md`, `.csv`, `.txt` and any other file.
+   - Image paths get a preview on the next line, directly under the path, and Ctrl+click opens those too.
+   - Web links switch to the same Ctrl+click rule.
+
+3. **The other fixes:**
+   - **Tag panel won't collapse.** The worker will look at your running WPF window and your WPF settings file without clicking or changing anything, to find out why the collapse isn't working for you. It will also check that `[Publish-WPF]` really has the latest build.
+   - **Black window at startup in the light theme.** The fix makes the first paint use the right colours in both themes.
+   - **Recent dropdown colour.** A Settings checkbox, "Show recency colour in the closed Recent dropdown", on by default.
+   - **Screensaver.** Images in fill mode, covering the screen and cropped, instead of fit.
+
+Each worker also updates the matching requirements in `docs/requirements/`.
+
+[2026-11-17T15:13:47Z] USER profile="[Sys] vvinogradoff@gmail.com"
+One more issue to fix - when I switch sessions from "recent sessions" drop down please do select the session in the tree. And scroll the tree to the selected element
+
