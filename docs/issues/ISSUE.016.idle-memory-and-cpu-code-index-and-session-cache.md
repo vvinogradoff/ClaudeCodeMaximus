@@ -58,3 +58,22 @@ After the restart onto the fixed build, memory was settled: about 0.7 GB private
 - **Cause:** the tree-search "Searching…" spinner (`SessionTreeView.axaml`, FR.1.11) and the Tags tab spinner (`TagSearchView.axaml`) had an infinite rotate animation on the style selector `TextBlock`. That selector always matches, so both spinners kept animating while hidden. Every tick requested a frame, and every frame re-walked the whole visual tree, including the non-virtualized transcript of the open session.
 - **Fix:** commit `7de9c1f`. The animation runs only on `TextBlock.spinning`, a class bound to `IsSearching` / `IsLoading`.
 - **Verify** after the next restart: `cpu=` in the MEM lines should drop to low single digits when the app is idle.
+
+## Follow-up 2026-11-15: measured after the fixes, and the startup repair
+
+Data: `logs/log-2026111[1-5].txt` and `diag/` (10 hang captures, 3 heap histograms). The restart at 2026-11-15 15:02 runs a build from 11:32 that includes `547cf52`, `939efe0`, `36b7286`, `20ee2fa`, `7de9c1f` and `bfe4691`.
+
+| Metric | 2026-11-13 | 2026-11-15, after 15:02 |
+|---|---|---|
+| CPU while idle (MEM `cpu=`) | 100-490 % | 3-13 % |
+| Share of time paused for GC | 5.7-8.7 % | 0.3-0.5 % |
+| GC heap | 1.4-2.5 GB, 19-31 M objects | 0.4-1.3 GB |
+| UI stalls of 2 s or more | about 16 a day; 228 of 237 stalls in 11-11..15 had no UI operation running, and their GC pause matched the stall (for example 13.4 s with 12.3 s of GC pause) | 3 in the first 20 min, 2.4-3.6 s each, about 1 s of GC pause each |
+
+The no-operation stalls were GC pauses: the hang captures show an idle UI thread (`Win32DispatcherImpl.RunLoop`) while the stall lasted.
+
+**Remaining startup hang:** `SessionFileService.RepairCorruptedCompactions` read every session file twice on the UI thread, in the `MainWindowViewModel` constructor. It froze the UI for 33.7 s on 2026-11-15 15:02 (`hang-20261115-150259.txt`), and for 14-30 s at earlier starts. No `Repaired N` line appears in the 11-11..15 logs. Fixed in `bf44890`: the repair runs on a background task and reads each file once.
+
+**Still open:**
+- HardStop's index is at the 200,000-file cap, and building it adds about 450 MB of heap a few minutes after startup (MEM 15:06-15:07). The remaining 2-4 s GC stalls follow it. Decided 2026-11-15 (Architect): build the index lazily on the first `#` / `##` autocomplete, cap unchanged. Done in `7da82ff`: `SessionViewModel.EnsureCodeIndex`, called from `SessionView.UpdateAutocompleteTrigger`; suggestions refresh when the index is ready.
+- `session-switch-until-idle` averages 1.1 s, with a maximum of 6 s (191 lines). That is the non-virtualized transcript build, left to the WPF client.

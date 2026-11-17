@@ -28,6 +28,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Margin="0,0,16,6" VerticalAlignment="Center" Text="Assistant text" />
                 <TextBox Grid.Row="0" Grid.Column="1" Margin="0,0,0,6" Text="{Binding AssistantFontSize, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Assistant font size" />
@@ -37,8 +38,14 @@
                 <TextBox Grid.Row="2" Grid.Column="1" Margin="0,0,0,6" Text="{Binding UserFontSize, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="User font size" />
                 <TextBlock Grid.Row="3" Margin="0,0,16,6" VerticalAlignment="Center" Text="Prompt box" />
                 <TextBox Grid.Row="3" Grid.Column="1" Margin="0,0,0,6" Text="{Binding InputFontSize, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Input font size" />
+                <TextBlock Grid.Row="4" Margin="0,0,16,6" VerticalAlignment="Center" Text="Tag cloud" />
+                <TextBox Grid.Row="4" Grid.Column="1" Margin="0,0,0,6" Text="{Binding TagFontSize, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tag cloud font size" />
             </Grid>
             <TextBlock Style="{StaticResource SettingsHint}" Text="Sizes in points, 8 to 40. Colours have their own tab." />
+
+            <TextBlock Style="{StaticResource SettingsLabel}" Text="Line spacing" />
+            <TextBox HorizontalAlignment="Left" Width="90" Text="{Binding LineSpacing, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Line spacing" />
+            <TextBlock Style="{StaticResource SettingsHint}" Text="A multiple of the font size, 1.0 to 1.8 (default 1.25). Applies to the session output and the Focus view." />
 
             <s:SectionMessages Margin="0,8,0,0" />
         </StackPanel>

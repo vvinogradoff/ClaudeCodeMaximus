@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.Client;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
@@ -444,7 +444,7 @@ public sealed class SessionListsReviewFixTests
 	}
 
 	[Fact]
-	public async Task Tags_ASelectedDirectory_ScopesThroughItsFirstSession()
+	public async Task Tags_ASelectedDirectory_IsNotScoped_AsInAvalonia()
 	{
 		var tree = await LoadTreeAsync(_b.Directory("d1", "Repo", [], _b.Session("s1", "One")));
 		using var tags = CreateTags();
@@ -454,7 +454,8 @@ public sealed class SessionListsReviewFixTests
 		tree.SelectNodeById("d1");
 		await tags.SearchTask;
 
-		Assert.Equal("s1", _client.TagsSearchScopes.Last());
+		Assert.Null(_client.TagsSearchScopes.Last());   // FR.1.10 / FR.24.11: the project scope belongs to a selected session; a directory selected means every tag is searched
+		Assert.False(tags.CanScope);
 	}
 
 	[Fact]

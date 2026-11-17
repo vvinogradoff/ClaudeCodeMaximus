@@ -1,0 +1,33 @@
+# TC.HS.01 — WPF Client Hosting and Coexistence
+
+Related requirements: FR.32.1–FR.32.8. Use cases: [UC.HS.01](/docs/usecases/UC.HS.01-Client-Hosting.md).
+
+**Legend.** AUTOMATED = unit / integration (WPF.Tests, Core tests, real PowerShell for scripts); MANUAL = checked by hand in the real apps (they were not started in the work reports; the checklist is in `.wpf-work\471-side-by-side.md` section 7 and `458-wpf-daily-switch.md` section 3).
+
+| TC | Title | Kind | UC | FR |
+|---|---|---|---|---|
+| TC.HS.01 | One host mutex: a second host exits, a second visible window is refused | AUTOMATED | UC.HS.03 | FR.32.2 |
+| TC.HS.02 | Launcher: never with a daemon found, never while the mutex is held, once per 60 s, copy off the lock | AUTOMATED | UC.HS.01 | FR.32.5 |
+| TC.HS.03 | Setting off: outcome Disabled, banner "Waiting for Tessyn…", no timeout | AUTOMATED | UC.HS.03 | FR.32.5 |
+| TC.HS.04 | Starting banner ends after 45 s with the detail; unreadable token text | AUTOMATED | UC.HS.01 | FR.32.8 |
+| TC.HS.05 | Self-update script (real PowerShell, folder named `[Publish-WPF]`): copies, keeps `host\`, restarts; failed copy recorded and logged | AUTOMATED | UC.HS.04 | FR.32.3 |
+| TC.HS.06 | Self-update, host start and import are off for `--test-window`, `--data-root`, `--daemon-file`, build output | AUTOMATED | UC.HS.04 | FR.32.3 |
+| TC.HS.07 | Stale banner: Core-only change seen; no banner for an Avalonia-hosted daemon, unknown build, no-op launcher | AUTOMATED | UC.HS.04 | FR.32.7 |
+| TC.HS.08 | Takeover: only a background host is signalled; outcomes Acquired, NotABackgroundHost, DidNotExit | AUTOMATED | UC.HS.03 | FR.32.6 |
+| TC.HS.09 | Reconnect to a new run after takeover; sound registered again; sound never double | AUTOMATED | UC.HS.03 | FR.32.6 |
+| TC.HS.10 | Host exit: confirmation, terminate, shutdown; throwing terminate still shuts down; one tray question | AUTOMATED | UC.HS.06 | FR.32.1 |
+| TC.HS.11 | Import dialog once; answer remembered; no second dialog on reconnect | AUTOMATED | UC.HS.05 | FR.32.4 |
+| TC.HS.12 | WPF started before the daemon connects through a real `daemon.json` and token (E2E) | E2E | UC.HS.03 | FR.32.6 |
+| TC.HS.13 | Real windowless host, tray icon, tray confirm and exit listener | MANUAL | UC.HS.06 | FR.32.1 |
+
+## FR → TC coverage
+| FR | Test cases |
+|---|---|
+| FR.32.1 | TC.HS.10, 13 |
+| FR.32.2 | TC.HS.01 |
+| FR.32.3 | TC.HS.05, 06 |
+| FR.32.4 | TC.HS.11 |
+| FR.32.5 | TC.HS.02, 03 |
+| FR.32.6 | TC.HS.08, 09, 12 |
+| FR.32.7 | TC.HS.07 |
+| FR.32.8 | TC.HS.04 |

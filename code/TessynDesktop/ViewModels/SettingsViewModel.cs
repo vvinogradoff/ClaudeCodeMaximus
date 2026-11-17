@@ -29,6 +29,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
 	private string _httpsProxy;
 	private bool _isDarkTheme;
 	private string _screensaverDirectory;
+	private string _tagFontSize;
 	private string _screensaverTimeout;
 	private string _screensaverSlideshowInterval;
 	private bool _notificationsEnabled;
@@ -90,6 +91,13 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
 	{
 		get => _screensaverTimeout;
 		set => this.RaiseAndSetIfChanged(ref _screensaverTimeout, value);
+	}
+
+	/// <summary>The tag cloud font size as typed (Appearance tab); an invalid text keeps the stored size on save.</summary>
+	public string TagFontSize
+	{
+		get => _tagFontSize;
+		set => this.RaiseAndSetIfChanged(ref _tagFontSize, value);
 	}
 
 	public string ScreensaverSlideshowInterval
@@ -359,6 +367,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
 		_screensaverTimeout = appSettings.Settings.ScreensaverTimeout.ToString();
 		_screensaverSlideshowInterval = appSettings.Settings.ScreensaverSlideshowInterval.ToString();
 		_isDarkTheme = appSettings.Settings.Theme == "Dark";
+		_tagFontSize = TagFontSizeRules.Format(TagFontSizeRules.Normalize(appSettings.Settings.TagFontSize));
 		_notificationsEnabled = appSettings.Settings.NotificationsEnabled;
 		_sessionCompletionSoundFile = appSettings.Settings.SessionCompletionSoundFile;
 		_sessionCompletionSoundThrottleSeconds = appSettings.Settings.SessionCompletionSoundThrottleSeconds.ToString();
@@ -539,6 +548,10 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
 		_appSettings.Settings.TelegramMentionHandle = _telegramMentionHandle;
 		_appSettings.Settings.TelegramMirrorMode = _telegramMirrorMode;
 		_appSettings.Settings.Theme = _isDarkTheme ? "Dark" : "Light";
+		if (TagFontSizeRules.TryParse(_tagFontSize, out var tagFontSize))
+			_appSettings.Settings.TagFontSize = tagFontSize;
+		_tagFontSize = TagFontSizeRules.Format(TagFontSizeRules.Normalize(_appSettings.Settings.TagFontSize));
+		this.RaisePropertyChanged(nameof(TagFontSize));
 
 		// Save colors to the appropriate theme
 		var colors = _isDarkTheme ? _appSettings.Settings.DarkColors : _appSettings.Settings.LightColors;

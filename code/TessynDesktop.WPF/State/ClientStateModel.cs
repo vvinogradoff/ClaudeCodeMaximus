@@ -25,8 +25,9 @@ public sealed class ClientStateModel
 	/// <summary>The composer's file mode (FR.31.2): dropped files are copied into the session's attachments instead of inserting their paths. Global, not per session.</summary>
 	public bool AttachAsFiles { get; set; }
 
-	/// <summary>The session tag area shows up to <see cref="Constants.TagArea.MaxFullLines"/> lines (FR.24 "full") instead of one line ("mini"). Global, not per session.</summary>
-	public bool TagAreaExpanded { get; set; }
+	/// <summary>Obsolete: the tag area mode is no longer remembered (FR.24: every opened session starts collapsed). Read and dropped (the setter discards it), so old wpf.json files load, it is never written back.</summary>
+	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+	public bool TagAreaExpanded { get => false; set { } }
 
 	/// <summary>The command bar (model, effort, profile) under the input box is shown (FR.12.11). Global for the WPF client, not per working directory.</summary>
 	public bool CommandBarVisible { get; set; } = true;

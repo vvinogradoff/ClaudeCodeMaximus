@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Tests.Fakes;
@@ -148,10 +148,45 @@ public sealed class AppearanceServiceTests
 	}
 
 	[Fact]
+	public void TagFontSize_DefaultsToTheSizeTheChipsHad_AndAChangeIsAnnounced()
+	{
+		Assert.Equal(14, _service.Current.TagFontSize);
+		Assert.Equal(Constants.Defaults.TagFontSize, _service.Current.TagFontSize);
+
+		_store.Update<AppearanceSettings>(a => a.TagFontSize = 18);
+
+		Assert.Equal(18, _service.Current.TagFontSize);
+		Assert.Equal(1, _changes);
+	}
+
+	[Fact]
 	public void PageMessage_CarriesTheThemeAndTheThreeSizes()
 	{
 		var json = new PageAppearance("dark", 15, 14, 12).ToMessage();
 
-		Assert.Equal("""{"cmd":"appearance","theme":"dark","asst":15,"md":14,"user":12}""", json);
+		Assert.Equal("""{"cmd":"appearance","theme":"dark","asst":15,"md":14,"user":12,"lh":1.25}""", json);
+	}
+
+	[Fact]
+	public void PageMessage_CarriesTheSystemRowColour_AsAPageVariable_OnlyWhenTheUserChangedIt()
+	{
+		var settings = new ColourSettings();
+		Assert.DoesNotContain("sys", new PageAppearance("light", 15, 14, 12, ColourCatalog.PageVariables(settings, false)).ToMessage());
+
+		settings.Light[ColourCatalog.SystemRow] = "#BFE0F8";
+		var json = new PageAppearance("light", 15, 14, 12, ColourCatalog.PageVariables(settings, false)).ToMessage();
+
+		Assert.Equal("""{"cmd":"appearance","theme":"light","asst":15,"md":14,"user":12,"colours":{"--sysbg":"#BFE0F8"},"lh":1.25}""", json);
+	}
+
+	[Theory]
+	[InlineData(false, "#BFE0F7")]
+	[InlineData(true, "#1A3A50")]
+	public void SystemRowColour_DefaultsToAvaloniasPaleBlueInBothThemes(bool dark, string expected)
+	{
+		var definition = ColourCatalog.Find(ColourCatalog.SystemRow)!;
+
+		Assert.Equal(expected, ColourCatalog.Effective(definition, null, dark));
+		Assert.Equal("#445566", ColourCatalog.Effective(definition, new Dictionary<string, string> { [ColourCatalog.SystemRow] = "#445566" }, dark));
 	}
 }

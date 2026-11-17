@@ -121,7 +121,9 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer, IMarkdownRenderer
 
 	private static string HeaderText(SessionEntryDto entry)
 	{
-		var text = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss");
+		// A user row carries the date and the time (to the minute) for the column on its left, as the Avalonia client shows them.
+		var local = entry.Timestamp.ToLocalTime();
+		var text = RoleCode(entry.Role) == "U" ? local.ToString("yyyy-MM-dd HH:mm") : local.ToString("HH:mm:ss");
 		foreach (var part in new[] { entry.ModelId, entry.Effort, entry.ProfileName })
 		{
 			if (!string.IsNullOrWhiteSpace(part))

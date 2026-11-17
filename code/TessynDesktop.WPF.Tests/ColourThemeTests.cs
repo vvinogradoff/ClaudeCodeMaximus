@@ -265,17 +265,17 @@ public sealed class ColourThemeTests
 	public void AnyKey_IsStoredPerTheme_EvenOneTheCatalogDoesNotKnowYet()
 	{
 		var store = SettingsTestSupport.NewStore();
-		store.Update<ColourSettings>(c => c.Of(false)["SystemRow"] = "#ABCDEF");   // a palette key another change adds
+		store.Update<ColourSettings>(c => c.Of(false)["FutureKey"] = "#ABCDEF");   // a key a later build adds (SystemRow itself is in the catalog now)
 
 		var tab = NewTab(store);
 		tab.Rows.Single(r => r.Key == ColourCatalog.Selection).Set("#010203");
 
 		var stored = store.Get<ColourSettings>();
-		Assert.Equal("#ABCDEF", stored.Light["SystemRow"]);   // a change of another colour leaves it alone
-		Assert.Equal("#ABCDEF", stored.For(false)["SystemRow"]);
-		Assert.False(stored.For(true).ContainsKey("SystemRow"));
-		Assert.Null(ColourCatalog.Find("SystemRow"));
-		Assert.DoesNotContain("SystemRow", ColourCatalog.PageVariables(stored, false).Keys);
+		Assert.Equal("#ABCDEF", stored.Light["FutureKey"]);   // a change of another colour leaves it alone
+		Assert.Equal("#ABCDEF", stored.For(false)["FutureKey"]);
+		Assert.False(stored.For(true).ContainsKey("FutureKey"));
+		Assert.Null(ColourCatalog.Find("FutureKey"));
+		Assert.DoesNotContain("FutureKey", ColourCatalog.PageVariables(stored, false).Keys);
 	}
 
 	[Fact]

@@ -221,6 +221,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		ResetAuthForOpen();
 		if (switching)
 			ResetViewForOpen(nodeId);   // FR.23.12, FR.12.29: the session's view, and that view's default input area
+		if (switching)
+			ResetTagArea();   // FR.24: every opened session starts collapsed, also one that was expanded before
 		if (target != null)
 			IsFocusSelected = false;   // a jump lands on the transcript
 		Error = null;
@@ -317,6 +319,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_current = null;
 		Title = string.Empty;
 		Tags.Clear();
+		ResetTagArea();
 		_back.Clear();
 		NotifyBack();
 		Focus.Clear();

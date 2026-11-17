@@ -20,6 +20,7 @@ namespace TessynDesktop.WPF.E2E.Tests;
 public sealed class WpfTranscriptScrollE2ETests : IDisposable
 {
 	private const int Entries = 100;   // one page: no paging happens while the thumb is dragged
+	private const int SystemEntry = 20;   // a system entry among the user ones
 
 	private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
 	private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(20);
@@ -73,6 +74,12 @@ public sealed class WpfTranscriptScrollE2ETests : IDisposable
 		var sb = new StringBuilder();
 		for (var i = 0; i < Entries; i++)
 		{
+			if (i == SystemEntry)
+			{
+				sb.Append(EntryIdsEnv.EntryText("SYSTEM", i, "Read notes.md"));
+				continue;
+			}
+
 			if (i % 2 == 0)
 			{
 				sb.Append(EntryIdsEnv.EntryText("USER", i, $"input {i}", "profile=\"work\""));
@@ -151,9 +158,79 @@ public sealed class WpfTranscriptScrollE2ETests : IDisposable
 			Assert.True(a[5]!.GetValue<double>() >= -0.5, "the time is not to the right of the text: " + a[5]);
 			Assert.True(a[6]!.GetValue<double>() > a[7]!.GetValue<double>() * 0.8, "the time is not at the right edge: " + a[6] + " of " + a[7]);
 
-			var u = (await page.EvalAsync(@"(() => { const e = document.querySelector('.e.U'); const c = e.querySelector('.c'), cs = getComputedStyle(c); return [cs.backgroundColor, e.querySelector('.h').textContent.split(' ')[0]]; })()"))!.AsArray();
+			var u = (await page.EvalAsync(@"(() => { const e = document.querySelector('.e.U'); const c = e.querySelector('.c'), cs = getComputedStyle(c), ts = e.querySelector('.ts'), d = ts.querySelector('.d'), tm = ts.querySelector('.tm');
+				return [cs.backgroundColor, e.textContent.includes('USER'), d.textContent, tm.textContent, ts.getBoundingClientRect().right <= c.getBoundingClientRect().left + 0.5, tm.getBoundingClientRect().top >= d.getBoundingClientRect().bottom - 0.5]; })()"))!.AsArray();
 			Assert.NotEqual("rgba(0, 0, 0, 0)", u[0]!.GetValue<string>());
-			Assert.Equal("USER", u[1]!.GetValue<string>());
+			Assert.False(u[1]!.GetValue<bool>(), "the word USER is printed");
+			Assert.Matches(@"^\d{4}-\d\d-\d\d$", u[2]!.GetValue<string>());
+			Assert.Matches(@"^\d\d:\d\d$", u[3]!.GetValue<string>());
+			Assert.True(u[4]!.GetValue<bool>(), "the date and time are not left of the bubble");
+			Assert.True(u[5]!.GetValue<bool>(), "the time is not under the date");
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
+	public async Task System_rows_have_no_role_word_the_time_on_the_right_and_the_pale_blue_of_the_palette_in_both_themes()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			// The seeded system entry may be outside the rendered window: render it by scrolling there.
+			await page.EvalAsync($"vp.scrollTop = S.off[{SystemEntry} - S.items[0].i]; 0");
+			await WaitAsync("the system row to be rendered", async () => await Num("document.querySelectorAll('.e.S').length", page) >= 1);
+			const string Probe = @"(() => { const e = document.querySelector('.e.S'); const c = e.querySelector('.c'), t = e.querySelector('.t');
+				return [getComputedStyle(c).backgroundColor, e.textContent.toUpperCase().includes('SYSTEM'), t ? t.textContent : null, t ? t.getBoundingClientRect().left - c.getBoundingClientRect().right : -999, t ? t.getBoundingClientRect().left - e.getBoundingClientRect().left : -999, e.getBoundingClientRect().width, document.documentElement.getAttribute('data-theme')]; })()";
+			var s = (await page.EvalAsync(Probe))!.AsArray();
+			var dark = s[6]?.GetValue<string>() == "dark";
+			Assert.Equal(dark ? "rgb(26, 58, 80)" : "rgb(191, 224, 247)", s[0]!.GetValue<string>());
+			Assert.False(s[1]!.GetValue<bool>(), "the word SYSTEM is printed");
+			Assert.Matches(@"^\d\d:\d\d:\d\d$", s[2]!.GetValue<string>());
+			Assert.True(s[3]!.GetValue<double>() >= -0.5, "the time is not to the right of the text: " + s[3]);
+			Assert.True(s[4]!.GetValue<double>() > s[5]!.GetValue<double>() * 0.8, "the time is not at the right edge");
+
+			// The page takes the palette colour from the host's appearance message, for either theme.
+			await page.EvalAsync("onAppearance({ theme: 'dark', sys: '#112233' }); 0");
+			Assert.Equal("rgb(17, 34, 51)", (await page.EvalAsync("getComputedStyle(document.querySelector('.e.S .c')).backgroundColor"))!.GetValue<string>());
+			await page.EvalAsync("onAppearance({ theme: 'light', sys: '#BFE0F7' }); 0");
+			Assert.Equal("rgb(191, 224, 247)", (await page.EvalAsync("getComputedStyle(document.querySelector('.e.S .c')).backgroundColor"))!.GetValue<string>());
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	/// <summary>TC.LS.07 (FR.9.12): the one line-spacing value drives every row of the page; a change from the host re-measures the virtualised list.</summary>
+	[Fact]
+	public async Task Line_spacing_applies_to_every_row_kind_and_a_change_re_measures_the_list()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			// Ratio of the computed line height to the font size of the newest assistant text, a user bubble and the root.
+			const string Ratios = @"(() => { const r = el => { const cs = getComputedStyle(el); return parseFloat(cs.lineHeight) / parseFloat(cs.fontSize); };
+				const a = Array.from(document.querySelectorAll('.e.A .c')).pop(), u = document.querySelector('.e.U .c');
+				return [r(a), r(u), r(document.body)]; })()";
+			var first = (await page.EvalAsync(Ratios))!.AsArray();
+			foreach (var ratio in first)
+				Assert.Equal(1.25, ratio!.GetValue<double>(), 2);   // the stored default reached the page
+
+			const string AvgHeight = "items.getBoundingClientRect().height / items.children.length";   // the rendered entries, whatever the window of them is
+			var height0 = await Num(AvgHeight, page);
+			await page.EvalAsync("onAppearance({ theme: 'dark', asst: 14, md: 14, user: 14, lh: 1.6 }); 0");
+			foreach (var ratio in (await page.EvalAsync(Ratios))!.AsArray())
+				Assert.Equal(1.6, ratio!.GetValue<double>(), 2);
+			await WaitAsync("the list to be measured again with the wider spacing", async () => await Num(AvgHeight, page) > height0 * 1.05);
+
+			var height1 = await Num(AvgHeight, page);
+			await page.EvalAsync("onAppearance({ theme: 'dark', asst: 14, md: 14, user: 14, lh: 1.05 }); 0");
+			foreach (var ratio in (await page.EvalAsync(Ratios))!.AsArray())
+				Assert.Equal(1.05, ratio!.GetValue<double>(), 2);
+			await WaitAsync("the list to be measured again with the tighter spacing", async () => await Num(AvgHeight, page) < height1 * 0.9);
 		}
 		finally
 		{

@@ -40,9 +40,15 @@ function entryHtml(k) {
   const media = it.m.length ? MediaGate.previewHtml(it.m, ALLOW, it.i, S.loaded) : '';
   const cls = '<div class="e ' + esc(it.r) + (InputNav.isAuto(it) ? ' auto' : '') + '" data-k="' + k + '"><div class="c' + (it.i === SEL ? ' sel' : '') + '">';
   const tail = '<div class="b">' + it.html + '</div>' + more + media + chipsHtml(it) + '</div>';
-  if (it.r === 'A') {   // an assistant response sits on the view background: no role word, the model beside nothing, the time on the right (as in the Avalonia client)
+  if (it.r === 'A' || it.r === 'S') {   // an assistant response sits on the view background: no role word, the model beside nothing, the time on the right (as in the Avalonia client)
     const cut = it.ts.indexOf(' · '), time = cut < 0 ? it.ts : it.ts.substring(0, cut), model = cut < 0 ? '' : it.ts.substring(cut + 3);
     return cls + (model ? '<div class="h">' + esc(model) + '</div>' : '') + tail + '<div class="t">' + esc(time) + '</div></div>';
+  }
+  if (it.r === 'U') {   // a user input: date over time in a column on the left, the bubble on the right; only an automated input has a label (SCHEDULED / SUPERVISOR)
+    const cut = it.ts.indexOf(' · '), when = cut < 0 ? it.ts : it.ts.substring(0, cut), extra = cut < 0 ? '' : it.ts.substring(cut + 3);
+    const sp = when.indexOf(' '), date = sp < 0 ? when : when.substring(0, sp), time = sp < 0 ? '' : when.substring(sp + 1);
+    const label = InputNav.labelOf(it), head = label || extra ? '<div class="h">' + esc(label || '') + (label && extra ? ' &middot; ' : '') + esc(extra) + '</div>' : '';
+    return '<div class="e U' + (InputNav.isAuto(it) ? ' auto' : '') + '" data-k="' + k + '"><div class="ts"><div class="d">' + esc(date) + '</div><div class="tm">' + esc(time) + '</div></div><div class="c' + (it.i === SEL ? ' sel' : '') + '">' + head + tail;
   }
   return cls + '<div class="h">' + esc(InputNav.labelOf(it) || ROLE[it.r] || it.r) + ' &middot; ' + esc(it.ts) + '</div>' + tail + '</div>';
 }
@@ -425,7 +431,7 @@ function onMediaOk(m) {
   remeasure();
 }
 
-// Theme and fonts from the host (W10a): the theme name and the three font sizes become attributes and CSS variables on the root; entry heights change with the font, so the list is measured again.
+// Theme and fonts from the host (W10a): the theme name and the three font sizes and the line spacing (--lh, FR.9.12) become attributes and CSS variables on the root; entry heights change with the font, so the list is measured again.
 // The colours the user changed (Settings > Colours) are set as inline CSS variables over the page's own; the ones no longer listed are dropped again.
 let colourVars = [];
 function onColours(m) {
@@ -443,6 +449,7 @@ function onAppearance(m) {
   let sizeChanged = false;
   const set = (name, v) => { const x = px(v); if (x && r.style.getPropertyValue(name) !== x) { r.style.setProperty(name, x); sizeChanged = true; } };
   set('--fs-a', m.asst); set('--fs-m', m.md); set('--fs-u', m.user);
+  if (typeof m.lh === 'number' && m.lh >= 1 && m.lh <= 2.5) { const x = String(m.lh); if (r.style.getPropertyValue('--lh') !== x) { r.style.setProperty('--lh', x); sizeChanged = true; } }
   if (S && sizeChanged) remeasure();   // the entries change height only with a font size, not with the theme
 }
 

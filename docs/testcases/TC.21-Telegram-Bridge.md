@@ -1,6 +1,6 @@
 # TC.21 — Telegram Notification Bridge
 
-Related requirement: [FR.21](/docs/requirements.md#fr21--telegram-notification-bridge). Related use cases: [UC.21](/docs/usecases/UC.21-Telegram-Bridge.md).
+Related requirement: [FR.21](/docs/requirements/FR.21-Telegram-Bridge.md#fr21--telegram-notification-bridge). Related use cases: [UC.21](/docs/usecases/UC.21-Telegram-Bridge.md).
 
 All Telegram Bot API calls are abstracted behind `ITelegramClient`, so these test cases run against a fake implementation (no real network/bot) except where noted as manual verification.
 
