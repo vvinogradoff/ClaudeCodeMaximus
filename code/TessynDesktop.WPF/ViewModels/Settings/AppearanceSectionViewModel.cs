@@ -6,7 +6,7 @@ using TessynDesktop.WPF.State;
 namespace TessynDesktop.WPF.ViewModels.Settings;
 
 /// <summary>
-/// The Appearance tab (FR.9): the theme and the four font sizes, stored in the client settings (<c>wpf.json</c>, section <c>appearance</c>). Applying them is the theme
+/// The Appearance tab (FR.9): the theme, the four font sizes and the tag cloud font size, stored in the client settings (<c>wpf.json</c>, section <c>appearance</c>). Applying them is the theme
 /// package's job; this tab only edits the stored values. The colour palette editor of the Avalonia client is dropped (decision A8).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -31,6 +31,12 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 
 	[ObservableProperty]
 	private string _inputFontSize = string.Empty;
+
+	[ObservableProperty]
+	private string _tagFontSize = string.Empty;
+
+	[ObservableProperty]
+	private string _lineSpacing = string.Empty;
 
 	public AppearanceSectionViewModel(IClientSettingsStore store)
 	{
@@ -66,7 +72,9 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 					|| edited.AssistantFontSize != stored.AssistantFontSize
 					|| edited.AssistantMarkdownFontSize != stored.AssistantMarkdownFontSize
 					|| edited.UserFontSize != stored.UserFontSize
-					|| edited.InputFontSize != stored.InputFontSize;
+					|| edited.InputFontSize != stored.InputFontSize
+					|| edited.TagFontSize != stored.TagFontSize
+					|| edited.LineSpacing != stored.LineSpacing;
 			}
 			catch (SettingsInputException)
 			{
@@ -89,6 +97,8 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 				a.AssistantMarkdownFontSize = edited.AssistantMarkdownFontSize;
 				a.UserFontSize = edited.UserFontSize;
 				a.InputFontSize = edited.InputFontSize;
+				a.TagFontSize = edited.TagFontSize;
+				a.LineSpacing = edited.LineSpacing;
 			});
 			StatusText = Constants.Settings.Saved;
 			return Task.FromResult(true);
@@ -118,6 +128,8 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 		AssistantMarkdownFontSize = Format(stored.AssistantMarkdownFontSize);
 		UserFontSize = Format(stored.UserFontSize);
 		InputFontSize = Format(stored.InputFontSize);
+		TagFontSize = Format(stored.TagFontSize);
+		LineSpacing = Format(stored.LineSpacing);
 	}
 
 	private AppearanceSettings Build(AppearanceSettings stored) => new()
@@ -128,6 +140,8 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 		AssistantMarkdownFontSize = ParseSize(AssistantMarkdownFontSize, stored.AssistantMarkdownFontSize),
 		UserFontSize = ParseSize(UserFontSize, stored.UserFontSize),
 		InputFontSize = ParseSize(InputFontSize, stored.InputFontSize),
+		TagFontSize = ParseSize(TagFontSize, stored.TagFontSize),
+		LineSpacing = ParseLineSpacing(LineSpacing, stored.LineSpacing),
 	};
 
 	private static double ParseSize(string text, double fallback)
@@ -140,6 +154,18 @@ public sealed partial class AppearanceSectionViewModel : SettingsSectionViewMode
 			throw new SettingsInputException(string.Format(Constants.Settings.FontSizeInvalid, Constants.Settings.MinFontSize, Constants.Settings.MaxFontSize));
 
 		return size;
+	}
+
+	private static double ParseLineSpacing(string text, double fallback)
+	{
+		if (string.IsNullOrWhiteSpace(text))
+			return fallback;
+
+		if (!double.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var factor)
+			|| factor < Constants.Settings.MinLineSpacing || factor > Constants.Settings.MaxLineSpacing)
+			throw new SettingsInputException(string.Format(Constants.Settings.LineSpacingInvalid, Constants.Settings.MinLineSpacing, Constants.Settings.MaxLineSpacing));
+
+		return Math.Round(factor, 2);
 	}
 
 	private static string Format(double size) => size.ToString("0.##", CultureInfo.InvariantCulture);

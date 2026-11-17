@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -15,7 +15,7 @@ namespace TessynDesktop.WPF.ViewModels;
 /// The Tags tab (FR.1.15, FR.24.11-24.14): a search box over the tags, the chips it finds (selected ones first), and the sessions carrying
 /// any selected tag (OR filter) grouped by directory. Everything is the daemon's <c>tags.search</c>; the client sends the text, the selected
 /// tags and, while the project scope is on, the selected session (the daemon scopes to its directory; a worker scopes like its supervisor).
-/// The scope is on by default while a session is selected and off without a selection. Chips and rows are updated in place. Refreshes on
+/// The scope is on by default while a session (or worker) is selected and off without one, also while a directory or group is selected (as in the Avalonia client). Chips and rows are updated in place. Refreshes on
 /// <c>tags.changed</c>; a favourite or running flip arrives as <c>session.changed</c> and updates the rows in place. Contains no WPF types.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -91,7 +91,7 @@ public sealed partial class TagSearchViewModel : ObservableObject, IDisposable
 	/// <summary>The search is limited to the selected session's directory.</summary>
 	public bool IsScoped => IsScopeEnabled && _scopeSessionId != null;
 
-	/// <summary>A session (or a directory with sessions) is selected, so the scope toggle has an effect; false forces the scope off.</summary>
+	/// <summary>A session or worker is selected, so the scope toggle has an effect; false forces the scope off.</summary>
 	public bool CanScope => _scopeSessionId != null;
 
 	/// <summary>The task of the latest search (tests await it).</summary>
@@ -199,6 +199,9 @@ public sealed partial class TagSearchViewModel : ObservableObject, IDisposable
 			_launcher?.TryOpen(chip.Url);
 	}
 
+	/// <summary>Switches the project scope off: the tags of every directory are searched (the "show all" link under the search box while the scope is on).</summary>
+	[RelayCommand]
+	private void ShowAllDirectories() => IsScopeEnabled = false;
 	/// <summary>Drops the whole selection and the text.</summary>
 	[RelayCommand]
 	private Task ClearAsync()

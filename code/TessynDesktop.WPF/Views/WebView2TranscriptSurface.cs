@@ -6,6 +6,7 @@ using Microsoft.Web.WebView2.Wpf;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Rendering;
 using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Transcript;
 
 namespace TessynDesktop.WPF.Views;
@@ -37,6 +38,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private readonly TranscriptMediaBroker _broker;
 	private readonly WebRequestPolicy _requests;
 	private readonly IAppearanceService _appearance;
+	private readonly IClientSettingsStore _store;
 	private readonly ScreensaverController _screensaver;
 	private readonly UiCoalescer _appearanceCoalescer;
 
@@ -48,12 +50,13 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private Task _sendTail = Task.CompletedTask;
 	private int _generation;
 
-	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, TranscriptMediaBroker broker, WebRequestPolicy requests, IAppearanceService appearance, ScreensaverController screensaver, ILogger<WebView2TranscriptSurface> logger)
+	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, TranscriptMediaBroker broker, WebRequestPolicy requests, IAppearanceService appearance, IClientSettingsStore store, ScreensaverController screensaver, ILogger<WebView2TranscriptSurface> logger)
 	{
 		_screensaver = screensaver;
 		_appearanceCoalescer = new UiCoalescer(ApplyAppearance);
 		_broker = broker;
 		_appearance = appearance;
+		_store = store;
 		_requests = requests;
 		_environment = environment;
 		_paths = paths;
@@ -63,6 +66,11 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		_logger = logger;
 		_media.Changed += (_, _) => PostPolicy();
 		_appearance.Changed += (_, _) => _appearanceCoalescer.Request(_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher);
+		_store.Changed += (_, e) =>
+		{
+			if (e.Section == Constants.SettingsSections.Colours)
+				_appearanceCoalescer.Request(_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher);
+		};
 	}
 
 	public event EventHandler<ViewAnchorEventArgs>? ViewChanged;
@@ -464,8 +472,12 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		if (_control?.CoreWebView2 == null || !_ready)
 			return;
 
-		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(_appearance.IsDark, _appearance.Current).ToMessage());
+		_control.CoreWebView2.PostWebMessageAsJson(PageAppearance.From(_appearance.IsDark, _appearance.Current, SystemRowColour()).ToMessage());
 	}
+
+	/// <summary>The palette colour of the system rows for the effective theme.</summary>
+	private string SystemRowColour() =>
+		ColourCatalog.Effective(ColourCatalog.Find(ColourCatalog.SystemRow)!, _store.Get<ColourSettings>().Overrides, _appearance.IsDark);
 
 	/// <summary>Hands the Windows accent colour to the page as the --accent CSS variable.</summary>
 	private void ApplyAccent()

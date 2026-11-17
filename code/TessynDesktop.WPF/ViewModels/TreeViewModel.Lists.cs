@@ -1,4 +1,4 @@
-using TessynDesktop.Models.Remote;
+﻿using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.WPF.ViewModels;
 
@@ -67,20 +67,9 @@ public sealed partial class TreeViewModel
 	}
 
 	/// <summary>
-	/// The session id to send as <c>scopeNodeId</c> for the selected node: the node itself for a session or worker (the daemon scopes a worker like
-	/// its supervisor), the first session below a directory or group; null with no selection or an empty directory.
+	/// The session id to send as <c>scopeNodeId</c>: the selected session or worker (the daemon scopes a worker like its supervisor). Null with no selection and for a selected
+	/// directory or group, as in the Avalonia client and FR.1.10 / FR.24.11 (the project scope belongs to a selected session; with a directory selected the scope is off and
+	/// every tag is searched).
 	/// </summary>
-	public string? ScopeSessionIdOfSelection()
-	{
-		var node = SelectedNode;
-		if (node == null)
-			return null;
-
-		if (node.IsSessionLike)
-			return node.Id;
-
-		var sessions = new List<TreeNodeViewModel>();
-		Collect(node, sessions);
-		return sessions.FirstOrDefault()?.Id;
-	}
+	public string? ScopeSessionIdOfSelection() => SelectedNode is { IsSessionLike: true } node ? node.Id : null;
 }

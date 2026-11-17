@@ -1,6 +1,6 @@
 # UC.LC.01 — Offline coding with a local model using a curated tool profile
 
-Related requirement: [FR.12.21 — Local Tool Profile](/docs/requirements.md#fr1221--local-tool-profile), [FR.12.22 — Command-bar selector compaction & left-truncated model label](/docs/requirements.md#fr1222--command-bar-selector-compaction--left-truncated-model-label). Related background: [Local-Models_Agentic-Coding-Findings](/docs/business-analysis/Local-Models_Agentic-Coding-Findings.md).
+Related requirement: [FR.12.21 — Local Tool Profile](/docs/requirements/FR.12-Input-and-Composer.md), [FR.12.22 — Command-bar selector compaction & left-truncated model label](/docs/requirements/FR.12-Input-and-Composer.md). Related background: [Local-Models_Agentic-Coding-Findings](/docs/business-analysis/Local-Models_Agentic-Coding-Findings.md).
 
 ## Actors
 

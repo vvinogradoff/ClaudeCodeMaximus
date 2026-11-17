@@ -161,6 +161,13 @@
                             </StackPanel>
                         </StackPanel>
 
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Tag cloud font size" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding TagFontSize}" Width="90" HorizontalAlignment="Left" AutomationProperties.Name="Tag cloud font size"/>
+                            <TextBlock Text="Size in points (8 to 40) of the tag chips and the +N hint under the session header. Applied when you save."
+                                       FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
+                        </StackPanel>
+
                         <Separator Margin="0,4"/>
 
                         <TextBlock Text="Colors (for selected theme)" FontWeight="SemiBold"/>

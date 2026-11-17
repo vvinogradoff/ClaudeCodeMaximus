@@ -20,6 +20,7 @@ public static class ThemeApplicator
     public const string KeyRecency15Min  = "CmxRecency15Min";
     public const string KeyRecency30Min  = "CmxRecency30Min";
     public const string KeyRecency60Min  = "CmxRecency60Min";
+    public const string KeyTagFontSize   = "CmxTagFontSize";
 
     public static void Apply(AppSettingsModel settings)
     {
@@ -34,7 +35,12 @@ public static class ThemeApplicator
         // Use dark colors when dark theme is active (either explicit or system dark)
         var isDark = settings.Theme == "Dark";
         ApplyColors(isDark ? settings.DarkColors : settings.LightColors);
+        ApplyTagFontSize(settings.TagFontSize);
     }
+
+    /// <summary>Puts the tag cloud size into the application resources; the tag areas follow it live.</summary>
+    public static void ApplyTagFontSize(double size) =>
+        Application.Current!.Resources[KeyTagFontSize] = TagFontSizeRules.Normalize(size);
 
     public static void ApplyColors(ThemeColorsModel colors)
     {

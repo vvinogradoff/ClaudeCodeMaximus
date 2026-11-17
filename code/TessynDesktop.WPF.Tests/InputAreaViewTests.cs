@@ -93,6 +93,17 @@ public sealed class InputAreaViewTests
 		splitter.RaiseEvent(new DragCompletedEventArgs(0, 0, canceled: false) { RoutedEvent = Thumb.DragCompletedEvent, Source = splitter });
 
 	[Fact]
+	public void TheInputBox_HasAnInnerPaddingOfThreePixels()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var f = Create();
+
+			Assert.Equal(new Thickness(3), f.Input.Padding);
+		});
+	}
+
+	[Fact]
 	public void ADoubleClickOnTheSplitter_CollapsesAndExpandsTheInputArea_ASingleClickDoesNot()
 	{
 		StaTestRunner.Run(() =>

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -181,15 +181,15 @@ public sealed class TreeFeedbackTests
 	// ---- dates and recency ----
 
 	[Fact]
-	public void TheDate_IsYyyyMmDdHhMm_ByDefault_AndRelativeBySetting()
+	public void TheDate_IsYyyyMmDd_ByDefault_AndRelativeAgeBySetting()
 	{
 		var at = new DateTimeOffset(2026, 11, 3, 9, 5, 0, TimeSpan.Zero).ToLocalTime();
 		var nowSameDay = at.AddHours(2);
 		var nowLater = at.AddDays(5);
 
-		Assert.Equal(at.ToString("yyyy-MM-dd HH:mm"), SessionDisplay.DateText(at, nowSameDay, SessionDateFormat.Absolute));
-		Assert.Equal(at.ToString("HH:mm"), SessionDisplay.DateText(at, nowSameDay, SessionDateFormat.Relative));
-		Assert.Equal(at.ToString("MMM d"), SessionDisplay.DateText(at, nowLater, SessionDateFormat.Relative));
+		Assert.Equal(at.ToString("yyyy-MM-dd"), SessionDisplay.DateText(at, nowSameDay, SessionDateFormat.Absolute));
+		Assert.Equal("2h", SessionDisplay.DateText(at, nowSameDay, SessionDateFormat.Relative));
+		Assert.Equal("5d", SessionDisplay.DateText(at, nowLater, SessionDateFormat.Relative));
 		Assert.Equal(string.Empty, SessionDisplay.DateText(null, nowLater, SessionDateFormat.Absolute));
 	}
 
@@ -224,7 +224,7 @@ public sealed class TreeFeedbackTests
 	{
 		var prompt = Now.AddMinutes(-40);
 		var row = new SessionRowViewModel("s", "N", "d", State("s", prompt: prompt), clock: new FixedClock(Now));
-		Assert.Equal(prompt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), row.LastPromptText);
+		Assert.Equal(prompt.ToLocalTime().ToString("yyyy-MM-dd"), row.LastPromptText);
 		Assert.Equal(3, row.RecencyLevel);
 
 		var node = new TreeNodeViewModel("s", TreeNodeKind.Session, "N", null) { State = State("s", prompt: DateTimeOffset.UtcNow.AddMinutes(-10)) };

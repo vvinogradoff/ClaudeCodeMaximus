@@ -24,22 +24,10 @@ public sealed class SessionTagAreaViewTests
 {
 	private const double Width = 400;
 
-	private sealed class MemoryState : IClientStateStore
-	{
-		public ClientStateModel State { get; } = new();
-
-		public Task LoadAsync() => Task.CompletedTask;
-
-		public void Update(Action<ClientStateModel> change) => change(State);
-
-		public Task FlushAsync() => Task.CompletedTask;
-	}
-
 	private sealed class Fixture
 	{
 		public required FakeUrlLauncher Launcher { get; init; }
 		public required ObservableCollection<SessionTagViewModel> Tags { get; init; }
-		public required MemoryState State { get; init; }
 		public required TagAreaViewModel Model { get; init; }
 		public required SessionTagArea Area { get; init; }
 
@@ -73,13 +61,11 @@ public sealed class SessionTagAreaViewTests
 	private static Fixture Create(int tags, bool expanded = false)
 	{
 		var launcher = new FakeUrlLauncher();
-		var state = new MemoryState();
-		state.State.TagAreaExpanded = expanded;
 		var collection = new ObservableCollection<SessionTagViewModel>(Enumerable.Range(0, tags).Select(i => Chip(i, launcher)));
-		var model = new TagAreaViewModel(collection, state);
+		var model = new TagAreaViewModel(collection) { IsExpanded = expanded };
 		var area = new SessionTagArea { DataContext = model };
 		Host(area);
-		var fixture = new Fixture { Launcher = launcher, Tags = collection, State = state, Model = model, Area = area };
+		var fixture = new Fixture { Launcher = launcher, Tags = collection, Model = model, Area = area };
 		fixture.Settle();
 		return fixture;
 	}
@@ -340,7 +326,6 @@ public sealed class SessionTagAreaViewTests
 
 			Assert.True(f.Model.IsExpanded);
 			Assert.True(f.Area.AreaHeight > f.Area.LineHeight);
-			Assert.True(f.State.State.TagAreaExpanded);
 		});
 	}
 
@@ -404,12 +389,11 @@ public sealed class SessionTagAreaViewTests
 
 			Assert.False(f.Model.IsExpanded);
 			Assert.Equal(f.Area.LineHeight, f.Area.AreaHeight, 1);
-			Assert.False(f.State.State.TagAreaExpanded);
 		});
 	}
 
 	[Fact]
-	public void A_double_click_on_a_chip_in_full_mode_collapses_and_the_chip_is_not_pressed_again()
+	public void A_double_click_on_a_chip_in_full_mode_does_not_collapse_only_empty_space_does()
 	{
 		Run(() =>
 		{
@@ -419,8 +403,8 @@ public sealed class SessionTagAreaViewTests
 			Press(chip, 1);
 			var second = Press(chip, 2);
 
-			Assert.False(f.Model.IsExpanded);
-			Assert.True(second.Handled, "the second press must not reach the chip, so the link opens once (from the first click)");
+			Assert.True(f.Model.IsExpanded);
+			Assert.False(second.Handled, "a chip press keeps its own meaning");
 		});
 	}
 
@@ -479,6 +463,77 @@ public sealed class SessionTagAreaViewTests
 	}
 
 	[Fact]
+	public void The_chips_and_the_hint_use_the_default_tag_font_size_of_the_setting()
+	{
+		Run(() =>
+		{
+			var f = Create(60);
+
+			Assert.Equal(Constants.Defaults.TagFontSize, f.Area.TagFontSize);
+			Assert.All(f.Chips(), chip => Assert.Equal(Constants.Defaults.TagFontSize, chip.FontSize));
+			Assert.Equal(Constants.Defaults.TagFontSize, Named(f.Area, "HiddenHintText") is TextBlock hint ? hint.FontSize : double.NaN);
+		});
+	}
+
+	[Fact]
+	public void A_new_tag_font_size_applies_live_to_the_chips_and_the_hint_and_the_mini_line_follows_the_chip_height()
+	{
+		Run(() =>
+		{
+			var f = Create(60);
+			var smallLine = f.Area.LineHeight;
+			Assert.Equal(smallLine, f.Area.AreaHeight, 1);
+
+			f.Area.TagFontSize = 28;
+			f.Settle();
+
+			Assert.All(f.Chips(), chip => Assert.Equal(28, chip.FontSize));
+			Assert.Equal(28, ((TextBlock)Named(f.Area, "HiddenHintText")).FontSize);
+			Assert.True(f.Area.LineHeight > smallLine + 8, $"line {f.Area.LineHeight} did not grow from {smallLine}");
+			Assert.Equal(f.Area.LineHeight, f.Area.AreaHeight, 1);   // mini: exactly one line of the new chips
+
+			f.Area.TagFontSize = 9;
+			f.Settle();
+
+			Assert.True(f.Area.LineHeight < smallLine, $"line {f.Area.LineHeight} did not shrink from {smallLine}");
+			Assert.Equal(f.Area.LineHeight, f.Area.AreaHeight, 1);
+		});
+	}
+
+	[Fact]
+	public void The_area_follows_the_tag_font_size_application_resource()
+	{
+		Run(() =>
+		{
+			var f = Create(60);
+			f.Area.Resources[Constants.Appearance.TagFontSizeKey] = 22.0;
+			f.Settle();
+
+			Assert.Equal(22, f.Area.TagFontSize);
+			Assert.All(f.Chips(), chip => Assert.Equal(22, chip.FontSize));
+
+			f.Area.Resources[Constants.Appearance.TagFontSizeKey] = 12.0;
+			f.Settle();
+
+			Assert.All(f.Chips(), chip => Assert.Equal(12, chip.FontSize));
+			Assert.Equal(f.Area.LineHeight, f.Area.AreaHeight, 1);
+		});
+	}
+
+	[Fact]
+	public void A_bigger_tag_font_size_in_full_mode_grows_the_area_to_the_ten_line_cap_of_the_bigger_lines()
+	{
+		Run(() =>
+		{
+			var f = Create(200, expanded: true);
+			f.Area.TagFontSize = 24;
+			f.Settle();
+
+			Assert.Equal(f.Area.LineHeight * Constants.TagArea.MaxFullLines, f.Area.AreaHeight, 1);
+		});
+	}
+
+	[Fact]
 	public void The_plus_hint_never_covers_a_chip_of_the_line()
 	{
 		Run(() =>
@@ -510,7 +565,6 @@ public sealed class SessionTagAreaViewTests
 			provider.Expand();
 
 			Assert.False(f.Model.IsExpanded);
-			Assert.False(f.State.State.TagAreaExpanded);
 		});
 	}
 

@@ -1,6 +1,6 @@
 # UC.21 — Telegram Notification Bridge
 
-Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements.md#fr21--telegram-notification-bridge)
+Related requirement: [FR.21 — Telegram Notification Bridge](/docs/requirements/FR.21-Telegram-Bridge.md#fr21--telegram-notification-bridge)
 
 ## Actors
 

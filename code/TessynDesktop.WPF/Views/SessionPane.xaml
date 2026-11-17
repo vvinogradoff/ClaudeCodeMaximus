@@ -250,7 +250,7 @@
                         </ItemsPanelTemplate>
                     </v:SlotHost.ItemsPanel>
                 </v:SlotHost>
-                <TextBox x:Name="InputBox" Style="{StaticResource PromptBox}" AllowDrop="True" AutomationProperties.Name="Prompt input"
+                <TextBox x:Name="InputBox" Style="{StaticResource PromptBox}" Padding="3" AllowDrop="True" AutomationProperties.Name="Prompt input"
                          Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
                          Visibility="{Binding ShowInputBox, Converter={StaticResource BoolToVis}}"
                          ToolTip="Ctrl+Enter sends (Settings, Keyboard shortcuts). Ctrl+wheel changes the font size. Drop or paste files here."

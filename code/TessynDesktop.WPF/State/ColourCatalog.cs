@@ -13,6 +13,7 @@ public static partial class ColourCatalog
 	public const string StatusGroup = "Session status";
 	public const string FocusGroup = "Focus kinds";
 	public const string TreeGroup = "Tree";
+	public const string TranscriptGroup = "Session output";
 
 	public const string RecentTier1 = "RecentTier1";
 	public const string RecentTier2 = "RecentTier2";
@@ -32,6 +33,7 @@ public static partial class ColourCatalog
 	public const string FocusDecided = "FocusDecided";
 	public const string FocusDecidedText = "FocusDecidedText";
 	public const string Selection = "TreeSelection";
+	public const string SystemRow = "SystemRow";
 
 	/// <summary>The colours in the order of the Colours tab.</summary>
 	public static IReadOnlyList<ColourDefinition> All { get; } =
@@ -54,6 +56,7 @@ public static partial class ColourCatalog
 		new(FocusDecided, "Decided: background", FocusGroup, "#707070", "#707070"),
 		new(FocusDecidedText, "Decided: text", FocusGroup, "#FFFFFF", "#FFFFFF"),
 		new(Selection, "Selected row", TreeGroup, "#CDE6F7", "#264F78"),
+		new(SystemRow, "System rows (tool calls)", TranscriptGroup, "#BFE0F7", "#1A3A50"),
 	];
 
 	/// <summary>The definition with this key; null when unknown.</summary>

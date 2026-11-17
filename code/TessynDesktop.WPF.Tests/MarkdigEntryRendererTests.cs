@@ -128,6 +128,16 @@ public sealed class MarkdigEntryRendererTests
 		Assert.True(view.EstimatedHeight > 0);
 	}
 
+	[Fact]
+	public void A_user_entry_header_is_the_local_date_and_the_time_to_the_minute()
+	{
+		var at = new DateTimeOffset(2026, 11, 14, 10, 5, 9, TimeSpan.Zero);
+
+		var view = _renderer.Render(new SessionEntryDto { Index = 1, Role = "user", Content = "hi", Timestamp = at });
+
+		Assert.Equal(at.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), view.Timestamp);
+	}
+
 	[Theory]
 	[InlineData("user", "U")]
 	[InlineData("assistant", "A")]
