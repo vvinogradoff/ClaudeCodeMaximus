@@ -55,6 +55,9 @@ public sealed partial class SessionPaneViewModel
 	/// <summary>Number shown on the Focus toggle: open items other than Decided.</summary>
 	public int FocusBadge => Focus.OpenCount;
 
+	/// <summary>The kind of the most severe counted item; colours the Focus badge from the palette (FR.23.13).</summary>
+	public string FocusBadgeKind => Focus.TopOpenKind;
+
 	/// <summary>Reads the optional media-preview allowlist from the daemon (FR.26.4); safe to call when the daemon does not send one.</summary>
 	public Task InitializeAsync() => Task.WhenAll(_media?.RefreshAsync(_client) ?? Task.CompletedTask, LoadCatalogAsync());
 
@@ -69,11 +72,12 @@ public sealed partial class SessionPaneViewModel
 		if (e.PropertyName == nameof(FilePreviewViewModel.IsOpen) && Preview?.IsOpen == true)
 			SideCollapsed = false;
 
-		if (e.PropertyName is nameof(FocusViewModel.HasItems) or nameof(FocusViewModel.OpenCount) or nameof(FilePreviewViewModel.IsOpen))
+		if (e.PropertyName is nameof(FocusViewModel.HasItems) or nameof(FocusViewModel.OpenCount) or nameof(FocusViewModel.TopOpenKind) or nameof(FilePreviewViewModel.IsOpen))
 		{
 			OnPropertyChanged(nameof(HasSideContent));
 			OnPropertyChanged(nameof(IsSidePaneVisible));
 			OnPropertyChanged(nameof(FocusBadge));
+			OnPropertyChanged(nameof(FocusBadgeKind));
 			OnPropertyChanged(nameof(IsFocusBadgeVisible));
 		}
 	}
