@@ -1,6 +1,6 @@
 # TC.LC.01 — Local Tool Profile
 
-Related requirement: [FR.12.21](/docs/requirements.md#fr1221--local-tool-profile), [FR.12.22](/docs/requirements.md#fr1222--command-bar-selector-compaction--left-truncated-model-label). Related use cases: [UC.LC.01](/docs/usecases/UC.LC.01-Local-Tool-Profile.md).
+Related requirement: [FR.12.21](/docs/requirements/FR.12-Input-and-Composer.md), [FR.12.22](/docs/requirements/FR.12-Input-and-Composer.md). Related use cases: [UC.LC.01](/docs/usecases/UC.LC.01-Local-Tool-Profile.md).
 
 CLI argument assembly is tested by asserting on the built `ProcessStartInfo`/argument list (mirrors the existing `ClaudeProcessLauncher`/`ClaudeProcessManager.BuildArguments` test pattern) — no real `claude` or Ollama process is required for these cases.
 

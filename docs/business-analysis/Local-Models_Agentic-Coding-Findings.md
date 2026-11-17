@@ -1,6 +1,6 @@
 # Local-Models_Agentic-Coding-Findings
 
-*Empirically verified 2026-09-11 against a locally running Ollama 0.32.14 instance. Backs [FR.12.21/FR.12.22](/docs/requirements.md#fr1221--local-tool-profile).*
+*Empirically verified 2026-09-11 against a locally running Ollama 0.32.14 instance. Backs [FR.12.21/FR.12.22](/docs/requirements/FR.12-Input-and-Composer.md).*
 
 ## Pass-through architecture
 

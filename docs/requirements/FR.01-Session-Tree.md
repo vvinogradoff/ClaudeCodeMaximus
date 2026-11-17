@@ -1,11 +1,103 @@
-# FR.1 — Session Tree and Left Panel (batch 2026-11-17)
+> Area file of the requirements (index: [README](README.md); old IDs and where they went: [ID-MAP](ID-MAP.md)). The text below is the unchanged existing text of this area; the batch of 2026-11-17 is at the end.
 
-> **Staging file, phase 1.** This holds only the new and amended text of the 2026-11-17 batch for FR.1, in its target place. Phase 2 puts the existing FR.1 text (`requirements.md` lines 23–107, plus the FR.1.17 text of the uncommitted draft) above this block and keeps every existing ID. Use cases: [UC.LP.01](/docs/usecases/UC.LP.01-Left-Panel-Lists.md). Test cases: [TC.LP.01](/docs/testcases/TC.LP.01-Left-Panel-Lists.md).
+### FR.1 — Session Tree
+
+**FR.1.1** The left panel shall display a hierarchical tree of sessions.
+
+**FR.1.2** The tree shall support exactly three node types:
+
+| Type | Physical existence | Renameable | Purpose |
+|---|---|---|---|
+| **Directory** | Real filesystem directory | No — name is derived from the path (FR.1.3) | Top-level entry; defines the working directory for all sessions beneath it |
+| **Group** | `appsettings.json` only | Yes | Intermediate organisational node; no session, no working directory of its own |
+| **Session** | Session file on disk; name stored in `appsettings.json` | Yes | Terminal node; represents one Claude Code conversation |
+
+**FR.1.3 — Directory node display name:** Derived from the working directory path by a pure string rule (`IDirectoryLabelService.GetLabel`); the filesystem is not accessed and git (`.git` roots) is **not** consulted:
+1. Split the path on both `\` and `/`, dropping empty segments (so trailing separators, UNC `\\` prefixes and forward-slash paths are handled). If there are no segments, the input is returned unchanged.
+2. Take the last segment as the candidate. While the candidate is a **well-known project folder** name (`Constants` list: `Code`, `Docs`, `Data`; compared case-insensitively; not user-configurable), a previous segment exists, and that previous segment is not a drive designator (`X:`), move to the previous segment. Stripping repeats (`HardStop\Code\Data` → `HardStop`).
+3. If the chosen segment is a drive designator (the path is a drive root), the label is that segment with a trailing `\` (`C:\` → `C:\`).
+4. The label keeps the segment's original casing.
+5. The label is computed at display time and is never persisted; directory node display names are never overridden by the user.
+6. The directory node in the session tree shows the full working-directory path as a tooltip, since the label no longer reveals it.
+
+| Path | Label |
+|---|---|
+| `C:\Projects\oDesk\HardStop` | `HardStop` |
+| `C:\Projects\oDesk\HardStop\Code\` | `HardStop` |
+| `C:\Projects\oDesk\HardStop\Code\Docs` | `HardStop` |
+| `C:\Projects\EyeLabX\Code\EyeCura\` | `EyeCura` (only the *last* segment is replaced) |
+| `C:\Code` | `Code` (parent is a drive designator) |
+| `C:\` | `C:\` |
+| `\\server\share\Proj` | `Proj` |
+| `/home/u/proj/Code` | `proj` |
+
+Different directories may therefore share a label (e.g. `HardStop` and `HardStop\Code` both show `HardStop`). Duplicates are prevented by path (FR.1.5), never by label. The same label is used wherever a directory is named: tree, recent-sessions dropdown, import pickers (including the "switch to original directory" target), `list_sessions` `dirLabel` (FR.15.1) and Telegram topic names (FR.21.2).
+
+**FR.1.4 — Working directory inheritance:** All Session nodes nested under a Directory node (at any depth, through any number of Group nodes) inherit the Directory node's path as the `claude` process working directory.
+
+**FR.1.5 — Adding nodes:**
+- **Add Directory:** user selects a folder via a directory picker; a new top-level Directory node is created. If a Directory node for that path already exists, no duplicate is created (duplicates are detected by path, not by display label — FR.1.3).
+- **Add Group:** user right-clicks a Directory or Group node and selects "Add Group"; a new named Group node is created as a child. Name is entered inline.
+- **Add Session:** user right-clicks a Directory or Group node and selects "Add Session"; a new Session node is created as a child, a session file is created on disk (see FR.3), and a name is entered inline.
+- **New Session shortcut (no tree selection):** if the user triggers "New Session" without a tree context, they are first prompted to select a working directory. If a matching Directory node exists it is used; otherwise a new Directory node is created.
+
+**FR.1.6 — Renaming:**
+- Group nodes and Session nodes may be renamed via inline editing (double-click label, or context menu → Rename).
+- Directory nodes may not be renamed; their display name is always derived from the filesystem path per FR.1.3.
+- Renamed names are stored in `appsettings.json`.
+
+**FR.1.7 — Deletion rules:**
+- A **Session** node may be deleted from the tree only if its corresponding session file no longer exists on disk. The UI checks file existence before allowing the action.
+- A **Group** node may be deleted only if it has no children.
+- A **Directory** node may be deleted only if it has no children.
+- No cascading deletion: the UI shall never delete files or child nodes automatically.
+
+**FR.1.8 — Running indicator:** Session nodes with an active `claude` process shall be visually distinguished in the tree (e.g., animated spinner or distinct icon).
+
+**FR.1.8 amendment (amended 2026-11-12, FR.25):** The running flag now covers every kind of turn: headless turns (Telegram, scheduled, orchestrated, web) and turns typed in the desktop's own session view. The flag is **reference-counted** per session: each turn source that starts a turn adds 1 and removes 1 when its turn ends, the count never goes below 0, and the session counts as running while the count is above 0. The change event fires only when the count moves between 0 and 1. The desktop's `TurnController` reports its interactive turns to the daemon (`IDaemonClient.SetSessionRunning`, true when its busy count goes from 0 to 1, false when it returns to 0), so a turn started at the desktop also shows as running in Tessyn Web (FR.25.19).
+
+**FR.1.9 — Search:** A search box positioned above the tree performs a full-text search using the Cross-Project Search Index (FR.13.15), with a 300ms debounce after each keystroke and the query run on a background thread. The tree filters to show only Session nodes whose indexed content matches; ancestor nodes (Group, Directory) of matching sessions stay visible, all others are hidden. A supervisor session stays visible when any of its sub-sessions match, and non-matching sub-sessions are hidden. Any typed text is a valid query — emails, file names, paths and punctuation are matched literally and never cause a query error (FR.13.15). Only if the index itself cannot be opened does search fall back to a substring scan of session files in the configured Session Files Root; the fallback matches message bodies only (never the entry header lines, which carry the account profile such as `profile="user@example.com"`), and skips files it cannot read (e.g. one a running session is writing) instead of failing the search. (Fixed 2026-11-05, see [[ISSUE.015]].)
+
+**FR.1.10 — Project-scope toggle:** A toggle button next to the search box limits search results to the currently selected session's project (matched by Claude CLI project slug) when enabled. It defaults to enabled whenever a session is selected, and is forced off and disabled whenever no session is selected. Changing the toggle, or selecting a different session while it is enabled, re-runs the active search immediately.
+
+**FR.1.11 — Searching indicator:** While a search query is running against the index, an animated spinner glyph is shown inside the search box to indicate that a search is in progress, since index lookups are not always instantaneous. The indicator is cleared when the search completes, fails, or is cleared — a failing search never leaves it spinning (see [[ISSUE.015]]).
+
+**FR.1.12 — Relevance ordering:** While a search is active, the tree is reordered most relevant first. A session's relevance is the number of its messages containing the query as an exact phrase (strict match), then the number of its messages containing all query words anywhere (loose match); any strict match outranks any loose-only match, and ties go to the most recent prompt. A Group or Directory ranks by its best descendant session. Reordering is view-only — the persisted tree order is never changed — and clearing the search restores the original order (sessions added during the search appear at the end of their container). Moving sessions (drag-drop and the Move command) is unavailable while a search is active, since moves are positional and the displayed order is not the persisted one.
+
+**FR.1.13 — Live indexing:** Sessions become searchable as they post output, without an app restart. After each completed turn (`TurnCompleted`), that session's Claude CLI JSONL log is re-indexed (debounced ~2s per session, so a burst of turns indexes once). If a search is active when a session is re-indexed, the search re-runs so the tree reflects the new content.
+
+**FR.1.14 — Exact search toggle:** A toggle next to the search box limits results to sessions containing the query as an exact phrase (strict match, FR.1.12); loose-only matches are hidden. It switches on automatically when a search runs for a query that starts with `https://` or is shorter than 8 characters. Unchecking it for such a query holds until the search text changes; the automatic rule then applies to the new text. For other queries the toggle keeps whatever the user last chose. In a single-word query strict and loose match the same sessions, because the index matches whole words, so the toggle only changes results for multi-word queries and links.
+
+**FR.1.15 — Left panel tabs:** The left panel has three tabs, in this order:
+- **Tree**: the session tree (FR.1.1–FR.1.14).
+- **Recent** (FR.1.16).
+- **Tags** (FR.24.11).
+
+The selected tab isn't persisted: the app starts on Tree. Picking a session in the top-bar recent-sessions dropdown switches to the Tree tab, as it does today.
+
+**FR.1.16 — Recent tab:** Documents today's behaviour plus the new collapse rule:
+- **Content.** Every top-level session; Worker Sessions stay nested in the tree and aren't listed.
+- **Grouping.** Sessions are grouped under a header per Directory node: a 📂 icon and the Auto-derived label (FR.1.3), with directories in tree order.
+- **Order within a group.** Sessions with unsent draft text come first, then the rest, each newest first by Last Activity (`SessionNodeViewModel.LastActivityTimestamp`, FR.9.8).
+- **Rows.** Status dots, name, the draft ✏ indicator, the favorite star (FR.9.7), profile name, last prompt time, the recency background (FR.9.5) and the dotted border for recently active sessions.
+- **Click.** Clicking a row selects that session in the tree too. This also works when the same row is clicked again after another session was selected elsewhere.
+- **Rebuild.** The list is rebuilt each time the tab is selected.
+- **NEW: collapsible groups.** Each directory header shows a chevron (▾ expanded, ▸ collapsed); clicking the header toggles its group.
+- **NEW: collapse on switch.** Each time the user switches to the Recent tab, every group is collapsed except the one for the Directory node containing the selected session. With no session selected, every group is expanded. Expanding or collapsing a group by hand holds until the next switch to the tab.
+
+**FR.1.17 — Stable ids for Directory and Group nodes (amended 2026-11-12, FR.25):** Session nodes already have a `NodeId` (a 32-hex-digit GUID, `Guid.ToString("N")`). Directory and Group nodes now get one too (`DirectoryNodeModel.NodeId`, `GroupNodeModel.NodeId`), persisted in `appsettings.json` with the node. A node loaded without one gets an id during tree load, and the tree is saved once if any id was assigned; every code path that creates a Directory or Group node (Add directory, Add group, the agent session creation that creates a group) assigns an id at creation. Ids never change and are never reused. The registry finds a node by id (from a snapshot, under the registry lock). Tessyn Web addresses tree nodes by these ids (FR.25.07, FR.25.12).
+
+---
+
+---
+
+## Amendments and additions (batch 2026-11-17)
+
 > Clients: the rules are client-neutral unless a line says WPF. Avalonia is the visual reference (decision of the Architect); where WPF differed, WPF was changed.
 
 New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Directory and Group nodes).
 
-## Amendments to existing requirements
+### Amendments to existing requirements
 
 | Existing | Amended by | Change |
 |---|---|---|
@@ -14,7 +106,7 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 | FR.9.5 Recency bars | FR.9.10 | Four tiers (15 min, 1 h, 4 h, 12 h) plus the 24-hour dotted border. Replaces the three tiers 15/30/60 min. |
 | FR.24.11 Tags tab: search | FR.1.24, FR.24.17 | Tag search scope and wildcard rules, and what the tab says when nothing matches. |
 
-## New requirements
+### New requirements
 
 **FR.1.18 — Date in the session rows.** Every list that shows sessions (the tree, the Recent tab, the Tags tab session list and the Recent dropdown) shows **one** date text per row, chosen by one setting, **Date in the session rows**, in the Settings Appearance tab. Exactly two options:
 - **Date** — `yyyy-MM-dd`, local time, no clock time.

@@ -1,6 +1,6 @@
 # FR.32 — WPF Client Hosting: daily use, background daemon, coexistence (batch 2026-11-17)
 
-> **New requirement area, phase 1 text** (reports 458, 458b, 458c, 471, 471b; decisions A15, A23 Q6–Q8). FR.27–FR.30 are reserved by the WPF programme plan, so this area takes **FR.32**. Use cases: [UC.HS.01](/docs/usecases/UC.HS.01-Client-Hosting.md). Test cases: [TC.HS.01](/docs/testcases/TC.HS.01-Client-Hosting.md). Related: FR.8 (self-update on exit, Avalonia), NR.1, NR.4.
+> **New requirement area** (reports 458, 458b, 458c, 471, 471b; decisions A15, A23 Q6–Q8). FR.27–FR.30 are reserved by the WPF programme plan, so this area takes **FR.32**. Use cases: [UC.HS.01](/docs/usecases/UC.HS.01-Client-Hosting.md). Test cases: [TC.HS.01](/docs/testcases/TC.HS.01-Client-Hosting.md). Related: FR.8 (self-update on exit, Avalonia), NR.1, NR.4.
 
 **FR.32.1 — Background host.** The daemon can run without a window: `TessynDesktop.exe --background` hosts the MCP server, the scheduler, the relay, Telegram and the sessions, with no taskbar entry. A **tray icon** with *Exit Tessyn daemon* is the only way to reach it. Exit asks "N sessions are active, terminate?" when sessions run, then terminates them and shuts down; the shutdown always runs, even when the termination fails (the error is logged).
 
