@@ -357,3 +357,12 @@ Part 2 adds `mcp.list`, `mcp.upsert`, `mcp.remove`, `mcp.setEnabled`, `mcp.disco
 - **Source.** The registry's running state (the reference-counted flag `session.state.running` comes from), summed up the `supervisorId` chain. One pass over the running sessions serves every row of a snapshot; a changed tree or running flag invalidates it. Cycles in a corrupt tree are cut at the first repeated session.
 - **Events.** When a session starts or stops running, `session.changed` is published for it (as before) **and for every supervisor above it**, so their `runningWorkerCount` reaches the clients. Per-session coalescing (250 ms) turns a burst of workers starting or stopping into one `session.changed` per supervisor. Nothing is polled.
 - Additive: an older client ignores the member; a client of this version reads an absent one as 0. Golden files affected: `tree.snapshot`, `tree.workers` (the golden fixture now has one running worker).
+
+### 10.A7 — Limits error (`SessionStateDto`, also `session.changed`, `tree.snapshot`, `tree.workers`, `recent.list`, `tags.search`) — FR.1.29
+| Field | Type | Meaning |
+|---|---|---|
+| `session.state.limitError` | string | The shortened text (one line, at most 120 characters) of the usage or limits error that ended the session's last turn. Omitted when the last turn did not end with one. |
+- **Set** when a turn's stream carries a limits error: an assistant message stamped `error: "rate_limit"` or `quotaLimits.status: "rejected"` (structured), or a result or system error whose text matches `Constants.LimitErrors.TextPattern` (fallback). Assistant text is never matched by text.
+- **Cleared** when a later turn ends with a successful result. Other errors leave it unchanged.
+- **Event.** A change publishes `session.changed` for the session (through the same tracker event as `authError`; a repeated identical value publishes nothing).
+- Additive: an older client ignores the member. Held in memory: empty after a daemon restart until the next turn. No golden change (omitted when empty).
