@@ -43,5 +43,14 @@ public sealed class ClaudeStreamEvent
 	/// <summary>For tool_result events: the tool reported an error. Kept apart from <see cref="IsError"/>, which marks a failed turn.</summary>
 	public bool ToolIsError { get; init; }
 
+	/// <summary>
+	/// For assistant events: the API error class the CLI stamps on a synthetic error message (<c>"rate_limit"</c>, <c>"authentication_failed"</c>, <c>"server_error"</c>, ...);
+	/// null for a normal message. This is the structured signal of a limits error.
+	/// </summary>
+	public string? ApiError { get; init; }
+
+	/// <summary>For assistant events: the CLI's <c>quotaLimits.status</c> says the request was rejected (a usage or rate limit).</summary>
+	public bool QuotaRejected { get; init; }
+
 	public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }

@@ -21,15 +21,17 @@ internal sealed class TurnRun
 	private readonly ITurnObserver _observer;
 	private readonly TurnProgressTracker _progress;
 	private readonly Action<bool>? _authErrorChanged;
+	private readonly Action<string?>? _limitErrorChanged;
 
 	// Cross-thread (prepared on the caller's thread, consumed on the reader thread): use Interlocked.
 	private string? _pendingModelId;
 	private string? _pendingEffort;
 
 	public TurnRun(string turnId, SessionNodeModel node, ISessionFileService files, IAppSettingsService appSettings, ITurnObserver observer,
-		TurnProgressTracker progress, string? pendingModelId, string? pendingEffort, Action<bool>? authErrorChanged = null)
+		TurnProgressTracker progress, string? pendingModelId, string? pendingEffort, Action<bool>? authErrorChanged = null, Action<string?>? limitErrorChanged = null)
 	{
 		_authErrorChanged = authErrorChanged;
+		_limitErrorChanged = limitErrorChanged;
 		TurnId          = turnId;
 		_node           = node;
 		_files          = files;
@@ -60,6 +62,8 @@ internal sealed class TurnRun
 		switch (evt.Type)
 		{
 			case Constants.Turns.EventTypes.Assistant when !string.IsNullOrWhiteSpace(evt.Content):
+				if (LimitErrorDetector.IsStructuredLimit(evt))
+					SetLimitError(evt.Content);
 				var fileModelId = Interlocked.Exchange(ref _pendingModelId, null);
 				var fileEffort  = Interlocked.Exchange(ref _pendingEffort, null);
 				_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleAssistant, evt.Content,
@@ -107,11 +111,14 @@ internal sealed class TurnRun
 				_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
 				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
 					SetAuthError(true);
+				if (LimitErrorDetector.IsLimit(evt))
+					SetLimitError(evt.Content);
 				_observer.ResultError(evt.Content, evt.Timestamp);
 				break;
 
 			case Constants.Turns.EventTypes.Result when !evt.IsError && evt.SessionId is not null:
 				SetAuthError(false);
+				SetLimitError(null);
 				_node.ClaudeSessionId = evt.SessionId;
 				_appSettings.Save();
 				_observer.SessionIdCaptured();
@@ -119,6 +126,8 @@ internal sealed class TurnRun
 				break;
 
 			case Constants.Turns.EventTypes.Result:
+				if (!evt.IsError)
+					SetLimitError(null);
 				_observer.ResultEnded();
 				break;
 		}
@@ -133,6 +142,10 @@ internal sealed class TurnRun
 		_observer.AuthErrorChanged(hasAuthError);
 		_authErrorChanged?.Invoke(hasAuthError);
 	}
+
+	/// <summary>The limits outcome of the turn goes to the session's state (every client): the shortened text, or null when a later turn succeeded.</summary>
+	private void SetLimitError(string? text) =>
+		_limitErrorChanged?.Invoke(text == null ? null : LimitErrorDetector.Shorten(text));
 
 	private void HandleSystemError(ClaudeStreamEvent evt)
 	{
@@ -164,6 +177,8 @@ internal sealed class TurnRun
 		_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, content);
 		if (content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
 			SetAuthError(true);
+		if (LimitErrorDetector.IsLimit(evt))
+			SetLimitError(content);
 		_observer.SystemError(content, evt.Timestamp);
 	}
 }

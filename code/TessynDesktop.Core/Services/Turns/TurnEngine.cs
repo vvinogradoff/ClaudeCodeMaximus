@@ -105,7 +105,7 @@ public sealed class TurnEngine : ITurnEngine
 
 		var progress = new TurnProgressTracker(nodeId, turnId, _progressSinks);
 		var run = new TurnRun(turnId, node, _files, _appSettings, observer, progress,
-			settings.ModelId ?? Constants.Turns.DefaultOptionText, settings.Effort ?? Constants.Turns.DefaultOptionText, AuthErrorSink(nodeId));
+			settings.ModelId ?? Constants.Turns.DefaultOptionText, settings.Effort ?? Constants.Turns.DefaultOptionText, AuthErrorSink(nodeId), LimitErrorSink(nodeId));
 
 		context.Enter();
 		if (observer is not NullTurnObserver)
@@ -274,6 +274,9 @@ public sealed class TurnEngine : ITurnEngine
 	}
 
 	/// <summary>Where a turn of the node reports its auth outcome so that the session state carries it (null when the engine has no tracker).</summary>
+	private Action<string?>? LimitErrorSink(string nodeId) =>
+		_authErrors == null ? null : text => _authErrors.SetLimitError(nodeId, text);
+
 	private Action<bool>? AuthErrorSink(string nodeId) =>
 		_authErrors == null ? null : hasAuthError => _authErrors.Set(nodeId, hasAuthError);
 
@@ -437,7 +440,7 @@ public sealed class TurnEngine : ITurnEngine
 		{
 			var run = context.Active
 				?? new TurnRun(string.Empty, node, _files, _appSettings, context.LastObserver ?? new NullTurnObserver(),
-					new TurnProgressTracker(node.NodeId, string.Empty, []), null, null, AuthErrorSink(node.NodeId));
+					new TurnProgressTracker(node.NodeId, string.Empty, []), null, null, AuthErrorSink(node.NodeId), LimitErrorSink(node.NodeId));
 			run.HandleStreamEvent(evt);
 		};
 

@@ -24,6 +24,7 @@ public static partial class ColourCatalog
 	public const string ActiveBorder = "ActiveBorder";
 	public const string Running = "StatusRunning";
 	public const string Resumable = "StatusResumable";
+	public const string LimitWarning = "LimitWarning";
 	public const string ActiveWorkersText = "ActiveWorkersText";
 	public const string ActiveWorkersBorder = "ActiveWorkersBorder";
 	public const string FocusCritical = "FocusCritical";
@@ -101,6 +102,7 @@ public static partial class ColourCatalog
 		new(Resumable, "Resumable in Claude Code (lower square)", StatusGroup, "#1E90FF", "#1E90FF"),
 		new(ActiveWorkersText, "Active workers badge: number", StatusGroup, "#E00000", "#FF5555"),
 		new(ActiveWorkersBorder, "Active workers badge: outline", StatusGroup, "#8B0000", "#B03030"),
+		new(LimitWarning, "Limits-error warning (triangle)", StatusGroup, "#E0A800", "#FFD33D"),
 		new(FocusCritical, "Critical: background", FocusGroup, "#8B0000", "#8B0000"),
 		new(FocusCriticalText, "Critical: text", FocusGroup, "#FFFFFF", "#FFFFFF"),
 		new(FocusAsk, "Question: background", FocusGroup, "#DAA520", "#DAA520"),

@@ -28,6 +28,30 @@ public sealed class SessionAuthErrorTracker : ISessionAuthErrorTracker
 			Changed?.Invoke(nodeId);
 	}
 
+	private readonly ConcurrentDictionary<string, string> _limits = new(StringComparer.Ordinal);
+
+	/// <inheritdoc />
+	public string? GetLimitError(string nodeId) => !string.IsNullOrEmpty(nodeId) && _limits.TryGetValue(nodeId, out var text) ? text : null;
+
+	/// <inheritdoc />
+	public void SetLimitError(string nodeId, string? text)
+	{
+		if (string.IsNullOrEmpty(nodeId))
+			return;
+
+		bool changed;
+		if (string.IsNullOrEmpty(text))
+			changed = _limits.TryRemove(nodeId, out _);
+		else
+		{
+			changed = !_limits.TryGetValue(nodeId, out var old) || old != text;
+			_limits[nodeId] = text;
+		}
+
+		if (changed)
+			Changed?.Invoke(nodeId);
+	}
+
 	/// <inheritdoc />
 	public void ClearAll()
 	{

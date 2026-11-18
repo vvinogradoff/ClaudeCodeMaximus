@@ -67,7 +67,8 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 			PinnedProfileName:      pinnedName,
 			SwitchingToProfileName: switchingTo,
 			Resumable:             _resumable?.TryGet(nodeId),
-			RunningWorkerCount:    runningWorkers > 0 ? runningWorkers : null);
+			RunningWorkerCount:    runningWorkers > 0 ? runningWorkers : null,
+			LimitError:            _authErrors?.GetLimitError(nodeId));
 	}
 
 	/// <summary>The pin and the queued switch of a session, labelled as <c>list_sessions</c> labels them (ISSUE.013 R5). All null without a resolver or a pin.</summary>

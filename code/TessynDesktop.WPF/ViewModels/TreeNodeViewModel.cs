@@ -17,7 +17,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	private bool _isExpanded;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(AttentionKey), nameof(HasDraft), nameof(IsResumable), nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(HasSchedules), nameof(ProfileName), nameof(HasProfile), nameof(SwitchingToProfileName), nameof(HasSwitching), nameof(ShowProfileBadge), nameof(HasProfileMismatch), nameof(ProfileToolTip), nameof(RunningWorkerCount), nameof(HasRunningWorkers), nameof(RunningWorkersToolTip))]
+	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(AttentionKey), nameof(HasDraft), nameof(IsResumable), nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(HasSchedules), nameof(ProfileName), nameof(HasProfile), nameof(SwitchingToProfileName), nameof(HasSwitching), nameof(ShowProfileBadge), nameof(HasProfileMismatch), nameof(ProfileToolTip), nameof(RunningWorkerCount), nameof(HasRunningWorkers), nameof(RunningWorkersToolTip), nameof(LimitError), nameof(HasLimitError), nameof(ShowLimitOnDateLine), nameof(ShowLimitOnNameLine))]
 	private SessionStateDto? _state;
 
 	[ObservableProperty]
@@ -92,6 +92,17 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
 	/// <summary>The badge shows only while a worker runs.</summary>
 	public bool HasRunningWorkers => RunningWorkerCount > 0;
+
+	/// <summary>The shortened text of the usage or limits error that ended the session's last turn (the tooltip of the yellow warning); empty when it did not end with one or for a directory or group.</summary>
+	public string LimitError => IsSessionLike ? State?.LimitError ?? string.Empty : string.Empty;
+
+	public bool HasLimitError => LimitError.Length > 0;
+
+	/// <summary>The warning sits left of the date on the row's second line for a top-level session (FR.1.29).</summary>
+	public bool ShowLimitOnDateLine => HasLimitError && Kind != TreeNodeKind.Worker;
+
+	/// <summary>The warning of a worker (a sub-session) sits all the way to the right of its name line, above the date (FR.1.29).</summary>
+	public bool ShowLimitOnNameLine => HasLimitError && Kind == TreeNodeKind.Worker;
 
 	public string RunningWorkersToolTip => string.Format(Constants.SessionLists.RunningWorkersTip, RunningWorkerCount);
 

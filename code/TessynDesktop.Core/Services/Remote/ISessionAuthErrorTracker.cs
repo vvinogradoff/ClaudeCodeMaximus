@@ -19,6 +19,12 @@ public interface ISessionAuthErrorTracker
 	/// <summary>Records the outcome: true on an authentication failure, false when a result succeeded.</summary>
 	void Set(string nodeId, bool hasAuthError);
 
+	/// <summary>The shortened text of the usage or limits error that ended the session's last turn (FR.1.29); null when it did not end with one. Raises <see cref="Changed"/> like the auth flag.</summary>
+	string? GetLimitError(string nodeId);
+
+	/// <summary>Records the limits error of the turn (the text), or clears it (null) when a later turn succeeded.</summary>
+	void SetLimitError(string nodeId, string? text);
+
 	/// <summary>Clears the flag of every session (a profile was re-authenticated).</summary>
 	void ClearAll();
 }

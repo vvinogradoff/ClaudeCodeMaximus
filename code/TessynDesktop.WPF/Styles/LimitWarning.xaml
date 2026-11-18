@@ -1,0 +1,15 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+    <!-- The limits-error warning of a session row (FR.1.29): a yellow triangle shown when the session's last turn ended with a usage or limits error. DataContext: a tree node or a list row
+         (LimitError is the tooltip text). The colour is the palette's (Settings, Colours: Limits-error warning). -->
+    <Style x:Key="LimitWarningIcon" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Text" Value="&#xE7BA;" />
+        <Setter Property="Foreground" Value="{DynamicResource Colour.LimitWarning}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="ToolTip" Value="{Binding LimitError}" />
+    </Style>
+</ResourceDictionary>
