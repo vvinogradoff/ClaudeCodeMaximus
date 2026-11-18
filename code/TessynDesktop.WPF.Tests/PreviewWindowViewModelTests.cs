@@ -15,11 +15,12 @@ public sealed class PreviewWindowViewModelTests : IDisposable
 	private readonly FakeTessynClient _client = new();
 	private readonly FakePreviewSettingsService _settings = new(new PreviewGroupModel { Id = GroupId, Name = "Text and code", Patterns = "md txt" }, new PreviewGroupModel { Id = "other", Name = "Other" });
 	private readonly FakePreviewContentFactory _content = new();
+	private readonly ManualTimeProvider _time = new();
 	private readonly PreviewWindowViewModel _window;
 
 	public PreviewWindowViewModelTests()
 	{
-		_window = new PreviewWindowViewModel(GroupId, "Text and code", pinned: false, _settings, _content, new ImmediateUiDispatcher());
+		_window = new PreviewWindowViewModel(GroupId, "Text and code", pinned: false, _settings, _content, new ImmediateUiDispatcher(), _time);
 	}
 
 	public void Dispose()
@@ -173,22 +174,116 @@ public sealed class PreviewWindowViewModelTests : IDisposable
 		Assert.Equal(["https://example.com/a", "https://example.com/b"], _content.BrowserSurfaces[0].Navigated);
 	}
 
+	private static readonly TimeSpan Settled = Constants.PreviewWindow.AddressSettleDelay + TimeSpan.FromMilliseconds(1);
+
+	private TrackedBrowserSurface NavigateTo(string source, bool isLoading = false)
+	{
+		var surface = _content.BrowserSurfaces.Single();
+		surface.Source = source;
+		surface.RaiseState(isLoading);
+		return surface;
+	}
+
 	[Fact]
-	public void WhenThePageNavigates_ItemUrlFollows_AndItemChangedIsRaised()
+	public void WhenThePageNavigates_TheAddressIsSavedOnlyOnceItSettled()
 	{
 		_window.Show(Page("https://example.com/a"), null, null);
 		var raised = 0;
 		_window.ItemChanged += (_, _) => raised++;
-		var surface = _content.BrowserSurfaces.Single();
 
-		surface.Source = "https://example.com/next?x=1";
-		surface.RaiseState();
+		NavigateTo("https://example.com/next?x=1");
+		Assert.Equal("https://example.com/a", _window.Item!.Url);
+		Assert.Equal(0, raised);
+
+		_time.Advance(Settled);
 
 		Assert.Equal("https://example.com/next?x=1", _window.Item!.Url);
 		Assert.Equal(1, raised);
 
-		surface.RaiseState();   // the same address again: nothing to save
+		NavigateTo("https://example.com/next?x=1");   // the same address again: nothing to save
+		_time.Advance(Settled);
 		Assert.Equal(1, raised);
+	}
+
+	[Fact]
+	public void AnAddressThatKeepsChanging_IsNotSavedUntilItStops()
+	{
+		_window.Show(Page("https://example.com/a"), null, null);
+		var raised = 0;
+		_window.ItemChanged += (_, _) => raised++;
+
+		NavigateTo("https://example.com/1");
+		_time.Advance(TimeSpan.FromMilliseconds(600));
+		NavigateTo("https://example.com/2");
+		_time.Advance(TimeSpan.FromMilliseconds(600));
+		Assert.Equal(0, raised);
+
+		_time.Advance(TimeSpan.FromMilliseconds(600));
+
+		Assert.Equal(1, raised);
+		Assert.Equal("https://example.com/2", _window.Item!.Url);
+	}
+
+	[Fact]
+	public void APageStillLoading_OrThatFailed_IsNotSaved()
+	{
+		_window.Show(Page("https://example.com/a"), null, null);
+		var raised = 0;
+		_window.ItemChanged += (_, _) => raised++;
+
+		var surface = NavigateTo("https://example.com/slow", isLoading: true);
+		_time.Advance(Settled);
+		Assert.Equal(0, raised);
+
+		surface.RaiseFailed("ConnectionFailed");
+		surface.RaiseState(false);
+		_time.Advance(Settled);
+		Assert.Equal(0, raised);
+		Assert.Equal("https://example.com/a", _window.Item!.Url);
+	}
+
+	[Fact]
+	public void APageOnAnotherSite_KeepsTheLastSavedAddress()
+	{
+		_window.Show(Page("https://app.example.com/home"), null, null);
+		var raised = 0;
+		_window.ItemChanged += (_, _) => raised++;
+
+		NavigateTo("https://login.idp.com/signin");
+		_time.Advance(Settled);
+		Assert.Equal("https://app.example.com/home", _window.Item!.Url);
+		Assert.Equal(0, raised);
+
+		NavigateTo("https://app.example.com/dashboard");
+		_time.Advance(Settled);
+		Assert.Equal("https://app.example.com/dashboard", _window.Item!.Url);
+		Assert.Equal(1, raised);
+	}
+
+	[Fact]
+	public void SignInParameters_AreNeverSaved()
+	{
+		_window.Show(Page("https://app.example.com/home"), null, null);
+		var saved = new List<string?>();
+		_window.ItemChanged += (_, _) => saved.Add(_window.Item!.Url);
+
+		NavigateTo("https://app.example.com/callback?code=abc&state=xyz");
+		_time.Advance(Settled);
+
+		Assert.Equal(["https://app.example.com/callback"], saved);
+		Assert.DoesNotContain("code=", _window.Item!.Url);
+	}
+
+	[Fact]
+	public void TheTitleFollowsThePageAtOnce_WithoutWaitingForTheSettleDelay()
+	{
+		_window.Show(Page("https://example.com/a"), null, null);
+
+		var surface = _content.BrowserSurfaces.Single();
+		surface.DocumentTitle = "Quick";
+		surface.RaiseState(false);
+
+		Assert.Equal("Quick - Text and code", _window.Title);
 	}
 
 	[Fact]
