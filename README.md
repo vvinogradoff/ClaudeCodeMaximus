@@ -1,10 +1,10 @@
 # Tessyn Desktop
 
-Cross-platform desktop GUI for managing Claude Code sessions, backed by the [Tessyn](https://github.com/sapph1re/tessyn) daemon for session indexing, search, and process management.
+Windows desktop GUI for managing Claude Code sessions, backed by the [Tessyn](https://github.com/sapph1re/tessyn) daemon for session indexing, search, and process management.
 
 ## Architecture
 
-- **Frontend**: Avalonia (.NET 9) -- native UI on macOS, Windows, and Linux
+- **Frontend**: TessynDesktop.WPF (WPF, .NET 10) -- the only desktop client; `code/TessynDesktop` is the headless daemon host it launches (`TessynDesktop.exe --background`)
 - **Backend**: Tessyn daemon -- indexes Claude Code JSONL session files into SQLite with FTS5 full-text search, manages Claude CLI processes, persists session metadata
 - **Code Analysis**: Roslyn-based C# symbol indexing for autocomplete
 
@@ -18,11 +18,10 @@ Cross-platform desktop GUI for managing Claude Code sessions, backed by the [Tes
 - **Instruction Toggles**: Per-session auto-commit, auto-document, auto-compact, new-branch
 - **Themes**: Dark and light with customizable colors
 - **Daemon Status**: Live connection and indexing state in the title bar
-- **macOS Shortcuts**: Cmd+Delete, Cmd+Left/Right, Option+Left/Right, Option+Delete via NativeTextBox
 
 ## Prerequisites
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Tessyn daemon](https://github.com/sapph1re/tessyn): `npm install -g tessyn`
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code): `npm install -g @anthropic-ai/claude-code`
 
@@ -39,27 +38,13 @@ Start the daemon:
 tessyn start
 ```
 
-Run the app:
-```bash
-dotnet run --project code/TessynDesktop/TessynDesktop.csproj
+Run the app (builds WPF and the host, copies them to `[Publish-WPF]` and starts the client from there):
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.un-wpf.ps1
 ```
 
-On first launch, enable daemon mode in `appsettings.json` (located in `~/Library/Application Support/TessynDesktop/` on macOS):
-```json
-{
-  "UseTessynDaemon": true
-}
-```
-
-## macOS App Bundle
-
-Build a standalone `.app` bundle (no .NET SDK required to run):
-
-```bash
-./build-mac.sh
-```
-
-Installs to `~/Applications/Tessyn Desktop.app`. Launchable from Finder or Spotlight.
+The WPF client starts the daemon host itself and updates itself from newer builds under `SourceCodesLocation`.
 
 ## Disclaimer
 
