@@ -1197,3 +1197,22 @@ Plan: `.wpf-work/root-sessions-plan.md`, approved 2026-11-18 (Focus A1–A3; A3 
 - [DONE] Tests: TC.15.8 and TC.ME.01–ME.04 (Core), TC.15.9 and TC.ME.05 (WPF E2E)
 - [DONE] Review (`.wpf-work/rootsess-review.md`: SHIP; M1 sticky-pick reset, L1-L3, L5, L6 fixed), merge `f4df779`, all suites green: Core 3964, WPF 1812, Web 146, Web E2E 24 (+1 skipped), WPF E2E 103/103
 - [ ] After the restart onto the build: create "Root level sessions" (Opus, Max, Default profile, streaming, sound) right under "Load session output" (manual UC.15.4)
+
+## Phase 44 — Multi-monitor preview windows (FR.27, FR.29)
+
+Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"); docs drafted 2026-11-18 on branch `docs/preview-windows`, waiting for the Architect's approval of the open decisions (FR.29 end).
+
+- [ ] Docs: FR.27, FR.29, FR.6.10, amendment rows in FR.23, FR.24, FR.26, glossary, UC.PW.01, TC.PW.01 (FR.27, FR.29, FR.6.10) — drafted, not committed
+- [ ] Core: `previews` and `previewWindows` settings with the defaults, pattern matcher, monitor watcher with the scripted seam, placement planner (FR.29.2, FR.29.3, FR.29.5, FR.29.6, FR.29.10, FR.29.13)
+- [ ] Embedded browser: persistent profile, navigation policy, popups, controls, permissions, downloads, clear data (FR.27.1–27.9)
+- [ ] Router and preview windows: router with the launcher decorator, group and pinned windows, window chrome with Pin and Auto-close, placement save and restore (FR.29.4, FR.29.5, FR.29.6, FR.29.7, FR.29.8, FR.29.9, FR.29.11)
+- [ ] Reopen preview windows with their items after a restart (FR.29.11): save the list of open windows in `previewWindows`, reopen group and pinned windows once connected, `file.preview` for transcript paths (TC.PW.41, TC.PW.55–TC.PW.63)
+- [ ] Title bar Monitor toggle (FR.6.10, FR.29.1)
+- [ ] Settings → Previews tab: groups list, validation, Reset to defaults, Forget window positions, Clear browser data, close guard (FR.29.2, FR.27.8, FR.4.7)
+- [ ] Wiring: transcript paths and links, Focus file and url references, session tag chips, links in markdown previews and Focus card text, session switch and Focus item closing (FR.29.4, FR.29.9)
+- [ ] TIFF decoding for pane and windows; CSV keeps the text view (FR.29.12)
+- [ ] Unit tests: matcher, placement planner, monitor watcher, router with a fake window factory, navigation policy, view models (TC.PW.03, TC.PW.06–TC.PW.10, TC.PW.17–TC.PW.19, TC.PW.27, TC.PW.28, TC.PW.30, TC.PW.35, TC.PW.38, TC.PW.40, TC.PW.47, TC.PW.51, TC.PW.52)
+- [ ] E2E with `--test-monitors <n>` through `tools\e2e\Run-WpfE2E.ps1` (TC.PW.01, TC.PW.02, TC.PW.05, TC.PW.07, TC.PW.08, TC.PW.11, TC.PW.12, TC.PW.14–TC.PW.16, TC.PW.20–TC.PW.22, TC.PW.25, TC.PW.26, TC.PW.31–TC.PW.34, TC.PW.36, TC.PW.37, TC.PW.41, TC.PW.42, TC.PW.44, TC.PW.49) (FR.29.13)
+- [ ] Manual list for the Architect: real second monitor and display changes, real Slack sign-in, downloads, popups (TC.PW.04, TC.PW.23, TC.PW.29, TC.PW.39, TC.PW.46, TC.PW.48, TC.PW.50, TC.PW.53, TC.PW.54)
+- [ ] Review (separate reviewer), fixes
+- [ ] Merge master into the branch, build, run all five suites, merge to master

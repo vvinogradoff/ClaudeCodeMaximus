@@ -59,6 +59,10 @@ The amendment paragraphs of the FR.25 commit (FR.1.8 amendment, FR.1.17, FR.3.3 
 | FR.23.20–FR.23.23 | selectable Focus text, Send answers placement, Ctrl+Enter, Closed in WPF | |
 | FR.24.16–FR.24.18 | tag-area rule, Tags tab results, tag cloud font size | FR.24.16 was only a proposal in report 452, never in the docs |
 | **FR.32.1–FR.32.8** | **new area** hosting and coexistence | FR.27–FR.30 reserved |
+| FR.6.10 | monitor toggle in the title bar | 2026-11-18, amends FR.6.7 |
+| **FR.27.1–FR.27.9** | **new area** embedded browser of the web preview windows (profile, navigation, new windows, controls, downloads, permissions, isolation, clear data, known limit) | 2026-11-18, reserved by the WPF plan |
+| **FR.29.1–FR.29.13** | **new area** preview windows: monitor toggle, groups, patterns and matching, routing, group window, placement, chrome, pinned window, auto-close, monitors change, restart (windows reopen), file kinds, test seam | 2026-11-18, amends FR.23.18, FR.24.7, FR.26.3, FR.26.5, FR.26.6 |
+| UC/TC code PW | UC.PW.01–16, TC.PW.01–63 | no clash with the codes above |
 | NR.6, NR.7 | E2E running, stretching rule | |
 | UC/TC codes | LP, TR, IN, CL, SH, TA, FC, HS | no clash with 15, 21, DL, FD, FV, IC, LC, RT, TG, WEB |
 

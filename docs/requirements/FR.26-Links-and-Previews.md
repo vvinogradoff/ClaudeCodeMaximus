@@ -18,3 +18,15 @@ Complements FR.24 Session Tags (chips under the session header that come from `t
 Status: FR.26.1 implemented (Phase 0). FR.26.4 and FR.26.5 implemented in WPF and web (2026-11-15; WPF merge `dc2493b`, web merge `b59b14f`). FR.26.5 inline paths with image previews and FR.26.6 (Ctrl+click) implemented in WPF (2026-11-17, branch `wpf/inline-paths`). Video first-frame previews and Ctrl+click in the default media player implemented in WPF (2026-11-18, branch `wpf/inline-video`). FR.26.2 and FR.26.3 arrive with the WPF link chips and the browser pane (Phase 3).
 
 ---
+
+---
+
+## Amendments (2026-11-18, preview windows)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.26.3 Preview on click | FR.29.4 | With the preview windows mode on and a group that matches the link, the link opens in that group's preview window (embedded browser, FR.27). Otherwise it opens as before (system browser). |
+| FR.26.5 Local files inline | FR.29.4 | With the mode on and a matching group, an opened file goes to the group's preview window instead of the preview pane. Otherwise it opens as before. |
+| FR.26.6 Ctrl+click opens | FR.29.4 | Ctrl+click on a path or a link is routed as above. A video goes to a window only when a group lists its extension; otherwise it opens in the default media player. A plain click still does nothing. |
+
+The routing rule, the preview groups and the windows are specified in [FR.29](FR.29-Preview-Windows.md); the embedded browser in [FR.27](FR.27-Embedded-Browser.md).

@@ -290,3 +290,11 @@ Why: a project rule such as CLAUDE.md's "ask in plain text" was written to avoid
 - **Same as an option.** When the recommendation text equals an option (trimmed, case-insensitive), that option is not listed again: only the recommended button is shown, last.
 - **Behaviour unchanged.** A click on an option puts its text in the reply box; a click on the recommended button puts `Accepted your recommendation: <recommendation>` there (FR.23.14).
 - **Web.** The web client's Focus tab (FR.25) is unchanged by this requirement.
+
+---
+
+## Amendments (2026-11-18, preview windows)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.23.18 References on items (a file reference opens the preview pane; a url reference opens the system browser) | FR.29.4 | With the preview windows mode on and a matching group, a file reference and a url reference open in the group's preview window. Otherwise they open as before. A window opened from a Focus item can close with that item (FR.29.9). |
