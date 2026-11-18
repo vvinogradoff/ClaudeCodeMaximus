@@ -25,6 +25,7 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	private readonly DaemonRestarter? _restarter;
 	private long _startingSince;
 	private int _daemonPid;
+	private int _daemonCheckRunning;
 
 	private ITessynClient? _client;
 
@@ -169,19 +170,30 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 
 	public string DaemonOlderText => Constants.Switch.DaemonOlderText;
 
+	/// <summary>Evaluates the stale-daemon banner again (after a check for a newer build, FR.32.9); does nothing while not connected.</summary>
+	public void RecheckDaemonBuild()
+	{
+		if (_client != null && _daemonPid != 0)
+			_ = CheckDaemonBuildAsync(_daemonPid);
+	}
+
 	private async Task CheckDaemonBuildAsync(int pid)
 	{
-		if (_restarter == null)
+		if (_restarter == null || Interlocked.Exchange(ref _daemonCheckRunning, 1) == 1)
 			return;
 
 		try
 		{
-			var stale = await Task.Run(() => _restarter.Check(pid));
+			var stale = await Task.Run(() => _restarter.Check(pid)); // off the UI thread: it reads assemblies and runs git
 			_ui.Post(() => IsDaemonOlder = stale != null);
 		}
 		catch (Exception ex)
 		{
 			_logger.LogInformation(ex, "Could not compare the daemon's build with the newest build");
+		}
+		finally
+		{
+			Volatile.Write(ref _daemonCheckRunning, 0);
 		}
 	}
 

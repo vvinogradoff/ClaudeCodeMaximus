@@ -37,6 +37,9 @@ public sealed class LiveUpdateService : IDisposable
 		_notice.RestartHandler = RestartNow;
 	}
 
+	/// <summary>Raised after every check for a newer build, on the thread that ran it (FR.32.9: the stale-daemon banner is evaluated again then).</summary>
+	public event Action? Checked;
+
 	/// <summary>Starts the periodic check on the thread pool.</summary>
 	public void Start() => _ = Task.Run(() => LoopAsync(_stop.Token));
 
@@ -45,6 +48,7 @@ public sealed class LiveUpdateService : IDisposable
 	{
 		var pending = _updater.FindPendingClientBuild() != null;
 		_ui.Post(() => _notice.IsVisible = pending);
+		Checked?.Invoke();
 		return pending;
 	}
 
