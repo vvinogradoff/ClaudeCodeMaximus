@@ -38,4 +38,10 @@ public interface IPreviewSettingsService
 
 	/// <summary>Settings → Forget window positions.</summary>
 	void ForgetPlacements();
+
+	/// <summary>The saved list of open preview windows (copies), for reopening them at start (FR.29.11).</summary>
+	IReadOnlyList<OpenPreviewWindowModel> OpenWindows { get; }
+
+	/// <summary>Replaces the saved list of open preview windows.</summary>
+	void SaveOpenWindows(IReadOnlyList<OpenPreviewWindowModel> windows);
 }

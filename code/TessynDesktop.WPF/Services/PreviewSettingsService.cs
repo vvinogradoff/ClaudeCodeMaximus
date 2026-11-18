@@ -63,6 +63,11 @@ public sealed class PreviewSettingsService : IPreviewSettingsService
 
 	public void ForgetPlacements() => _store.Update<PreviewWindowsSettings>(s => s.Placements.Clear());
 
+	public IReadOnlyList<OpenPreviewWindowModel> OpenWindows => _store.Get<PreviewWindowsSettings>().OpenWindows;
+
+	public void SaveOpenWindows(IReadOnlyList<OpenPreviewWindowModel> windows) =>
+		_store.Update<PreviewWindowsSettings>(s => s.OpenWindows = windows.ToList());
+
 	private void OnStoreChanged(object? sender, ClientSettingsChangedEventArgs e)
 	{
 		if (e.Section == Constants.SettingsSections.Previews)

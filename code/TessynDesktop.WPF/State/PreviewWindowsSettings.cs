@@ -10,4 +10,7 @@ public sealed class PreviewWindowsSettings
 
 	/// <summary>Remembered placements by group id.</summary>
 	public Dictionary<string, PreviewPlacementModel> Placements { get; set; } = new();
+
+	/// <summary>The preview windows open now, in the order they were opened (FR.29.11); reopened at the next start.</summary>
+	public List<OpenPreviewWindowModel> OpenWindows { get; set; } = [];
 }

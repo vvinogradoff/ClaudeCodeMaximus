@@ -118,6 +118,46 @@ public sealed class PreviewSettingsServiceTests
 	}
 
 	[Fact]
+	public void OpenWindows_DefaultToEmpty()
+	{
+		Assert.Empty(_service.OpenWindows);
+	}
+
+	[Fact]
+	public void OpenWindows_RoundTrip()
+	{
+		var window = new OpenPreviewWindowModel
+		{
+			GroupId = "images",
+			Pinned = true,
+			Item = new PreviewItemModel { Kind = PreviewItemKind.File, FileName = "a.png", RefId = "r1", SourceNodeId = "n1", SourceFocusItemId = "f1" },
+			Placement = new PreviewPlacementModel { Left = 7, Width = 10, Height = 20, MonitorDeviceName = "d" },
+		};
+
+		_service.SaveOpenWindows([window]);
+
+		var saved = Assert.Single(_service.OpenWindows);
+		Assert.Equal(("images", true), (saved.GroupId, saved.Pinned));
+		Assert.Equal((PreviewItemKind.File, "a.png", "r1", "n1", "f1"), (saved.Item.Kind, saved.Item.FileName, saved.Item.RefId, saved.Item.SourceNodeId, saved.Item.SourceFocusItemId));
+		Assert.Equal(7, saved.Placement!.Left);
+	}
+
+	[Fact]
+	public void SaveOpenWindows_KeepsPlacementsAndTheToggle_AndRaisesNoEnabledEvent()
+	{
+		_service.SavePlacement("images", new PreviewPlacementModel { Left = 5 });
+		_service.SetWindowsEnabled(false);
+		var before = _enabledEvents;
+
+		_service.SaveOpenWindows([new OpenPreviewWindowModel { GroupId = "csv", Item = new PreviewItemModel { Kind = PreviewItemKind.Url, Url = "https://x.test" } }]);
+
+		Assert.Equal(5, _service.GetPlacement("images")!.Left);
+		Assert.False(_service.WindowsEnabled);
+		Assert.Equal(before, _enabledEvents);
+		Assert.Equal("https://x.test", _service.OpenWindows[0].Item.Url);
+	}
+
+	[Fact]
 	public void PlacementModel_ConvertsToAWindowPlacement()
 	{
 		var placement = new PreviewPlacementModel { Left = 1, Top = 2, Width = 3, Height = 4, Maximized = true }.ToWindowPlacement();
