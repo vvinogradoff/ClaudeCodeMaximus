@@ -342,6 +342,34 @@ public sealed class TreeOperations
 		await RunAsync(TreeTexts.MoveFailed, () => MoveAsync(source, target.Id, index));
 	}
 
+	/// <summary>
+	/// Ctrl+Up / Ctrl+Down (FR.1.31): moves a top-level session one place among the sessions of its directory or group (<paramref name="direction"/> -1 up, +1 down),
+	/// as a drag onto the neighbour would. Does nothing on the first/last session, for any other node, or while a search is active; a running session is refused with the
+	/// drag's text in the status line. One at a time: a press while a move is in flight is dropped (<see cref="ExclusiveAsync"/>).
+	/// </summary>
+	public Task MoveStepAsync(TreeNodeViewModel? node, int direction) => ExclusiveAsync(() => MoveStepCoreAsync(node, direction));
+
+	private async Task MoveStepCoreAsync(TreeNodeViewModel? node, int direction)
+	{
+		if (_tree == null || _tree.IsSearching || !IsMovable(node))
+			return;
+
+		var parent = node!.Parent!;
+		var siblings = parent.Children.Where(c => c.Kind == TreeNodeKind.Session).ToList();
+		var target = siblings.FindIndex(c => c.Id == node.Id) + Math.Sign(direction);
+		if (target < 0 || target >= siblings.Count)
+			return;
+
+		if (node.IsRunning)
+		{
+			_tree.StatusText = TreeTexts.SessionRunning;
+			return;
+		}
+
+		// The daemon counts the index after the session has left its list, so the neighbour's index in the full list is the new one in both directions.
+		await RunAsync(TreeTexts.MoveFailed, () => MoveAsync(node, parent.Id, target));
+	}
+
 	/// <summary>"Directory / Group / Subgroup": where a container sits, so two groups of the same name can be told apart.</summary>
 	public static string PathLabel(TreeNodeViewModel container)
 	{

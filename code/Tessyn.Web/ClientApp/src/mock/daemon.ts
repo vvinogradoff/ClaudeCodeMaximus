@@ -688,6 +688,7 @@ ${'const veryLongLine = 1; '.repeat(12)}
 				for (const d of this.dirs) { const g = findGroup(d.groups, (x) => x.id === anchor); if (g) { dir = d; group = g; break; } }
 			}
 			if (!dir) throw new RpcError(-32000, 'Anchor not found');
+			index = (group ?? dir).sessionIds.length; // FR.1.30: a directory or group anchor puts it last
 		}
 		const s = this.mk({ name, dirId: dir.id, groupId: group?.id, lastActivityMin: null });
 		(group ?? dir).sessionIds.splice(index, 0, s.id);

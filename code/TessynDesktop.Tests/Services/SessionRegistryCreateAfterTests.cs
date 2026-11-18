@@ -78,6 +78,7 @@ public sealed class SessionRegistryCreateAfterTests : IDisposable
 		Assert.Equal(["A", "B", "New"], dir.Sessions.Select(s => s.Name));
 	}
 
+	/// <summary>TC.TO.03.</summary>
 	[Fact]
 	public void WorkerAnchor_ResolvesToTheTopLevelSupervisor_SoTheNewSessionIsNotNestedAmongWorkers()
 	{
@@ -109,34 +110,70 @@ public sealed class SessionRegistryCreateAfterTests : IDisposable
 		Assert.Equal(["Orphan", "New"], dir.Sessions.Select(s => s.Name));
 	}
 
+	/// <summary>TC.TO.02, TC.TO.04: a group anchor puts the session after the group's last session; nested groups stay where they are.</summary>
 	[Fact]
-	public void GroupAnchor_InsertsAtIndexZeroOfItsSessions_AndNotAmongTheGroups()
+	public void GroupAnchor_InsertsAfterTheGroupsLastSession_AndNotAmongTheGroups()
 	{
 		var dir = Dir();
 		var group = _registry.AddGroup(dir, "G");
 		var nested = _registry.AddGroupToGroup(group, "Nested");
-		_registry.AddSessionToGroup(group, "A");
+		var a = _registry.AddSessionToGroup(group, "A");
+		var b = _registry.AddSessionToGroup(group, "B");
+		_events.Clear();
 
 		var placement = _registry.CreateSessionAfter(group.NodeId, "New");
 
-		Assert.Equal(["New", "A"], group.Sessions.Select(s => s.Name));
-		Assert.Equal(0, placement!.Index);
+		Assert.Equal(["A", "B", "New"], group.Sessions.Select(s => s.Name));
+		Assert.Equal(2, placement!.Index);
 		Assert.Same(group, placement.Group);
 		Assert.Same(nested, Assert.Single(group.Groups));
+		var e = Assert.Single(_events, x => x.Kind == TreeChangeKind.SessionAdded);
+		Assert.Equal(2, e.Index);
+		Assert.Same(b, e.PrecedingSession);
+		Assert.Same(group, e.ParentGroup);
+		Assert.NotSame(a, e.PrecedingSession);
 	}
 
+	/// <summary>TC.TO.01, TC.TO.04: a directory anchor puts the session after the last session, also with groups and worker models in the list.</summary>
 	[Fact]
-	public void DirectoryAnchor_InsertsAtIndexZeroOfItsSessions()
+	public void DirectoryAnchor_InsertsAfterTheDirectorysLastSession_AlsoWithGroupsAndWorkers()
 	{
 		var dir = Dir();
-		_registry.AddSession(dir, "A");
+		_registry.AddGroup(dir, "G");
+		var a = _registry.AddSession(dir, "A");
+		var w = _registry.AddSession(dir, "W");
+		var b = _registry.AddSession(dir, "B");
+		var w2 = _registry.AddSession(dir, "W2");
+		w.SupervisorNodeId  = a.NodeId;
+		w2.SupervisorNodeId = b.NodeId;
+		_events.Clear();
 
 		var placement = _registry.CreateSessionAfter(dir.NodeId, "New");
 
-		Assert.Equal(["New", "A"], dir.Sessions.Select(s => s.Name));
-		Assert.Equal(0, placement!.Index);
+		Assert.Equal(["A", "W", "B", "W2", "New"], dir.Sessions.Select(s => s.Name));
+		Assert.Equal(4, placement!.Index);
 		Assert.Null(placement.Group);
 		Assert.Equal(dir.Path, placement.Session.WorkingDirectory);
+		Assert.Single(dir.Groups);
+		var e = Assert.Single(_events, x => x.Kind == TreeChangeKind.SessionAdded);
+		Assert.Equal(4, e.Index);
+		Assert.Same(w2, e.PrecedingSession);
+	}
+
+	/// <summary>TC.TO.02: an empty group or directory gets the session as its only one.</summary>
+	[Fact]
+	public void EmptyContainers_GetTheSessionAsTheirOnlyOne()
+	{
+		var dir = Dir();
+		var group = _registry.AddGroup(dir, "G");
+
+		var inGroup = _registry.CreateSessionAfter(group.NodeId, "InGroup");
+		var inDir   = _registry.CreateSessionAfter(dir.NodeId, "InDir");
+
+		Assert.Equal(0, inGroup!.Index);
+		Assert.Equal(0, inDir!.Index);
+		Assert.Equal(["InGroup"], group.Sessions.Select(s => s.Name));
+		Assert.Equal(["InDir"], dir.Sessions.Select(s => s.Name));
 	}
 
 	[Fact]
@@ -177,7 +214,7 @@ public sealed class SessionRegistryCreateAfterTests : IDisposable
 	}
 
 	[Fact]
-	public void FirstPosition_RaisesTheEventWithoutAPredecessor()
+	public void EmptyDirectory_RaisesTheEventWithoutAPredecessor()
 	{
 		var dir = Dir();
 
