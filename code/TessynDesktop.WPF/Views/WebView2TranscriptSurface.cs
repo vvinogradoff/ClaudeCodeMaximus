@@ -32,6 +32,8 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private readonly UrlPolicy _policy;
 	private readonly MediaPreviewPolicy _media;
 	private readonly ILogger<WebView2TranscriptSurface> _logger;
+	private readonly IClipboardWriter _clipboard;
+	private readonly TranscriptCopySource _copySource = new();
 	private readonly List<string> _pending = new();
 	private string? _pendingLive;
 
@@ -50,8 +52,9 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	private Task _sendTail = Task.CompletedTask;
 	private int _generation;
 
-	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, TranscriptMediaBroker broker, WebRequestPolicy requests, IAppearanceService appearance, IClientSettingsStore store, ScreensaverController screensaver, ILogger<WebView2TranscriptSurface> logger)
+	public WebView2TranscriptSurface(WebViewEnvironmentProvider environment, AppPaths paths, IUrlLauncher launcher, UrlPolicy policy, MediaPreviewPolicy media, TranscriptMediaBroker broker, WebRequestPolicy requests, IAppearanceService appearance, IClientSettingsStore store, ScreensaverController screensaver, IClipboardWriter clipboard, ILogger<WebView2TranscriptSurface> logger)
 	{
+		_clipboard = clipboard;
 		_screensaver = screensaver;
 		_appearanceCoalescer = new UiCoalescer(ApplyAppearance);
 		_broker = broker;
@@ -154,6 +157,7 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 		_broker.Reset();
 		var token = _token;
 		var snapshot = entries.ToList();
+		_copySource.Reset();
 		Offer(snapshot);
 		Post(() => JsonSerializer.Serialize(new { cmd = "load", tok = token, key, entries = snapshot.Select(ToPage), hasOlder, toBottom, hasNewer }, Json), replacesQueue: true);
 	}
@@ -217,7 +221,9 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 	/// <summary>Tells the broker which media URLs the page is about to receive, so it can later approve and serve exactly those.</summary>
 	private void Offer(IEnumerable<TranscriptEntryView> entries)
 	{
-		foreach (var entry in entries)
+		var list = entries.ToList();
+		_copySource.Remember(list);
+		foreach (var entry in list)
 			_broker.Offer(entry.Index, entry.Media);
 	}
 
@@ -422,6 +428,9 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 					_logger.LogInformation("Reference jump: entry {Index} visible {Visible}, quote highlighted {Quote}, entry outlined {Entry}",
 						root.GetProperty("i").GetInt32(), root.GetProperty("visible").GetBoolean(), root.GetProperty("quote").GetBoolean(), root.GetProperty("entry").GetBoolean());
 					break;
+				case "copy":
+					OnCopy(root);
+					break;
 				case "mediaLoad" when TokenMatches(root):
 					_ = ApproveMediaAsync(root.GetProperty("url").GetString(), root.GetProperty("i").GetInt32());
 					break;
@@ -468,6 +477,36 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 		_control?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { cmd = failed ? "mediaFail" : "mediaOk", tok = token, i = entry, url, src }, Json));
 	}
+
+	/// <summary>
+	/// The page asks for the selection on the clipboard (FR.2.13): as plain text ("text"), or as Markdown ("markdown"), where the parts of the selection are
+	/// either converted by the page or, for a whole entry, replaced by the entry's original Markdown kept here. The content is never logged.
+	/// </summary>
+	private void OnCopy(JsonElement root)
+	{
+		var kind = root.TryGetProperty("kind", out var kindProperty) && kindProperty.ValueKind == JsonValueKind.String ? kindProperty.GetString() : null;
+		string text;
+		if (kind == Constants.CopyKinds.Markdown && root.TryGetProperty("parts", out var partsProperty) && partsProperty.ValueKind == JsonValueKind.Array)
+		{
+			var parts = partsProperty.EnumerateArray().Where(p => p.ValueKind == JsonValueKind.Object).Select(ToCopyPart).ToList();
+			text = _copySource.Compose(parts, useSources: TokenMatches(root));
+		}
+		else if (kind == Constants.CopyKinds.Text && root.TryGetProperty("text", out var textProperty) && textProperty.ValueKind == JsonValueKind.String)
+			text = textProperty.GetString() ?? string.Empty;
+		else
+			return;
+
+		if (text.Length == 0)
+			return;
+
+		var done = _clipboard.TrySetText(text);
+		_logger.LogInformation("Copied the selection as {Kind}: {Chars} characters, clipboard written {Done}", kind, text.Length, done);
+	}
+
+	private static CopyPart ToCopyPart(JsonElement part) => new(
+		part.TryGetProperty("i", out var index) && index.ValueKind == JsonValueKind.Number ? index.GetInt32() : null,
+		part.TryGetProperty("whole", out var whole) && whole.ValueKind == JsonValueKind.True,
+		part.TryGetProperty("md", out var markdown) && markdown.ValueKind == JsonValueKind.String ? markdown.GetString() ?? string.Empty : string.Empty);
 
 	private void OnSystemParameterChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{

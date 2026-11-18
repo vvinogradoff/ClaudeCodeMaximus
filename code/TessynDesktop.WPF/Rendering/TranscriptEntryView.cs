@@ -11,6 +11,7 @@ namespace TessynDesktop.WPF.Rendering;
 /// <param name="Media">https media links of an assistant entry (FR.26.4), at most six; the page decides per link whether it loads at once or after a click.</param>
 /// <param name="Paths">Absolute local file paths of an assistant entry (FR.26.5); the page shows each as a chip.</param>
 /// <param name="Source">What produced a user entry ("scheduled", "orchestrated", "telegram", "web"); null for the desktop user and other roles. The page colours scheduled and orchestrated inputs apart.</param>
+/// <param name="SourceMarkdown">The entry's original Markdown (FR.2.13: a selection covering the whole entry copies this). Kept by the host; the page is not sent it.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record TranscriptEntryView(
 	int Index,
@@ -22,4 +23,5 @@ public sealed record TranscriptEntryView(
 	int EstimatedHeight,
 	IReadOnlyList<string>? Media = null,
 	IReadOnlyList<string>? Paths = null,
-	string? Source = null);
+	string? Source = null,
+	string? SourceMarkdown = null);

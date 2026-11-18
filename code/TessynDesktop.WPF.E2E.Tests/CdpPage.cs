@@ -149,6 +149,14 @@ public sealed class CdpPage : IDisposable
 		await MouseAsync("mouseReleased", x, y, 1, modifiers: modifiers);
 	}
 
+	/// <summary>A right click at page coordinates (CSS pixels): the page gets mousedown, mouseup and the contextmenu event.</summary>
+	public async Task RightClickAsync(double x, double y)
+	{
+		await MouseAsync("mouseMoved", x, y, 0);
+		foreach (var type in new[] { "mousePressed", "mouseReleased" })
+			await SendAsync("Input.dispatchMouseEvent", new JsonObject { ["type"] = type, ["x"] = x, ["y"] = y, ["button"] = "right", ["buttons"] = type == "mousePressed" ? 2 : 0, ["clickCount"] = 1 });
+	}
+
 	/// <summary>A drag from one point to another with the left button held (selects text under it).</summary>
 	public async Task DragAsync(double fromX, double fromY, double toX, double toY)
 	{

@@ -66,7 +66,8 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer, IMarkdownRenderer
 			EstimateHeight(entry.Content),
 			assistant ? _media?.Detect(entry.Content) : null,
 			paths,
-			entry.Source);
+			entry.Source,
+			entry.Content);
 	}
 
 	/// <summary>Markdown to sanitized HTML.</summary>

@@ -20,6 +20,13 @@ public static partial class Constants
 		public const string PreviewCacheFolder = "preview-cache";
 	}
 
+	/// <summary>The kinds of copy the transcript page asks the host for (FR.2.13); the page uses the same words.</summary>
+	public static class CopyKinds
+	{
+		public const string Text = "text";
+		public const string Markdown = "markdown";
+	}
+
 	/// <summary>Hosts the pages are served from (virtual host mappings).</summary>
 	public static class Hosts
 	{
