@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds TessynDesktop.WPF and the Avalonia daemon host (TessynDesktop), copies the WPF output to [Publish-WPF] and the host output to
+    Builds TessynDesktop.WPF and the daemon host (TessynDesktop), copies the WPF output to [Publish-WPF] and the host output to
     [Publish-WPF]\host next to this script, and starts the WPF client from there, so a build output folder is never locked by a running app.
     The WPF client then starts the host itself (TessynDesktop.exe --background) when no daemon answers, and updates both folders by itself
     whenever a newer build exists under SourceCodesLocation. Run this script once to create the folders (the first switch), or to force a refresh.
@@ -11,7 +11,7 @@
 .NOTES
     Run with: Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; .\run-wpf.ps1
     A running WPF instance started from [Publish-WPF] is stopped first. A running host is left alone (its files are locked): its folder is then
-    not refreshed, and the WPF client refreshes it the next time it has to start a host. Never touches [Publish] (the Avalonia app, the rollback).
+    not refreshed, and the WPF client refreshes it the next time it has to start a host. Never touches the retired [Publish] folder (the removed Avalonia window and its backups).
 #>
 [CmdletBinding()]
 param(
