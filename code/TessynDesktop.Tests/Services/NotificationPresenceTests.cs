@@ -242,20 +242,20 @@ public sealed class NotificationPresenceTests : IDisposable
 	// -- Sound --------------------------------------------------------------------------------------------------------------------
 
 	[Fact]
-	public void TheCompletionSound_PlaysOnTheHost_UntilAClientTakesItOver_AndResumesAfterIt()
+	public void TheFocusItemSound_PlaysOnTheHost_UntilAClientTakesItOver_AndResumesAfterIt()
 	{
-		_sounds.PlayCompletionSound("n");
+		_sounds.PlayFocusItemSound("n");
 		Assert.Equal(1, _host.SoundCount);
 
 		_presence.Register("wpf", [Sound]);
 		var stream = _presence.OpenStream("wpf");
-		_acks.AcknowledgeSound("n"); // the client played it on turn.completed
-		_sounds.PlayCompletionSound("n");
+		_acks.AcknowledgeSound("n"); // the client played it on focus.itemCreated
+		_sounds.PlayFocusItemSound("n");
 		Thread.Sleep(AckTimeout * 2);
 		Assert.Equal(1, _host.SoundCount);
 
 		stream.Dispose();
-		_sounds.PlayCompletionSound("n");
+		_sounds.PlayFocusItemSound("n");
 		Assert.Equal(2, _host.SoundCount);
 	}
 
@@ -327,7 +327,7 @@ public sealed class NotificationPresenceTests : IDisposable
 		using var stream = _presence.OpenStream("wpf");
 
 		var watch = System.Diagnostics.Stopwatch.StartNew();
-		_sounds.PlayCompletionSound("n");
+		_sounds.PlayFocusItemSound("n");
 
 		Assert.True(watch.Elapsed < AckTimeout / 2, "the caller must not wait");
 		Assert.Equal(0, _host.SoundCount);
@@ -341,7 +341,7 @@ public sealed class NotificationPresenceTests : IDisposable
 		_presence.Register("wpf", [Sound]);
 		using var stream = _presence.OpenStream("wpf");
 
-		_sounds.PlayCompletionSound("n");
+		_sounds.PlayFocusItemSound("n");
 		await Task.Delay(AckTimeout / 4);
 		_acks.AcknowledgeSound("n");
 		await Task.Delay(AckTimeout * 2);
@@ -387,7 +387,7 @@ public sealed class NotificationPresenceTests : IDisposable
 		_presence.Register("wpf", [Toast]);
 		using var stream = _presence.OpenStream("wpf");
 
-		_sounds.PlayCompletionSound("n");
+		_sounds.PlayFocusItemSound("n");
 
 		Assert.Equal(1, _host.SoundCount);
 	}

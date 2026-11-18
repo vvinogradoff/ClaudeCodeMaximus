@@ -3,19 +3,18 @@ using System.Collections.Generic;
 namespace TessynDesktop.Services;
 
 /// <summary>
-/// Plays the Session Completion Sound (FR.22): an audible cue on natural interactive turn
-/// completion, throttled per session.
+/// Plays the Focus item sound (FR.22): the audible cue for a new Focus item. The per-session switch and the
+/// global throttle are applied before it by <see cref="FocusItemSoundNotifier"/>.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public interface ISessionSoundService
 {
 	/// <summary>
-	/// Plays <see cref="Models.AppSettingsModel.SessionCompletionSoundFile"/> for the given session,
-	/// unless a sound already played for that <paramref name="nodeId"/> within
-	/// <see cref="Models.AppSettingsModel.SessionCompletionSoundThrottleSeconds"/> (FR.22.3). Swallows
-	/// and logs any playback failure — never throws.
+	/// Plays <see cref="Models.AppSettingsModel.SessionCompletionSoundFile"/> for a new Focus item of the given
+	/// session (FR.22.1). Where it plays — the client or the host — is the implementation's business (FR.22.6).
+	/// Swallows and logs any playback failure — never throws.
 	/// </summary>
-	void PlayCompletionSound(string nodeId);
+	void PlayFocusItemSound(string nodeId);
 
 	/// <summary>Plays <paramref name="filePath"/> immediately, bypassing the per-session throttle (FR.22.5's Test button).</summary>
 	void PlayTestSound(string filePath);

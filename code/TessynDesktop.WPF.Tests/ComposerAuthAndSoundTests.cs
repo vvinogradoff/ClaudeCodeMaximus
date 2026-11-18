@@ -10,7 +10,7 @@ using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Tests;
 
-/// <summary>W1b: the auth-error indicator with Re-authenticate, the completion sound with its acknowledgement, the client's presence registration, and the two W1a leftovers (R1, R2).</summary>
+/// <summary>W1b: the auth-error indicator with Re-authenticate, the Focus item sound with its acknowledgement, the client's presence registration, and the two W1a leftovers (R1, R2).</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class ComposerAuthAndSoundTests : IDisposable
 {
@@ -156,7 +156,7 @@ public sealed class ComposerAuthAndSoundTests : IDisposable
 		Assert.Null(pane.AuthNotice);
 	}
 
-	// ---- completion sound ----
+	// ---- Focus item sound (FR.22) ----
 
 	private sealed class RecordingPlayer : ISoundPlayer
 	{
@@ -174,36 +174,58 @@ public sealed class ComposerAuthAndSoundTests : IDisposable
 		public void Advance(TimeSpan by) => _now += by;
 	}
 
-	private (CompletionSoundService Service, RecordingPlayer Player, ManualClock Clock) CreateSound(int throttleSeconds = 60)
+	private (FocusItemSoundService Service, RecordingPlayer Player, ManualClock Clock) CreateSound(int throttleSeconds = 3)
 	{
 		_client.SettingsValues[RemoteProtocol.SettingsApi.NotificationsSection] = new NotificationsSettingsDto(true, @"C:\Windows\Media\done.wav", throttleSeconds);
 		var player = new RecordingPlayer();
 		var clock = new ManualClock();
-		var service = new CompletionSoundService(_client, player, clock, NullLogger<CompletionSoundService>.Instance);
+		var service = new FocusItemSoundService(_client, player, clock, NullLogger<FocusItemSoundService>.Instance);
 		service.Attach();
 		_disposables.Add(service);
 		return (service, player, clock);
 	}
 
-	[Fact]
-	public async Task ACompletedTurn_PlaysTheConfiguredSound_AndAcknowledgesIt()
-	{
-		var (service, player, _) = CreateSound();
+	private void RaiseItem(ManualClock clock, string nodeId, string itemId = "A1", string kind = "ask", TimeSpan? age = null) =>
+		_client.RaiseNotification(
+			RemoteProtocol.Notifications.FocusItemCreatedEvent,
+			new FocusItemCreatedPayload(nodeId, itemId, kind, clock.GetUtcNow() - (age ?? TimeSpan.Zero)));
 
-		_client.RaiseTurnCompleted(Node, "t1");
+	[Fact]
+	public async Task ANewFocusItem_PlaysTheConfiguredSoundOnce_AndAcknowledgesItOnce()
+	{
+		var (service, player, clock) = CreateSound();
+
+		RaiseItem(clock, Node);
 		await service.WhenIdleAsync();
 
 		Assert.Equal([@"C:\Windows\Media\done.wav"], player.Played);
 		Assert.Equal([Node], _client.AckedSounds);
 	}
 
+	[Theory]
+	[InlineData("critical")]
+	[InlineData("ask")]
+	[InlineData("todo")]
+	[InlineData("alert")]
+	[InlineData("decided")]
+	public async Task EveryKindOfNewItem_Plays(string kind)
+	{
+		var (service, player, clock) = CreateSound();
+
+		RaiseItem(clock, Node, kind: kind);
+		await service.WhenIdleAsync();
+
+		Assert.Single(player.Played);
+	}
+
 	[Fact]
-	public async Task AStoppedTurn_AndATurnThatNeverRan_AreSilent_AndNotAcknowledged()
+	public async Task ATurnCompletion_PlaysNothing_AndAcknowledgesNothing()
 	{
 		var (service, player, _) = CreateSound();
 
-		_client.RaiseTurnCompleted(Node, "t1", cancelled: true);
-		_client.RaiseNotification(RemoteProtocol.Events.TurnCompleted, new TurnCompletedPayload(Node, false, null, "t2", NeverRan: true));
+		_client.RaiseTurnCompleted(Node, "t1");
+		_client.RaiseTurnCompleted(Node, "t2", cancelled: true);
+		_client.RaiseTurnCompleted(Node, "t3", error: "boom");
 		await service.WhenIdleAsync();
 
 		Assert.Empty(player.Played);
@@ -211,23 +233,12 @@ public sealed class ComposerAuthAndSoundTests : IDisposable
 	}
 
 	[Fact]
-	public async Task ATurnThatEndedInAnError_StillPlays()
-	{
-		var (service, player, _) = CreateSound();
-
-		_client.RaiseTurnCompleted(Node, "t1", error: "boom");
-		await service.WhenIdleAsync();
-
-		Assert.Single(player.Played);
-	}
-
-	[Fact]
 	public async Task WhenTheSessionTurnedTheSoundOff_NothingPlays()
 	{
-		var (service, player, _) = CreateSound();
+		var (service, player, clock) = CreateSound();
 		_client.SetOptionsHandler = (_, _, _, _) => new SessionSetOptionsResult(new SessionOptionsDto(null, false, PlayCompletionSound: false), null);
 
-		_client.RaiseTurnCompleted(Node, "t1");
+		RaiseItem(clock, Node);
 		await service.WhenIdleAsync();
 
 		Assert.Empty(player.Played);
@@ -237,54 +248,82 @@ public sealed class ComposerAuthAndSoundTests : IDisposable
 	[Fact]
 	public async Task TheSessionsOption_IsReadWithoutChangingAnything()
 	{
-		var (service, _, _) = CreateSound();
+		var (service, _, clock) = CreateSound();
 
-		_client.RaiseTurnCompleted(Node, "t1");
+		RaiseItem(clock, Node);
 		await service.WhenIdleAsync();
 
 		Assert.Contains($"session.setOptions:{Node}:::", _client.Calls);
 	}
 
 	[Fact]
-	public async Task ASecondCompletionInsideTheThrottleWindow_IsSilent_ButAcknowledged_AndPlaysAgainAfterIt()
+	public async Task ABurst_IsOneSound_AcknowledgedForEveryItem_AndPlaysAgainAfterTheWindow()
 	{
-		var (service, player, clock) = CreateSound(throttleSeconds: 60);
+		var (service, player, clock) = CreateSound(throttleSeconds: 3);
 
-		_client.RaiseTurnCompleted(Node, "t1");
+		RaiseItem(clock, Node, "A1");
 		await service.WhenIdleAsync();
-		clock.Advance(TimeSpan.FromSeconds(10));
-		_client.RaiseTurnCompleted(Node, "t2");
+		clock.Advance(TimeSpan.FromSeconds(1));
+		RaiseItem(clock, Node, "A2");
+		RaiseItem(clock, "b", "A1");
 		await service.WhenIdleAsync();
 		Assert.Single(player.Played);
-		Assert.Equal([Node, Node], _client.AckedSounds);
+		Assert.Equal([Node, Node, "b"], _client.AckedSounds);
 
-		clock.Advance(TimeSpan.FromSeconds(61));
-		_client.RaiseTurnCompleted(Node, "t3");
+		clock.Advance(TimeSpan.FromSeconds(3));
+		RaiseItem(clock, Node, "A3");
 		await service.WhenIdleAsync();
 		Assert.Equal(2, player.Played.Count);
 	}
 
 	[Fact]
-	public async Task TheThrottle_IsPerSession()
+	public async Task TheThrottle_IsGlobal_NotPerSession()
 	{
-		var (service, player, _) = CreateSound();
+		var (service, player, clock) = CreateSound();
 
-		_client.RaiseTurnCompleted("a", "t1");
-		_client.RaiseTurnCompleted("b", "t1");
+		RaiseItem(clock, "a");
+		RaiseItem(clock, "b");
+		await service.WhenIdleAsync();
+
+		Assert.Single(player.Played);
+	}
+
+	[Fact]
+	public async Task AStoredThrottleOfTheOldDefault_IsReadAsThreeSeconds()
+	{
+		var (service, player, clock) = CreateSound(throttleSeconds: 180);
+
+		RaiseItem(clock, Node);
+		await service.WhenIdleAsync();
+		clock.Advance(TimeSpan.FromSeconds(4));
+		RaiseItem(clock, Node, "A2");
 		await service.WhenIdleAsync();
 
 		Assert.Equal(2, player.Played.Count);
+	}
+
+	[Fact]
+	public async Task AReplayedEvent_PlaysNothing()
+	{
+		var (service, player, clock) = CreateSound();
+
+		RaiseItem(clock, Node, age: TimeSpan.FromSeconds(31));
+		await service.WhenIdleAsync();
+
+		Assert.Empty(player.Played);
+		Assert.Empty(_client.AckedSounds);
 	}
 
 	[Fact]
 	public async Task WhenTheSettingsCannotBeRead_NothingPlaysAndNothingIsAcknowledged_SoTheHostPlaysItsOwn()
 	{
 		var player = new RecordingPlayer();
+		var clock = new ManualClock();
 		_client.SettingsValues.Clear();
-		using var service = new CompletionSoundService(_client, player, new ManualClock(), NullLogger<CompletionSoundService>.Instance);
+		using var service = new FocusItemSoundService(_client, player, clock, NullLogger<FocusItemSoundService>.Instance);
 		service.Attach();
 
-		_client.RaiseTurnCompleted(Node, "t1");
+		RaiseItem(clock, Node);
 		await service.WhenIdleAsync();
 
 		Assert.Empty(player.Played);
@@ -296,13 +335,13 @@ public sealed class ComposerAuthAndSoundTests : IDisposable
 	{
 		var (service, _, clock) = CreateSound(throttleSeconds: 0);
 
-		_client.RaiseTurnCompleted(Node, "t1");
-		_client.RaiseTurnCompleted(Node, "t2");
+		RaiseItem(clock, Node, "A1");
+		RaiseItem(clock, Node, "A2");
 		await service.WhenIdleAsync();
 		Assert.Equal(1, _client.Calls.Count(c => c.StartsWith("settings.get:notifications", StringComparison.Ordinal)));
 
 		clock.Advance(Constants.SoundRules.SettingsCacheAge + TimeSpan.FromSeconds(1));
-		_client.RaiseTurnCompleted(Node, "t3");
+		RaiseItem(clock, Node, "A3");
 		await service.WhenIdleAsync();
 		Assert.Equal(2, _client.Calls.Count(c => c.StartsWith("settings.get:notifications", StringComparison.Ordinal)));
 	}

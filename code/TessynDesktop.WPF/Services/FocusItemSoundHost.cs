@@ -5,16 +5,16 @@ using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Services;
 
-/// <summary>Starts the <see cref="CompletionSoundService"/> for the client once the connection delivers it (the client itself registers the sound channel in its hello).</summary>
+/// <summary>Starts the <see cref="FocusItemSoundService"/> for the client once the connection delivers it (the client itself registers the sound channel in its hello).</summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class CompletionSoundHost : IHostedService, IDisposable
+public sealed class FocusItemSoundHost : IHostedService, IDisposable
 {
 	private readonly ConnectionViewModel _connection;
 	private readonly ISoundPlayer _player;
 	private readonly ILoggerFactory _loggers;
-	private CompletionSoundService? _service;
+	private FocusItemSoundService? _service;
 
-	public CompletionSoundHost(ConnectionViewModel connection, ISoundPlayer player, ILoggerFactory loggers)
+	public FocusItemSoundHost(ConnectionViewModel connection, ISoundPlayer player, ILoggerFactory loggers)
 	{
 		_connection = connection;
 		_player = player;
@@ -39,7 +39,7 @@ public sealed class CompletionSoundHost : IHostedService, IDisposable
 	private void OnClientReady(ITessynClient client)
 	{
 		_service?.Dispose();
-		_service = new CompletionSoundService(client, _player, TimeProvider.System, _loggers.CreateLogger<CompletionSoundService>());
+		_service = new FocusItemSoundService(client, _player, TimeProvider.System, _loggers.CreateLogger<FocusItemSoundService>());
 		_service.Attach();
 	}
 

@@ -17,16 +17,16 @@
                 <CheckBox Content="Show a desktop notification when a session asks for you" IsChecked="{Binding NotificationsEnabled}" AutomationProperties.Name="Desktop notifications" />
                 <TextBlock Style="{StaticResource SettingsHint}" Text="A Windows toast shows the same messages that ping Telegram when a session calls notify_user. Turn completion is never announced." />
 
-                <TextBlock Style="{StaticResource SettingsLabel}" Text="Session completion sound" />
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Focus item sound" />
                 <DockPanel>
                     <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Test" Command="{Binding TestSoundCommand}" AutomationProperties.Name="Test sound" />
-                    <ComboBox IsEditable="True" ItemsSource="{Binding Sounds}" Text="{Binding SoundFile, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Completion sound file" />
+                    <ComboBox IsEditable="True" ItemsSource="{Binding Sounds}" Text="{Binding SoundFile, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Focus item sound file" />
                 </DockPanel>
                 <TextBlock Style="{StaticResource SettingsError}" Text="{Binding SoundTestText}" />
 
-                <TextBlock Style="{StaticResource SettingsLabel}" Text="Seconds between sounds (per session)" />
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Throttle (seconds): one sound per burst, all sessions" />
                 <TextBox Width="120" HorizontalAlignment="Left" Text="{Binding ThrottleText, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Sound throttle seconds" />
-                <TextBlock Style="{StaticResource SettingsHint}" Text="Plays through the bell toggle of the command bar (per session) when a turn finishes thinking naturally, not when stopped. The test plays on the machine that runs the daemon." />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="Plays when a new Focus item appears in a session (any kind), through the bell toggle of the command bar (per session); never for a turn completion, an update or a resolve. The test plays on the machine that runs the daemon." />
 
                 <s:SectionMessages Margin="0,8,0,0" />
                 <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Reload" Command="{Binding ReloadCommand}" AutomationProperties.Name="Reload Notifications" />

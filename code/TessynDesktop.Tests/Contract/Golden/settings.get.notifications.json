@@ -4,6 +4,6 @@
   "values": {
     "notificationsEnabled": true,
     "sessionCompletionSoundFile": "<root>/ding.wav",
-    "sessionCompletionSoundThrottleSeconds": 180
+    "sessionCompletionSoundThrottleSeconds": 3
   }
 }

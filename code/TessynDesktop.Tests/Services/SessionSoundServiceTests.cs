@@ -17,95 +17,63 @@ internal sealed class FakeAppSettingsServiceForSound : IAppSettingsService
 	public void Save() { }
 }
 
+/// <summary>The host's player of the Focus item sound (FR.22.4). The throttle is the notifier's (FocusItemSoundNotifierTests).</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionSoundServiceTests
 {
 	private readonly FakeAppSettingsServiceForSound _appSettings = new();
 	private readonly List<string> _played = new();
-	private DateTimeOffset _now = DateTimeOffset.UtcNow;
 
-	private SessionSoundService MakeService(int throttleSeconds = 180)
+	private SessionSoundService MakeService()
 	{
-		_appSettings.Settings.SessionCompletionSoundThrottleSeconds = throttleSeconds;
 		_appSettings.Settings.SessionCompletionSoundFile = "fake.wav";
-		return new SessionSoundService(_appSettings, () => _now, file => _played.Add(file));
+		return new SessionSoundService(_appSettings, file => _played.Add(file));
 	}
 
 	[Fact]
-	public void PlayCompletionSound_FirstCallForSession_Plays()
+	public void PlayFocusItemSound_PlaysTheConfiguredFile()
 	{
 		var svc = MakeService();
 
-		svc.PlayCompletionSound("node-1");
+		svc.PlayFocusItemSound("node-1");
 
-		Assert.Single(_played);
-		Assert.Equal("fake.wav", _played[0]);
+		Assert.Equal(["fake.wav"], _played);
 	}
 
 	[Fact]
-	public void PlayCompletionSound_SecondCallWithinThrottleWindow_IsSuppressed()
-	{
-		var svc = MakeService(throttleSeconds: 180);
-
-		svc.PlayCompletionSound("node-1");
-		_now = _now.AddSeconds(60);
-		svc.PlayCompletionSound("node-1");
-
-		Assert.Single(_played);
-	}
-
-	[Fact]
-	public void PlayCompletionSound_CallAfterThrottleWindowElapses_PlaysAgain()
-	{
-		var svc = MakeService(throttleSeconds: 180);
-
-		svc.PlayCompletionSound("node-1");
-		_now = _now.AddSeconds(181);
-		svc.PlayCompletionSound("node-1");
-
-		Assert.Equal(2, _played.Count);
-	}
-
-	[Fact]
-	public void PlayCompletionSound_DifferentSessions_ThrottleIndependently()
-	{
-		var svc = MakeService(throttleSeconds: 180);
-
-		svc.PlayCompletionSound("node-1");
-		svc.PlayCompletionSound("node-2");
-
-		Assert.Equal(2, _played.Count);
-	}
-
-	[Fact]
-	public void PlayCompletionSound_EmptyNodeId_DoesNothing()
+	public void PlayFocusItemSound_EmptyNodeId_DoesNothing()
 	{
 		var svc = MakeService();
 
-		svc.PlayCompletionSound(string.Empty);
+		svc.PlayFocusItemSound(string.Empty);
 
 		Assert.Empty(_played);
 	}
 
 	[Fact]
-	public void PlayTestSound_BypassesThrottle()
+	public void PlayTestSound_PlaysTheGivenFile()
 	{
-		var svc = MakeService(throttleSeconds: 180);
+		var svc = MakeService();
 
-		svc.PlayCompletionSound("node-1");
 		svc.PlayTestSound("other.wav");
 		svc.PlayTestSound("other.wav");
 
-		Assert.Equal(3, _played.Count);
+		Assert.Equal(["other.wav", "other.wav"], _played);
 	}
 
 	[Fact]
-	public void PlayCompletionSound_PlaybackThrows_IsSwallowed()
+	public void PlayFocusItemSound_PlaybackThrows_IsSwallowed()
 	{
-		var svc = new SessionSoundService(_appSettings, () => _now, _ => throw new InvalidOperationException("no audio device"));
+		var svc = new SessionSoundService(_appSettings, _ => throw new InvalidOperationException("no audio device"));
 
-		var ex = Record.Exception(() => svc.PlayCompletionSound("node-1"));
+		var ex = Record.Exception(() => svc.PlayFocusItemSound("node-1"));
 
 		Assert.Null(ex);
+	}
+
+	[Fact]
+	public void TheDefaultThrottle_IsThreeSeconds()
+	{
+		Assert.Equal(3, _appSettings.Settings.SessionCompletionSoundThrottleSeconds);
 	}
 }

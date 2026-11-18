@@ -151,13 +151,13 @@ public sealed class ServiceRegistration
 		services.AddSingleton<StatusBarViewModel>();
 		services.AddSingleton<IShellModule, ChromeShellModule>();
 
-		// W1b: the completion sound. A test window never plays one (the sound is the one thing an off-screen window cannot hide).
+		// W1b: the Focus item sound (FR.22). A test window never plays one (the sound is the one thing an off-screen window cannot hide).
 		if (options.TestWindow)
 			services.AddSingleton<ISoundPlayer, SilentSoundPlayer>();
 		else
 			services.AddSingleton<ISoundPlayer, WinmmSoundPlayer>();
 
-		services.AddSingleton<IHostedService, CompletionSoundHost>();
+		services.AddSingleton<IHostedService, FocusItemSoundHost>();
 
 		services.AddSingleton<WindowPlacementClamper>();
 		services.AddSingleton<Win32WindowPlacement>();

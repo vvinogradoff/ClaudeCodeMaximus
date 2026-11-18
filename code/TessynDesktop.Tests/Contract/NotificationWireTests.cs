@@ -1,10 +1,13 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
+using TessynDesktop.Tests.Services;
 using TessynDesktop.Tests.Services.Turns;
 using Xunit;
 
@@ -156,8 +159,8 @@ public sealed class NotificationWireTests : IDisposable
 		var shown = Task.Run(() => _env.Toasts.ShowUserNotification("node-1", "Build done", "All green"));
 		var frame = await NextRaisedAsync(stream);
 		var ack = await _env.Server.CallAsync("notification.ack", new JsonObject { ["notificationId"] = frame.Params!["notificationId"]!.GetValue<string>() });
-		await _env.Server.CallAsync("notification.ack", new JsonObject { ["nodeId"] = "node-1" }); // the client played the completion sound
-		_env.Sounds.PlayCompletionSound("node-1");
+		await _env.Server.CallAsync("notification.ack", new JsonObject { ["nodeId"] = "node-1" }); // the client played the Focus item sound
+		_env.Sounds.PlayFocusItemSound("node-1");
 
 		Assert.True(await shown.WaitAsync(TimeSpan.FromSeconds(10)));
 		Assert.True(ack["result"]!["acknowledged"]!.GetValue<bool>());
@@ -176,7 +179,7 @@ public sealed class NotificationWireTests : IDisposable
 		Assert.True(await BecomesAsync(() => _env.Presence.IsPresented("toast"), true));
 
 		var shown = await Task.Run(() => _env.Toasts.ShowUserNotification("node-1", "Build done", "All green"));
-		_env.Sounds.PlayCompletionSound("node-1");
+		_env.Sounds.PlayFocusItemSound("node-1");
 
 		Assert.True(shown);
 		Assert.Equal(1, _env.Host.ToastCount);
@@ -210,7 +213,7 @@ public sealed class NotificationWireTests : IDisposable
 
 		Assert.True(await BecomesAsync(() => _env.Presence.IsPresented("toast"), false), "the dead stream still silences the host");
 		_env.Toasts.ShowUserNotification("node-1", "After", "x");
-		_env.Sounds.PlayCompletionSound("node-1");
+		_env.Sounds.PlayFocusItemSound("node-1");
 		Assert.Equal(1, _env.Host.ToastCount); // no client presents: the host does not wait
 		Assert.Equal(1, _env.Host.SoundCount);
 	}
@@ -294,6 +297,63 @@ public sealed class NotificationWireTests : IDisposable
 		Assert.Equal("userNotification", frame.Params["kind"]!.GetValue<string>());
 		Assert.True(RemoteProtocol.TurnStream.IsLocalOnly(new RemoteNotification(frame.Method!, frame.Params)));
 		Assert.Equal(1, _env.Host.ToastCount); // nobody registered: the host shows it
+	}
+
+	// -- Focus item sound (FR.22.6, TC.SD.08) --------------------------------------------------------------------------------------
+
+	private (FocusItemSoundNotifier Notifier, AttentionTestEnv Attention, string Dir) FocusSoundDaemon()
+	{
+		var dir = Path.Combine(Path.GetTempPath(), "focus-wire-tests-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(dir);
+		var attention = new AttentionTestEnv();
+		var registry = new FakeSessionRegistry();
+		registry.AddNode(AttentionTestEnv.Node("node-1"));
+		var notifier = new FocusItemSoundNotifier(attention.Service, registry, new AppSettingsService(dir), _env.Presence, _env.Bus, _env.Sounds, attention.Clock);
+		notifier.Start();
+		return (notifier, attention, dir);
+	}
+
+	[Fact]
+	public async Task ANewFocusItem_ReachesAPresentingClientAsFocusItemCreated_WhichAcknowledgesIt_SoTheHostStaysSilent()
+	{
+		await _env.Server.CallAsync("client.register", Register("wpf", "sound"));
+		using var stream = await OpenStreamAsync("wpf");
+		Assert.True(await BecomesAsync(() => _env.Presence.IsPresented("sound"), true));
+		var (notifier, attention, dir) = FocusSoundDaemon();
+		using (notifier) using (attention)
+		{
+			var item = attention.Service.Post(AttentionTestEnv.Node("node-1"), [AttentionTestEnv.Req("Pick one", AttentionKind.Decided)]).Single().Item;
+
+			SseTestFrame frame;
+			do { frame = await stream.NextAsync(); } while (frame.Method != RemoteProtocol.Notifications.FocusItemCreatedEvent);
+			await _env.Server.CallAsync("notification.ack", new JsonObject { ["nodeId"] = frame.Params!["nodeId"]!.GetValue<string>() });
+
+			Assert.Equal("node-1", frame.Params["nodeId"]!.GetValue<string>());
+			Assert.Equal(item.Id, frame.Params["itemId"]!.GetValue<string>());
+			Assert.Equal("decided", frame.Params["kind"]!.GetValue<string>());
+			Assert.True(RemoteProtocol.TurnStream.IsLocalOnly(new RemoteNotification(frame.Method!, frame.Params)));
+			await Task.Delay(NotificationWireEnv.AckTimeout * 2);
+			Assert.Equal(0, _env.Host.SoundCount);
+		}
+
+		Directory.Delete(dir, recursive: true);
+	}
+
+	[Fact]
+	public async Task ANewFocusItem_WithAHungClient_IsPlayedByTheHostAfterTheTimeout()
+	{
+		await _env.Server.CallAsync("client.register", Register("wpf", "sound"));
+		using var stream = await OpenStreamAsync("wpf");
+		Assert.True(await BecomesAsync(() => _env.Presence.IsPresented("sound"), true));
+		var (notifier, attention, dir) = FocusSoundDaemon();
+		using (notifier) using (attention)
+		{
+			attention.Service.Post(AttentionTestEnv.Node("node-1"), [AttentionTestEnv.Req("Pick one")]);
+
+			Assert.True(await BecomesAsync(() => _env.Host.SoundCount == 1, true));
+		}
+
+		Directory.Delete(dir, recursive: true);
 	}
 
 	private static async Task<SseTestFrame> NextRaisedAsync(SseTestClient stream)

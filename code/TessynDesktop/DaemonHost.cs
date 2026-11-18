@@ -112,6 +112,16 @@ public sealed class DaemonHost
 			Log.Error(ex, "Could not start the Focus draft lifecycle");
 		}
 
+		// FR.22: the Focus item sound (the host plays it, or a presenting client does). Never allowed to break start-up.
+		try
+		{
+			Services.GetRequiredService<FocusItemSoundNotifier>().Start();
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Could not start the Focus item sound");
+		}
+
 		// Remote API (web client): publish the daemon's events as remote notifications. Never allowed to break start-up.
 		try
 		{
@@ -272,6 +282,7 @@ public sealed class DaemonHost
 		services.AddSingleton<SessionTagStore>();
 		services.AddSingleton<ISessionTagService, SessionTagService>();
 		services.AddSingleton<IDraftService, DraftService>();
+		services.AddSingleton<FocusItemSoundNotifier>(); // FR.22: the Focus item sound follows new items only
 		services.AddSingleton<FocusDraftLifecycle>(); // FR.23.19: removes a Focus reply draft when its item closes or its session is deleted
 		services.AddSingleton<ClaudeProcessLauncher>();
 		services.AddSingleton<IClaudeProcessManager, ClaudeProcessManager>();
