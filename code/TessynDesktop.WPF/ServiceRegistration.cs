@@ -70,7 +70,12 @@ public sealed class ServiceRegistration
 		services.AddSingleton<ExternalOpenPolicy>();
 		services.AddSingleton<FileKindClassifier>();
 		services.AddSingleton<PreviewFileStore>();
-		services.AddSingleton<IExternalFileLauncher, SystemExternalFileLauncher>();
+		services.AddSingleton<IVideoThumbnailService, ShellVideoThumbnailService>();
+		// A test window never starts a media player or any other program: the launcher only logs the file it was asked to open.
+		if (options.TestWindow)
+			services.AddSingleton<IExternalFileLauncher, LoggingExternalFileLauncher>();
+		else
+			services.AddSingleton<IExternalFileLauncher, SystemExternalFileLauncher>();
 		services.AddSingleton<IEntryRenderer, MarkdigEntryRenderer>();
 		services.AddSingleton<IMarkdownRenderer>(sp => (MarkdigEntryRenderer)sp.GetRequiredService<IEntryRenderer>());
 		services.AddSingleton<SwitchLatencyTracker>();
@@ -88,7 +93,7 @@ public sealed class ServiceRegistration
 				new FilePreviewLoader(client, sp.GetRequiredService<FileKindClassifier>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<ExternalOpenPolicy>()),
 				sp.GetRequiredService<IPreviewSurface>(), sp.GetRequiredService<IMarkdownRenderer>(), sp.GetRequiredService<IExternalFileLauncher>(),
 				sp.GetRequiredService<ExternalOpenPolicy>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<IUrlLauncher>(),
-				sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FilePreviewViewModel>>()),
+				sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FilePreviewViewModel>>(), sp.GetRequiredService<IVideoThumbnailService>()),
 			sp.GetRequiredService<MediaPreviewPolicy>(),
 			sp.GetRequiredService<IClientStateStore>())
 		{

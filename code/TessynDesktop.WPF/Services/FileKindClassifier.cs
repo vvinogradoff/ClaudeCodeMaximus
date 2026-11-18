@@ -14,7 +14,7 @@ public sealed class FileKindClassifier
 				return PreviewKind.Markdown;
 			if (Constants.FileTypes.Image.Contains(extension))
 				return PreviewKind.Image;
-			if (Constants.FileTypes.Video.Contains(extension))
+			if (Constants.FileTypes.Video.Contains(extension) || Constants.FileTypes.InlineVideo.Contains(extension))
 				return PreviewKind.Video;
 			if (Constants.FileTypes.Pdf.Contains(extension))
 				return PreviewKind.Pdf;

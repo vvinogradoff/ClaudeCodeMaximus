@@ -6,8 +6,8 @@ namespace TessynDesktop.WPF.Rendering;
 /// <summary>
 /// Marks the local file paths of an assistant entry inside its rendered HTML (FR.26.5): each occurrence becomes
 /// <c>&lt;span class="pth" data-j="N"&gt;path&lt;/span&gt;</c> where N is the index into the entry's path list, so the path stays exactly where it is in the
-/// text. The first occurrence of an image path is followed by an empty <c>&lt;span class="pslot" data-j="N"&gt;</c> the page fills with the image preview
-/// (directly under the path). Runs on the already sanitized HTML and writes only its own fixed markup and the escaped text, so it adds no
+/// text. The first occurrence of an image or video path is followed by an empty <c>&lt;span class="pslot" data-j="N"&gt;</c> the page fills with the image preview or the
+/// first frame of the video (directly under the path). Runs on the already sanitized HTML and writes only its own fixed markup and the escaped text, so it adds no
 /// attribute or element that can load a resource. Paths inside links are left alone.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -15,6 +15,13 @@ public sealed class InlinePathMarker
 {
 	/// <summary>Image types the page may preview inline (svg is a text type here and is never rendered, so it gets the path only).</summary>
 	private static readonly HashSet<string> InlineImageExtensions = new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+
+	/// <summary>True when the path names a video the page previews inline with its first frame (FR.26.6).</summary>
+	public static bool IsInlineVideo(string path)
+	{
+		var dot = path.LastIndexOf('.');
+		return dot > 0 && Constants.FileTypes.InlineVideo.Contains(path[dot..]);
+	}
 
 	/// <summary>True when the path names an image the page previews inline.</summary>
 	public static bool IsInlineImage(string path)
@@ -83,7 +90,7 @@ public sealed class InlinePathMarker
 			span.SetAttribute("data-j", hit.Index.ToString());
 			span.TextContent = hit.Text;
 			pieces.Add(span);
-			if (IsInlineImage(hit.Text) && slotted.Add(hit.Index))
+			if ((IsInlineImage(hit.Text) || IsInlineVideo(hit.Text)) && slotted.Add(hit.Index))
 			{
 				var slot = document.CreateElement("span");
 				slot.ClassName = "pslot";

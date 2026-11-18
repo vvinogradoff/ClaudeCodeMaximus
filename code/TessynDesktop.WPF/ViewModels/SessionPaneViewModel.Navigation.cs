@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.Client;
 using TessynDesktop.Models.Remote;
+using TessynDesktop.WPF.Rendering;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.Transcript;
 
@@ -298,6 +299,7 @@ public sealed partial class SessionPaneViewModel
 		}
 
 		var key = nodeId + "|" + entry.EntryId + "|" + path;
+		var isVideo = InlinePathMarker.IsInlineVideo(path);
 		if (_inlineImages.TryGetValue(key, out var known))
 		{
 			_surface.ShowPathImage(entryIndex, path, known, denied: false);
@@ -321,11 +323,13 @@ public sealed partial class SessionPaneViewModel
 		await _inlineImageSlots.WaitAsync();
 		try
 		{
-			src = await Preview.CacheImageAsync(result.Handle, CancellationToken.None);
+			src = isVideo
+				? await Preview.CacheVideoFrameAsync(result.Handle, result.Size, CancellationToken.None)
+				: await Preview.CacheImageAsync(result.Handle, CancellationToken.None);
 		}
 		catch (Exception ex)
 		{
-			_logger.LogInformation(ex, "An inline image of {NodeId} could not be read", nodeId);
+			_logger.LogInformation(ex, "An inline {Kind} of {NodeId} could not be read", isVideo ? "video" : "image", nodeId);
 		}
 		finally
 		{
@@ -357,6 +361,14 @@ public sealed partial class SessionPaneViewModel
 		{
 			Notice = null;
 			var result = await _client.FilePreviewAsync(nodeId, entry.EntryId, path);
+			if (InlinePathMarker.IsInlineVideo(path))
+			{
+				// A video opens in the default media player (FR.26.6), not in the pane.
+				if (!await Preview.OpenVideoInDefaultPlayerAsync(result.Handle, nodeId + "|" + entry.EntryId + "|" + path, CancellationToken.None))
+					Notice = "The video could not be opened in the default player.";
+				return;
+			}
+
 			await Preview.OpenAsync(new PreviewTarget(result.Handle, result.Name));
 		}
 		catch (Exception ex)

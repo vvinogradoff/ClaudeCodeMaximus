@@ -26,6 +26,8 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 	private readonly IUrlLauncher _launcher;
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<FilePreviewViewModel> _logger;
+	private readonly IVideoThumbnailService? _thumbnails;
+	private readonly Dictionary<string, string> _openedVideos = new(StringComparer.Ordinal);
 
 	private CancellationTokenSource? _cts;
 	private int _loadToken;
@@ -74,8 +76,10 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 		PreviewFileStore store,
 		IUrlLauncher launcher,
 		IUiDispatcher ui,
-		ILogger<FilePreviewViewModel> logger)
+		ILogger<FilePreviewViewModel> logger,
+		IVideoThumbnailService? thumbnails = null)
 	{
+		_thumbnails = thumbnails;
 		_loader = loader;
 		_surface = surface;
 		_markdown = markdown;
@@ -121,6 +125,57 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 	{
 		var loaded = await _loader.LoadAsync(handle, saveToFile: true, progress: null, cancellationToken);
 		return loaded.Refusal == null && loaded.Kind == PreviewKind.Image && loaded.FilePath != null ? _store.UrlOf(loaded.FilePath) : null;
+	}
+
+	/// <summary>
+	/// Makes the first-frame picture of the video behind a handle for the transcript's inline video (FR.26.6): the video is copied into the preview
+	/// cache only long enough for the shell to read it, the frame is saved next to it as a PNG and its cache URL returned. Null when the file is not a
+	/// video the cache accepts, is over <see cref="Constants.Limits.MaxInlineVideoBytes"/>, or no frame could be made. The preview pane is not touched.
+	/// </summary>
+	public async Task<string?> CacheVideoFrameAsync(string handle, long size, CancellationToken cancellationToken)
+	{
+		if (_thumbnails == null || size > Constants.Limits.MaxInlineVideoBytes)
+			return null;
+
+		var loaded = await _loader.LoadAsync(handle, saveToFile: true, progress: null, cancellationToken);
+		try
+		{
+			if (loaded.Refusal != null || loaded.Kind != PreviewKind.Video || loaded.FilePath == null)
+				return null;
+
+			var frame = _store.NewFilePath(".png");
+			if (await _thumbnails.TryCreateAsync(loaded.FilePath, frame, Constants.Limits.InlineVideoFramePixels, cancellationToken))
+				return _store.UrlOf(frame);
+
+			_store.Delete(frame);
+			return null;
+		}
+		finally
+		{
+			_store.Delete(loaded.FilePath);   // the video itself is not kept: opening it fetches it again
+		}
+	}
+
+	/// <summary>
+	/// Opens the video behind a handle in the system's default media player (FR.26.6): copied into the preview cache (once per <paramref name="key"/>)
+	/// and launched through <see cref="IExternalFileLauncher"/>, so the allowlist and the cache-only rule apply. False when it could not be fetched or
+	/// started. The preview pane is not touched.
+	/// </summary>
+	public async Task<bool> OpenVideoInDefaultPlayerAsync(string handle, string key, CancellationToken cancellationToken)
+	{
+		if (_openedVideos.TryGetValue(key, out var cached) && File.Exists(cached))
+			return _external.TryOpen(cached);
+
+		var loaded = await _loader.LoadAsync(handle, saveToFile: true, progress: null, cancellationToken);
+		if (loaded.Refusal != null || loaded.Kind != PreviewKind.Video || loaded.FilePath == null)
+		{
+			_store.Delete(loaded.FilePath);
+			return false;
+		}
+
+		_openedVideos[key] = loaded.FilePath;
+		_logger.LogInformation("Opening an inline video in the default player: {Name} ({Size} bytes)", loaded.Name, loaded.Size);
+		return _external.TryOpen(loaded.FilePath);
 	}
 
 	/// <summary>Shows a failure instead of a file (for example <c>file.preview</c> refused the path).</summary>
@@ -215,6 +270,9 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 				break;
 			case PreviewKind.Image:
 				_surface.ShowImage(_store.UrlOf(loaded.FilePath!));
+				break;
+			case PreviewKind.Video when !Constants.FileTypes.Video.Contains(_openPolicy.ExtensionOf(loaded.Name) ?? string.Empty):
+				Message = Constants.Texts.VideoOpensExternallyHint;   // mkv, avi, wmv: the page cannot play them, the default player can
 				break;
 			case PreviewKind.Video:
 				_surface.ShowVideo(_store.UrlOf(loaded.FilePath!));

@@ -31,6 +31,35 @@ public sealed class InlinePathMarkerTests
 		Assert.Contains(@"<code><span class=""pth"" data-j=""0"">C:\my docs\a b.txt</span></code>", view.Html);
 	}
 
+	[Theory]
+	[InlineData(@"C:\clips\a.mp4")]
+	[InlineData(@"C:\clips\a.MOV")]
+	[InlineData(@"C:\clips\a.webm")]
+	[InlineData(@"C:\clips\a.mkv")]
+	[InlineData(@"C:\clips\a.avi")]
+	[InlineData(@"C:\clips\a.m4v")]
+	[InlineData(@"C:\clips\a.wmv")]
+	public void AVideoPath_GetsTheSameSlotAnImageDoes_ForTheFirstOccurrenceOnly(string path)
+	{
+		var view = Render($"Clip: {path} and again {path}.");
+
+		Assert.Equal(1, Count(view.Html, @"<span class=""pslot"" data-j=""0""></span>"));
+		Assert.Equal(2, Count(view.Html, $@"data-j=""0"">{path}</span>"));
+		Assert.True(InlinePathMarker.IsInlineVideo(path));
+		Assert.False(InlinePathMarker.IsInlineImage(path));
+	}
+
+	[Theory]
+	[InlineData(@"C:\clips\a.ogv")]      // plays in the pane but is not an inline-preview type
+	[InlineData(@"C:\clips\a.mp3")]
+	[InlineData(@"C:\clips\a.svg")]      // decision: no svg preview
+	[InlineData(@"C:\clips\mp4")]
+	public void OtherPaths_GetNoVideoSlot(string path)
+	{
+		Assert.False(InlinePathMarker.IsInlineVideo(path));
+		Assert.DoesNotContain("pslot", Render($"File {path} here").Html);
+	}
+
 	[Fact]
 	public void AnImagePath_GetsAnEmptySlotRightAfterIt_ForTheFirstOccurrenceOnly()
 	{
