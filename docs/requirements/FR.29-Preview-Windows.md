@@ -124,4 +124,4 @@ The Architect works with two or more monitors and wants previews out of the main
 
 **FR.29.15 — Resizing.** A preview window that is not maximized can be resized from every edge and corner: the resize cursor appears on all four edges, and the page content never covers the resize border. Maximized windows have no border.
 
-Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (unit tests, WPF E2E `WpfPreviewWindows*E2ETests`); manual checks on two real monitors pending. FR.29.14 and FR.29.15: approved by the Architect's feedback 2026-11-18, built on branch `wpf/preview-window-polish`.
+Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (merge `1d07de9`; unit tests, WPF E2E `WpfPreviewWindows*E2ETests`). FR.29.14 and FR.29.15: approved by the Architect's feedback 2026-11-18, built on branch `wpf/preview-window-polish` (merge `cd82193`). Accepted by the Architect in use on two monitors after both restarts (2026-11-18); the MANUAL rows of TC.PW.01 were not ticked one by one. Summary: `docs/features/preview-windows.md`.

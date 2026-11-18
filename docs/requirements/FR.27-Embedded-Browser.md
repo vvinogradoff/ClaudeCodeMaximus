@@ -35,4 +35,4 @@ The embedded browser is a Chromium browser (WebView2) with a **persistent sessio
 - The box stretches with the window (NR.7).
 - A typed address is not routed to other groups (FR.29.4): it opens in this window.
 
-Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (unit tests); manual checks on two real monitors pending. FR.27.10: approved by the Architect's feedback 2026-11-18, built on branch `wpf/preview-window-polish`.
+Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (merge `1d07de9`; unit tests). FR.27.10: approved by the Architect's feedback 2026-11-18, built on branch `wpf/preview-window-polish` (merge `cd82193`). Accepted by the Architect in use (2026-11-18); the MANUAL rows of TC.PW.01 (sign-in persistence, popups, downloads) were not ticked one by one. Summary: `docs/features/preview-windows.md`.
