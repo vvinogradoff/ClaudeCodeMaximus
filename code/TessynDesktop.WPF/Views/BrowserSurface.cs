@@ -20,6 +20,7 @@ public sealed class BrowserSurface : IBrowserSurface, IDisposable
 	private readonly StartupOptions _options;
 	private readonly ILogger<BrowserSurface> _logger;
 	private readonly List<BrowserPopupWindow> _popups = [];
+	private readonly BrowserPopupPolicy _popupPolicy = new();
 
 	private WebView2? _control;
 	private CoreWebView2Environment? _env;
@@ -180,19 +181,26 @@ public sealed class BrowserSurface : IBrowserSurface, IDisposable
 		if (_env == null || _disposed)
 			return;
 
-		var deferral = e.GetDeferral();
 		e.Handled = true;
-		_ = OpenPopupAsync(e, deferral, owner);
+		var decision = _popupPolicy.Decide(_popups.Count, e.IsUserInitiated);
+		if (decision == BrowserPopupDecision.Drop)
+		{
+			_logger.LogInformation("A browser popup was dropped: {Count} popups are already open", _popups.Count);
+			return;
+		}
+
+		var deferral = e.GetDeferral();
+		_ = OpenPopupAsync(e, deferral, owner, decision == BrowserPopupDecision.ShowActive);
 	}
 
-	private async Task OpenPopupAsync(CoreWebView2NewWindowRequestedEventArgs e, CoreWebView2Deferral deferral, Window? owner)
+	private async Task OpenPopupAsync(CoreWebView2NewWindowRequestedEventArgs e, CoreWebView2Deferral deferral, Window? owner, bool activate)
 	{
 		try
 		{
 			var features = e.WindowFeatures;
 			var width = features.HasSize ? features.Width : Constants.Browser.PopupDefaultWidth;
 			var height = features.HasSize ? features.Height : Constants.Browser.PopupDefaultHeight;
-			var popup = new BrowserPopupWindow(owner, width, height, _options.TestWindow);
+			var popup = new BrowserPopupWindow(owner, width, height, activate, _options.TestWindow);
 			_popups.Add(popup);
 			popup.Closed += (_, _) => _popups.Remove(popup);
 			var core = await popup.InitializeAsync(_env!);
