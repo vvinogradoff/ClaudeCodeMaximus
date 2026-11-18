@@ -112,6 +112,15 @@ public interface ISessionRegistry
     /// </summary>
     SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name);
 
+    /// <summary>
+    /// FR.15.15: creates a top-level session (no supervisor, depth 0) with <paramref name="settings"/> in ONE step (one lock, one <c>Save()</c>, one
+    /// <see cref="TreeChangeKind.SessionAdded"/> carrying the parent and the index), so no client sees it half set up. Placement: right after
+    /// <see cref="NewSessionPlacementModel.AfterNodeId"/> (a worker stands for its top-level supervisor); without it, last in the group named
+    /// <see cref="NewSessionPlacementModel.GroupName"/> (created when missing) of the directory holding <see cref="NewSessionPlacementModel.WorkingDirectory"/>,
+    /// or last in that directory. Returns null, creating nothing, when the anchor or the directory is not found.
+    /// </summary>
+    SessionPlacementModel? CreateTopLevelSession(NewSessionPlacementModel placement, string name, NewSessionSettingsModel settings);
+
     SessionNodeModel AddSession(DirectoryNodeModel parent, string name);
     SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name);
     SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId);

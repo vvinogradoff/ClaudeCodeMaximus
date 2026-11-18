@@ -41,7 +41,7 @@ internal sealed class TreeMutationWireEnv : IDisposable
 			new TreeMutationRpcModule(tree),
 			new SessionOptionsRpcModule(options),
 			new LocalToolsRpcModule(local),
-			new TurnRpcModule(Turn.Registry, new TurnOptionsResolver(Turn.Models, Turn.Settings, new ProfileLabelService(Turn.ProfileService, Turn.Settings)), resolver, new TurnSendService(Turn.Engine, Turn.Registry), Turn.Engine, Turn.Turns, Turn.Streaming),
+			new TurnRpcModule(Turn.Registry, new TurnOptionsResolver(Turn.Models, Turn.Settings, new ProfileLabelService(Turn.ProfileService, Turn.Settings)), resolver, new TurnSendService(Turn.Engine, Turn.Registry), Turn.Engine, Turn.Turns, Turn.Streaming, new SessionModelSettings(Turn.Settings)),
 		]);
 		Host = new TdcpTestHost(Dispatcher, bus: Turn.Bus, runInfo: runInfo);
 	}

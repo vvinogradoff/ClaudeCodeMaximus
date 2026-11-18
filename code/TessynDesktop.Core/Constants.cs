@@ -170,6 +170,7 @@ public static partial class Constants
 			"Do NOT use the Claude Code `Workflow` tool. Do NOT use the `Agent` tool for multi-agent orchestration. Do NOT use the `/deep-research` skill. These spawn processes/subagents that are invisible to TessynDesktop and untracked in the session tree. " +
 			"Instead, use the TessynDesktop MCP tools for all multi-agent, orchestration, and research fan-out work: " +
 			"`mcp__" + Agent.McpServerName + "__spawn_session` to create child sessions (supports `model`, `outputFormat` args), " +
+			"`mcp__" + Agent.McpServerName + "__" + CreateSession.ToolName + "` to create a new top-level session for the user, not a worker of yours (only when the user asks for a new session; supports `after` to place it right after a session, `model`, `effort`, `profile`, `streaming`, `sound`), " +
 			"`mcp__" + Agent.McpServerName + "__send_to_session` to send prompts (use `wait` mode for sequential work, `async` for parallel fan-out; supports `outputFormat` arg for a markdown shape hint), " +
 			"`mcp__" + Agent.McpServerName + "__read_session` to retrieve results, " +
 			"`mcp__" + Agent.McpServerName + "__stop_session` to cancel a running turn, " +
@@ -783,6 +784,12 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// <summary>Maximum cron fires per schedule before auto-cancellation (FR.15.5). 0 = unlimited.</summary>
 		public const int MaxTurnsPerLoop = 100;
 
+		/// <summary>Successful <c>create_session</c> calls allowed per rolling <see cref="CreatedSessionsWindow"/> across the app (FR.15.15).</summary>
+		public const int MaxCreatedSessionsPerHour = 10;
+
+		/// <summary>The rolling window of <see cref="MaxCreatedSessionsPerHour"/> (FR.15.15).</summary>
+		public static readonly TimeSpan CreatedSessionsWindow = TimeSpan.FromHours(1);
+
 		/// <summary>
 		/// Tier assigned to sessions whose effective model is not configured (FR.16.4).
 		/// Defaults to 2 (Sonnet) so unconfigured sessions can still spawn Haiku/Local workers.
@@ -899,6 +906,18 @@ SESSION TRANSCRIPT TO COMPACT:
 			  one turn. Use a self-wake only for a real deadline, or as a long-interval check on a
 			  worker that may be stuck.
 
+			## Creating a session for the user
+
+			`create_session` makes a new top-level session that belongs to the user, not a worker:
+			it has no supervisor, you get no result from it, and it shows in the tree, Recent and
+			Telegram like a session the user made. Use it only when the user asks for a new session.
+			Place it with `after=<session id>` (right after that session; find the id with
+			`list_sessions query=`) or with `workingDir`/`group` (last there); with neither it goes
+			right after you. Set `model` (tier-checked), `effort`, `profile` (default: yours),
+			`streaming` and `sound` as the user asked. An optional `prompt` starts its first turn in
+			the background. Only top-level sessions can call it, and the number of sessions created
+			per hour is capped.
+
 			## As a worker
 
 			If your prompt is a specific, scoped task sent by another session, you're a worker in
@@ -912,10 +931,10 @@ SESSION TRANSCRIPT TO COMPACT:
 			- You are headless and the CLI process is terminated between turns. Never use the CLI's
 			  native `ScheduleWakeup`/`CronCreate`/`CronList`/`CronDelete` — those schedules won't
 			  survive. Use `mcp__cmx__schedule_wake` if you need to poll or resume later.
-			- Do not call `notify_user` or `post_attention` — a worker session's call is dropped or
-			  refused before it ever reaches the user (both are reserved for the top-level session the
-			  user is actually talking to); put anything the user needs to see in your final response
-			  to your supervisor instead.
+			- Do not call `notify_user`, `post_attention` or `create_session` — a worker session's call
+			  is dropped or refused before it ever reaches the user (they are reserved for the top-level
+			  session the user is actually talking to); put anything the user needs to see in your
+			  final response to your supervisor instead.
 			""";
 	}
 

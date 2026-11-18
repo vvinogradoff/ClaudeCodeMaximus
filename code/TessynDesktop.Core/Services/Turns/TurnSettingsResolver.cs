@@ -8,8 +8,8 @@ namespace TessynDesktop.Services;
 
 /// <inheritdoc cref="ITurnSettingsResolver" />
 /// <remarks>
-/// The model rules repeat those of <see cref="SessionTurnService"/> (per-turn, node, directory, app); the profile comes from the shared
-/// <see cref="IProfileResolver"/> (ISSUE.013). Created by Claude.
+/// The model and effort come from the shared <see cref="ISessionModelSettings"/> (FR.12.35), as for <see cref="SessionTurnService"/>; the profile
+/// comes from the shared <see cref="IProfileResolver"/> (ISSUE.013). Created by Claude.
 /// </remarks>
 public sealed class TurnSettingsResolver : ITurnSettingsResolver
 {
@@ -19,6 +19,7 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 	private readonly IClaudeModelService _models;
 	private readonly IProfileLabelService _labels;
 	private readonly IProfileResolver _resolver;
+	private readonly ISessionModelSettings _modelSettings;
 
 	public TurnSettingsResolver(
 		IAppSettingsService appSettings,
@@ -26,7 +27,8 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 		IClaudeProfileService profiles,
 		IClaudeModelService models,
 		IProfileLabelService labels,
-		IProfileResolver? resolver = null)
+		IProfileResolver? resolver = null,
+		ISessionModelSettings? modelSettings = null)
 	{
 		_appSettings = appSettings;
 		_turns       = turns;
@@ -34,6 +36,7 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 		_models      = models;
 		_labels      = labels;
 		_resolver    = resolver ?? new ProfileResolver(appSettings, profiles);
+		_modelSettings = modelSettings ?? new SessionModelSettings(appSettings, models);
 	}
 
 	/// <inheritdoc />
@@ -50,8 +53,9 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 		var stampedProfileName = profile.IsDefault ? await _labels.GetDefaultLabelAsync() : profile.DisplayName;
 		var profileConfigDir   = profile.ConfigDir;
 
-		var modelId   = ResolveTurnModel(node, options);
-		var effort    = NormalizeEffort(options?.Effort);
+		var turn      = _modelSettings.ResolveTurn(node, options);
+		var modelId   = turn.ModelId;
+		var effort    = turn.Effort;
 		var modelInfo = string.IsNullOrEmpty(modelId)
 			? null
 			: _models.GetCachedModels().FirstOrDefault(m => m.Id == modelId);
@@ -63,32 +67,4 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 
 		return new TurnSettings(modelId, effort, profileConfigDir, stampedProfileName, ollamaBaseUrl, disableTools, Chrome: false, modelInfo, directory);
 	}
-
-	/// <summary>The per-turn choice (<c>"default"</c> = no --model flag), else node, directory, app-level model; null when nothing is configured.</summary>
-	private string? ResolveTurnModel(SessionNodeModel node, TurnOptionsModel? options)
-	{
-		var requested = options?.ModelId;
-		if (string.IsNullOrEmpty(requested))
-			return ResolveEffectiveModel(node);
-
-		return string.Equals(requested, Constants.Remote.DefaultOptionId, StringComparison.OrdinalIgnoreCase) ? null : requested;
-	}
-
-	private string? ResolveEffectiveModel(SessionNodeModel node)
-	{
-		if (!string.IsNullOrEmpty(node.ModelId))
-			return node.ModelId;
-
-		var directory = _appSettings.Settings.Tree.FirstOrDefault(d =>
-			string.Equals(d.Path, node.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
-		if (!string.IsNullOrEmpty(directory?.SelectedModelId))
-			return directory.SelectedModelId;
-
-		return string.IsNullOrEmpty(_appSettings.Settings.SelectedModelId) ? null : _appSettings.Settings.SelectedModelId;
-	}
-
-	private static string? NormalizeEffort(string? effort) =>
-		string.IsNullOrWhiteSpace(effort) || string.Equals(effort, Constants.Remote.DefaultOptionId, StringComparison.OrdinalIgnoreCase)
-			? null
-			: effort;
 }

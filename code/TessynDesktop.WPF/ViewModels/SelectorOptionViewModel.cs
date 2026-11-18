@@ -30,4 +30,7 @@ public sealed class SelectorOptionViewModel
 
 	/// <summary>A system profile ("[Sys] ...", not one of the user's own): shown dimmed.</summary>
 	public bool IsSystem { get; }
+
+	/// <summary>The label: UI Automation (screen readers, the E2E tests) names a selector's items by it instead of by the type name.</summary>
+	public override string ToString() => Label;
 }

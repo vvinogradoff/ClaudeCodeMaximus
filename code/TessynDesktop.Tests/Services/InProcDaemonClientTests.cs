@@ -136,6 +136,7 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
     public void RenameGroup(GroupNodeModel group, string newName) => LastRenameGroupArgs = (group, newName);
 
     public SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name) => throw new NotImplementedException();
+    public SessionPlacementModel? CreateTopLevelSession(NewSessionPlacementModel placement, string name, NewSessionSettingsModel settings) => throw new NotImplementedException();
     public SessionNodeModel AddSession(DirectoryNodeModel parent, string name)
     {
         LastAddSessionArgs = (parent, name);

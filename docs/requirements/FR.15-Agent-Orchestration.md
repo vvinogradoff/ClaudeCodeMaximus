@@ -169,7 +169,7 @@ Use cases: [UC.15.4](/docs/usecases/UC.15-Agent-Orchestration.md). Test cases: [
   - The result stays in the new session: nothing goes back to the caller and there is no Mailbox Delivery.
   - The turn runs one-shot even with `streaming` on (FR.19.11); the Persistent Session Process starts with the user's first send.
   - Because the session is top-level, its first turn gets the top-level instruction block (tool bans, `notify_user`, Focus; FR.14.11).
-- **Result** (plain text): `Session '<name>' created (nodeId=<id>) in <place>.`, where `<place>` is `<directory label>[ / <group path>], right after '<anchor name>'` or `<directory label>[ / <group path>], last`. A second line follows: `model=<id>, effort=<effort>, profile=<name>, streaming=on|off, sound=on|off.` (`default` for an unset model or effort). A third line reads `First turn started.` or `No prompt run.`
+- **Result** (plain text): `Session '<name>' created (nodeId=<id>) in <place>.`, where `<place>` is `<directory label>[ / <group path>], right after '<anchor name>'` or `<directory label>[ / <group path>], last`. A second line follows: `model=<id>, effort=<effort>, profile=<name>, streaming=on|off, sound=on|off.` The model and effort are what the session's turns use (FR.12.35, so an inherited directory or app model is named), and `default` when there is no flag; the profile is `default` for the Default profile. A third line reads `First turn started.` or `No prompt run.`
 - **Errors** (a tool error; nothing is created):
   - the caller is a worker: `create_session is for top-level sessions: a worker reports to its supervisor instead.`;
   - a blank `name`;

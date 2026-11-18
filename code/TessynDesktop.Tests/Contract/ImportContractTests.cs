@@ -46,7 +46,7 @@ public sealed class ImportContractTests : IDisposable
 		new SearchRpcModule(_env.Search).Register(registry);
 		new ScheduleRpcModule(_env.Schedules).Register(registry);
 		new DaemonHealthRpcModule(_env.Health).Register(registry);
-		new AttentionRpcModule(_env.Import.Registry, _env.Attention.Service, null!, null!, _env.Overview).Register(registry);
+		new AttentionRpcModule(_env.Import.Registry, _env.Attention.Service, null!, null!, null!, _env.Overview).Register(registry);
 
 		var added = registry.Entries.Where(e => J4Methods.Contains(e.Name)).ToList();
 
@@ -58,7 +58,7 @@ public sealed class ImportContractTests : IDisposable
 	public void TheAttentionModule_RegistersTheListAllMethodOnlyWhenTheOverviewIsWired()
 	{
 		var registry = new TdcpMethodRegistry();
-		new AttentionRpcModule(_env.Import.Registry, _env.Attention.Service, null!, null!).Register(registry);
+		new AttentionRpcModule(_env.Import.Registry, _env.Attention.Service, null!, null!, null!).Register(registry);
 
 		Assert.DoesNotContain(registry.Entries, e => e.Name == "attention.listAll");
 		Assert.Contains(registry.Entries, e => e.Name == "attention.list" && e.RemoteCallable); // the web methods are untouched

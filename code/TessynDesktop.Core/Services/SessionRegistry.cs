@@ -244,19 +244,52 @@ public sealed class SessionRegistry : ISessionRegistry
 
     // ── CRUD – Session ────────────────────────────────────────────────────────
 
-    public SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name)
+    // A session created by a client gets the defaults of a new node; create_session gives its own settings (FR.15.15).
+    public SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name) =>
+        CreateTopLevelSession(
+            new NewSessionPlacementModel(anchorNodeId, null, null),
+            name,
+            new NewSessionSettingsModel(ModelId: null, Effort: null, ProfileId: null, ProfileName: null, IsStreamingMode: false, PlayCompletionSound: true));
+
+    public SessionPlacementModel? CreateTopLevelSession(NewSessionPlacementModel placement, string name, NewSessionSettingsModel settings)
     {
-        // The session file is created before the lock (file I/O), like every other creator; an unknown anchor leaves one empty file behind only
-        // when the caller passed a bad id, which the remote module rejects first.
         lock (_appSettings.SyncRoot)
         {
-            if (!TryFindContainerFor(anchorNodeId, out var directory, out var group, out var sessions, out var index))
-                return null;
+            DirectoryNodeModel directory;
+            GroupNodeModel? group;
+            List<SessionNodeModel> sessions;
+            int index;
 
-            var workingDir = group?.WorkingDirectory ?? directory.Path;
-            var model      = CreateSessionModel(name, workingDir);
-            var preceding  = index > 0 ? sessions[index - 1] : null;
+            if (!string.IsNullOrEmpty(placement.AfterNodeId))
+            {
+                if (!TryFindContainerFor(placement.AfterNodeId, out directory, out group, out sessions, out index))
+                    return null;
+            }
+            else
+            {
+                var dir = string.IsNullOrEmpty(placement.WorkingDirectory) ? null : FindDirectoryFor(placement.WorkingDirectory);
+                if (dir == null)
+                    return null;
 
+                directory = dir;
+                group     = string.IsNullOrEmpty(placement.GroupName)
+                    ? null
+                    : dir.Groups.FirstOrDefault(g => string.Equals(g.Name, placement.GroupName, StringComparison.OrdinalIgnoreCase))
+                      ?? AddGroupModel(dir, placement.GroupName);
+                sessions  = group?.Sessions ?? dir.Sessions;
+                index     = sessions.Count;   // FR.1.30: last in its directory or group
+            }
+
+            // Every setting is on the node before it is saved and announced, so no client sees it half set up (FR.15.15).
+            var model = CreateSessionModel(name, group?.WorkingDirectory ?? directory.Path);
+            model.ModelId             = settings.ModelId;
+            model.Effort              = settings.Effort;
+            model.ProfileId           = settings.ProfileId;
+            model.ProfileName         = settings.ProfileName;
+            model.IsStreamingMode     = settings.IsStreamingMode;
+            model.PlayCompletionSound = settings.PlayCompletionSound;
+
+            var preceding = index > 0 ? sessions[index - 1] : null;
             sessions.Insert(index, model);
             _appSettings.Save();
 
@@ -270,7 +303,7 @@ public sealed class SessionRegistry : ISessionRegistry
                 PrecedingSession = preceding,
             });
 
-            return new SessionPlacementModel(model, directory, group, index);
+            return new SessionPlacementModel(model, directory, group, index, preceding);
         }
     }
 
@@ -596,6 +629,11 @@ public sealed class SessionRegistry : ISessionRegistry
         return work.Length == dir.Length || work[dir.Length] is '\\' or '/';
     }
 
+    /// <summary>The Directory node whose path is <paramref name="workingDir"/>, else the first one it lies below; null when none (settings lock held by the caller).</summary>
+    private DirectoryNodeModel? FindDirectoryFor(string workingDir) =>
+        _appSettings.Settings.Tree.FirstOrDefault(d => string.Equals(d.Path, workingDir, StringComparison.OrdinalIgnoreCase))
+        ?? _appSettings.Settings.Tree.FirstOrDefault(d => IsUnderDirectory(workingDir, d.Path));
+
     public SessionNodeModel? CreateSessionForAgent(
         string workingDir, string name, string? group,
         int orchestrationDepth = 0, string? supervisorNodeId = null)
@@ -605,15 +643,7 @@ public sealed class SessionRegistry : ISessionRegistry
 
         lock (_appSettings.SyncRoot)
         {
-            dir = _appSettings.Settings.Tree.FirstOrDefault(d =>
-                string.Equals(d.Path, workingDir, StringComparison.OrdinalIgnoreCase));
-
-            if (dir == null)
-            {
-                dir = _appSettings.Settings.Tree.FirstOrDefault(d =>
-                    IsUnderDirectory(workingDir, d.Path));
-            }
-
+            dir = FindDirectoryFor(workingDir);
             if (dir == null)
                 return null;
 

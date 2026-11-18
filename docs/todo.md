@@ -1191,9 +1191,9 @@ Status copied from the plan and the worker reports in `.wpf-work/` as of 2026-11
 Plan: `.wpf-work/root-sessions-plan.md`, approved 2026-11-18 (Focus A1–A3; A3 folds sticky picks into this work). Branch `feat/create-session`, worktree `../Tessyn-wt-rootsess`.
 
 - [DONE] Docs: FR.15.15, FR.12.35, FR.16.6, the FR.25.24 row, tdcp-spec 10.A9, glossary (Top-level Session, Session model and effort, Sticky pick), UC.15.4, UC.ME.01–ME.03, TC.15.8–15.9, TC.ME.01–ME.05
-- [ ] `SessionNodeModel.Effort`; the shared model and effort rule with sticky picks (`ISessionModelSettings`) in the engine turn, headless turns, compaction, `lastUsed` and the caller's tier (FR.12.35, FR.16.6)
-- [ ] Registry: create a top-level session right after an anchor or last in a container, with its settings, in one step (FR.15.15)
-- [ ] `create_session` tool: arguments, placement, settings, guardrails, first prompt, result text; the tool in `NoWorkflowTool` and the `cmx-orchestration` skill (FR.15.15)
-- [ ] Tests: TC.15.8 and TC.ME.01–ME.04 (Core), TC.15.9 and TC.ME.05 (WPF E2E)
+- [DONE] `SessionNodeModel.Effort`; the shared model and effort rule with sticky picks (`ISessionModelSettings`) in the engine turn, headless turns, compaction, `lastUsed` and the caller's tier (FR.12.35, FR.16.6)
+- [DONE] Registry: create a top-level session right after an anchor or last in a container, with its settings, in one step (FR.15.15)
+- [DONE] `create_session` tool: arguments, placement, settings, guardrails, first prompt, result text; the tool in `NoWorkflowTool` and the `cmx-orchestration` skill (FR.15.15)
+- [DONE] Tests: TC.15.8 and TC.ME.01–ME.04 (Core), TC.15.9 and TC.ME.05 (WPF E2E)
 - [ ] Review, merge, all suites green
 - [ ] After the restart onto the build: create "Root level sessions" (Opus, Max, Default profile, streaming, sound) right under "Load session output" (manual UC.15.4)

@@ -217,13 +217,13 @@ The Default profile cannot be removed (the Remove button never appears while Def
 - **A turn's effort:** the per-turn pick, else the session's `Effort`, else no flag.
 - **One resolver.** One resolver (`ISessionModelSettings`) serves the engine turn (`turn.send`), every headless turn (scheduled, orchestrated, Telegram, web) and compaction. The caller's tier (FR.16.6) uses the same model rule.
 - **Sticky picks.**
-  - When an interactive send carries a model or effort pick that differs from what the session would use without it, the pick is stored on the session when the send is accepted, and the settings are saved.
+  - When an interactive send carries a model or effort pick that differs from what the client is shown for the session (`lastUsed`, see below), the pick is stored on the session when the send is accepted, and the settings are saved. Model ids are compared case-insensitively and stored in the catalog's form.
   - Interactive sends are the desktop's `turn.send`, the web's `session.send` and `attention.reply`.
-  - A pick equal to the session's current value changes nothing. A client that always sends its choice (the web, FR.25.24) therefore doesn't pin a session by accident.
+  - A pick equal to what is shown changes nothing. A client that always sends its choice (the web, FR.25.24) therefore neither pins a session by accident nor resets one: a session whose model is not in the catalog is shown `default`, and a `default` sent back leaves its model as it is.
   - Picks of a schedule (FR.14.13), `session.compact` options, Telegram turns and orchestrated turns are never stored.
 - **Other writers.** `spawn_session` with `model` and `set_session_model` set `ModelId` (FR.15.10); `create_session` sets both (FR.15.15).
 - **What the selectors show.**
-  - `session.get` and `session.headers` return in `lastUsed.modelId` and `lastUsed.effort` what a turn without a pick uses: the rules above, `default` when there is no flag, and `default` for a model that isn't in the catalog. These values no longer come from the last ASSISTANT entry (tdcp-spec 10.A9).
+  - `session.get` and `session.headers` return in `lastUsed.modelId` and `lastUsed.effort` what a turn without a pick uses: the rules above, the model in the catalog's form (matched case-insensitively), `default` when there is no flag, and `default` for a model that isn't in the catalog. These values no longer come from the last ASSISTANT entry (tdcp-spec 10.A9).
   - The profile is unchanged (the pin, FR.12.27).
   - The WPF client still sends only the fields the user picked (tdcp-spec 9.8).
 - **Existing sessions.** There is no migration.

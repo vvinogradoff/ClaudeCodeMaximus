@@ -76,7 +76,7 @@ internal sealed class ImportWireEnv : IDisposable
 			new ScheduleRpcModule(Schedules),
 			new DaemonHealthRpcModule(Health),
 			// attention.reply and attention.dismiss are not part of J4; the module only needs the overview here.
-			new AttentionRpcModule(Import.Registry, Attention.Service, null!, null!, Overview),
+			new AttentionRpcModule(Import.Registry, Attention.Service, null!, null!, null!, Overview),
 		]);
 		Host = new TdcpTestHost(Dispatcher, bus: Bus, runInfo: runInfo);
 	}

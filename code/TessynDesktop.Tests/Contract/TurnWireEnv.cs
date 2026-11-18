@@ -58,7 +58,7 @@ internal sealed class TurnWireEnv : IDisposable
 		var labels   = new ProfileLabelService(ProfileService, Settings);
 		var options  = new TurnOptionsResolver(Models, Settings, labels);
 		var resolver = new TurnSettingsResolver(Settings, Turns, ProfileService, Models, labels);
-		var module   = new TurnRpcModule(Registry, options, resolver, new TurnSendService(Engine, Registry), Engine, Turns, Streaming);
+		var module   = new TurnRpcModule(Registry, options, resolver, new TurnSendService(Engine, Registry), Engine, Turns, Streaming, new SessionModelSettings(Settings));
 
 		// The event log of hello's capabilities (the host keeps its own for the stream).
 		// The run id of hello must be the one of the stream the client then resumes on.

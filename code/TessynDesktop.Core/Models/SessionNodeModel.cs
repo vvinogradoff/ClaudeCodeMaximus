@@ -61,10 +61,17 @@ public sealed class SessionNodeModel
 
 	/// <summary>
 	/// Model ID used for all turns (user, scheduled, orchestrated) on this session (FR.16.3).
-	/// Null or empty means "inherit from directory/app setting".
-	/// Set interactively via the UI or by the <c>set_session_model</c> MCP tool (FR.15.10).
+	/// Null or empty means "inherit from directory/app setting"; <c>"default"</c> means no <c>--model</c> flag and no fallback (FR.12.35).
+	/// Set by a sticky pick of an interactive send, by <c>create_session</c>, by <c>spawn_session</c>'s <c>model</c> and by the
+	/// <c>set_session_model</c> MCP tool (FR.15.10). Read through <see cref="Services.ISessionModelSettings"/>.
 	/// </summary>
 	public string? ModelId { get; set; }
+
+	/// <summary>
+	/// The session's effort (FR.12.35): the <c>--effort</c> value of every turn without a per-turn pick (<c>max</c>, <c>high</c>, <c>medium</c>,
+	/// <c>low</c>). Null (or <c>"default"</c>) means no flag. Set by a sticky pick of an interactive send and by <c>create_session</c>.
+	/// </summary>
+	public string? Effort { get; set; }
 
 	/// <summary>
 	/// Nesting depth in the supervisor→worker chain (FR.15.5, FR.16).

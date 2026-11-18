@@ -67,7 +67,7 @@ internal sealed class ComposerWireEnv : IDisposable
 		var labels   = new ProfileLabelService(profiles, Settings);
 		var options  = new TurnOptionsResolver(models, Settings, labels);
 		var resolver = new TurnSettingsResolver(Settings, Turns, profiles, models, labels);
-		var turnModule = new TurnRpcModule(Registry, options, resolver, new TurnSendService(Engine, Registry), Engine, Turns, Streaming);
+		var turnModule = new TurnRpcModule(Registry, options, resolver, new TurnSendService(Engine, Registry), Engine, Turns, Streaming, new SessionModelSettings(Settings));
 
 		Autocomplete = new AutocompleteRpcModule(Registry, CodeIndex);
 

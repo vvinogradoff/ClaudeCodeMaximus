@@ -100,7 +100,7 @@ internal sealed class FocusRefsEnv : IDisposable
 	{
 		var labels = new ProfileLabelService(Base.ProfileService, Base.Settings);
 		var options = new TurnOptionsResolver(Base.Models, Base.Settings, labels);
-		var attentionModule = new AttentionRpcModule(Base.Registry, Attention, new AttentionReplyService(Attention, new RecordingSendService()), options);
+		var attentionModule = new AttentionRpcModule(Base.Registry, Attention, new AttentionReplyService(Attention, new RecordingSendService()), options, new SessionModelSettings(Base.Settings, Base.Models));
 		Modules    = [Base.Module, attentionModule, new FileRpcModule(Files)];
 		Dispatcher = new TdcpDispatcher(Modules);
 	}
