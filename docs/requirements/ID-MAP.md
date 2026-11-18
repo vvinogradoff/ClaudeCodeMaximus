@@ -62,7 +62,9 @@ The amendment paragraphs of the FR.25 commit (FR.1.8 amendment, FR.1.17, FR.3.3 
 | FR.6.10 | monitor toggle in the title bar | 2026-11-18, amends FR.6.7 |
 | **FR.27.1–FR.27.9** | **new area** embedded browser of the web preview windows (profile, navigation, new windows, controls, downloads, permissions, isolation, clear data, known limit) | 2026-11-18, reserved by the WPF plan |
 | **FR.29.1–FR.29.13** | **new area** preview windows: monitor toggle, groups, patterns and matching, routing, group window, placement, chrome, pinned window, auto-close, monitors change, restart (windows reopen), file kinds, test seam | 2026-11-18, amends FR.23.18, FR.24.7, FR.26.3, FR.26.5, FR.26.6 |
-| UC/TC code PW | UC.PW.01–16, TC.PW.01–63 | no clash with the codes above |
+| **FR.27.10** | typeable address in the browser bar | 2026-11-18, Architect feedback, amends FR.27.4 |
+| **FR.29.14**, **FR.29.15** | file controls in the title bar; resizable edges | 2026-11-18, Architect feedback, amend FR.29.7 and FR.29.5 |
+| UC/TC code PW | UC.PW.01–16, TC.PW.01–70 | no clash with the codes above |
 | NR.6, NR.7 | E2E running, stretching rule | |
 | UC/TC codes | LP, TR, IN, CL, SH, TA, FC, HS | no clash with 15, 21, DL, FD, FV, IC, LC, RT, TG, WEB |
 

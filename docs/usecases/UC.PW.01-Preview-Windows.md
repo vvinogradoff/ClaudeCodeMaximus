@@ -18,8 +18,8 @@ Related requirements: FR.29.1–FR.29.13, FR.27.1–FR.27.9, FR.6.10 (see `docs/
 
 ## UC.PW.02 — Preview a file in its group's window
 **Main flow:** with the mode on, the User Ctrl+clicks the path of a `.md` file in the transcript. A window "<file name> - Text and code" opens on the other monitor, with the markdown rendered; the main window keeps the keyboard focus. The User Ctrl+clicks another `.md` path: the same window shows the new file.
-**Alternative flows:** **A1** — The window is minimized: it is restored. **A2** — The User clicks a Focus item's file reference or opens a link inside the markdown: the same rules apply (FR.29.4). **A3** — The policy refuses the file: a dismissible message in the window, no dialog.
-**Covers:** FR.29.4, FR.29.5.
+**Alternative flows:** **A1** — The window is minimized: it is restored. **A2** — The User clicks a Focus item's file reference or opens a link inside the markdown: the same rules apply (FR.29.4). **A3** — The policy refuses the file: a dismissible message in the window, no dialog. **A4** — The User toggles Source or clicks Open in default app in the title bar.
+**Covers:** FR.29.4, FR.29.5, FR.29.14.
 
 ## UC.PW.03 — Two groups side by side
 **Main flow:** the User has split `cpp h` out of "Text and code" (UC.PW.09). The User opens a `.md` file and a `.cpp` file: two windows appear, one per group. The User arranges them next to each other. Opening another `.md` file changes only the `.md` window.
@@ -32,8 +32,8 @@ Related requirements: FR.29.1–FR.29.13, FR.27.1–FR.27.9, FR.6.10 (see `docs/
 
 ## UC.PW.05 — Preview a web page and sign in once
 **Main flow:** the User Ctrl+clicks a Slack link in the transcript. A window "<page title> - Slack" opens with the embedded browser and shows Slack's sign-in. The User signs in with the User's email code. Later the User opens another Slack link: the same window shows it, signed in. After a restart of Tessyn the sign-in is still there, and a GitHub link opens in the "Windows app" group's own window.
-**Alternative flows:** **A1** — The page opens a sign-in popup: it opens as a popup of the same profile and closes itself when the page is done. **A2** — A page tries to open `slack://...`: nothing opens, the attempt is logged. **A3** — A page asks for notifications or the camera: denied silently. **A4** — The User downloads a file: the download goes to the Downloads folder and nothing opens. **A5** — Google refuses to sign in: the User uses the service's own sign-in, or **Open in system browser**.
-**Covers:** FR.27.1–FR.27.7, FR.27.9, FR.29.4, FR.29.5.
+**Alternative flows:** **A1** — The page opens a sign-in popup: it opens as a popup of the same profile and closes itself when the page is done. **A2** — A page tries to open `slack://...`: nothing opens, the attempt is logged. **A3** — A page asks for notifications or the camera: denied silently. **A4** — The User downloads a file: the download goes to the Downloads folder and nothing opens. **A5** — Google refuses to sign in: the User uses the service's own sign-in, or **Open in system browser**. **A6** — The User types an address into the address box and presses Enter: the window opens it.
+**Covers:** FR.27.1–FR.27.7, FR.27.9, FR.27.10, FR.29.4, FR.29.5.
 
 ## UC.PW.06 — Pin an item
 **Main flow:** a "Linear" window shows an issue the User wants to keep. The User clicks **Pin**: the window shows the pinned state and loses its Auto-close button. The User opens another Linear issue: a **new** Linear window opens at the group's remembered place; the pinned one stays as it is. The User moves the pinned one: the group's placement does not change. The User closes it by hand.

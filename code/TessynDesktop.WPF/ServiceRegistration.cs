@@ -56,6 +56,7 @@ public sealed class ServiceRegistration
 			return tree;
 		});
 		services.AddSingleton<UrlPolicy>();
+		services.AddSingleton<BrowserAddressInput>();
 		// The concrete system launcher stays resolvable: the browser bar's "Open in system browser" must never route back into a preview window.
 		// IUrlLauncher is the routing decorator (FR.29.4): one per app, over the one router; the router itself does not depend on IUrlLauncher, so there is no cycle.
 		services.AddSingleton<SystemUrlLauncher>();

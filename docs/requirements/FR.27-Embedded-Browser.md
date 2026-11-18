@@ -22,4 +22,17 @@ The embedded browser is a Chromium browser (WebView2) with a **persistent sessio
 
 **FR.27.9 — Known limit.** Google may refuse to sign in inside an embedded browser ("This browser or app may not be secure"). Use the service's own sign-in: Slack email code or password, GitHub password and 2FA, Linear email code. **Open in system browser** is always available (FR.27.4).
 
-Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (unit tests); manual checks on two real monitors pending.
+## Amendments (2026-11-18, Architect feedback)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.27.4 Controls | FR.27.10 | The address of the browser bar is no longer read-only: the user can type an address. |
+
+**FR.27.10 — Typeable address.** The address box of the browser bar is editable.
+- **Enter** opens the typed address in this window. An address without a scheme gets `https://` (`github.com/x` opens `https://github.com/x`). After that, anything that is not `http` or `https` is refused with a dismissible message and nothing is opened. Text with a space inside is refused too, and so is text that starts with one of the schemes `javascript`, `vbscript`, `data`, `blob`, `file`, `about`, `mailto`, `tel`, `sms`, `ftp`, `ws`, `wss`, `chrome`, `edge`, `view-source`, `ms-settings`, `slack` or `zoommtg` and a colon, even when it looks like a host and a port (`mailto:5`). `localhost:8080` and `127.0.0.1:5000/a` are hosts with a port and open.
+- **Esc** puts back the address of the page shown, and clears the message of a refused address.
+- While the user types, page navigations do not overwrite the text. When the box loses the keyboard focus without Enter, it shows the page's address again and clears that message.
+- The box stretches with the window (NR.7).
+- A typed address is not routed to other groups (FR.29.4): it opens in this window.
+
+Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (unit tests); manual checks on two real monitors pending. FR.27.10: approved by the Architect's feedback 2026-11-18, built on branch `wpf/preview-window-polish`.

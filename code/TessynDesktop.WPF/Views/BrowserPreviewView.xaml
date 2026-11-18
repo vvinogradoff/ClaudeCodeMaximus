@@ -64,7 +64,8 @@
                     ToolTip="Open in system browser" AutomationProperties.Name="Open in system browser">
                 <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphOpenInNew}" />
             </Button>
-            <TextBox Text="{Binding Address, Mode=OneWay}" IsReadOnly="True" VerticalContentAlignment="Center" Padding="8,5"
+            <TextBox x:Name="AddressBox" Text="{Binding AddressText, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" Padding="8,5"
+                     GotKeyboardFocus="OnAddressGotFocus" LostKeyboardFocus="OnAddressLostFocus" PreviewKeyDown="OnAddressKeyDown"
                      AutomationProperties.Name="Page address" />
         </DockPanel>
 

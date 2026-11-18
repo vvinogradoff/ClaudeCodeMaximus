@@ -174,4 +174,112 @@ public sealed class BrowserPreviewViewModelTests
 		_surface.RaiseState(true);
 		Assert.False(vm.IsLoading);
 	}
+	/// <summary>TC.PW.69 (FR.27.10).</summary>
+	[Theory]
+	[InlineData("https://example.com/a", "https://example.com/a")]
+	[InlineData("github.com/x", "https://github.com/x")]
+	[InlineData("  example.com  ", "https://example.com/")]
+	[InlineData("localhost:8080/x", "https://localhost:8080/x")]
+	[InlineData("http://127.0.0.1:5000/other", "http://127.0.0.1:5000/other")]
+	public void GoToAddress_OpensTheTypedAddress_AddingHttpsWhenThereIsNoScheme(string typed, string expected)
+	{
+		var vm = Create();
+		_surface.Attach();
+		vm.IsEditingAddress = true;
+		vm.AddressText = typed;
+		vm.GoToAddressCommand.Execute(null);
+
+		Assert.Equal([expected], _surface.Navigated);
+		Assert.Equal(expected, vm.Address);
+		Assert.Equal(expected, vm.AddressText);
+		Assert.False(vm.IsEditingAddress);
+		Assert.Null(vm.Error);
+	}
+
+	[Theory]
+	[InlineData("ftp://x")]
+	[InlineData("javascript:x")]
+	[InlineData("mailto:a@b.c")]
+	[InlineData("file:///C:/x.txt")]
+	public void GoToAddress_RefusesWhatIsNotHttpOrHttps_WithAMessage_AndOpensNothing(string typed)
+	{
+		var vm = Create();
+		_surface.Attach();
+		vm.IsEditingAddress = true;
+		vm.AddressText = typed;
+		vm.GoToAddressCommand.Execute(null);
+
+		Assert.Empty(_surface.Navigated);
+		Assert.Null(_surface.PendingUrl);
+		Assert.True(vm.HasError);
+		Assert.Equal(Constants.Browser.TypedAddressRefusedMessage, vm.Error);
+		Assert.Equal(typed, vm.AddressText);   // the text stays for the user to fix
+		vm.DismissErrorCommand.Execute(null);
+		Assert.False(vm.HasError);
+	}
+
+	[Fact]
+	public void RevertAddress_PutsBackThePagesAddress()
+	{
+		var vm = Create();
+		_surface.Attach();
+		vm.Navigate("https://example.com/a");
+		vm.IsEditingAddress = true;
+		vm.AddressText = "something else";
+		vm.RevertAddressCommand.Execute(null);
+
+		Assert.Equal("https://example.com/a", vm.AddressText);
+	}
+
+	[Fact]
+	public void RevertAddress_AndLosingFocus_ClearTheMessageOfARefusedTypedAddress()
+	{
+		var vm = Create();
+		_surface.Attach();
+		vm.Navigate("https://example.com/a");
+		vm.IsEditingAddress = true;
+		vm.AddressText = "ftp://x";
+		vm.GoToAddressCommand.Execute(null);
+		Assert.True(vm.HasError);
+
+		vm.RevertAddressCommand.Execute(null);
+		Assert.False(vm.HasError);
+		Assert.Equal("https://example.com/a", vm.AddressText);
+
+		vm.AddressText = "mailto:5";
+		vm.GoToAddressCommand.Execute(null);
+		Assert.True(vm.HasError);
+		vm.IsEditingAddress = false;
+		Assert.False(vm.HasError);
+		Assert.Equal("https://example.com/a", vm.AddressText);
+	}
+
+	[Fact]
+	public void TypingIsNotOverwrittenByANavigation_AndLosingFocusShowsThePageAddressAgain()
+	{
+		var vm = Create();
+		_surface.Attach();
+		vm.Navigate("https://example.com/a");
+		vm.IsEditingAddress = true;
+		vm.AddressText = "exam";
+
+		_surface.Source = "https://example.com/redirected";
+		_surface.RaiseState(false);
+		Assert.Equal("https://example.com/redirected", vm.Address);
+		Assert.Equal("exam", vm.AddressText);
+
+		vm.IsEditingAddress = false;
+		Assert.Equal("https://example.com/redirected", vm.AddressText);
+	}
+
+	[Fact]
+	public void PageNavigations_UpdateTheAddressText_WhenTheUserIsNotTyping()
+	{
+		var vm = Create();
+		_surface.Attach();
+		_surface.Source = "https://example.com/next";
+		_surface.RaiseState(false);
+
+		Assert.Equal("https://example.com/next", vm.AddressText);
+	}
 }

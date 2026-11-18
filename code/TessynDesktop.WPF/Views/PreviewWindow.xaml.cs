@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Shell;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
@@ -66,6 +67,8 @@ public partial class PreviewWindow : Window
 		_testWindow = options.TestWindow;
 		DataContext = viewModel;
 		InitializeComponent();
+		WindowChrome.GetWindowChrome(this).ResizeBorderThickness = new Thickness(Constants.PreviewWindow.ResizeBorder);   // one source for the chrome and the content inset (FR.29.15)
+		FitMaximized();
 		if (_testWindow)
 			PrepareTestWindow();
 
@@ -84,7 +87,7 @@ public partial class PreviewWindow : Window
 		StateChanged += (_, _) =>
 		{
 			_tracker.Changed();
-			OnStateChanged();
+			ApplyWindowState();
 		};
 		DpiChanged += (_, _) => FitMaximized();
 		Closing += (_, _) => _tracker.Flush();
@@ -184,8 +187,8 @@ public partial class PreviewWindow : Window
 		_placement.Apply(hwnd, planned);
 	}
 
-	/// <summary>A maximized window with a custom frame reaches over the screen edge by the resize border; pull the content back in. The maximize button shows "restore" while maximized.</summary>
-	private void OnStateChanged()
+	/// <summary>Called when the window state changes (and by tests, since an unshown window raises no state change). A maximized window with a custom frame reaches over the screen edge by the resize border; pull the content back in. The maximize button shows "restore" while maximized.</summary>
+	public void ApplyWindowState()
 	{
 		FitMaximized();
 		var maximized = WindowState == WindowState.Maximized;
@@ -195,7 +198,14 @@ public partial class PreviewWindow : Window
 		AutomationProperties.SetName(MaximizeButton, name);
 	}
 
-	private void FitMaximized() => Root.Margin = WindowState == WindowState.Maximized ? FrameMetrics.MaximizedMargin(VisualTreeHelper.GetDpi(this).DpiScaleX) : new Thickness(0);
+	private void FitMaximized()
+	{
+		var maximized = WindowState == WindowState.Maximized;
+		Root.Margin = maximized ? FrameMetrics.MaximizedMargin(VisualTreeHelper.GetDpi(this).DpiScaleX) : new Thickness(0);
+		ContentHost.Margin = maximized
+			? new Thickness(0)
+			: new Thickness(Constants.PreviewWindow.ResizeBorder, 0, Constants.PreviewWindow.ResizeBorder, Constants.PreviewWindow.ResizeBorder);   // left, right, bottom: the top is the title bar   // FR.29.15: a maximized window has no border
+	}
 
 	private void OnMinimizeClick(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
 

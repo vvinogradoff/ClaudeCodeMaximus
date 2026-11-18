@@ -109,4 +109,19 @@ The Architect works with two or more monitors and wants previews out of the main
 4. All five click sources are routed (FR.29.4).
 5. CSV keeps the text view (FR.29.12).
 
-Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (unit tests, WPF E2E `WpfPreviewWindows*E2ETests`); manual checks on two real monitors pending.
+## Amendments (2026-11-18, Architect feedback)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.29.7 Window chrome | FR.29.14 | A file preview window has no header row; Source and Open in default app move to the title bar. |
+| FR.29.5 The group window | FR.29.15 | The window can be resized from every edge and corner. |
+
+**FR.29.14 — File controls in the title bar.** In a file preview window there is no header row under the title bar: the window title already names the file.
+- **Source** (a toggle, only for markdown) and **Open in default app** (only for the types FR.23.18 allows) are icon buttons in the title bar, **left of the title**, with tooltips.
+- Progress with Cancel and the messages appear under the title bar only while there is something to show.
+- The web preview keeps its browser bar (FR.27.4, FR.27.10).
+- The preview pane in the main window keeps its header as before.
+
+**FR.29.15 — Resizing.** A preview window that is not maximized can be resized from every edge and corner: the resize cursor appears on all four edges, and the page content never covers the resize border. Maximized windows have no border.
+
+Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (unit tests, WPF E2E `WpfPreviewWindows*E2ETests`); manual checks on two real monitors pending. FR.29.14 and FR.29.15: approved by the Architect's feedback 2026-11-18, built on branch `wpf/preview-window-polish`.

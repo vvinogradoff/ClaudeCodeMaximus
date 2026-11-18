@@ -1,7 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Wpf;
+using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Views;
 
@@ -33,6 +35,45 @@ public partial class BrowserPreviewView : UserControl
 		_surface = surface;
 		_logger = logger;
 		return _loaded ? EnsureAttachedAsync() : Task.CompletedTask;
+	}
+
+	/// <summary>FR.27.10: typing in the address box pauses the page's own address updates; losing the focus ends it (the view model shows the page's address again).</summary>
+	private void OnAddressGotFocus(object sender, KeyboardFocusChangedEventArgs e)
+	{
+		if (DataContext is BrowserPreviewViewModel vm)
+			vm.IsEditingAddress = true;
+	}
+
+	private void OnAddressLostFocus(object sender, KeyboardFocusChangedEventArgs e)
+	{
+		if (DataContext is BrowserPreviewViewModel vm)
+			vm.IsEditingAddress = false;
+	}
+
+	/// <summary>Enter opens the typed address (the page then takes the keyboard focus, as in a browser); Esc puts the page's address back.</summary>
+	private void OnAddressKeyDown(object sender, KeyEventArgs e)
+	{
+		if (DataContext is not BrowserPreviewViewModel vm)
+			return;
+
+		if (e.Key == Key.Enter)
+		{
+			vm.GoToAddressCommand.Execute(null);
+			if (!vm.HasError)
+			{
+				if (Page != null)
+					Page.Focus();
+				else
+					Keyboard.ClearFocus();
+			}
+
+			e.Handled = true;
+		}
+		else if (e.Key == Key.Escape)
+		{
+			vm.RevertAddressCommand.Execute(null);
+			e.Handled = true;
+		}
 	}
 
 	private void OnLoaded(object sender, RoutedEventArgs e)

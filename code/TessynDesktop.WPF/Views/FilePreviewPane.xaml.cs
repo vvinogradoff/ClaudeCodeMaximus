@@ -19,6 +19,10 @@ public partial class FilePreviewPane : UserControl
 	public static readonly DependencyProperty ShowCloseButtonProperty = DependencyProperty.Register(
 		nameof(ShowCloseButton), typeof(bool), typeof(FilePreviewPane), new PropertyMetadata(true, (d, e) => ((FilePreviewPane)d).CloseButton.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed));
 
+	/// <summary>False in a preview window, whose title bar names the file and holds Source and Open in default app (FR.29.14); true in the side pane.</summary>
+	public static readonly DependencyProperty ShowHeaderProperty = DependencyProperty.Register(
+		nameof(ShowHeader), typeof(bool), typeof(FilePreviewPane), new PropertyMetadata(true, (d, e) => ((FilePreviewPane)d).HeaderRow.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed));
+
 	private FilePreviewViewModel? _subscribed;
 	private FilePreviewSurface? _attachedSurface;
 	private bool _attached;
@@ -27,6 +31,12 @@ public partial class FilePreviewPane : UserControl
 	{
 		InitializeComponent();
 		DataContextChanged += OnDataContextChanged;
+	}
+
+	public bool ShowHeader
+	{
+		get => (bool)GetValue(ShowHeaderProperty);
+		set => SetValue(ShowHeaderProperty, value);
 	}
 
 	public bool ShowCloseButton

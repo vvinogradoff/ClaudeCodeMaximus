@@ -16,6 +16,7 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 {
 	private readonly IBrowserSurface _surface;
 	private readonly UrlPolicy _policy;
+	private readonly BrowserAddressInput _addressInput;
 	private readonly IUrlLauncher _systemBrowser;
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<BrowserPreviewViewModel> _logger;
@@ -24,6 +25,10 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 	[ObservableProperty]
 	[NotifyCanExecuteChangedFor(nameof(OpenInSystemBrowserCommand))]
 	private string _address = string.Empty;
+
+	/// <summary>What the address box shows and the user types (FR.27.10): the page's <see cref="Address"/> while the user is not editing.</summary>
+	[ObservableProperty]
+	private string _addressText = string.Empty;
 
 	[ObservableProperty]
 	private string _title = string.Empty;
@@ -44,8 +49,9 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 	[NotifyCanExecuteChangedFor(nameof(ForwardCommand))]
 	private bool _canGoForward;
 
-	public BrowserPreviewViewModel(IBrowserSurface surface, UrlPolicy policy, IUrlLauncher systemBrowser, IUiDispatcher ui, ILogger<BrowserPreviewViewModel> logger)
+	public BrowserPreviewViewModel(IBrowserSurface surface, UrlPolicy policy, IUrlLauncher systemBrowser, IUiDispatcher ui, ILogger<BrowserPreviewViewModel> logger, BrowserAddressInput? addressInput = null)
 	{
+		_addressInput = addressInput ?? new BrowserAddressInput(policy);
 		_surface = surface;
 		_policy = policy;
 		_systemBrowser = systemBrowser;
@@ -60,6 +66,28 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 	public event EventHandler? TitleChanged;
 
 	public bool HasError => !string.IsNullOrEmpty(Error);
+
+	private bool _isEditingAddress;
+
+	/// <summary>True while the address box has the keyboard focus: page navigations then leave <see cref="AddressText"/> alone; losing the focus shows the page's address again (FR.27.10).</summary>
+	public bool IsEditingAddress
+	{
+		get => _isEditingAddress;
+		set
+		{
+			if (!SetProperty(ref _isEditingAddress, value))
+				return;
+
+			if (!value)
+				RevertAddress();
+		}
+	}
+
+	partial void OnAddressChanged(string value)
+	{
+		if (!IsEditingAddress)
+			AddressText = value;
+	}
 
 	/// <summary>Navigates to <paramref name="url"/>; anything but an absolute http or https URL sets <see cref="Error"/> and navigates nowhere.</summary>
 	public void Navigate(string url)
@@ -94,6 +122,35 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 
 	[RelayCommand(CanExecute = nameof(CanOpenInSystemBrowser))]
 	private void OpenInSystemBrowser() => _systemBrowser.TryOpen(Address);
+
+	/// <summary>Enter in the address box (FR.27.10): opens the typed address in this window; a bare host gets https, anything but http and https is refused with <see cref="Error"/>.</summary>
+	[RelayCommand]
+	private void GoToAddress()
+	{
+		if (string.IsNullOrWhiteSpace(AddressText))
+		{
+			RevertAddress();
+			return;
+		}
+
+		if (!_addressInput.TryNormalize(AddressText, out var uri))
+		{
+			Error = Constants.Browser.TypedAddressRefusedMessage;
+			_logger.LogInformation("Refused a typed address that is not http or https");
+			return;
+		}
+
+		IsEditingAddress = false;
+		Navigate(uri.AbsoluteUri);
+	}
+
+	/// <summary>Esc in the address box (FR.27.10): the address of the page shown comes back.</summary>
+	[RelayCommand]
+	private void RevertAddress()
+	{
+		AddressText = Address;
+		Error = null;   // a refusal of the typed address goes with the text
+	}
 
 	[RelayCommand]
 	private void DismissError() => Error = null;
