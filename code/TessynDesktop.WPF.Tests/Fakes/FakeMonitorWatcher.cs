@@ -11,7 +11,10 @@ public sealed class FakeMonitorWatcher : IMonitorWatcher
 
 	public IReadOnlyList<MonitorInfo> Monitors { get; private set; } = [];
 
-	public bool IsSettling => false;
+	public bool IsSettling => Settling;
+
+	/// <summary>Makes <see cref="IsSettling"/> true, as after a display change.</summary>
+	public bool Settling { get; set; }
 
 	public event EventHandler? Changed;
 

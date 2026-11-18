@@ -25,6 +25,7 @@ public sealed class PreviewWindowHandle : IPreviewWindowHandle
 		_window = window;
 		_viewModel.Pinned += (_, _) => Pinned?.Invoke(this, EventArgs.Empty);
 		_viewModel.ItemChanged += (_, _) => ItemChanged?.Invoke(this, EventArgs.Empty);
+		_window.PinnedPlacementChanged += (_, _) => PlacementChanged?.Invoke(this, EventArgs.Empty);
 		_window.Closed += OnWindowClosed;
 	}
 
@@ -41,6 +42,8 @@ public sealed class PreviewWindowHandle : IPreviewWindowHandle
 	public event EventHandler? Pinned;
 
 	public event EventHandler? ItemChanged;
+
+	public event EventHandler? PlacementChanged;
 
 	public void Show(PreviewItemModel item, PreviewTarget? fileHandle, ITessynClient? client)
 	{

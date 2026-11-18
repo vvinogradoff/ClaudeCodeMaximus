@@ -59,7 +59,7 @@ public sealed class PreviewWindowViewTests
 		var appearance = new AppearanceApplier(new AppearanceService(store, new FixedProbe()), new ImmediateUiDispatcher());
 		var window = new PreviewWindow(
 			viewModel, null, settings, new ScriptedMonitorWatcher(2), new PreviewPlacementPlanner(), new Win32WindowPlacement(), appearance,
-			new StartupOptions { TestWindow = true }, () => IntPtr.Zero, NullLogger.Instance);
+			new StartupOptions { TestWindow = true }, () => IntPtr.Zero, NullLogger.Instance, new ImmediateUiDispatcher());
 		return (window, viewModel, content);
 	}
 
@@ -89,6 +89,21 @@ public sealed class PreviewWindowViewTests
 			Assert.Equal(Constants.Limits.OffScreenCoordinate, window.Left);
 			Assert.Null(window.Owner);   // its own taskbar button, not owned by the main window (FR.29.5)
 			Assert.Equal("Group", window.Title);
+
+			viewModel.Dispose();
+		});
+	}
+
+	[Fact]
+	public void PreviewWindow_InTestMode_ReportsNoPlacement_EvenOnceItHasAHandle()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var (window, viewModel, content) = BuildWindow(pinned: true);
+			using var _ = content;
+			new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();   // a handle without showing the window
+
+			Assert.Null(window.CurrentPlacement());   // FR.29.13: the off-screen test rectangle is never stored
 
 			viewModel.Dispose();
 		});

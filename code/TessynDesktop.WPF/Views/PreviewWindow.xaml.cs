@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
@@ -16,7 +15,7 @@ namespace TessynDesktop.WPF.Views;
 /// <summary>
 /// A preview window (FR.29.5–FR.29.8): its own top-level window with a custom title bar (Pin, Auto-close, Minimize, Maximize/Restore, Close) and the content of its
 /// <see cref="PreviewWindowViewModel"/>: a <see cref="FilePreviewPane"/> or a <see cref="BrowserPreviewView"/>. A group window opens at the group's remembered
-/// placement and remembers its moves 500 ms after the last change; a pinned window never writes the group's placement. It is shown and raised without taking
+/// placement and remembers its moves 500 ms after the last change; a pinned window never writes the group's placement but tells the router (<see cref="PreviewPlacementTracker"/>). It is shown and raised without taking
 /// the keyboard focus. In test mode it is off-screen, not in the taskbar and never activated (FR.29.13).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -37,9 +36,8 @@ public partial class PreviewWindow : Window
 	private readonly PreviewPlacementModel? _ownPlacement;
 	private readonly ILogger _logger;
 	private readonly bool _testWindow;
-	private readonly DispatcherTimer _placementTimer;
+	private readonly PreviewPlacementTracker _tracker;
 	private BrowserPreviewView? _browserView;
-	private bool _tracking;
 
 	public PreviewWindow(
 		PreviewWindowViewModel viewModel,
@@ -51,7 +49,10 @@ public partial class PreviewWindow : Window
 		AppearanceApplier appearance,
 		StartupOptions options,
 		Func<IntPtr> mainWindow,
-		ILogger logger)
+		ILogger logger,
+		IUiDispatcher ui,
+		TimeProvider? time = null,
+		TimeSpan? placementDelay = null)
 	{
 		_viewModel = viewModel;
 		_ownPlacement = ownPlacement;
@@ -72,28 +73,39 @@ public partial class PreviewWindow : Window
 		ContentRendered += (_, _) =>
 		{
 			_appearance.ApplyToWindow(this);   // ... and again once its first frame is up
-			_tracking = true;
+			_tracker.Tracking = true;
 		};
 
-		_placementTimer = new DispatcherTimer { Interval = Constants.PreviewWindow.PlacementSaveDelay };
-		_placementTimer.Tick += (_, _) => SaveGroupPlacement();
+		_tracker = new PreviewPlacementTracker(
+			viewModel.GroupId, settings, monitors, ui, () => viewModel.IsPinned, () => WindowState == WindowState.Minimized, CurrentPlacement, _testWindow, time, placementDelay);
 		SourceInitialized += OnSourceInitialized;
-		LocationChanged += (_, _) => RestartPlacementTimer();
-		SizeChanged += (_, _) => RestartPlacementTimer();
+		LocationChanged += (_, _) => _tracker.Changed();
+		SizeChanged += (_, _) => _tracker.Changed();
 		StateChanged += (_, _) =>
 		{
-			RestartPlacementTimer();
+			_tracker.Changed();
 			OnStateChanged();
 		};
 		DpiChanged += (_, _) => FitMaximized();
-		Closing += (_, _) => FlushPlacement();
+		Closing += (_, _) => _tracker.Flush();
+		Closed += (_, _) => _tracker.Dispose();
 		viewModel.PropertyChanged += OnViewModelPropertyChanged;
 		ApplyContent();
 	}
 
-	/// <summary>The window's placement now, remembered the way a group window remembers it; null before it has a window handle or when it cannot be read.</summary>
+	/// <summary>A pinned window settled at a new place (500 ms after its last move, resize or state change).</summary>
+	public event EventHandler? PinnedPlacementChanged
+	{
+		add => _tracker.PinnedPlacementChanged += value;
+		remove => _tracker.PinnedPlacementChanged -= value;
+	}
+
+	/// <summary>The window's placement now, remembered the way a group window remembers it; null before it has a window handle, when it cannot be read, and in test mode (FR.29.13).</summary>
 	public PreviewPlacementModel? CurrentPlacement()
 	{
+		if (_testWindow)
+			return null;
+
 		var hwnd = new WindowInteropHelper(this).Handle;
 		if (hwnd == IntPtr.Zero)
 			return null;
@@ -172,39 +184,12 @@ public partial class PreviewWindow : Window
 		_placement.Apply(hwnd, planned);
 	}
 
-	private void RestartPlacementTimer()
-	{
-		if (_testWindow || !_tracking || _viewModel.IsPinned)
-			return;
-
-		_placementTimer.Stop();
-		_placementTimer.Start();
-	}
-
-	/// <summary>A group window remembers its place: not when pinned, not while minimized, not while Windows is moving windows about after a display change (FR.29.6).</summary>
-	private void SaveGroupPlacement()
-	{
-		_placementTimer.Stop();
-		if (_testWindow || _viewModel.IsPinned || WindowState == WindowState.Minimized || _monitors.IsSettling)
-			return;
-
-		if (CurrentPlacement() is { } current)
-			_settings.SavePlacement(_viewModel.GroupId, current);
-	}
-
-	/// <summary>A change still waiting for its 500 ms is saved when the window closes.</summary>
-	private void FlushPlacement()
-	{
-		if (_placementTimer.IsEnabled)
-			SaveGroupPlacement();
-	}
-
 	/// <summary>A maximized window with a custom frame reaches over the screen edge by the resize border; pull the content back in. The maximize button shows "restore" while maximized.</summary>
 	private void OnStateChanged()
 	{
 		FitMaximized();
 		var maximized = WindowState == WindowState.Maximized;
-		MaximizeGlyph.Text = maximized ? "" : "";
+		MaximizeGlyph.Text = maximized ? Constants.PreviewWindow.RestoreGlyph : Constants.PreviewWindow.MaximizeGlyph;
 		var name = maximized ? Constants.PreviewWindow.RestoreAutomationName : Constants.PreviewWindow.MaximizeAutomationName;
 		MaximizeButton.ToolTip = maximized ? Constants.PreviewWindow.RestoreToolTip : Constants.PreviewWindow.MaximizeToolTip;
 		AutomationProperties.SetName(MaximizeButton, name);

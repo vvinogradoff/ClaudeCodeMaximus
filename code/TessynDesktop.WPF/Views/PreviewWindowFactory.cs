@@ -30,7 +30,7 @@ public sealed class PreviewWindowFactory : IPreviewWindowFactory
 		var viewModel = new PreviewWindowViewModel(group.Id, group.Name, pinned, settings, Get<IPreviewContentFactory>(), Get<IUiDispatcher>());
 		var window = new PreviewWindow(
 			viewModel, ownPlacement, settings, Get<IMonitorWatcher>(), _services.GetService<PreviewPlacementPlanner>() ?? new PreviewPlacementPlanner(),
-			Get<Win32WindowPlacement>(), Get<AppearanceApplier>(), Get<StartupOptions>(), MainWindowHandle, Get<ILoggerFactory>().CreateLogger<PreviewWindow>());
+			Get<Win32WindowPlacement>(), Get<AppearanceApplier>(), Get<StartupOptions>(), MainWindowHandle, Get<ILoggerFactory>().CreateLogger<PreviewWindow>(), Get<IUiDispatcher>());
 		return new PreviewWindowHandle(viewModel, window);
 	}
 

@@ -54,6 +54,10 @@ public static partial class Constants
 		public const char QuerySeparator = '&';
 		public const char ParameterValueSeparator = '=';
 
+		/// <summary>Segoe MDL2 Assets glyphs of the maximize button: "Restore" while maximized, "Maximize" otherwise.</summary>
+		public const string RestoreGlyph = "\uE923";
+		public const string MaximizeGlyph = "\uE922";
+
 		public const double CaptionHeight = 32;
 		public const double ResizeBorder = 6;
 		public const double DefaultWidth = 960;

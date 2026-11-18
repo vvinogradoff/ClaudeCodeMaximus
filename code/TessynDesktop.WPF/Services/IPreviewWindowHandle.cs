@@ -39,4 +39,7 @@ public interface IPreviewWindowHandle
 
 	/// <summary>The item changed inside the window (a web page navigated), so the saved list must be written again.</summary>
 	event EventHandler? ItemChanged;
+
+	/// <summary>A pinned window was moved, resized or changed state and stayed so; the saved list must be written again (FR.29.11). Not raised by a group window, which saves its own placement.</summary>
+	event EventHandler? PlacementChanged;
 }
