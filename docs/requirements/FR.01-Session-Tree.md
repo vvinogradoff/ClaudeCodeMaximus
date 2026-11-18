@@ -106,6 +106,8 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 | FR.9.5 Recency bars | FR.9.10 | Four tiers (15 min, 1 h, 4 h, 12 h) plus the 24-hour dotted border. Replaces the three tiers 15/30/60 min. |
 | FR.24.11 Tags tab: search | FR.1.24, FR.24.17 | Tag search scope and wildcard rules, and what the tab says when nothing matches. |
 | FR.1.21 Worker count and the recency box | FR.1.28 | The `N workers` total stays as it is. A new badge next to it counts the workers **running now**. |
+| FR.1.5 Adding nodes (Add Session), FR.25.12 Create session | FR.1.30 | A session created **in a directory or group** goes **last** among its sessions, not first. Created beside a selected session (web): still right after it. |
+| FR.1.25 Tree toolbar and header actions | FR.1.31 | Ctrl+Up and Ctrl+Down move the selected session one place up or down, as a drag would. |
 
 ### New requirements
 
@@ -160,3 +162,15 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 - **Detection (daemon).** Structured first: the Claude CLI stamps the synthetic assistant message of a limit `error: "rate_limit"` (with `quotaLimits.status: "rejected"`); either marks the turn. A result or system error carries no stamp, so its text is matched against patterns kept in `Constants.LimitErrors` (tested with real messages from session files). Ordinary assistant text is **never** text-matched, so a session that talks about limits does not warn.
 - **Not an auth error.** It is independent of the `authError` flag (FR.12.16). It lives in memory with the auth flag: after a daemon restart it is empty until the next turn.
 - **Colour.** Palette entry *Limits-error warning* (FR.9.17).
+
+**FR.1.30 — New session goes last.** (Amends FR.1.5 Add Session and FR.25.12.) A session created **in a directory or a group** (New session in the toolbar, Add Session in the context menu, the web's Create session with a directory or group selected) is placed **after the last session** of that directory or group, so it is the last row among its sessions. Groups keep their place.
+- **Beside a session.** A session created with a **session** as the anchor (the web's Create session with a session selected) still goes **right after that session** (FR.25.12, unchanged).
+- **Agent spawns.** Workers and agent-created sessions are appended as before (no change).
+- **Where.** The daemon decides the place (`tree.createSession`); the desktop and the web show it where the daemon put it, then the desktop selects it and scrolls it into view.
+
+**FR.1.31 — Move a session with Ctrl+Up / Ctrl+Down.** In the tree, with a **top-level session** selected (a session directly in a directory or group, the same sessions a drag can move), **Ctrl+Up** moves it **one place up** and **Ctrl+Down** **one place down** among the sessions of its directory or group.
+- **Same as a drag.** It is the move a drag onto the neighbour would make (`tree.moveNode` with the new index), with the same rules and the same refusals: a running session is not moved, and the reason shows in the tree status line, as for a drag.
+- **Stays in its container.** It never leaves its directory or group and never enters a group. On the first session Ctrl+Up does nothing; on the last, Ctrl+Down does nothing. Workers move with their supervisor. With a worker, a group or a directory selected the keys do nothing.
+- **Selection and focus.** The moved session stays selected and in view, and the keyboard focus stays in the tree, so the keys can be pressed again at once. A press while the previous move is still in flight is ignored (no queue).
+- **Search.** While a tree search is active (the tree is in relevance order, FR.1.12) the keys do nothing.
+- **Only in the tree.** The keys act only while the tree has the keyboard focus; elsewhere Ctrl+Up / Ctrl+Down keep their meaning (input navigation, FR.12).

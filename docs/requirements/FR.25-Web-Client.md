@@ -89,7 +89,7 @@ Server tests are in `code/Tessyn.Web.Tests`; end-to-end tests (real server, real
 
 **FR.25.12 — Create session:** The Tree tab has a **Create session** button where the desktop has Add directory. It is enabled when a directory, group or session is selected. It asks for a name in a small dialog (required, trimmed) and calls `tree.createSession`:
 - **A session is selected:** the new session is inserted **right after it** in the same parent (a worker as the anchor resolves to its top-level supervisor).
-- **A group or directory is selected:** the new session is inserted **first** inside it.
+- **A group or directory is selected:** the new session is inserted **first** inside it. *(Amended by FR.1.30 on 2026-11-18: it goes **last** inside it.)*
 - The new session gets the same defaults as a session created on the desktop. The desktop's tree shows it at the same place at once (the registry raises one event carrying the parent and the preceding session; an unknown anchor creates nothing). **Desktop insert position rule (decided 2026-11-13):** the desktop does not use a literal `groupCount + index`, because a model's `Sessions` index also counts worker sessions while the tree rows do not (workers are nested under their supervisors). It inserts the row right after the row of the **preceding model session**, or first among the sessions (after the groups) when there is none. A session created by an agent (`spawn_session`) carries no index and is still appended. After creation the web opens the new session with the message box focused.
 
 **FR.25.13 — Not in the Tree tab:** no Add directory, no Add group, no context menus (rename, delete, move, import, schedules, etc.), no drag and drop. Those stay desktop features.
