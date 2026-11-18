@@ -84,7 +84,7 @@ public sealed class PreviewSettingsServiceTests
 
 		_service.SetWindowsEnabled(false);
 		_service.SetWindowsEnabled(false);
-		_service.SavePlacement("g", new PreviewPlacementModel { Width = 1 });
+		_service.SavePlacement("images", new PreviewPlacementModel { Width = 1 });
 		_service.SetWindowsEnabled(true);
 
 		Assert.Equal(2, _enabledEvents);
@@ -115,6 +115,28 @@ public sealed class PreviewSettingsServiceTests
 
 		Assert.Null(_service.GetPlacement("images"));
 		Assert.True(_service.WindowsEnabled);
+	}
+
+	[Fact]
+	public void SavePlacement_IgnoresAGroupThatIsNotInTheList()
+	{
+		_service.SavePlacement("ghost", new PreviewPlacementModel { Left = 7 });
+
+		Assert.Null(_service.GetPlacement("ghost"));
+		Assert.Empty(_store.Get<PreviewWindowsSettings>().Placements);
+	}
+
+	[Fact]
+	public void ARemovedGroupsLatePlacement_IsNotSavedAgain()
+	{
+		_service.SavePlacement("csv", new PreviewPlacementModel { Left = 1 });
+		_service.SaveGroups(_service.Groups.Where(g => g.Id != "csv").ToList());
+		Assert.Null(_service.GetPlacement("csv"));
+
+		_service.SavePlacement("csv", new PreviewPlacementModel { Left = 2 });   // the closing window's pending timer
+
+		Assert.Null(_service.GetPlacement("csv"));
+		Assert.DoesNotContain("csv", _store.Get<PreviewWindowsSettings>().Placements.Keys);
 	}
 
 	[Fact]
