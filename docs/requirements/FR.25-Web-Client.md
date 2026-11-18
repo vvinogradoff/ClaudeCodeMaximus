@@ -283,3 +283,10 @@ The server adds `link.status { online, since }` and `resync`.
 ## Amendments and additions (batch 2026-11-17)
 
 **FR.25.41 — Relay link settings through the Remote API.** The relay link (URL, link token, on/off) can be configured through the Remote API; the link token is write-only and must be sent again when the URL moves to another origin.
+---
+
+## Amendments and additions (2026-11-18)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.25.24 Per-session choices and locking | FR.12.35 | `session.get.lastUsed` reports the session's model and effort settings: what the next turn without a pick uses, no longer the last ASSISTANT entry's values. A choice the web sends that differs from the session's setting is stored on the session (a sticky pick). |

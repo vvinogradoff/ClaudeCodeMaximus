@@ -1186,3 +1186,14 @@ Status copied from the plan and the worker reports in `.wpf-work/` as of 2026-11
 - [DONE] Architect decided (A47): the one-time settings import (FR.32.4, UC.HS.05, TC.HS.11) and the `avalonia-ui` section are removed; branch `chore/remove-avalonia-window`
 - [ ] Manual list for WPF: Ctrl+Enter in Decisions cards and the narrow-window title check (was TC.FC.10); the tooltip wording of TC.TG.21 steps 3–5; confirm the carried-over manual steps of TC.FV.21–40, TC.TG.22–54 and TC.RT.02–10 against WPF
 - [ ] Code follow-ups (not done here): tests that still assert the second tag cloud default (TC.TA.16) or the host takeover (TC.HS.08); retire `TessynDesktop.Tests` cases of the previous window; `docs/session_resume_notes.md`, `docs/shell_commands.md` and `docs/issues/*` still carry the old UI's name as history
+## Phase 43 — Top-level sessions created by a session; the session's model and effort (FR.15.15, FR.12.35, FR.16.6)
+
+Plan: `.wpf-work/root-sessions-plan.md`, approved 2026-11-18 (Focus A1–A3; A3 folds sticky picks into this work). Branch `feat/create-session`, worktree `../Tessyn-wt-rootsess`.
+
+- [DONE] Docs: FR.15.15, FR.12.35, FR.16.6, the FR.25.24 row, tdcp-spec 10.A9, glossary (Top-level Session, Session model and effort, Sticky pick), UC.15.4, UC.ME.01–ME.03, TC.15.8–15.9, TC.ME.01–ME.05
+- [ ] `SessionNodeModel.Effort`; the shared model and effort rule with sticky picks (`ISessionModelSettings`) in the engine turn, headless turns, compaction, `lastUsed` and the caller's tier (FR.12.35, FR.16.6)
+- [ ] Registry: create a top-level session right after an anchor or last in a container, with its settings, in one step (FR.15.15)
+- [ ] `create_session` tool: arguments, placement, settings, guardrails, first prompt, result text; the tool in `NoWorkflowTool` and the `cmx-orchestration` skill (FR.15.15)
+- [ ] Tests: TC.15.8 and TC.ME.01–ME.04 (Core), TC.15.9 and TC.ME.05 (WPF E2E)
+- [ ] Review, merge, all suites green
+- [ ] After the restart onto the build: create "Root level sessions" (Opus, Max, Default profile, streaming, sound) right under "Load session output" (manual UC.15.4)

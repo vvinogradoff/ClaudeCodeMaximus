@@ -374,3 +374,12 @@ Part 2 adds `mcp.list`, `mcp.upsert`, `mcp.remove`, `mcp.setEnabled`, `mcp.disco
 - **No running rule.** A group holding a running session may be moved (no working directory changes).
 - **Result and events.** The same `TreeMoveResult` as a session move; the registry saves once and raises `tree.changed`. A move to the same place answers `moved: true` and changes nothing.
 - Additive: an older daemon refuses a group, as before. No golden change.
+### 10.A9 — The session's model and effort (`session.get`, `session.headers`, `turn.send`, `session.send`, `attention.reply`) — FR.12.35
+- **`lastUsed.modelId` and `lastUsed.effort`.**
+  - They report the session's settings: what a turn without a pick uses. For the model that is the session's `ModelId`, then the directory's and the app's `SelectedModelId`; for the effort it is the session's `Effort`.
+  - The value is `default` when there is no flag, and `default` for a model that isn't in the catalog.
+  - Before, they came from the last ASSISTANT entry.
+  - `lastUsed.profileId` and `profileName` are unchanged (the pin, 9.8). The members and value sets are the same.
+- **Sticky picks.** For `turn.send`, `session.send` and `attention.reply`, a `modelId` or `effort` that differs from the session's setting is stored on the session when the request is accepted, an explicit `default` included. `schedules.add` picks (10.A4) and `session.compact` options are never stored.
+- **No new method.** `create_session` (FR.15.15) is an MCP tool, not a TDCP method. The session it creates reaches clients through the usual `tree.changed`.
+- **Compatibility.** An older client reads the same fields. Golden files: unchanged, because the fixtures' sessions carry neither their own model nor a directory or app model.

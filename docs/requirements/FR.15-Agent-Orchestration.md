@@ -128,3 +128,64 @@ Creates one session per item. Within each session the stages are sent as sequent
 - `spawn_session` pins the new child by `ProfileId` from its supervisor (a supervisor on Default with no record leaves the child unpinned). It never registers a directory. A `workingDir` outside every project gives: `'<dir>' is not under a project in the Tessyn tree. Registered: <a>, <b>, ... (+N more). Add it in Tessyn or use parentNodeId.` (the first 12 are listed). The match respects path separators and ignores case and trailing separators: `C:\a\bc` is not under `C:\a\b`.
 
 ---
+## Amendments and additions (2026-11-18)
+
+### Amendments to existing requirements
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.15.1 Orchestration tools | FR.15.15 | New tool `create_session`: a session creates a top-level session for the user, not a worker. |
+| FR.15.5 Guardrails | FR.15.15 | `create_session` has its own limits (top-level callers only, a rate cap); the depth limit does not apply to it. |
+| FR.15.11 CMX Orchestration Skill | FR.15.15 | The skill and the session-start tool list name `create_session` and say when to use it. |
+
+### New requirements
+
+**FR.15.15 — Create a top-level session (`create_session`).** A session can create a **top-level session** that belongs to the user, for example when the user asks it to open a new session with given settings at a given place in the tree. Unlike `spawn_session`, the new session is **not a worker**:
+- It has no `SupervisorNodeId` and its `OrchestrationDepth` is 0.
+- It is listed like a session the user created (tree, Recent tab, Tags tab).
+- It gets its own Telegram topic and its own Focus items.
+- The caller gets no result from it.
+
+Use cases: [UC.15.4](/docs/usecases/UC.15-Agent-Orchestration.md). Test cases: [TC.15.8, TC.15.9](/docs/testcases/TC.15-Agent-Orchestration.md).
+
+| Arg | Required | Meaning |
+|---|---|---|
+| `name` | yes | Display name, trimmed; must not be blank. |
+| `after` | no | A session id (full NodeId or Short Node Id, FR.15.13). The new session goes **right after** that session in its directory or group. A worker stands for its top-level supervisor, as in `tree.createSession` (FR.1.30). |
+| `workingDir` | no | A registered project directory or a path below one (the rule and error of `spawn_session`, FR.15.14). The new session goes **last** in that directory (FR.1.30). |
+| `group` | no | A group directly in that directory, or in the caller's directory when there is no `workingDir`. Matched by name, case-insensitively, and created when missing. The new session goes last in the group. |
+| `model` | no | A model id from the catalog (`catalog.get`), or `default`. Stored as the session's model (FR.12.35). Tier-checked (FR.16.6). |
+| `effort` | no | `default`, `max`, `high`, `medium` or `low`. Stored as the session's effort (FR.12.35). |
+| `profile` | no | `default`, or a stored profile's `ProfileId` or display name (case-insensitive). The session is pinned to it (FR.12.27). Without it, the session gets the caller's profile, inherited as `spawn_session` does (FR.15.14). |
+| `streaming` | no | Streaming Session Mode (FR.19). Default off. |
+| `sound` | no | Focus Item Sound (FR.22). Default on. |
+| `prompt` | no | The first prompt. |
+
+- **Placement.** `after` can't be combined with `workingDir` or `group`. With none of the three, the new session goes right after the caller.
+- **One step.** The registry creates the node, any missing group and all the settings under one lock, with one save and one `SessionAdded` event, so no client sees a half-configured session.
+- **No selection.** Clients show the session where the daemon put it. They neither select it nor open it.
+- **First prompt.**
+  - Its turn starts in the background as a headless turn with `TurnSource.Orchestrated`, so the USER entry carries `source="orchestrated"` (FR.2.6). The tool returns at once.
+  - The result stays in the new session: nothing goes back to the caller and there is no Mailbox Delivery.
+  - The turn runs one-shot even with `streaming` on (FR.19.11); the Persistent Session Process starts with the user's first send.
+  - Because the session is top-level, its first turn gets the top-level instruction block (tool bans, `notify_user`, Focus; FR.14.11).
+- **Result** (plain text): `Session '<name>' created (nodeId=<id>) in <place>.`, where `<place>` is `<directory label>[ / <group path>], right after '<anchor name>'` or `<directory label>[ / <group path>], last`. A second line follows: `model=<id>, effort=<effort>, profile=<name>, streaming=on|off, sound=on|off.` (`default` for an unset model or effort). A third line reads `First turn started.` or `No prompt run.`
+- **Errors** (a tool error; nothing is created):
+  - the caller is a worker: `create_session is for top-level sessions: a worker reports to its supervisor instead.`;
+  - a blank `name`;
+  - `after` together with `workingDir` or `group`: `Use either 'after' or 'workingDir'/'group', not both.`;
+  - an `after` that is not found, too short or ambiguous (FR.15.13 wording);
+  - a `workingDir` outside every project (the FR.15.14 message);
+  - an unknown model, effort or profile; the message lists the valid values (for models the first 12, then `(+N more)`);
+  - a stored profile without credentials (logged out), naming the profile;
+  - a tier violation (FR.16.6);
+  - the rate cap: `Session creation limit reached: at most 10 sessions per hour. Try again later.`
+- **Guardrails.**
+  - Only a top-level session may call the tool.
+  - At most `Constants.Agent.MaxCreatedSessionsPerHour` (10) calls succeed per rolling hour across the app. The count is kept in memory, so a daemon restart resets it, and a refused call doesn't count.
+  - The depth limit of FR.15.5 can't apply, because every created session is top-level. The cap is what stops a chain of sessions that create sessions.
+- **Later contact.** The caller can use `send_to_session` with the returned id, as for any session.
+- **Tool description and guidance.**
+  - The description says that the new session belongs to the user, that it is not a worker, and that `spawn_session` is the tool for workers.
+  - `Constants.Instructions.NoWorkflowTool` lists the tool.
+  - The `cmx-orchestration` skill (FR.15.11) says to use it only when the user asks for a new session.

@@ -2,7 +2,7 @@
 
 Related requirement: [FR.15](/docs/requirements/FR.15-Agent-Orchestration.md#fr15--agent-orchestration-persistent-worker-sessions). Related use cases: [UC.15](/docs/usecases/UC.15-Agent-Orchestration.md).
 
-This file covers Mailbox Delivery coalescing (FR.15.12, ISSUE.012) and the session listing (FR.15.13).
+This file covers Mailbox Delivery coalescing (FR.15.12, ISSUE.012), the session listing (FR.15.13) and `create_session` (FR.15.15).
 
 ## Integration tests (xUnit, `TessynDesktop.Tests`)
 
@@ -80,8 +80,37 @@ This file covers Mailbox Delivery coalescing (FR.15.12, ISSUE.012) and the sessi
 - `ListSessions_2000SessionTree_DefaultPageUnder5000Chars_FullPageUnder30000Chars`.
 - `OrchestrationSkill_WorkerSection_NoLongerSendsWorkersToFullListing`.
 
+### TC.15.8 — `create_session` (`AgentMcpServerCreateSessionTests`, real `SessionRegistry` over a temp settings dir, fake turn service) — FR.15.15, FR.16.6, FR.12.35; UC.15.4
+- `ToolsList_CreateSession_DeclaresAllArguments` — `name` is required; `after`, `workingDir`, `group`, `model`, `effort` (enum), `profile`, `streaming`, `sound` and `prompt` are optional.
+- `CreateSession_After_GoesRightAfterAnchorInItsGroup_TopLevelFields` — index = the anchor's + 1 in the anchor's group. `SupervisorNodeId` is null, `OrchestrationDepth` is 0, `NodeId` and `AgentToken` are set, and the working directory is the container's.
+- `CreateSession_AfterWorker_GoesAfterItsTopLevelSupervisor`.
+- `CreateSession_AfterShortId_Resolved`; `CreateSession_AfterUnknownOrAmbiguous_ErrorAndNothingCreated`.
+- `CreateSession_NoPlacement_GoesRightAfterCaller`.
+- `CreateSession_WorkingDir_GoesLastInDirectory`; `CreateSession_WorkingDirAndGroup_MissingGroupCreated_GoesLastInIt`; `CreateSession_GroupOnly_UsesCallersDirectory`.
+- `CreateSession_AfterWithWorkingDirOrGroup_Error`; `CreateSession_WorkingDirOutsideProjects_ErrorListsRegistered`; `CreateSession_BlankName_Error`.
+- `CreateSession_Settings_Stored` — `ModelId`, `Effort`, the `ProfileId` pin, `IsStreamingMode` and `PlayCompletionSound`. Defaults: streaming off, sound on, the caller's profile.
+- `CreateSession_Profile_ByIdByNameOrDefault`; `CreateSession_UnknownModelEffortOrProfile_ErrorListsValidValues`; `CreateSession_LoggedOutProfile_Error`.
+- `CreateSession_OneSessionAddedEvent_SettingsAlreadySet` — the event's session already carries the settings.
+- `CreateSession_WorkerCaller_Refused`.
+- `CreateSession_ModelAboveCallerTier_Refused` and `CreateSession_ModelAtCallerTier_Allowed` (FR.16.6).
+- `CreateSession_RateCap_EleventhCallWithinAnHourRefused_RefusedCallsDoNotCount`.
+- `CreateSession_Prompt_StartsOrchestratedTurnAndReturnsAtOnce`:
+  - the fake turn service blocks, and the tool has already returned;
+  - the turn runs with `TurnSource.Orchestrated` and without per-turn options, so the session's settings apply;
+  - no Mailbox Delivery is added.
+- `CreateSession_ResultText_NamesPlaceAndSettings`.
+- `OrchestrationSkill_AndNoWorkflowTool_NameCreateSession`.
+
+### TC.15.9 — `create_session` in the WPF client (`WpfCreateSessionE2ETests`, the built app against a loopback daemon) — FR.15.15, FR.12.35; UC.15.4
+- `A_created_session_appears_right_under_its_anchor_and_the_selection_stays`:
+  - the daemon creates a session, after a session in a group, with the registry call that `create_session` makes;
+  - the tree shows it as the next row under the anchor;
+  - the selected session doesn't change.
+- `Opening_the_created_session_shows_its_model_effort_streaming_and_sound` — the Model selector shows its model and Effort shows Max; the Streaming and Sound toggles are on.
+
 ## Manual / E2E verification
 
 1. **UC.15.1** — Have a supervisor send three short `async` tasks to workers while it is itself busy in a long turn (e.g. it runs a multi-minute command right after dispatching). Confirm that when its turn ends, a single `[Scheduled] Worker results (3): …` turn follows, containing all three results, instead of three separate delivery turns.
 2. **UC.15.2** — In a supervisor with workers, call `list_sessions` with no arguments. Confirm the reply is a few KB, the `You:` line names the caller, its workers are nested under its row, and `send_to_session` works with a printed short id.
 3. **UC.15.3** — Call `list_sessions` with `query=` part of a session name from another project: the footer suggests `scope=all`; with `scope=all` the session is found under its directory's header.
+4. **UC.15.4** — From a session, ask for "an Opus session named X with Max effort, streaming and sound on, right under session Y". Confirm that X appears under Y at once and the selection stays. Opening X shows Opus, Max, streaming on and the bell on.

@@ -24,3 +24,16 @@ Matching is case-insensitive substring search on the model ID string. If multipl
 **FR.16.5 — Turn model resolution (bug fix):** `SessionTurnService.RunTurnAsync` previously always passed `model: null` to `SendMessageAsync`, causing all headless turns (scheduled and orchestrated) to run on the CLI's default model regardless of the session's configured model. After this fix, `RunTurnAsync` resolves the effective model from `SessionNodeModel.ModelId` (falling back to directory/app selection), determines `ollamaBaseUrl` and `disableTools` from model provider, and passes these to `SendMessageAsync`.
 
 ---
+## Amendments and additions (2026-11-18)
+
+### Amendments to existing requirements
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.16.2 Enforcement | FR.16.6 | Also enforced on `create_session` (FR.15.15). |
+| FR.16.3 Per-session model persistence | FR.12.35 | `ModelId` is also written by a sticky pick and by `create_session`. It may hold `default` (no `--model` flag, no fallback). |
+| FR.16.4 Caller tier resolution | FR.16.6 | The caller's model is resolved by the shared rule of FR.12.35. |
+
+### New requirements
+
+**FR.16.6 — Tier check on `create_session`, and the caller's model.** `create_session` with a `model` is refused when the caller's tier is below that model's tier: `Tier violation: a <caller tier> session cannot create a <model tier> session. Caller model: '<id>', requested: '<id>'.` The caller's model comes from the shared rule of FR.12.35 without a pick: its `ModelId`, else the directory's, else the app's `SelectedModelId`. A `default` model or no model gives `Constants.Agent.DefaultModelTier`, as in FR.16.4.
