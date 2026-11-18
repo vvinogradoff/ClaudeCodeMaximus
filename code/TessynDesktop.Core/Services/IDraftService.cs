@@ -76,6 +76,12 @@ public interface IDraftService
 	/// <summary>The ids of the Focus items of a session that have a reply draft.</summary>
 	IReadOnlyList<string> ListItemDraftIds(string sessionFileName) => [];
 
+	/// <summary>The Focus reply drafts of a session with the stamp of each file (FR.9.20). Metadata only: never reads a draft's content.</summary>
+	IReadOnlyList<ItemDraftStampModel> ListItemDraftStamps(string sessionFileName) => [];
+
+	/// <summary>Returns when a Focus item's reply draft was last written, or null if none exists.</summary>
+	DateTimeOffset? GetItemDraftTimestamp(string sessionFileName, string itemId) => null;
+
 	/// <summary>Deletes every Focus reply draft of a session (the session was deleted).</summary>
 	void DeleteItemDrafts(string sessionFileName)
 	{

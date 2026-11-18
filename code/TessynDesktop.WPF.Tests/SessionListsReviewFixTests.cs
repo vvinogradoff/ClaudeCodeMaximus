@@ -76,6 +76,29 @@ public sealed class SessionListsReviewFixTests
 		Assert.False(tab.List.Items.OfType<SessionRowViewModel>().First().ShowDirectory);
 	}
 
+	// TC.RT.13 (FR.9.20): a Focus reply draft moves a session's last activity but is not a composer draft: the row has no pencil and does not jump ahead of the composer drafts.
+	[Fact]
+	public async Task RecentTab_AReplyDraftSession_IsNewestButNotADraft_SoComposerDraftsStayFirst()
+	{
+		var tree = await LoadTreeAsync(
+			_b.Directory("d1", "Repo", [],
+				_b.SessionWith(State("s1", activity: Now.AddHours(-3)), "Old"),
+				_b.SessionWith(State("s2", activity: Now.AddMinutes(-1), draft: false, prompt: Now.AddDays(-2)), "ReplyDraft"),
+				_b.SessionWith(State("s3", draft: true, activity: Now.AddHours(-5)), "Composer")));
+		using var tab = CreateTab();
+
+		tab.Attach(tree);
+
+		Assert.Equal(["[d1]", "s3", "s2", "s1"], Shown(tab.List));
+		var reply = tab.List.Items.OfType<SessionRowViewModel>().Single(r => r.Id == "s2");
+		Assert.False(reply.HasDraft);
+
+		// The 15-minute colour comes from the newest activity (the reply draft), not from the old prompt.
+		var timed = new SessionRowViewModel("s2", "ReplyDraft", "d1", reply.State, clock: new FixedClock(Now));
+		Assert.Equal(4, timed.RecencyLevel);
+		Assert.False(timed.HasDraft);
+	}
+
 	[Fact]
 	public async Task RecentTab_LeavesOutWorkers()
 	{

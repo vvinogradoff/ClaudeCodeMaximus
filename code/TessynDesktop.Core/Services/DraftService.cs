@@ -60,6 +60,26 @@ public sealed class DraftService : IDraftService
 		return ids;
 	}
 
+	public IReadOnlyList<ItemDraftStampModel> ListItemDraftStamps(string sessionFileName)
+	{
+		var prefix = sessionFileName + Constants.ItemDraftInfix;
+		var stamps = new List<ItemDraftStampModel>();
+		// FileInfo from the enumeration carries length and write time from the directory listing: no extra stat call per file.
+		foreach (var info in new DirectoryInfo(_draftsDirectory).EnumerateFiles(prefix + "*" + Constants.DraftFileExtension))
+		{
+			var id = info.Name[prefix.Length..^Constants.DraftFileExtension.Length];
+			if (IsValidItemId(id))
+				stamps.Add(new ItemDraftStampModel(id, new SessionFileStampModel(info.Length, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero))));
+		}
+		return stamps;
+	}
+
+	public DateTimeOffset? GetItemDraftTimestamp(string sessionFileName, string itemId)
+	{
+		var path = GetItemDraftPath(sessionFileName, itemId);
+		return File.Exists(path) ? new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero) : null;
+	}
+
 	public void DeleteItemDrafts(string sessionFileName)
 	{
 		foreach (var id in ListItemDraftIds(sessionFileName))

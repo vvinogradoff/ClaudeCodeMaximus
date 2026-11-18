@@ -12,7 +12,8 @@ namespace TessynDesktop.Services;
 /// <see cref="Constants.Remote.ActivityTailBytes"/> bytes, widened once to <see cref="Constants.Remote.ActivityColdParseMaxBytes"/>
 /// when that tail holds no USER entry (beyond it the last prompt reads as unknown). A file that only grew since the cached read
 /// parses just the appended bytes and merges them into the cached values; a shorter or same-length rewrite resets the entry.
-/// Draft presence is cached by the draft file's stamp, so a draft is read only when it changed. Created by Claude.
+/// Draft presence is cached by the draft file's stamp, so a draft is read only when it changed. The Focus reply drafts (FR.9.20) add to the
+/// last-activity time only, cached per item by stamp the same way; they never set <c>HasDraft</c>. Created by Claude.
 /// </remarks>
 public sealed class SessionActivityService : ISessionActivityService
 {
@@ -22,6 +23,9 @@ public sealed class SessionActivityService : ISessionActivityService
 	private readonly IDraftService _drafts;
 	private readonly ConcurrentDictionary<string, CachedActivity> _cache = new(StringComparer.OrdinalIgnoreCase);
 	private readonly ConcurrentDictionary<string, CachedDraft> _draftCache = new(StringComparer.OrdinalIgnoreCase);
+
+	// Per session, the reply drafts seen at the last call (item id -> cached read). The dictionary is replaced as a whole, never mutated after publishing.
+	private readonly ConcurrentDictionary<string, Dictionary<string, CachedDraft>> _replyCache = new(StringComparer.OrdinalIgnoreCase);
 
 	public SessionActivityService(ISessionFileService files, IDraftService drafts)
 	{
@@ -35,7 +39,10 @@ public sealed class SessionActivityService : ISessionActivityService
 		var fileActivity = ReadFileActivity(node.FileName);
 		var (hasDraft, draftTime) = ReadDraft(node.FileName);
 
-		var lastActivity = Max(Max(fileActivity.LastPrompt, fileActivity.LastResponse), hasDraft ? draftTime : null);
+		// FR.9.20: a non-blank Focus reply draft counts for the time like the composer draft, but never for HasDraft (the pencil, "drafts first").
+		var replyTime = ReadReplyDraftTime(node.FileName);
+
+		var lastActivity = Max(Max(Max(fileActivity.LastPrompt, fileActivity.LastResponse), hasDraft ? draftTime : null), replyTime);
 		return new SessionActivityModel(lastActivity, fileActivity.LastPrompt, fileActivity.LastResponse, fileActivity.PromptProfileName, hasDraft);
 	}
 
@@ -122,6 +129,43 @@ public sealed class SessionActivityService : ISessionActivityService
 		{
 			_log.Debug(ex, "SessionActivityService: could not read the draft of {FileName}", fileName);
 			return (false, null);
+		}
+	}
+
+	/// <summary>The latest write time over the session's non-blank Focus reply drafts, or null. Lists the files (metadata) and reads a draft only when its stamp changed.</summary>
+	private DateTimeOffset? ReadReplyDraftTime(string fileName)
+	{
+		try
+		{
+			var stamps = _drafts.ListItemDraftStamps(fileName);
+			if (stamps.Count == 0)
+			{
+				_replyCache.TryRemove(fileName, out _);
+				return null;
+			}
+
+			_replyCache.TryGetValue(fileName, out var previous);
+			var current = new Dictionary<string, CachedDraft>(stamps.Count, StringComparer.Ordinal);
+			DateTimeOffset? latest = null;
+			foreach (var item in stamps)
+			{
+				if (previous == null || !previous.TryGetValue(item.ItemId, out var entry) || entry.Stamp != item.Stamp)
+				{
+					var hasText = !string.IsNullOrWhiteSpace(_drafts.LoadItemDraft(fileName, item.ItemId));
+					entry = new CachedDraft(item.Stamp, hasText, hasText ? item.Stamp.LastWriteUtc : null);
+				}
+
+				current[item.ItemId] = entry;
+				latest = Max(latest, entry.Time);
+			}
+
+			_replyCache[fileName] = current; // items no longer listed drop out of the cache here
+			return latest;
+		}
+		catch (Exception ex)
+		{
+			_log.Debug(ex, "SessionActivityService: could not read the reply drafts of {FileName}", fileName);
+			return null;
 		}
 	}
 
