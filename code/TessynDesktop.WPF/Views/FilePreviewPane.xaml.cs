@@ -15,7 +15,12 @@ namespace TessynDesktop.WPF.Views;
 /// <remarks>Created by Claude</remarks>
 public partial class FilePreviewPane : UserControl
 {
+	/// <summary>False in a preview window, whose title bar has the Close (FR.29.7); true in the side pane.</summary>
+	public static readonly DependencyProperty ShowCloseButtonProperty = DependencyProperty.Register(
+		nameof(ShowCloseButton), typeof(bool), typeof(FilePreviewPane), new PropertyMetadata(true, (d, e) => ((FilePreviewPane)d).CloseButton.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed));
+
 	private FilePreviewViewModel? _subscribed;
+	private FilePreviewSurface? _attachedSurface;
 	private bool _attached;
 
 	public FilePreviewPane()
@@ -24,12 +29,29 @@ public partial class FilePreviewPane : UserControl
 		DataContextChanged += OnDataContextChanged;
 	}
 
+	public bool ShowCloseButton
+	{
+		get => (bool)GetValue(ShowCloseButtonProperty);
+		set => SetValue(ShowCloseButtonProperty, value);
+	}
+
+	/// <summary>The WebView2 of the control, null before the first preview was opened.</summary>
+	public WebView2? Page => PageHost.Children.OfType<WebView2>().FirstOrDefault();
+
 	private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
 	{
 		if (_subscribed != null)
 			_subscribed.PropertyChanged -= OnPropertyChanged;
 
 		_subscribed = e.NewValue as FilePreviewViewModel;
+		if (_attached && !ReferenceEquals(_attachedSurface, _subscribed?.Surface))
+		{
+			// A new view model with its own surface (a preview window got a new renderer): the old WebView2 belongs to the old surface.
+			PageHost.Children.Clear();
+			_attached = false;
+			_attachedSurface = null;
+		}
+
 		if (_subscribed != null)
 		{
 			_subscribed.PropertyChanged += OnPropertyChanged;
@@ -46,25 +68,26 @@ public partial class FilePreviewPane : UserControl
 
 	private void EnsureAttached()
 	{
-		if (_attached || Application.Current is not App app)
+		if (_attached || _subscribed?.Surface is not FilePreviewSurface surface)
 			return;
 
 		_attached = true;
+		_attachedSurface = surface;
 		var control = new WebView2();
 		PageHost.Children.Add(control);
-		_ = AttachAsync(app, control);
+		_ = AttachAsync(surface, control);
 	}
 
-	private static async Task AttachAsync(App app, WebView2 control)
+	private static async Task AttachAsync(FilePreviewSurface surface, WebView2 control)
 	{
-		var logger = app.Services.GetRequiredService<ILogger<FilePreviewPane>>();
+		var logger = (Application.Current as App)?.Services.GetService<ILogger<FilePreviewPane>>();
 		try
 		{
-			await app.Services.GetRequiredService<FilePreviewSurface>().AttachAsync(control);
+			await surface.AttachAsync(control);
 		}
 		catch (Exception ex)
 		{
-			logger.LogError(ex, "The preview WebView2 failed to initialize");
+			logger?.LogError(ex, "The preview WebView2 failed to initialize");
 		}
 	}
 }

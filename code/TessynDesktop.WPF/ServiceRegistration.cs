@@ -148,7 +148,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IScreensaverImages, FolderScreensaverImages>();
 		services.AddSingleton(sp => new ScreensaverController(sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IScreensaverImages>(), DateTime.UtcNow));
 		services.AddSingleton(sp => new TitleBarViewModel(sp.GetRequiredService<IAppearanceService>(), sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(),
-			sp.GetRequiredService<IUiDispatcher>(), BuildNumber.Read(typeof(App).Assembly), SourceBuilds.IsBuildOutput(AppContext.BaseDirectory)));
+			sp.GetRequiredService<IUiDispatcher>(), BuildNumber.Read(typeof(App).Assembly), SourceBuilds.IsBuildOutput(AppContext.BaseDirectory), sp.GetService<IPreviewRouter>()));
 		services.AddSingleton<StatusBarViewModel>();
 		services.AddSingleton<IShellModule, ChromeShellModule>();
 
