@@ -19,9 +19,33 @@ public partial class ColourPickerControl : UserControl
 	public ColourPickerControl()
 	{
 		InitializeComponent();
+		// The picker may grow (named colours, harmonies) but fits on the screen: past the work area it scrolls.
+		Scroller.MaxHeight = Math.Max(240, SystemParameters.WorkArea.Height - 48);
 		DataContextChanged += (_, _) => Attach();
 		Unloaded += (_, _) => Detach();
-		Loaded += (_, _) => Attach();
+		Loaded += (_, _) =>
+		{
+			Attach();
+			Focus();   // Esc and Enter reach the picker
+		};
+	}
+
+	/// <summary>Esc drops the edit and closes the picker; Enter keeps the new colour (pending on its row) and closes it.</summary>
+	private void OnKeyDown(object sender, KeyEventArgs e)
+	{
+		if (_model == null)
+			return;
+
+		if (e.Key == Key.Escape)
+		{
+			_model.Cancel();
+			e.Handled = true;
+		}
+		else if (e.Key == Key.Enter)
+		{
+			_model.Accept();
+			e.Handled = true;
+		}
 	}
 
 	private void Attach()

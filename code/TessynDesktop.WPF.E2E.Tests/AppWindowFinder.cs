@@ -32,6 +32,21 @@ public sealed class AppWindowFinder
 		return found;
 	}
 
+	/// <summary>Every visible top-level window of <paramref name="processId"/> (an open popup such as the colour picker is a window of its own).</summary>
+	public List<IntPtr> FindAll(int processId)
+	{
+		var found = new List<IntPtr>();
+		EnumWindows((hwnd, _) =>
+		{
+			GetWindowThreadProcessId(hwnd, out var pid);
+			if (pid == processId && HasVisibleStyle(hwnd))
+				found.Add(hwnd);
+
+			return true;
+		}, IntPtr.Zero);
+		return found;
+	}
+
 	/// <summary>Waits for the window to exist.</summary>
 	public async Task<bool> WaitForWindowAsync(Process process, TimeSpan timeout)
 	{

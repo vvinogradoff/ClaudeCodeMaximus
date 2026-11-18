@@ -7,13 +7,15 @@ namespace TessynDesktop.WPF.ViewModels.Settings;
 
 /// <summary>
 /// The Colours tab: every colour of <see cref="ColourCatalog"/> (the application, the transcript page, recent and active sessions, session status, Focus kinds, tree selection)
-/// for the theme chosen with the Light/Dark switch, which starts on the current theme. Light and Dark keep their colours separately. A colour changed in the picker is stored
-/// at once, so the application shows it live (there is nothing to save); only a colour that differs from its theme's default is stored. Contains no WPF types.
+/// for the theme chosen with the Light/Dark switch, which starts on the current theme. Light and Dark keep their colours separately. A colour changed in the picker (or reset) is
+/// <b>pending</b> (FR.9.19): <see cref="HasChanges"/> is true, and Apply or the window's Save stores every pending colour in one update, which applies them everywhere. Pending
+/// colours are kept per theme while the switch is used; closing the window drops them. Only a colour that differs from its theme's default is stored. Contains no WPF types.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class ColoursSectionViewModel : SettingsSectionViewModel, ISettingsEditor
 {
 	private readonly IClientSettingsStore _store;
+	private readonly Dictionary<bool, Dictionary<string, string>> _pending = new() { [false] = new(StringComparer.Ordinal), [true] = new(StringComparer.Ordinal) };
 
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(EditingLight), nameof(ResetAllText))]
@@ -46,36 +48,42 @@ public sealed partial class ColoursSectionViewModel : SettingsSectionViewModel, 
 
 	public string ResetAllText => string.Format(Constants.Colours.ResetAllFormat, EditingDark ? Constants.Colours.DarkName : Constants.Colours.LightName);
 
-	/// <summary>Colours are stored as they change, so there is never anything left for the window's Save.</summary>
-	public bool HasChanges => false;
+	/// <summary>True while a colour is pending (picked, or reset, and not applied yet) in either theme.</summary>
+	public bool HasChanges => _pending.Values.Any(p => p.Count > 0);
 
-	public Task<bool> SaveAsync() => Task.FromResult(true);
+	/// <summary>The window's Save: stores the pending colours, like Apply.</summary>
+	public Task<bool> SaveAsync()
+	{
+		ClearMessages();
+		Store();
+		return Task.FromResult(true);
+	}
 
+	/// <summary>Drops the pending colours and reads the stored ones again.</summary>
 	[RelayCommand]
 	public Task ReloadAsync()
 	{
 		ClearMessages();
+		foreach (var pending in _pending.Values)
+			pending.Clear();
+
 		Read();
+		OnPropertyChanged(nameof(HasChanges));
 		return Task.CompletedTask;
 	}
 
-	/// <summary>Every colour of the edited theme back to its default; the other theme is left alone.</summary>
+	/// <summary>Every colour of the edited theme back to its default, pending until Apply or Save; the other theme is left alone.</summary>
 	[RelayCommand]
 	private void ResetAll()
 	{
-		var dark = EditingDark;
-		_store.Update<ColourSettings>(s =>
-		{
-			s.Migrate();
-			s.Of(dark).Clear();
-		});
-		Read();
+		foreach (var row in Rows)
+			row.Reset();
 	}
 
 	/// <summary>
-	/// Apply (FR.9.18): commits the colour of any open picker, closes the pickers, and re-applies the palette everywhere by raising the Colours section's change again
-	/// (the one path: <c>ColourApplier</c> sets the brushes, the appearance service sends the transcript its <c>appearance</c> message). The stored values do not change
-	/// by it, so applying the theme that is not active leaves the active brushes as they are.
+	/// Apply (FR.9.18, FR.9.19): closes the open pickers (a picker keeps its colour as the row's), then stores every pending colour in one update, which re-applies the palette
+	/// everywhere (the one path: <c>ColourApplier</c> sets the brushes, the appearance service sends the transcript its <c>appearance</c> message). With nothing pending the update
+	/// still raises the change, so Apply is also "make sure it is applied now". Applying the theme that is not active leaves the active brushes as they are.
 	/// </summary>
 	[RelayCommand]
 	private void Apply()
@@ -83,7 +91,34 @@ public sealed partial class ColoursSectionViewModel : SettingsSectionViewModel, 
 		foreach (var row in Rows)
 			row.CommitAndClosePicker();
 
-		_store.Update<ColourSettings>(s => s.Migrate());
+		Store();
+	}
+
+	/// <summary>Writes the pending colours of both themes (a colour equal to its default is removed) in one update, then reads the rows again.</summary>
+	private void Store()
+	{
+		var pending = _pending.ToDictionary(p => p.Key, p => new Dictionary<string, string>(p.Value, StringComparer.Ordinal));
+		foreach (var colours in _pending.Values)
+			colours.Clear();
+
+		_store.Update<ColourSettings>(s =>
+		{
+			s.Migrate();
+			foreach (var (dark, colours) in pending)
+			{
+				foreach (var (key, hex) in colours)
+				{
+					var definition = ColourCatalog.Find(key);
+					var isDefault = definition != null && string.Equals(hex, dark ? definition.DarkDefault : definition.LightDefault, StringComparison.OrdinalIgnoreCase);
+					if (isDefault)
+						s.Of(dark).Remove(key);
+					else
+						s.Of(dark)[key] = hex;
+				}
+			}
+		});
+		Read();
+		OnPropertyChanged(nameof(HasChanges));
 	}
 
 	partial void OnEditingDarkChanged(bool value) => Read();
@@ -93,23 +128,22 @@ public sealed partial class ColoursSectionViewModel : SettingsSectionViewModel, 
 	{
 		var dark = EditingDark;
 		var changed = _store.Get<ColourSettings>().For(dark);
+		var pending = _pending[dark];
 		Rows = ColourCatalog.All
-			.Select(d => new ColourRowViewModel(d, dark ? d.DarkDefault : d.LightDefault, changed.TryGetValue(d.Key, out var value) && ColourCatalog.IsValid(value) ? ColourCatalog.Normalize(value) : null, Commit))
+			.Select(d => new ColourRowViewModel(d, dark ? d.DarkDefault : d.LightDefault, changed.TryGetValue(d.Key, out var value) && ColourCatalog.IsValid(value) ? ColourCatalog.Normalize(value) : null, Pending,
+				pending.GetValueOrDefault(d.Key)))
 			.ToList();
 		OnPropertyChanged(nameof(Rows));
 	}
 
-	/// <summary>Stores (or, for null, drops) one colour of the edited theme.</summary>
-	private void Commit(ColourRowViewModel row, string? hex)
+	/// <summary>A row's colour became pending (the hex), or went back to what is stored (null).</summary>
+	private void Pending(ColourRowViewModel row, string? hex)
 	{
-		var dark = EditingDark;
-		_store.Update<ColourSettings>(s =>
-		{
-			s.Migrate();
-			if (hex == null)
-				s.Of(dark).Remove(row.Key);
-			else
-				s.Of(dark)[row.Key] = hex;
-		});
+		if (hex == null)
+			_pending[EditingDark].Remove(row.Key);
+		else
+			_pending[EditingDark][row.Key] = hex;
+
+		OnPropertyChanged(nameof(HasChanges));
 	}
 }

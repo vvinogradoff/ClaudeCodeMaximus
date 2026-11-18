@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -111,7 +111,7 @@ public sealed class TreeFeedbackTests
 	}
 
 	[Fact]
-	public void TheColoursTab_StoresAtOnce_OnlyWhatDiffersFromTheDefault_AndResets()
+	public void TheColoursTab_HoldsPendingColours_StoresOnApply_OnlyWhatDiffersFromTheDefault_AndResets()
 	{
 		var store = SettingsTestSupport.NewStore();
 		var settings = SettingsTestSupport.NewSettings(new FakeTessynClient(), store);
@@ -119,20 +119,32 @@ public sealed class TreeFeedbackTests
 		Assert.False(colours.HasChanges);
 		var tier1 = colours.Rows.Single(r => r.Key == ColourCatalog.RecentTier1);
 
-		tier1.Set("#ff0000");   // light is the edited theme: there is nothing to save, it is stored
-		Assert.Equal("#FF0000", store.Get<ColourSettings>().Light[ColourCatalog.RecentTier1]);
+		tier1.Set("#ff0000");   // pending (FR.9.19): the window's Save stores it
+		Assert.Empty(store.Get<ColourSettings>().Light);
 		Assert.True(tier1.IsOverridden);
+		Assert.True(tier1.IsPending);
+		Assert.True(colours.HasChanges);
+		Assert.True(settings.HasChanges);
+		settings.SaveCommand.Execute(null);
+		Assert.Equal("#FF0000", store.Get<ColourSettings>().Light[ColourCatalog.RecentTier1]);
 		Assert.False(colours.HasChanges);
 
-		tier1.Set(ColourCatalog.Find(ColourCatalog.RecentTier1)!.LightDefault);   // the default again: nothing to store
+		tier1 = colours.Rows.Single(r => r.Key == ColourCatalog.RecentTier1);
+		Assert.False(tier1.IsPending);
+		tier1.Set(ColourCatalog.Find(ColourCatalog.RecentTier1)!.LightDefault);   // the default again: pending, and Apply removes the stored colour
+		Assert.True(colours.HasChanges);
+		colours.ApplyCommand.Execute(null);
 		Assert.Empty(store.Get<ColourSettings>().Light);
 
+		tier1 = colours.Rows.Single(r => r.Key == ColourCatalog.RecentTier1);
 		tier1.Set("not a colour");   // refused
 		Assert.False(tier1.IsOverridden);
+		Assert.False(colours.HasChanges);
 
 		tier1.Set("#00FF00");
 		colours.ResetAllCommand.Execute(null);
 		Assert.All(colours.Rows, r => Assert.False(r.IsOverridden));
+		Assert.False(colours.HasChanges);   // back to what is stored
 		Assert.Empty(store.Get<ColourSettings>().Light);
 	}
 	[Fact]
