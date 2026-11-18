@@ -31,3 +31,8 @@ Related requirements: FR.26.5, FR.26.6 (see `docs/requirements/`). Test cases: [
 ## UC.LK.05 — Open a web link
 **Main flow:** the User Ctrl+clicks a link; it opens (http and https only). A plain click does nothing.
 **Covers:** FR.26.3, FR.26.6.
+
+## UC.LK.06 — See and play a video the session mentions
+**Main flow:** the entry mentions a video path (mp4, mov, webm, mkv, avi, m4v, wmv); right under the path the first frame of the video appears, fitted to the column, with a small play badge. The User Ctrl+clicks the path or the frame and the video plays in the default media player. A plain click does nothing, so the User can select and copy the frame or the path.
+**Alternative flows:** **A1** — The policy refuses the file: the path stays with "Video not allowed". **A2** — No frame can be made (damaged file, no codec, too large for a preview, shell timeout): "Preview unavailable"; Ctrl+click still opens the file. **A3** — The frame appears late: the entry is measured again and the view does not jump. **A4** — The daemon refuses on Ctrl+click: a dismissible notice, no dialog, no player.
+**Covers:** FR.26.5, FR.26.6.

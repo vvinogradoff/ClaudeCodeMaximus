@@ -2,7 +2,7 @@
 
 Related requirements: FR.26.5, FR.26.6. Use cases: [UC.LK.01](/docs/usecases/UC.LK.01-Inline-Paths-and-Links.md).
 
-**Legend.** AUTOMATED = unit tests, renderer tests and node script tests (`InlinePathMarkerTests`, `PathSlotsScriptTests`, `SessionPaneNavigationTests`); E2E = WPF end-to-end over CDP (NR.6, class `WpfInlinePathsE2ETests`, and `WpfFocusE2ETests` for the preview of a path).
+**Legend.** AUTOMATED = unit tests, renderer tests and node script tests (`InlinePathMarkerTests`, `PathSlotsScriptTests`, `SessionPaneNavigationTests`, `InlineVideoTests`, `ShellVideoThumbnailServiceTests`); E2E = WPF end-to-end over CDP (NR.6, classes `WpfInlinePathsE2ETests` and `WpfInlineVideoE2ETests`, and `WpfFocusE2ETests` for the preview of a path).
 
 | TC | Title | Kind | UC | FR |
 |---|---|---|---|---|
@@ -23,9 +23,17 @@ Related requirements: FR.26.5, FR.26.6. Use cases: [UC.LK.01](/docs/usecases/UC.
 | TC.LK.15 | After the image loaded the entry height is the measured one (re-measure) | E2E | UC.LK.04 | FR.26.5 |
 | TC.LK.16 | A web link: plain click posts nothing, Ctrl+click posts it to the host; the host keeps the http/https policy | E2E | UC.LK.05 | FR.26.3, FR.26.6 |
 | TC.LK.17 | The page's CSP names only the app's own virtual hosts (the media proxy and the preview cache for images) | AUTOMATED | UC.LK.04 | FR.26.5 |
+| TC.LK.18 | A video path (mp4, mov, webm, mkv, avi, m4v, wmv) gets the slot for its first occurrence only; ogv, mp3, svg and a name without extension get none | AUTOMATED | UC.LK.06 | FR.26.6 |
+| TC.LK.19 | The shell makes a PNG first frame of a real H.264 clip (landscape, right size); a file that is not a video, a missing file and a cancelled call give none, without throwing | AUTOMATED (real shell, `ShellVideoThumbnailServiceTests`) | UC.LK.06 | FR.26.6 |
+| TC.LK.20 | A loaded frame shows under the path with the play badge; a frame source outside the preview-cache host never becomes an `<img>`; the hints are "Video not allowed", "Preview unavailable" and "Loading preview" | AUTOMATED | UC.LK.06 | FR.26.6 |
+| TC.LK.21 | A video path asks the daemon like a click (`file.preview`), the shell reads the video from the preview cache, the video is deleted afterwards and only the frame stays; answered once per entry and path; the pane stays closed | AUTOMATED | UC.LK.06 | FR.26.6 |
+| TC.LK.22 | A refusal answers "not allowed" and reads nothing; no frame answers "unavailable" and leaves nothing in the cache; a video over 150 MB is not fetched | AUTOMATED | UC.LK.06 | FR.26.6 |
+| TC.LK.23 | Ctrl+click on a video path opens a copy from the preview cache through the allowlisted launcher, not the pane; a second Ctrl+click does not fetch again; a daemon refusal gives a notice and starts nothing; non-video paths still open the pane | AUTOMATED | UC.LK.06 | FR.26.6 |
+| TC.LK.24 | E2E over CDP with a real 3 KB clip: the first frame (made by the shell in the test user's session) appears directly under the path, centred play badge, fitted to the column, entry re-measured; a plain click on the path or the frame asks for nothing; the pointer cursor only with Ctrl; Ctrl+click on the frame and on the path asks the host to open it in the default player (a test window only logs the request) and the pane stays closed | E2E | UC.LK.06 | FR.26.6 |
+| TC.LK.25 | E2E: a file named .mp4 that is not a video shows "Preview unavailable", a clip under a credentials folder "Video not allowed", and only the real clip became a frame | E2E | UC.LK.06 | FR.26.6 |
 
 ## FR → TC coverage
 | FR | Test cases |
 |---|---|
 | FR.26.5 | TC.LK.01–02, 03, 07–15, 17 |
-| FR.26.6 | TC.LK.03–07, 11, 16 |
+| FR.26.6 | TC.LK.03–07, 11, 16, 18–25 |
