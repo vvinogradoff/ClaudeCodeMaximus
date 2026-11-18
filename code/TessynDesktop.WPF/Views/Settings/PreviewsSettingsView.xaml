@@ -1,0 +1,80 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.Settings.PreviewsSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:s="clr-namespace:TessynDesktop.WPF.Views.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <DockPanel Margin="16,4,16,12">
+        <StackPanel DockPanel.Dock="Top">
+            <TextBlock Style="{StaticResource SettingsHint}" Margin="0,0,0,8" Text="{Binding Help}" />
+            <Grid Margin="0,0,0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="86" />
+                    <ColumnDefinition Width="92" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Style="{StaticResource SettingsLabel}" Margin="0" Text="Name" />
+                <TextBlock Grid.Column="1" Style="{StaticResource SettingsLabel}" Margin="8,0,0,0" Text="Patterns" />
+                <TextBlock Grid.Column="2" Style="{StaticResource SettingsLabel}" Margin="8,0,0,0" Text="Auto-close" />
+            </Grid>
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource SettingsButton}" Content="Add group" Command="{Binding AddGroupCommand}" AutomationProperties.Name="Add preview group" />
+                <Button Style="{StaticResource SettingsButton}" Content="Reset to defaults" Command="{Binding ResetToDefaultsCommand}" AutomationProperties.Name="Reset preview groups"
+                        ToolTip="The list becomes the default groups; press Save to keep it" />
+            </StackPanel>
+            <Separator Margin="0,12" />
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource SettingsButton}" Content="Forget window positions" Command="{Binding ForgetPositionsCommand}" AutomationProperties.Name="Forget window positions"
+                        ToolTip="Each preview window opens in its default place next time" />
+                <Button Style="{StaticResource SettingsButton}" Content="Clear browser data" Command="{Binding ClearBrowserDataCommand}" AutomationProperties.Name="Clear browser data"
+                        ToolTip="Deletes the preview browser's cookies, stored data and cache: signs you out of every site" />
+            </StackPanel>
+            <s:SectionMessages Margin="0,8,0,0" />
+        </StackPanel>
+        <ListBox x:Name="Rows" ItemsSource="{Binding Groups}" BorderThickness="0" Background="Transparent" HorizontalContentAlignment="Stretch" Focusable="False"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Preview groups">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0,0,0,4" />
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="86" />
+                                <ColumnDefinition Width="92" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="GroupNameBox" Grid.Column="0" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="{Binding NameAutomationName}" />
+                            <TextBox Grid.Column="1" Margin="8,0,0,0" Text="{Binding Patterns, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="{Binding PatternsAutomationName}" />
+                            <CheckBox Grid.Column="2" Margin="8,0,0,0" HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="0" IsChecked="{Binding AutoClose}"
+                                      AutomationProperties.Name="{Binding AutoCloseAutomationName}" />
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="▲" Width="26" Margin="0,0,2,0" ToolTip="Move up" AutomationProperties.Name="{Binding UpAutomationName}"
+                                        Command="{Binding DataContext.MoveUpCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" />
+                                <Button Content="▼" Width="26" Margin="0,0,2,0" ToolTip="Move down" AutomationProperties.Name="{Binding DownAutomationName}"
+                                        Command="{Binding DataContext.MoveDownCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" />
+                                <Button Content="✕" Width="26" ToolTip="Remove group" AutomationProperties.Name="{Binding RemoveAutomationName}"
+                                        Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Style="{StaticResource SettingsError}" Text="{Binding Error}" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</UserControl>

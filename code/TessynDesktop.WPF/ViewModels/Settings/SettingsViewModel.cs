@@ -43,7 +43,10 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		ProfileViewModel profiles,
 		IUiDispatcher ui,
 		ILoggerFactory loggers,
-		IAppearanceService? appearance = null)
+		IAppearanceService? appearance = null,
+		IPreviewSettingsService? previewSettings = null,
+		PreviewGroupMatcher? previewMatcher = null,
+		IBrowserDataCleaner? browserDataCleaner = null)
 	{
 		_client = client;
 		_dialogs = dialogs;
@@ -61,6 +64,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		Keyboard = new KeyboardSectionViewModel(store, commands);
 		Startup = new StartupSectionViewModel(store);
 		Colours = new ColoursSectionViewModel(store, appearance);
+		if (previewSettings != null)
+			Previews = new PreviewsSectionViewModel(previewSettings, previewMatcher ?? new PreviewGroupMatcher(), browserDataCleaner, dialogs, ui);
 
 		client.NotificationReceived += OnNotification;
 	}
@@ -87,12 +92,17 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
 	public ColoursSectionViewModel Colours { get; }
 
+	/// <summary>The Previews tab; null when no preview settings service was given (a test window without one).</summary>
+	public PreviewsSectionViewModel? Previews { get; }
+
+	public bool HasPreviews => Previews != null;
+
 	public bool HasStatus => !string.IsNullOrEmpty(StatusText);
 
 	public bool HasError => !string.IsNullOrEmpty(ErrorText);
 
 	/// <summary>The sections the window's Save button applies.</summary>
-	private IEnumerable<ISettingsEditor> Editors => [General, Notifications, Telegram, Appearance, Colours, Screensaver, Keyboard, Startup];
+	private IEnumerable<ISettingsEditor> Editors => Previews == null ? [General, Notifications, Telegram, Appearance, Colours, Screensaver, Keyboard, Startup] : [General, Notifications, Telegram, Appearance, Colours, Screensaver, Keyboard, Startup, Previews];
 
 	public bool HasChanges => Editors.Any(e => e.HasChanges);
 
@@ -207,5 +217,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		}
 	}
 
-	public void Dispose() => _client.NotificationReceived -= OnNotification;
+	public void Dispose()
+	{
+		_client.NotificationReceived -= OnNotification;
+		Previews?.Dispose();
+	}
 }

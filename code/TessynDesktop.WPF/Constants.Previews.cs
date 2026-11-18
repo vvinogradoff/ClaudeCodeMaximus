@@ -28,6 +28,9 @@ public static partial class Constants
 		public const string HttpsPrefix = "https://";
 		public const char Wildcard = '*';
 
+		/// <summary>The end of a URL pattern that also matches the address without the slash.</summary>
+		public const string SlashWildcard = "/*";
+
 		/// <summary>The smallest a preview window may be (the main window's minimum is larger).</summary>
 		public const int MinWindowWidth = 360;
 		public const int MinWindowHeight = 240;

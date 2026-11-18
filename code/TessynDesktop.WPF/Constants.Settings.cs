@@ -104,5 +104,22 @@ public static partial class Constants
 		public const string McpSecretNotSet = "Nothing stored.";
 		public const string McpUrlQueryHidden = "The stored URL has a query string (it is not shown); the query is kept unless you change the URL.";
 		public const string McpArgumentsHidden = "Arguments are stored (not shown); the stored arguments are kept unless you type new ones.";
+
+		public const string PreviewsTitle = "Previews";
+		public const string PreviewsHelp = "Each group has its own preview window when preview windows are on (monitor button in the title bar). Patterns, separated by spaces or commas: a file extension (md or .md), or a web address where * stands for any text (https://github.com/org/repo/*, https://*). When several groups match, the most specific pattern wins; a tie goes to the group higher in the list. Items without a group open as before: files in the preview pane, links in the system browser.";
+		public const string PreviewGroupNameRequired = "A group has no name.";
+		public const string PreviewGroupNameDuplicateFormat = "The name '{0}' is used by more than one group.";
+		public const string PreviewGroupNoPatternsFormat = "Group '{0}' has no pattern.";
+		public const string PreviewGroupInvalidPatternFormat = "Group '{0}': '{1}' is not a file extension or an http(s) address.";
+		public const string PreviewForgetTitle = "Forget window positions";
+		public const string PreviewForgetMessage = "Forget where the preview windows were last placed? Each window opens in its default place next time.";
+		public const string PreviewForgetConfirm = "Forget";
+		public const string PreviewForgotten = "Window positions forgotten.";
+		public const string PreviewClearTitle = "Clear browser data";
+		public const string PreviewClearMessage = "Delete the cookies, stored data and cache of the preview browser? This signs you out of every site (Slack, GitHub, Linear, ...).";
+		public const string PreviewClearConfirm = "Clear and sign out";
+		public const string PreviewCleared = "Browser data cleared; you are signed out of every site.";
+		public const string PreviewClearFailed = "The browser data could not be cleared; see the log.";
+		public const string PreviewClearUnavailable = "The preview browser is not available.";
 	}
 }
