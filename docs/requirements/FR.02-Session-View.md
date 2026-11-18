@@ -56,6 +56,7 @@ New IDs start at **FR.2.6**.
 | FR.2.3.4 User bubble profile label | FR.2.9 | The word "You"/"USER" is gone from the row header. The profile name stays on the right of the header row. |
 | FR.2.3.5 Assistant model/effort label | FR.2.7 | Same content; it is now a small italic line above the response, not part of a header with a role word. |
 | FR.2.3.2 Text selectability | FR.2.10 | Restated for every row type, and for Focus cards (FR.23.20). |
+| FR.2.10 Selectable text | FR.2.13 | A right-click on selected text opens a menu with **Copy** and **Copy as Markdown**. |
 
 ### New requirements
 
@@ -81,3 +82,10 @@ Wire: `SessionEntryDto.source` (`tdcp-spec` additions §A1).
 **FR.2.11 — Scrollbar.** The transcript has one custom scrollbar whose thumb position is **proportional to the entry index** (the top entry plus the fraction of it scrolled past, over the same figure at the end of the scroll range), because entries below the window have only estimated heights. A drag keeps the thumb exactly under the mouse, re-aims after each render and rebases when a page of older or newer entries arrives mid-drag, so the content does not jump. The thumb is exactly at the ends at the ends of the range. A track click pages toward the click; the wheel over the bar scrolls. Native scroll keys and wheel work as before.
 
 **FR.2.12 — Rule lines.** In every row kind (user, assistant, system) a line made only of --- (3 or more) renders as a **horizontal rule** and a line made only of === (3 or more, spaces allowed) as a **double horizontal rule** (<hr class="dbl">, two thin lines). The text line above stays a normal paragraph: Markdown's *setext headings* (H1 from ===, H2 from ---) are off. ATX headings (#), lists starting with -, table separator rows (---|---), and code blocks and fences (which keep === and --- as text) are unchanged. Both rules use the palette line colour (--line) in both themes.
+
+**FR.2.13 — Copy as Markdown (WPF).** A **right-click on selected text** in the session output opens a small context menu with **Copy** and **Copy as Markdown**.
+- **Copy** copies the selection as plain text, as Ctrl+C does.
+- **Copy as Markdown** copies the selection as Markdown: headings (`#`), bold and italic, inline code, fenced code blocks (with their language), lists (bulleted, numbered, nested), quotes, links (`[text](url)`), tables, horizontal and double rules (FR.2.12) and line breaks. A selection that covers **whole entries** copies those entries' **original Markdown source**; a partial selection is converted from the rendered fragment. A selection spanning several entries puts a blank line between them.
+- **Where.** Every row kind (user, assistant, system), in markdown and plain modes. Inline path chips and link chips (FR.26) copy as their text or link. Images and video previews copy as their Markdown link.
+- **No selection.** A right-click without a selection shows no menu (as today). A right-click on a link or a path chip keeps its own behaviour.
+- **Keyboard.** Ctrl+Shift+C does Copy as Markdown while the transcript has the focus and a selection exists.

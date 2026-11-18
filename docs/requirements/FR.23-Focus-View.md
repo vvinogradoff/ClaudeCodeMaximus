@@ -273,9 +273,20 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 | Existing | Amended by | Change |
 |---|---|---|
 | FR.23.10 Guidance | FR.23.24 | The guidance ends with a sentence that names `post_attention` for every decision, approval or action the session needs, and gives it precedence over a project's "ask in plain text" rule. |
+| FR.23.20 Selectable Focus text | FR.23.25 | A selection runs **across the whole card text** (paragraphs, lists, code, title, outcome), not one paragraph at a time. |
+| FR.23.14 Card contents (options, "Use recommendation"), FR.23.15 | FR.23.26 | Options are a **vertical list** of full-width buttons; the recommendation is the **last** button, marked by an accent outline, without the "Use recommendation:" prefix. |
 
 **FR.23.24 — Questions go to the Focus view, before any plain-text rule.** The FR.23.10 guidance (`Constants.Instructions.AttentionGuidance`, same gate: once per fresh top-level session) ends with:
 
 > When you need the user's decision, approval or action, post it with `mcp__cmx__post_attention` (kind `ask` with `options` and your `recommendation`, or `todo`), not only in the reply text. Report decisions you made on their behalf as `decided`. When the user answers in chat, close the item with `mcp__cmx__resolve_attention`. This takes precedence over a project's "ask in plain text" rule, which is about the interactive question picker, not the Focus view.
 
 Why: a project rule such as CLAUDE.md's "ask in plain text" was written to avoid the interactive question picker (`AskUserQuestion`). Without a stated precedence a model reads it as "every question goes in plain text" and never pins it. Naming the tool in the guidance also makes the model load its description. Test: `InstructionBlockBuilderTests` (the guidance's last sentence).
+
+**FR.23.25 — One selection across a Focus card (WPF).** (Amends FR.23.20.) Within **one card**, a mouse selection can start anywhere in its text and extend across **all of it**: the id, the title, the body (every paragraph, list item, quote, table and code block) and the outcome line (`Answered: …`). Ctrl+A with the focus in that text selects all of it; Ctrl+C and the right-click Copy copy it with paragraph breaks kept. A selection never spans two cards. The option buttons and the reply box are not part of it (the reply box keeps its own selection). A press that ends a selection still triggers no card action, and links in the body still open on a click. Applies to open, Decided and closed cards.
+
+**FR.23.26 — Option buttons (WPF).** (Amends the options and "Use recommendation" parts of FR.23.14.)
+- **Vertical.** A card's options are always one **vertical list**, one button per line, in the order given, each **as wide as the card** (left-aligned text). The text wraps only when it does not fit the card's width; the button grows in height for it. The gap between buttons is small (2 px).
+- **Recommendation last.** When the item has a recommendation it is the **last** button of the list. It shows the **recommendation text only** (no "Use recommendation:" prefix) and is marked by an **accent outline** (the accent colour of the window's Save button, 1.5 px), with the normal button background. Its tooltip says `Recommended`.
+- **Same as an option.** When the recommendation text equals an option (trimmed, case-insensitive), that option is not listed again: only the recommended button is shown, last.
+- **Behaviour unchanged.** A click on an option puts its text in the reply box; a click on the recommended button puts `Accepted your recommendation: <recommendation>` there (FR.23.14).
+- **Web.** The web client's Focus tab (FR.25) is unchanged by this requirement.
