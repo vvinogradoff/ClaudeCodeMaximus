@@ -75,3 +75,6 @@ E2E tests: `WpfPreviewWindowsToggleE2ETests`, `WpfPreviewWindowsRoutingE2ETests`
 | TC.PW.65 | A popup opened by a click in the page may take the focus; a script's popup never does; the 6th popup of a window is dropped and logged | AUTOMATED (the decision), MANUAL (real popups) | UC.PW.05 | FR.27.3 |
 | TC.PW.66 | A TIFF over 100 megapixels is refused before decoding | AUTOMATED | UC.PW.15 | FR.29.12 |
 | TC.PW.67 | Moving or resizing a pinned window saves the open-window list after 500 ms; its group's placement is untouched | AUTOMATED | UC.PW.06 | FR.29.8, FR.29.11 |
+| TC.PW.68 | The resize border on all four edges and the corners is free of page content when the window is not maximized, and gone when it is maximized | AUTOMATED (the inset), MANUAL (the cursor) | UC.PW.04 | FR.29.15 |
+| TC.PW.69 | A typed address opens on Enter; a bare host gets `https://`; `ftp://x` and `javascript:x` are refused with a message and nothing opens; Esc and losing the focus restore the page's address; typing is not overwritten by a navigation | AUTOMATED (unit, E2E) | UC.PW.05 | FR.27.10 |
+| TC.PW.70 | A file window has no header row; Source and Open in default app are title-bar icons left of the title, shown only when they apply, and work; the pane in the main window keeps its header | AUTOMATED (unit, E2E) | UC.PW.02 | FR.29.14 |
