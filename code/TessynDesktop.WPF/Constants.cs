@@ -10,6 +10,7 @@ public static partial class Constants
 		public const string DataFolderName = "TessynDesktop";
 		public const string LogsFolder = "logs";
 		public const string WebView2Folder = "webview2";
+		public const string BrowserFolder = "browser";
 		public const string ClientsFolder = "clients";
 		public const string ClientStateFileName = "wpf.json";
 		public const string LogFilePattern = "wpf-.txt";

@@ -15,6 +15,7 @@
     <sys:String x:Key="GlyphWarning">&#xE7BA;</sys:String>
     <sys:String x:Key="GlyphLink">&#xE71B;</sys:String>
     <sys:String x:Key="GlyphBack">&#xE72B;</sys:String>
+    <sys:String x:Key="GlyphForward">&#xE72A;</sys:String>
     <sys:String x:Key="GlyphEntry">&#xE8BD;</sys:String>
     <sys:String x:Key="GlyphFile">&#xE8A5;</sys:String>
     <sys:String x:Key="GlyphOpenInNew">&#xE8A7;</sys:String>
