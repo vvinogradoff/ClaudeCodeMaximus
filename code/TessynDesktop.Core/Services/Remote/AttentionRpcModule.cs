@@ -16,12 +16,14 @@ public sealed class AttentionRpcModule : IRemoteRpcModule
 	private readonly IAttentionReplyService _reply;
 	private readonly ITurnOptionsResolver _options;
 	private readonly IAttentionOverviewService? _overview;
+	private readonly ISessionModelSettings _modelSettings;
 
 	public AttentionRpcModule(
 		ISessionRegistry registry,
 		IAttentionService attention,
 		IAttentionReplyService reply,
 		ITurnOptionsResolver options,
+		ISessionModelSettings modelSettings,
 		IAttentionOverviewService? overview = null)
 	{
 		_registry  = registry;
@@ -29,6 +31,7 @@ public sealed class AttentionRpcModule : IRemoteRpcModule
 		_reply     = reply;
 		_options   = options;
 		_overview  = overview;
+		_modelSettings = modelSettings;
 	}
 
 	/// <inheritdoc />
@@ -65,8 +68,13 @@ public sealed class AttentionRpcModule : IRemoteRpcModule
 		var node    = RemoteSessionLookup.Require(_registry, TdcpParams.RequireString(@params, "nodeId"));
 		var answers = ParseAnswers(TdcpParams.Find(@params, "answers"));
 		var options = await _options.ResolveAsync(@params);
+		var result  = _reply.Reply(node, answers, options);
 
-		return _reply.Reply(node, answers, options);
+		// FR.12.35: the picks of the turn the answers started are kept on the session, as for a send.
+		if (result.TurnStarted)
+			_modelSettings.RecordPicks(node, options);
+
+		return result;
 	}
 
 	private object? Dismiss(JsonNode? @params)

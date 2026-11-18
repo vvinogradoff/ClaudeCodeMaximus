@@ -195,3 +195,38 @@ The Default profile cannot be removed (the Remove button never appears while Def
 **Note on FR.12.29.** It is correct as committed. Only the closing of its open point is new. The WPF Focus view of FR.12.29 means "the Focus column being shown" (FR.23.12).
 
 **FR.12.34 — Model catalogue refresh.** A client can ask the daemon to refresh the model catalogue (local Ollama models) (`models.refresh`).
+---
+
+## Amendments and additions (2026-11-18)
+
+### Amendments to existing requirements
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.12.4 Model persistence | FR.12.35 | The model is a setting of the session (`SessionNodeModel.ModelId`), kept from the user's pick. The directory's and the app's `SelectedModelId` are only the fallback. |
+| FR.12.12 Effort level selection | FR.12.35 | The effort is a setting of the session (`SessionNodeModel.Effort`), kept from the user's pick. `DirectoryNodeModel.SelectedEffortIndex` is not read. |
+
+### New requirements
+
+**FR.12.35 — The session's model and effort.** A session's model and effort are **its own settings**, kept on the session node, so the command bar shows what a send really uses, also after a restart. This fixes the effort silently reverting to the CLI default: since the switch to the WPF client a pick lived only in the running client, and nothing read `SelectedEffortIndex`. Use cases: [UC.ME.01](/docs/usecases/UC.ME.01-Session-Model-and-Effort.md). Test cases: [TC.ME.01](/docs/testcases/TC.ME.01-Session-Model-and-Effort.md).
+- **Storage.**
+  - `SessionNodeModel.ModelId` (existing) and `SessionNodeModel.Effort` (new) are both `string?` in `appsettings.json`; `null` means not set.
+  - `ModelId = "default"` means "no `--model` flag" and stops the fallback below.
+  - For the effort, `default` and `null` both mean no `--effort` flag.
+- **A turn's model:** the per-turn pick (`default` = no flag), else the session's `ModelId`, else the directory's `SelectedModelId`, else the app's `SelectedModelId`, else no flag.
+- **A turn's effort:** the per-turn pick, else the session's `Effort`, else no flag.
+- **One resolver.** One resolver (`ISessionModelSettings`) serves the engine turn (`turn.send`), every headless turn (scheduled, orchestrated, Telegram, web) and compaction. The caller's tier (FR.16.6) uses the same model rule.
+- **Sticky picks.**
+  - When an interactive send carries a model or effort pick that differs from what the client is shown for the session (`lastUsed`, see below), the pick is stored on the session when the send is accepted, and the settings are saved. Model ids are compared case-insensitively and stored in the catalog's form.
+  - Interactive sends are the desktop's `turn.send`, the web's `session.send` and `attention.reply`.
+  - A pick equal to what is shown changes nothing. A client that always sends its choice (the web, FR.25.24) therefore neither pins a session by accident nor resets one: a session whose model is not in the catalog is shown `default`, and a `default` sent back leaves its model as it is.
+  - Picks of a schedule (FR.14.13), `session.compact` options, Telegram turns and orchestrated turns are never stored.
+- **Other writers.** `spawn_session` with `model` and `set_session_model` set `ModelId` (FR.15.10); `create_session` sets both (FR.15.15).
+- **What the selectors show.**
+  - `session.get` and `session.headers` return in `lastUsed.modelId` and `lastUsed.effort` what a turn without a pick uses: the rules above, the model in the catalog's form (matched case-insensitively), `default` when there is no flag, and `default` for a model that isn't in the catalog. These values no longer come from the last ASSISTANT entry (tdcp-spec 10.A9).
+  - The profile is unchanged (the pin, FR.12.27).
+  - The WPF client still sends only the fields the user picked (tdcp-spec 9.8).
+- **Existing sessions.** There is no migration.
+  - A session without an `Effort` shows and runs **Default** until the user picks an effort once; that pick then stays.
+  - A session without a `ModelId` shows the directory's or the app's model, which is the model its turns already run on.
+- **Unchanged.** FR.19.8: the selectors stay disabled while a Persistent Session Process is alive, and a live process keeps the model and effort it was started with. FR.12.15: a change takes effect from the next send.

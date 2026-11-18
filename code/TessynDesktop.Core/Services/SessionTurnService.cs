@@ -32,6 +32,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly IProfileLabelService            _profileLabels;
 	private readonly IProfileResolver                _profileResolver;
 	private readonly IProfileSwitchService?          _profileSwitch;
+	private readonly ISessionModelSettings           _modelSettings;
 	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
@@ -56,7 +57,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		IProfileLabelService profileLabels,
 		IEnumerable<ITurnProgressSink>? progressSinks = null,
 		IProfileResolver? profileResolver = null,
-		IProfileSwitchService? profileSwitch = null)
+		IProfileSwitchService? profileSwitch = null,
+		ISessionModelSettings? modelSettings = null)
 	{
 		_processManager   = processManager;
 		_fileService      = fileService;
@@ -74,6 +76,7 @@ public sealed class SessionTurnService : ISessionTurnService
 		_progressSinks    = progressSinks?.ToArray() ?? [];
 		_profileResolver  = profileResolver ?? new ProfileResolver(appSettings, profileService);
 		_profileSwitch    = profileSwitch;
+		_modelSettings    = modelSettings ?? new SessionModelSettings(appSettings, modelService);
 	}
 
 	/// <summary>
@@ -212,10 +215,11 @@ public sealed class SessionTurnService : ISessionTurnService
 			_profileSwitch?.RecordTurnProfile(node, stampedProfileName);
 			var profileConfigDir = profile.ConfigDir;
 
-			// Resolve effective model for this session (FR.16.5 bug fix):
-			// per-turn choice → node.ModelId → per-directory setting → app-level setting.
-			var effectiveModelId = ResolveTurnModel(node, turnOptions);
-			var effort           = NormalizeEffort(turnOptions?.Effort);
+			// The turn's model and effort (FR.16.5, FR.12.35): the per-turn choice, else the session's own setting, else (model only)
+			// the directory's and the app's setting.
+			var turnModel        = _modelSettings.ResolveTurn(node, turnOptions);
+			var effectiveModelId = turnModel.ModelId;
+			var effort           = turnModel.Effort;
 			var modelInfo        = string.IsNullOrEmpty(effectiveModelId)
 				? null
 				: _modelService.GetCachedModels().FirstOrDefault(m => m.Id == effectiveModelId);
@@ -551,26 +555,6 @@ public sealed class SessionTurnService : ISessionTurnService
 	}
 
 	/// <summary>
-	/// Resolves the effective model ID for a session: node.ModelId → directory SelectedModelId
-	/// → app-level SelectedModelId. Returns null/empty if nothing is configured.
-	/// </summary>
-	private string? ResolveEffectiveModel(SessionNodeModel node)
-	{
-		if (!string.IsNullOrEmpty(node.ModelId))
-			return node.ModelId;
-
-		var dirModel = _appSettings.Settings.Tree.FirstOrDefault(d =>
-			string.Equals(d.Path, node.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
-
-		if (!string.IsNullOrEmpty(dirModel?.SelectedModelId))
-			return dirModel.SelectedModelId;
-
-		return string.IsNullOrEmpty(_appSettings.Settings.SelectedModelId)
-			? null
-			: _appSettings.Settings.SelectedModelId;
-	}
-
-	/// <summary>
 	/// Resolves the profile display name for a session: the pinned/inherited
 	/// <see cref="SessionNodeModel.ProfileName"/> takes precedence (orchestrated children inherit
 	/// their supervisor's profile at spawn — ISSUE-002); otherwise the last user entry in the
@@ -588,23 +572,4 @@ public sealed class SessionTurnService : ISessionTurnService
 
 		return lastUserWithProfile?.ProfileName;
 	}
-
-	/// <summary>
-	/// The model of one turn: the per-turn choice (<c>"default"</c> = no --model flag), else
-	/// <see cref="ResolveEffectiveModel"/>.
-	/// </summary>
-	private string? ResolveTurnModel(SessionNodeModel node, TurnOptionsModel? options)
-	{
-		var requested = options?.ModelId;
-		if (string.IsNullOrEmpty(requested))
-			return ResolveEffectiveModel(node);
-
-		return string.Equals(requested, Constants.Remote.DefaultOptionId, StringComparison.OrdinalIgnoreCase) ? null : requested;
-	}
-
-	/// <summary>The --effort value for the turn; null (no flag) for a blank or "default" effort.</summary>
-	private static string? NormalizeEffort(string? effort) =>
-		string.IsNullOrWhiteSpace(effort) || string.Equals(effort, Constants.Remote.DefaultOptionId, StringComparison.OrdinalIgnoreCase)
-			? null
-			: effort;
 }

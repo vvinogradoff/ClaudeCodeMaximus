@@ -2,7 +2,7 @@
 
 Related requirement: [FR.15 — Agent Orchestration](/docs/requirements/FR.15-Agent-Orchestration.md#fr15--agent-orchestration-persistent-worker-sessions)
 
-This file currently covers the Mailbox Delivery coalescing added by ISSUE.012 and the session listing (FR.15.13); the rest of FR.15 predates the use-case convention.
+This file currently covers the Mailbox Delivery coalescing added by ISSUE.012, the session listing (FR.15.13) and the creation of a top-level session by a session (FR.15.15); the rest of FR.15 predates the use-case convention.
 
 ## Actors
 
@@ -10,6 +10,7 @@ This file currently covers the Mailbox Delivery coalescing added by ISSUE.012 an
 - **Worker Session** — a session doing that work; its result is delivered back to the supervisor.
 - **Scheduler** — `SchedulerService`, which fires Mailbox Deliveries (FR.15.3) as scheduled turns.
 - **Any session** — a session that looks up other sessions with `list_sessions`.
+- **User** — the person who asks a session to open a new session (UC.15.4).
 
 ## Preconditions
 
@@ -52,6 +53,25 @@ This file currently covers the Mailbox Delivery coalescing added by ISSUE.012 an
 4. With `scope=all` it gets the matches of every project, grouped by directory.
 
 **Outcome:** the target's short id in one or two small calls.
+
+---
+
+## UC.15.4 — A session creates a top-level session for the user
+
+**Trigger:** the user asks a session to open a new session, for example "create an Opus session named X with Max effort, streaming and sound on, right under session Y".
+
+1. The session finds Y with `list_sessions` (`query=` part of its name).
+2. It calls `create_session` with `name`, `after=<Y's id>` and the settings the user named (`model`, `effort`, `profile`, `streaming`, `sound`), and optionally a first `prompt`.
+3. Tessyn creates X right after Y, in Y's directory or group, with those settings, and answers with X's id, place and settings.
+4. The tree shows X right under Y at once. The user's selection doesn't move.
+5. When the user opens X, the command bar shows its model and effort, and the Streaming and Sound toggles show its settings. X is not marked as anyone's worker.
+
+**Outcome:** a top-level session that belongs to the user, set up as asked, without creating it by hand. With a first prompt, its first turn has already started; its result stays in X.
+
+**Alternatives:**
+- With no `after`, `workingDir` or `group`, X goes right after the calling session.
+- With `workingDir` and/or `group`, X goes last in that directory or group; a missing group is created.
+- A worker calls the tool, the profile is logged out, the model is above the caller's tier, or the hourly cap is reached: nothing is created and the tool answers with the reason.
 
 ---
 

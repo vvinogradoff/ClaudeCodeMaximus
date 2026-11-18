@@ -93,6 +93,9 @@ public sealed class SessionRpcModuleTests : IDisposable
 		_env.Attention.Summary = new AttentionSummaryModel { OpenCount = 1, TopKind = AttentionKind.Ask, AllOpenCount = 2, AllOpenTopKind = AttentionKind.Ask };
 		_env.Files.RaiseRewritten(Node.FileName);
 		Node.IsStreamingMode = true;
+		// FR.12.35: lastUsed reports the session's own model and effort (what a turn without a pick uses), not the transcript's.
+		Node.ModelId = "claude-opus-5-5";
+		Node.Effort  = "high";
 
 		var json = (await Call("session.get"))!;
 
@@ -525,5 +528,104 @@ public sealed class SessionRpcModuleTests : IDisposable
 	{
 		await InvalidParams("session.setStreaming");
 		await InvalidParams("session.setStreaming", "\"enabled\":1");
+	}
+
+	// ── FR.12.35 — the session's model and effort (TC.ME.02, TC.ME.03) ─────────────
+
+	[Fact]
+	public async Task SessionGet_LastUsed_ReportsSessionModelAndEffort_NotTheTranscript()
+	{
+		_env.Files.Set(Node.FileName, [User("hi", 1, "Work"), Assistant("yo", 2, "claude-sonnet-5-5", "low")]);
+		_env.Files.RaiseRewritten(Node.FileName);
+		Node.ModelId = "claude-opus-5-5";
+		Node.Effort  = "max";
+
+		var lastUsed = (await Call("session.get"))!["lastUsed"]!;
+
+		Assert.Equal("claude-opus-5-5", (string?)lastUsed["modelId"]);
+		Assert.Equal("max", (string?)lastUsed["effort"]);
+		Assert.Equal("p1", (string?)lastUsed["profileId"]);   // the profile still comes from the history (no pin)
+	}
+
+	[Fact]
+	public async Task SessionGet_LastUsed_NoOwnModel_DirectoryOrAppModel()
+	{
+		_env.Files.Set(Node.FileName, [User("hi", 1, "Work"), Assistant("yo", 2, "claude-sonnet-5-5", "low")]);
+		_env.Files.RaiseRewritten(Node.FileName);
+
+		var none = (await Call("session.get"))!["lastUsed"]!;
+		Assert.Equal(("default", "default"), ((string?)none["modelId"], (string?)none["effort"]));
+
+		_env.Settings.Settings.SelectedModelId = "claude-sonnet-5-5";
+		Assert.Equal("claude-sonnet-5-5", (string?)(await Call("session.get"))!["lastUsed"]!["modelId"]);
+
+		_env.Directory.SelectedModelId = "claude-opus-5-5";
+		var dir = (await Call("session.get"))!["lastUsed"]!;
+		Assert.Equal(("claude-opus-5-5", "default"), ((string?)dir["modelId"], (string?)dir["effort"]));
+	}
+
+	[Fact]
+	public async Task SessionGet_LastUsed_ModelNotInCatalog_Default()
+	{
+		Node.ModelId = "claude-retired-1";
+		Node.Effort  = "turbo";
+
+		var lastUsed = (await Call("session.get"))!["lastUsed"]!;
+
+		Assert.Equal(("default", "default"), ((string?)lastUsed["modelId"], (string?)lastUsed["effort"]));
+	}
+
+	[Fact]
+	public async Task SessionHeaders_LastUsed_SameRule()
+	{
+		_env.Files.Set(Node.FileName, [User("hi", 1, "Work"), Assistant("yo", 2, "claude-sonnet-5-5", "low")]);
+		_env.Files.RaiseRewritten(Node.FileName);
+		Node.ModelId = "claude-opus-5-5";
+		Node.Effort  = "high";
+
+		// Loopback only, so it is invoked without the remote-callable check.
+		var result   = (SessionHeadersResult)(await CallRawAsync(_env.Module, "session.headers", $"{{\"nodeIds\":[\"{Node.NodeId}\"]}}"))!;
+		var lastUsed = Assert.Single(result.Headers).LastUsed;
+
+		Assert.Equal(("claude-opus-5-5", "high"), (lastUsed.ModelId, lastUsed.Effort));
+	}
+
+	[Fact]
+	public async Task SessionSend_WithPick_SessionKeepsIt()
+	{
+		await Call("session.send", "\"text\":\"a\",\"modelId\":\"claude-sonnet-5-5\",\"effort\":\"max\"");
+
+		Assert.Equal(("claude-sonnet-5-5", "max"), (Node.ModelId, Node.Effort));
+		var lastUsed = (await Call("session.get"))!["lastUsed"]!;
+		Assert.Equal(("claude-sonnet-5-5", "max"), ((string?)lastUsed["modelId"], (string?)lastUsed["effort"]));
+	}
+
+	[Fact]
+	public async Task SessionSend_DefaultForAnUnlistedModel_LeavesTheSessionsModel()
+	{
+		Node.ModelId = "claude-retired-1";   // shown as "default": the web sends that back with every message
+
+		await Call("session.send", "\"text\":\"a\",\"modelId\":\"default\"");
+
+		Assert.Equal("claude-retired-1", Node.ModelId);
+	}
+
+	[Fact]
+	public async Task SessionGet_LastUsed_ModelInAnotherCase_ShownInCatalogForm()
+	{
+		Node.ModelId = "CLAUDE-OPUS-5-5";
+
+		Assert.Equal("claude-opus-5-5", (string?)(await Call("session.get"))!["lastUsed"]!["modelId"]);
+	}
+
+	[Fact]
+	public async Task SessionSend_PickEqualToTheSessionsValue_PinsNothing()
+	{
+		_env.Settings.Settings.SelectedModelId = "claude-opus-5-5";
+
+		await Call("session.send", "\"text\":\"a\",\"modelId\":\"claude-opus-5-5\",\"effort\":\"default\"");
+
+		Assert.Null(Node.ModelId);
+		Assert.Null(Node.Effort);
 	}
 }

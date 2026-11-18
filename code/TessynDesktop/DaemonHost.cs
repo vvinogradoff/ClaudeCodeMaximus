@@ -435,6 +435,8 @@ public sealed class DaemonHost
 		// P1.I: the interactive turn stream. The publisher and the send service hold per-turn / per-node state, so they are singletons.
 		services.AddSingleton<ITurnProgressSink, TurnEventPublisher>();
 		services.AddSingleton<ITurnSendService, TurnSendService>();
+		// FR.12.35: the session's model and effort (stateless): every turn path, compaction, lastUsed, the caller's tier, sticky picks.
+		services.AddTransient<ISessionModelSettings, SessionModelSettings>();
 		services.AddTransient<ITurnSettingsResolver, TurnSettingsResolver>();
 		services.AddTransient<IRemoteRpcModule, TurnRpcModule>();
 		// Package J2: the per-session auth error (singleton: the engine writes it, the state builder and the publisher read it), drafts, autocomplete.

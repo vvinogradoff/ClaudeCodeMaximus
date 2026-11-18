@@ -508,7 +508,7 @@ public sealed class InstructionBlockBuilderTests
         Assert.Contains("Post the ask once with `post_attention` (`notify: true` when the user must act soon)", supervisor);
         Assert.Contains("don't restate it in later delivery", supervisor);
         Assert.DoesNotContain("Call `notify_user` once", supervisor);
-        Assert.Contains("Do not call `notify_user` or `post_attention`", worker);
+        Assert.Contains("Do not call `notify_user`, `post_attention` or `create_session`", worker);
     }
 
     // ── FR.24.6 — Session Tag guidance (TC.TG.14, TC.TG.16) ─────────────────────────────────

@@ -157,6 +157,8 @@ public sealed class DaemonHarness : IDisposable
 		s.AddSingleton<ISessionSendService, SessionSendService>();
 		s.AddSingleton<IRemoteUsageService, RemoteUsageService>();
 		s.AddTransient<ITurnOptionsResolver, TurnOptionsResolver>();
+		// FR.12.35, as in DaemonHost: the session's model and effort and the sticky picks of session.send and attention.reply.
+		s.AddTransient<ISessionModelSettings, SessionModelSettings>();
 		s.AddTransient<IAttentionReplyService, AttentionReplyService>();
 		s.AddTransient<IRemoteRpcModule, SessionRpcModule>();
 		s.AddTransient<IRemoteRpcModule, AttentionRpcModule>();

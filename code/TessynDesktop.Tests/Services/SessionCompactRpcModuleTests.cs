@@ -392,4 +392,33 @@ public sealed class SessionCompactRpcModuleTests : IDisposable
 		Assert.True(response["result"]!["accepted"]!.GetValue<bool>());
 		Assert.Equal("disk gone", Assert.Single(_completed).ErrorText);
 	}
+
+	// ── FR.12.35 — the session's model and effort (TC.ME.02) ─────────────────────
+
+	[Fact]
+	public async Task NoOptions_UsesTheSessionsOwnModelAndEffort()
+	{
+		_settings.Settings.SelectedModelId = "app-model";
+		_node.ModelId = "node-model";
+		_node.Effort  = "max";
+
+		await Call(_node.NodeId);
+		await WaitForCompletedNotification();
+
+		Assert.Equal("node-model", _compaction.Options!.ModelId);
+		Assert.Equal("max", _compaction.Options.Effort);
+	}
+
+	[Fact]
+	public async Task ExplicitOptions_AreNotKeptOnTheSession()
+	{
+		_models.Models.Add(new ClaudeModelInfo("claude-opus-x", "opus", "Opus X"));
+
+		await Call(_node.NodeId, ("modelId", "claude-opus-x"), ("effort", "high"));
+		await WaitForCompletedNotification();
+
+		Assert.Equal("high", _compaction.Options!.Effort);
+		Assert.Null(_node.ModelId);
+		Assert.Null(_node.Effort);
+	}
 }

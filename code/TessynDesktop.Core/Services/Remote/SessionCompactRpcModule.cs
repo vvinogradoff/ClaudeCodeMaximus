@@ -25,6 +25,7 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 	private readonly IClaudeProfileService     _profiles;
 	private readonly IProfileResolver          _profileResolver;
 	private readonly ITurnOptionsResolver      _optionsResolver;
+	private readonly ISessionModelSettings     _modelSettings;
 
 	public SessionCompactRpcModule(
 		ISessionRegistry registry,
@@ -35,7 +36,8 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		IClaudeModelService models,
 		IClaudeProfileService profiles,
 		ITurnOptionsResolver optionsResolver,
-		IProfileResolver? profileResolver = null)
+		IProfileResolver? profileResolver = null,
+		ISessionModelSettings? modelSettings = null)
 	{
 		_registry        = registry;
 		_compaction      = compaction;
@@ -46,6 +48,7 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		_profiles        = profiles;
 		_profileResolver = profileResolver ?? new ProfileResolver(appSettings, profiles);
 		_optionsResolver = optionsResolver;
+		_modelSettings   = modelSettings ?? new SessionModelSettings(appSettings, models);
 	}
 
 	/// <inheritdoc />
@@ -67,7 +70,7 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		return new SessionCompactResult(true, queued);
 	}
 
-	/// <summary>Turns the validated per-turn options into run options like a headless turn: absent model = node, directory, app setting; "default" = no flag; absent profile = the session's own.</summary>
+	/// <summary>Turns the validated per-turn options into run options like a headless turn: absent model or effort = the session's (FR.12.35); "default" = no flag; absent profile = the session's own.</summary>
 	private SessionCompactionOptionsModel ResolveOptions(SessionNodeModel node, TurnOptionsModel? requested)
 	{
 		// May read the session file, so it is resolved before the settings lock is taken.
@@ -78,34 +81,14 @@ public sealed class SessionCompactRpcModule : IRemoteRpcModule
 		if (!profile.IsResolved)
 			throw new TdcpException(profile.Error!);
 
-		string? effectiveModelId;
 		var profileConfigDir = profile.ConfigDir;
-		lock (_appSettings.SyncRoot)
-		{
-			effectiveModelId = requested?.ModelId == null ? ResolveEffectiveModel(node)
-				: requested.ModelId == Constants.Remote.DefaultOptionId ? null : requested.ModelId;
-		}
+		var turn             = _modelSettings.ResolveTurn(node, requested);
 
-		var modelInfo = string.IsNullOrEmpty(effectiveModelId)
+		var modelInfo = string.IsNullOrEmpty(turn.ModelId)
 			? null
-			: _models.GetCachedModels().FirstOrDefault(m => m.Id == effectiveModelId);
+			: _models.GetCachedModels().FirstOrDefault(m => m.Id == turn.ModelId);
 
-		var effort = requested?.Effort;
-		var effectiveEffort = string.IsNullOrEmpty(effort) || effort == Constants.Remote.DefaultOptionId ? null : effort;
-		return new SessionCompactionOptionsModel(effectiveModelId, effectiveEffort, profileConfigDir, modelInfo);
-	}
-
-	private string? ResolveEffectiveModel(SessionNodeModel node)
-	{
-		if (!string.IsNullOrEmpty(node.ModelId))
-			return node.ModelId;
-
-		var directory = _appSettings.Settings.Tree.FirstOrDefault(d =>
-			string.Equals(d.Path, node.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
-		if (!string.IsNullOrEmpty(directory?.SelectedModelId))
-			return directory.SelectedModelId;
-
-		return string.IsNullOrEmpty(_appSettings.Settings.SelectedModelId) ? null : _appSettings.Settings.SelectedModelId;
+		return new SessionCompactionOptionsModel(turn.ModelId, turn.Effort, profileConfigDir, modelInfo);
 	}
 
 	private async Task RunAsync(SessionNodeModel node, SessionCompactionOptionsModel options)

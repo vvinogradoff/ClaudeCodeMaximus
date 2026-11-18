@@ -30,6 +30,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 	private readonly ISessionTurnService _turns;
 	private readonly IClaudeStreamingSessionManager _streaming;
 	private readonly ITurnEngine? _engine;
+	private readonly ISessionModelSettings _modelSettings;
 
 	public SessionRpcModule(
 		ISessionRegistry registry,
@@ -45,7 +46,8 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		ITurnOptionsResolver options,
 		ISessionTurnService turns,
 		IClaudeStreamingSessionManager streaming,
-		ITurnEngine? engine = null)
+		ITurnEngine? engine = null,
+		ISessionModelSettings? modelSettings = null)
 	{
 		_registry     = registry;
 		_appSettings  = appSettings;
@@ -61,6 +63,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		_turns        = turns;
 		_streaming    = streaming;
 		_engine       = engine;
+		_modelSettings = modelSettings ?? new SessionModelSettings(appSettings, models);
 	}
 
 	/// <inheritdoc />
@@ -101,7 +104,8 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 
 		var location = _registry.GetSessionLocation(node);
 		var epoch    = _epochs.GetEpoch(node.FileName);
-		var content  = ReadContentHeader(node.FileName, profiles, _models.GetCachedModels(), await _labels.GetDefaultLabelAsync());
+		var models   = _models.GetCachedModels();
+		var content  = ReadContentHeader(node.FileName, profiles, models, await _labels.GetDefaultLabelAsync());
 
 		return new SessionDetailDto(
 			node.NodeId,
@@ -113,7 +117,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 			_stateBuilder.Build(node),
 			_tags.GetTags(node.NodeId, name).Select(tag => tag.ToDto()).ToList(),
 			_attention.GetSummary(node.NodeId).ToDto(),
-			ApplyPin(content.LastUsed, node, profiles),
+			ApplySessionModelSettings(ApplyPin(content.LastUsed, node, profiles), node),
 			isStreamingMode,
 			content.EntryCount,
 			epoch,
@@ -217,12 +221,27 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 				content.Seq ?? content.EntryCount,
 				content.FirstTimestamp,
 				content.LastTimestamp,
-				ApplyPin(content.LastUsed, node, profiles),
+				ApplySessionModelSettings(ApplyPin(content.LastUsed, node, profiles), node),
 				content.ContentVersion,
 				content.FileLength));
 		}
 
 		return new SessionHeadersResult(headers, missing);
+	}
+
+	/// <summary>
+	/// FR.12.35: the model and effort a client shows as a session's choice are the session's own settings, what a turn without a pick uses, not the
+	/// values the last ASSISTANT entry recorded (a pick lived only in the client before, so the recorded value could differ from what ran). A model
+	/// that is not in the catalog shows as "default", as the recorded one did; sticky picks compare with this same projection.
+	/// </summary>
+	private LastUsedSettingsDto ApplySessionModelSettings(LastUsedSettingsDto lastUsed, SessionNodeModel node)
+	{
+		var shown = _modelSettings.ResolveShown(node);
+		return lastUsed with
+		{
+			ModelId = shown.ModelId ?? Constants.Remote.DefaultOptionId,
+			Effort  = shown.Effort ?? Constants.Remote.DefaultOptionId,
+		};
 	}
 
 	/// <summary>
@@ -432,6 +451,9 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 
 		var options = await _options.ResolveAsync(@params);
 		var queued  = _send.Send(node, text, options);
+
+		// FR.12.35: a pick the web sends that differs from the session's setting is kept on the session.
+		_modelSettings.RecordPicks(node, options);
 
 		return new SessionSendResult(Accepted: true, Queued: queued);
 	}

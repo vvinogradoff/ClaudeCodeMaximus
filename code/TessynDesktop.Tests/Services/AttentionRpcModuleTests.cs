@@ -21,7 +21,7 @@ public sealed class AttentionRpcModuleTests : IDisposable
 	public AttentionRpcModuleTests()
 	{
 		_env.Models.Models = [new ClaudeModelInfo("claude-opus-5-5", "opus", "Opus 5.5")];
-		_module = new AttentionRpcModule(_env.Registry, _attention.Service, new AttentionReplyService(_attention.Service, _send), _env.Options);
+		_module = new AttentionRpcModule(_env.Registry, _attention.Service, new AttentionReplyService(_attention.Service, _send), _env.Options, new SessionModelSettings(_env.Settings, _env.Models));
 	}
 
 	public void Dispose()
@@ -254,5 +254,25 @@ public sealed class AttentionRpcModuleTests : IDisposable
 	public async Task Dismiss_RequiresAnItemId()
 	{
 		await Assert.ThrowsAsync<TdcpInvalidParamsException>(() => Call("attention.dismiss"));
+	}
+
+	// ── FR.12.35 — sticky picks (TC.ME.02) ────────────────────────────────────────
+
+	[Fact]
+	public async Task AttentionReply_WithPick_SessionKeepsIt()
+	{
+		var ask = Post("Which way?");
+
+		await Call("attention.reply", $"\"answers\":[{{\"itemId\":\"{ask.Id}\",\"text\":\"left\"}}],\"modelId\":\"claude-opus-5-5\",\"effort\":\"max\"");
+
+		Assert.Equal(("claude-opus-5-5", "max"), (Node.ModelId, Node.Effort));
+	}
+
+	[Fact]
+	public async Task AttentionReply_WithoutATurn_KeepsNoPick()
+	{
+		await Call("attention.reply", "\"answers\":[{\"itemId\":\"A99\",\"text\":\"left\"}],\"effort\":\"max\"");
+
+		Assert.Null(Node.Effort);
 	}
 }

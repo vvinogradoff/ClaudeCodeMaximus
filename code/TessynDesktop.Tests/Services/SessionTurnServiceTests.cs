@@ -143,6 +143,7 @@ internal sealed class FakeRegistryForTurnService : ISessionRegistry
 	public bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group) => throw new NotImplementedException();
 	public void RenameGroup(GroupNodeModel group, string newName) => throw new NotImplementedException();
 	public SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name) => throw new NotImplementedException();
+	public SessionPlacementModel? CreateTopLevelSession(NewSessionPlacementModel placement, string name, NewSessionSettingsModel settings) => throw new NotImplementedException();
 	public SessionNodeModel AddSession(DirectoryNodeModel parent, string name) => throw new NotImplementedException();
 	public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name) => throw new NotImplementedException();
 	public SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId) => throw new NotImplementedException();
@@ -1119,5 +1120,47 @@ public sealed class SessionTurnServiceTests : IDisposable
 			Assert.True(DateTime.UtcNow < deadline, "condition not reached in time");
 			await Task.Delay(5);
 		}
+	}
+
+	// ── FR.12.35 — the session's model and effort on a headless turn (TC.ME.02) ──
+
+	[Fact]
+	public async Task HeadlessTurn_NoPick_RunsWithSessionModelAndEffort()
+	{
+		EmitOneAnswer();
+		var node = MakeNode();
+		node.ModelId = "claude-sonnet-5-5";
+		node.Effort  = "max";
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Scheduled);
+
+		Assert.Equal(("claude-sonnet-5-5", "max"), (_processManager.Spawns[0].model, _processManager.Spawns[0].effort));
+		Assert.Equal(("claude-sonnet-5-5", "max"), (FirstAssistant().modelId, FirstAssistant().effort));
+	}
+
+	[Fact]
+	public async Task HeadlessTurn_SessionDefaultModel_NoFlagDespiteAnAppModel()
+	{
+		EmitOneAnswer();
+		_appSettings.Settings.SelectedModelId = "claude-opus-5-5";
+		var node = MakeNode();
+		node.ModelId = "default";
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Orchestrated);
+
+		Assert.Null(_processManager.Spawns[0].model);
+	}
+
+	[Fact]
+	public async Task HeadlessTurn_EffortPick_WinsOverTheSessionsEffort()
+	{
+		EmitOneAnswer();
+		var node = MakeNode();
+		node.Effort = "max";
+
+		await _sut.RunTurnAsync(node, "hello", TurnSource.Web, new TurnOptionsModel(Effort: "low"));
+
+		Assert.Equal("low", _processManager.Spawns[0].effort);
+		Assert.Equal("max", node.Effort);   // a headless turn's pick is never kept
 	}
 }

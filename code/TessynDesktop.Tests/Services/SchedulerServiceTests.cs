@@ -83,6 +83,7 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
     public bool TryDeleteGroupFromGroup(GroupNodeModel parent, GroupNodeModel group) => false;
     public void RenameGroup(GroupNodeModel group, string newName) { }
     public SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name) => throw new NotImplementedException();
+    public SessionPlacementModel? CreateTopLevelSession(NewSessionPlacementModel placement, string name, NewSessionSettingsModel settings) => throw new NotImplementedException();
     public SessionNodeModel AddSession(DirectoryNodeModel parent, string name) => throw new NotImplementedException();
     public SessionNodeModel AddSessionToGroup(GroupNodeModel parent, string name) => throw new NotImplementedException();
     public SessionNodeModel ImportSession(DirectoryNodeModel parent, string name, string fileName, string claudeSessionId) => throw new NotImplementedException();

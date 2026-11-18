@@ -23,7 +23,7 @@ namespace TessynDesktop.Services;
 /// before shipping (see docs/shell_commands.md).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class AgentMcpServer : IAgentMcpServer
+public sealed partial class AgentMcpServer : IAgentMcpServer
 {
 	private static readonly ILogger _log = Log.ForContext<AgentMcpServer>();
 
@@ -44,6 +44,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 	private readonly IFocusRefResolver?        _refs;
 	private readonly IProfileResolver?         _profiles;
 	private readonly IProfileSwitchService?    _profileSwitch;
+	private readonly ISessionModelSettings     _modelSettings;
+	private readonly TimeProvider              _clock;
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
 	private readonly SessionTagSearchPageBuilder _tagSearchBuilder   = new();
@@ -80,7 +82,9 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		DiagnosticsToolHandler? diagnostics = null,
 		IFocusRefResolver? refResolver = null,
 		IProfileResolver? profiles = null,
-		IProfileSwitchService? profileSwitch = null)
+		IProfileSwitchService? profileSwitch = null,
+		ISessionModelSettings? modelSettings = null,
+		TimeProvider? clock = null)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -100,6 +104,8 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		_refs           = refResolver;
 		_profiles       = profiles;
 		_profileSwitch  = profileSwitch;
+		_modelSettings  = modelSettings ?? new SessionModelSettings(appSettings, modelService);
+		_clock          = clock ?? TimeProvider.System;
 	}
 
 	public void Start()
@@ -208,21 +214,31 @@ public sealed class AgentMcpServer : IAgentMcpServer
 		if (!string.IsNullOrEmpty(child.ProfileName) || !string.IsNullOrEmpty(child.ProfileId))
 			return; // already pinned
 
-		var recordedName = _turnService.Value.ResolveProfileName(supervisor);
-		if (string.IsNullOrEmpty(recordedName) && string.IsNullOrEmpty(supervisor.ProfileId))
-			return; // the supervisor is on Default without any record: the child is unpinned too
+		var pin = InheritedProfilePin(supervisor);
+		if (pin.ProfileId != null)
+			child.ProfileId = pin.ProfileId;
+		if (pin.ProfileName != null)
+			child.ProfileName = pin.ProfileName;
+	}
 
-		// ISSUE.013: the child is pinned by ProfileId, so a later rename of the profile does not re-route it to Default.
-		var profile = _profiles?.Resolve(supervisor, recordedName);
+	/// <summary>A profile pin for a new session: the <see cref="SessionNodeModel.ProfileId"/> and display-name record it starts with (null = none).</summary>
+	private sealed record ProfilePin(string? ProfileId, string? ProfileName);
+
+	/// <summary>
+	/// The pin a session created by <paramref name="creator"/> inherits (ISSUE-002, ISSUE.013): the creator's resolved profile by id, so a later rename
+	/// does not re-route it to Default. No pin when the creator is on Default without any record.
+	/// </summary>
+	private ProfilePin InheritedProfilePin(SessionNodeModel creator)
+	{
+		var recordedName = _turnService.Value.ResolveProfileName(creator);
+		if (string.IsNullOrEmpty(recordedName) && string.IsNullOrEmpty(creator.ProfileId))
+			return new ProfilePin(null, null);
+
+		var profile = _profiles?.Resolve(creator, recordedName);
 		if (profile is { IsResolved: true })
-		{
-			child.ProfileId   = profile.ProfileId;
-			child.ProfileName = profile.IsDefault ? recordedName : profile.DisplayName;
-			return;
-		}
+			return new ProfilePin(profile.ProfileId, profile.IsDefault ? recordedName : profile.DisplayName);
 
-		if (!string.IsNullOrEmpty(recordedName))
-			child.ProfileName = recordedName;
+		return new ProfilePin(null, string.IsNullOrEmpty(recordedName) ? null : recordedName);
 	}
 
 	/// <summary>
@@ -404,6 +420,9 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			BuildToolDef("spawn_session",
 				"Create a new persistent session node and optionally run the first turn. Model is tier-enforced (FR.16).",
 				SpawnSessionSchema()),
+			BuildToolDef(Constants.CreateSession.ToolName,
+				Constants.CreateSession.ToolDescription,
+				CreateSessionSchema()),
 			BuildToolDef("send_to_session",
 				"Resume an existing session and run a turn on the profile it is pinned to (the result states it as [profile=<name>]). A target whose pinned profile is removed or logged out returns an error naming the profile; migrate=true (only for your own descendants) first moves it to your profile. Use mode=async to not block. Supports an optional markdown outputFormat hint.",
 				SendToSessionSchema()),
@@ -475,6 +494,7 @@ public sealed class AgentMcpServer : IAgentMcpServer
 			"cancel_schedule"      => CancelSchedule(arguments),
 			"list_sessions"        => ListSessions(arguments, callerNode),
 			"spawn_session"        => await SpawnSessionAsync(arguments, callerNode),
+			Constants.CreateSession.ToolName => await CreateSessionAsync(arguments, callerNode),
 			"send_to_session"      => await SendToSessionAsync(arguments, callerNode),
 			"read_session"         => await ReadSessionAsync(arguments),
 			"stop_session"         => StopSession(arguments),
@@ -1658,34 +1678,31 @@ public sealed class AgentMcpServer : IAgentMcpServer
 
 	// ── Helpers: tier enforcement + output shaping ────────────────────────────
 
-	/// <summary>Resolves the caller's effective model for tier comparison (FR.16.4).</summary>
-	private string? GetCallerEffectiveModel(SessionNodeModel callerNode)
-	{
-		if (!string.IsNullOrEmpty(callerNode.ModelId))
-			return callerNode.ModelId;
-
-		var dirModel = _appSettings.Settings.Tree.FirstOrDefault(d =>
-			string.Equals(d.Path, callerNode.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
-
-		return !string.IsNullOrEmpty(dirModel?.SelectedModelId)
-			? dirModel.SelectedModelId
-			: _appSettings.Settings.SelectedModelId;
-	}
+	/// <summary>Resolves the caller's effective model for tier comparison (FR.16.4, FR.16.6): the session's model rule of FR.12.35 without a pick.</summary>
+	private string? GetCallerEffectiveModel(SessionNodeModel callerNode) =>
+		_modelSettings.ResolveSession(callerNode).ModelId;
 
 	/// <summary>
-	/// Throws <see cref="McpToolException"/> when the caller's tier is lower than the requested model's tier.
+	/// Throws <see cref="McpToolException"/> when the caller's tier is lower than the requested model's tier. <paramref name="violationFormat"/>
+	/// words the refusal (args: caller tier, model tier, caller model, requested model); without it the worker wording of FR.16.2 is used.
 	/// </summary>
-	private void EnforceModelTier(SessionNodeModel callerNode, string requestedModel)
+	private void EnforceModelTier(SessionNodeModel callerNode, string requestedModel, string? violationFormat = null)
 	{
 		var callerModel = GetCallerEffectiveModel(callerNode);
 		var callerTier  = ModelTierService.GetTier(callerModel);
 		var targetTier  = ModelTierService.GetTier(requestedModel);
 
-		if (callerTier < targetTier)
-			throw new McpToolException(
-				$"Tier violation: a {ModelTierService.TierName(callerTier)} session cannot spawn " +
-				$"a {ModelTierService.TierName(targetTier)} worker. " +
-				$"Caller model: '{callerModel ?? "default"}', requested: '{requestedModel}'.");
+		if (callerTier >= targetTier)
+			return;
+
+		if (violationFormat != null)
+			throw new McpToolException(string.Format(violationFormat,
+				ModelTierService.TierName(callerTier), ModelTierService.TierName(targetTier), callerModel ?? Constants.Remote.DefaultOptionId, requestedModel));
+
+		throw new McpToolException(
+			$"Tier violation: a {ModelTierService.TierName(callerTier)} session cannot spawn " +
+			$"a {ModelTierService.TierName(targetTier)} worker. " +
+			$"Caller model: '{callerModel ?? Constants.Remote.DefaultOptionId}', requested: '{requestedModel}'.");
 	}
 
 	/// <summary>
@@ -1880,6 +1897,25 @@ public sealed class AgentMcpServer : IAgentMcpServer
 				"group":        { "type": "string", "description": "Optional group name to place the session under." },
 				"model":        { "type": "string", "description": "Model ID for the new session (tier-enforced, FR.16)." },
 				"outputFormat": { "type": "string", "description": "Optional markdown/free-text description of the desired response shape for the first prompt (e.g. a section outline). Advisory guidance appended to the prompt — not validated. For a large or structured artifact, tell the worker to write a file and return its path instead of inlining it (FR.15.7)." }
+			},
+			"required": ["name"]
+		}
+		""")!;
+
+	private static JsonNode CreateSessionSchema() => JsonNode.Parse("""
+		{
+			"type": "object",
+			"properties": {
+				"name":       { "type": "string", "description": "Display name of the new session." },
+				"after":      { "type": "string", "description": "Session id (full NodeId or a unique prefix of at least 6 characters, as list_sessions prints it): the new session goes right after that session in its directory or group (a worker stands for its top-level supervisor). Not together with workingDir or group." },
+				"workingDir": { "type": "string", "description": "A registered project directory in the Tessyn tree, or a path below one: the new session goes last in that directory. Not together with after." },
+				"group":      { "type": "string", "description": "A group in that directory (in your directory without workingDir), created when missing: the new session goes last in it. Not together with after." },
+				"model":      { "type": "string", "description": "A model id of the catalog, or 'default' (no --model flag). Tier-enforced (FR.16). Omitted: the directory's or app's model." },
+				"effort":     { "type": "string", "enum": ["default", "max", "high", "medium", "low"], "description": "The session's effort. Omitted: none." },
+				"profile":    { "type": "string", "description": "'default', or a profile's id or name as list_sessions prints it (profile=<name>). Omitted: your profile." },
+				"streaming":  { "type": "boolean", "description": "Streaming Session Mode. Default false." },
+				"sound":      { "type": "boolean", "description": "Play a sound when the session posts a new Focus item. Default true." },
+				"prompt":     { "type": "string", "description": "Optional first prompt, started in the background; its result stays in the new session." }
 			},
 			"required": ["name"]
 		}
@@ -2125,4 +2161,3 @@ public sealed class AgentMcpServer : IAgentMcpServer
 // ── Private exceptions ────────────────────────────────────────────────────────
 
 file sealed class McpMethodNotFoundException(string method) : Exception(method);
-file sealed class McpToolException(string message) : Exception(message);

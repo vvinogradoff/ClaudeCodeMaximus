@@ -19,6 +19,7 @@ public sealed class TurnRpcModule : IRemoteRpcModule
 	private readonly ITurnEngine _engine;
 	private readonly ISessionTurnService _turns;
 	private readonly IClaudeStreamingSessionManager _streaming;
+	private readonly ISessionModelSettings _modelSettings;
 
 	public TurnRpcModule(
 		ISessionRegistry registry,
@@ -27,7 +28,8 @@ public sealed class TurnRpcModule : IRemoteRpcModule
 		ITurnSendService send,
 		ITurnEngine engine,
 		ISessionTurnService turns,
-		IClaudeStreamingSessionManager streaming)
+		IClaudeStreamingSessionManager streaming,
+		ISessionModelSettings modelSettings)
 	{
 		_registry  = registry;
 		_options   = options;
@@ -36,6 +38,7 @@ public sealed class TurnRpcModule : IRemoteRpcModule
 		_engine    = engine;
 		_turns     = turns;
 		_streaming = streaming;
+		_modelSettings = modelSettings;
 	}
 
 	/// <inheritdoc />
@@ -60,6 +63,9 @@ public sealed class TurnRpcModule : IRemoteRpcModule
 		var options         = await _options.ResolveAsync(@params);
 		var settings        = await _settings.ResolveAsync(node, options);
 		var ticket          = _send.Send(node, text, settings, clientRequestId, newBranch, autoCompact);
+
+		// FR.12.35: a model or effort the user picked that differs from the session's setting is kept on the session.
+		_modelSettings.RecordPicks(node, options);
 
 		return new TurnSendResult(ticket.TurnId, Accepted: true, ticket.Queued);
 	}

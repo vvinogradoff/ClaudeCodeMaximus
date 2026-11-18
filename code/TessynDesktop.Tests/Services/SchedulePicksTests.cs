@@ -188,4 +188,16 @@ public sealed class SchedulePicksTests : IDisposable
 		var accepted = await CallAsync("work");
 		Assert.Equal("work", accepted["result"]!["profileId"]!.GetValue<string>());
 	}
+
+	// ── FR.12.35 — a schedule's picks are not sticky (TC.ME.02) ──────────────────
+
+	[Fact]
+	public async Task SchedulesAdd_PicksNotStored()
+	{
+		_api.Add(Request("work", "claude-opus-5-5", "high"));
+		await FireDueAsync(_scheduler.GetSchedules().Single());
+
+		Assert.Null(_session.ModelId);
+		Assert.Null(_session.Effort);
+	}
 }
