@@ -1,0 +1,85 @@
+using TessynDesktop.WPF.State;
+
+namespace TessynDesktop.WPF.Services;
+
+/// <summary>
+/// <see cref="IPreviewSettingsService"/> over the client settings store. It listens to the store's <c>Changed</c> event for its two sections, so a write from
+/// anywhere (not only through this service) raises the matching event.
+/// </summary>
+/// <remarks>Created by Claude</remarks>
+public sealed class PreviewSettingsService : IPreviewSettingsService
+{
+	private readonly IClientSettingsStore _store;
+	private bool _lastEnabled;
+
+	public PreviewSettingsService(IClientSettingsStore store)
+	{
+		_store = store;
+		_lastEnabled = store.Get<PreviewWindowsSettings>().Enabled;
+		_store.Changed += OnStoreChanged;
+	}
+
+	public event EventHandler? GroupsChanged;
+
+	public event EventHandler? WindowsEnabledChanged;
+
+	public IReadOnlyList<PreviewGroupModel> Groups
+	{
+		get
+		{
+			var stored = _store.Get<PreviewSettings>().Groups;
+			if (stored == null)
+				return Constants.Previews.DefaultGroups.Select(d => new PreviewGroupModel { Id = d.Id, Name = d.Name, Patterns = d.Patterns }).ToList();
+
+			return stored.Select(g => g.Clone()).ToList();
+		}
+	}
+
+	public bool WindowsEnabled => _store.Get<PreviewWindowsSettings>().Enabled;
+
+	public void SaveGroups(IReadOnlyList<PreviewGroupModel> groups) =>
+		_store.Update<PreviewSettings>(s => s.Groups = groups.Select(g => g.Clone()).ToList());
+
+	public void ResetGroups() => _store.Update<PreviewSettings>(s => s.Groups = null);
+
+	public void SetAutoClose(string groupId, bool autoClose)
+	{
+		if (!Groups.Any(g => g.Id == groupId))
+			return;
+
+		// Start from the current list (the defaults when never edited) so flipping one switch also stores the rest.
+		var groups = Groups.ToList();
+		groups.First(g => g.Id == groupId).AutoClose = autoClose;
+		SaveGroups(groups);
+	}
+
+	public void SetWindowsEnabled(bool enabled) => _store.Update<PreviewWindowsSettings>(s => s.Enabled = enabled);
+
+	public PreviewPlacementModel? GetPlacement(string groupId) =>
+		_store.Get<PreviewWindowsSettings>().Placements.TryGetValue(groupId, out var placement) ? placement : null;
+
+	public void SavePlacement(string groupId, PreviewPlacementModel placement) =>
+		_store.Update<PreviewWindowsSettings>(s => s.Placements[groupId] = placement);
+
+	public void ForgetPlacements() => _store.Update<PreviewWindowsSettings>(s => s.Placements.Clear());
+
+	private void OnStoreChanged(object? sender, ClientSettingsChangedEventArgs e)
+	{
+		if (e.Section == Constants.SettingsSections.Previews)
+		{
+			GroupsChanged?.Invoke(this, EventArgs.Empty);
+			return;
+		}
+
+		if (e.Section != Constants.SettingsSections.PreviewWindows)
+			return;
+
+		// The section also changes when a placement is saved; only a changed toggle is an event.
+		var enabled = WindowsEnabled;
+		if (enabled == _lastEnabled)
+			return;
+
+		_lastEnabled = enabled;
+		WindowsEnabledChanged?.Invoke(this, EventArgs.Empty);
+	}
+}
