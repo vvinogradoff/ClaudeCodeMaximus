@@ -42,7 +42,7 @@ public sealed class PreviewContentFactory : IPreviewContentFactory
 			_services.GetService<BrowserNavigationPolicy>() ?? (_browserPolicy ??= new BrowserNavigationPolicy()),
 			Get<StartupOptions>(), Get<ILogger<BrowserSurface>>());
 		var systemBrowser = Get<SystemUrlLauncher>();   // the concrete launcher: a link in the address bar's "Open in system browser" never routes
-		var viewModel = new BrowserPreviewViewModel(surface, Get<UrlPolicy>(), systemBrowser, Get<IUiDispatcher>(), Get<ILogger<BrowserPreviewViewModel>>());
+		var viewModel = new BrowserPreviewViewModel(surface, Get<UrlPolicy>(), systemBrowser, Get<IUiDispatcher>(), Get<ILogger<BrowserPreviewViewModel>>(), Get<BrowserAddressInput>());
 		return new PreviewBrowserContent(viewModel, surface);
 	}
 

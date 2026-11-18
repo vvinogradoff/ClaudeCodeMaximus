@@ -232,6 +232,29 @@ public sealed class BrowserPreviewViewModelTests
 	}
 
 	[Fact]
+	public void RevertAddress_AndLosingFocus_ClearTheMessageOfARefusedTypedAddress()
+	{
+		var vm = Create();
+		_surface.Attach();
+		vm.Navigate("https://example.com/a");
+		vm.IsEditingAddress = true;
+		vm.AddressText = "ftp://x";
+		vm.GoToAddressCommand.Execute(null);
+		Assert.True(vm.HasError);
+
+		vm.RevertAddressCommand.Execute(null);
+		Assert.False(vm.HasError);
+		Assert.Equal("https://example.com/a", vm.AddressText);
+
+		vm.AddressText = "mailto:5";
+		vm.GoToAddressCommand.Execute(null);
+		Assert.True(vm.HasError);
+		vm.IsEditingAddress = false;
+		Assert.False(vm.HasError);
+		Assert.Equal("https://example.com/a", vm.AddressText);
+	}
+
+	[Fact]
 	public void TypingIsNotOverwrittenByANavigation_AndLosingFocusShowsThePageAddressAgain()
 	{
 		var vm = Create();

@@ -24,6 +24,12 @@ public static partial class Constants
 
 		public const string BlankUri = "about:blank";
 		public const string NotAllowedMessage = "Only http and https addresses can be opened here.";
+		/// <summary>Typed text that starts with one of these schemes and a colon is refused, even when it looks like a host and a port (FR.27.10).</summary>
+		public static readonly IReadOnlyList<string> RefusedSchemes =
+		[
+			"javascript", "vbscript", "data", "blob", "file", "about", "mailto", "tel", "sms", "ftp", "ws", "wss", "chrome", "edge", "view-source", "ms-settings", "slack", "zoommtg",
+		];
+
 		public const string TypedAddressRefusedMessage = "That address cannot be opened here. Type an http or https address.";
 		public const string NavigationFailedFormat = "The page could not be loaded ({0}).";
 		public const string BrowserLostMessage = "The browser stopped unexpectedly. Reload the page to continue.";

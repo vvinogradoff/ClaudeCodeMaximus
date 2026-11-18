@@ -63,6 +63,21 @@ public sealed class PreviewWindowViewTests
 		return (window, viewModel, content);
 	}
 
+	/// <summary>Shows a file and pumps the dispatcher until its load is done: the load's continuations touch the live bindings, as in the app.</summary>
+	private static void PumpUntilLoaded(PreviewWindowViewModel viewModel, PreviewItemModel item, PreviewTarget target, FakeTessynClient client)
+	{
+		var task = Task.CompletedTask;
+		System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() =>
+		{
+			viewModel.Show(item, target, client);
+			task = viewModel.File!.WhenIdleAsync();
+		});
+		var frame = new System.Windows.Threading.DispatcherFrame();
+		task.ContinueWith(_ => frame.Continue = false, TaskScheduler.Default);
+		System.Windows.Threading.Dispatcher.PushFrame(frame);
+		task.GetAwaiter().GetResult();
+	}
+
 	private static void Layout(FrameworkElement element, double width = 1000, double height = 700)
 	{
 		element.Measure(new Size(width, height));
@@ -254,7 +269,18 @@ public sealed class PreviewWindowViewTests
 			Assert.Equal(Visibility.Collapsed, source.Visibility);   // no file yet
 			Assert.Equal(Visibility.Collapsed, open.Visibility);
 
-			viewModel.Show(new PreviewItemModel { Kind = PreviewItemKind.File, FileName = "note.md" }, new PreviewTarget("h", "note.md"), client);
+			client.Files["t"] = ("note.txt", "text/plain", "plain"u8.ToArray());
+			client.Files["c"] = ("main.cpp", "text/plain", "int main() {}"u8.ToArray());
+
+			// Source for markdown only; Open in default app for the types on the FR.23.18 list; each shown, not just not collapsed
+			foreach (var (handle, name, sourceShown, openShown) in new[] { ("h", "note.md", true, true), ("t", "note.txt", false, true), ("c", "main.cpp", false, false) })
+			{
+				PumpUntilLoaded(viewModel, new PreviewItemModel { Kind = PreviewItemKind.File, FileName = name }, new PreviewTarget(handle, name), client);
+				Layout((FrameworkElement)window.Content);
+				Assert.Equal(sourceShown ? Visibility.Visible : Visibility.Collapsed, source.Visibility);
+				Assert.Equal(openShown ? Visibility.Visible : Visibility.Collapsed, open.Visibility);
+			}
+
 			viewModel.Show(new PreviewItemModel { Kind = PreviewItemKind.Url, Url = "https://example.com/x" }, null, null);
 			Layout((FrameworkElement)window.Content);
 			Assert.Equal(Visibility.Collapsed, source.Visibility);   // a web page keeps its browser bar only

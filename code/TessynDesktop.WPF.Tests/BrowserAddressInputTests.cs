@@ -6,6 +6,8 @@ namespace TessynDesktop.WPF.Tests;
 /// <remarks>Created by Claude</remarks>
 public sealed class BrowserAddressInputTests
 {
+	private readonly BrowserAddressInput _input = new(new UrlPolicy());
+
 	[Theory]
 	[InlineData("github.com/x", "https://github.com/x")]
 	[InlineData("  https://a.example/b?c=1  ", "https://a.example/b?c=1")]
@@ -14,9 +16,12 @@ public sealed class BrowserAddressInputTests
 	[InlineData("//a.example/p", "https://a.example/p")]
 	[InlineData("localhost:3000", "https://localhost:3000/")]
 	[InlineData("127.0.0.1:8080/x", "https://127.0.0.1:8080/x")]
+	[InlineData("localhost:8080", "https://localhost:8080/")]
+	[InlineData("https://bücher.example/x", "https://bücher.example/x")]
+	[InlineData("bücher.example", "https://bücher.example/")]
 	public void TryNormalize_AcceptsHttpAndHttps_AddingHttpsToABareHost(string typed, string expected)
 	{
-		Assert.True(BrowserAddressInput.TryNormalize(typed, new UrlPolicy(), out var uri));
+		Assert.True(_input.TryNormalize(typed, out var uri));
 		Assert.Equal(expected, uri.AbsoluteUri);
 	}
 
@@ -30,8 +35,16 @@ public sealed class BrowserAddressInputTests
 	[InlineData("file:///C:/x.txt")]
 	[InlineData("slack://open")]
 	[InlineData("data:text/html,x")]
+	[InlineData("javascript:1")]
+	[InlineData("mailto:5")]
+	[InlineData("about:blank")]
+	[InlineData("JavaScript:alert(1)")]
+	[InlineData("tel:5551234")]
+	[InlineData("view-source:https://a.example/")]
+	[InlineData("two words.example")]
+	[InlineData("a.example/with space")]
 	public void TryNormalize_RefusesEverythingElse(string? typed)
 	{
-		Assert.False(BrowserAddressInput.TryNormalize(typed, new UrlPolicy(), out _));
+		Assert.False(_input.TryNormalize(typed, out _));
 	}
 }

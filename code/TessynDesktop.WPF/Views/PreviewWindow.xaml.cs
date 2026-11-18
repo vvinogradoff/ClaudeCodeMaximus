@@ -202,11 +202,10 @@ public partial class PreviewWindow : Window
 	{
 		var maximized = WindowState == WindowState.Maximized;
 		Root.Margin = maximized ? FrameMetrics.MaximizedMargin(VisualTreeHelper.GetDpi(this).DpiScaleX) : new Thickness(0);
-		ContentHost.Margin = maximized ? new Thickness(0) : ResizeInset();   // FR.29.15: a maximized window has no border
+		ContentHost.Margin = maximized
+			? new Thickness(0)
+			: new Thickness(Constants.PreviewWindow.ResizeBorder, 0, Constants.PreviewWindow.ResizeBorder, Constants.PreviewWindow.ResizeBorder);   // left, right, bottom: the top is the title bar   // FR.29.15: a maximized window has no border
 	}
-
-	/// <summary>The resize border the content must not cover: left, right and bottom (the top is the title bar).</summary>
-	private static Thickness ResizeInset() => new(Constants.PreviewWindow.ResizeBorder, 0, Constants.PreviewWindow.ResizeBorder, Constants.PreviewWindow.ResizeBorder);
 
 	private void OnMinimizeClick(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
 

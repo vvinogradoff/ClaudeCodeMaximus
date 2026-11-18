@@ -16,6 +16,7 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 {
 	private readonly IBrowserSurface _surface;
 	private readonly UrlPolicy _policy;
+	private readonly BrowserAddressInput _addressInput;
 	private readonly IUrlLauncher _systemBrowser;
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<BrowserPreviewViewModel> _logger;
@@ -48,8 +49,9 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 	[NotifyCanExecuteChangedFor(nameof(ForwardCommand))]
 	private bool _canGoForward;
 
-	public BrowserPreviewViewModel(IBrowserSurface surface, UrlPolicy policy, IUrlLauncher systemBrowser, IUiDispatcher ui, ILogger<BrowserPreviewViewModel> logger)
+	public BrowserPreviewViewModel(IBrowserSurface surface, UrlPolicy policy, IUrlLauncher systemBrowser, IUiDispatcher ui, ILogger<BrowserPreviewViewModel> logger, BrowserAddressInput? addressInput = null)
 	{
+		_addressInput = addressInput ?? new BrowserAddressInput(policy);
 		_surface = surface;
 		_policy = policy;
 		_systemBrowser = systemBrowser;
@@ -77,7 +79,7 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 				return;
 
 			if (!value)
-				AddressText = Address;
+				RevertAddress();
 		}
 	}
 
@@ -131,7 +133,7 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 			return;
 		}
 
-		if (!BrowserAddressInput.TryNormalize(AddressText, _policy, out var uri))
+		if (!_addressInput.TryNormalize(AddressText, out var uri))
 		{
 			Error = Constants.Browser.TypedAddressRefusedMessage;
 			_logger.LogInformation("Refused a typed address that is not http or https");
@@ -144,7 +146,11 @@ public sealed partial class BrowserPreviewViewModel : ObservableObject, IDisposa
 
 	/// <summary>Esc in the address box (FR.27.10): the address of the page shown comes back.</summary>
 	[RelayCommand]
-	private void RevertAddress() => AddressText = Address;
+	private void RevertAddress()
+	{
+		AddressText = Address;
+		Error = null;   // a refusal of the typed address goes with the text
+	}
 
 	[RelayCommand]
 	private void DismissError() => Error = null;
