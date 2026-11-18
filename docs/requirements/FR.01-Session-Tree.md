@@ -151,3 +151,12 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 - **One face.** The badge is part of the shared session row face (FR.1.20) and of the dropdown row, so all four lists show the same thing. Its tooltip reads `Workers running now: N`.
 - **Colours.** Number and outline are palette entries (FR.9.16).
 - **Daemon.** `SessionStateDto.runningWorkerCount` is computed from the registry's running state of the session's workers (TDCP 10.A6). The daemon publishes `session.changed` for a supervisor when one of its workers starts or stops running, coalesced per session (no event storm).
+
+**FR.1.29 — Limits-error warning.** When a session's **last turn ended with a usage or limits error** (Claude's "You've hit your session limit", "weekly limit" or "5-hour limit" message, "usage limit reached", or a rate-limit error), its row shows a **yellow warning triangle**.
+- **Placement.** Tree, Recent tab and Tags tab session list: **left of the session date** (second line of the row, right end). Recent dropdown row: **left of the project name / profile name block**. **Workers and sub-sessions in the tree**: all the way to the **right of the sub-session's name line**, above the date.
+- **Tooltip.** The error text, shortened to one line of at most 120 characters (for example `You've hit your session limit · resets 5:20pm (Asia/Makassar)`).
+- **Clearing.** It goes away as soon as a **later turn succeeds** (a result without error). Another kind of error, or a turn that ends without a result, leaves it.
+- **Live.** It follows the daemon's `session.changed` events (`SessionStateDto.limitError`, TDCP section 10.A7) in every list; nothing is polled.
+- **Detection (daemon).** Structured first: the Claude CLI stamps the synthetic assistant message of a limit `error: "rate_limit"` (with `quotaLimits.status: "rejected"`); either marks the turn. A result or system error carries no stamp, so its text is matched against patterns kept in `Constants.LimitErrors` (tested with real messages from session files). Ordinary assistant text is **never** text-matched, so a session that talks about limits does not warn.
+- **Not an auth error.** It is independent of the `authError` flag (FR.12.16). It lives in memory with the auth flag: after a daemon restart it is empty until the next turn.
+- **Colour.** Palette entry *Limits-error warning* (FR.9.17).

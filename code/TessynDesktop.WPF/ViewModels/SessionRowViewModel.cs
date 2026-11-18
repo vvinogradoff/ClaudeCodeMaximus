@@ -19,7 +19,7 @@ public sealed partial class SessionRowViewModel : ObservableObject
 
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(HasDraft), nameof(ProfileName), nameof(HasSwitching), nameof(SwitchingToProfileName),
-		nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(IsResumable), nameof(AttentionKey), nameof(ShowStar), nameof(ShowHide), nameof(ShowStarToggle), nameof(RunningWorkerCount), nameof(HasRunningWorkers), nameof(RunningWorkersToolTip))]
+		nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(IsResumable), nameof(AttentionKey), nameof(ShowStar), nameof(ShowHide), nameof(ShowStarToggle), nameof(RunningWorkerCount), nameof(HasRunningWorkers), nameof(RunningWorkersToolTip), nameof(LimitError), nameof(HasLimitError), nameof(ShowLimitOnDateLine))]
 	private SessionStateDto _state;
 
 	[ObservableProperty]
@@ -121,6 +121,17 @@ public sealed partial class SessionRowViewModel : ObservableObject
 
 	/// <summary>The badge shows only while a worker runs.</summary>
 	public bool HasRunningWorkers => RunningWorkerCount > 0;
+
+	/// <summary>The shortened text of the usage or limits error that ended the session's last turn (the tooltip of the yellow warning); empty when it did not end with one.</summary>
+	public string LimitError => State.LimitError ?? string.Empty;
+
+	public bool HasLimitError => LimitError.Length > 0;
+
+	/// <summary>The warning sits left of the date (a list row is never a worker row; the shared face binds the same names as a tree node).</summary>
+	public bool ShowLimitOnDateLine => HasLimitError;
+
+	/// <summary>Never: only a worker row in the tree puts the warning on its name line.</summary>
+	public bool ShowLimitOnNameLine => false;
 
 	public string RunningWorkersToolTip => string.Format(Constants.SessionLists.RunningWorkersTip, RunningWorkerCount);
 

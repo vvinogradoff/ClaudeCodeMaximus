@@ -9,6 +9,7 @@
         <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/KindPill.xaml" />
         <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/RecencyTint.xaml" />
         <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/ActiveWorkersBadge.xaml" />
+        <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/LimitWarning.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
     <sys:String x:Key="GlyphStar">&#xE734;</sys:String>
@@ -141,6 +142,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Grid Grid.Column="0" Width="8" Height="16" Margin="0,0,6,0" VerticalAlignment="Center" AutomationProperties.Name="Session status">
                                 <Grid.RowDefinitions>
@@ -158,11 +160,14 @@
                             <Border Grid.Column="3" Style="{StaticResource ActiveWorkersBadge}" Margin="6,0,0,0" AutomationProperties.Name="Active workers">
                                 <TextBlock Style="{StaticResource ActiveWorkersBadgeText}" />
                             </Border>
-                            <StackPanel Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,0,0">
+                            <!-- Left of the project and profile block (FR.1.29). -->
+                            <TextBlock Grid.Column="4" Style="{StaticResource LimitWarningIcon}" Margin="6,0,0,0" VerticalAlignment="Center" AutomationProperties.Name="Limits error"
+                                       Visibility="{Binding ShowLimitOnDateLine, Converter={StaticResource SessionListBoolToVis}}" />
+                            <StackPanel Grid.Column="5" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,0,0">
                                 <TextBlock Text="{Binding DirectoryLabel}" HorizontalAlignment="Right" FontSize="10" Opacity="0.6" MaxWidth="140" TextTrimming="CharacterEllipsis" AutomationProperties.Name="Project" />
                                 <TextBlock Text="{Binding ProfileName}" HorizontalAlignment="Right" FontSize="10" Opacity="0.6" MaxWidth="140" TextTrimming="CharacterEllipsis" AutomationProperties.Name="Profile" />
                             </StackPanel>
-                            <TextBlock Grid.Column="5" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphClock}" Opacity="0.7" ToolTip="This session has a schedule"
+                            <TextBlock Grid.Column="6" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphClock}" Opacity="0.7" ToolTip="This session has a schedule"
                                        Visibility="{Binding HasSchedules, Converter={StaticResource SessionListBoolToVis}}" AutomationProperties.Name="Schedule indicator" />
                         </Grid>
                         <Rectangle Stroke="{DynamicResource Colour.ActiveBorder}" StrokeThickness="1" StrokeDashArray="3,2" RadiusX="3" RadiusY="3" Fill="Transparent" IsHitTestVisible="False"

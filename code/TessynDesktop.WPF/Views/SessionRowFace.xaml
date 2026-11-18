@@ -12,6 +12,7 @@
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/KindPill.xaml" />
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/RecencyTint.xaml" />
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/ActiveWorkersBadge.xaml" />
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/LimitWarning.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
         </ResourceDictionary>
@@ -38,6 +39,9 @@
                             Visibility="{Binding HasAttention, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Focus items">
                         <TextBlock Text="{Binding AttentionCount}" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
+                    <!-- A worker's limits-error warning: all the way to the right of its name line, above the date (FR.1.29). -->
+                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource LimitWarningIcon}" Margin="6,0,0,0" AutomationProperties.Name="Limits error"
+                               Visibility="{Binding ShowLimitOnNameLine, Converter={StaticResource BoolToVis}}" />
                     <TextBlock DockPanel.Dock="Right" FontSize="10" Margin="6,0,0,0" Opacity="0.7" Text="{Binding WorkerCountText}" ToolTip="Sessions this session supervises"
                                Visibility="{Binding HasWorkers, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Worker count" />
                     <!-- Left of the "N workers" total: the badge counts the workers running now. -->
@@ -62,7 +66,12 @@
                         <TextBlock Text="{Binding SwitchingToProfileName, StringFormat=→ {0}}" FontSize="10" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="110"
                                    Foreground="{DynamicResource SystemFillColorCautionBrush}" Visibility="{Binding HasSwitching, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
-                    <TextBlock Grid.Column="1" Text="{Binding LastPromptText}" FontSize="10" Opacity="0.7" Margin="8,0,0,0" HorizontalAlignment="Right" AutomationProperties.Name="Last prompt" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="8,0,0,0">
+                        <!-- Left of the date (FR.1.29): the last turn ended with a usage or limits error. -->
+                        <TextBlock Style="{StaticResource LimitWarningIcon}" Margin="0,0,5,0" AutomationProperties.Name="Limits error"
+                                   Visibility="{Binding ShowLimitOnDateLine, Converter={StaticResource BoolToVis}}" />
+                        <TextBlock Text="{Binding LastPromptText}" FontSize="10" Opacity="0.7" AutomationProperties.Name="Last prompt" />
+                    </StackPanel>
                 </Grid>
             </Grid>
             <Rectangle Stroke="{DynamicResource Colour.ActiveBorder}" StrokeThickness="1" StrokeDashArray="3,2" RadiusX="3" RadiusY="3" Fill="Transparent" IsHitTestVisible="False"

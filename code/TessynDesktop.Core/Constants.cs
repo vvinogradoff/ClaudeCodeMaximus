@@ -64,6 +64,25 @@ public static partial class Constants
 		public const string NoConversationFoundMarker = "No conversation found";
 	}
 
+	/// <summary>Detection of a usage or limits error that ended a turn (FR.1.29). The structured signal comes first; the text patterns are the fallback for the result and system errors, which carry no structure.</summary>
+	public static class LimitErrors
+	{
+		/// <summary>The CLI's <c>error</c> class of a synthetic assistant message for a usage or rate limit (HTTP 429).</summary>
+		public const string RateLimitApiError = "rate_limit";
+
+		/// <summary>The value of <c>quotaLimits.status</c> when the request was refused for a limit.</summary>
+		public const string QuotaRejectedStatus = "rejected";
+
+		/// <summary>
+		/// Real messages: <c>You've hit your session limit · resets 5:20pm (Asia/Makassar)</c>, <c>You've hit your weekly limit · resets Nov 11, 1pm (...)</c>, <c>You've hit your 5-hour limit · resets 1:10pm (...)</c>,
+		/// and the older <c>Claude AI usage limit reached|1731...</c>. Matched only on result and system errors, never on assistant prose.
+		/// </summary>
+		public const string TextPattern = @"hit your [\w\s-]*limit|usage limit reached|5-hour limit|weekly limit reached|session limit reached|rate limit(ed)? (reached|exceeded)|exceeded your .*(rate|usage) limit";
+
+		/// <summary>Longest tooltip text; longer messages are cut with an ellipsis.</summary>
+		public const int TooltipMaxChars = 120;
+	}
+
 	public static class Auth
 	{
 		/// <summary>Substring of the Claude CLI's 401 error text (FR.12.16).</summary>

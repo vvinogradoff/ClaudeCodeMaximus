@@ -71,7 +71,12 @@ public static class ClaudeStreamEventParser
 		if (string.IsNullOrEmpty(content))
 			return null;
 
-		return new ClaudeStreamEvent { Type = type, Subtype = subtype, Content = content };
+		var apiError = root.TryGetProperty("error", out var errorEl) && errorEl.ValueKind == JsonValueKind.String ? errorEl.GetString() : null;
+		var rejected = root.TryGetProperty("quotaLimits", out var quota) && quota.ValueKind == JsonValueKind.Object
+			&& quota.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.String
+			&& string.Equals(status.GetString(), Constants.LimitErrors.QuotaRejectedStatus, StringComparison.OrdinalIgnoreCase);
+
+		return new ClaudeStreamEvent { Type = type, Subtype = subtype, Content = content, ApiError = apiError, QuotaRejected = rejected };
 	}
 
 	private static ClaudeStreamEvent ParseSystemEvent(JsonElement root, string type, string? subtype)
