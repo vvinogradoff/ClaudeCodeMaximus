@@ -1216,7 +1216,7 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 - [DONE] Manual list for the Architect: real second monitor and display changes, real Slack sign-in, downloads, popups (TC.PW.04, TC.PW.23, TC.PW.29, TC.PW.39, TC.PW.46, TC.PW.48, TC.PW.50, TC.PW.53, TC.PW.54)
 - [DONE] Review (separate reviewer), fixes
 - [DONE] Merge master into the branch, build, run all five suites (TessynDesktop 3964, Web 146, Web E2E 24 + 1 skipped, WPF 2215, WPF E2E 126), merge to master (`1d07de9`), main-tree build
-- [ ] Architect feedback: typeable address, file controls in the title bar, resizable edges (FR.27.10, FR.29.14, FR.29.15; TC.PW.68–70; branch `wpf/preview-window-polish`)
+- [DONE] Architect feedback: typeable address, file controls in the title bar, resizable edges (FR.27.10, FR.29.14, FR.29.15; TC.PW.68–70; branch `wpf/preview-window-polish`)
 - [ ] Manual checks on two real monitors and real sign-ins (TC.PW MANUAL rows; list in `.mm-work/07-review.md` 'Manual checks')
 - [ ] E2E for TC.PW.11, 21, 26, 31, 34, 49 and the remaining TC.PW.16 sources
 - [ ] The Architect restarts WPF into the new build (self-update on exit or "Restart now"); no daemon restart needed (no daemon code changed)

@@ -20,6 +20,7 @@
     <sys:String x:Key="GlyphFile">&#xE8A5;</sys:String>
     <sys:String x:Key="GlyphOpenInNew">&#xE8A7;</sys:String>
     <sys:String x:Key="GlyphPin">&#xE718;</sys:String>
+    <sys:String x:Key="GlyphCode">&#xE943;</sys:String>
     <sys:String x:Key="GlyphCheck">&#xE73E;</sys:String>
     <sys:String x:Key="GlyphInfo">&#xE946;</sys:String>
     <sys:String x:Key="GlyphAttach">&#xE723;</sys:String>

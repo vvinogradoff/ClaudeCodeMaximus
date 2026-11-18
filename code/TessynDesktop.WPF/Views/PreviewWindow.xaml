@@ -7,7 +7,7 @@
         ShowActivated="False" WindowStartupLocation="Manual">
     <!-- FR.29.7: a custom title bar in the style of the main window's: icon, title, Pin, Auto-close, Minimize, Maximize/Restore, Close. The caption is the empty part, so the window is dragged by it and a double-click maximizes. -->
     <shell:WindowChrome.WindowChrome>
-        <shell:WindowChrome CaptionHeight="32" ResizeBorderThickness="6" GlassFrameThickness="1" CornerRadius="0" UseAeroCaptionButtons="False" />
+        <shell:WindowChrome CaptionHeight="32" GlassFrameThickness="1" CornerRadius="0" UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <ResourceDictionary>
@@ -24,9 +24,14 @@
                 <Setter Property="Margin" Value="0" />
                 <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
             </Style>
+            <Style x:Key="WindowIconButton" TargetType="Button" BasedOn="{StaticResource BarIconButton}">
+                <Setter Property="Width" Value="36" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Margin" Value="0" />
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
-    <Grid x:Name="Root">
+    <Grid x:Name="Root" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=Window}}">
         <Grid.RowDefinitions>
             <RowDefinition Height="32" />
             <RowDefinition Height="*" />
@@ -34,12 +39,26 @@
         <Grid Grid.Row="0" Background="{DynamicResource TitleBarBackgroundBrush}" TextElement.Foreground="{DynamicResource TitleBarForegroundBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Image Grid.Column="0" Width="16" Height="16" Margin="10,0,8,0" Source="{Binding Icon, RelativeSource={RelativeSource AncestorType=Window}}" />
-            <TextBlock x:Name="TitleText" Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" AutomationProperties.Name="Preview title" />
-            <StackPanel Grid.Column="2" Orientation="Horizontal">
+            <!-- FR.29.14: the file window's own controls, left of the title: Source (markdown only) and Open in default app (only the types FR.23.18 allows) -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton x:Name="SourceButton" Style="{StaticResource WindowToggle}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                              IsChecked="{Binding File.ShowSource, Mode=TwoWay}" Visibility="{Binding File.CanToggleSource, FallbackValue=Collapsed, Converter={StaticResource BoolToVis}}"
+                              ToolTip="Show the markdown source" AutomationProperties.Name="Show markdown source">
+                    <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphCode}" />
+                </ToggleButton>
+                <Button x:Name="OpenExternalButton" Style="{StaticResource WindowIconButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                        Command="{Binding File.OpenExternalCommand}" Visibility="{Binding File.CanOpenExternally, FallbackValue=Collapsed, Converter={StaticResource BoolToVis}}"
+                        ToolTip="Open in default app" AutomationProperties.Name="Open in default app">
+                    <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphOpenInNew}" />
+                </Button>
+            </StackPanel>
+            <TextBlock x:Name="TitleText" Grid.Column="2" Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" AutomationProperties.Name="Preview title" />
+            <StackPanel Grid.Column="3" Orientation="Horizontal">
                 <ToggleButton x:Name="PinButton" Style="{StaticResource WindowToggle}" IsChecked="{Binding PinChecked, Mode=TwoWay}" IsEnabled="{Binding CanAutoClose}"
                               ToolTip="{Binding PinToolTip}" AutomationProperties.Name="Pin preview">
                     <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphPin}" />
@@ -61,7 +80,10 @@
             </StackPanel>
         </Grid>
         <!-- The content stretches with the window (NR.7): a file renderer or a browser, created when the content is shown -->
-        <v:FilePreviewPane x:Name="FilePane" Grid.Row="1" ShowCloseButton="False" Visibility="Collapsed" />
-        <Border x:Name="BrowserHost" Grid.Row="1" Visibility="Collapsed" />
+        <!-- ContentHost leaves the resize border (FR.29.15) free: the WebView2 children are HWNDs and would swallow the mouse over it -->
+        <Grid x:Name="ContentHost" Grid.Row="1">
+            <v:FilePreviewPane x:Name="FilePane" ShowCloseButton="False" ShowHeader="False" Visibility="Collapsed" />
+            <Border x:Name="BrowserHost" Visibility="Collapsed" />
+        </Grid>
     </Grid>
 </Window>

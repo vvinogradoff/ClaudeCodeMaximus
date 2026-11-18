@@ -45,7 +45,7 @@ public sealed class BrowserPreviewViewTests
 			Assert.Empty(Descendants<Microsoft.Web.WebView2.Wpf.WebView2>(view));
 
 			var address = Descendants<TextBox>(view).Single();
-			Assert.True(address.IsReadOnly);
+			Assert.False(address.IsReadOnly);   // FR.27.10
 			vm.Navigate("https://example.com/x");
 			view.UpdateLayout();
 			Assert.Equal("https://example.com/x", address.Text);

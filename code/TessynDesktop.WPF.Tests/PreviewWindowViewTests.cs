@@ -207,6 +207,82 @@ public sealed class PreviewWindowViewTests
 		});
 	}
 
+	/// <summary>TC.PW.68 (FR.29.15): the content keeps off the resize border on the left, right and bottom while the window is normal, and fills the window when it is maximized.</summary>
+	[Fact]
+	public void PreviewWindow_ContentHost_LeavesTheResizeBorderFree_UnlessMaximized()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var (window, viewModel, content) = BuildWindow();
+			using var _ = content;
+			var host = (Grid)window.FindName("ContentHost")!;
+			var border = Constants.PreviewWindow.ResizeBorder;
+
+			Assert.Equal(new Thickness(border, 0, border, border), host.Margin);
+			Assert.Equal(new Thickness(border), System.Windows.Shell.WindowChrome.GetWindowChrome(window).ResizeBorderThickness);
+
+			window.WindowState = WindowState.Maximized;
+			window.ApplyWindowState();   // an unshown window raises no StateChanged
+			Assert.Equal(new Thickness(0), host.Margin);
+
+			window.WindowState = WindowState.Normal;
+			window.ApplyWindowState();
+			Assert.Equal(new Thickness(border, 0, border, border), host.Margin);
+			viewModel.Dispose();
+		});
+	}
+
+	/// <summary>TC.PW.70 (FR.29.14): the window's pane has no header row, and Source and Open in default app are in the title bar, left of the title, only for a file.</summary>
+	[Fact]
+	public void PreviewWindow_HasNoPaneHeader_AndTheFileControlsLeftOfTheTitle()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var (window, viewModel, content) = BuildWindow();
+			using var _ = content;
+			var pane = (FilePreviewPane)window.FindName("FilePane")!;
+			var source = (ToggleButton)window.FindName("SourceButton")!;
+			var open = (Button)window.FindName("OpenExternalButton")!;
+			var title = (TextBlock)window.FindName("TitleText")!;
+			var client = new FakeTessynClient();
+			client.Files["h"] = ("note.md", "text/markdown", "# hi"u8.ToArray());
+
+			Assert.False(pane.ShowHeader);
+			Assert.Equal(Visibility.Collapsed, ((FrameworkElement)pane.FindName("HeaderRow")!).Visibility);
+			Assert.Equal("Show markdown source", AutomationProperties.GetName(source));
+			Assert.Equal("Open in default app", AutomationProperties.GetName(open));
+			Assert.Equal(Visibility.Collapsed, source.Visibility);   // no file yet
+			Assert.Equal(Visibility.Collapsed, open.Visibility);
+
+			viewModel.Show(new PreviewItemModel { Kind = PreviewItemKind.File, FileName = "note.md" }, new PreviewTarget("h", "note.md"), client);
+			viewModel.Show(new PreviewItemModel { Kind = PreviewItemKind.Url, Url = "https://example.com/x" }, null, null);
+			Layout((FrameworkElement)window.Content);
+			Assert.Equal(Visibility.Collapsed, source.Visibility);   // a web page keeps its browser bar only
+			Assert.Equal(Visibility.Collapsed, open.Visibility);
+
+			var controls = (FrameworkElement)source.Parent;
+			Assert.True(Grid.GetColumn(controls) < Grid.GetColumn(title));   // left of the title
+			Assert.Same(controls, open.Parent);
+			viewModel.Dispose();
+		});
+	}
+
+	[Fact]
+	public void FilePreviewPane_ShowHeader_False_CollapsesTheHeaderRow_AndTheSidePaneKeepsIt()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var pane = new FilePreviewPane();
+			Layout(pane, 600, 400);
+			var header = (FrameworkElement)pane.FindName("HeaderRow")!;
+			Assert.True(pane.ShowHeader);
+			Assert.Equal(Visibility.Visible, header.Visibility);
+
+			pane.ShowHeader = false;
+			Assert.Equal(Visibility.Collapsed, header.Visibility);
+		});
+	}
+
 	[Fact]
 	public void FilePreviewPane_ShowCloseButton_HidesItsCloseButton()
 	{

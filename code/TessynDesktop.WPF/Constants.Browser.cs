@@ -24,6 +24,7 @@ public static partial class Constants
 
 		public const string BlankUri = "about:blank";
 		public const string NotAllowedMessage = "Only http and https addresses can be opened here.";
+		public const string TypedAddressRefusedMessage = "That address cannot be opened here. Type an http or https address.";
 		public const string NavigationFailedFormat = "The page could not be loaded ({0}).";
 		public const string BrowserLostMessage = "The browser stopped unexpectedly. Reload the page to continue.";
 		public const string UntitledPopup = "Browser";
