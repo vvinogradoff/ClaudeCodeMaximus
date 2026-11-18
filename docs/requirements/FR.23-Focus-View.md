@@ -104,6 +104,7 @@ This matches the `notify_user` policy (FR.21.19). `list_attention` returns `No i
 - When FR.23.4 calls for a notification, it goes through exactly the fan-out `notify_user` uses (FR.21.5): Telegram `NotifyAsync` (mention and sound) plus the desktop toast, each gated as today (`TelegramEnabled`, `NotificationsEnabled`). That fan-out is extracted into one private helper shared by both tools; it is not duplicated.
 - Message text: one created item: `A12 (critical): <title>` + blank line + body; several created items: `<n> new items in the Focus view:` then one `- A12 (critical): <title>` line each.
 - Worker Sessions never notify (FR.23.6).
+- Independently of the notification, every **created** item plays the Focus item sound (FR.22.1; one per burst, per-session switch); updates and closes are silent.
 
 **FR.23.10 — Guidance (hidden instruction block, once per fresh session):**
 - New `Constants.Instructions.AttentionGuidance`, emitted when `IsAgentToolsEnabled && IsNewSession && !IsWorkerSession`. It is session policy, so it uses the same gate as `NoWorkflowTool`. The `mcp__cmx__` prefix is built from `Agent.McpServerName`, as the existing constants do. Text:

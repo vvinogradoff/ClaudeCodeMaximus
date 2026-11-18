@@ -34,7 +34,7 @@
 | FR.19-Streaming-Mode | Streaming mode | FR.19.1–19.13 | — |
 | FR.20-External-MCP-Registry | MCP registry | FR.20.1–20.9 | FR.20.10 |
 | FR.21-Telegram-Bridge | Telegram | FR.21.1–21.24 | FR.21.25 |
-| FR.22-Completion-Sound | Sound | FR.22.1–22.5 | — |
+| FR.22-Completion-Sound | Sound | FR.22.1–22.6 | — |
 | FR.23-Focus-View | Focus view | FR.23.1–23.19 | FR.23.20–23.23 |
 | FR.24-Session-Tags | Session tags | FR.24.1–24.15 | FR.24.16–24.18 |
 | FR.25-Web-Client | Tessyn Web (from the draft in the main tree) | FR.25.01–25.40 | FR.25.41 |
