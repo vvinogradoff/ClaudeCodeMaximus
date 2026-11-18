@@ -8,7 +8,7 @@ The embedded browser is a Chromium browser (WebView2) with a **persistent sessio
 
 **FR.27.2 — Navigation.** The page navigates freely over `http` and `https` (sign-in redirects, single sign-on). Any other scheme (`slack://`, `mailto:`, `file:` and so on) is cancelled and logged; nothing is handed to the operating system.
 
-**FR.27.3 — New windows.** `target=_blank`, `window.open` and sign-in popups open in a **popup window of the same profile**, so flows that use `window.opener` work. The popup closes when the page closes it. A popup is not a preview window: it has no group, no Pin and no Auto-close.
+**FR.27.3 — New windows.** `target=_blank`, `window.open` and sign-in popups open in a **popup window of the same profile**, so flows that use `window.opener` work. The popup closes when the page closes it. A popup is not a preview window: it has no group, no Pin and no Auto-close. A popup takes the keyboard focus only when the user's click in the page opened it; a popup a script opens on its own does not. One window has at most 5 popups open; further requests are dropped and logged.
 
 **FR.27.4 — Controls.** A browser bar under the window's title bar (FR.29.7): **Back**, **Forward**, **Reload/Stop**, the address (read-only, selectable) and **Open in system browser**. The page title is the window title (FR.29.5). **Open in system browser** opens the current address in the default browser; it is never routed back to a preview window.
 
@@ -22,4 +22,4 @@ The embedded browser is a Chromium browser (WebView2) with a **persistent sessio
 
 **FR.27.9 — Known limit.** Google may refuse to sign in inside an embedded browser ("This browser or app may not be secure"). Use the service's own sign-in: Slack email code or password, GitHub password and 2FA, Linear email code. **Open in system browser** is always available (FR.27.4).
 
-Status: Specified 2026-11-18; not built.
+Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (unit tests); manual checks on two real monitors pending.

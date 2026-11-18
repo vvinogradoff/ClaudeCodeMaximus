@@ -94,10 +94,10 @@ The Architect works with two or more monitors and wants previews out of the main
 - Group windows reopen only when the preview windows mode is on at start (FR.29.1). Pinned windows always reopen, as they also stay open when the mode goes off (FR.29.10).
 - A window whose item can no longer be opened (the file is gone or refused, the session or the entry no longer exists) is not reopened; the log says why. A window of an auto-close group is not reopened when its item came from another session than the one the main window opens with (it would close at once, FR.29.9).
 - The windows reopen once the main window is connected to the daemon, and they do not take the keyboard focus. A window the user closed is not reopened.
-- The list of open windows is kept in the `previewWindows` section of `wpf.json` and saved whenever a window opens, closes, is pinned or its page navigates, so a crash loses nothing.
+- The list of open windows is kept in the `previewWindows` section of `wpf.json` and saved whenever a window opens, closes, is pinned, a pinned window is moved or resized (500 ms after the last change), or a web page settles at a new address (see above), so a crash loses nothing.
 
 **FR.29.12 — File kinds.**
-- **TIFF.** A `.tif` or `.tiff` file is decoded by the host (Windows Imaging Component) and shown as a PNG from the preview cache, in the preview pane and in preview windows. The 25 MB image limit of FR.23.18 applies. The inline images in the transcript (FR.26.5) are unchanged.
+- **TIFF.** A `.tif` or `.tiff` file is decoded by the host (Windows Imaging Component) and shown as a PNG from the preview cache, in the preview pane and in preview windows. The 25 MB image limit of FR.23.18 applies, and a limit of 100 megapixels, checked before the image is decoded. The inline images in the transcript (FR.26.5) are unchanged.
 - **CSV.** A `.csv` file keeps today's text preview; a table view is not part of this requirement.
 
 **FR.29.13 — Test seam.** With `--test-window` the preview windows are off-screen, not in the taskbar and never activated, and they use the test window focus guard. The switch `--test-monitors <n>` (accepted only together with `--test-window`) makes the app see **n** monitors, so that end-to-end tests can enable the toggle on a machine with one screen. The list of open windows (FR.29.11) is kept under `--test-window` too, in the test data root, so a restart can be tested; placements are not saved there.
@@ -109,4 +109,4 @@ The Architect works with two or more monitors and wants previews out of the main
 4. All five click sources are routed (FR.29.4).
 5. CSV keeps the text view (FR.29.12).
 
-Status: Specified 2026-11-18, approved by the Architect 2026-11-18; not built.
+Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (unit tests, WPF E2E `WpfPreviewWindows*E2ETests`); manual checks on two real monitors pending.
