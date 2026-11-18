@@ -264,3 +264,11 @@ Applies to the **WPF desktop client**. **Tessyn Web is not covered** by FR.24.16
 - **When it applies.** **Live**: every visible chip, in the tag area (FR.24.16) and in the Tags tab chips (FR.24.11), and the `+N` hint, restyles at once, with no restart and no reopening of the session.
 - The value is a client setting (not per session, not in the daemon).
 - **Not imported.** (The one-time settings import of the previous client, FR.32.4, is WITHDRAWN 2026-11-17 (decision A47); WPF keeps its own value, default 14.)
+
+---
+
+## Amendments (2026-11-18, preview windows)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.24.7 Tag row, **Click** (opens the URL in the default OS browser), and the chip menu entry **Open in browser** | FR.29.4 | With the preview windows mode on and a matching group, the click and **Open in browser** open the URL in the group's preview window. Otherwise the default OS browser as before. The URL policy (`SessionTagUrlPolicy.IsOpenable`: absolute https, host `linear.app` or `github.com`) is unchanged and is checked first. |
