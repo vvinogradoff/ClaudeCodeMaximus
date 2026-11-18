@@ -22,4 +22,18 @@
 - **Scroll position:** each session stores a `ScrollOffset` value for the message output area, so returning to a session resumes at the same scroll position.
 - **Tree panel visibility:** whether the left panel is collapsed or visible.
 
+## Amendments and additions (batch 2026-11-18)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.4.4 Settings window | FR.4.7 | Closing the window with unsaved changes asks first. |
+
+**FR.4.7 — Ask before closing Settings with unsaved changes (WPF; decision A54).** When the Settings window is closed (the **Close** button, Esc, the title bar's close button or Alt+F4) while **any tab** has unsaved changes, including pending colours (FR.9.19), a dialog asks: **Save**, **Discard** or **Cancel**.
+- **Save** saves every changed tab, as the window's Save button does, then closes. If a save fails, the window stays open and shows the error, as Save does.
+- **Discard** drops the changes and closes; nothing is stored.
+- **Cancel** keeps the window open with the changes as they were.
+- **No changes:** the window closes at once, with no dialog.
+- The dialog names the tabs with unsaved changes (for example `Unsaved changes in Colours, Appearance.`).
+- Closing the main window, or the application exiting, while Settings is open behaves the same; Cancel then also stops the main window from closing.
+
 ---
