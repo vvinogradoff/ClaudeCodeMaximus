@@ -164,7 +164,13 @@ public sealed class TreeMutationService : ITreeMutationService
 		if (index is < 0)
 			throw new TdcpInvalidParamsException("'index' must not be negative");
 
-		var located = FindSession(nodeId);
+		var located = Find(nodeId);
+		if (located.Kind == RemoteProtocol.TreeMutation.NodeKinds.Group)
+			return ReorderGroup(located, parentId, index);
+
+		if (located.Kind != RemoteProtocol.TreeMutation.NodeKinds.Session)
+			throw new TdcpException(Constants.TreeMutation.OnlySessionsMove);
+
 		var session = located.Session!;
 
 		// A move changes the working directory the next --resume (and a correction) uses: not while a turn runs.
@@ -200,6 +206,33 @@ public sealed class TreeMutationService : ITreeMutationService
 			throw new TdcpException(Constants.TreeMutation.GitOriginRefused);
 
 		if (!_registry.MoveSession(session, targetDirectory, targetGroup, rawIndex))
+			throw new TdcpException(Constants.TreeMutation.NodeNotFound);
+
+		_registry.RaiseDaemonTreeMutation();
+		return new TreeMoveResult(true);
+	}
+
+	/// <summary>FR.1.32 / TDCP 10.A8: a group moves only within its current parent; the index counts the parent's groups once it has left the list.</summary>
+	private TreeMoveResult ReorderGroup(Located located, string parentId, int? index)
+	{
+		var group = located.Group!;
+		int rawIndex;
+
+		lock (_appSettings.SyncRoot)
+		{
+			var currentParentId = located.ParentGroup?.NodeId ?? located.Directory.NodeId;
+			if (parentId != currentParentId)
+			{
+				if (Locate(parentId) == null)
+					throw new TdcpException(Constants.TreeMutation.ParentNotFound);
+				throw new TdcpException(Constants.TreeMutation.GroupMoveRefused);
+			}
+
+			var siblings = located.ParentGroup?.Groups ?? located.Directory.Groups;
+			rawIndex = Math.Clamp(index ?? 0, 0, siblings.Count(g => g != group));
+		}
+
+		if (!_registry.ReorderGroup(located.Directory, located.ParentGroup, group, rawIndex))
 			throw new TdcpException(Constants.TreeMutation.NodeNotFound);
 
 		_registry.RaiseDaemonTreeMutation();

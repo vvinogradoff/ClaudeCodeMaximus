@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
 using TessynDesktop.Tests.Client;
 using TessynDesktop.Tests.Services;
@@ -29,6 +30,9 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 	private readonly SessionNodeModel _withFile;
 	private readonly SessionNodeModel _noFile;
 	private readonly GroupNodeModel _archive;
+	private readonly GroupNodeModel _beta;
+	private readonly GroupNodeModel _gamma;
+	private readonly TreeMutationService _mutation;
 
 	public WpfTreeOperationsE2ETests()
 	{
@@ -40,6 +44,8 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 		_env.Files.Set(_withFile.FileName, [User("a question", 0), Assistant("an answer", 1, "claude-opus-5-5", "high")]);
 		_noFile = _env.Registry.AddSession(_env.Directory, "No transcript");
 		_archive = _env.Registry.AddGroup(_env.Directory, "Archive");
+		_beta = _env.Registry.AddGroup(_env.Directory, "Beta group");
+		_gamma = _env.Registry.AddGroup(_env.Directory, "Gamma group");
 
 		var activity = new ActivityByNodeService();
 		var states = new SessionStateBuilder(_env.Registry, _env.Streaming, _env.Attention, activity);
@@ -49,12 +55,14 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 		{
 			if (e.Kind != TreeChangeKind.DaemonMutation && e.Kind != TreeChangeKind.SessionIsRunningChanged)
 				versions.Increment();
+			else if (e.Kind == TreeChangeKind.DaemonMutation)
+				_host!.Bus.Publish(RemoteProtocol.Events.TreeChanged, new TreeChangedPayload(versions.Current));   // the publisher's tree.changed after a mutation
 		};
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Settings), _env.Registry, states, activity, versions,
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
-		var mutation = new TreeMutationService(_env.Registry, _env.Settings, new FakeDirectoryLabelService(), new FakeDirectoryGitOrigins());
+		_mutation = new TreeMutationService(_env.Registry, _env.Settings, new FakeDirectoryLabelService(), new FakeDirectoryGitOrigins());
 		_host = new ClientTestHost((run, log) => new TdcpDispatcher([
-			new ClientRpcModule(runInfo: run, eventLog: log, treeMutation: mutation), _env.Module, tree, new TreeMutationRpcModule(mutation)]));
+			new ClientRpcModule(runInfo: run, eventLog: log, treeMutation: _mutation), _env.Module, tree, new TreeMutationRpcModule(_mutation)]));
 
 		var tokens = new TdcpTokenStore(Path.Combine(_root, "tdcp-token.dat"));
 		tokens.Save(ClientTestHost.Token);
@@ -233,6 +241,32 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 			lock (_env.Settings.SyncRoot)
 				Assert.Same(created, _env.Directory.Sessions.Last());
 			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, $"Session {created.NodeId} opened"), "The new session was not opened in the pane. Log:\n" + _app.ReadLog());
+			AssertNoErrors();
+		}
+		finally
+		{
+			_app.Stop(process);
+		}
+	}
+
+	/// <summary>TC.TO.24 (FR.1.32): a group moved through <c>tree.moveNode</c> shows in its new place in the app after <c>tree.changed</c>. The key press itself cannot be sent to the never-activated test window; it is covered by GroupOrderTests.</summary>
+	[Fact]
+	public async Task A_group_moved_through_the_daemon_shows_in_its_new_place_in_the_app()
+	{
+		using var process = await StartAsync();
+		try
+		{
+			string[] groups = ["Archive", "Beta group", "Gamma group"];
+			Assert.True(await _rows.WaitForOrderAsync(process, groups, StepTimeout), "The groups are not in their first order. Log:\n" + _app.ReadLog());
+
+			var result = _mutation.MoveNode(_gamma.NodeId, _env.Directory.NodeId, 0);
+			Assert.True(result.Moved);
+			Assert.True(await _rows.WaitForOrderAsync(process, ["Gamma group", "Archive", "Beta group"], StepTimeout), "The app does not show the group in its new place. Log:\n" + _app.ReadLog());
+			lock (_env.Settings.SyncRoot)
+				Assert.Equal(["Gamma group", "Archive", "Beta group"], _env.Directory.Groups.Select(g => g.Name).ToArray());
+
+			// Another parent is refused, and nothing moves.
+			Assert.Throws<TdcpException>(() => _mutation.MoveNode(_beta.NodeId, _archive.NodeId, 0));
 			AssertNoErrors();
 		}
 		finally
