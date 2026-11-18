@@ -21,3 +21,17 @@
 **FR.32.7 — Stale daemon banner.** When the daemon runs from this run folder's `host\` and its newest `TessynDesktop*.dll` is more than 2 s older than the newest build, the client shows **"The daemon is older than the build."** with **Restart daemon** (confirmation naming the running sessions; the host terminates its sessions and shuts down; WPF starts the new one). No banner for a daemon that does not run from this folder's `host\`, for an unknown build, or when the launcher is the no-op one.
 
 **FR.32.8 — Starting banner.** While a host starts: "Starting the Tessyn daemon in the background…". After 45 s without `daemon.json` the detail says "the host started but did not publish daemon.json; are the agent tools switched off…". An unreadable token says so.
+
+## Amendments and additions (2026-11-18)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.32.7 Stale daemon banner | FR.32.9 | The banner shows only when the **daemon's source** changed between the running daemon and the newest build, not on every rebuild. |
+
+**FR.32.9 — Stale daemon banner only for daemon changes.** (Amends FR.32.7.) Every assembly carries the git commit it was built from in its informational version (`1.0.0+<commit>`), so **any** commit, even a docs-only one, rebuilds the daemon assemblies with new bytes and new times. FR.32.7's time rule therefore fires after builds that changed nothing in the daemon. The check becomes:
+1. **Commits.** Read the commit of the running daemon (from its `TessynDesktop.dll` in `host\`) and of the newest build (from the same assembly in the build folder). If they are equal, no banner.
+2. **Daemon source.** Otherwise, in the git repository at `SourceCodesLocation`, compare the two commits over the **daemon's source paths**: the daemon host project and every project it references, transitively (today `code/TessynDesktop`, `code/TessynDesktop.Core`, `code/TessynDesktop.Protocol`), plus the build files that affect them (`Directory.Build.*`, `Directory.Packages.props`, `global.json`, `NuGet.config` under `code/`, when present). The project list is derived from the project references, not hard-coded. **No difference: no banner.** A difference: the banner, as in FR.32.7.
+3. **Uncommitted changes.** When the newest build was made from a working tree with uncommitted changes in the daemon's source paths (git reports them now), the daemon counts as changed.
+4. **Fallback.** When either commit is unknown, git is not available, a commit is not in the repository, or git fails or takes longer than 5 s, the FR.32.7 time rule decides, as before.
+- **Off the UI thread.** The check runs in the background at connect and after each self-update check (FR.32.3); it never blocks the window. The result is logged (both commits, the decision and its reason).
+- **Restart daemon** and its confirmation are unchanged.

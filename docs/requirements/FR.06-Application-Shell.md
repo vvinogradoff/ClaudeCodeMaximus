@@ -42,3 +42,13 @@
 **FR.6.8 — Status bar (WPF).** The two plan-usage meters (FR.18) fill the bar's full height and take all the width left by the other items. The Profiles button is at the far right.
 
 **FR.6.9 — Screensaver picture mode: fill (WPF).** The screensaver (idle cover with a slideshow of the pictures of its folder) shows each picture in **fill** mode: the picture **covers the whole screen**, keeps its **aspect ratio** and is **cropped** where the ratio differs from the screen's (centre crop), instead of being fitted inside the screen with bars. The folder, idle time and slide interval settings are unchanged.
+
+---
+
+## Amendments (2026-11-18, preview windows)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.6.7 Title bar contents (WPF) | FR.6.10 | A **Monitor** toggle follows the day/night toggle. |
+
+**FR.6.10 — Monitor toggle in the title bar (WPF).** Right after the day/night toggle (before the separator and the instruction toolbar) the title bar has a **Monitor** icon button. It is **enabled only while two or more monitors are connected** (tooltip with one monitor: "Connect a second monitor to open previews in their own windows"); with two or more it is a toggle that looks checked when on, remembered in the client settings, default on. When on, items that have a preview open in their own windows on the extra monitors. Details, the preview groups and the window rules: FR.29.1 and FR.29 (use cases UC.PW.01, test cases TC.PW.01).

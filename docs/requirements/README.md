@@ -39,13 +39,15 @@
 | FR.24-Session-Tags | Session tags | FR.24.1–24.15 | FR.24.16–24.18 |
 | FR.25-Web-Client | Tessyn Web (from the draft in the main tree) | FR.25.01–25.40 | FR.25.41 |
 | FR.26-Links-and-Previews | Links and previews | FR.26.x | — |
+| **FR.27-Embedded-Browser** | Embedded browser of the web preview windows | — | FR.27.1–27.9 (new area, drafted 2026-11-18) |
+| **FR.29-Preview-Windows** | Preview windows on extra monitors, preview groups, monitor toggle | — | FR.29.1–29.13 (new area, drafted 2026-11-18) |
 | FR.31-Attachments | Attachments | FR.31.1–31.9 | — |
 | **FR.32-Client-Hosting** | WPF hosting, background daemon, coexistence | — | FR.32.1–32.8 (new area) |
 | NR-Non-Functional | NR.1–NR.7 | NR.1–NR.5 | NR.6, NR.7 |
 | Out-of-Scope | Out of scope list | — | — |
 
-FR.27–FR.30 stay **reserved** (embedded browser pane, output modes, multi-screen layout, helper models; `docs/refactoring/wpf-programme-plan.md`).
+FR.27 (embedded browser) and FR.29 (preview windows on extra monitors) are specified (2026-11-18, not built). Only FR.28 (output modes) and FR.30 (helper models) stay **reserved** (`docs/refactoring/wpf-programme-plan.md`).
 
 ## Supporting text
 - The wire additions of the batch are in `docs/refactoring/tdcp-spec.md` section 10; the new glossary terms are in `docs/glossary.md`.
-- Use cases and test cases of the batch: `UC/TC.LP.01`, `TR.01`, `IN.01`, `CL.01`, `SH.01`, `TA.01`, `FC.01`, `HS.01`.
+- Use cases and test cases of the batch: `UC/TC.LP.01`, `TR.01`, `IN.01`, `CL.01`, `SH.01`, `TA.01`, `FC.01`, `HS.01`; preview windows: `UC/TC.PW.01`.

@@ -21,6 +21,13 @@ Related requirements: FR.32.1–FR.32.8. Use cases: [UC.HS.01](/docs/usecases/UC
 | TC.HS.13 | Real windowless host, tray icon, tray confirm and exit listener | MANUAL | UC.HS.06 | FR.32.1 |
 | TC.HS.14 | An old `wpf.json` with the removed `imports` and `avaloniaImport` sections loads without error; other sections are kept | AUTOMATED | UC.HS.05 | FR.32.4 |
 | TC.HS.15 | The built host exe, isolated (`--data-root`, `--daemon-file`, `--instance`): starts, publishes `daemon.json`, answers `tree.snapshot`, ends cleanly on the exit event and removes `daemon.json`; a start without `--background` runs as the host and logs a note; a second start with the same instance ends at once | E2E | UC.HS.06 | FR.32.1, FR.32.2 |
+| TC.HS.16 | Same commit in the running daemon and the newest build: no banner | AUTOMATED | UC.HS.07 | FR.32.9 |
+| TC.HS.17 | Different commits with no change in the daemon source paths (a WPF-only or docs commit, in a real temporary git repo): no banner | AUTOMATED | UC.HS.07 | FR.32.9 |
+| TC.HS.18 | A change in Core, Protocol, the host project or a build file between the commits: the banner | AUTOMATED | UC.HS.07 | FR.32.9 |
+| TC.HS.19 | Uncommitted changes in a daemon source path: the banner | AUTOMATED | UC.HS.07 | FR.32.9 |
+| TC.HS.20 | The daemon source paths come from the host project references, transitively | AUTOMATED | UC.HS.07 | FR.32.9 |
+| TC.HS.21 | Unknown commit, no git, a commit missing from the repo, or a git timeout: the time rule of FR.32.7 decides | AUTOMATED | UC.HS.07 | FR.32.9 |
+| TC.HS.22 | The check runs off the UI thread and logs both commits and the decision | AUTOMATED | UC.HS.07 | FR.32.9 |
 
 ## FR → TC coverage
 | FR | Test cases |
@@ -33,3 +40,4 @@ Related requirements: FR.32.1–FR.32.8. Use cases: [UC.HS.01](/docs/usecases/UC
 | FR.32.6 | TC.HS.08 (withdrawn), 09, 12 |
 | FR.32.7 | TC.HS.07 |
 | FR.32.8 | TC.HS.04 |
+| FR.32.9 | TC.HS.16–22 |

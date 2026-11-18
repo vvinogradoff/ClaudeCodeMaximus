@@ -33,3 +33,9 @@ Was: the previous client hosting the daemon in its window while WPF attached. Th
 ## UC.HS.06 — Exit the background host
 **Main flow:** the User picks *Exit Tessyn daemon* in the tray; with running sessions a question appears; confirming terminates them and shuts down, even if the termination throws.
 **Covers:** FR.32.1.
+
+## UC.HS.07 — A rebuild without daemon changes shows no stale banner
+**Actor:** the Architect. **Precondition:** WPF runs from `[Publish-WPF]` with its daemon from `host\`.
+**Main flow:** 1. A WPF-only change (or a docs commit) is merged and built. 2. WPF updates and reconnects. 3. No "The daemon is older than the build." banner appears, because nothing in the daemon's source changed.
+**Alternative flows:** **A1** — A change in `TessynDesktop.Core` is merged and built: the banner appears with Restart daemon. **A2** — The build was made with uncommitted Core edits: the banner appears. **A3** — git is missing or the running commit is unknown: the time rule decides (FR.32.7).
+**Covers:** FR.32.9.
