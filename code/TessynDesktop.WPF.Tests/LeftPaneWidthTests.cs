@@ -128,9 +128,9 @@ public sealed class LeftPaneWidthTests
 			Assert.Equal(Visibility.Visible, bar.Visibility);
 			AssertNear(ScrollBar, bar.ActualWidth, "The vertical scrollbar is the theme width");
 
-			// A row (item margin 4 + 4) spans the list less the scrollbar: the margins stay fixed, only the content grows.
+			// A row (no side margins: the scrollbar and the splitter are the delimiters) spans the list less the scrollbar.
 			var row = FindAll<ListBoxItem>(list).First();
-			Assert.InRange(row.ActualWidth, width - ScrollBar - 8 - ListChrome - Tolerance, width - ScrollBar - 8 + Tolerance);   // spans the list: only the scrollbar, the item margins and the list's own border are left
+			Assert.InRange(row.ActualWidth, width - ScrollBar - ListChrome - Tolerance, width - ScrollBar + Tolerance);   // spans the list: only the scrollbar and the list's own border are left
 
 			var toolbar = FindAll<TreeToolbar>(page).Single();
 			AssertNear(width, toolbar.ActualWidth, "The bottom button line spans the panel");
