@@ -46,19 +46,6 @@
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
-            <!-- An answer button: as wide as the card, text left, 2 px between buttons; the recommendation has an accent outline (the accent of the Save button's AccentButtonStyle, FR.23.26). -->
-            <Style x:Key="OptionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="HorizontalContentAlignment" Value="Left" />
-                <Setter Property="Margin" Value="0,0,0,2" />
-                <Setter Property="Padding" Value="10,4" />
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsRecommended}" Value="True">
-                        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
-                        <Setter Property="BorderThickness" Value="1.5" />
-                    </DataTrigger>
-                </Style.Triggers>
-            </Style>
             <DataTemplate x:Key="OpenCardTemplate" DataType="{x:Type vm:FocusItemViewModel}">
 
                     <Border Style="{StaticResource CardBorder}">
@@ -95,17 +82,36 @@
                             <!-- options, the recommendation last (FR.23.26): one vertical list of full-width buttons -->
                             <ItemsControl ItemsSource="{Binding Options}" Margin="0,6,0,4" Visibility="{Binding HasOptions, Converter={StaticResource BoolToVis}}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
+                                    <!-- An answer button: as wide as the card, text left, 2 px between buttons (FR.23.26); the recommendation is an accent button, like Send answers and Send (FR.23.28). -->
                                     <DataTemplate DataType="{x:Type vm:FocusOptionViewModel}">
-                                        <Button Style="{StaticResource OptionButton}" Command="{Binding PickCommand}" ToolTip="{Binding ToolTip}">
+                                        <Button x:Name="OptionButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="0,0,0,2" Padding="10,4"
+                                                Command="{Binding PickCommand}" ToolTip="{Binding ToolTip}">
                                             <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
                                         </Button>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsRecommended}" Value="True">
+                                                <Setter TargetName="OptionButton" Property="Style" Value="{DynamicResource AccentButtonStyle}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <!-- free-text answer -->
-                            <TextBox Text="{Binding ReplyText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="160"
-                                     VerticalScrollBarVisibility="Auto" ToolTip="Your answer; sent with Reply or Send answers" AutomationProperties.Name="Your answer" />
+                            <!-- free-text answer: a 2 px accent border and a resize grip at the bottom right (FR.23.28) -->
+                            <Border x:Name="ReplyFrame" BorderThickness="2" CornerRadius="4" BorderBrush="{DynamicResource AccentFillColorDefaultBrush}">
+                                <Grid>
+                                    <TextBox x:Name="ReplyBox" Text="{Binding ReplyText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="600"
+                                             BorderThickness="0" VerticalScrollBarVisibility="Auto" ToolTip="Your answer; sent with Reply or Send answers" AutomationProperties.Name="Your answer" />
+                                    <Thumb x:Name="ReplyGrip" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="14" Height="14" Cursor="SizeNWSE"
+                                           DragDelta="OnReplyGripDragDelta" ToolTip="Drag to resize" AutomationProperties.Name="Resize the answer box">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <ResizeGrip Background="Transparent" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Grid>
+                            </Border>
                             <DockPanel Margin="0,8,0,0">
                                 <Button DockPanel.Dock="Right" Command="{Binding DismissCommand}" Content="{Binding CloseText}" ToolTip="Closes the item without sending anything" />
                                 <Button HorizontalAlignment="Left" Command="{Binding ReplyCommand}" Content="Reply" Style="{DynamicResource AccentButtonStyle}" />
