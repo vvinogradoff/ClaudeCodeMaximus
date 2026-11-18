@@ -74,7 +74,7 @@
       if (has && loaded.get(item.url) === null) inner = '<span class="mfail">Preview unavailable</span>';
       else if (item.auto || has) inner = elementHtml(item, has ? loaded.get(item.url) : '') || '<span class="mfail">Preview unavailable</span>';
       else inner = '<button class="mload" type="button" data-i="' + entryIndex + '" data-j="' + j + '">Load preview ' + esc(item.host) + '</button>';
-      html += '<div class="ms">' + inner + '</div>';
+      html += '<div class="ms" data-j="' + j + '">' + inner + '</div>';
     });
     return html + '</div>';
   }

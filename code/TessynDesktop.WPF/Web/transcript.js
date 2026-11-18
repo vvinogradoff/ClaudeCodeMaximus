@@ -331,6 +331,7 @@ function stepFind(dir) { if (!F || !F.idx.length) return; F.cur = (F.cur + dir +
 
 // ---- host commands ----
 function onLoad(m) {
+  hideMenu();
   showLive(null);
   SEL = InputNav.selectionOnLoad(SEL, S ? S.key : null, m.key);   // a reload of the same session keeps its selection; another session clears it
   S = { key: m.key, tok: m.tok, items: m.entries.map(mk), off: new Float64Array(1), a: 0, b: 0, hasOlder: m.hasOlder, hasNewer: !!m.hasNewer, loaded: new Map(), pimg: new Map() };

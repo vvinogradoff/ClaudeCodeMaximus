@@ -57,6 +57,7 @@ public sealed class ServiceRegistration
 		});
 		services.AddSingleton<UrlPolicy>();
 		services.AddSingleton<IUrlLauncher, SystemUrlLauncher>();
+		services.AddSingleton<IClipboardWriter, SystemClipboardWriter>();
 		services.AddSingleton<MediaPreviewPolicy>();
 		services.AddSingleton<PrivateAddressCheck>();
 		services.AddSingleton<MediaProxyUrl>();
