@@ -205,15 +205,44 @@ public sealed class PreviewsSectionTests
 	}
 
 	[Fact]
-	public void GroupsChanged_KeepsTheEdits_WhenThereAreUnsavedChanges()
+	public void GroupsChanged_KeepsTheEdits_AndMergesAnAutoCloseFlipMadeInAWindow()
 	{
 		_section.Groups[0].Name = "Pictures";
 
-		_service.SetAutoClose("csv", true);
+		_service.SetAutoClose("csv", true);   // a window's Auto-close button
 
 		Assert.Equal("Pictures", _section.Groups[0].Name);
-		Assert.False(_section.Groups.Single(g => g.Id == "csv").AutoClose);
+		Assert.True(_section.Groups.Single(g => g.Id == "csv").AutoClose);
 		Assert.True(_section.HasChanges);
+	}
+
+	[Fact]
+	public async Task SaveAfterAWindowFlip_DoesNotWriteTheStaleSwitchBack()
+	{
+		_section.Groups[0].Name = "Pictures";
+		_service.SetAutoClose("csv", true);
+
+		Assert.True(await _section.SaveAsync());
+
+		Assert.True(_service.Groups.Single(g => g.Id == "csv").AutoClose);
+		Assert.Equal("Pictures", _service.Groups[0].Name);
+		Assert.False(_section.HasChanges);
+	}
+
+	[Fact]
+	public async Task AnAutoCloseTheUserChangedInTheTab_IsKeptWhenAWindowFlipsAnother()
+	{
+		_section.Groups.Single(g => g.Id == "csv").AutoClose = true;   // the user's edit, unsaved
+
+		_service.SetAutoClose("images", true);   // a window flips another group
+
+		Assert.True(_section.Groups.Single(g => g.Id == "images").AutoClose);
+		Assert.True(_section.Groups.Single(g => g.Id == "csv").AutoClose);
+		Assert.True(_section.HasChanges);
+
+		await _section.SaveAsync();
+		Assert.True(_service.Groups.Single(g => g.Id == "csv").AutoClose);
+		Assert.True(_service.Groups.Single(g => g.Id == "images").AutoClose);
 	}
 
 	[Fact]
