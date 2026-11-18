@@ -201,7 +201,7 @@ public sealed class AppSettingsModel
 
 	/// <summary>
 	/// Minimum seconds between Session Completion Sound plays for the same session (FR.22.3).
-	/// Default 180 (3 minutes).
+	/// Default 3: one Focus item sound per burst (FR.22.3); a stored 180, the old per-session default, reads as 3.
 	/// </summary>
 	public int SessionCompletionSoundThrottleSeconds { get; set; } = Constants.SessionSound.DefaultThrottleSeconds;
 }

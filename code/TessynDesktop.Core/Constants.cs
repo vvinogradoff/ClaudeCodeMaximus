@@ -941,8 +941,8 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// <summary>File name (within <see cref="SoundLibrarySubfolder"/>) of the default completion sound.</summary>
 		public const string DefaultSoundFileName = "Windows Notify.wav";
 
-		/// <summary>Default per-session throttle window (3 minutes).</summary>
-		public const int DefaultThrottleSeconds = 180;
+		/// <summary>Default global throttle window of the Focus item sound (FR.22.3): one sound per burst.</summary>
+		public const int DefaultThrottleSeconds = TessynDesktop.Models.Remote.RemoteProtocol.Notifications.DefaultSoundThrottleSeconds;
 
 		/// <summary>Search pattern used to enumerate the sound library.</summary>
 		public const string SoundFileSearchPattern = "*.wav";

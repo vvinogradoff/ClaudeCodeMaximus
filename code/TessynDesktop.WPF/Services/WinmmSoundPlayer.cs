@@ -26,7 +26,7 @@ public sealed class WinmmSoundPlayer : ISoundPlayer
 		{
 			if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
 			{
-				_logger.LogWarning("Completion sound file not found: {File}", file);
+				_logger.LogWarning("Focus item sound file not found: {File}", file);
 				return;
 			}
 
@@ -34,7 +34,7 @@ public sealed class WinmmSoundPlayer : ISoundPlayer
 		}
 		catch (Exception ex)
 		{
-			_logger.LogWarning(ex, "Could not play the completion sound {File}", file);
+			_logger.LogWarning(ex, "Could not play the Focus item sound {File}", file);
 		}
 	}
 }

@@ -142,7 +142,7 @@ public sealed class WpfToolbarE2ETests : IDisposable
 			await WaitForCallAsync("setOptions:autoDocument=True");
 			Assert.True(_toolbar.AutoDocument);
 
-			await ToggleAsync(process, "Completion sound");
+			await ToggleAsync(process, "Focus item sound");
 			await WaitForCallAsync("setOptions:sound=False");
 			Assert.DoesNotContain("[ERR]", _app.ReadLog());
 		}

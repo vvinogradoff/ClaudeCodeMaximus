@@ -30,6 +30,10 @@ public static class ComposerNotificationExtensions
 	/// A notification the host would have shown as a toast (package J2, <c>notifications.local</c>). Show it once per <see cref="NotificationRaisedPayload.NotificationId"/>
 	/// and drop it when <see cref="NotificationRaisedPayload.RaisedUtc"/> is much older than now (a replay after a reconnect).
 	/// </summary>
+	/// <summary>The Focus item sound cue (FR.22.6).</summary>
+	public static bool TryGetFocusItemCreated(this RemoteNotification notification, [NotNullWhen(true)] out FocusItemCreatedPayload? payload) =>
+		TurnNotificationExtensions.TryRead(notification, RemoteProtocol.Notifications.FocusItemCreatedEvent, out payload);
+
 	public static bool TryGetNotificationRaised(this RemoteNotification notification, [NotNullWhen(true)] out NotificationRaisedPayload? payload)
 	{
 		payload = null;

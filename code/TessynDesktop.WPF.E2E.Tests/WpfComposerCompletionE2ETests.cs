@@ -12,7 +12,7 @@ namespace TessynDesktop.WPF.E2E.Tests;
 /// <summary>
 /// End to end for the composer completion (W1b): the BUILT WPF app against a real loopback daemon with the real draft and autocomplete modules, the
 /// real presence registry and acknowledgement book. A suggestion is chosen through UI Automation (the rows are buttons), the draft survives an app
-/// restart, the sign-in notice follows <c>session.changed</c>, and the completion sound is played by the client (a test window only logs it) and
+/// restart, the sign-in notice follows <c>session.changed</c>, and the Focus item sound (FR.22) is played by the client (a test window only logs it) and
 /// acknowledged to the daemon.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -260,10 +260,10 @@ public sealed class WpfComposerCompletionE2ETests : IDisposable
 
 	private SessionStateDto State(bool authError) => new(_main, false, false, null, false, null, null, false, null, authError);
 
-	// ---- completion sound ----
+	// ---- Focus item sound ----
 
 	[Fact]
-	public async Task The_client_registers_the_sound_channel_plays_the_completion_sound_and_acknowledges_it()
+	public async Task The_client_registers_the_sound_channel_plays_the_focus_item_sound_and_acknowledges_it()
 	{
 		using var process = await StartAsync();
 		try
@@ -271,11 +271,11 @@ public sealed class WpfComposerCompletionE2ETests : IDisposable
 			await WaitUntilAsync(() => _presence.IsPresented(RemoteProtocol.Notifications.SoundChannel), "the sound channel was registered");
 			Assert.False(_presence.IsPresented(RemoteProtocol.Notifications.ToastChannel));   // toasts belong to the notification package
 
-			_host.Bus.Publish(RemoteProtocol.Events.TurnCompleted, new TurnCompletedPayload(_main, false, null, "t1"));
+			_host.Bus.Publish(RemoteProtocol.Notifications.FocusItemCreatedEvent, new FocusItemCreatedPayload(_main, "A1", "ask", DateTimeOffset.UtcNow));
 
 			var since = DateTimeOffset.UtcNow.AddMinutes(-1);
-			await WaitUntilAsync(() => _acks.TryConsumeSoundAck(_main, since), "the completion sound was acknowledged");
-			Assert.Contains("Completion sound (silent in a test window)", _app.ReadLog());
+			await WaitUntilAsync(() => _acks.TryConsumeSoundAck(_main, since), "the Focus item sound was acknowledged");
+			Assert.Contains("Focus item sound (silent in a test window)", _app.ReadLog());
 		}
 		finally
 		{
@@ -284,17 +284,18 @@ public sealed class WpfComposerCompletionE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task A_stopped_turn_makes_no_sound()
+	public async Task A_completed_turn_makes_no_sound()
 	{
 		using var process = await StartAsync();
 		try
 		{
 			await WaitUntilAsync(() => _presence.IsPresented(RemoteProtocol.Notifications.SoundChannel), "the sound channel was registered");
 
-			_host.Bus.Publish(RemoteProtocol.Events.TurnCompleted, new TurnCompletedPayload(_main, true, null, "t1"));
+			_host.Bus.Publish(RemoteProtocol.Events.TurnCompleted, new TurnCompletedPayload(_main, false, null, "t1"));
+			_host.Bus.Publish(RemoteProtocol.Events.TurnCompleted, new TurnCompletedPayload(_main, true, null, "t2"));
 			await Task.Delay(1500);
 
-			Assert.DoesNotContain("Completion sound", _app.ReadLog());
+			Assert.DoesNotContain("Focus item sound", _app.ReadLog());
 			Assert.False(_acks.TryConsumeSoundAck(_main, DateTimeOffset.UtcNow.AddMinutes(-1)));
 		}
 		finally

@@ -28,6 +28,8 @@ public sealed class AttentionService : IAttentionService
 
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 
+	public event EventHandler<AttentionItemsCreatedEventArgs>? ItemsCreated;
+
 	public AttentionService(AttentionLedgerStore store, ISessionFileService fileService)
 		: this(store, fileService, TimeProvider.System)
 	{
@@ -94,6 +96,7 @@ public sealed class AttentionService : IAttentionService
 
 		AppendEntries(node, entries);
 		RaiseChanged(node.NodeId);
+		RaiseCreated(node.NodeId, outcomes);
 		return outcomes;
 	}
 
@@ -398,6 +401,22 @@ public sealed class AttentionService : IAttentionService
 		catch (Exception ex)
 		{
 			_log.Warning(ex, "AttentionService: AttentionChanged subscriber failed for node {NodeId}", nodeId);
+		}
+	}
+
+	private void RaiseCreated(string nodeId, IReadOnlyList<AttentionPostOutcomeModel> outcomes)
+	{
+		var created = outcomes.Where(o => o.IsCreated).Select(o => o.Item).ToList();
+		if (created.Count == 0)
+			return;
+
+		try
+		{
+			ItemsCreated?.Invoke(this, new AttentionItemsCreatedEventArgs(nodeId, created));
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "AttentionService: ItemsCreated subscriber failed for node {NodeId}", nodeId);
 		}
 	}
 

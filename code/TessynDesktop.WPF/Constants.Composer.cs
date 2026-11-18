@@ -1,6 +1,6 @@
 namespace TessynDesktop.WPF;
 
-/// <summary>Limits and texts of the composer completion (W1b): drafts, autocomplete, the completion sound and the auth-error notice.</summary>
+/// <summary>Limits and texts of the composer completion (W1b): drafts, autocomplete, the Focus item sound and the auth-error notice.</summary>
 /// <remarks>Created by Claude</remarks>
 public static partial class Constants
 {
@@ -41,7 +41,7 @@ public static partial class Constants
 		public const string ReauthenticateFailed = "Could not start the sign-in: ";
 	}
 
-	/// <summary>The completion sound (FR.22): what the client reads from the daemon and when it stays silent.</summary>
+	/// <summary>The Focus item sound (FR.22): what the client reads from the daemon and when it stays silent.</summary>
 	public static class SoundRules
 	{
 		/// <summary>Channel this client registers for: the host stays silent for it while this client is connected.</summary>

@@ -11,7 +11,7 @@ internal sealed class RecordingSoundService : ISessionSoundService
 
 	public List<string> Available { get; set; } = [@"C:\Windows\Media\Alarm01.wav", @"C:\Windows\Media\chimes.wav"];
 
-	public void PlayCompletionSound(string nodeId)
+	public void PlayFocusItemSound(string nodeId)
 	{
 	}
 

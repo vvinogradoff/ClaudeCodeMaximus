@@ -46,7 +46,7 @@ public sealed class NotificationClientTests : IDisposable
 			(await probe.NextNotificationAsync()).TryGetNotificationRaised(out raised);
 		Assert.True((await client.NotificationAckAsync(raised.NotificationId)).Acknowledged);
 		await client.NotificationSoundAckAsync("n");
-		_env.Sounds.PlayCompletionSound("n");
+		_env.Sounds.PlayFocusItemSound("n");
 		Assert.True(await shown.WaitAsync(TimeSpan.FromSeconds(10)));
 		await Task.Delay(NotificationWireEnv.AckTimeout * 2);
 		Assert.Equal(0, _env.Host.ToastCount);

@@ -109,6 +109,10 @@ internal sealed class FakeAttentionService : IAttentionService
 {
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 
+	public event EventHandler<AttentionItemsCreatedEventArgs>? ItemsCreated;
+
+	public void RaiseCreated(string nodeId, params AttentionItemModel[] items) => ItemsCreated?.Invoke(this, new AttentionItemsCreatedEventArgs(nodeId, items));
+
 	public List<AttentionItemModel> Items { get; set; } = new();
 	public AttentionSummaryModel Summary { get; set; } = new();
 	public List<AttentionItemModel> Closures { get; set; } = new();

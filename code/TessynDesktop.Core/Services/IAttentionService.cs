@@ -16,6 +16,9 @@ public interface IAttentionService
 	/// <summary>Raised once after every call that changed a ledger (FR.23.16). May fire on any thread.</summary>
 	event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 
+	/// <summary>Raised once per <see cref="Post"/> that created at least one new item (FR.22.1), after <see cref="AttentionChanged"/>. Never for an update or a close. May fire on any thread.</summary>
+	event EventHandler<AttentionItemsCreatedEventArgs>? ItemsCreated;
+
 	/// <summary>
 	/// Pins <paramref name="requests"/> to the node's ledger (FR.23.4): item by item, an open item with the same
 	/// key (else the same normalised title) is updated, otherwise a new <c>A{n}</c> is created. Writes a SYSTEM

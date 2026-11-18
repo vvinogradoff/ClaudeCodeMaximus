@@ -11,10 +11,9 @@ namespace TessynDesktop.Services;
 /// <summary>
 /// Default <see cref="ISessionSoundService"/> implementation (FR.22). Plays .wav files via the
 /// Win32 <c>winmm.dll</c> <c>PlaySound</c> API rather than <see cref="System.Media.SoundPlayer"/>
-/// or a NuGet audio package, so no project reference change is needed. The per-session throttle
-/// (FR.22.3) is tracked in memory for the lifetime of this app-wide singleton; the clock and the
-/// actual playback call are both injectable so the throttle logic can be unit tested without
-/// touching real audio hardware or wall-clock time.
+/// or a NuGet audio package, so no project reference change is needed. The throttle (FR.22.3) is
+/// applied before this service by <see cref="FocusItemSoundNotifier"/>; the playback call is
+/// injectable so tests do not touch real audio hardware.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionSoundService : ISessionSoundService
@@ -28,35 +27,25 @@ public sealed class SessionSoundService : ISessionSoundService
 	private static extern bool PlaySound(string? pszSound, IntPtr hmod, uint fdwSound);
 
 	private readonly IAppSettingsService _appSettings;
-	private readonly Func<DateTimeOffset> _now;
 	private readonly Action<string> _play;
-	private readonly ConcurrentDictionary<string, DateTimeOffset> _lastPlayedByNodeId = new();
 
 	public SessionSoundService(IAppSettingsService appSettings)
-		: this(appSettings, now: null, play: null)
+		: this(appSettings, play: null)
 	{
 	}
 
-	/// <summary>Test seam: <paramref name="now"/> and <paramref name="play"/> default to real time/playback when null.</summary>
-	public SessionSoundService(IAppSettingsService appSettings, Func<DateTimeOffset>? now, Action<string>? play)
+	/// <summary>Test seam: <paramref name="play"/> defaults to the real playback when null.</summary>
+	public SessionSoundService(IAppSettingsService appSettings, Action<string>? play)
 	{
 		_appSettings = appSettings;
-		_now = now ?? (() => DateTimeOffset.UtcNow);
 		_play = play ?? PlayWavFile;
 	}
 
-	public void PlayCompletionSound(string nodeId)
+	public void PlayFocusItemSound(string nodeId)
 	{
 		if (string.IsNullOrEmpty(nodeId))
 			return;
 
-		var throttle = TimeSpan.FromSeconds(Math.Max(0, _appSettings.Settings.SessionCompletionSoundThrottleSeconds));
-		var now = _now();
-
-		if (_lastPlayedByNodeId.TryGetValue(nodeId, out var last) && now - last < throttle)
-			return;
-
-		_lastPlayedByNodeId[nodeId] = now;
 		PlaySafe(_appSettings.Settings.SessionCompletionSoundFile);
 	}
 

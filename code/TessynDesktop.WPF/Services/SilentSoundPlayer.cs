@@ -13,5 +13,5 @@ public sealed class SilentSoundPlayer : ISoundPlayer
 		_logger = logger;
 	}
 
-	public void Play(string file) => _logger.LogInformation("Completion sound (silent in a test window): {File}", file);
+	public void Play(string file) => _logger.LogInformation("Focus item sound (silent in a test window): {File}", file);
 }

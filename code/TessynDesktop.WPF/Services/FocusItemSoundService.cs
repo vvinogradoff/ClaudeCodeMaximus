@@ -5,26 +5,27 @@ using TessynDesktop.Models.Remote;
 namespace TessynDesktop.WPF.Services;
 
 /// <summary>
-/// The completion sound of the WPF client (FR.22, W1b). The client registers the <c>sound</c> channel with the daemon, so the desktop host stays
-/// silent while it is connected; this service plays the sound itself when a turn completes and tells the daemon with <c>notification.ack { nodeId }</c>
-/// (the host plays it after about 3 s when no ack comes). The rules are the host's: never after a stop, never when the turn never ran, only when the
-/// session's "play completion sound" option is on, at most once per session per throttle window, with the file the Settings window chose.
+/// The Focus item sound of the WPF client (FR.22, W1b). The client registers the <c>sound</c> channel with the daemon, so the desktop host stays
+/// silent while it is connected; this service plays the sound itself when the daemon announces a new Focus item (<c>focus.itemCreated</c>) and tells
+/// the daemon with <c>notification.ack { nodeId }</c> (the host plays it after about 3 s when no ack comes). A turn completion, an item update and a
+/// resolve announce nothing, so they never play. The rules: only when the owning session's "play a sound when a new Focus item appears" option is on,
+/// at most one sound per global throttle window (a burst is one sound), never for a replayed event, with the file the Settings window chose.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class CompletionSoundService : IDisposable
+public sealed class FocusItemSoundService : IDisposable
 {
 	private readonly ITessynClient _client;
 	private readonly ISoundPlayer _player;
 	private readonly TimeProvider _clock;
-	private readonly ILogger<CompletionSoundService> _logger;
-	private readonly Dictionary<string, DateTimeOffset> _lastPlayed = new();
+	private readonly ILogger<FocusItemSoundService> _logger;
 	private readonly object _lock = new();
 
+	private DateTimeOffset? _lastPlayed;
 	private NotificationsSettingsDto? _settings;
 	private DateTimeOffset _settingsReadAt;
 	private bool _attached;
 
-	public CompletionSoundService(ITessynClient client, ISoundPlayer player, TimeProvider clock, ILogger<CompletionSoundService> logger)
+	public FocusItemSoundService(ITessynClient client, ISoundPlayer player, TimeProvider clock, ILogger<FocusItemSoundService> logger)
 	{
 		_client = client;
 		_player = player;
@@ -32,7 +33,7 @@ public sealed class CompletionSoundService : IDisposable
 		_logger = logger;
 	}
 
-	/// <summary>Completes when no completion is being handled (tests).</summary>
+	/// <summary>Completes when no event is being handled (tests).</summary>
 	public Task WhenIdleAsync()
 	{
 		lock (_lock)
@@ -53,36 +54,37 @@ public sealed class CompletionSoundService : IDisposable
 
 	private void OnNotification(object? sender, RemoteNotification notification)
 	{
-		if (!notification.TryGetTurnCompleted(out var completed))
+		if (!notification.TryGetFocusItemCreated(out var created))
 			return;
 
 		lock (_lock)
-			_pending = Task.WhenAll(_pending, HandleAsync(completed));
+			_pending = Task.WhenAll(_pending, HandleAsync(created));
 	}
 
-	private async Task HandleAsync(TurnCompletedPayload completed)
+	private async Task HandleAsync(FocusItemCreatedPayload created)
 	{
 		try
 		{
-			if (completed.Cancelled || completed.NeverRan == true)
+			// The event log replays after a reconnect: an old cue is not played (and not acknowledged; the host decided long ago).
+			if (created.IsReplay(_clock.GetUtcNow()))
 				return;
 
-			if (!await SessionWantsSoundAsync(completed.NodeId).ConfigureAwait(false))
+			if (!await SessionWantsSoundAsync(created.NodeId).ConfigureAwait(false))
 				return;
 
 			var settings = await ReadSettingsAsync().ConfigureAwait(false);
 			if (settings == null || string.IsNullOrWhiteSpace(settings.SessionCompletionSoundFile))
 				return;   // nothing to play: no ack, so the host plays its own after the wait
 
-			if (!Throttled(completed.NodeId, settings.SessionCompletionSoundThrottleSeconds))
+			if (!Throttled(RemoteProtocol.Notifications.EffectiveSoundThrottleSeconds(settings.SessionCompletionSoundThrottleSeconds)))
 				_player.Play(settings.SessionCompletionSoundFile);
 
 			// A throttled sound is acknowledged too: staying silent was this client's decision, and the host would not play it either.
-			await _client.NotificationSoundAckAsync(completed.NodeId).ConfigureAwait(false);
+			await _client.NotificationSoundAckAsync(created.NodeId).ConfigureAwait(false);
 		}
 		catch (Exception ex)
 		{
-			_logger.LogWarning(ex, "Handling the completion sound of {NodeId} failed", completed.NodeId);
+			_logger.LogWarning(ex, "Handling the Focus item sound of {NodeId} failed", created.NodeId);
 		}
 	}
 
@@ -97,7 +99,7 @@ public sealed class CompletionSoundService : IDisposable
 		}
 		catch (Exception ex)
 		{
-			_logger.LogInformation("Could not read the completion sound option of {NodeId} ({Message}); playing", nodeId, ex.Message);
+			_logger.LogInformation("Could not read the Focus item sound option of {NodeId} ({Message}); playing", nodeId, ex.Message);
 			return true;
 		}
 	}
@@ -130,16 +132,17 @@ public sealed class CompletionSoundService : IDisposable
 		}
 	}
 
-	private bool Throttled(string nodeId, int throttleSeconds)
+	/// <summary>True when a sound played inside the global window (FR.22.3); otherwise starts the window now.</summary>
+	private bool Throttled(int throttleSeconds)
 	{
 		var now = _clock.GetUtcNow();
 		var window = TimeSpan.FromSeconds(Math.Max(0, throttleSeconds));
 		lock (_lock)
 		{
-			if (_lastPlayed.TryGetValue(nodeId, out var last) && now - last < window)
+			if (_lastPlayed is { } last && now - last < window)
 				return true;
 
-			_lastPlayed[nodeId] = now;
+			_lastPlayed = now;
 			return false;
 		}
 	}

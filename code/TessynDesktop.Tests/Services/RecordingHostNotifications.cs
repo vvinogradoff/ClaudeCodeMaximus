@@ -29,7 +29,7 @@ internal sealed class RecordingHostNotifications : INotificationService, ISessio
 	{
 	}
 
-	public void PlayCompletionSound(string nodeId) => Interlocked.Increment(ref _sounds);
+	public void PlayFocusItemSound(string nodeId) => Interlocked.Increment(ref _sounds);
 
 	public void PlayTestSound(string filePath) => TestSounds.Add(filePath);
 

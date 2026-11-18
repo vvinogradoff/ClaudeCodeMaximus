@@ -14,7 +14,9 @@ public sealed class NotificationsSettingsSection : ISettingsSection
 
 	/// <inheritdoc />
 	public object Read(AppSettingsModel settings) =>
-		new NotificationsSettingsDto(settings.NotificationsEnabled, settings.SessionCompletionSoundFile, settings.SessionCompletionSoundThrottleSeconds);
+		new NotificationsSettingsDto(
+			settings.NotificationsEnabled, settings.SessionCompletionSoundFile,
+			TessynDesktop.Models.Remote.RemoteProtocol.Notifications.EffectiveSoundThrottleSeconds(settings.SessionCompletionSoundThrottleSeconds));
 
 	/// <inheritdoc />
 	public Action CaptureRestore(AppSettingsModel settings)
