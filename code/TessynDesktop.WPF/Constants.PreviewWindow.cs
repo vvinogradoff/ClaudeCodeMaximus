@@ -38,6 +38,26 @@ public static partial class Constants
 		/// <summary>A window is saved this long after the last move or resize (as the main window).</summary>
 		public static readonly TimeSpan PlacementSaveDelay = TimeSpan.FromMilliseconds(500);
 
+		/// <summary>A web page's address is saved once it has stayed this long after the page finished loading (FR.29.11).</summary>
+		public static readonly TimeSpan AddressSettleDelay = TimeSpan.FromSeconds(1);
+
+		/// <summary>Query or fragment parameter names (case-insensitive) that carry a sign-in secret; an address with one is saved without query and fragment (FR.29.11).</summary>
+		public static readonly IReadOnlyList<string> SignInParameters =
+		[
+			"code", "state", "token", "access_token", "id_token", "refresh_token", "auth", "authorization", "session", "sessionid", "sid", "sig", "signature",
+			"password", "pwd", "secret", "key", "apikey", "api_key", "otp", "ticket", "nonce", "assertion", "samlresponse", "oauth_token", "oauth_verifier",
+		];
+
+		/// <summary>A fragment that contains one of these is a sign-in result whatever else it holds.</summary>
+		public static readonly IReadOnlyList<string> SignInFragmentMarkers = ["access_token=", "id_token="];
+
+		public const char QuerySeparator = '&';
+		public const char ParameterValueSeparator = '=';
+
+		/// <summary>Segoe MDL2 Assets glyphs of the maximize button: "Restore" while maximized, "Maximize" otherwise.</summary>
+		public const string RestoreGlyph = "\uE923";
+		public const string MaximizeGlyph = "\uE922";
+
 		public const double CaptionHeight = 32;
 		public const double ResizeBorder = 6;
 		public const double DefaultWidth = 960;

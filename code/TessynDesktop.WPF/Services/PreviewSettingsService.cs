@@ -80,8 +80,14 @@ public sealed class PreviewSettingsService : IPreviewSettingsService
 	public PreviewPlacementModel? GetPlacement(string groupId) =>
 		_store.Get<PreviewWindowsSettings>().Placements.TryGetValue(groupId, out var placement) ? placement : null;
 
-	public void SavePlacement(string groupId, PreviewPlacementModel placement) =>
+	/// <summary>Stores the placement of an existing group; the id of a group that no longer exists is ignored, so no orphan placement is left behind (FR.29.2).</summary>
+	public void SavePlacement(string groupId, PreviewPlacementModel placement)
+	{
+		if (!Groups.Any(g => g.Id == groupId))
+			return;
+
 		_store.Update<PreviewWindowsSettings>(s => s.Placements[groupId] = placement);
+	}
 
 	public void ForgetPlacements() => _store.Update<PreviewWindowsSettings>(s => s.Placements.Clear());
 

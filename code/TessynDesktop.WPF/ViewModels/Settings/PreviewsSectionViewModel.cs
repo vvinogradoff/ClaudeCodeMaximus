@@ -192,12 +192,40 @@ public sealed partial class PreviewsSectionViewModel : SettingsSectionViewModel,
 			Groups.Add(new PreviewGroupRowViewModel(group));
 	}
 
+	/// <summary>
+	/// The tab has unsaved edits and a window's Auto-close button changed the stored groups: every row whose Auto-close the user has not changed takes the stored
+	/// value, and so does the baseline, so that Save never writes a stale switch back.
+	/// </summary>
+	private void MergeAutoClose()
+	{
+		var stored = _service.Groups.ToDictionary(g => g.Id);
+		var baseline = new List<PreviewGroupModel>();
+		foreach (var old in _baseline)
+		{
+			var merged = old.Clone();
+			if (stored.TryGetValue(old.Id, out var current))
+			{
+				var row = Groups.FirstOrDefault(r => r.Id == old.Id);
+				if (row != null && row.AutoClose == old.AutoClose)
+					row.AutoClose = current.AutoClose;
+
+				merged.AutoClose = current.AutoClose;
+			}
+
+			baseline.Add(merged);
+		}
+
+		_baseline = baseline;
+	}
+
 	private void OnGroupsChanged(object? sender, EventArgs e)
 	{
 		void Reload()
 		{
 			if (!DiffersFrom(_baseline))
 				Read();
+			else
+				MergeAutoClose();
 		}
 
 		if (_ui == null)

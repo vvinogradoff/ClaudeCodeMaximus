@@ -10,6 +10,9 @@ public static partial class Constants
 		public const double PopupDefaultWidth = 600;
 		public const double PopupDefaultHeight = 700;
 
+		/// <summary>One browser surface keeps at most this many popups open; a request over the cap is dropped (review 2).</summary>
+		public const int MaxPopups = 5;
+
 		/// <summary>A popup is never smaller than this (DIPs).</summary>
 		public const double PopupMinSize = 200;
 

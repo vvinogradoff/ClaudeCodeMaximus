@@ -58,6 +58,15 @@ public sealed class FakePreviewWindowHandle : IPreviewWindowHandle
 
 	public event EventHandler? ItemChanged;
 
+	public event EventHandler? PlacementChanged;
+
+	/// <summary>The (pinned) window settled at a new place.</summary>
+	public void MoveTo(PreviewPlacementModel placement)
+	{
+		CurrentPlacement = placement;
+		PlacementChanged?.Invoke(this, EventArgs.Empty);
+	}
+
 	public void RaiseClosed(bool byUser)
 	{
 		if (IsClosed)

@@ -315,6 +315,58 @@ public sealed class PreviewRouterTests : IDisposable
 	}
 
 	[Fact]
+	public void APinnedWindowsMove_SavesTheListAtOnce_SoACrashKeepsIt()
+	{
+		OpenFile("a.png");
+		var images = Window("images");
+		images.Pin();
+		Assert.Equal(["images*"], SavedGroups());
+
+		images.MoveTo(new PreviewPlacementModel { Left = 40, Width = 700, Height = 500 });
+
+		Assert.Equal(40, _settings.OpenWindows.Single().Placement!.Left);
+		Assert.Equal(700, _settings.OpenWindows.Single().Placement!.Width);
+	}
+
+	[Fact]
+	public void AGroupWindowsPlacementEvent_DoesNotWriteThePlacementIntoTheList()
+	{
+		OpenFile("a.png");
+		var images = Window("images");
+
+		images.MoveTo(new PreviewPlacementModel { Left = 40, Width = 700, Height = 500 });
+
+		Assert.Null(_settings.OpenWindows.Single().Placement);
+	}
+
+	[Fact]
+	public void AClosedWindowsPlacementEvent_IsNotHeardAnymore()
+	{
+		OpenFile("a.png");
+		var images = Window("images");
+		images.Pin();
+		images.RaiseClosed(byUser: true);
+		Assert.Empty(_settings.OpenWindows);
+
+		images.MoveTo(new PreviewPlacementModel { Left = 1 });
+
+		Assert.Empty(_settings.OpenWindows);
+	}
+
+	[Fact]
+	public void SessionShown_SkipsAWindowWithoutAnItem()
+	{
+		OpenFile("a.png");
+		_settings.SetAutoClose("images", true);
+		var images = Window("images");
+		images.Item = null;
+
+		_router.OnSessionShown("n2");
+
+		Assert.Equal(0, images.CloseCalls);
+	}
+
+	[Fact]
 	public void CloseAllForExit_ClosesEverything_ButKeepsTheSavedList()
 	{
 		OpenFile("a.png");

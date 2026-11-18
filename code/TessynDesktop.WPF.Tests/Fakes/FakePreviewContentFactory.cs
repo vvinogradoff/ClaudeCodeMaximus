@@ -65,11 +65,7 @@ public sealed class TrackedBrowserSurface : IBrowserSurface, IDisposable
 
 	public event EventHandler<BrowserStateChangedEventArgs>? StateChanged;
 
-	public event EventHandler<string>? NavigationFailed
-	{
-		add { }
-		remove { }
-	}
+	public event EventHandler<string>? NavigationFailed;
 
 	public event EventHandler? BrowserLost
 	{
@@ -95,7 +91,9 @@ public sealed class TrackedBrowserSurface : IBrowserSurface, IDisposable
 	{
 	}
 
-	public void RaiseState() => StateChanged?.Invoke(this, new BrowserStateChangedEventArgs(false));
+	public void RaiseState(bool isLoading = false) => StateChanged?.Invoke(this, new BrowserStateChangedEventArgs(isLoading));
+
+	public void RaiseFailed(string status) => NavigationFailed?.Invoke(this, status);
 
 	public void Dispose() => Disposed = true;
 }

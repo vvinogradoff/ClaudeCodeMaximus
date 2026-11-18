@@ -18,6 +18,9 @@ public sealed partial class PreviewWindowViewModel : ObservableObject, IDisposab
 	private readonly IPreviewSettingsService _settings;
 	private readonly IPreviewContentFactory _content;
 	private readonly IUiDispatcher _ui;
+	private readonly PreviewAddressSanitizer _sanitizer = new();
+	private readonly ITimer _settleTimer;
+	private string? _routedAddress;
 	private PreviewItemModel? _item;
 	private ITessynClient? _fileClient;
 	private PreviewBrowserContent? _browserContent;
@@ -43,7 +46,7 @@ public sealed partial class PreviewWindowViewModel : ObservableObject, IDisposab
 	[ObservableProperty]
 	private BrowserPreviewViewModel? _browser;
 
-	public PreviewWindowViewModel(string groupId, string groupName, bool pinned, IPreviewSettingsService settings, IPreviewContentFactory content, IUiDispatcher ui)
+	public PreviewWindowViewModel(string groupId, string groupName, bool pinned, IPreviewSettingsService settings, IPreviewContentFactory content, IUiDispatcher ui, TimeProvider? time = null)
 	{
 		GroupId = groupId;
 		GroupName = groupName;
@@ -53,6 +56,7 @@ public sealed partial class PreviewWindowViewModel : ObservableObject, IDisposab
 		_ui = ui;
 		_autoClose = ReadAutoClose();
 		_title = groupName;
+		_settleTimer = (time ?? TimeProvider.System).CreateTimer(_ => _ui.Post(SaveSettledAddress), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 		_settings.GroupsChanged += OnGroupsChanged;
 	}
 
@@ -106,7 +110,7 @@ public sealed partial class PreviewWindowViewModel : ObservableObject, IDisposab
 	/// <summary>The user pinned the window.</summary>
 	public event EventHandler? Pinned;
 
-	/// <summary>The item changed inside the window (a web page navigated).</summary>
+	/// <summary>The item changed inside the window: a web page settled on a new address on its own site, without sign-in parameters (FR.29.11).</summary>
 	public event EventHandler? ItemChanged;
 
 	/// <summary>Shows <paramref name="item"/>, replacing the content.</summary>
@@ -116,6 +120,8 @@ public sealed partial class PreviewWindowViewModel : ObservableObject, IDisposab
 			return;
 
 		_item = item.Clone();
+		_routedAddress = item.Kind == PreviewItemKind.Url ? item.Url : null;
+		_settleTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 		if (item.Kind == PreviewItemKind.Url)
 			ShowPage(item.Url ?? string.Empty);
 		else
@@ -150,6 +156,7 @@ public sealed partial class PreviewWindowViewModel : ObservableObject, IDisposab
 			return;
 
 		_disposed = true;
+		_settleTimer.Dispose();
 		_settings.GroupsChanged -= OnGroupsChanged;
 		DisposeFile();
 		DisposeBrowser();
@@ -195,14 +202,28 @@ public sealed partial class PreviewWindowViewModel : ObservableObject, IDisposab
 
 	private void OnBrowserPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
-		if (e.PropertyName != nameof(BrowserPreviewViewModel.Address) || _item == null || Browser == null || _disposed)
+		if (e.PropertyName is not (nameof(BrowserPreviewViewModel.Address) or nameof(BrowserPreviewViewModel.IsLoading)) || _item == null || _disposed)
+			return;
+
+		// The address is saved only once it has settled: every change (or the end of a load) restarts the wait.
+		_settleTimer.Change(Constants.PreviewWindow.AddressSettleDelay, Timeout.InfiniteTimeSpan);
+	}
+
+	/// <summary>The page finished loading and kept its address for the settle delay: saves it when it is a new address on the routed site (FR.29.11).</summary>
+	private void SaveSettledAddress()
+	{
+		if (_disposed || _item == null || Browser == null || Browser.IsLoading || Browser.HasError)
 			return;
 
 		var address = Browser.Address;
-		if (string.IsNullOrEmpty(address) || address == _item.Url)
+		if (string.IsNullOrEmpty(address) || !_sanitizer.IsSameOrigin(address, _routedAddress))
 			return;
 
-		_item.Url = address;
+		var saved = _sanitizer.Sanitize(address);
+		if (saved == _item.Url)
+			return;
+
+		_item.Url = saved;
 		ItemChanged?.Invoke(this, EventArgs.Empty);
 	}
 

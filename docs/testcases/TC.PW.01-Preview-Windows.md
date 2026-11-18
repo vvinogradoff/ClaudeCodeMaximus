@@ -69,3 +69,4 @@ Related requirements: FR.29.1–FR.29.13, FR.27.1–FR.27.9, FR.6.10. Use cases:
 | TC.PW.61 | A window the user closed before quitting is not reopened | AUTOMATED, E2E | UC.PW.16 | FR.29.11 |
 | TC.PW.62 | Reopened windows do not take the keyboard focus from the main window | MANUAL | UC.PW.16 | FR.29.11 |
 | TC.PW.63 | Under `--test-window` the list of open windows survives a restart in the test data root; placements are not saved there | E2E | UC.PW.16 | FR.29.11, FR.29.13 |
+| TC.PW.64 | Only a settled same-site address is saved for a web window; sign-in parameters are never saved | AUTOMATED | UC.PW.16 | FR.29.11 |

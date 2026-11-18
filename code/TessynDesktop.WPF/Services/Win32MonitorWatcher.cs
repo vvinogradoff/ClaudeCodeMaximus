@@ -67,8 +67,21 @@ public sealed class Win32MonitorWatcher : IMonitorWatcher, IDisposable
 			return;
 
 		_settling = true;
-		_settle.Change(Timeout.Infinite, Timeout.Infinite);
-		_debounce.Change(Constants.Previews.MonitorDebounce, Timeout.InfiniteTimeSpan);
+		Arm(_settle, Timeout.InfiniteTimeSpan);
+		Arm(_debounce, Constants.Previews.MonitorDebounce);
+	}
+
+	/// <summary>Starts (or stops, with an infinite delay) a timer; a <see cref="Dispose"/> that wins the race is not an error.</summary>
+	private void Arm(Timer timer, TimeSpan delay)
+	{
+		try
+		{
+			timer.Change(delay, Timeout.InfiniteTimeSpan);
+		}
+		catch (ObjectDisposedException)
+		{
+			// disposed meanwhile: nothing left to watch
+		}
 	}
 
 	/// <summary>On the UI thread, after the debounce: reads the monitors again and raises <see cref="Changed"/> when they differ; the settle period starts now.</summary>
@@ -83,7 +96,7 @@ public sealed class Win32MonitorWatcher : IMonitorWatcher, IDisposable
 		if (changed)
 			Changed?.Invoke(this, EventArgs.Empty);
 
-		_settle.Change(Constants.Previews.MonitorSettle, Timeout.InfiniteTimeSpan);
+		Arm(_settle, Constants.Previews.MonitorSettle);
 	}
 
 	private static IReadOnlyList<MonitorInfo> Read()

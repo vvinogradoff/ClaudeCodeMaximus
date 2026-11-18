@@ -89,6 +89,8 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		public EventHandler? OnPinned { get; set; }
 
 		public EventHandler? OnItemChanged { get; set; }
+
+		public EventHandler? OnPlacementChanged { get; set; }
 	}
 
 	public event EventHandler? StateChanged;
@@ -142,7 +144,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		var groups = _settings.Groups;
 		foreach (var window in _windows.ToList())
 		{
-			if (window.IsPinned || window.Handle.Item?.SourceNodeId == nodeId || !IsAutoClose(groups, window.GroupId))
+			if (window.IsPinned || window.Handle.Item == null || window.Handle.Item.SourceNodeId == nodeId || !IsAutoClose(groups, window.GroupId))
 				continue;
 
 			CloseByRouter(window, "auto-close: another session is shown");
@@ -260,9 +262,11 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		window.OnClosed = (_, args) => OnWindowClosed(window, args);
 		window.OnPinned = (_, _) => OnWindowPinned(window);
 		window.OnItemChanged = (_, _) => SaveList();
+		window.OnPlacementChanged = (_, _) => OnWindowPlacementChanged(window);
 		handle.Closed += window.OnClosed;
 		handle.Pinned += window.OnPinned;
 		handle.ItemChanged += window.OnItemChanged;
+		handle.PlacementChanged += window.OnPlacementChanged;
 		_windows.Add(window);
 		return window;
 	}
@@ -272,6 +276,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		window.Handle.Closed -= window.OnClosed;
 		window.Handle.Pinned -= window.OnPinned;
 		window.Handle.ItemChanged -= window.OnItemChanged;
+		window.Handle.PlacementChanged -= window.OnPlacementChanged;
 	}
 
 	// ---- window events ----
@@ -284,6 +289,13 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		Detach(window);
 		_logger.LogInformation("Preview window of group {GroupId} closed ({Reason})", window.GroupId, args.ByUser ? "by the user" : "by the app");
 		if (!_exiting)
+			SaveList();
+	}
+
+	/// <summary>A pinned window settled at a new place: the list is saved again, so a crash does not lose the move (FR.29.11).</summary>
+	private void OnWindowPlacementChanged(OpenWindow window)
+	{
+		if (window.IsPinned)
 			SaveList();
 	}
 
