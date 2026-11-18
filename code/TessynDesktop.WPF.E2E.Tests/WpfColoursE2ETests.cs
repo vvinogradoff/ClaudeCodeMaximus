@@ -98,6 +98,52 @@ public sealed class WpfColoursE2ETests : IDisposable
 		}
 	}
 
+	/// <summary>TC.CL.26: the Colours tab shows Apply and two columns; Apply after a change leaves the stored colour in the client state.</summary>
+	[Fact]
+	public async Task TheColoursTab_ShowsApplyAndTwoColumns_AndApplyKeepsTheStoredColour()
+	{
+		using var process = _app.Start();
+		try
+		{
+			var ready = await _app.WaitForLogAsync(process, StartTimeout, "Connected to daemon run", $"Session {_main} opened", "click-to-first-paint");
+			Assert.True(ready, "The app did not open the session. Log:\n" + _app.ReadLog());
+
+			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Settings…", StepTimeout), "The Settings entry of the main menu was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.SelectTabAsync(process, "Colours tab", StepTimeout), "The Colours tab was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.WaitForButtonAsync(process, "Apply colours", StepTimeout), "The Apply button was not found. Log:\n" + _app.ReadLog());
+
+			// Apply is to the right of Reset all, in the same row.
+			var apply = _clicker.GetBounds(process, "Apply colours");
+			var resetAll = _clicker.GetBounds(process, "Reset all colours");
+			Assert.NotNull(apply);
+			Assert.NotNull(resetAll);
+			Assert.True(apply.Value.Left >= resetAll.Value.Right, $"Apply {apply} is not right of Reset all {resetAll}");
+			Assert.InRange(Math.Abs(apply.Value.Top - resetAll.Value.Top), 0, 12);
+
+			// Two columns: the first two colours of the first group are side by side.
+			var first = _clicker.GetBounds(process, "Colour " + FirstTwoLabels.First);
+			var second = _clicker.GetBounds(process, "Colour " + FirstTwoLabels.Second);
+			Assert.NotNull(first);
+			Assert.NotNull(second);
+			Assert.InRange(Math.Abs(first.Value.Top - second.Value.Top), 0, 4);
+			Assert.True(second.Value.Left > first.Value.Right, $"The second swatch {second} is not right of the first {first}");
+
+			// A colour is changed, Apply is pressed: the colour is stored.
+			Assert.True(await _clicker.ClickAsync(process, "Colour Window background", StepTimeout), "The swatch was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Palette #1E90FF", StepTimeout), "The palette colour was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Apply colours", StepTimeout), "Apply could not be pressed. Log:\n" + _app.ReadLog());
+			var data = await WaitForColoursAsync(c => c.Dark.TryGetValue("WindowBackground", out var v) && v == "#1E90FF");
+			Assert.False(data.Light.ContainsKey("WindowBackground"));
+			Assert.DoesNotContain("[ERR]", _app.ReadLog());
+		}
+		finally
+		{
+			_app.Stop(process);
+		}
+	}
+
+	private static readonly (string First, string Second) FirstTwoLabels = ("Window background", "Panels and cards");   // the first two rows of the first group
+
 	private sealed class StoredColours
 	{
 		public Dictionary<string, string> Light { get; set; } = [];

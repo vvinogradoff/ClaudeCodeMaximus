@@ -16,23 +16,49 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <DockPanel>
-        <StackPanel DockPanel.Dock="Top" Margin="16,4,16,8">
+        <StackPanel DockPanel.Dock="Top" Margin="16,4,16,4">
             <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding Hint}" />
-            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <DockPanel Margin="0,10,0,0" x:Name="ThemeRow">
+                <Button DockPanel.Dock="Right" x:Name="ApplyButton" Padding="14,4" Content="Apply" Command="{Binding ApplyCommand}" AutomationProperties.Name="Apply colours"
+                        ToolTip="Commit the open picker, close it and apply the colours everywhere" />
+                <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Theme to edit" VerticalAlignment="Center" Margin="0,0,10,0" />
                 <RadioButton GroupName="ColourTheme" Content="Light" IsChecked="{Binding EditingLight, Mode=TwoWay}" Margin="0,0,10,0" MinWidth="0" AutomationProperties.Name="Edit Light colours" />
                 <RadioButton GroupName="ColourTheme" Content="Dark" IsChecked="{Binding EditingDark, Mode=TwoWay}" MinWidth="0" AutomationProperties.Name="Edit Dark colours" />
-                <Button Margin="24,0,0,0" Padding="10,4" Content="{Binding ResetAllText}" Command="{Binding ResetAllCommand}" AutomationProperties.Name="Reset all colours" />
-            </StackPanel>
-            <s:SectionMessages Margin="0,8,0,0" />
+                <Button Margin="24,0,0,0" Padding="10,4" Content="{Binding ResetAllText}" Command="{Binding ResetAllCommand}" AutomationProperties.Name="Reset all colours" x:Name="ResetAllButton" />
+                </StackPanel>
+            </DockPanel>
+            <s:SectionMessages />
         </StackPanel>
         <ListBox ItemsSource="{Binding Source={StaticResource Grouped}}" BorderThickness="0" Background="Transparent" Margin="12,0,12,8" Focusable="False"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Colours">
+            <!-- The rows inside a group use the ListBox's own panel (GroupStyle.Panel would lay out the groups): two equal columns, one under ~640 px -->
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <s:TwoColumnPanel />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
             <ListBox.GroupStyle>
                 <GroupStyle>
+                    <!-- The right margin keeps the swatches off the scrollbar -->
+                    <GroupStyle.ContainerStyle>
+                        <Style TargetType="GroupItem">
+                            <Setter Property="Margin" Value="0,0,12,10" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="GroupItem">
+                                        <StackPanel>
+                                            <ContentPresenter />
+                                            <ItemsPresenter />
+                                        </StackPanel>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </GroupStyle.ContainerStyle>
                     <GroupStyle.HeaderTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Margin="4,14,0,4" />
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Margin="4,0,0,4" />
                         </DataTemplate>
                     </GroupStyle.HeaderTemplate>
                 </GroupStyle>
@@ -54,7 +80,7 @@
                 <DataTemplate DataType="{x:Type vm:ColourRowViewModel}">
                     <Grid Margin="4,2">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" MinWidth="200" />
+                            <ColumnDefinition Width="*" MinWidth="100" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
