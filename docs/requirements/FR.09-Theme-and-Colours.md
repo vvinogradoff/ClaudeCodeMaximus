@@ -59,6 +59,8 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 | **FR.9.5 Session recency bars** | **FR.9.10** | **Replaced.** Three tiers (15/30/60 min, last prompt) become four tiers on the latest activity, plus the dotted border. FR.9.5 stays as an ID and points to FR.9.10. |
 | FR.9.6 Recent-dropdown hide | FR.9.11 | A row keeps its recency colour in every state of the dropdown. |
 | FR.9.8 Pinned sessions and order | FR.1.20 | Row content and layout in the dropdown. |
+| FR.9.13 Recency colour on the closed Recent dropdown | FR.9.15 | The closed button keeps its recency colour while hovered and while open: a faint overlay, never a replaced background. |
+| FR.9.9 Colours tab | FR.9.16 | Two new palette entries: the active workers badge's number and outline. |
 
 ### New requirements
 
@@ -101,3 +103,7 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 - **Live.** Toggling it applies at once (no restart, no reopening); the tint also follows the open session and ages with the 60-second clock (FR.9.10). It concerns only the closed button: the popup's rows keep their own colours (FR.9.11).
 
 **FR.9.14 — First paint of the stored theme.** The window is in the stored theme (Light or Dark, or the system's for System) **from its first paint**, not only after the theme has been switched back and forth: the frame, the backdrop behind the controls and the controls agree, in both themes. A stored Light theme on a system that is dark never shows a dark window, and the reverse. The window is styled for the stored theme when it is created, again once its first frame is on screen, and on every theme change, for every open window.
+
+**FR.9.15 — The closed Recent dropdown keeps its recency colour on hover.** (Amends FR.9.13; extends FR.9.11.) Hovering the closed dropdown button, and opening the list, **do not replace** the button's background: the recency colour of the open session stays, and a **faint overlay** (the theme's hover highlight, partly transparent) is laid over it. The same holds for the rows of the open list (FR.9.11): hover shows only the overlay over the row's own recency colour. With no tint (tier 0 or the setting off) the overlay is all there is, as before.
+
+**FR.9.16 — Active workers badge colours.** The Colours tab (FR.9.9) gets two entries in the group *Session status*: **Active workers badge: number** and **Active workers badge: outline**. Defaults, Light: number **`#E00000`** (red), outline **`#8B0000`** (dark red). Dark: number **`#FF5555`**, outline **`#B03030`** (lighter so they read on a dark background). Per theme, live, resettable, like every palette entry. The badge (FR.1.28) uses them as `Colour.ActiveWorkersText` and `Colour.ActiveWorkersBorder`.

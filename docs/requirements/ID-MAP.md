@@ -50,6 +50,7 @@ The amendment paragraphs of the FR.25 commit (FR.1.8 amendment, FR.1.17, FR.3.3 
 | FR.6.5–FR.6.8 | icon, version text, title bar, status bar | |
 | FR.9.9–FR.9.11 | colours tab, recency (replaces FR.9.5), dropdown colours | |
 | FR.9.12 | line spacing setting for the session output and the Focus view | 2026-11-17 |
+| FR.1.28, FR.9.15, FR.9.16 | active workers badge; the closed dropdown keeps its colour on hover; badge colours | 2026-11-18 |
 | FR.11.14 | profile on the row | |
 | FR.12.30–FR.12.34 | toggles, composer layout, Send later picks, pointer, catalogue refresh | |
 | FR.14.13 | schedule picks | |

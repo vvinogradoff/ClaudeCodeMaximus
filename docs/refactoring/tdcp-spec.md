@@ -260,7 +260,7 @@ Sent as JSON-RPC notifications (`method`, `params`, no `id`); the Relay Connecto
 | Method | Params | Trigger |
 |---|---|---|
 | `tree.changed` | `{ version }` | structural tree change (debounce 300 ms) |
-| `session.changed` | `{ state: SessionStateDto }` | running flag, attention, favourite/streaming, entry appended (debounce 250 ms per session) |
+| `session.changed` | `{ state: SessionStateDto }` | running flag, attention, favourite/streaming, entry appended, a worker starting or stopping (the supervisors' `runningWorkerCount`; debounce 250 ms per session) |
 | `session.appended` | `{ nodeId, epoch }` | entry appended (debounce 250 ms per session) |
 | `session.reset` | `{ nodeId, epoch }` | session file rewritten |
 | `turn.completed` | `{ nodeId, cancelled, error? }` | turn ended |
@@ -348,3 +348,12 @@ Field and method additions behind the new requirements (`docs/requirements/`). A
 
 ### 10.A5 — Settings administration (addition to "Settings, profiles and sounds (package J3, loopback only)") — FR.20.10, FR.21.25, FR.25.41, FR.12.34
 Part 2 adds `mcp.list`, `mcp.upsert`, `mcp.remove`, `mcp.setEnabled`, `mcp.discover`, `mcp.authorize`, `telegram.status`, `telegram.setToken`, `telegram.clearToken`, `relay.status`, `relay.configure`, `models.refresh` and the notifications `mcp.changed` and `catalog.changed`. All are loopback-only; the relay answers `-32601` and never carries the two notifications. Capabilities: `mcp.registry`, `telegram.settings`, `relay.settings`, `models.admin`. Secrets (MCP header values, OAuth client secrets and tokens, the Telegram bot token, the relay link token) are write-only: results say `hasStaticHeaderValue`, `hasClientSecret`, `hasToken`; a server URL is shown without user info, query and fragment (`urlHasQuery`); stdio arguments only as `hasArguments`. In `mcp.upsert` a member left out keeps its value and an empty string clears it; changing a server's origin deletes its stored token and requires secrets again; `relay.configure` requires `linkToken` again when the URL moves to another origin. `mcp.discover` is stopped after 15 s and answers `timedOut: true` with what it found. `mcp.authorize` answers when the browser flow ends (up to 2 minutes), one flow per server. `settings.get` also serves the read-only section `avalonia-ui` (theme, colours, font sizes, key bindings, screensaver), version 1, no `settings.changed`; `settings.update` refuses it with `-32602`.
+
+### 10.A6 — Running workers (`SessionStateDto`, also `session.changed`, `tree.snapshot`, `tree.workers`, `recent.list`, `tags.search`) — FR.1.28
+| Field | Type | Meaning |
+|---|---|---|
+| `session.state.runningWorkerCount` | int | How many workers of the session are running **right now**, **direct and nested** (a worker's workers count for every supervisor above it; the session itself is not counted). Omitted when 0. |
+`workerCount` (in `tree.snapshot` and `tree.workers`) is unchanged: the **total** of direct workers ever spawned. A client shows the total as text and `runningWorkerCount` as the active badge.
+- **Source.** The registry's running state (the reference-counted flag `session.state.running` comes from), summed up the `supervisorId` chain. One pass over the running sessions serves every row of a snapshot; a changed tree or running flag invalidates it. Cycles in a corrupt tree are cut at the first repeated session.
+- **Events.** When a session starts or stops running, `session.changed` is published for it (as before) **and for every supervisor above it**, so their `runningWorkerCount` reaches the clients. Per-session coalescing (250 ms) turns a burst of workers starting or stopping into one `session.changed` per supervisor. Nothing is polled.
+- Additive: an older client ignores the member; a client of this version reads an absent one as 0. Golden files affected: `tree.snapshot`, `tree.workers` (the golden fixture now has one running worker).
