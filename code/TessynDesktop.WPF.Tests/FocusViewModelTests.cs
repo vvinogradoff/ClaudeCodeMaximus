@@ -153,13 +153,13 @@ public sealed class FocusViewModelTests
 	[Fact]
 	public async Task AskItems_ShowOptionsAndRecommendation_AndClicksFillTheReplyBox()
 	{
-		Seed("n", Item(1, options: ["Yes", "No"], recommendation: "Yes", body: "Pick **one**"));
+		Seed("n", Item(1, options: ["Yes", "No"], recommendation: "Maybe", body: "Pick **one**"));
 		using var focus = Create();
 		await focus.SetSessionAsync("n");
 		var item = focus.Items.Single();
 
 		Assert.Equal("Pick **one**", item.Body);
-		Assert.Equal(["Yes", "No"], item.Options.Select(o => o.Text));
+		Assert.Equal(["Yes", "No", "Maybe"], item.Options.Select(o => o.Text));   // the recommendation is the last button, without a prefix (FR.23.26)
 		Assert.True(item.HasOptions);
 		Assert.True(item.HasRecommendation);
 
@@ -167,6 +167,67 @@ public sealed class FocusViewModelTests
 		Assert.Equal("No", item.ReplyText);
 
 		item.AcceptRecommendationCommand.Execute(null);
+		Assert.Equal("Accepted your recommendation: Maybe", item.ReplyText);
+	}
+
+	[Fact]
+	public async Task TheRecommendationIsTheLastButton_MarkedAsRecommended_AndOnlyItIs()
+	{
+		Seed("n", Item(1, options: ["Yes", "No"], recommendation: "  Use the cache  "));
+		using var focus = Create();
+		await focus.SetSessionAsync("n");
+		var item = focus.Items.Single();
+
+		Assert.Equal([false, false, true], item.Options.Select(o => o.IsRecommended));
+		Assert.Equal("  Use the cache  ", item.Options[^1].Text);   // the text as given, no "Use recommendation:" or "Recommended:" prefix
+		Assert.Equal("Recommended", item.Options[^1].ToolTip);
+		Assert.All(item.Options.Take(2), o => Assert.NotEqual("Recommended", o.ToolTip));
+	}
+
+	[Theory]
+	[InlineData("No")]
+	[InlineData("  no ")]
+	[InlineData("NO")]
+	public async Task ARecommendationEqualToAnOption_IsListedOnce_AsTheLastButton(string recommendation)
+	{
+		Seed("n", Item(1, options: ["Yes", "No", "Later"], recommendation: recommendation));
+		using var focus = Create();
+		await focus.SetSessionAsync("n");
+		var item = focus.Items.Single();
+
+		Assert.Equal(["Yes", "Later", recommendation], item.Options.Select(o => o.Text));
+		Assert.Equal([false, false, true], item.Options.Select(o => o.IsRecommended));
+	}
+
+	[Fact]
+	public async Task WithoutARecommendation_OnlyTheOptionsShow_AndAChangedRecommendationRebuildsTheList()
+	{
+		Seed("n", Item(1, options: ["Yes", "No"]));
+		using var focus = Create();
+		await focus.SetSessionAsync("n");
+		var item = focus.Items.Single();
+		Assert.Equal(["Yes", "No"], item.Options.Select(o => o.Text));
+		Assert.DoesNotContain(item.Options, o => o.IsRecommended);
+
+		Seed("n", Item(1, options: ["Yes", "No"], recommendation: "Yes"));
+		await focus.RefreshAsync();
+
+		Assert.Same(item, focus.Items.Single());
+		Assert.Equal(["No", "Yes"], item.Options.Select(o => o.Text));
+		Assert.True(item.Options[^1].IsRecommended);
+	}
+
+	[Fact]
+	public async Task ClickingTheRecommendedButton_FillsTheReplyBoxWithTheAcceptedText_AndAnOptionWithItsOwnText()
+	{
+		Seed("n", Item(1, options: ["Yes", "No"], recommendation: "Yes"));
+		using var focus = Create();
+		await focus.SetSessionAsync("n");
+		var item = focus.Items.Single();
+
+		item.Options[0].PickCommand.Execute(null);
+		Assert.Equal("No", item.ReplyText);
+		item.Options[^1].PickCommand.Execute(null);
 		Assert.Equal("Accepted your recommendation: Yes", item.ReplyText);
 	}
 

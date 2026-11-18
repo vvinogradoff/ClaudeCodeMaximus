@@ -53,10 +53,25 @@ public sealed class FocusViewBindingTests
 		}
 	}
 
-	/// <summary>The texts shown in a Focus panel: text blocks plus the selectable texts (titles, outcomes, body paragraphs).</summary>
+	/// <summary>The texts shown in a Focus panel: text blocks, plus every run of a card's one document (id, title, outcome, body text) and of the selectable texts.</summary>
 	private static IEnumerable<string> Texts(DependencyObject panel, bool visibleOnly = false) =>
 		Descendants<TextBlock>(panel).Where(t => !visibleOnly || t.Visibility == Visibility.Visible).Select(t => t.Text)
-			.Concat(Descendants<SelectableText>(panel).Where(t => !visibleOnly || t.Visibility == Visibility.Visible).Select(t => t.PlainText));
+			.Concat(Descendants<SelectableText>(panel).Where(t => !visibleOnly || t.Visibility == Visibility.Visible).Select(t => t.PlainText))
+			.Concat(Descendants<FocusCardText>(panel).Where(t => !visibleOnly || t.Visibility == Visibility.Visible).SelectMany(t => Runs(t.Document)));
+
+	private static IEnumerable<string> Runs(object element)
+	{
+		if (element is System.Windows.Documents.Run run)
+			yield return run.Text;
+		else if (element is DependencyObject node)
+			foreach (var child in LogicalTreeHelper.GetChildren(node))
+				foreach (var text in Runs(child))
+					yield return text;
+	}
+
+	/// <summary>The cards whose document holds more than the id-and-title paragraph (the open ones with a body, closed ones with their body shown).</summary>
+	private static int CardsShowingABody(DependencyObject panel) =>
+		Descendants<FocusCardText>(panel).Count(t => t.Visibility == Visibility.Visible && t.ParagraphMetrics.Count > (t.PlainText.Contains("Answered:") || t.PlainText.Contains("Dismissed") ? 2 : 1));
 
 	[Fact]
 	public void SessionPane_WithFocusItemsAndAPreview_BindsWithoutBindingErrors_AndShowsTheSideColumn()
@@ -114,7 +129,7 @@ public sealed class FocusViewBindingTests
 			var panel = Descendants<FocusPanel>(view).Single();
 			cardTexts.AddRange(Texts(panel));
 			cardTexts.AddRange(Descendants<TextBlock>((DependencyObject)view.FindName("SendAnswersButton")).Select(t => t.Text));   // "Send answers (n)" now lives in the session header (FR.23.14)
-			markdownBlocks = Descendants<StackPanel>(panel).Count(p => MarkdownText.GetSource(p) != null);
+			markdownBlocks = CardsShowingABody(panel);
 		});
 
 		Assert.Empty(listener.Errors);
@@ -252,12 +267,12 @@ public sealed class FocusViewBindingTests
 			closed.IsExpanded = true;
 			Layout(panel);
 			expandedTexts.AddRange(Texts(panel));
-			var bodyPanelsBefore = Descendants<StackPanel>(panel).Count(p => MarkdownText.GetSource(p) != null && p.Visibility == Visibility.Visible);
+			var bodyPanelsBefore = CardsShowingABody(panel);
 			bodyHiddenAtFirst = bodyPanelsBefore == 0;
 
 			focus.ClosedItems.Single(i => i.Id == "A2").ToggleBodyCommand.Execute(null);
 			Layout(panel);
-			bodyShownAfterClick = Descendants<StackPanel>(panel).Count(p => MarkdownText.GetSource(p) != null && p.Visibility == Visibility.Visible) == 1;
+			bodyShownAfterClick = CardsShowingABody(panel) == 1;
 
 			focus.RefreshAsync().GetAwaiter().GetResult();
 			Layout(panel);

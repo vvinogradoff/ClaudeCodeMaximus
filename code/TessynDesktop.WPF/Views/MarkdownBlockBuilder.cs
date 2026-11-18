@@ -1,26 +1,32 @@
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using Markdig;
+using Markdig.Extensions.Tables;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using TessynDesktop.WPF.Services;
-using Block = Markdig.Syntax.Block;
+using MdBlock = Markdig.Syntax.Block;
+using WBlock = System.Windows.Documents.Block;
+using WList = System.Windows.Documents.List;
+using WTable = System.Windows.Documents.Table;
+using WTableCell = System.Windows.Documents.TableCell;
+using WTableRow = System.Windows.Documents.TableRow;
 
 namespace TessynDesktop.WPF.Views;
 
 /// <summary>
-/// Builds native WPF elements from untrusted markdown for the Focus cards. Nothing is HTML: raw HTML is disabled in the parser and
-/// shown as literal text, images become the text "[image]", and a link is clickable only when <see cref="UrlPolicy"/> allows it
-/// (http and https); the click is handed to the caller, never navigated here. Supports paragraphs, headings, bullet and numbered
-/// lists, quotes, code blocks, bold, italic, inline code and links; anything else (tables, ...) falls back to its text.
+/// Builds the flow-document blocks of a Focus card body from untrusted markdown (FR.23.25: the blocks go into the card's one document, so a selection runs
+/// across all of them). Nothing is HTML: raw HTML is disabled in the parser and shown as literal text, images become the text "[image]", and a link is
+/// clickable only when <see cref="UrlPolicy"/> allows it (http and https); the click is handed to the caller, never navigated here. Supports paragraphs,
+/// headings, bullet and numbered lists, quotes, code blocks, tables, bold, italic, inline code and links.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class MarkdownBlockBuilder
 {
 	private const double BlockGap = 6;
 	private const double ListIndent = 18;
+	private const double TableCellPadding = 4;
 	private const string CodeFont = "Consolas";
 
 	private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().DisableHtml().UsePipeTables().UseEmphasisExtras().UseTaskLists().UseAutoLinks().Build();
@@ -34,10 +40,10 @@ public sealed class MarkdownBlockBuilder
 		_onLink = onLink;
 	}
 
-	/// <summary>The blocks of <paramref name="markdown"/> as elements to stack vertically.</summary>
-	public IReadOnlyList<UIElement> Build(string? markdown)
+	/// <summary>The blocks of <paramref name="markdown"/>, to add to a <see cref="FlowDocument"/> in order.</summary>
+	public IReadOnlyList<WBlock> Build(string? markdown)
 	{
-		var result = new List<UIElement>();
+		var result = new List<WBlock>();
 		if (string.IsNullOrWhiteSpace(markdown))
 			return result;
 
@@ -53,19 +59,25 @@ public sealed class MarkdownBlockBuilder
 		{
 			// Pathological input (for example thousands of nested quotes) must not make the card body vanish: show the text as it is (V6).
 			result.Clear();
-			result.Add(new SelectableText { Text = markdown });
+			result.Add(new Paragraph(new Run(markdown)) { Margin = new Thickness(0, 0, 0, BlockGap) });
 		}
 
 		return result;
 	}
 
-	private void AddBlock(Block block, List<UIElement> into)
+	private void AddBlock(MdBlock block, List<WBlock> into)
 	{
 		switch (block)
 		{
 			case HeadingBlock heading:
-				into.Add(TextOf(heading.Inline, FontWeights.SemiBold, HeadingSize(heading.Level)));
+			{
+				var paragraph = TextOf(heading.Inline);
+				paragraph.FontWeight = FontWeights.SemiBold;
+				paragraph.FontSize = HeadingSize(heading.Level);
+				into.Add(paragraph);
 				break;
+			}
+
 			case ParagraphBlock paragraph:
 				into.Add(TextOf(paragraph.Inline));
 				break;
@@ -76,16 +88,19 @@ public sealed class MarkdownBlockBuilder
 				into.Add(QuoteOf(quote));
 				break;
 			case CodeBlock code:
-				into.Add(CodeBox(string.Join("\n", code.Lines.Lines.Take(code.Lines.Count).Select(l => l.ToString()))));
+				into.Add(CodeOf(string.Join("\n", code.Lines.Lines.Take(code.Lines.Count).Select(l => l.ToString()))));
 				break;
 			case ThematicBreakBlock:
 			{
-				var rule = new Border { Height = 1, Margin = new Thickness(0, 2, 0, BlockGap) };
-				rule.SetResourceReference(Border.BackgroundProperty, "DividerStrokeColorDefaultBrush");
+				var rule = new Paragraph { FontSize = 2, Margin = new Thickness(0, 2, 0, BlockGap), BorderThickness = new Thickness(0, 0, 0, 1) };
+				rule.SetResourceReference(WBlock.BorderBrushProperty, "DividerStrokeColorDefaultBrush");
 				into.Add(rule);
 				break;
 			}
 
+			case Markdig.Extensions.Tables.Table table:
+				into.Add(TableOf(table));
+				break;
 			case ContainerBlock container:
 				foreach (var child in container)
 					AddBlock(child, into);
@@ -96,54 +111,89 @@ public sealed class MarkdownBlockBuilder
 		}
 	}
 
-	private Border QuoteOf(QuoteBlock quote)
+	private Section QuoteOf(QuoteBlock quote)
 	{
-		var inner = new StackPanel();
-		var blocks = new List<UIElement>();
+		var section = new Section { BorderThickness = new Thickness(3, 0, 0, 0), Padding = new Thickness(8, 0, 0, 0) };
+		section.SetResourceReference(WBlock.BorderBrushProperty, "ControlStrokeColorDefaultBrush");
+		var blocks = new List<WBlock>();
 		foreach (var child in quote)
 			AddBlock(child, blocks);
-		foreach (var element in blocks)
-			inner.Children.Add(element);
-
-		var border = new Border { BorderThickness = new Thickness(3, 0, 0, 0), Padding = new Thickness(8, 0, 0, 0), Child = inner };
-		border.SetResourceReference(Border.BorderBrushProperty, "ControlStrokeColorDefaultBrush");
-		return border;
+		foreach (var block in blocks)
+			section.Blocks.Add(block);
+		return section;
 	}
 
-	private StackPanel ListOf(ListBlock list)
+	private WList ListOf(ListBlock list)
 	{
-		var number = int.TryParse(list.OrderedStart, out var start) ? start : 1;
-		var panel = new StackPanel { Margin = new Thickness(0, 0, 0, BlockGap) };
+		var result = new WList
+		{
+			MarkerStyle = list.IsOrdered ? TextMarkerStyle.Decimal : TextMarkerStyle.Disc,
+			MarkerOffset = 4,
+			Padding = new Thickness(ListIndent, 0, 0, 0),
+			Margin = new Thickness(0, 0, 0, BlockGap),
+		};
+		if (list.IsOrdered && int.TryParse(list.OrderedStart, out var start))
+			result.StartIndex = start;
+
 		foreach (var item in list.OfType<ListItemBlock>())
 		{
-			var row = new Grid();
-			row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ListIndent) });
-			row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-			var marker = new TextBlock { Text = list.IsOrdered ? $"{number++}." : "•" };
-			var content = new StackPanel();
-			var blocks = new List<UIElement>();
+			var blocks = new List<WBlock>();
 			foreach (var child in item)
 				AddBlock(child, blocks);
-			foreach (var element in blocks)
-				content.Children.Add(element);
-			Grid.SetColumn(content, 1);
-			row.Children.Add(marker);
-			row.Children.Add(content);
-			panel.Children.Add(row);
+			if (blocks.Count == 0)
+				blocks.Add(new Paragraph());
+			var listItem = new ListItem();
+			foreach (var block in blocks)
+				listItem.Blocks.Add(block);
+			result.ListItems.Add(listItem);
 		}
 
-		return panel;
+		return result;
 	}
 
-	private SelectableText TextOf(ContainerInline? inline, FontWeight? fontWeight = null, double? fontSize = null)
+	private WTable TableOf(Markdig.Extensions.Tables.Table table)
 	{
-		var text = new SelectableText { Margin = new Thickness(0, 0, 0, BlockGap) };
-		if (fontWeight != null)
-			text.FontWeight = fontWeight.Value;
-		if (fontSize != null)
-			text.FontSize = fontSize.Value;
-		AddInlines(text.Inlines, inline);
-		return text;
+		var result = new WTable { CellSpacing = 0, Margin = new Thickness(0, 0, 0, BlockGap) };
+		var group = new TableRowGroup();
+		result.RowGroups.Add(group);
+		var columns = 0;
+		foreach (var row in table.OfType<Markdig.Extensions.Tables.TableRow>())
+		{
+			var wrow = new WTableRow();
+			foreach (var cell in row.OfType<Markdig.Extensions.Tables.TableCell>())
+			{
+				var blocks = new List<WBlock>();
+				foreach (var child in cell)
+					AddBlock(child, blocks);
+				if (blocks.Count == 0)
+					blocks.Add(new Paragraph());
+				var wcell = new WTableCell { Padding = new Thickness(TableCellPadding), BorderThickness = new Thickness(1) };
+				wcell.SetResourceReference(WTableCell.BorderBrushProperty, "DividerStrokeColorDefaultBrush");
+				foreach (var block in blocks)
+				{
+					block.Margin = new Thickness(0);
+					if (row.IsHeader)
+						block.FontWeight = FontWeights.SemiBold;
+					wcell.Blocks.Add(block);
+				}
+
+				wrow.Cells.Add(wcell);
+			}
+
+			columns = Math.Max(columns, wrow.Cells.Count);
+			group.Rows.Add(wrow);
+		}
+
+		for (var i = 0; i < columns; i++)
+			result.Columns.Add(new TableColumn());
+		return result;
+	}
+
+	private Paragraph TextOf(ContainerInline? inline)
+	{
+		var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, BlockGap) };
+		AddInlines(paragraph.Inlines, inline);
+		return paragraph;
 	}
 
 	private void AddInlines(InlineCollection target, ContainerInline? container)
@@ -222,13 +272,20 @@ public sealed class MarkdownBlockBuilder
 			hyperlink.Inlines.Add(new Run(fallbackText ?? url ?? uri.AbsoluteUri));
 	}
 
-	private static Border CodeBox(string code)
+	/// <summary>A code block is a monospaced paragraph on a tinted background, one line break per source line; it is part of the card's selection like any text.</summary>
+	private static Paragraph CodeOf(string code)
 	{
-		var text = new TextBox { Text = code, FontFamily = new FontFamily(CodeFont), IsReadOnly = true, BorderThickness = new Thickness(0), Padding = new Thickness(0), Background = System.Windows.Media.Brushes.Transparent, TextWrapping = TextWrapping.NoWrap };
-		var scroll = new ScrollViewer { Content = text, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
-		var border = new Border { Padding = new Thickness(8, 6, 8, 6), CornerRadius = new CornerRadius(4), Child = scroll, Margin = new Thickness(0, 0, 0, BlockGap) };
-		border.SetResourceReference(Border.BackgroundProperty, "ControlFillColorSecondaryBrush");
-		return border;
+		var paragraph = new Paragraph { FontFamily = new FontFamily(CodeFont), Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(0, 0, 0, BlockGap) };
+		paragraph.SetResourceReference(TextElement.BackgroundProperty, "ControlFillColorSecondaryBrush");
+		var lines = code.Split('\n');
+		for (var i = 0; i < lines.Length; i++)
+		{
+			if (i > 0)
+				paragraph.Inlines.Add(new LineBreak());
+			paragraph.Inlines.Add(new Run(lines[i]));
+		}
+
+		return paragraph;
 	}
 
 	private static double HeadingSize(int level) => level switch { 1 => 20, 2 => 17, _ => 15 };

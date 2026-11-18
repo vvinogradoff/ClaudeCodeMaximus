@@ -52,9 +52,11 @@ public sealed partial class FocusItemViewModel : ObservableObject
 
 	public DateTimeOffset CreatedUtc { get; }
 
+	/// <summary>The answer buttons in order: the options, then the recommendation last (an option equal to it is listed once, as the recommendation; FR.23.26).</summary>
 	public ObservableCollection<FocusOptionViewModel> Options { get; } = [];
 
 	private readonly List<string> _optionTexts = [];
+	private string? _optionsRecommendation;
 
 	public ObservableCollection<FocusRefViewModel> Refs { get; } = [];
 
@@ -129,13 +131,19 @@ public sealed partial class FocusItemViewModel : ObservableObject
 		Kind = item.Kind;
 		Recommendation = item.Recommendation;
 
-		if (!_optionTexts.SequenceEqual(item.Options))
+		var recommendation = string.IsNullOrWhiteSpace(item.Recommendation) ? null : item.Recommendation;
+		if (!_optionTexts.SequenceEqual(item.Options) || _optionsRecommendation != recommendation)
 		{
 			_optionTexts.Clear();
 			_optionTexts.AddRange(item.Options);
+			_optionsRecommendation = recommendation;
 			Options.Clear();
+			var pick = new Action<string>(text => ReplyText = text);
 			foreach (var option in item.Options)
-				Options.Add(new FocusOptionViewModel(option, text => ReplyText = text));
+				if (recommendation == null || !string.Equals(option.Trim(), recommendation.Trim(), StringComparison.OrdinalIgnoreCase))
+					Options.Add(new FocusOptionViewModel(option, pick));
+			if (recommendation != null)
+				Options.Add(new FocusOptionViewModel(recommendation, pick, isRecommended: true));
 			OnPropertyChanged(nameof(HasOptions));
 		}
 

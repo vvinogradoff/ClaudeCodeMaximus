@@ -20,28 +20,59 @@ public partial class FocusPanel : UserControl
 	private bool _headerClickArmed;
 
 	/// <summary>
-	/// The title of a closed card is selectable text, which takes the mouse for selecting, so the header toggle is a click detected here:
-	/// a single press and release without dragging (a drag is a selection and must not toggle).
+	/// A closed card's text is selectable (FR.23.25), which takes the mouse for selecting, so showing or hiding the body is a click detected here: a single
+	/// press and release over the card's header (the chip row, or the id-and-title paragraph) without dragging (a drag is a selection and must not toggle).
 	/// </summary>
-	private void OnClosedHeaderDown(object sender, MouseButtonEventArgs e)
+	private void OnClosedCardDown(object sender, MouseButtonEventArgs e) =>
+		PressOnClosedCard(e.GetPosition((IInputElement)sender), e.ClickCount, IsOverHeader((Border)sender, e));
+
+	private void OnClosedCardUp(object sender, MouseButtonEventArgs e)
 	{
-		_headerDown = e.GetPosition((IInputElement)sender);
-		_headerClickArmed = e.ClickCount == 1;
+		if (sender is FrameworkElement { DataContext: FocusItemViewModel item })
+			ReleaseOnClosedCard(item, e.GetPosition((IInputElement)sender));
 	}
 
-	private void OnClosedHeaderUp(object sender, MouseButtonEventArgs e)
+	/// <summary>A press on a closed card (position in the card's coordinates): arms the header click only for a single press over the header.</summary>
+	public void PressOnClosedCard(Point position, int clickCount, bool overHeader)
+	{
+		_headerDown = position;
+		_headerClickArmed = clickCount == 1 && overHeader;
+	}
+
+	/// <summary>The release: toggles the body when the press was armed and the mouse did not travel (a drag is a selection and triggers nothing). True when it toggled.</summary>
+	public bool ReleaseOnClosedCard(FocusItemViewModel item, Point position)
 	{
 		var armed = _headerClickArmed;
 		_headerClickArmed = false;
-		if (!armed || sender is not FrameworkElement { DataContext: FocusItemViewModel item })
-			return;
+		if (!armed)
+			return false;
 
-		var moved = e.GetPosition((IInputElement)sender) - _headerDown;
+		var moved = position - _headerDown;
 		if (Math.Abs(moved.X) > SystemParameters.MinimumHorizontalDragDistance || Math.Abs(moved.Y) > SystemParameters.MinimumVerticalDragDistance)
-			return;
+			return false;
 
-		if (item.ToggleBodyCommand.CanExecute(null))
-			item.ToggleBodyCommand.Execute(null);
+		if (!item.ToggleBodyCommand.CanExecute(null))
+			return false;
+
+		item.ToggleBodyCommand.Execute(null);
+		return true;
+	}
+
+	private static bool IsOverHeader(Border card, MouseButtonEventArgs e)
+	{
+		if (card.Child is not StackPanel panel)
+			return false;
+
+		if (panel.Children.OfType<DockPanel>().FirstOrDefault() is { } row && new Rect(row.RenderSize).Contains(e.GetPosition(row)))
+			return true;
+
+		if (panel.Children.OfType<FocusCardText>().FirstOrDefault() is { } text)
+		{
+			var point = e.GetPosition(text);
+			return new Rect(text.RenderSize).Contains(point) && text.IsHeaderAt(point);
+		}
+
+		return false;
 	}
 
 	/// <summary>The panel shows when Focus is selected (its host is collapsed under Session): the Closed expander collapses again (FR.23.14).</summary>

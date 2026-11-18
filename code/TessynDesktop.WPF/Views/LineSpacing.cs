@@ -24,6 +24,8 @@ public static class LineSpacing
 			Apply(text, (double)e.NewValue);
 		else if (sender is SelectableText selectable)
 			Apply(selectable, (double)e.NewValue);
+		else if (sender is FocusCardText card)
+			card.SetLineSpacing((double)e.NewValue);
 	}
 
 	/// <summary>The selectable text (a read-only RichTextBox) takes the same fixed line height on its paragraph.</summary>

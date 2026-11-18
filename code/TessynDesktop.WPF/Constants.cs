@@ -48,6 +48,8 @@ public static partial class Constants
 		public const string OutcomeDismissed = "Dismissed";
 		public const string OutcomeFormat = "{0}: {1}";
 		public const string AcceptedRecommendation = "Accepted your recommendation: ";
+		public const string RecommendedTooltip = "Recommended";
+		public const string OptionTooltip = "Use this as your answer";
 		public const string EntryGone = "The referenced entry no longer exists in that session.";
 		public const string PreviewTooLarge = "This file is too large to preview";
 		/// <summary>The part of the daemon's FileAccess refusal text ("That file cannot be read remotely. ...") that tells a refusal by the access rules from a missing file or a wrong path.</summary>
