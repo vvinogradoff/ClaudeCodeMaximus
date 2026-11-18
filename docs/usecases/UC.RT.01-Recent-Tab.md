@@ -123,3 +123,10 @@ Related requirements: FR.1.15, FR.1.16 in [requirements.md](/docs/requirements.m
 
 - Persisting the selected tab or the collapsed state of groups.
 - Reordering, pinning or filtering sessions in the Recent tab (the Tags tab filters by tag, UC.TG.14).
+
+
+## UC.RT.08 — A Focus reply draft makes a session recent
+**Actor:** the User. **Precondition:** a session last active two days ago has an open Ask item.
+**Main flow:** 1. The User types an answer into the item's reply box without sending it. 2. The session's row in the tree gets the 15-minute recency colour, and the session appears at the top of the Recent tab and the Recent dropdown. 3. The draft pencil does not appear (it is for the composer draft).
+**Alternative flows:** **A1** — The User deletes all the text: the reply draft no longer counts, and the recency falls back to the other activity. **A2** — The answer is typed on the web: the same on the desktop. **A3** — The item is closed: its draft is deleted and no longer counts.
+**Covers:** FR.9.20.

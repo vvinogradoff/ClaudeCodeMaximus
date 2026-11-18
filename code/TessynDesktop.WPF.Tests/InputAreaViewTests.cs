@@ -54,7 +54,7 @@ public sealed class InputAreaViewTests
 		}
 	}
 
-	private static Fixture Create()
+	private static Fixture Create(double? storedHeight = null)
 	{
 		var client = new FakeTessynClient();
 		client.Sessions["a"] = FakeSession.WithEntries(3);
@@ -62,6 +62,7 @@ public sealed class InputAreaViewTests
 		var model = new SessionPaneViewModel(client, new FakeTranscriptSurface(), new MarkdigEntryRenderer(new UrlPolicy()), new FakeUrlLauncher(),
 			new ImmediateUiDispatcher(), new SwitchLatencyTracker(NullLogger<SwitchLatencyTracker>.Instance), NullLogger<SessionPaneViewModel>.Instance);
 		model.OpenAsync("a", "A").GetAwaiter().GetResult();
+		model.ExpandedInputHeight = storedHeight;   // as read from the client state at start (FR.12.36)
 		var pane = new SessionPane { DataContext = model };
 		pane.Measure(new Size(900, 700));
 		pane.Arrange(new Rect(0, 0, 900, 700));
@@ -311,6 +312,21 @@ public sealed class InputAreaViewTests
 			Assert.True(f.Input.ActualHeight > natural + 100, $"the text box stayed at {f.Input.ActualHeight} (natural {natural}) in a 360 row");
 			Assert.True(f.Input.ActualHeight <= 360);
 			Assert.Equal(360, f.Model.ExpandedInputHeight);
+		});
+	}
+
+	/// <summary>FR.12.36: a height stored by an earlier run sizes the expanded input area from the first layout, and the text box fills it.</summary>
+	[Fact]
+	public void AStoredHeight_SizesTheInputArea_AtStart()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var f = Create(storedHeight: 320);
+			f.Settle();
+
+			Assert.False(f.Model.IsInputCollapsed);
+			Assert.Equal(320, f.InputRow.ActualHeight, 0.5);
+			Assert.True(f.Input.ActualHeight > 150, $"the text box is {f.Input.ActualHeight} high in a 320 row");
 		});
 	}
 

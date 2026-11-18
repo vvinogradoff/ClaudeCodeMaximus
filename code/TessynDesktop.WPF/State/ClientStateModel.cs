@@ -32,6 +32,9 @@ public sealed class ClientStateModel
 	/// <summary>The command bar (model, effort, profile) under the input box is shown (FR.12.11). Global for the WPF client, not per working directory.</summary>
 	public bool CommandBarVisible { get; set; } = true;
 
+	/// <summary>The height the user dragged the expanded input area to (FR.12.36); null while it has its natural height. Global for the WPF client.</summary>
+	public double? InputAreaHeight { get; set; }
+
 	/// <summary>Typed, versioned settings sections by name (see <see cref="IClientSettingsStore"/>); new sections never need a new property here.</summary>
 	public Dictionary<string, ClientSectionModel> Sections { get; set; } = new();
 }

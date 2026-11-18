@@ -295,37 +295,91 @@ public sealed class FocusCardTextViewTests
 			Assert.Equal(2.0, tops[i] - (tops[i - 1] + heights[i - 1]), 1);   // the gap between buttons is 2 px
 	}
 
+	/// <summary>TC.FX.11 / TC.FX.20 (FR.23.26, FR.23.28): the recommendation is the last button, without a prefix, tooltip Recommended, in the accent button style; the others keep the default style.</summary>
 	[Fact]
-	public void TC_FX_11_TheRecommendationIsTheLastButton_WithoutAPrefix_OutlinedInTheAccent_AndTooltipRecommended()
+	public void TC_FX_20_TheRecommendationIsTheLastButton_WithoutAPrefix_InTheAccentButtonStyle_AndTooltipRecommended()
 	{
 		var shown = new List<string>();
-		var brushes = new List<Brush>();
-		var thicknesses = new List<double>();
+		var styles = new List<Style?>();
 		var tooltips = new List<object?>();
-		SolidColorBrush? accent = null;
+		Style? accentStyle = null;
 		StaTestRunner.Run(() =>
 		{
 			var focus = Create(Open(1, body: null, options: ["Yes", "No"], recommendation: "Maybe"));
-			accent = new SolidColorBrush(Color.FromRgb(0x12, 0x78, 0xD4));
+			accentStyle = new Style(typeof(Button));
 			var panel = new FocusPanel { DataContext = focus, Width = PanelWidth };
-			panel.Resources["AccentFillColorDefaultBrush"] = accent;   // the brush AccentButtonStyle (the Save button) takes its colour from
+			panel.Resources["AccentButtonStyle"] = accentStyle;   // the style of Send answers, Send and the Settings Save button
 			Layout(panel);
 			foreach (var button in Descendants<Button>(panel).Where(b => b.DataContext is FocusOptionViewModel))
 			{
 				shown.Add(Descendants<TextBlock>(button).Single().Text);
-				brushes.Add(button.BorderBrush);
-				thicknesses.Add(button.BorderThickness.Left);
+				styles.Add(button.Style);
 				tooltips.Add(button.ToolTip);
 			}
 		});
 
 		Assert.Equal(["Yes", "No", "Maybe"], shown);                       // no "Recommended: " or "Use recommendation: " prefix
-		Assert.Equal(1.5, thicknesses[2]);
-		Assert.Same(accent, brushes[2]);
-		Assert.NotEqual(1.5, thicknesses[0]);
-		Assert.NotSame(accent, brushes[0]);
-		Assert.NotSame(accent, brushes[1]);
+		Assert.Same(accentStyle, styles[2]);
+		Assert.NotSame(accentStyle, styles[0]);
+		Assert.NotSame(accentStyle, styles[1]);
 		Assert.Equal("Recommended", tooltips[2]);
 		Assert.NotEqual("Recommended", tooltips[0]);
+	}
+
+	/// <summary>TC.FX.21 (FR.23.28): the reply box sits in a 2 px accent border, with no border of its own.</summary>
+	[Fact]
+	public void TC_FX_21_TheReplyBox_HasATwoPixelAccentBorder()
+	{
+		Thickness frame = default, own = default;
+		Brush? brush = null;
+		SolidColorBrush? accent = null;
+		StaTestRunner.Run(() =>
+		{
+			var focus = Create(Open(1, body: null, options: ["Yes"], recommendation: null));
+			accent = new SolidColorBrush(Color.FromRgb(0x12, 0x78, 0xD4));
+			var panel = new FocusPanel { DataContext = focus, Width = PanelWidth };
+			panel.Resources["AccentFillColorDefaultBrush"] = accent;
+			Layout(panel);
+			var box = Descendants<TextBox>(panel).Single(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Your answer");
+			var border = (Border)((FrameworkElement)box.Parent).Parent;
+			frame = border.BorderThickness;
+			brush = border.BorderBrush;
+			own = box.BorderThickness;
+		});
+
+		Assert.Equal(new Thickness(2), frame);
+		Assert.Same(accent, brush);
+		Assert.Equal(new Thickness(0), own);
+	}
+
+	/// <summary>TC.FX.22 (FR.23.28): the grip sets the reply box height, within 56..600 px.</summary>
+	[Fact]
+	public void TC_FX_22_TheGrip_ResizesTheReplyBox_WithinItsRange()
+	{
+		var heights = new List<double>();
+		var hasGrip = false;
+		StaTestRunner.Run(() =>
+		{
+			var focus = Create(Open(1, body: null, options: ["Yes"], recommendation: null));
+			var panel = new FocusPanel { DataContext = focus, Width = PanelWidth };
+			Layout(panel);
+			var box = Descendants<TextBox>(panel).Single(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Your answer");
+			hasGrip = Descendants<System.Windows.Controls.Primitives.Thumb>(panel).Any(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Resize the answer box");
+			var start = box.ActualHeight;
+			FocusPanel.ResizeReply(box, 100);
+			heights.Add(box.Height - start);
+			FocusPanel.ResizeReply(box, 5000);
+			heights.Add(box.Height);
+			FocusPanel.ResizeReply(box, -5000);
+			heights.Add(box.Height);
+			Layout(panel);
+			heights.Add(box.ActualHeight);
+		});
+
+		Assert.True(hasGrip);
+		Assert.Equal(100, heights[0], 0.5);
+		Assert.Equal(FocusPanel.MaxReplyHeight, heights[1]);
+		Assert.Equal(FocusPanel.MinReplyHeight, heights[2]);
+		Assert.Equal(FocusPanel.MinReplyHeight, heights[3], 0.5);
 	}
 }

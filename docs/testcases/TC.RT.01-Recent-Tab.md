@@ -18,6 +18,11 @@ Related requirements: FR.1.15, FR.1.16 in [requirements.md](/docs/requirements.m
 | TC.RT.08 | Worker Session selected in the tree | MANUAL | UC.RT.06 | FR.1.16 |
 | TC.RT.09 | Three tabs, start tab, dropdown | MANUAL | UC.RT.07 | FR.1.15 |
 | TC.RT.10 | Rebuild on every selection of the tab | MANUAL | UC.RT.01 | FR.1.16 |
+| TC.RT.11 | The daemon's draft activity time is the latest of the composer draft and the non-empty Focus reply drafts; empty or whitespace-only reply drafts do not count; a deleted one stops counting | AUTOMATED (Core) | UC.RT.08 | FR.9.20 |
+| TC.RT.12 | Writing a reply draft (`draft.set` with `itemId`) publishes the session change that updates its recency, like a composer draft | AUTOMATED (Core) | UC.RT.08 | FR.9.20 |
+| TC.RT.13 | The draft pencil and the "drafts first" order still use the composer draft only | AUTOMATED (Core, VM) | UC.RT.08 | FR.9.20 |
+| TC.RT.14 | The startup scan (`SessionLastActivityScanner`) includes reply drafts too | AUTOMATED (Core) | UC.RT.08 | FR.9.20 |
+| TC.RT.15 | End to end: typing in a Focus reply box gives the row the 15-minute recency colour and moves it to the top of the Recent tab | AUTOMATED (E2E) | UC.RT.08 | FR.9.20 |
 
 ## FR → TC coverage
 

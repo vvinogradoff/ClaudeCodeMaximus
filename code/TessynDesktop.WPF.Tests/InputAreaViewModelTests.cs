@@ -154,7 +154,7 @@ public sealed class InputAreaViewModelTests : IDisposable
 		_pane.ToggleInputAreaCommand.Execute(null);
 
 		Assert.True(_pane.IsInputCollapsed);
-		Assert.True(_state.State.CommandBarVisible);   // the only input-area state in the client state is the command bar's own switch
+		Assert.True(_state.State.CommandBarVisible);   // the collapse is not stored: only the command bar switch and the dragged height are (FR.12.36)
 		using var restarted = Create(_state);
 		await restarted.OpenAsync("a");
 		Assert.False(restarted.IsInputCollapsed);
@@ -316,13 +316,34 @@ public sealed class InputAreaViewModelTests : IDisposable
 		Assert.True(_pane.IsInputCollapsed);            // no view change, no reset
 	}
 
+	/// <summary>FR.12.36: the dragged height is stored in the client state and read back by the next run.</summary>
 	[Fact]
-	public void TheExpandedHeight_IsRememberedForTheRunOfTheApp()
+	public void TheExpandedHeight_IsRememberedAcrossRuns()
 	{
-		Assert.Null(_pane.ExpandedInputHeight);
+		Assert.Null(_pane.ExpandedInputHeight);   // no stored height: the natural height, as before
 
 		_pane.ExpandedInputHeight = 180;
 
 		Assert.Equal(180, _pane.ExpandedInputHeight);
+		Assert.Equal(180, _state.State.InputAreaHeight);
+		using var restarted = Create(_state);
+		Assert.Equal(180, restarted.ExpandedInputHeight);
+	}
+
+	/// <summary>FR.12.36: a height that is not positive counts as none, written or read.</summary>
+	[Theory]
+	[InlineData(0.0)]
+	[InlineData(-5.0)]
+	public void ANonPositiveHeight_CountsAsNone(double height)
+	{
+		_pane.ExpandedInputHeight = 200;
+		_pane.ExpandedInputHeight = height;
+
+		Assert.Null(_pane.ExpandedInputHeight);
+		Assert.Null(_state.State.InputAreaHeight);
+
+		_state.State.InputAreaHeight = height;
+		using var restarted = Create(_state);
+		Assert.Null(restarted.ExpandedInputHeight);
 	}
 }

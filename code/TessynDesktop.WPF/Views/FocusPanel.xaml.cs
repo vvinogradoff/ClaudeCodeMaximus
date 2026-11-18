@@ -19,6 +19,25 @@ public partial class FocusPanel : UserControl
 	private Point _headerDown;
 	private bool _headerClickArmed;
 
+	/// <summary>The reply box's height range while its grip is dragged (FR.23.28).</summary>
+	public const double MinReplyHeight = 56;
+
+	public const double MaxReplyHeight = 600;
+
+	/// <summary>The grip at the reply box's bottom right sets the box's height (FR.23.28); the width follows the card. Kept while the card is shown, not stored.</summary>
+	private void OnReplyGripDragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+	{
+		if (sender is FrameworkElement { Parent: Grid { Children: var children } } && children.OfType<TextBox>().FirstOrDefault() is { } box)
+			ResizeReply(box, e.VerticalChange);
+	}
+
+	/// <summary>Grows or shrinks <paramref name="box"/> by <paramref name="delta"/>, from its current height, within <see cref="MinReplyHeight"/>..<see cref="MaxReplyHeight"/>.</summary>
+	public static void ResizeReply(TextBox box, double delta)
+	{
+		var current = double.IsNaN(box.Height) ? box.ActualHeight : box.Height;
+		box.Height = Math.Clamp(current + delta, MinReplyHeight, MaxReplyHeight);
+	}
+
 	/// <summary>
 	/// A closed card's text is selectable (FR.23.25), which takes the mouse for selecting, so showing or hiding the body is a click detected here: a single
 	/// press and release over the card's header (the chip row, or the id-and-title paragraph) without dragging (a drag is a selection and must not toggle).

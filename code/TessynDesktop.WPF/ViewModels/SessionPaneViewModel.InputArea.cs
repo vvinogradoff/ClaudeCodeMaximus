@@ -30,8 +30,23 @@ public sealed partial class SessionPaneViewModel
 	[ObservableProperty]
 	private bool _isCommandBarVisible = true;
 
-	/// <summary>The height the expanded input area had when it was last collapsed or resized; null while it has its natural height. Kept for the run of the app only.</summary>
-	public double? ExpandedInputHeight { get; set; }
+	private double? _expandedInputHeight;
+
+	/// <summary>
+	/// The height the user dragged the expanded input area to; null while it has its natural height. Kept across restarts in the client state (FR.12.36):
+	/// read at start, written when it changes. A value that is not positive counts as none.
+	/// </summary>
+	public double? ExpandedInputHeight
+	{
+		get => _expandedInputHeight;
+		set
+		{
+			var height = value is > 0 ? value : null;
+			_expandedInputHeight = height;
+			if (_stateStore != null && _stateStore.State.InputAreaHeight != height)
+				_stateStore.Update(s => s.InputAreaHeight = height);
+		}
+	}
 
 	public bool IsSessionSelected => !IsFocusSelected;
 
@@ -55,6 +70,7 @@ public sealed partial class SessionPaneViewModel
 	private void InitializeInputArea(IClientStateStore? stateStore)
 	{
 		_isCommandBarVisible = stateStore?.State.CommandBarVisible ?? true;
+		_expandedInputHeight = stateStore?.State.InputAreaHeight is > 0 and var height ? height : null;
 	}
 
 	partial void OnIsFocusSelectedChanged(bool value)

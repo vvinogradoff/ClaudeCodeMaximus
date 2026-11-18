@@ -63,6 +63,7 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 | FR.9.9 Colours tab | FR.9.16 | Two new palette entries: the active workers badge's number and outline. |
 | FR.9.9 Colours tab | FR.9.18 | An **Apply** button; less space above the list; the colours in **two columns**; a gap before the scrollbar. |
 | FR.9.9 Colours tab (Live), FR.9.18 Apply | FR.9.19 | The picker no longer applies a colour on every pointer move: picked colours are **pending** until **Apply** (or Save). The picker gains the **named web colours** and **colour harmonies**. |
+| FR.9.10 Session recency (latest activity), FR.9.8 order | FR.9.20 | A non-empty **Focus reply draft** edit counts as draft activity, like the composer draft. |
 
 ### New requirements
 
@@ -126,3 +127,9 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 - **Named colours.** The picker has a **Named colours** section listing the 140 standard CSS / HTML named colours (`aliceblue` … `yellowgreen`, `palegoldenrod` included), each as a small swatch with its name, with a **filter box** that matches part of the name. Clicking one makes it the new colour (opacity kept). When the new colour equals a named colour, its name is shown next to the preview.
 - **Harmonies.** For the new colour the picker shows three rows of clickable swatches: **Complementary** (hue + 180°), **Analogous** (hue − 30° and + 30°) and **Triadic** (hue + 120° and + 240°), keeping saturation, brightness and opacity. Clicking one makes it the new colour; the harmonies follow the new colour as it changes.
 - **Size.** The picker stays a popup next to the swatch; it may grow, but it fits on the screen (it opens upward or to the side when there is no room below).
+
+**FR.9.20 — Focus reply drafts count for recency.** (Amends FR.9.10 and the order of FR.9.8.) The *last non-empty draft edit* of a session is the latest of: its composer draft (as before) **and its Focus reply drafts** (FR.23.19, one per item). An edit to a Focus card's reply box that leaves text in it counts, from the desktop or the web; an empty or whitespace-only reply draft does not count.
+- **Everywhere recency is used.** The recency box colours (FR.9.10), the 24-hour dotted border, the order of the Recent tab, the Recent dropdown and its 24-hour window (FR.9.6, FR.9.8), and the web's Recent list follow the new time.
+- **Live.** Typing in a reply box updates the session's recency in every list as composer typing does (through the same change event), with no polling.
+- **Not a draft for other purposes.** The draft pencil (FR.1.20) and "sessions with unsent draft text come first" (FR.1.16) still look at the **composer** draft only.
+- **Closed items.** The reply draft of a closed item is deleted with it (FR.23.19); it then no longer counts.

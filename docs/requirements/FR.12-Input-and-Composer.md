@@ -205,6 +205,7 @@ The Default profile cannot be removed (the Remove button never appears while Def
 |---|---|---|
 | FR.12.4 Model persistence | FR.12.35 | The model is a setting of the session (`SessionNodeModel.ModelId`), kept from the user's pick. The directory's and the app's `SelectedModelId` are only the fallback. |
 | FR.12.12 Effort level selection | FR.12.35 | The effort is a setting of the session (`SessionNodeModel.Effort`), kept from the user's pick. `DirectoryNodeModel.SelectedEffortIndex` is not read. |
+| FR.12.29 Collapsible input area (Splitter) | FR.12.36 | The dragged height is kept **across restarts**, not only for the run of the app. |
 
 ### New requirements
 
@@ -230,3 +231,5 @@ The Default profile cannot be removed (the Remove button never appears while Def
   - A session without an `Effort` shows and runs **Default** until the user picks an effort once; that pick then stays.
   - A session without a `ModelId` shows the directory's or the app's model, which is the model its turns already run on.
 - **Unchanged.** FR.19.8: the selectors stay disabled while a Persistent Session Process is alive, and a live process keeps the model and effort it was started with. FR.12.15: a change takes effect from the next send.
+
+**FR.12.36 — The input area height is kept across restarts (WPF).** (Amends the *Splitter* bullet of FR.12.29.) The height the user drags the input area to is stored in the WPF client state (`InputAreaHeight`, one value for the client, like `CommandBarVisible`) when the drag ends, and used from the next start on whenever the area is expanded. Without a stored height the area has the height of its content, as before. A stored height that is not positive is ignored. The collapsed or expanded state itself is not stored (each view applies its default, FR.12.29).
