@@ -47,7 +47,7 @@ public sealed class PreviewGroupMatcher
 			return null;
 
 		var absolute = uri.AbsoluteUri;
-		return Best(groups, PreviewPatternKind.Url, pattern => GlobMatches(pattern.Text, absolute));
+		return Best(groups, PreviewPatternKind.Url, pattern => UrlPatternMatches(pattern.Text, absolute));
 	}
 
 	private PreviewGroupMatch? Best(IReadOnlyList<PreviewGroupModel> groups, PreviewPatternKind kind, Func<PreviewPattern, bool> matches)
@@ -98,6 +98,15 @@ public sealed class PreviewGroupMatcher
 
 		var extension = file[(dot + 1)..];
 		return extension.All(char.IsAsciiLetterOrDigit) ? extension.ToLowerInvariant() : null;
+	}
+
+	/// <summary>A pattern ending with <c>/*</c> also matches the address without that last slash (a repository URL matches <c>.../repo/*</c>).</summary>
+	private static bool UrlPatternMatches(string pattern, string absolute)
+	{
+		if (GlobMatches(pattern, absolute))
+			return true;
+
+		return pattern.EndsWith(Constants.Previews.SlashWildcard, StringComparison.Ordinal) && GlobMatches(pattern[..^Constants.Previews.SlashWildcard.Length], absolute);
 	}
 
 	/// <summary>Iterative two-pointer glob (<c>*</c> = any run of characters), ordinal ignoring case; it remembers only the last star, so it never blows up.</summary>

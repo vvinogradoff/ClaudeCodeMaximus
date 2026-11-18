@@ -57,6 +57,7 @@ public static partial class Constants
 		public const string FileAccessRefusalFragment = "cannot be read remotely";
 
 		public const string PreviewUnsupported = "This file type has no preview.";
+		public const string PreviewTiffUndecodable = "This TIFF image could not be decoded.";
 		public const string PreviewTruncated = "Showing the first part of a large file.";
 		public const string PdfHint = "PDF files open in your default PDF app.";
 		public const string VideoOpensExternallyHint = "This video type plays in your default media player: use Open in default app.";
@@ -78,7 +79,12 @@ public static partial class Constants
 	{
 		public static readonly IReadOnlySet<string> Markdown = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown" };
 
-		public static readonly IReadOnlySet<string> Image = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" };
+		public static readonly IReadOnlySet<string> Image = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff" };
+
+		/// <summary>Decoded by the host and shown as PNG (plan D9).</summary>
+		public static readonly IReadOnlySet<string> Tiff = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".tif", ".tiff" };
+
+		public const string PngExtension = ".png";
 
 		public static readonly IReadOnlySet<string> Video = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".webm", ".mov", ".m4v", ".ogv" };
 
@@ -100,7 +106,7 @@ public static partial class Constants
 		/// <summary>The only types that may be opened in the default app: documents and media. Executables and scripts never leave the preview.</summary>
 		public static readonly IReadOnlySet<string> ExternallyOpenable = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 		{
-			".md", ".markdown", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".mkv", ".avi", ".wmv", ".pdf",
+			".md", ".markdown", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".mkv", ".avi", ".wmv", ".pdf",
 		};
 
 		/// <summary>Remote media links by extension (FR.26.4); svg is left out on purpose.</summary>

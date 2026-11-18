@@ -91,7 +91,7 @@ public sealed class ServiceRegistration
 			Constants.Limits.MaxCachedTranscripts,
 			new FocusViewModel(client, sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FocusViewModel>>()),
 			new FilePreviewViewModel(
-				new FilePreviewLoader(client, sp.GetRequiredService<FileKindClassifier>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<ExternalOpenPolicy>()),
+				new FilePreviewLoader(client, sp.GetRequiredService<FileKindClassifier>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<ExternalOpenPolicy>(), new WicTiffConverter()),
 				sp.GetRequiredService<IPreviewSurface>(), sp.GetRequiredService<IMarkdownRenderer>(), sp.GetRequiredService<IExternalFileLauncher>(),
 				sp.GetRequiredService<ExternalOpenPolicy>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<IUrlLauncher>(),
 				sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FilePreviewViewModel>>(), sp.GetRequiredService<IVideoThumbnailService>()),
@@ -135,7 +135,8 @@ public sealed class ServiceRegistration
 		services.AddSingleton<Func<ITessynClient, SettingsViewModel>>(sp => client => new SettingsViewModel(
 			client, sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(), sp.GetRequiredService<IDialogService>(),
 			sp.GetRequiredService<IFolderPicker>(), sp.GetRequiredService<IMcpServerEditorPresenter>(), sp.GetRequiredService<ProfileViewModel>(),
-			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILoggerFactory>(), sp.GetRequiredService<IAppearanceService>()));
+			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILoggerFactory>(), sp.GetRequiredService<IAppearanceService>(),
+			sp.GetService<IPreviewSettingsService>(), sp.GetService<PreviewGroupMatcher>(), sp.GetService<IBrowserDataCleaner>()));
 		services.AddSingleton<SettingsHost>();
 		services.AddSingleton<IShellModule, SettingsShellModule>();
 
