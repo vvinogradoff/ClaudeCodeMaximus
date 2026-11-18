@@ -226,6 +226,22 @@ public sealed class FocusViewBindingTests
 		Assert.Contains(Constants.Texts.NoOpenItems, texts);
 	}
 
+	/// <summary>FR.23.27: no "Focus" title line; the switch in the session header names the view.</summary>
+	[Fact]
+	public void FocusPanel_HasNoTitleLine()
+	{
+		var texts = new List<string>();
+		StaTestRunner.Run(() =>
+		{
+			var focus = new FocusViewModel(new FakeTessynClient(), new ImmediateUiDispatcher(), NullLogger<FocusViewModel>.Instance);
+			var panel = new FocusPanel { DataContext = focus };
+			Layout(panel);
+			texts.AddRange(Texts(panel, visibleOnly: true));
+		});
+
+		Assert.DoesNotContain("Focus", texts);
+	}
+
 	[Fact]
 	public void FocusPanel_ShowsDecisionsAndClosedCollapsed_WithEmptyStateWhenOnlyThoseExist_AndTheClosedCardsAreCompact()
 	{
