@@ -275,6 +275,7 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 | FR.23.10 Guidance | FR.23.24 | The guidance ends with a sentence that names `post_attention` for every decision, approval or action the session needs, and gives it precedence over a project's "ask in plain text" rule. |
 | FR.23.20 Selectable Focus text | FR.23.25 | A selection runs **across the whole card text** (paragraphs, lists, code, title, outcome), not one paragraph at a time. |
 | FR.23.14 Card contents (options, "Use recommendation"), FR.23.15 | FR.23.26 | Options are a **vertical list** of full-width buttons; the recommendation is the **last** button, marked by an accent outline, without the "Use recommendation:" prefix. |
+| FR.23.14 Focus view layout | FR.23.27 | No **"Focus"** title at the top of the Focus view (WPF). |
 
 **FR.23.24 — Questions go to the Focus view, before any plain-text rule.** The FR.23.10 guidance (`Constants.Instructions.AttentionGuidance`, same gate: once per fresh top-level session) ends with:
 
@@ -298,3 +299,5 @@ Why: a project rule such as CLAUDE.md's "ask in plain text" was written to avoid
 | Existing | Amended by | Change |
 |---|---|---|
 | FR.23.18 References on items (a file reference opens the preview pane; a url reference opens the system browser) | FR.29.4 | With the preview windows mode on and a matching group, a file reference and a url reference open in the group's preview window. Otherwise they open as before. A window opened from a Focus item can close with that item (FR.29.9). |
+
+**FR.23.27 — No title in the Focus view (WPF).** The Focus view has no "Focus" header line: the Session/Focus switch in the session header already names it. The list (and the error line, when there is one) starts at the top of the view.
