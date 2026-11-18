@@ -15,6 +15,7 @@
     <sys:String x:Key="GlyphWarning">&#xE7BA;</sys:String>
     <sys:String x:Key="GlyphLink">&#xE71B;</sys:String>
     <sys:String x:Key="GlyphBack">&#xE72B;</sys:String>
+    <sys:String x:Key="GlyphForward">&#xE72A;</sys:String>
     <sys:String x:Key="GlyphEntry">&#xE8BD;</sys:String>
     <sys:String x:Key="GlyphFile">&#xE8A5;</sys:String>
     <sys:String x:Key="GlyphOpenInNew">&#xE8A7;</sys:String>
@@ -26,6 +27,9 @@
     <sys:String x:Key="GlyphClock">&#xE121;</sys:String>
     <sys:String x:Key="GlyphStreaming">&#xE945;</sys:String>
     <sys:String x:Key="GlyphSound">&#xE767;</sys:String>
+    <sys:String x:Key="GlyphMonitor">&#xE7F4;</sys:String>
+    <sys:String x:Key="GlyphPinned">&#xE840;</sys:String>
+    <sys:String x:Key="GlyphAutoClose">&#xE7E8;</sys:String>
 
     <Style x:Key="IconText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource IconFont}" />

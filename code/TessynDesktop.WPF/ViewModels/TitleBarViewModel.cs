@@ -17,6 +17,7 @@ public sealed partial class TitleBarViewModel : ObservableObject
 	private readonly IClientSettingsStore _settings;
 	private readonly IShellCommands _commands;
 	private readonly IUiDispatcher _ui;
+	private readonly IPreviewRouter? _previews;
 
 	[ObservableProperty]
 	private bool _isTreeVisible;
@@ -24,8 +25,9 @@ public sealed partial class TitleBarViewModel : ObservableObject
 	[ObservableProperty]
 	private bool _isDark;
 
-	public TitleBarViewModel(IAppearanceService appearance, IClientSettingsStore settings, IShellCommands commands, IUiDispatcher ui, string buildNumber, bool isBuildOutput)
+	public TitleBarViewModel(IAppearanceService appearance, IClientSettingsStore settings, IShellCommands commands, IUiDispatcher ui, string buildNumber, bool isBuildOutput, IPreviewRouter? previews = null)
 	{
+		_previews = previews;
 		_appearance = appearance;
 		_settings = settings;
 		_commands = commands;
@@ -35,6 +37,8 @@ public sealed partial class TitleBarViewModel : ObservableObject
 		_isTreeVisible = !settings.Get<ShellLayoutSettings>().TreeCollapsed;
 		_isDark = appearance.IsDark;
 		appearance.Changed += (_, _) => _ui.Post(() => IsDark = _appearance.IsDark);
+		if (previews != null)
+			previews.StateChanged += (_, _) => _ui.Post(RaisePreviewState);
 	}
 
 	/// <summary>Build time of this app as <c>yyyyMM.dd.HHmm</c>; empty when it cannot be read.</summary>
@@ -45,11 +49,51 @@ public sealed partial class TitleBarViewModel : ObservableObject
 
 	public string BuildOutputWarning => Constants.TitleBar.BuildOutputWarning;
 
+	/// <summary>The Monitor toggle exists only where a preview router is registered (FR.6.10).</summary>
+	public bool IsMonitorToggleVisible => _previews != null;
+
+	/// <summary>Two or more monitors are connected (FR.29.1).</summary>
+	public bool IsMonitorToggleEnabled => _previews?.CanToggle ?? false;
+
+	/// <summary>
+	/// The preview windows mode is on: the toggle looks checked. Settable, so that the button works through the Toggle pattern of UI Automation too (a screen reader, a test),
+	/// which flips a ToggleButton without running its command.
+	/// </summary>
+	public bool IsPreviewWindowsOn
+	{
+		get => _previews?.IsActive ?? false;
+		set
+		{
+			if (IsMonitorToggleEnabled && value != IsPreviewWindowsOn)
+				_previews?.SetEnabled(value);
+			else
+				OnPropertyChanged();   // refused: the button goes back to the real state
+		}
+	}
+
+	public string MonitorToggleToolTip => _previews switch
+	{
+		null or { CanToggle: false } => Constants.PreviewWindow.MonitorDisabledToolTip,
+		{ IsEnabled: true } => Constants.PreviewWindow.MonitorOnToolTip,
+		_ => Constants.PreviewWindow.MonitorOffToolTip,
+	};
+
 	/// <summary>The left panel was shown or hidden (the window lays itself out).</summary>
 	public event EventHandler? TreeVisibilityChanged;
 
 	[RelayCommand]
 	private void ToggleTree() => SetTreeVisible(!IsTreeVisible);
+
+	[RelayCommand(CanExecute = nameof(IsMonitorToggleEnabled))]
+	private void TogglePreviewWindows() => _previews?.SetEnabled(!_previews.IsEnabled);
+
+	private void RaisePreviewState()
+	{
+		OnPropertyChanged(nameof(IsMonitorToggleEnabled));
+		OnPropertyChanged(nameof(IsPreviewWindowsOn));
+		OnPropertyChanged(nameof(MonitorToggleToolTip));
+		TogglePreviewWindowsCommand.NotifyCanExecuteChanged();
+	}
 
 	[RelayCommand]
 	private void ToggleTheme() => _appearance.ToggleTheme();

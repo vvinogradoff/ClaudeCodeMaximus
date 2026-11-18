@@ -4,6 +4,8 @@ Related requirements: FR.29.1–FR.29.13, FR.27.1–FR.27.9, FR.6.10. Use cases:
 
 **Legend.** AUTOMATED = unit tests (the pattern matcher, the placement planner, the monitor watcher with a scripted monitor list, the router with a fake window factory, the browser navigation policy, view models). E2E = WPF end-to-end through `tools\e2e\Run-WpfE2E.ps1` (NR.6) with `--test-window --test-monitors <n>` (FR.29.13); preview windows are off-screen and never activated. MANUAL = needs a real second monitor, a real sign-in or a real display change; run by the Architect.
 
+E2E tests: `WpfPreviewWindowsToggleE2ETests`, `WpfPreviewWindowsRoutingE2ETests`, `WpfPreviewWindowsFocusE2ETests` (see report 06 for the row mapping). E2E rows without an E2E test yet: TC.PW.11, 21, 26, 31, 34, 49, and in TC.PW.16 the tag chip, markdown-preview link and Focus-card-text link (covered by unit tests).
+
 | TC | Title | Kind | UC | FR |
 |---|---|---|---|---|
 | TC.PW.01 | With one monitor the Monitor button after the day/night toggle is disabled and its tooltip is "Connect a second monitor to open previews in their own windows" | E2E | UC.PW.01 | FR.29.1, FR.6.10 |
@@ -69,3 +71,7 @@ Related requirements: FR.29.1–FR.29.13, FR.27.1–FR.27.9, FR.6.10. Use cases:
 | TC.PW.61 | A window the user closed before quitting is not reopened | AUTOMATED, E2E | UC.PW.16 | FR.29.11 |
 | TC.PW.62 | Reopened windows do not take the keyboard focus from the main window | MANUAL | UC.PW.16 | FR.29.11 |
 | TC.PW.63 | Under `--test-window` the list of open windows survives a restart in the test data root; placements are not saved there | E2E | UC.PW.16 | FR.29.11, FR.29.13 |
+| TC.PW.64 | Only a settled same-site address is saved for a web window; sign-in parameters are never saved | AUTOMATED | UC.PW.16 | FR.29.11 |
+| TC.PW.65 | A popup opened by a click in the page may take the focus; a script's popup never does; the 6th popup of a window is dropped and logged | AUTOMATED (the decision), MANUAL (real popups) | UC.PW.05 | FR.27.3 |
+| TC.PW.66 | A TIFF over 100 megapixels is refused before decoding | AUTOMATED | UC.PW.15 | FR.29.12 |
+| TC.PW.67 | Moving or resizing a pinned window saves the open-window list after 500 ms; its group's placement is untouched | AUTOMATED | UC.PW.06 | FR.29.8, FR.29.11 |

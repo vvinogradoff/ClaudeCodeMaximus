@@ -118,7 +118,7 @@ public static class SettingsTestSupport
 	/// <summary>The window's view model over the fake client and an in-memory store.</summary>
 	public static SettingsViewModel NewSettings(
 		FakeTessynClient client, IClientSettingsStore? store = null, IShellCommands? commands = null, FakeDialogPresenter? presenter = null,
-		IMcpServerEditorPresenter? editor = null, IFolderPicker? picker = null)
+		IMcpServerEditorPresenter? editor = null, IFolderPicker? picker = null, IPreviewSettingsService? previewSettings = null)
 	{
 		store ??= NewStore();
 		commands ??= NewCommands(store);
@@ -127,6 +127,6 @@ public static class SettingsTestSupport
 		var profiles = new ProfileViewModel(dialogs, ui, NullLogger<ProfileViewModel>.Instance);
 		return new SettingsViewModel(
 			client, store, commands, dialogs, picker ?? new ScriptedFolderPicker([], NullLogger<ScriptedFolderPicker>.Instance),
-			editor ?? new ScriptedMcpEditorPresenter(), profiles, ui, NullLoggerFactory.Instance);
+			editor ?? new ScriptedMcpEditorPresenter(), profiles, ui, NullLoggerFactory.Instance, previewSettings: previewSettings);
 	}
 }

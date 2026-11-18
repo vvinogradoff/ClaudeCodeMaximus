@@ -24,14 +24,16 @@ public partial class MainWindow : Window
 	private readonly IShellCommands _commands;
 	private readonly TitleBarViewModel _titleBar;
 	private readonly SettingsHost _settings;
+	private readonly IPreviewRouter? _previews;
 	private bool _closeApproved;
 	private double _treeWidth;
 	private readonly bool _testWindow;
 	private readonly CancellationTokenSource _lifetime = new();
 	private readonly DispatcherTimer _placementTimer;
 
-	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands, TitleBarViewModel titleBar, ScreensaverController screensaver, SettingsHost settings, ILogger<MainWindow> logger)
+	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands, TitleBarViewModel titleBar, ScreensaverController screensaver, SettingsHost settings, ILogger<MainWindow> logger, IPreviewRouter? previews = null)
 	{
+		_previews = previews;
 		_settings = settings;
 		_titleBar = titleBar;
 		_commands = commands;
@@ -69,7 +71,11 @@ public partial class MainWindow : Window
 		};
 		DpiChanged += (_, _) => FitMaximized();   // dragged to a monitor with another scale while maximised
 		Closing += OnClosing;
-		Closed += (_, _) => _lifetime.Cancel();
+		Closed += (_, _) =>
+		{
+			_previews?.CloseAllForExit();   // the app really closes now (the Settings guard allowed it): the preview windows go with it (FR.29.11)
+			_lifetime.Cancel();
+		};
 		Splitter.DragCompleted += (_, _) =>
 		{
 			_treeWidth = TreeColumn.ActualWidth;

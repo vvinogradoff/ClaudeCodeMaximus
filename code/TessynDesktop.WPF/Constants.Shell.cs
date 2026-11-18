@@ -57,6 +57,12 @@ public static partial class Constants
 		public const string Layout = "layout";
 		public const string DaemonHost = "daemonHost";
 		public const string Colours = "colours";
+
+		/// <summary>The preview groups (edited by Settings → Previews and by a preview window's Auto-close button).</summary>
+		public const string Previews = "previews";
+
+		/// <summary>Runtime state of the preview windows: the monitor toggle and the remembered placements (written by the app only).</summary>
+		public const string PreviewWindows = "previewWindows";
 	}
 
 	/// <summary>Defaults of the client settings sections; they mirror the Avalonia client's.</summary>

@@ -18,9 +18,11 @@ public sealed class FilePreviewLoader : IFilePreviewLoader
 	private readonly FileKindClassifier _classifier;
 	private readonly PreviewFileStore _store;
 	private readonly ExternalOpenPolicy _openPolicy;
+	private readonly ITiffConverter? _tiff;
 
-	public FilePreviewLoader(ITessynClient client, FileKindClassifier classifier, PreviewFileStore store, ExternalOpenPolicy openPolicy)
+	public FilePreviewLoader(ITessynClient client, FileKindClassifier classifier, PreviewFileStore store, ExternalOpenPolicy openPolicy, ITiffConverter? tiffConverter = null)
 	{
+		_tiff = tiffConverter;
 		_client = client;
 		_classifier = classifier;
 		_store = store;
@@ -97,6 +99,9 @@ public sealed class FilePreviewLoader : IFilePreviewLoader
 
 			await file!.DisposeAsync();
 			file = null;
+			if (kind == PreviewKind.Image && Constants.FileTypes.Tiff.Contains(extension!))
+				return await ConvertTiffAsync(first, kind, path!, cancellationToken);
+
 			return new LoadedPreview(first.Name, first.Mime, kind, first.Size, null, path, false, null);
 		}
 		catch
@@ -105,6 +110,32 @@ public sealed class FilePreviewLoader : IFilePreviewLoader
 				await file.DisposeAsync();
 			_store.Delete(path);
 			throw;
+		}
+	}
+
+	/// <summary>The TIFF in the cache becomes a PNG in a new cache folder; the TIFF copy is deleted either way.</summary>
+	private async Task<LoadedPreview> ConvertTiffAsync(FileReadResult first, PreviewKind kind, string tiffPath, CancellationToken cancellationToken)
+	{
+		var pngPath = _store.NewFilePath(Constants.FileTypes.PngExtension);
+		try
+		{
+			var converted = _tiff != null && await _tiff.ConvertToPngAsync(tiffPath, pngPath, cancellationToken);
+			if (!converted)
+			{
+				_store.Delete(pngPath);
+				return Refused(first, kind, Constants.Texts.PreviewTiffUndecodable);
+			}
+
+			return new LoadedPreview(first.Name, "image/png", kind, first.Size, null, pngPath, false, null);
+		}
+		catch
+		{
+			_store.Delete(pngPath);
+			throw;
+		}
+		finally
+		{
+			_store.Delete(tiffPath);
 		}
 	}
 

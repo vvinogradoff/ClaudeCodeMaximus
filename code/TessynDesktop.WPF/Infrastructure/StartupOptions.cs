@@ -15,6 +15,7 @@ public sealed class StartupOptions
 	public const string TestDropArgument = "--test-drop";
 	public const string TestDialogArgument = "--test-dialog";
 	public const string TestFolderArgument = "--test-folder";
+	public const string TestMonitorsArgument = "--test-monitors";
 
 	/// <summary>The arguments the process was started with (a self-update restarts the client with them).</summary>
 	public IReadOnlyList<string> Arguments { get; init; } = [];
@@ -65,6 +66,9 @@ public sealed class StartupOptions
 	/// <summary>Test seam (only with <c>--test-window</c>; repeatable <c>--test-folder &lt;path&gt;</c>): the folder dialog opens no window and answers with these folders in order (see <c>ScriptedFolderPicker</c>).</summary>
 	public IReadOnlyList<string> TestFolderAnswers { get; init; } = [];
 
+	/// <summary>Test seam (only with <c>--test-window</c>; <c>--test-monitors &lt;n&gt;</c>, n = 1 to 4, anything else is ignored): the app sees n monitors of 1920×1080 side by side (see <c>ScriptedMonitorWatcher</c>).</summary>
+	public int? TestMonitorCount { get; init; }
+
 	/// <summary>The single-instance mutex name for this run.</summary>
 	public string MutexName => DataRoot == null
 		? Constants.Identity.SingleInstanceMutexName
@@ -77,6 +81,7 @@ public sealed class StartupOptions
 		var testDrops = new List<string>();
 		var testDialogs = new List<string>();
 		var testFolders = new List<string>();
+		int? testMonitors = null;
 		for (var i = 0; i < args.Count - 1; i++)
 		{
 			if (string.Equals(args[i], DaemonFileArgument, StringComparison.OrdinalIgnoreCase))
@@ -89,11 +94,16 @@ public sealed class StartupOptions
 				testDialogs.Add(args[++i]);
 			else if (string.Equals(args[i], TestFolderArgument, StringComparison.OrdinalIgnoreCase))
 				testFolders.Add(args[++i]);
+			else if (string.Equals(args[i], TestMonitorsArgument, StringComparison.OrdinalIgnoreCase))
+			{
+				if (int.TryParse(args[++i], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var count) && count is >= Constants.Previews.TestMonitorsMin and <= Constants.Previews.TestMonitorsMax)
+					testMonitors = count;
+			}
 		}
 
 		var testWindow = args.Any(a => string.Equals(a, TestWindowArgument, StringComparison.OrdinalIgnoreCase));
 		var noSelfUpdate = args.Any(a => string.Equals(a, Constants.Switch.NoSelfUpdateArgument, StringComparison.OrdinalIgnoreCase));
 		var noHostStart = args.Any(a => string.Equals(a, Constants.Switch.NoHostStartArgument, StringComparison.OrdinalIgnoreCase));
-		return new StartupOptions { Arguments = [.. args], NoSelfUpdate = noSelfUpdate, NoHostStart = noHostStart, DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [], TestDialogAnswers = testWindow ? testDialogs : [], TestFolderAnswers = testWindow ? testFolders : [] };
+		return new StartupOptions { Arguments = [.. args], NoSelfUpdate = noSelfUpdate, NoHostStart = noHostStart, DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [], TestDialogAnswers = testWindow ? testDialogs : [], TestFolderAnswers = testWindow ? testFolders : [], TestMonitorCount = testWindow ? testMonitors : null };
 	}
 }

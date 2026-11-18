@@ -27,6 +27,7 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<FilePreviewViewModel> _logger;
 	private readonly IVideoThumbnailService? _thumbnails;
+	private readonly bool _ownsSurface;
 	private readonly Dictionary<string, string> _openedVideos = new(StringComparer.Ordinal);
 
 	private CancellationTokenSource? _cts;
@@ -77,8 +78,10 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 		IUrlLauncher launcher,
 		IUiDispatcher ui,
 		ILogger<FilePreviewViewModel> logger,
-		IVideoThumbnailService? thumbnails = null)
+		IVideoThumbnailService? thumbnails = null,
+		bool ownsSurface = false)
 	{
+		_ownsSurface = ownsSurface;
 		_thumbnails = thumbnails;
 		_loader = loader;
 		_surface = surface;
@@ -92,6 +95,9 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 		_surface.LinkClicked += OnLinkClicked;
 		_surface.Rendered += OnRendered;
 	}
+
+	/// <summary>The surface this view model draws on; the pane attaches its WebView2 to it (a preview window has its own, the side pane the shared one).</summary>
+	public IPreviewSurface Surface => _surface;
 
 	/// <summary>True for a markdown file, which can be shown as rendered output or as source.</summary>
 	public bool CanToggleSource => Kind == PreviewKind.Markdown && !IsLoading && Error == null;
@@ -427,6 +433,8 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 		CancelCore();
 		_surface.LinkClicked -= OnLinkClicked;
 		_surface.Rendered -= OnRendered;
+		if (_ownsSurface && _surface is IDisposable disposable)
+			disposable.Dispose();
 	}
 
 	private sealed class UiProgress : IProgress<PreviewProgress>

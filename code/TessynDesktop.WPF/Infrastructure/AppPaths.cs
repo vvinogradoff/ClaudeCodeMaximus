@@ -21,6 +21,9 @@ public sealed class AppPaths
 
 	public string WebView2UserDataDirectory => Path.Combine(DataRoot, Constants.Paths.WebView2Folder);
 
+	/// <summary>The persistent user data folder of the embedded browser (web preview windows, FR.27.1): cookies, storage and sign-ins live here.</summary>
+	public string BrowserUserDataDirectory => Path.Combine(DataRoot, Constants.Paths.BrowserFolder);
+
 	public string ClientStateFilePath => Path.Combine(DataRoot, Constants.Paths.ClientsFolder, Constants.Paths.ClientStateFileName);
 
 	/// <summary>Where preview files (images, video, files to open externally) are written; emptied at startup and served to the preview page as <c>preview.local</c>.</summary>

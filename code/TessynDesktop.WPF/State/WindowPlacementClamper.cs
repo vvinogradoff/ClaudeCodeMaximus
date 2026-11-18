@@ -12,7 +12,11 @@ public sealed class WindowPlacementClamper
 	/// <param name="saved">The remembered placement.</param>
 	/// <param name="monitors">Work areas of the monitors present; empty means "unknown", the placement is kept as is.</param>
 	/// <param name="primary">The primary monitor's work area.</param>
-	public WindowPlacementModel? Clamp(WindowPlacementModel? saved, IReadOnlyList<MonitorBounds> monitors, MonitorBounds primary)
+	public WindowPlacementModel? Clamp(WindowPlacementModel? saved, IReadOnlyList<MonitorBounds> monitors, MonitorBounds primary) =>
+		Clamp(saved, monitors, primary, Constants.Limits.MinWindowWidth, Constants.Limits.MinWindowHeight);
+
+	/// <summary>The same with the minimum window size of the caller (the preview windows are smaller than the main window); <paramref name="primary"/> is the fallback monitor.</summary>
+	public WindowPlacementModel? Clamp(WindowPlacementModel? saved, IReadOnlyList<MonitorBounds> monitors, MonitorBounds primary, int minWidth, int minHeight)
 	{
 		if (saved == null || saved.Width <= 0 || saved.Height <= 0)
 			return null;
@@ -22,8 +26,8 @@ public sealed class WindowPlacementClamper
 
 		var overlapped = BestMonitor(saved, monitors);
 		var target = overlapped ?? primary;
-		var width = Math.Clamp(saved.Width, Math.Min(Constants.Limits.MinWindowWidth, target.Width), target.Width);
-		var height = Math.Clamp(saved.Height, Math.Min(Constants.Limits.MinWindowHeight, target.Height), target.Height);
+		var width = Math.Clamp(saved.Width, Math.Min(minWidth, target.Width), target.Width);
+		var height = Math.Clamp(saved.Height, Math.Min(minHeight, target.Height), target.Height);
 
 		int left;
 		int top;
