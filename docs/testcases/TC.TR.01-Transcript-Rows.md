@@ -1,6 +1,6 @@
 # TC.TR.01 — Transcript Rows
 
-Related requirements: FR.2.7–FR.2.11. Use cases: [UC.TR.01](/docs/usecases/UC.TR.01-Transcript-Rows.md).
+Related requirements: FR.2.12, FR.2.7–FR.2.11. Use cases: [UC.TR.01](/docs/usecases/UC.TR.01-Transcript-Rows.md).
 
 **Legend.** AUTOMATED = unit (node script tests, view-model); E2E = WPF end-to-end over CDP (`CdpPage`, NR.6).
 
@@ -14,6 +14,7 @@ Related requirements: FR.2.7–FR.2.11. Use cases: [UC.TR.01](/docs/usecases/UC.
 | TC.TR.06 | Scroll map: mapping, round trip, monotonic, thumb at the ends, remeasure does not move the target | AUTOMATED | UC.TR.03 | FR.2.11 |
 | TC.TR.07 | Thumb follows the mouse within 1.5 px at every step on 100 entries of different heights | E2E | UC.TR.03 | FR.2.11 |
 | TC.TR.08 | Drag to the extremes lands exactly at the bottom and the top; content stable after release | E2E | UC.TR.03 | FR.2.11 |
+| TC.TR.09 | Rule lines: `---` is `<hr>`, `===` is `<hr class=dbl>`, the text above stays a paragraph; ATX headings, lists, tables, code and fences unchanged; same for user, assistant and system rows | AUTOMATED (`MarkdigEntryRendererTests`) | UC.TR.01 | FR.2.12 |
 
 ## FR → TC coverage
 | FR | Test cases |
@@ -23,3 +24,4 @@ Related requirements: FR.2.7–FR.2.11. Use cases: [UC.TR.01](/docs/usecases/UC.
 | FR.2.9 | TC.TR.04 |
 | FR.2.10 | TC.TR.05 |
 | FR.2.11 | TC.TR.06–08 |
+| FR.2.12 | TC.TR.09 |

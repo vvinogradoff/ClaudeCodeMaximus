@@ -100,7 +100,7 @@ public sealed partial class HtmlAllowlistSanitizer
 			var value = attribute.Value;
 			switch (key)
 			{
-				case "class" when name is "a" or "code" or "th" or "td" or "pre" or "span" or "div":
+				case "class" when name is "a" or "code" or "th" or "td" or "pre" or "span" or "div" or "hr":
 					classes.AddRange(ClassToken().Matches(value).Select(m => m.Value));
 					break;
 				case "href" when name == "a":
