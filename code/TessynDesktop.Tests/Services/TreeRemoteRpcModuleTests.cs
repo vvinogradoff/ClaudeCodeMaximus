@@ -422,14 +422,14 @@ public sealed class TreeRemoteRpcModuleTests : IDisposable
 	}
 
 	[Fact]
-	public async Task CreateSession_UnderADirectory_OmitsGroupId_AndGoesFirst()
+	public async Task CreateSession_UnderADirectory_OmitsGroupId_AndGoesLast()
 	{
 		var dir = _env.AddDirectory("proj");
 		_env.AddSession(dir, "A");
 
 		var result = await _env.CallAsync("tree.createSession", $$"""{"anchorId":"{{dir.NodeId}}","name":"First"}""");
 
-		Assert.Equal(["First", "A"], dir.Sessions.Select(s => s.Name));
+		Assert.Equal(["A", "First"], dir.Sessions.Select(s => s.Name));
 		Assert.Null(result["groupId"]);
 	}
 
@@ -443,7 +443,7 @@ public sealed class TreeRemoteRpcModuleTests : IDisposable
 		await _env.CallAsync("tree.createSession", $$"""{"anchorId":"{{dir.NodeId}}","name":"N"}""");
 
 		Assert.NotNull(added);
-		Assert.Equal(0, added!.Index);
+		Assert.Equal(0, added!.Index); // an empty directory: the only session
 	}
 
 	[Theory]

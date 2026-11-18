@@ -46,6 +46,9 @@ public partial class TreePanel : UserControl
 
 	private readonly TreeDragDrop _dragDrop;
 
+	/// <summary>The modifier keys held now; a seam so a view test can press Ctrl+Up without a real keyboard (the system key state cannot be set from a test).</summary>
+	public Func<ModifierKeys> CurrentModifiers { get; set; } = () => Keyboard.Modifiers;
+
 	/// <summary>A group's or a session's tooltip shows its path on disk and git origin: asked once, when the tooltip first opens.</summary>
 	private async void OnRowToolTipOpening(object sender, ToolTipEventArgs e)
 	{
@@ -61,6 +64,18 @@ public partial class TreePanel : UserControl
 	{
 		if (sender is not ListBox list || list.DataContext is not TreeViewModel tree || list.SelectedItem is not TreeNodeViewModel node)
 			return;
+
+		// FR.1.31: Ctrl+Up / Ctrl+Down move a top-level session one place. Handled here (tunnelling) so the ListBox does not take it as a focus move.
+		if (e.Key is Key.Up or Key.Down && CurrentModifiers() == ModifierKeys.Control)
+		{
+			if (tree.Operations != null && TreeOperations.IsMovable(node))
+			{
+				e.Handled = true;
+				_ = MoveStepAsync(list, tree, node, e.Key == Key.Up ? -1 : 1);
+			}
+
+			return;
+		}
 
 		switch (e.Key)
 		{
@@ -84,6 +99,27 @@ public partial class TreePanel : UserControl
 		}
 
 		e.Handled = true;
+	}
+
+	/// <summary>Moves the session, then keeps it selected, in view, and the keyboard focus in the tree (the rows were rebuilt, so the old row is gone).</summary>
+	private static async Task MoveStepAsync(ListBox list, TreeViewModel tree, TreeNodeViewModel node, int direction)
+	{
+		await tree.Operations!.MoveStepAsync(node, direction);
+
+		var id = tree.SelectedNodeId;
+		if (id != null && tree.FindNode(id) is { } current && tree.Rows.Contains(current))
+		{
+			tree.SelectedNode = current;
+			list.ScrollIntoView(current);
+			list.UpdateLayout();
+			if (list.ItemContainerGenerator.ContainerFromItem(current) is ListBoxItem item)
+			{
+				item.Focus();
+				return;
+			}
+		}
+
+		list.Focus();
 	}
 
 	private static void SelectRelative(ListBox list, TreeViewModel tree, TreeNodeViewModel node, int offset)

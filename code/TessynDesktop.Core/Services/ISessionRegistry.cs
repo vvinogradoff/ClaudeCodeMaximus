@@ -107,7 +107,7 @@ public interface ISessionRegistry
     /// <summary>
     /// Creates a session positioned relative to <paramref name="anchorNodeId"/> in ONE step (one lock, one <c>Save()</c>):
     /// a session anchor (a worker resolves to its top-level supervisor) puts the new session right after it in the same
-    /// container's <c>Sessions</c>; a group or directory anchor puts it at index 0 of that container. Raises
+    /// container's <c>Sessions</c>; a group or directory anchor puts it after the container's last session (FR.1.30). Raises
     /// <see cref="TreeChangeKind.SessionAdded"/> carrying the parent and the index. Returns null when the anchor is not found.
     /// </summary>
     SessionPlacementModel? CreateSessionAfter(string anchorNodeId, string name);

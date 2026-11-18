@@ -276,7 +276,8 @@ public sealed class SessionRegistry : ISessionRegistry
 
     /// <summary>
     /// Resolves the insertion point for a new session (settings lock held by the caller). A group or directory NodeId means
-    /// index 0 of its Sessions; a session NodeId means right after it, or after its top-level supervisor when it is a worker.
+    /// the end of its Sessions (FR.1.30; the list also holds worker models, so the end is after the last of them too); a session NodeId means
+    /// right after it, or after its top-level supervisor when it is a worker.
     /// </summary>
     private bool TryFindContainerFor(
         string anchorNodeId, out DirectoryNodeModel directory, out GroupNodeModel? group, out List<SessionNodeModel> sessions, out int index)
@@ -293,6 +294,7 @@ public sealed class SessionRegistry : ISessionRegistry
         {
             directory = dir;
             sessions  = dir.Sessions;
+            index     = sessions.Count;
             return true;
         }
 
@@ -304,6 +306,7 @@ public sealed class SessionRegistry : ISessionRegistry
             directory = d;
             group     = grp;
             sessions  = grp.Sessions;
+            index     = sessions.Count;
             return true;
         }
 

@@ -116,18 +116,18 @@ public sealed class StackReadFlowTests
 		var changed = await events.WaitForMethodAsync("tree.changed");
 		Assert.True(changed.Params["version"]!.GetValue<long>() > versionBefore);
 
-		// Anchor = group: index 0 of the group's sessions. Anchor = directory: index 0 of the directory's sessions.
-		var inGroup = await stack.RpcAsync(browser, "tree.createSession", P($$"""{"anchorId":"{{seed.GroupId}}","name":"Group first"}"""));
+		// Anchor = group or directory: after the last session of its sessions (FR.1.30).
+		var inGroup = await stack.RpcAsync(browser, "tree.createSession", P($$"""{"anchorId":"{{seed.GroupId}}","name":"Group last"}"""));
 		Assert.Equal(seed.GroupId, inGroup["groupId"]!.GetValue<string>());
-		var inDir = await stack.RpcAsync(browser, "tree.createSession", P($$"""{"anchorId":"{{seed.BetaDirectoryId}}","name":"Beta first"}"""));
+		var inDir = await stack.RpcAsync(browser, "tree.createSession", P($$"""{"anchorId":"{{seed.BetaDirectoryId}}","name":"Beta last"}"""));
 		Assert.Null(inDir["groupId"]);
 		Assert.Equal(seed.BetaDirectoryId, inDir["directoryId"]!.GetValue<string>());
 
 		var snapshot = await stack.RpcAsync(browser, "tree.snapshot");
 		var alpha = Directory(snapshot, SeedModel.AlphaLabel);
 		Assert.Equal($"{SeedModel.SupervisorName}|After supervisor|{SeedModel.FavoriteName}", Names(alpha["sessions"]!));
-		Assert.Equal($"Group first|{SeedModel.BackendName}", Names(alpha["groups"]![0]!["sessions"]!));
-		Assert.StartsWith("Beta first|", Names(Directory(snapshot, SeedModel.BetaLabel)["sessions"]!));
+		Assert.Equal($"{SeedModel.BackendName}|Group last", Names(alpha["groups"]![0]!["sessions"]!));
+		Assert.EndsWith("|Beta last", Names(Directory(snapshot, SeedModel.BetaLabel)["sessions"]!));
 		Assert.True(snapshot["version"]!.GetValue<long>() > versionBefore);
 
 		var empty = await stack.RpcRawAsync(browser, "tree.createSession", P($$"""{"anchorId":"{{seed.SupervisorId}}","name":"   "}"""));

@@ -297,6 +297,40 @@ public sealed class TreeMutationServiceTests : IDisposable
 		Assert.Equal(["B1", "B1-worker", "Moved", "B2"], TreeMutationTestEnv.Names(b.Sessions));
 	}
 
+	/// <summary>TC.TO.16 (FR.1.31): one place up or down, as the desktop asks for it (the neighbour's index among the other top-level sessions), moves the visible row by exactly one place with worker models interleaved in the list.</summary>
+	[Fact]
+	public void MoveNode_StepByStep_WithInterleavedWorkers_MovesTheVisibleRowOnePlace_AndWorkersStayUnderTheirSupervisor()
+	{
+		var dir = _env.AddDirectory("a");
+		var a = _env.AddSession(dir, "A");
+		_env.AddSession(dir, "A-w", supervisorNodeId: a.NodeId);
+		var b = _env.AddSession(dir, "B");
+		_env.AddSession(dir, "B-w1", supervisorNodeId: b.NodeId);
+		_env.AddSession(dir, "B-w2", supervisorNodeId: b.NodeId);
+		var c = _env.AddSession(dir, "C");
+		_env.AddSession(dir, "C-w", supervisorNodeId: c.NodeId);
+		var d = _env.AddSession(dir, "D");
+
+		string[] Visible() => dir.Sessions.Where(s => s.SupervisorNodeId == null).Select(s => s.Name).ToArray();
+
+		// C up twice (neighbour index 1, then 0), then down three times (1, 2, 3): A B C D -> A C B D -> C A B D -> A C B D -> A B C D -> A B D C.
+		_env.Tree.MoveNode(c.NodeId, dir.NodeId, 1);
+		Assert.Equal(["A", "C", "B", "D"], Visible());
+		_env.Tree.MoveNode(c.NodeId, dir.NodeId, 0);
+		Assert.Equal(["C", "A", "B", "D"], Visible());
+		_env.Tree.MoveNode(c.NodeId, dir.NodeId, 1);
+		Assert.Equal(["A", "C", "B", "D"], Visible());
+		_env.Tree.MoveNode(c.NodeId, dir.NodeId, 2);
+		Assert.Equal(["A", "B", "C", "D"], Visible());
+		_env.Tree.MoveNode(c.NodeId, dir.NodeId, 3);
+		Assert.Equal(["A", "B", "D", "C"], Visible());
+
+		Assert.Equal(["A-w", "B-w1", "B-w2", "C-w"], dir.Sessions.Where(s => s.SupervisorNodeId != null).Select(s => s.Name).Order().ToArray());
+		Assert.All(dir.Sessions.Where(s => s.Name.StartsWith("B-w", StringComparison.Ordinal)), w => Assert.Equal(b.NodeId, w.SupervisorNodeId));
+		Assert.Equal(c.NodeId, dir.Sessions.Single(s => s.Name == "C-w").SupervisorNodeId);
+		Assert.Same(d, dir.Sessions.Single(s => s.Name == "D"));
+	}
+
 	[Theory]
 	[InlineData(null, new[] { "Moved", "X", "Y" })]
 	[InlineData(0, new[] { "Moved", "X", "Y" })]
