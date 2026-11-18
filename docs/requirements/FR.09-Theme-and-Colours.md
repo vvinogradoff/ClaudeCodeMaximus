@@ -62,6 +62,7 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 | FR.9.13 Recency colour on the closed Recent dropdown | FR.9.15 | The closed button keeps its recency colour while hovered and while open: a faint overlay, never a replaced background. |
 | FR.9.9 Colours tab | FR.9.16 | Two new palette entries: the active workers badge's number and outline. |
 | FR.9.9 Colours tab | FR.9.18 | An **Apply** button; less space above the list; the colours in **two columns**; a gap before the scrollbar. |
+| FR.9.9 Colours tab (Live), FR.9.18 Apply | FR.9.19 | The picker no longer applies a colour on every pointer move: picked colours are **pending** until **Apply** (or Save). The picker gains the **named web colours** and **colour harmonies**. |
 
 ### New requirements
 
@@ -116,3 +117,12 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 - **Less space above the list.** Between the theme row and the first group heading there is at most **8 px** (the messages area takes no height while it is empty; the first heading has no extra top margin).
 - **Two columns.** Within each group the colour rows are laid out in **two equal columns** (left column first, then right, row by row). The label trims with an ellipsis and shows in full as a tooltip; swatch and Reset keep their size. Under a width of about 640 px the list falls back to one column.
 - **Gap before the scrollbar.** The rightmost swatch or Reset button ends at least **8 px** before the list's vertical scrollbar (and before the tab's right edge when no scrollbar is shown).
+
+**FR.9.19 — Colour picker: pending colours, named colours, harmonies.** (Amends FR.9.9 *Live* and FR.9.18 *Apply*.)
+- **Pending, not live.** Dragging in the picker (hue, saturation and brightness area, opacity slider) changes only the picker's **new colour** preview; nothing is stored or applied while the pointer moves. Closing the picker (click outside, or Enter) keeps the colour as **pending** on its row: the row's swatch shows it, with a small dot marking it as not applied yet. **Esc** in the picker drops the edit and keeps the previous colour.
+- **Apply.** **Apply** stores every pending colour of the edited theme and applies them everywhere at once: the application brushes and every open transcript page (FR.9.18). The window's **Save** does the same. **Close** with pending colours asks whether to apply them, as for any other unsaved setting.
+- **Reset and Reset all** are pending too, until Apply or Save.
+- **Applied means visible.** After Apply the colour shows in the tree, the lists, the session output and the Focus view without a restart or a theme switch.
+- **Named colours.** The picker has a **Named colours** section listing the 140 standard CSS / HTML named colours (`aliceblue` … `yellowgreen`, `palegoldenrod` included), each as a small swatch with its name, with a **filter box** that matches part of the name. Clicking one makes it the new colour (opacity kept). When the new colour equals a named colour, its name is shown next to the preview.
+- **Harmonies.** For the new colour the picker shows three rows of clickable swatches: **Complementary** (hue + 180°), **Analogous** (hue − 30° and + 30°) and **Triadic** (hue + 120° and + 240°), keeping saturation, brightness and opacity. Clicking one makes it the new colour; the harmonies follow the new colour as it changes.
+- **Size.** The picker stays a popup next to the swatch; it may grow, but it fits on the screen (it opens upward or to the side when there is no room below).
