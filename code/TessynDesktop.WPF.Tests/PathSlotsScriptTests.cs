@@ -69,6 +69,56 @@ public sealed class PathSlotsScriptTests
 		Assert.DoesNotContain("<img", html);
 	}
 
+	private const string VideoEntry = "'<p>clip <span class=\"pth\" data-j=\"0\">C:\\\\a\\\\v.mp4</span><span class=\"pslot\" data-j=\"0\"></span></p>'";
+	private const string VideoPaths = "['C:\\\\a\\\\v.mp4']";
+
+	private static string FillVideo(string state) => Eval($"g.fill({VideoEntry}, 4, {VideoPaths}, () => {state}).html").GetString()!;
+
+	[Fact]
+	public void ALoadedVideoFrame_AppearsRightAfterThePath_WithAPlayBadgeOverIt()
+	{
+		var html = FillVideo("({ st: 'ok', src: 'https://preview.local/abc/content.png' })");
+
+		Assert.Contains("<span class=\"pvid\"><img class=\"pimg\" src=\"https://preview.local/abc/content.png\"", html);
+		Assert.Contains("data-i=\"4\" data-j=\"0\"", html);                  // a click lands on the frame, which opens it like the path
+		Assert.Contains("<span class=\"pplay\" aria-hidden=\"true\"></span></span>", html);
+		Assert.True(html.IndexOf("class=\"pth\"", StringComparison.Ordinal) < html.IndexOf("<img", StringComparison.Ordinal));
+	}
+
+	[Theory]
+	[InlineData("({ st: 'denied' })", "Video not allowed")]
+	[InlineData("({ st: 'fail' })", "Preview unavailable")]
+	[InlineData("({ st: 'wait' })", "Loading preview")]
+	public void AVideoSlotShowsItsOwnHints_NeverAnImage(string state, string hint)
+	{
+		var html = FillVideo(state);
+
+		Assert.Contains(hint, html);
+		Assert.DoesNotContain("<img", html);
+		Assert.DoesNotContain("pplay", html);
+	}
+
+	[Theory]
+	[InlineData("https://evil.example/x.png")]
+	[InlineData("file:///C:/a/v.mp4")]
+	[InlineData("https://preview.local.evil.example/x.png")]
+	public void AVideoFrameFromOutsideThePreviewCache_NeverBecomesAnImg(string src)
+	{
+		var html = FillVideo($"({{ st: 'ok', src: '{src}' }})");
+
+		Assert.DoesNotContain("<img", html);
+		Assert.DoesNotContain("pplay", html);
+	}
+
+	[Theory]
+	[InlineData("C:\\a\\v.mp4", true)]
+	[InlineData("C:\\a\\v.MKV", true)]
+	[InlineData("C:\\a\\v.wmv", true)]
+	[InlineData("C:\\a\\v.png", false)]
+	[InlineData("C:\\a\\v.mp4.txt", false)]
+	[InlineData("C:\\a\\mp4", false)]
+	public void TheScriptRecognisesVideoPathsByExtension(string path, bool expected) => Assert.Equal(expected, Eval($"g.isVideo({JsonSerializer.Serialize(path)})").GetBoolean());
+
 	[Fact]
 	public void APathNobodyAskedAbout_IsReportedAsWanted_OnceAnswered_Not()
 	{

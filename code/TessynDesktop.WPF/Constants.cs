@@ -49,6 +49,7 @@ public static partial class Constants
 		public const string PreviewUnsupported = "This file type has no preview.";
 		public const string PreviewTruncated = "Showing the first part of a large file.";
 		public const string PdfHint = "PDF files open in your default PDF app.";
+		public const string VideoOpensExternallyHint = "This video type plays in your default media player: use Open in default app.";
 		public const string AttachedFilePrefix = "Attached file: ";
 		public const string AttachFolderRefused = "a folder cannot be attached; drop the files inside it instead";
 		public const string AttachNeedsSession = "Select a session first: files are attached to a session.";
@@ -71,6 +72,9 @@ public static partial class Constants
 
 		public static readonly IReadOnlySet<string> Video = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".webm", ".mov", ".m4v", ".ogv" };
 
+		/// <summary>Video types a local path may show a first-frame preview for (FR.26.6); the shell makes the frame with the installed codecs. Wider than <see cref="Video"/>, which is what the preview pane and remote links play.</summary>
+		public static readonly IReadOnlySet<string> InlineVideo = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".wmv" };
+
 		public static readonly IReadOnlySet<string> Pdf = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf" };
 
 		/// <summary>Shown as monospace text, markup and script types included (svg, html, ps1, ...): displayed, never rendered or run.</summary>
@@ -86,7 +90,7 @@ public static partial class Constants
 		/// <summary>The only types that may be opened in the default app: documents and media. Executables and scripts never leave the preview.</summary>
 		public static readonly IReadOnlySet<string> ExternallyOpenable = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 		{
-			".md", ".markdown", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".pdf",
+			".md", ".markdown", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".mkv", ".avi", ".wmv", ".pdf",
 		};
 
 		/// <summary>Remote media links by extension (FR.26.4); svg is left out on purpose.</summary>
@@ -115,6 +119,10 @@ public static partial class Constants
 		public const long MaxPreviewTextBytes = 2L * 1024 * 1024;
 		public const long MaxPreviewImageBytes = 25L * 1024 * 1024;
 		public const long MaxPreviewVideoBytes = 500L * 1024 * 1024;
+		/// <summary>The most a video may weigh for the host to fetch it only to make its first frame (FR.26.6); larger ones show "Preview unavailable" and still open on Ctrl+click.</summary>
+		public const long MaxInlineVideoBytes = 150L * 1024 * 1024;
+		/// <summary>Longest side, in pixels, of the first frame the shell is asked for.</summary>
+		public const int InlineVideoFramePixels = 720;
 		public const long MaxPreviewPdfBytes = 100L * 1024 * 1024;
 		public const int MaxMediaPreviewsPerEntry = 6;
 		public const int MaxPathChipsPerEntry = 8;

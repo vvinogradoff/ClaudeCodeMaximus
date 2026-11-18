@@ -253,6 +253,8 @@ public static class FileAccessPolicy
 		map[".webm"] = (FileTypeClass.Video, "video/webm");
 		map[".mov"]  = (FileTypeClass.Video, "video/quicktime");
 		map[".mkv"]  = (FileTypeClass.Video, "video/x-matroska");
+		map[".avi"]  = (FileTypeClass.Video, "video/x-msvideo");
+		map[".wmv"]  = (FileTypeClass.Video, "video/x-ms-wmv");
 
 		map[".pdf"] = (FileTypeClass.Pdf, "application/pdf");
 		return map;
