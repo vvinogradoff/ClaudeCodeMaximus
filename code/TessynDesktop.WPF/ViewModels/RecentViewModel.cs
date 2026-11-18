@@ -47,6 +47,15 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 	[NotifyPropertyChangedFor(nameof(RecencyLevel))]
 	private int _currentRecencyLevel;
 
+	/// <summary>How many workers of the session open in the pane are running now (the active workers badge of the closed button); 0 when none is open.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasRunningWorkers), nameof(RunningWorkersToolTip))]
+	private int _runningWorkerCount;
+
+	public bool HasRunningWorkers => RunningWorkerCount > 0;
+
+	public string RunningWorkersToolTip => string.Format(Constants.SessionLists.RunningWorkersTip, RunningWorkerCount);
+
 	/// <summary>The "Show recency colour in the closed Recent dropdown" setting (FR.9.13); the button is plain while it is off.</summary>
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(RecencyLevel))]

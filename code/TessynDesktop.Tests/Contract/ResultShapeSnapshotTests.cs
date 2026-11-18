@@ -48,7 +48,8 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 		var group = _env.Registry.AddGroup(dir, "Group");
 		var sup = _env.AddSession(dir, "Supervisor");
 		_supervisorId = sup.NodeId;
-		_env.AddSession(dir, "Worker", supervisorNodeId: sup.NodeId);
+		var worker = _env.AddSession(dir, "Worker", supervisorNodeId: sup.NodeId);
+		_env.Registry.SetSessionRunning(worker.NodeId, true);   // a running worker: its own state is running, the Supervisor's carries runningWorkerCount 1 (P13)
 		var inGroup = _env.AddSession(dir, "InGroup", group);
 		inGroup.IsFavorite = true;
 		inGroup.ClaudeSessionId = "claude-in-group";   // the daemon reports it resumable after its first sweep; the Supervisor is not

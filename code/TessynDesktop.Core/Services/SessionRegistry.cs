@@ -32,6 +32,9 @@ public sealed class SessionRegistry : ISessionRegistry
     // Running state: NodeId → number of open running activities (transient, never persisted). Guarded by _runningLock.
     private readonly Dictionary<string, int> _runningNodes = new();
     private readonly object _runningLock = new();
+    // Supervisor NodeId → running workers below it (direct and nested); null = stale. The generation stops a count computed before an invalidation from being cached. Guarded by _runningLock.
+    private Dictionary<string, int>? _runningWorkerCounts;
+    private long _runningWorkerGeneration;
 
     public event EventHandler<TreeChangedEventArgs>? TreeChanged;
 
@@ -773,6 +776,8 @@ public sealed class SessionRegistry : ISessionRegistry
                 _runningNodes[nodeId] = next;
 
             changed = (count == 0) != (next == 0);
+            if (changed)
+                InvalidateRunningWorkerCounts();
         }
 
         if (!changed)
@@ -792,12 +797,75 @@ public sealed class SessionRegistry : ISessionRegistry
             return _runningNodes.TryGetValue(nodeId, out var count) && count > 0;
     }
 
+    /// <inheritdoc />
+    public int CountRunningWorkers(string nodeId)
+    {
+        Dictionary<string, int>? cached;
+        long generation;
+        List<string> running;
+        lock (_runningLock)
+        {
+            cached = _runningWorkerCounts;
+            generation = _runningWorkerGeneration;
+            running = cached == null ? [.. _runningNodes.Keys] : [];
+        }
+
+        if (cached != null)
+            return cached.GetValueOrDefault(nodeId);
+
+        // One pass for every supervisor: each running node adds one to all of its supervisors (direct and nested), so the per-row state builds of a tree snapshot cost a lookup each.
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (running.Count > 0)
+        {
+            var byId = new Dictionary<string, SessionNodeModel>(StringComparer.Ordinal);
+            lock (_appSettings.SyncRoot)
+            {
+                foreach (var d in _appSettings.Settings.Tree)
+                    IndexSessions(d.Sessions, d.Groups, byId);
+            }
+
+            foreach (var id in running)
+            {
+                if (!byId.TryGetValue(id, out var current))
+                    continue;
+
+                var visited = new HashSet<string>(StringComparer.Ordinal) { current.NodeId };
+                while (!string.IsNullOrEmpty(current.SupervisorNodeId) && byId.TryGetValue(current.SupervisorNodeId, out var supervisor) && visited.Add(supervisor.NodeId))
+                {
+                    counts[supervisor.NodeId] = counts.GetValueOrDefault(supervisor.NodeId) + 1;
+                    current = supervisor;
+                }
+            }
+        }
+
+        lock (_runningLock)
+        {
+            if (generation == _runningWorkerGeneration)
+                _runningWorkerCounts = counts;
+        }
+
+        return counts.GetValueOrDefault(nodeId);
+    }
+
+    private void InvalidateRunningWorkerCounts()
+    {
+        lock (_runningLock)
+        {
+            _runningWorkerCounts = null;
+            _runningWorkerGeneration++;
+        }
+    }
+
     public void RaiseSessionSettingsChanged(string nodeId) =>
         SessionSettingsChanged?.Invoke(this, new SessionSettingsChangedEventArgs { NodeId = nodeId });
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private void Raise(TreeChangedEventArgs args) => TreeChanged?.Invoke(this, args);
+    private void Raise(TreeChangedEventArgs args)
+    {
+        InvalidateRunningWorkerCounts();   // a moved, added or removed worker changes who supervises the running ones
+        TreeChanged?.Invoke(this, args);
+    }
 
     private static string NewNodeId() => Guid.NewGuid().ToString("N");
 

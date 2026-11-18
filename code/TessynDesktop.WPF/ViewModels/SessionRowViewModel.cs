@@ -19,7 +19,7 @@ public sealed partial class SessionRowViewModel : ObservableObject
 
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(HasDraft), nameof(ProfileName), nameof(HasSwitching), nameof(SwitchingToProfileName),
-		nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(IsResumable), nameof(AttentionKey), nameof(ShowStar), nameof(ShowHide), nameof(ShowStarToggle))]
+		nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(IsResumable), nameof(AttentionKey), nameof(ShowStar), nameof(ShowHide), nameof(ShowStarToggle), nameof(RunningWorkerCount), nameof(HasRunningWorkers), nameof(RunningWorkersToolTip))]
 	private SessionStateDto _state;
 
 	[ObservableProperty]
@@ -115,6 +115,14 @@ public sealed partial class SessionRowViewModel : ObservableObject
 		OnPropertyChanged(nameof(IsRecentlyActive));
 		OnPropertyChanged(nameof(LastPromptText));   // an age ("5m") grows with the clock
 	}
+
+	/// <summary>How many of the session's workers (direct and nested) are running right now, from its state. The red square badge of the row.</summary>
+	public int RunningWorkerCount => State.RunningWorkerCount ?? 0;
+
+	/// <summary>The badge shows only while a worker runs.</summary>
+	public bool HasRunningWorkers => RunningWorkerCount > 0;
+
+	public string RunningWorkersToolTip => string.Format(Constants.SessionLists.RunningWorkersTip, RunningWorkerCount);
 
 	/// <summary>The lists show no worker count (the face is shared with the tree).</summary>
 	public string WorkerCountText => string.Empty;

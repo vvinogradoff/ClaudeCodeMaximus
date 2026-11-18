@@ -49,6 +49,7 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 			: null;
 
 		var (pinnedId, pinnedName, switchingTo) = DescribeProfile(node);
+		var runningWorkers = _registry.CountRunningWorkers(nodeId);
 
 		return new SessionStateDto(
 			Id:              nodeId,
@@ -65,7 +66,8 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 			PinnedProfileId:        pinnedId,
 			PinnedProfileName:      pinnedName,
 			SwitchingToProfileName: switchingTo,
-			Resumable:             _resumable?.TryGet(nodeId));
+			Resumable:             _resumable?.TryGet(nodeId),
+			RunningWorkerCount:    runningWorkers > 0 ? runningWorkers : null);
 	}
 
 	/// <summary>The pin and the queued switch of a session, labelled as <c>list_sessions</c> labels them (ISSUE.013 R5). All null without a resolver or a pin.</summary>

@@ -22,6 +22,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	private ITessynClient? _client;
 	private TreeViewModel? _tree;
 	private SessionPaneViewModel? _observed;
+	private TreeNodeViewModel? _observedNode;
 	private readonly ListDisplayService? _display;
 
 	public SessionListsHost(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILoggerFactory loggers, IUrlLauncher? launcher = null, ListDisplayService? display = null)
@@ -101,8 +102,32 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	}
 
 	/// <summary>The closed dropdown button takes the recency tier of the open session, read from its tree node (the same level its row shows).</summary>
-	private void ShowSessionRecency() =>
-		Recent.CurrentRecencyLevel = _observed is { NodeId: { } id } && _tree?.FindNode(id) is { } node ? node.RecencyLevel : 0;
+	private void ShowSessionRecency()
+	{
+		var node = _observed is { NodeId: { } id } ? _tree?.FindNode(id) : null;
+		Recent.CurrentRecencyLevel = node?.RecencyLevel ?? 0;
+		Recent.RunningWorkerCount = node?.RunningWorkerCount ?? 0;
+
+		// The badge of the closed button is live: the open session's own node tells when its state (the running workers, the tier) changes.
+		if (!ReferenceEquals(node, _observedNode))
+		{
+			if (_observedNode != null)
+				_observedNode.PropertyChanged -= OnObservedNodeChanged;
+
+			_observedNode = node;
+			if (_observedNode != null)
+				_observedNode.PropertyChanged += OnObservedNodeChanged;
+		}
+	}
+
+	private void OnObservedNodeChanged(object? sender, PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName is nameof(TreeNodeViewModel.RunningWorkerCount) or nameof(TreeNodeViewModel.RecencyLevel) && sender is TreeNodeViewModel node)
+		{
+			Recent.CurrentRecencyLevel = node.RecencyLevel;
+			Recent.RunningWorkerCount = node.RunningWorkerCount;
+		}
+	}
 
 	private void AttachTree()
 	{
@@ -155,6 +180,9 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	{
 		if (_observed != null)
 			_observed.PropertyChanged -= OnSessionChanged;
+
+		if (_observedNode != null)
+			_observedNode.PropertyChanged -= OnObservedNodeChanged;
 
 		_lifetime.Cancel();
 		_lifetime.Dispose();

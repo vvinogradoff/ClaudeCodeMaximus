@@ -18,6 +18,7 @@ namespace TessynDesktop.Models.Remote;
 /// <param name="PinnedProfileName">The display name of the pinned profile (the <c>profile=</c> label of <c>list_sessions</c>; <c>"default"</c> for the Default profile; a missing profile carries the missing suffix); omitted without a pin.</param>
 /// <param name="SwitchingToProfileName">The display name of the profile a queued switch will move the session to when its turn ends (the <c>switching-to=</c> label of <c>list_sessions</c>); omitted when no switch is queued.</param>
 /// <param name="Resumable">Claude Code still has the session available for <c>--resume</c> (the blue square of the Avalonia tree); omitted (null) until the daemon's first sweep of the tree has run. Comes from a cached batch sweep (<c>ISessionResumabilityCache</c>), never from a file probe per session.</param>
+/// <param name="RunningWorkerCount">How many of the session's workers are running right now, direct and nested (P13, additive; the tree's <c>workerCount</c> is the total ever spawned). Omitted (null) when none is running.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record SessionStateDto(
 	string Id,
@@ -34,4 +35,5 @@ public sealed record SessionStateDto(
 	string? PinnedProfileId = null,
 	string? PinnedProfileName = null,
 	string? SwitchingToProfileName = null,
-	bool? Resumable = null);
+	bool? Resumable = null,
+	int? RunningWorkerCount = null);

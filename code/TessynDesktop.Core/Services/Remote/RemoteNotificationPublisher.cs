@@ -148,7 +148,15 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		if (e.Kind == TreeChangeKind.SessionIsRunningChanged)
 		{
 			if (e.Session != null)
+			{
 				PublishSessionChangedByNode(e.Session.NodeId);
+
+				// A supervisor's state carries the count of its running workers (direct and nested): every supervisor above the session is refreshed too. The lookups run off this
+				// thread (the event can fire inside a lock); the per-node coalescing window then merges a burst of workers starting or stopping into one session.changed per supervisor.
+				var worker = e.Session;
+				if (!string.IsNullOrEmpty(worker.SupervisorNodeId))
+					ThreadPool.QueueUserWorkItem(_ => Guard(() => PublishSessionChangedForSupervisors(worker)));
+			}
 			return;
 		}
 
@@ -354,6 +362,21 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			Constants.Remote.Events.SessionChanged, NodeKeyPrefix + nodeId,
 			() => BuildSessionChangedPayload(_daemon.FindSessionByNodeId(nodeId)),
 			Constants.Remote.Timings.SessionChangedWindow);
+
+	private void PublishSessionChangedForSupervisors(SessionNodeModel worker)
+	{
+		var visited = new HashSet<string>(StringComparer.Ordinal) { worker.NodeId };
+		var current = worker;
+		while (!string.IsNullOrEmpty(current.SupervisorNodeId) && visited.Add(current.SupervisorNodeId))
+		{
+			var supervisor = _daemon.FindSessionByNodeId(current.SupervisorNodeId);
+			if (supervisor == null)
+				return;
+
+			PublishSessionChangedByNode(supervisor.NodeId);
+			current = supervisor;
+		}
+	}
 
 	private SessionChangedPayload? BuildSessionChangedPayload(SessionNodeModel? node) =>
 		node == null ? null : new SessionChangedPayload(_states.Build(node));

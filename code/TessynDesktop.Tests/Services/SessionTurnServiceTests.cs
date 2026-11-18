@@ -169,6 +169,7 @@ internal sealed class FakeRegistryForTurnService : ISessionRegistry
 	// threads; List<T>.Add is not thread-safe, so serialise on the list (readers lock it too).
 	public void SetSessionRunning(string nodeId, bool isRunning) { lock (SetRunningCalls) SetRunningCalls.Add((nodeId, isRunning)); }
 	public bool IsSessionRunning(string nodeId) => throw new NotImplementedException();
+	public int CountRunningWorkers(string nodeId) => 0;
 }
 
 internal sealed class FakeProfileServiceForTurnService : IClaudeProfileService

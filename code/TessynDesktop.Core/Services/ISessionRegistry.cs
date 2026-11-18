@@ -188,4 +188,10 @@ public interface ISessionRegistry
 
     /// <summary>Returns true while a claude process is running for the given node.</summary>
     bool IsSessionRunning(string nodeId);
+
+    /// <summary>
+    /// How many workers below <paramref name="nodeId"/> are running right now: direct and nested (a worker's workers count for every supervisor above them), the session itself
+    /// not included. The total of all workers ever spawned is the tree's <c>workerCount</c>; this is the active part of it.
+    /// </summary>
+    int CountRunningWorkers(string nodeId);
 }
