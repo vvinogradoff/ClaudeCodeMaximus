@@ -187,6 +187,7 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
     public void InsertSessionIntoGroup(GroupNodeModel parent, SessionNodeModel session, int index)
         => LastInsertSessionIntoGroupArgs = (parent, session, index);
     public bool MoveSession(SessionNodeModel session, DirectoryNodeModel targetDirectory, GroupNodeModel? targetGroup, int index) => throw new System.NotSupportedException();
+    public bool ReorderGroup(DirectoryNodeModel directory, GroupNodeModel? parentGroup, GroupNodeModel group, int index) => throw new System.NotSupportedException();
     public void RaiseTreeModified() { }
     public void RaiseDaemonTreeMutation() { }
 

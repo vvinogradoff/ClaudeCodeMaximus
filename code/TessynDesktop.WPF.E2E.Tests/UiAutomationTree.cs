@@ -41,6 +41,37 @@ public sealed class UiAutomationTree
 		return false;
 	}
 
+	/// <summary>Waits until the rows with these names appear in the tree in exactly this relative order (other rows may lie between them); false on timeout.</summary>
+	public async Task<bool> WaitForOrderAsync(Process process, string[] names, TimeSpan timeout)
+	{
+		var finder = new AppWindowFinder();
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			var hwnd = finder.Find(process.Id);
+			if (hwnd != IntPtr.Zero && InOrder(hwnd, names))
+				return true;
+
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
+
+	private static bool InOrder(IntPtr hwnd, string[] names)
+	{
+		try
+		{
+			var rows = AutomationElement.FromHandle(hwnd).FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
+			var seen = rows.Cast<AutomationElement>().Select(r => r.Current.Name).Where(names.Contains).ToArray();
+			return seen.SequenceEqual(names);
+		}
+		catch (Exception ex) when (ex is ElementNotAvailableException or ElementNotEnabledException)
+		{
+			return false;
+		}
+	}
+
 	private static bool TrySelect(IntPtr hwnd, string rowName)
 	{
 		try

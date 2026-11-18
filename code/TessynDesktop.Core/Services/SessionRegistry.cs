@@ -594,6 +594,25 @@ public sealed class SessionRegistry : ISessionRegistry
         return true;
     }
 
+    public bool ReorderGroup(DirectoryNodeModel directory, GroupNodeModel? parentGroup, GroupNodeModel group, int index)
+    {
+        lock (_appSettings.SyncRoot)
+        {
+            if (!_appSettings.Settings.Tree.Contains(directory) || (parentGroup != null && !ContainsGroup(directory.Groups, parentGroup)))
+                return false;
+
+            var list = parentGroup?.Groups ?? directory.Groups;
+            if (!list.Remove(group))
+                return false;
+
+            list.Insert(Math.Clamp(index, 0, list.Count), group);
+            _appSettings.Save();
+        }
+
+        Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.SettingsModified });
+        return true;
+    }
+
     public void RaiseTreeModified() => Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.SettingsModified });
 
     public void RaiseDaemonTreeMutation() => Raise(new TreeChangedEventArgs { Kind = TreeChangeKind.DaemonMutation });

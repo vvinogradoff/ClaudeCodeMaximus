@@ -46,6 +46,9 @@ public sealed class TreeOperations
 	/// <summary>Only a top-level session (not a worker, not a search-result row) can be moved.</summary>
 	public static bool IsMovable(TreeNodeViewModel? node) => node is { Kind: TreeNodeKind.Session, Parent.Kind: TreeNodeKind.Directory or TreeNodeKind.Group };
 
+	/// <summary>Ctrl+Up / Ctrl+Down (FR.1.31, FR.1.32) act on a movable session or on a group (never a worker, a directory or a search-result row).</summary>
+	public static bool CanMoveStep(TreeNodeViewModel? node) => IsMovable(node) || node is { Kind: TreeNodeKind.Group, Parent.Kind: TreeNodeKind.Directory or TreeNodeKind.Group };
+
 	/// <summary>Renaming is for sessions and groups (the daemon refuses a directory).</summary>
 	public static bool CanRename(TreeNodeViewModel? node) => node is { Kind: not TreeNodeKind.Directory };
 
@@ -343,30 +346,30 @@ public sealed class TreeOperations
 	}
 
 	/// <summary>
-	/// Ctrl+Up / Ctrl+Down (FR.1.31): moves a top-level session one place among the sessions of its directory or group (<paramref name="direction"/> -1 up, +1 down),
-	/// as a drag onto the neighbour would. Does nothing on the first/last session, for any other node, or while a search is active; a running session is refused with the
-	/// drag's text in the status line. One at a time: a press while a move is in flight is dropped (<see cref="ExclusiveAsync"/>).
+	/// Ctrl+Up / Ctrl+Down (FR.1.31, FR.1.32): moves a top-level session one place among the sessions of its directory or group, or a group one place among the groups
+	/// of its parent (<paramref name="direction"/> -1 up, +1 down), as a drag onto the neighbour would. Does nothing on the first/last one, for any other node, or while a search
+	/// is active; a running session is refused with the drag's text in the status line (a running session inside a group does not block moving the group). One at a time: a press while a move is in flight is dropped (<see cref="ExclusiveAsync"/>).
 	/// </summary>
 	public Task MoveStepAsync(TreeNodeViewModel? node, int direction) => ExclusiveAsync(() => MoveStepCoreAsync(node, direction));
 
 	private async Task MoveStepCoreAsync(TreeNodeViewModel? node, int direction)
 	{
-		if (_tree == null || _tree.IsSearching || !IsMovable(node))
+		if (_tree == null || _tree.IsSearching || !CanMoveStep(node))
 			return;
 
 		var parent = node!.Parent!;
-		var siblings = parent.Children.Where(c => c.Kind == TreeNodeKind.Session).ToList();
+		var siblings = parent.Children.Where(c => c.Kind == node.Kind).ToList();
 		var target = siblings.FindIndex(c => c.Id == node.Id) + Math.Sign(direction);
 		if (target < 0 || target >= siblings.Count)
 			return;
 
-		if (node.IsRunning)
+		if (node.Kind == TreeNodeKind.Session && node.IsRunning)
 		{
 			_tree.StatusText = TreeTexts.SessionRunning;
 			return;
 		}
 
-		// The daemon counts the index after the session has left its list, so the neighbour's index in the full list is the new one in both directions.
+		// The daemon counts the index after the session has left its list, so the neighbour's index among its siblings of the kind is the new one in both directions.
 		await RunAsync(TreeTexts.MoveFailed, () => MoveAsync(node, parent.Id, target));
 	}
 

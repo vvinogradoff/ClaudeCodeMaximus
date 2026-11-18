@@ -127,6 +127,24 @@ public sealed class UiAutomationClicker
 		return hwnd != IntPtr.Zero && FindButton(hwnd, buttonName) != null;
 	}
 
+	/// <summary>The screen rectangle of the button with this name, or null when it does not exist (or is off-screen with no rectangle).</summary>
+	public System.Windows.Rect? GetBounds(Process process, string buttonName)
+	{
+		var hwnd = new AppWindowFinder().Find(process.Id);
+		if (hwnd == IntPtr.Zero)
+			return null;
+
+		try
+		{
+			var rect = FindButton(hwnd, buttonName)?.Current.BoundingRectangle;
+			return rect is { IsEmpty: false } r ? r : null;
+		}
+		catch (ElementNotAvailableException)
+		{
+			return null;
+		}
+	}
+
 	private static bool TryInvoke(IntPtr hwnd, string buttonName)
 	{
 		try

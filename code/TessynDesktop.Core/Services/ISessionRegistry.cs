@@ -144,6 +144,13 @@ public interface ISessionRegistry
     /// </summary>
     bool MoveSession(SessionNodeModel session, DirectoryNodeModel targetDirectory, GroupNodeModel? targetGroup, int index);
 
+    /// <summary>
+    /// Moves <paramref name="group"/> to <paramref name="index"/> of its parent's <c>Groups</c> list (the parent is <paramref name="parentGroup"/>, or
+    /// <paramref name="directory"/> when null) as it is once the group has left the list (clamped), in ONE step (one lock, one <c>Save()</c>, one
+    /// <see cref="TreeChangeKind.SettingsModified"/>). Returns false, changing nothing, when the group is not in that parent (FR.1.32).
+    /// </summary>
+    bool ReorderGroup(DirectoryNodeModel directory, GroupNodeModel? parentGroup, GroupNodeModel group, int index);
+
     /// <summary>Raises <see cref="TreeChangeKind.SettingsModified"/> after a change to tree data that bypassed the registry (a directory's local tool profile).</summary>
     void RaiseTreeModified();
 

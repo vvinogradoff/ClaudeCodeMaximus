@@ -20,6 +20,7 @@ public static partial class Constants
 		public const string PathNotFound            = "The folder does not exist";
 		public const string DirectoryRenameRefused  = "A directory cannot be renamed; its name comes from its path";
 		public const string OnlySessionsMove        = "Only sessions can be moved";
+		public const string GroupMoveRefused        = "A group can only be moved within its own parent";
 		public const string WorkerMoveRefused       = "A worker session cannot be moved; it follows its supervisor";
 		public const string TargetMustBeContainer   = "The target must be a directory or a group";
 		public const string GitOriginRefused        = "Cannot move here: the target belongs to a different git repository (or none) than the session's directory";

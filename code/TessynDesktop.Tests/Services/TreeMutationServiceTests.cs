@@ -391,13 +391,14 @@ public sealed class TreeMutationServiceTests : IDisposable
 	public void MoveNode_Refusals_WorkerGroupUnknownTargetSessionTargetAndNegativeIndex()
 	{
 		var dir        = _env.AddDirectory("a");
+		var otherDir   = _env.AddDirectory("b");
 		var group      = _env.Registry.AddGroup(dir, "G");
 		var supervisor = _env.AddSession(dir, "Sup");
 		var worker     = _env.AddSession(dir, "Worker", supervisorNodeId: supervisor.NodeId);
 		var other      = _env.AddSession(dir, "Other");
 
 		Assert.Equal(Constants.TreeMutation.WorkerMoveRefused, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(worker.NodeId, dir.NodeId, null)).Message);
-		Assert.Equal(Constants.TreeMutation.OnlySessionsMove, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(group.NodeId, dir.NodeId, null)).Message);
+		Assert.Equal(Constants.TreeMutation.GroupMoveRefused, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(group.NodeId, otherDir.NodeId, null)).Message);
 		Assert.Equal(Constants.TreeMutation.NodeNotFound, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode("nope", dir.NodeId, null)).Message);
 		Assert.Equal(Constants.TreeMutation.ParentNotFound, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(other.NodeId, "nope", null)).Message);
 		Assert.Equal(Constants.TreeMutation.TargetMustBeContainer, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(other.NodeId, supervisor.NodeId, null)).Message);
@@ -417,6 +418,80 @@ public sealed class TreeMutationServiceTests : IDisposable
 		Assert.Equal(Constants.TreeMutation.SessionRunning, error.Message);
 		Assert.Same(s, Assert.Single(a.Sessions));
 		Assert.Empty(b.Sessions);
+	}
+
+	/// <summary>TC.TO.20 (FR.1.32, TDCP 10.A8): a group moves among its parent's groups, the index counts after it left the list and is clamped; its content moves with it.</summary>
+	[Theory]
+	[InlineData(0, new[] { "G3", "G1", "G2" })]
+	[InlineData(1, new[] { "G1", "G3", "G2" })]
+	[InlineData(2, new[] { "G1", "G2", "G3" })]
+	[InlineData(99, new[] { "G1", "G2", "G3" })]
+	[InlineData(null, new[] { "G3", "G1", "G2" })]
+	public void MoveNode_AGroupWithItsCurrentParent_ReordersAmongTheParentsGroups_AndRaisesOneTreeChange(int? index, string[] expected)
+	{
+		var dir = _env.AddDirectory("a");
+		var g1  = _env.Registry.AddGroup(dir, "G1");
+		var g2  = _env.Registry.AddGroup(dir, "G2");
+		var g3  = _env.Registry.AddGroup(dir, "G3");
+		var s   = _env.AddSession(dir, "S");
+		var inner = _env.Registry.AddGroupToGroup(g3, "Inner");
+		var gs  = _env.AddSession(dir, "GS", g3);
+		var before = _env.TreeChanges;
+
+		var result = _env.Tree.MoveNode(g3.NodeId, dir.NodeId, index);
+
+		Assert.True(result.Moved);
+		Assert.Equal(expected, dir.Groups.Select(g => g.Name).ToArray());
+		Assert.Same(s, Assert.Single(dir.Sessions));
+		Assert.Same(inner, Assert.Single(g3.Groups));
+		Assert.Same(gs, Assert.Single(g3.Sessions));
+		Assert.Equal(1, _env.TreeChanges - before);
+		Assert.NotNull(g1);
+		Assert.NotNull(g2);
+	}
+
+	[Fact]
+	public void MoveNode_ANestedGroup_MovesAmongTheGroupsOfItsParentGroup_AndMovingToTheSamePlaceIsMovedTrue()
+	{
+		var dir   = _env.AddDirectory("a");
+		var outer = _env.Registry.AddGroup(dir, "Outer");
+		var other = _env.Registry.AddGroup(dir, "Other");
+		_env.Registry.AddGroupToGroup(outer, "N1");
+		var n2 = _env.Registry.AddGroupToGroup(outer, "N2");
+
+		Assert.True(_env.Tree.MoveNode(n2.NodeId, outer.NodeId, 0).Moved);
+		Assert.Equal(["N2", "N1"], outer.Groups.Select(g => g.Name).ToArray());
+		Assert.True(_env.Tree.MoveNode(n2.NodeId, outer.NodeId, 0).Moved);
+		Assert.Equal(["N2", "N1"], outer.Groups.Select(g => g.Name).ToArray());
+		Assert.Equal(["Outer", "Other"], dir.Groups.Select(g => g.Name).ToArray());
+		Assert.Empty(other.Groups);
+	}
+
+	/// <summary>TC.TO.21: another parent is refused with a reason and changes nothing; a running session inside the group does not block the move.</summary>
+	[Fact]
+	public void MoveNode_AGroupToAnotherParent_IsRefused_ButARunningSessionInsideDoesNotBlockTheMove()
+	{
+		var dir   = _env.AddDirectory("a");
+		var other = _env.AddDirectory("b");
+		var g1    = _env.Registry.AddGroup(dir, "G1");
+		var g2    = _env.Registry.AddGroup(dir, "G2");
+		var inner = _env.Registry.AddGroupToGroup(g1, "Inner");
+		var gs    = _env.AddSession(dir, "Running", g2);
+		_env.Registry.SetSessionRunning(gs.NodeId, true);
+		var before = _env.TreeChanges;
+
+		Assert.Equal(Constants.TreeMutation.GroupMoveRefused, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(g2.NodeId, other.NodeId, 0)).Message);
+		Assert.Equal(Constants.TreeMutation.GroupMoveRefused, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(g2.NodeId, g1.NodeId, 0)).Message);
+		Assert.Equal(Constants.TreeMutation.GroupMoveRefused, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(inner.NodeId, dir.NodeId, 0)).Message);
+		Assert.Equal(Constants.TreeMutation.ParentNotFound, Assert.Throws<TdcpException>(() => _env.Tree.MoveNode(g2.NodeId, "nope", 0)).Message);
+		Assert.Throws<TdcpInvalidParamsException>(() => _env.Tree.MoveNode(g2.NodeId, dir.NodeId, -1));
+		Assert.Equal(["G1", "G2"], dir.Groups.Select(g => g.Name).ToArray());
+		Assert.Equal(before, _env.TreeChanges);
+
+		Assert.True(_env.Tree.MoveNode(g2.NodeId, dir.NodeId, 0).Moved);
+		Assert.Equal(["G2", "G1"], dir.Groups.Select(g => g.Name).ToArray());
+		Assert.Same(gs, Assert.Single(g2.Sessions));
+		Assert.Equal(g2.WorkingDirectory, gs.WorkingDirectory);
 	}
 
 	[Fact]
