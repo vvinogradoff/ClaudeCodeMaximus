@@ -78,6 +78,31 @@ public static partial class Constants
 
 		public static readonly TimeSpan DaemonExitTimeout = TimeSpan.FromSeconds(40);
 
+		/// <summary>FR.32.9: the git executable, and the longest the whole stale-daemon comparison may take before the time rule of FR.32.7 decides.</summary>
+		public const string GitExecutable = "git";
+
+		public static readonly TimeSpan GitCheckTimeout = TimeSpan.FromSeconds(5);
+
+		/// <summary>FR.32.9: the project file extension followed to find the daemon's source paths, and the element naming a reference.</summary>
+		public const string ProjectFileExtension = ".csproj";
+
+		public const string ProjectReferenceElement = "ProjectReference";
+
+		public const string IncludeAttribute = "Include";
+
+		/// <summary>FR.32.9: the build files under <c>code\</c> that affect the daemon's assemblies (git pathspec patterns).</summary>
+		public static readonly string[] DaemonBuildFilePatterns = ["Directory.Build.*", "Directory.Packages.props", "global.json", "NuGet.config"];
+
+		/// <summary>FR.32.9: the assembly attribute holding <c>1.0.0+&lt;commit&gt;</c>, and the character that separates the version from the commit.</summary>
+		public const string InformationalVersionAttributeName = "AssemblyInformationalVersionAttribute";
+
+		public const string ReflectionNamespace = "System.Reflection";
+
+		public const char CommitSeparator = '+';
+
+		/// <summary>FR.32.9: the shortest hex string accepted as a commit.</summary>
+		public const int MinimumCommitLength = 7;
+
 		public const string StartingTimedOutDetail = "the host started but did not publish daemon.json; are the agent tools switched off in the settings?";
 
 		public const string TokenUnavailableDetail = "daemon.json is there but its token cannot be read (another Windows user?)";

@@ -167,9 +167,11 @@ public sealed class DaemonRestarter
 	private readonly TimeSpan _exitTimeout;
 	private readonly ILogger _logger;
 	private readonly string? _hostFolder;
+	private readonly IDaemonChangeDetector? _changeDetector;
 
-	public DaemonRestarter(string? sourceLocation, IDaemonBuildProbe probe, IDialogService dialogs, IHostExitSignal signal, IProcessExitWaiter waiter, IClientRestarter restarter, TimeSpan exitTimeout, ILogger logger, string? hostFolder = null)
+	public DaemonRestarter(string? sourceLocation, IDaemonBuildProbe probe, IDialogService dialogs, IHostExitSignal signal, IProcessExitWaiter waiter, IClientRestarter restarter, TimeSpan exitTimeout, ILogger logger, string? hostFolder = null, IDaemonChangeDetector? changeDetector = null)
 	{
+		_changeDetector = changeDetector;
 		_hostFolder = hostFolder;
 		_sourceLocation = sourceLocation;
 		_probe = probe;
@@ -181,7 +183,10 @@ public sealed class DaemonRestarter
 		_logger = logger;
 	}
 
-	/// <summary>The stale info when the daemon process <paramref name="pid"/> runs a build older than the newest one under the source location; otherwise null (also when either is unknown).</summary>
+	/// <summary>
+	/// The stale info when the daemon process <paramref name="pid"/> runs a build older than the newest one under the source location; otherwise null (also when either is unknown).
+	/// With a change detector (FR.32.9) the daemon's source decides: the banner only when it changed between the two commits; the time rule (FR.32.7) decides when that cannot be told.
+	/// </summary>
 	public DaemonStaleInfo? Check(int pid)
 	{
 		if (string.IsNullOrWhiteSpace(_sourceLocation))
@@ -197,7 +202,31 @@ public sealed class DaemonRestarter
 			return null;
 
 		var newest = NewestAssemblyWrite(buildDir);
-		return newest != null && newest.Value - running.BuildUtc > Tolerance ? new DaemonStaleInfo(running.BuildUtc, newest.Value) : null;
+		if (newest == null)
+			return null;
+
+		var change = _changeDetector?.Evaluate(running.Folder, buildDir, _sourceLocation);
+		if (change != null)
+			LogDecision(change);
+
+		if (change?.Decision == DaemonChangeDecision.Unchanged)
+			return null;
+
+		if (change?.Decision == DaemonChangeDecision.Changed)
+			return new DaemonStaleInfo(running.BuildUtc, newest.Value);
+
+		return newest.Value - running.BuildUtc > Tolerance ? new DaemonStaleInfo(running.BuildUtc, newest.Value) : null;
+	}
+
+	private void LogDecision(DaemonChangeResult change)
+	{
+		var outcome = change.Decision switch
+		{
+			DaemonChangeDecision.Changed => "banner",
+			DaemonChangeDecision.Unchanged => "no banner",
+			_ => "the build time decides",
+		};
+		_logger.LogInformation("Stale daemon check: running commit {RunningCommit}, newest build commit {NewestCommit}: {Decision} ({Reason}); {Outcome}", change.RunningCommit ?? "unknown", change.NewestCommit ?? "unknown", change.Decision, change.Reason, outcome);
 	}
 
 	/// <summary>

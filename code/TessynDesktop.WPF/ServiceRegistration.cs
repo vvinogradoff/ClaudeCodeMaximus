@@ -187,7 +187,8 @@ public sealed class ServiceRegistration
 			});
 		return new DaemonRestarter(sourceLocation, new ProcessDaemonBuildProbe(), sp.GetRequiredService<IDialogService>(), new NamedEventHostExitSignal(),
 			new ProcessExitWaiter(), restarter, Constants.Switch.DaemonExitTimeout, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonRestarter>(),
-			Path.Combine(AppContext.BaseDirectory.TrimEnd('\\', '/'), Constants.Switch.HostFolderName));
+			Path.Combine(AppContext.BaseDirectory.TrimEnd('\\', '/'), Constants.Switch.HostFolderName),
+			new DaemonChangeDetector(new AssemblyDaemonCommitReader(), new ProcessGitRunner(), new DaemonSourcePathResolver(), Constants.Switch.GitCheckTimeout));
 	}
 
 	/// <summary>The running client's update check, notice and copy-on-exit: only in the real environment and from the run folder.</summary>
