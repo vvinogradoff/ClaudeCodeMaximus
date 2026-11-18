@@ -216,7 +216,7 @@
         <!-- Input: expanded (FR.12.1/12.2) or collapsed (FR.12.29: the command bar only while it is shown, otherwise one line of text) -->
         <!-- The content fills the row the splitter sets and never scrolls as a whole: the text box is what stretches and shrinks (its own scrollbar shows inside it),
              the side buttons keep their places (the row cannot get smaller than they need, see SessionPane.xaml.cs). -->
-        <Grid Grid.Row="4" x:Name="InputContent" Margin="16,2,16,12" ClipToBounds="True">
+        <Grid Grid.Row="4" x:Name="InputContent" Margin="0,2,4,4" ClipToBounds="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />

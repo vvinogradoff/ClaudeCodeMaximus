@@ -19,7 +19,7 @@
     </UserControl.Resources>
     <Border Style="{StaticResource RecencyTint}" MinHeight="34">
         <Grid>
-            <Grid Margin="2,2,4,3">
+            <Grid Margin="0,2,0,3">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />

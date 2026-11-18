@@ -91,8 +91,10 @@
                     <TextBlock Text="{Binding GitOriginLabel}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" Margin="0,0,8,0"
                                TextTrimming="CharacterEllipsis" MaxWidth="140" Visibility="{Binding HasGitOrigin, Converter={StaticResource BoolToVis}}" />
                     <!-- ISSUE.013 R5: a caution mark when a worker runs on another profile than its supervisor. -->
-                    <TextBlock Style="{StaticResource IconText}" FontSize="12" Margin="0,0,6,0" Text="{StaticResource GlyphWarning}" ToolTip="{Binding ProfileToolTip}"
-                               AutomationProperties.Name="Profile badge" Foreground="{DynamicResource SystemFillColorCautionBrush}" Visibility="{Binding HasProfileMismatch, Converter={StaticResource BoolToVis}}" />
+                    <Border x:Name="ProfileBadgeSpace" Padding="4,0" VerticalAlignment="Stretch" Visibility="{Binding HasProfileMismatch, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource IconText}" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Text="{StaticResource GlyphWarning}" ToolTip="{Binding ProfileToolTip}"
+                                   AutomationProperties.Name="Profile badge" Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                    </Border>
                     <TextBlock Text="{Binding MatchSummary}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,8,0" />
                 </StackPanel>
             </Grid>
@@ -102,7 +104,7 @@
         <!-- Slots: the toolbar (Add directory, New session, New group, Refresh) in one line at the bottom of the panel, a footer above it -->
         <v:SlotHost DockPanel.Dock="Bottom" SlotId="tree.toolbar" />
         <v:SlotHost DockPanel.Dock="Bottom" SlotId="tree.footer" />
-        <Grid DockPanel.Dock="Top" Margin="8,8,8,4">
+        <Grid DockPanel.Dock="Top" Margin="4,8,0,4">
             <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Search sessions" Padding="8,5,30,5" />
             <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphSearch}" FontSize="12" HorizontalAlignment="Right"
                        Margin="0,0,10,0" IsHitTestVisible="False" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
