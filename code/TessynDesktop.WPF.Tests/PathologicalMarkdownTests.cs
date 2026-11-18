@@ -37,10 +37,10 @@ public sealed class PathologicalMarkdownTests
 		StaTestRunner.Run(() =>
 		{
 			var builder = new MarkdownBlockBuilder(new UrlPolicy(), _ => { });
-			foreach (var element in builder.Build(DeepQuotes))
-				texts.Add(((SelectableText)element).PlainText);
+			foreach (var block in builder.Build(DeepQuotes))
+				texts.Add(new System.Windows.Documents.TextRange(block.ContentStart, block.ContentEnd).Text);
 			var huge = builder.Build(new string('x', Constants.Limits.MaxMarkdownChars * 3));
-			texts.Add(string.Concat(huge.OfType<SelectableText>().SelectMany(t => t.Inlines.OfType<System.Windows.Documents.Run>()).Select(r => r.Text)));
+			texts.Add(string.Concat(huge.OfType<System.Windows.Documents.Paragraph>().SelectMany(t => t.Inlines.OfType<System.Windows.Documents.Run>()).Select(r => r.Text)));
 		});
 
 		Assert.Contains("the hidden warning", texts[0]);
@@ -62,7 +62,7 @@ public sealed class PathologicalMarkdownTests
 			panel.Measure(new System.Windows.Size(400, 600));
 			panel.Arrange(new System.Windows.Rect(0, 0, 400, 600));
 			panel.UpdateLayout();
-			shown = Descendants<SelectableText>(panel).Any(t => t.PlainText.Contains("hidden warning", StringComparison.Ordinal));
+			shown = Descendants<FocusCardText>(panel).Any(t => t.PlainText.Contains("hidden warning", StringComparison.Ordinal));
 		});
 
 		Assert.True(shown, "the card body disappeared");

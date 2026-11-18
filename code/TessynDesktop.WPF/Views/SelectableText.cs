@@ -22,15 +22,20 @@ public sealed class SelectableText : RichTextBox
 
 	static SelectableText()
 	{
-		// Without a template of its own the Fluent RichTextBox draws a frame and an accent underline on focus.
-		var template = new ControlTemplate(typeof(SelectableText));
+		TemplateProperty.OverrideMetadata(typeof(SelectableText), new FrameworkPropertyMetadata(ChromelessTemplate(typeof(SelectableText))));
+	}
+
+	/// <summary>Without a template of its own the Fluent RichTextBox draws a frame and an accent underline on focus: a bare scroll host (no scrolling of its own) instead.</summary>
+	internal static ControlTemplate ChromelessTemplate(Type owner)
+	{
+		var template = new ControlTemplate(owner);
 		var host = new FrameworkElementFactory(typeof(ScrollViewer)) { Name = "PART_ContentHost" };
 		host.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
 		host.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
 		host.SetValue(ScrollViewer.FocusableProperty, false);
 		template.VisualTree = host;
 		template.Seal();
-		TemplateProperty.OverrideMetadata(typeof(SelectableText), new FrameworkPropertyMetadata(template));
+		return template;
 	}
 
 	public SelectableText()

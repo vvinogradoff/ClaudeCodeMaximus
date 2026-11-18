@@ -165,6 +165,9 @@ public sealed class LineSpacingTests
 				rows.Add((Shown(t), t.FontSize, t.LineHeight, t.LineStackingStrategy));
 			foreach (var t in Descendants<SelectableText>(panel).Where(t => WantedText(t.PlainText)))
 				rows.Add((t.PlainText, t.FontSize, t.LineMetrics.Height, t.LineMetrics.Strategy));
+			foreach (var t in Descendants<FocusCardText>(panel))   // the card's paragraphs (title line, outcome, body) of its one document
+				foreach (var (text, size, height, strategy) in t.ParagraphMetrics.Where(p => WantedText(p.Text.Trim()) || p.Text.Contains("Which database?") || p.Text.Contains("Closed question")))
+					rows.Add((text.Trim(), size, height, strategy));
 			bodyParagraphs = rows.Count(r => r.Text.StartsWith("Pick", StringComparison.Ordinal) || r.Text.StartsWith("Closed body", StringComparison.Ordinal));
 			wideHeight = panel.DesiredSize.Height;
 
@@ -174,11 +177,14 @@ public sealed class LineSpacingTests
 				narrow.Add((Shown(t), t.FontSize, t.LineHeight));
 			foreach (var t in Descendants<SelectableText>(panel).Where(t => WantedText(t.PlainText)))
 				narrow.Add((t.PlainText, t.FontSize, t.LineMetrics.Height));
+			foreach (var t in Descendants<FocusCardText>(panel))
+				foreach (var (text, size, height, _) in t.ParagraphMetrics.Where(p => WantedText(p.Text.Trim()) || p.Text.Contains("Which database?") || p.Text.Contains("Closed question")))
+					narrow.Add((text.Trim(), size, height));
 			tightHeight = panel.DesiredSize.Height;
 		});
 
 		foreach (var needed in new[] { "Which database?", "Closed question", "Answered: Postgres" })
-			Assert.Contains(rows, r => r.Text == needed);   // the titles and the outcome
+			Assert.Contains(rows, r => r.Text.EndsWith(needed, StringComparison.Ordinal));   // the titles and the outcome
 		Assert.True(bodyParagraphs >= 1, "no body text found");
 		Assert.All(rows, r =>
 		{

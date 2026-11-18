@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Windows.Automation;
 using System.Text.Json.Nodes;
 using TessynDesktop.Models;
 using TessynDesktop.Services;
@@ -268,6 +269,62 @@ public sealed class WpfFocusE2ETests : IDisposable
 			Assert.True(_expander.TrySet(process, "FocusClosedExpander", expand: true), "The Closed expander was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await WaitForTextAsync(process, "Answered: Yes, go ahead"), "The outcome line did not show after expanding. Log:\n" + _app.ReadLog());
 			Assert.True(_clicker.TextExists(process, "Proceed with the migration?"));
+			AssertNoErrors();
+		}
+		finally
+		{
+			_app.Stop(process);
+		}
+	}
+
+	[Fact]
+	public async Task TC_FX_14_An_item_with_options_and_a_recommendation_shows_a_vertical_list_with_the_outlined_last_button_and_one_selectable_text()
+	{
+		await PostAsync(new JsonObject
+		{
+			["kind"] = "ask",
+			["title"] = "Which database?",
+			["body"] = "First paragraph of the body.\n\nSecond paragraph of the body.\n\n- list item\n\nLast paragraph of the body.",
+			["options"] = new JsonArray("Yes", "No"),
+			["recommendation"] = "Go with sqlite",
+		});
+		using var process = await StartAndWaitForFocusAsync(1);
+		try
+		{
+			Assert.True(await _clicker.WaitForButtonAsync(process, "Go with sqlite", StepTimeout), "The recommended button was not found (no prefix expected). Log:\n" + _app.ReadLog());
+			var yes = _clicker.GetBounds(process, "Yes");
+			var no = _clicker.GetBounds(process, "No");
+			var recommended = _clicker.GetBounds(process, "Go with sqlite");
+			Assert.NotNull(yes);
+			Assert.NotNull(no);
+			Assert.NotNull(recommended);
+			Assert.False(_clicker.Exists(process, "Recommended: Go with sqlite"));
+			Assert.False(_clicker.Exists(process, "Use recommendation: Go with sqlite"));
+
+			// One vertical list in the given order, the recommendation last, every button as wide as the card.
+			Assert.True(yes.Value.Bottom <= no.Value.Top + 1 && no.Value.Bottom <= recommended.Value.Top + 1, "The buttons are not stacked in order, the recommendation last.");
+			Assert.Equal(yes.Value.Left, no.Value.Left, 1);
+			Assert.Equal(yes.Value.Left, recommended.Value.Left, 1);
+			Assert.Equal(yes.Value.Width, no.Value.Width, 1);
+			Assert.Equal(yes.Value.Width, recommended.Value.Width, 1);
+			Assert.True(yes.Value.Width > 150, "The buttons did not stretch over the card.");
+			Assert.InRange(no.Value.Top - yes.Value.Bottom, 0, 4);   // the 2 px gap, rounded by the screen
+
+			// The title and the body are one text: a selection of its whole range holds both, and the last paragraph.
+			var hwnd = new AppWindowFinder().Find(process.Id);
+			var text = AutomationElement.FromHandle(hwnd).FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text))
+				.Cast<AutomationElement>().Single(e => e.Current.Name.Contains("Which database?", StringComparison.Ordinal));
+			Assert.Contains("First paragraph of the body.", text.Current.Name);
+			Assert.Contains("Last paragraph of the body.", text.Current.Name);
+			Assert.True(text.TryGetCurrentPattern(TextPattern.Pattern, out var pattern), "The card text offers no text pattern.");
+			var all = ((TextPattern)pattern).DocumentRange.GetText(-1);
+			Assert.Contains("Which database?", all);
+			Assert.Contains("Second paragraph of the body.", all);
+			Assert.Contains("Last paragraph of the body.", all);
+
+			// The recommended button fills the reply box with the accepted text.
+			Assert.True(await _clicker.ClickAsync(process, "Go with sqlite", StepTimeout));
+			Assert.Equal("Accepted your recommendation: Go with sqlite", _clicker.GetText(process, "Your answer"));
 			AssertNoErrors();
 		}
 		finally
