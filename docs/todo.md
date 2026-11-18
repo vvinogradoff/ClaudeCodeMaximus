@@ -1200,9 +1200,9 @@ Plan: `.wpf-work/root-sessions-plan.md`, approved 2026-11-18 (Focus A1–A3; A3 
 
 ## Phase 44 — Multi-monitor preview windows (FR.27, FR.29)
 
-Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"); docs drafted 2026-11-18 on branch `docs/preview-windows`, waiting for the Architect's approval of the open decisions (FR.29 end).
+Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by the Architect 2026-11-18 (`a777289`); built on branch `wpf/preview-windows`, merged to master as `1d07de9` and built in the main tree 2026-11-18.
 
-- [DONE] Docs: FR.27, FR.29, FR.6.10, amendment rows in FR.23, FR.24, FR.26, glossary, UC.PW.01, TC.PW.01 (FR.27, FR.29, FR.6.10) — drafted, not committed
+- [DONE] Docs: FR.27, FR.29, FR.6.10, amendment rows in FR.23, FR.24, FR.26, glossary, UC.PW.01, TC.PW.01 (FR.27, FR.29, FR.6.10) — approved and committed
 - [DONE] Core: `previews` and `previewWindows` settings with the defaults, pattern matcher, monitor watcher with the scripted seam, placement planner (FR.29.2, FR.29.3, FR.29.5, FR.29.6, FR.29.10, FR.29.13)
 - [DONE] Embedded browser: persistent profile, navigation policy, popups, controls, permissions, downloads, clear data (FR.27.1–27.9)
 - [DONE] Router and preview windows: router with the launcher decorator, group and pinned windows, window chrome with Pin and Auto-close, placement save and restore (FR.29.4, FR.29.5, FR.29.6, FR.29.7, FR.29.8, FR.29.9, FR.29.11)
@@ -1215,7 +1215,7 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"); docs drafted 2026
 - [DONE] E2E with `--test-monitors <n>` through `tools\e2e\Run-WpfE2E.ps1` (TC.PW.01, TC.PW.02, TC.PW.05, TC.PW.07, TC.PW.08, TC.PW.11, TC.PW.12, TC.PW.14–TC.PW.16, TC.PW.20–TC.PW.22, TC.PW.25, TC.PW.26, TC.PW.31–TC.PW.34, TC.PW.36, TC.PW.37, TC.PW.41, TC.PW.42, TC.PW.44, TC.PW.49) (FR.29.13)
 - [DONE] Manual list for the Architect: real second monitor and display changes, real Slack sign-in, downloads, popups (TC.PW.04, TC.PW.23, TC.PW.29, TC.PW.39, TC.PW.46, TC.PW.48, TC.PW.50, TC.PW.53, TC.PW.54)
 - [DONE] Review (separate reviewer), fixes
-- [ ] Merge master into the branch, build, run all five suites, merge to master
+- [DONE] Merge master into the branch, build, run all five suites (TessynDesktop 3964, Web 146, Web E2E 24 + 1 skipped, WPF 2215, WPF E2E 126), merge to master (`1d07de9`), main-tree build
 - [ ] Manual checks on two real monitors and real sign-ins (TC.PW MANUAL rows; list in `.mm-work/07-review.md` 'Manual checks')
 - [ ] E2E for TC.PW.11, 21, 26, 31, 34, 49 and the remaining TC.PW.16 sources
-- [ ] Merge to master and the WPF self-update restart
+- [ ] The Architect restarts WPF into the new build (self-update on exit or "Restart now"); no daemon restart needed (no daemon code changed)
