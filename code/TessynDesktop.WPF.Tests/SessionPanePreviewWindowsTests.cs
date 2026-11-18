@@ -20,7 +20,7 @@ public sealed class SessionPanePreviewWindowsTests : IDisposable
 	private readonly FakeTranscriptSurface _surface = new();
 	private readonly FakePreviewSurface _previewSurface = new();
 	private readonly FakeUrlLauncher _urls = new();
-	private readonly FakePreviewRouter _router = new();
+	private readonly RecordingPreviewRouter _router = new();
 	private readonly TempAppPaths _temp = new();
 	private readonly SessionPaneViewModel _pane;
 

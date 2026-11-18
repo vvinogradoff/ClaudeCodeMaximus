@@ -56,7 +56,11 @@ public sealed class ServiceRegistration
 			return tree;
 		});
 		services.AddSingleton<UrlPolicy>();
-		services.AddSingleton<IUrlLauncher, SystemUrlLauncher>();
+		// The concrete system launcher stays resolvable: the browser bar's "Open in system browser" must never route back into a preview window.
+		// IUrlLauncher is the routing decorator (FR.29.4): one per app, over the one router; the router itself does not depend on IUrlLauncher, so there is no cycle.
+		services.AddSingleton<SystemUrlLauncher>();
+		services.AddSingleton<IUrlLauncher>(sp => new PreviewRoutingUrlLauncher(sp.GetRequiredService<IPreviewRouter>(), sp.GetRequiredService<SystemUrlLauncher>(), sp.GetRequiredService<UrlPolicy>()));
+		RegisterPreviewWindows(services, options);
 		services.AddSingleton<IClipboardWriter, SystemClipboardWriter>();
 		services.AddSingleton<MediaPreviewPolicy>();
 		services.AddSingleton<PrivateAddressCheck>();
@@ -91,7 +95,7 @@ public sealed class ServiceRegistration
 			Constants.Limits.MaxCachedTranscripts,
 			new FocusViewModel(client, sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FocusViewModel>>()),
 			new FilePreviewViewModel(
-				new FilePreviewLoader(client, sp.GetRequiredService<FileKindClassifier>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<ExternalOpenPolicy>(), new WicTiffConverter()),
+				new FilePreviewLoader(client, sp.GetRequiredService<FileKindClassifier>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<ExternalOpenPolicy>(), sp.GetRequiredService<ITiffConverter>()),
 				sp.GetRequiredService<IPreviewSurface>(), sp.GetRequiredService<IMarkdownRenderer>(), sp.GetRequiredService<IExternalFileLauncher>(),
 				sp.GetRequiredService<ExternalOpenPolicy>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<IUrlLauncher>(),
 				sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FilePreviewViewModel>>(), sp.GetRequiredService<IVideoThumbnailService>()),
@@ -99,6 +103,7 @@ public sealed class ServiceRegistration
 			sp.GetRequiredService<IClientStateStore>())
 		{
 			TestDropPaths = options.TestDropPaths,
+			PreviewRouter = sp.GetRequiredService<IPreviewRouter>(),
 			Dialogs = sp.GetRequiredService<IDialogService>(),
 		});
 		services.AddSingleton<IClientStateStore, JsonClientStateStore>();
@@ -136,7 +141,7 @@ public sealed class ServiceRegistration
 			client, sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(), sp.GetRequiredService<IDialogService>(),
 			sp.GetRequiredService<IFolderPicker>(), sp.GetRequiredService<IMcpServerEditorPresenter>(), sp.GetRequiredService<ProfileViewModel>(),
 			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILoggerFactory>(), sp.GetRequiredService<IAppearanceService>(),
-			sp.GetService<IPreviewSettingsService>(), sp.GetService<PreviewGroupMatcher>(), sp.GetService<IBrowserDataCleaner>()));
+			sp.GetRequiredService<IPreviewSettingsService>(), sp.GetRequiredService<PreviewGroupMatcher>(), sp.GetRequiredService<IBrowserDataCleaner>()));
 		services.AddSingleton<SettingsHost>();
 		services.AddSingleton<IShellModule, SettingsShellModule>();
 
@@ -149,7 +154,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IScreensaverImages, FolderScreensaverImages>();
 		services.AddSingleton(sp => new ScreensaverController(sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IScreensaverImages>(), DateTime.UtcNow));
 		services.AddSingleton(sp => new TitleBarViewModel(sp.GetRequiredService<IAppearanceService>(), sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(),
-			sp.GetRequiredService<IUiDispatcher>(), BuildNumber.Read(typeof(App).Assembly), SourceBuilds.IsBuildOutput(AppContext.BaseDirectory), sp.GetService<IPreviewRouter>()));
+			sp.GetRequiredService<IUiDispatcher>(), BuildNumber.Read(typeof(App).Assembly), SourceBuilds.IsBuildOutput(AppContext.BaseDirectory), sp.GetRequiredService<IPreviewRouter>()));
 		services.AddSingleton<StatusBarViewModel>();
 		services.AddSingleton<IShellModule, ChromeShellModule>();
 
@@ -166,6 +171,29 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IHostedService>(sp => new UiWatchdogService(dispatcher, sp.GetRequiredService<ILogger<UiStallMonitor>>()));
 		services.AddSingleton<MainViewModel>();
 		services.AddSingleton<MainWindow>();
+	}
+
+	/// <summary>
+	/// FR.29 / FR.27 preview windows. Singletons, each the one owner of its kind per app: the settings service (one source of truth over the client settings store),
+	/// the router (owns every preview window and the mode state), the monitor watcher (one set of OS notifications), the browser environment (one WebView2 profile for all windows).
+	/// The matcher, planner and the two factories hold no state; they are singletons only because nothing needs more than one. The factories resolve lazily from the provider, so they add no cycle.
+	/// </summary>
+	private static void RegisterPreviewWindows(IServiceCollection services, StartupOptions options)
+	{
+		if (options.TestMonitorCount is { } monitors)
+			services.AddSingleton<IMonitorWatcher>(new ScriptedMonitorWatcher(monitors));
+		else
+			services.AddSingleton<IMonitorWatcher, Win32MonitorWatcher>(); // disposed with the container at shutdown
+		services.AddSingleton<IPreviewSettingsService, PreviewSettingsService>();
+		services.AddSingleton<PreviewGroupMatcher>();
+		services.AddSingleton<PreviewPlacementPlanner>();
+		services.AddSingleton<IPreviewRouter, PreviewRouter>(); // disposed with the container at shutdown; CloseAllForExit runs from MainWindow.Closed
+		services.AddSingleton<IPreviewWindowFactory, PreviewWindowFactory>();
+		services.AddSingleton<IPreviewContentFactory, PreviewContentFactory>();
+		services.AddSingleton<BrowserEnvironmentProvider>();
+		services.AddSingleton<BrowserNavigationPolicy>();
+		services.AddSingleton<IBrowserDataCleaner, BrowserDataCleaner>();
+		services.AddSingleton<ITiffConverter, WicTiffConverter>();
 	}
 
 	/// <summary>

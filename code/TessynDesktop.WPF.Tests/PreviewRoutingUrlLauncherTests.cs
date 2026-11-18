@@ -9,7 +9,7 @@ namespace TessynDesktop.WPF.Tests;
 /// <remarks>Created by Claude</remarks>
 public sealed class PreviewRoutingUrlLauncherTests
 {
-	private readonly FakePreviewRouter _router = new();
+	private readonly RecordingPreviewRouter _router = new();
 	private readonly FakeUrlLauncher _fallback = new();
 	private readonly PreviewRoutingUrlLauncher _launcher;
 
@@ -60,7 +60,7 @@ public sealed class PreviewRoutingUrlLauncherTests
 
 /// <summary>A router that records what it is offered and takes or refuses it as a test says.</summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class FakePreviewRouter : IPreviewRouter
+public sealed class RecordingPreviewRouter : IPreviewRouter
 {
 	public bool TakesUrls { get; set; }
 

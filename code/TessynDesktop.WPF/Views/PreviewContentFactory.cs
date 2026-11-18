@@ -41,7 +41,7 @@ public sealed class PreviewContentFactory : IPreviewContentFactory
 			_services.GetService<BrowserEnvironmentProvider>() ?? (_browserEnvironment ??= ActivatorUtilities.CreateInstance<BrowserEnvironmentProvider>(_services)),
 			_services.GetService<BrowserNavigationPolicy>() ?? (_browserPolicy ??= new BrowserNavigationPolicy()),
 			Get<StartupOptions>(), Get<ILogger<BrowserSurface>>());
-		var systemBrowser = ActivatorUtilities.CreateInstance<SystemUrlLauncher>(_services);   // the concrete launcher: a link in the address bar's "Open in system browser" never routes
+		var systemBrowser = Get<SystemUrlLauncher>();   // the concrete launcher: a link in the address bar's "Open in system browser" never routes
 		var viewModel = new BrowserPreviewViewModel(surface, Get<UrlPolicy>(), systemBrowser, Get<IUiDispatcher>(), Get<ILogger<BrowserPreviewViewModel>>());
 		return new PreviewBrowserContent(viewModel, surface);
 	}
