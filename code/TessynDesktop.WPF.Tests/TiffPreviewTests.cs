@@ -100,6 +100,29 @@ public sealed class TiffPreviewTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ATiffOverThePixelLimit_IsRefusedBeforeTheFullDecode_AndOneAtTheLimitIsConverted()
+	{
+		_client.Files["h"] = ("scan.tif", "image/tiff", MakeTiff(8, 5));   // 40 pixels
+
+		var over = await Loader(new WicTiffConverter(maxPixels: 39)).LoadAsync("h", saveToFile: false, null, CancellationToken.None);
+
+		Assert.Equal("This TIFF image could not be decoded.", over.Refusal);
+		Assert.Null(over.FilePath);
+		Assert.Empty(CacheFiles());
+
+		var atLimit = await Loader(new WicTiffConverter(maxPixels: 40)).LoadAsync("h", saveToFile: false, null, CancellationToken.None);
+
+		Assert.Null(atLimit.Refusal);
+		Assert.NotNull(atLimit.FilePath);
+	}
+
+	[Fact]
+	public void TheDefaultPixelLimit_IsOneHundredMegapixels()
+	{
+		Assert.Equal(100_000_000L, Constants.Limits.MaxTiffPixels);
+	}
+
+	[Fact]
 	public async Task WithoutAConverter_ATiffIsRefused()
 	{
 		_client.Files["h"] = ("scan.tif", "image/tiff", MakeTiff(2, 2));

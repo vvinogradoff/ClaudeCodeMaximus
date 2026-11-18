@@ -134,6 +134,9 @@ public static partial class Constants
 		public const int PreviewChunkBytes = 512 * 1024;
 		public const long MaxPreviewTextBytes = 2L * 1024 * 1024;
 		public const long MaxPreviewImageBytes = 25L * 1024 * 1024;
+
+		/// <summary>A TIFF whose first frame has more pixels than this (100 megapixels) is refused before it is decoded: the file is small, the bitmap would not be.</summary>
+		public const long MaxTiffPixels = 100_000_000L;
 		public const long MaxPreviewVideoBytes = 500L * 1024 * 1024;
 		/// <summary>The most a video may weigh for the host to fetch it only to make its first frame (FR.26.6); larger ones show "Preview unavailable" and still open on Ctrl+click.</summary>
 		public const long MaxInlineVideoBytes = 150L * 1024 * 1024;
