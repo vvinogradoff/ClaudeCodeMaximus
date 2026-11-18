@@ -96,6 +96,35 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
 	public bool HasChanges => Editors.Any(e => e.HasChanges);
 
+	/// <summary>The titles of the tabs with unsaved changes (pending colours included), in tab order.</summary>
+	public IReadOnlyList<string> UnsavedTabs => Editors.Where(e => e.HasChanges).Select(e => e is SettingsSectionViewModel section ? section.Title : e.GetType().Name).ToList();
+
+	/// <summary>
+	/// FR.4.7: may the window close? With no unsaved changes: yes, without a question. Otherwise a dialog names the tabs and offers Save, Discard and Cancel. Save saves every changed
+	/// tab like the Save button and closes only when all were saved (a failure leaves its error in the window); Discard closes and stores nothing; Cancel (or closing the dialog) keeps the window.
+	/// </summary>
+	public async Task<bool> ConfirmCloseAsync()
+	{
+		var tabs = UnsavedTabs;
+		if (tabs.Count == 0)
+			return true;
+
+		var choice = await _dialogs.ChoiceAsync(new ChoiceDialogRequest(
+			Constants.Settings.WindowTitle,
+			string.Format(Constants.Settings.UnsavedFormat, string.Join(", ", tabs)),
+			[new DialogChoice(Constants.Settings.SaveChoiceId, Constants.Settings.SaveChoiceLabel), new DialogChoice(Constants.Settings.DiscardChoiceId, Constants.Settings.DiscardChoiceLabel)]));
+		switch (choice)
+		{
+			case Constants.Settings.SaveChoiceId:
+				await SaveAsync();
+				return !HasError && !HasChanges;
+			case Constants.Settings.DiscardChoiceId:
+				return true;
+			default:
+				return false;
+		}
+	}
+
 	/// <summary>Reads every section; one that fails shows its own error and does not stop the others.</summary>
 	public async Task InitializeAsync()
 	{

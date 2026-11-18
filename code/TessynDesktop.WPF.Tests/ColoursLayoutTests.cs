@@ -186,11 +186,12 @@ public sealed class ColoursLayoutTests
 		Assert.DoesNotContain(ColourCatalog.PageBackground, store.Get<ColourSettings>().Light.Keys);
 
 		tab.ApplyCommand.Execute(null);
+		row = tab.Rows.Single(r => r.Key == ColourCatalog.PageBackground);   // the rows are read again from the store
 
 		Assert.False(row.IsPickerOpen);
 		Assert.Equal("#123456", row.Hex);
 		Assert.Equal("#123456", store.Get<ColourSettings>().Light[ColourCatalog.PageBackground]);
-		Assert.True(colourChanges >= 2, "the commit and the re-apply both raise the Colours change");
+		Assert.Equal(1, colourChanges);   // the pending colours are stored in ONE update, which is also the re-apply
 		Assert.True(appearanceChanges >= 1, "the transcript gets a fresh appearance message");
 		Assert.Equal("#123456", appearance.PageColours["--bg"]);
 

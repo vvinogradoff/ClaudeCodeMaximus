@@ -31,6 +31,15 @@ public sealed class SettingsHost
 	/// <summary>True while the window is open.</summary>
 	public bool IsOpen => _window != null;
 
+	/// <summary>True when the open Settings window has unsaved changes.</summary>
+	public bool HasUnsavedChanges => _window?.HasUnsavedChanges == true;
+
+	/// <summary>
+	/// FR.4.7: asked before the main window closes. True when no Settings window is open or it has no unsaved changes, or the user chose Save or Discard (the window then
+	/// closes with its owner without asking again); false when the user cancelled, which keeps both windows open. Call on the UI thread.
+	/// </summary>
+	public Task<bool> ConfirmCloseAsync() => _window == null ? Task.FromResult(true) : _window.ConfirmCloseAsync();
+
 	/// <summary>Shows the window, or brings the open one to the front. Call on the UI thread.</summary>
 	public async Task OpenAsync()
 	{

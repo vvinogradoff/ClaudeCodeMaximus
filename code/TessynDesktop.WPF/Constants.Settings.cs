@@ -21,6 +21,13 @@ public static partial class Constants
 
 		public const string Saved = "Saved.";
 		public const string NothingToSave = "No changes to save.";
+
+		/// <summary>FR.4.7: the question when Settings is closed with unsaved changes; {0} lists the tabs, for example "Colours, Appearance".</summary>
+		public const string UnsavedFormat = "Unsaved changes in {0}.";
+		public const string SaveChoiceId = "save";
+		public const string DiscardChoiceId = "discard";
+		public const string SaveChoiceLabel = "Save";
+		public const string DiscardChoiceLabel = "Discard";
 		public const string SaveFailedFormat = "Not saved: {0}";
 		public const string ConflictFormat = "'{0}' was changed elsewhere. Your edits are kept on top of the new values: press Save again to apply them, or Reload to drop them.";
 		public const string ChangedElsewhereFormat = "'{0}' was changed elsewhere. Reload to see the new values.";

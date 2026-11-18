@@ -8,7 +8,8 @@ namespace TessynDesktop.WPF.E2E.Tests;
 
 /// <summary>
 /// End to end for Settings › Colours: the BUILT WPF app starts Dark with colours stored the earlier single-theme way, the Colours tab is opened through UI Automation, a swatch opens
-/// the picker, a palette colour is picked (no Save needed: it applies and is stored at once, for the Dark theme only), and the earlier colours move into both themes; Reset takes it out.
+/// the picker, a palette colour is picked (it stays pending until Apply, FR.9.19; then it is stored for the Dark theme only), and the earlier colours move into both themes; Reset
+/// (pending too) and Apply take it out. A colour picked by name and applied reaches the transcript page of the running app (TC.CL.37).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 [Collection("wpf-app-e2e")]
@@ -66,7 +67,7 @@ public sealed class WpfColoursE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task APickedColour_IsStoredAtOnce_ForTheEditedThemeOnly_AndTheEarlierColoursMoveIntoBoth()
+	public async Task APickedColour_IsStoredOnApply_ForTheEditedThemeOnly_AndTheEarlierColoursMoveIntoBoth()
 	{
 		using var process = _app.Start();
 		try
@@ -81,14 +82,23 @@ public sealed class WpfColoursE2ETests : IDisposable
 			Assert.True(await _clicker.ClickAsync(process, "Colour Window background", StepTimeout), "The swatch was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await _clicker.ClickAsync(process, "Palette #1E90FF", StepTimeout), "The palette colour was not found. Log:\n" + _app.ReadLog());
 
+			// Picked, not applied: the swatch is pending (its Reset shows) and nothing is stored yet.
+			Assert.True(await _clicker.WaitForButtonAsync(process, "Reset Window background", StepTimeout), "The pending colour did not show its Reset. Log:\n" + _app.ReadLog());
+			await Task.Delay(800);
+			Assert.False(ReadColours().Dark.ContainsKey("WindowBackground"), "The colour was stored before Apply. wpf.json:\n" + File.ReadAllText(_settingsFile));
+
+			Assert.True(await _clicker.ClickAsync(process, "Apply colours", StepTimeout), "Apply could not be pressed. Log:\n" + _app.ReadLog());
 			var data = await WaitForColoursAsync(c => c.Dark.TryGetValue("WindowBackground", out var v) && v == "#1E90FF");
 			Assert.False(data.Light.ContainsKey("WindowBackground"));
 			Assert.Equal("#FF0000", data.Dark["RecentTier1"]);   // the earlier colour is in both themes now
 			Assert.Equal("#FF0000", data.Light["RecentTier1"]);
 			Assert.Empty(data.Overrides);
 
-			// Reset: the colour is taken out of Dark again.
+			// Reset is pending too: the colour leaves Dark when Apply is pressed.
 			Assert.True(await _clicker.ClickAsync(process, "Reset Window background", StepTimeout), "The reset button was not found. Log:\n" + _app.ReadLog());
+			await Task.Delay(800);
+			Assert.True(ReadColours().Dark.ContainsKey("WindowBackground"), "The reset was stored before Apply.");
+			Assert.True(await _clicker.ClickAsync(process, "Apply colours", StepTimeout), "Apply could not be pressed. Log:\n" + _app.ReadLog());
 			await WaitForColoursAsync(c => !c.Dark.ContainsKey("WindowBackground"));
 			Assert.DoesNotContain("[ERR]", _app.ReadLog());
 		}
@@ -140,6 +150,112 @@ public sealed class WpfColoursE2ETests : IDisposable
 		{
 			_app.Stop(process);
 		}
+	}
+
+	/// <summary>
+	/// TC.CL.37 (also TC.CL.34): a colour picked by its CSS name in the picker stays pending, and after Apply it is stored and the transcript page of the running app has it
+	/// (the page's <c>--bg</c> variable and the computed background of its body), without a restart or a theme switch.
+	/// </summary>
+	[Fact]
+	public async Task ANamedColour_StaysPendingUntilApply_ThenReachesTheStoreAndTheTranscriptPage()
+	{
+		var port = CdpPage.FreePort();
+		using var process = _app.Start(CdpPage.EnvironmentFor(port));
+		try
+		{
+			var ready = await _app.WaitForLogAsync(process, StartTimeout, "Connected to daemon run", $"Session {_main} opened", "click-to-first-paint");
+			Assert.True(ready, "The app did not open the session. Log:\n" + _app.ReadLog());
+			using var page = await CdpPage.ConnectAsync(port, "transcript.html", StartTimeout);
+			Assert.Equal(string.Empty, (await page.EvalAsync("document.documentElement.style.getPropertyValue('--bg')"))?.ToString());
+
+			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Settings…", StepTimeout), "The Settings entry of the main menu was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.SelectTabAsync(process, "Colours tab", StepTimeout), "The Colours tab was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Colour Page background", StepTimeout), "The swatch was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.SetTextAsync(process, "Filter named colours", "palegolden", StepTimeout), "The filter box was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Named palegoldenrod", StepTimeout), "The named colour was not found. Log:\n" + _app.ReadLog());
+
+			// Pending: not stored, not on the page.
+			await Task.Delay(1200);
+			Assert.False(ReadColours().Dark.ContainsKey("PageBackground"), "The colour was stored before Apply.");
+			Assert.Equal(string.Empty, (await page.EvalAsync("document.documentElement.style.getPropertyValue('--bg')"))?.ToString());
+
+			// The picker is still open (a named colour is not a final choice, so its name and harmonies stay in view): Apply commits it and closes it.
+			Assert.True(await _clicker.ClickInAnyWindowAsync(process, "Apply colours", StepTimeout), "Apply could not be pressed. Log:\n" + _app.ReadLog());
+			await WaitForColoursAsync(c => c.Dark.TryGetValue("PageBackground", out var v) && v == "#EEE8AA");
+
+			var deadline = DateTime.UtcNow + StepTimeout;
+			string? value = null;
+			string? body = null;
+			while (DateTime.UtcNow < deadline)
+			{
+				value = (await page.EvalAsync("document.documentElement.style.getPropertyValue('--bg')"))?.ToString();
+				body = (await page.EvalAsync("getComputedStyle(document.body).backgroundColor"))?.ToString();
+				if (string.Equals(value, "#EEE8AA", StringComparison.OrdinalIgnoreCase) && body == "rgb(238, 232, 170)")
+					break;
+
+				await Task.Delay(200);
+			}
+
+			Assert.Equal("#EEE8AA", value?.ToUpperInvariant());
+			Assert.Equal("rgb(238, 232, 170)", body);
+			Assert.DoesNotContain("[ERR]", _app.ReadLog());
+		}
+		finally
+		{
+			_app.Stop(process);
+		}
+	}
+
+	/// <summary>
+	/// TC.ST.07 (FR.4.7, FR.9.19; also TC.CL.33): a colour is picked and left pending, Settings is closed, the dialog asks, Save stores the colour in the client state.
+	/// Discard on a second round stores nothing.
+	/// </summary>
+	[Fact]
+	public async Task ClosingSettingsWithAPendingColour_Asks_AndSaveStoresIt_DiscardDoesNot()
+	{
+		// The test window answers dialogs from a script (no modal window): first Discard, then Save.
+		using var process = _app.Start("--test-dialog", "choice:discard", "--test-dialog", "choice:save");
+		try
+		{
+			var ready = await _app.WaitForLogAsync(process, StartTimeout, "Connected to daemon run", $"Session {_main} opened", "click-to-first-paint");
+			Assert.True(ready, "The app did not open the session. Log:\n" + _app.ReadLog());
+
+			// Round 1: Discard.
+			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Settings…", StepTimeout), "The Settings entry of the main menu was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.SelectTabAsync(process, "Colours tab", StepTimeout), "The Colours tab was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Colour Window background", StepTimeout), "The swatch was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Palette #1E90FF", StepTimeout), "The palette colour was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickInAnyWindowAsync(process, "Close settings", StepTimeout), "Close could not be pressed. Log:\n" + _app.ReadLog());
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "answered with choice:discard"), "The unsaved-changes dialog was not asked. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.WaitForButtonGoneAsync(process, "Close settings", StepTimeout), "Settings did not close. Log:\n" + _app.ReadLog());
+			await Task.Delay(800);
+			Assert.False(ReadColours().Dark.ContainsKey("WindowBackground"), "Discard stored the colour.");
+
+			// Round 2: Save.
+			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Settings…", StepTimeout), "The Settings entry of the main menu was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.SelectTabAsync(process, "Colours tab", StepTimeout), "The Colours tab was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Colour Window background", StepTimeout), "The swatch was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Palette #1E90FF", StepTimeout), "The palette colour was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickInAnyWindowAsync(process, "Close settings", StepTimeout), "Close could not be pressed. Log:\n" + _app.ReadLog());
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "answered with choice:save"), "The unsaved-changes dialog was not asked. Log:\n" + _app.ReadLog());
+			var data = await WaitForColoursAsync(c => c.Dark.TryGetValue("WindowBackground", out var v) && v == "#1E90FF");
+			Assert.False(data.Light.ContainsKey("WindowBackground"));
+			Assert.True(await _clicker.WaitForButtonGoneAsync(process, "Close settings", StepTimeout), "Settings did not close after Save. Log:\n" + _app.ReadLog());
+			Assert.DoesNotContain("[ERR]", _app.ReadLog());
+		}
+		finally
+		{
+			_app.Stop(process);
+		}
+	}
+
+	private StoredColours ReadColours()
+	{
+		using var document = JsonDocument.Parse(File.ReadAllText(_settingsFile));
+		if (document.RootElement.TryGetProperty("sections", out var sections) && sections.TryGetProperty("colours", out var colours) && colours.TryGetProperty("data", out var data))
+			return data.Deserialize<StoredColours>(new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new StoredColours();
+
+		return new StoredColours();
 	}
 
 	private static readonly (string First, string Second) FirstTwoLabels = ("Window background", "Panels and cards");   // the first two rows of the first group

@@ -27,6 +27,24 @@ public sealed class UiAutomationClicker
 		return false;
 	}
 
+	/// <summary>
+	/// Like <see cref="ClickAsync"/>, but looks in every top-level window of the app, not only the first one: for a button of the Settings window while a popup (the colour picker) is open.
+	/// </summary>
+	public async Task<bool> ClickInAnyWindowAsync(Process process, string buttonName, TimeSpan timeout)
+	{
+		var finder = new AppWindowFinder();
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			if (finder.FindAll(process.Id).Any(hwnd => TryInvoke(hwnd, buttonName)))
+				return true;
+
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
+
 	/// <summary>Opens the title bar's hamburger menu (the "Main menu" button) and invokes its entry with this name; false on timeout. The entries are buttons of a popup, filled afresh on each open.</summary>
 	public async Task<bool> ClickMainMenuItemAsync(Process process, string itemName, TimeSpan timeout)
 	{

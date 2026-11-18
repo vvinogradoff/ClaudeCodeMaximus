@@ -185,6 +185,8 @@ public sealed class ColourThemeTests
 		var selection = tab.Rows.Single(r => r.Key == ColourCatalog.Selection);
 		Assert.Equal("#264F78", selection.DefaultHex);   // the dark default
 		selection.Set("#112233");
+		Assert.Empty(store.Get<ColourSettings>().Dark);   // pending until Apply (FR.9.19)
+		tab.ApplyCommand.Execute(null);
 		Assert.Equal("#112233", store.Get<ColourSettings>().Dark[ColourCatalog.Selection]);
 		Assert.Empty(store.Get<ColourSettings>().Light);
 
@@ -193,6 +195,7 @@ public sealed class ColourThemeTests
 		Assert.Equal("#CDE6F7", selection.Hex);
 		Assert.False(selection.IsOverridden);
 		selection.Set("#445566");
+		tab.ApplyCommand.Execute(null);
 
 		Assert.Equal("#445566", store.Get<ColourSettings>().Light[ColourCatalog.Selection]);
 		Assert.Equal("#112233", store.Get<ColourSettings>().Dark[ColourCatalog.Selection]);
@@ -202,11 +205,16 @@ public sealed class ColourThemeTests
 
 		// reset one colour of this theme only, then reset all of it
 		tab.Rows.Single(r => r.Key == ColourCatalog.Selection).ResetCommand.Execute(null);
+		Assert.Contains(ColourCatalog.Selection, store.Get<ColourSettings>().Dark.Keys);   // the reset is pending too
+		tab.ApplyCommand.Execute(null);
 		Assert.DoesNotContain(ColourCatalog.Selection, store.Get<ColourSettings>().Dark.Keys);
 		Assert.Equal("#445566", store.Get<ColourSettings>().Light[ColourCatalog.Selection]);
 
 		tab.Rows.Single(r => r.Key == ColourCatalog.RecentTier1).Set("#FF0000");
+		tab.ApplyCommand.Execute(null);
+		Assert.Single(store.Get<ColourSettings>().Dark);
 		tab.ResetAllCommand.Execute(null);
+		tab.ApplyCommand.Execute(null);
 		Assert.Empty(store.Get<ColourSettings>().Dark);
 		Assert.Equal("#445566", store.Get<ColourSettings>().Light[ColourCatalog.Selection]);   // Light untouched
 		Assert.Contains("Dark", tab.ResetAllText);
@@ -236,7 +244,8 @@ public sealed class ColourThemeTests
 		Assert.Equal("#FF0000", tab.Rows.Single(r => r.Key == ColourCatalog.RecentTier1).Hex);
 		Assert.Equal("#112233", tab.Rows.Single(r => r.Key == ColourCatalog.Selection).Hex);
 
-		tab.Rows.Single(r => r.Key == ColourCatalog.Running).Set("#00FF00");   // the first change migrates
+		tab.Rows.Single(r => r.Key == ColourCatalog.Running).Set("#00FF00");
+		tab.ApplyCommand.Execute(null);   // the first stored change migrates
 		var stored = store.Get<ColourSettings>();
 		Assert.Empty(stored.Overrides);
 		Assert.Equal("#FF0000", stored.Light[ColourCatalog.RecentTier1]);
@@ -254,6 +263,7 @@ public sealed class ColourThemeTests
 
 		var tab = NewTab(store, dark: true);
 		tab.Rows.Single(r => r.Key == ColourCatalog.RecentTier1).ResetCommand.Execute(null);
+		tab.ApplyCommand.Execute(null);
 
 		var stored = store.Get<ColourSettings>();
 		Assert.DoesNotContain(ColourCatalog.RecentTier1, stored.Dark.Keys);
@@ -433,9 +443,10 @@ public sealed class ColourThemeTests
 				var control = new ColourPickerControl { DataContext = picker };
 				Layout(control);
 
-				Assert.Empty(FindAll<TextBox>(control));
+				// No hex text box: the only text box is the filter of the named colours (FR.9.19).
+				Assert.Equal("Filter named colours", System.Windows.Automation.AutomationProperties.GetName(Assert.Single(FindAll<TextBox>(control))));
 				Assert.Equal(2, FindAll<Slider>(control).Count);
-				Assert.Equal(ColourPickerViewModel.Palette.Count, FindAll<Button>(control).Count);
+				Assert.Equal(ColourPickerViewModel.Palette.Count, FindAll<Button>(control).Count(b => System.Windows.Automation.AutomationProperties.GetName(b).StartsWith("Palette ", StringComparison.Ordinal)));
 
 				var square = (FrameworkElement)control.FindName("Square");
 				var thumb = (FrameworkElement)control.FindName("Thumb");
