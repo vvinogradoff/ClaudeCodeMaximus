@@ -61,6 +61,7 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 | FR.9.8 Pinned sessions and order | FR.1.20 | Row content and layout in the dropdown. |
 | FR.9.13 Recency colour on the closed Recent dropdown | FR.9.15 | The closed button keeps its recency colour while hovered and while open: a faint overlay, never a replaced background. |
 | FR.9.9 Colours tab | FR.9.16 | Two new palette entries: the active workers badge's number and outline. |
+| FR.9.9 Colours tab | FR.9.18 | An **Apply** button; less space above the list; the colours in **two columns**; a gap before the scrollbar. |
 
 ### New requirements
 
@@ -109,3 +110,9 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 **FR.9.16 — Active workers badge colours.** The Colours tab (FR.9.9) gets two entries in the group *Session status*: **Active workers badge: number** and **Active workers badge: outline**. Defaults, Light: number **`#E00000`** (red), outline **`#8B0000`** (dark red). Dark: number **`#FF5555`**, outline **`#B03030`** (lighter so they read on a dark background). Per theme, live, resettable, like every palette entry. The badge (FR.1.28) uses them as `Colour.ActiveWorkersText` and `Colour.ActiveWorkersBorder`.
 
 **FR.9.17 — Limits-error warning colour.** The Colours tab (FR.9.9) gets the entry **Limits-error warning (triangle)** in the group *Session status*. Defaults: Light **`#E0A800`**, Dark **`#FFD33D`** (both yellow). Per theme, live, resettable. The warning of FR.1.29 uses it as `Colour.LimitWarning`.
+
+**FR.9.18 — Colours tab layout and Apply.** (Amends FR.9.9.)
+- **Apply.** An **Apply** button sits in the theme row, **all the way to the right** of the tab, on the same line as the Light/Dark switch and **Reset all <Theme> colours**. It commits a colour that is still being edited in an open picker (and closes the picker), then applies the edited theme's palette to every window and every open transcript page at once. Colours keep applying live as before (FR.9.9); Apply is the explicit "make sure it is applied everywhere now". When the edited theme is not the active one, Apply stores it; it shows when that theme becomes active.
+- **Less space above the list.** Between the theme row and the first group heading there is at most **8 px** (the messages area takes no height while it is empty; the first heading has no extra top margin).
+- **Two columns.** Within each group the colour rows are laid out in **two equal columns** (left column first, then right, row by row). The label trims with an ellipsis and shows in full as a tooltip; swatch and Reset keep their size. Under a width of about 640 px the list falls back to one column.
+- **Gap before the scrollbar.** The rightmost swatch or Reset button ends at least **8 px** before the list's vertical scrollbar (and before the tab's right edge when no scrollbar is shown).

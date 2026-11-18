@@ -108,6 +108,7 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 | FR.1.21 Worker count and the recency box | FR.1.28 | The `N workers` total stays as it is. A new badge next to it counts the workers **running now**. |
 | FR.1.5 Adding nodes (Add Session), FR.25.12 Create session | FR.1.30 | A session created **in a directory or group** goes **last** among its sessions, not first. Created beside a selected session (web): still right after it. |
 | FR.1.25 Tree toolbar and header actions | FR.1.31 | Ctrl+Up and Ctrl+Down move the selected session one place up or down, as a drag would. |
+| FR.1.31 Move a session with Ctrl+Up / Ctrl+Down | FR.1.32 | The same keys move a selected **group** one place among the groups of its directory or group. |
 
 ### New requirements
 
@@ -174,3 +175,10 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 - **Selection and focus.** The moved session stays selected and in view, and the keyboard focus stays in the tree, so the keys can be pressed again at once. A press while the previous move is still in flight is ignored (no queue).
 - **Search.** While a tree search is active (the tree is in relevance order, FR.1.12) the keys do nothing.
 - **Only in the tree.** The keys act only while the tree has the keyboard focus; elsewhere Ctrl+Up / Ctrl+Down keep their meaning (input navigation, FR.12).
+
+**FR.1.32 — Move a group with Ctrl+Up / Ctrl+Down.** (Extends FR.1.31.) With a **group** selected in the tree, **Ctrl+Up** moves it **one place up** and **Ctrl+Down** **one place down** among the **groups** of its parent (a directory or a group). Its sessions, sub-groups and workers move with it.
+- **Stays in its parent.** A group never leaves its parent this way and never passes the sessions: groups stay above the sessions of the same parent. On the first group Ctrl+Up does nothing; on the last, Ctrl+Down does nothing.
+- **Running sessions.** A running session inside the group does not block the move: its working directory does not change.
+- **Same behaviour as FR.1.31.** The group stays selected and in view, the tree keeps the keyboard focus, a press while a move is in flight is ignored, and the keys do nothing while a tree search is active. A directory selected: nothing happens.
+- **Daemon.** `tree.moveNode` accepts a group whose `parentId` is its current parent, with the new index among the parent's groups (TDCP section 10.A8). Moving a group to another parent stays refused.
+- **Stored.** The order is saved in `appsettings.json` like any tree change and is kept after a restart; the web's tree shows the same order.

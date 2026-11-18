@@ -1,6 +1,6 @@
 # UC.TO.01 — Tree order: new sessions last, keyboard moves
 
-Related requirements: FR.1.30, FR.1.31. Test cases: [TC.TO.01](/docs/testcases/TC.TO.01-Tree-Order.md).
+Related requirements: FR.1.30, FR.1.31, FR.1.32. Test cases: [TC.TO.01](/docs/testcases/TC.TO.01-Tree-Order.md).
 
 ## UC.TO.01 — Create a session at the end of a project
 **Actor:** the User. **Precondition:** a directory with a group and three sessions is in the tree.
@@ -13,3 +13,9 @@ Related requirements: FR.1.30, FR.1.31. Test cases: [TC.TO.01](/docs/testcases/T
 **Main flow:** 1. The User selects C. 2. Ctrl+Up: the order is A, C, B, D; C stays selected. 3. Ctrl+Up again: C, A, B, D. 4. Ctrl+Up again: nothing changes. 5. Ctrl+Down three times: A, B, D, C. The order is kept after a restart.
 **Alternative flows:** **A1** — C is running: nothing moves and the tree status line says why, as for a drag. **A2** — A worker, a group or a directory is selected: nothing happens. **A3** — A tree search is active: nothing happens. **A4** — C has workers: they stay under C. **A5** — The User holds the key down: a press during a move is ignored, so nothing moves twice by surprise.
 **Covers:** FR.1.31.
+
+## UC.TO.03 — Reorder groups with the keyboard
+**Actor:** the User. **Precondition:** the tree has the focus; a directory has groups G1, G2, G3 and then some sessions.
+**Main flow:** 1. The User selects G3. 2. Ctrl+Up twice: the order is G3, G1, G2; G3 stays selected, its sessions under it. 3. Ctrl+Up again: nothing changes. 4. Ctrl+Down twice: G1, G2, G3; the sessions of the directory stay below the groups. The order is kept after a restart.
+**Alternative flows:** **A1** — A session inside G3 is running: the move happens anyway. **A2** — A sub-group inside G1 is selected: it moves among the groups of G1 only. **A3** — A directory is selected or a tree search is active: nothing happens.
+**Covers:** FR.1.32.

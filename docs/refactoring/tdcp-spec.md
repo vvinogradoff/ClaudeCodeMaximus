@@ -366,3 +366,11 @@ Part 2 adds `mcp.list`, `mcp.upsert`, `mcp.remove`, `mcp.setEnabled`, `mcp.disco
 - **Cleared** when a later turn ends with a successful result. Other errors leave it unchanged.
 - **Event.** A change publishes `session.changed` for the session (through the same tracker event as `authError`; a repeated identical value publishes nothing).
 - Additive: an older client ignores the member. Held in memory: empty after a daemon restart until the next turn. No golden change (omitted when empty).
+
+### 10.A8 — Reorder a group (`tree.moveNode`) — FR.1.32
+`tree.moveNode { nodeId, parentId, index }` also accepts a **group** as `nodeId`:
+- **Only within its parent.** `parentId` must be the group's current parent (a directory or a group). Any other parent is refused with a reason (as a refused session move), so groups still cannot be moved between parents.
+- **Index.** The new position among the parent's **groups**, counted after the group has left the list (as for sessions); it is clamped to the list. Sessions are not counted: groups always come before the sessions of a parent.
+- **No running rule.** A group holding a running session may be moved (no working directory changes).
+- **Result and events.** The same `TreeMoveResult` as a session move; the registry saves once and raises `tree.changed`. A move to the same place answers `moved: true` and changes nothing.
+- Additive: an older daemon refuses a group, as before. No golden change.
