@@ -98,6 +98,8 @@ internal sealed class InProcFakeRegistry : ISessionRegistry
         ModelsByFileName.TryGetValue(fileName, out var model) ? model : FindByFileNameResult;
     public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session) => LocationResult;
     public bool IsSessionRunning(string nodeId) => IsRunningResult;
+    public int RunningWorkersResult;
+    public int CountRunningWorkers(string nodeId) => RunningWorkersResult;
     public void SetSessionRunning(string nodeId, bool isRunning) { SetRunningNodeId = nodeId; SetRunningValue = isRunning; }
 
     public void LoadFromSettings() => LoadFromSettingsCalled = true;

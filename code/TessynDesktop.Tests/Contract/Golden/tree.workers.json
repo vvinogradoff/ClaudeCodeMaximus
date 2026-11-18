@@ -8,7 +8,7 @@
       "supervisorId": "<id1>",
       "state": {
         "id": "<id2>",
-        "running": false,
+        "running": true,
         "streamingAlive": false,
         "favorite": false,
         "hasDraft": false,

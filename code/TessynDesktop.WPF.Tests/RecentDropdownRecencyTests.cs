@@ -168,6 +168,109 @@ public sealed class RecentDropdownRecencyTests : IDisposable
 		});
 	}
 
+	// ---- FR.9.15 / TC.RD.05, TC.RD.06: hovering keeps the recency colour; the active workers badge of the closed button (FR.1.28, TC.AW.07) ----
+
+	[Fact]
+	public void HoverAndOpen_LayAFaintOverlay_AndNeverReplaceTheRecencyBackground()   // TC.RD.05
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			var toggle = Layout(dropdown);
+			var template = toggle.Template;
+			var chrome = (Border)template.FindName("Chrome", toggle);
+			var overlay = (Border)template.FindName("Overlay", toggle);
+
+			Assert.Equal(Tier1, (chrome.Background as SolidColorBrush)?.Color);
+			Assert.Equal(Visibility.Collapsed, overlay.Visibility);
+			Assert.InRange(overlay.Opacity, 0.01, 0.9);   // faint
+			Assert.False(overlay.IsHitTestVisible);
+
+			// No trigger of the template replaces the chrome's background: hover and open only show the overlay.
+			var setters = template.Triggers.OfType<Trigger>().SelectMany(t => t.Setters.OfType<Setter>()).ToList();
+			Assert.DoesNotContain(setters, st => st.TargetName == "Chrome" && st.Property == Border.BackgroundProperty);
+			var hover = template.Triggers.OfType<Trigger>().Single(t => t.Property == UIElement.IsMouseOverProperty);
+			Assert.Contains(hover.Setters.OfType<Setter>(), st => st.TargetName == "Overlay" && st.Property == UIElement.VisibilityProperty && Equals(st.Value, Visibility.Visible));
+
+			// Open (checked) shows the overlay and still keeps the tier colour. A button of its own: the dropdown's one is tied to its popup, which does not open without a window.
+			var open = new ToggleButton { Style = (Style)dropdown.FindResource("RecentToggle"), Background = Frozen(Tier1), IsChecked = true, Width = 300, Height = 30 };
+			open.Measure(new Size(300, 30));
+			open.Arrange(new Rect(0, 0, 300, 30));
+			open.UpdateLayout();
+			Assert.Equal(Visibility.Visible, ((Border)open.Template.FindName("Overlay", open)).Visibility);
+			Assert.Equal(Tier1, (((Border)open.Template.FindName("Chrome", open)).Background as SolidColorBrush)?.Color);
+			open.IsChecked = false;
+			open.UpdateLayout();
+			Assert.Equal(Visibility.Collapsed, ((Border)open.Template.FindName("Overlay", open)).Visibility);
+		});
+	}
+
+	[Fact]
+	public void TheOpenListsRows_KeepTheirOwnColour_UnderTheHoverOverlay()   // TC.RD.06
+	{
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			Layout(dropdown);
+			var row = new SessionRowViewModel("fresh", "Fresh one", "Repo", new SessionStateDto("fresh", false, false, null, false, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, false, null));
+			var presenter = new ContentPresenter { Content = row, ContentTemplate = (DataTemplate)dropdown.FindResource("DropdownRowTemplate"), Width = 400 };
+			presenter.Resources["Colour.RecentTier1"] = Frozen(Tier1);
+			presenter.Measure(new Size(400, 60));
+			presenter.Arrange(new Rect(0, 0, 400, 60));
+			presenter.UpdateLayout();
+
+			var button = Descendants<Button>(presenter).First(b => (string?)b.Tag == "open");
+			var template = button.Template;
+			var hover = (Border)template.FindName("Hover", button);
+			Assert.Equal(Visibility.Collapsed, hover.Visibility);
+			Assert.InRange(hover.Opacity, 0.01, 0.9);
+			Assert.False(hover.IsHitTestVisible);
+			var setters = template.Triggers.OfType<Trigger>().SelectMany(t => t.Setters.OfType<Setter>()).ToList();
+			Assert.All(setters, st => Assert.Equal("Hover", st.TargetName));   // nothing but the overlay changes on hover
+			var tint = Descendants<Border>(presenter).First(b => b.Background is SolidColorBrush { Color: var c } && c == Tier1);
+			Assert.NotNull(tint);   // the row's own recency colour sits under the overlay
+		});
+	}
+
+	[Fact]
+	public void TheClosedButton_ShowsTheOpenSessionsActiveWorkers_LiveAndHiddenAtZero()   // TC.AW.07
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			Layout(dropdown);
+			var badge = (Border)dropdown.FindName("WorkersBadge")!;
+			Assert.Equal(Visibility.Collapsed, badge.Visibility);
+
+			var now = DateTimeOffset.UtcNow;
+			_client.RaiseNotification("session.changed", new SessionChangedPayload(new SessionStateDto("fresh", false, false, null, false, now, now, false, null, RunningWorkerCount: 3)));
+			dropdown.UpdateLayout();
+			Assert.Equal(3, _host.Recent.RunningWorkerCount);
+			Assert.Equal(Visibility.Visible, badge.Visibility);
+			Assert.Equal("3", ((TextBlock)badge.Child).Text);
+
+			_client.RaiseNotification("session.changed", new SessionChangedPayload(new SessionStateDto("fresh", false, false, null, false, now, now, false, null)));
+			dropdown.UpdateLayout();
+			Assert.Equal(0, _host.Recent.RunningWorkerCount);
+			Assert.Equal(Visibility.Collapsed, badge.Visibility);
+		});
+	}
+
+	private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+	{
+		for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+		{
+			var child = VisualTreeHelper.GetChild(root, i);
+			if (child is T match)
+				yield return match;
+
+			foreach (var nested in Descendants<T>(child))
+				yield return nested;
+		}
+	}
+
 	[Fact]
 	public void TheScreensaverPicture_FillsTheScreen_KeepingTheAspectRatioAndCropping()
 	{

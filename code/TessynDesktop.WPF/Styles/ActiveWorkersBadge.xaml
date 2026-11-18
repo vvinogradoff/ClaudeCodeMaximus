@@ -1,0 +1,28 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The active workers badge of a session row: the number of workers running right now (direct and nested) in red inside a dark-red outlined square with rounded corners; hidden at 0.
+         DataContext: a tree node or a list row (RunningWorkerCount, HasRunningWorkers, RunningWorkersToolTip). The colours are the palette's (Settings, Colours). -->
+    <BooleanToVisibilityConverter x:Key="ActiveWorkersBoolToVis" />
+
+    <Style x:Key="ActiveWorkersBadge" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource Colour.ActiveWorkersBorder}" />
+        <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="MinWidth" Value="18" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Padding" Value="3,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Visibility" Value="{Binding HasRunningWorkers, Converter={StaticResource ActiveWorkersBoolToVis}}" />
+        <Setter Property="ToolTip" Value="{Binding RunningWorkersToolTip}" />
+    </Style>
+
+    <Style x:Key="ActiveWorkersBadgeText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Colour.ActiveWorkersText}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Text" Value="{Binding RunningWorkerCount}" />
+        <Setter Property="AutomationProperties.Name" Value="{Binding RunningWorkersToolTip}" />
+    </Style>
+</ResourceDictionary>

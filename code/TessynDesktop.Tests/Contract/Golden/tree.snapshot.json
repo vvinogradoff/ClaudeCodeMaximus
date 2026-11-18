@@ -48,7 +48,8 @@
             "hasDraft": false,
             "authError": false,
             "hasSchedules": false,
-            "resumable": false
+            "resumable": false,
+            "runningWorkerCount": 1
           }
         }
       ]

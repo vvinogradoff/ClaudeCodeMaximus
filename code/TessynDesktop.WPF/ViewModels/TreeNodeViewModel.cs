@@ -17,7 +17,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 	private bool _isExpanded;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(AttentionKey), nameof(HasDraft), nameof(IsResumable), nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(HasSchedules), nameof(ProfileName), nameof(HasProfile), nameof(SwitchingToProfileName), nameof(HasSwitching), nameof(ShowProfileBadge), nameof(HasProfileMismatch), nameof(ProfileToolTip))]
+	[NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFavorite), nameof(AttentionCount), nameof(HasAttention), nameof(AttentionKey), nameof(HasDraft), nameof(IsResumable), nameof(LastPromptText), nameof(RecencyLevel), nameof(IsRecentlyActive), nameof(HasSchedules), nameof(ProfileName), nameof(HasProfile), nameof(SwitchingToProfileName), nameof(HasSwitching), nameof(ShowProfileBadge), nameof(HasProfileMismatch), nameof(ProfileToolTip), nameof(RunningWorkerCount), nameof(HasRunningWorkers), nameof(RunningWorkersToolTip))]
 	private SessionStateDto? _state;
 
 	[ObservableProperty]
@@ -86,6 +86,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 		: string.Empty;
 
 	public bool HasWorkers => WorkerCountText.Length > 0;
+
+	/// <summary>How many of the session's workers (direct and nested) are running right now, from its state; 0 for directories and groups. The red square badge of the row.</summary>
+	public int RunningWorkerCount => IsSessionLike ? State?.RunningWorkerCount ?? 0 : 0;
+
+	/// <summary>The badge shows only while a worker runs.</summary>
+	public bool HasRunningWorkers => RunningWorkerCount > 0;
+
+	public string RunningWorkersToolTip => string.Format(Constants.SessionLists.RunningWorkersTip, RunningWorkerCount);
 
 	/// <summary>Whether the row shows an expander.</summary>
 	public bool CanExpand => IsSessionLike ? WorkerCount > 0 : Children.Any(c => !c.IsHusk);

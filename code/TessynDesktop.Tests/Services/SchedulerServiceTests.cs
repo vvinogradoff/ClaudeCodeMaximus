@@ -116,6 +116,7 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
     public (string directoryLabel, string treePath) GetSessionLocation(SessionNodeModel session) => ("", "");
     public void SetSessionRunning(string nodeId, bool isRunning) { }
     public bool IsSessionRunning(string nodeId) => false;
+    public int CountRunningWorkers(string nodeId) => 0;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────

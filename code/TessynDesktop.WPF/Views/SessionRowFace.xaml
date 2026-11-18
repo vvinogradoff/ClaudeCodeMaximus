@@ -11,6 +11,7 @@
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/KindPill.xaml" />
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/RecencyTint.xaml" />
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/ActiveWorkersBadge.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
         </ResourceDictionary>
@@ -39,6 +40,10 @@
                     </Border>
                     <TextBlock DockPanel.Dock="Right" FontSize="10" Margin="6,0,0,0" Opacity="0.7" Text="{Binding WorkerCountText}" ToolTip="Sessions this session supervises"
                                Visibility="{Binding HasWorkers, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Worker count" />
+                    <!-- Left of the "N workers" total: the badge counts the workers running now. -->
+                    <Border DockPanel.Dock="Right" Style="{StaticResource ActiveWorkersBadge}" Margin="6,0,0,0" AutomationProperties.Name="Active workers">
+                        <TextBlock Style="{StaticResource ActiveWorkersBadgeText}" />
+                    </Border>
                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="&#xE735;" Foreground="Gold" ToolTip="Favourite"
                                Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Favourite mark" />
                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphClock}" ToolTip="This session has a schedule"

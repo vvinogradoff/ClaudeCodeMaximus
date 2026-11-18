@@ -29,6 +29,8 @@ public static partial class Constants
 		public const string WorkerCountFormat = "{0} {1}";
 		public const string WorkerNoun = "worker";
 		public const string WorkersNoun = "workers";
+		/// <summary>The tooltip of the active workers badge: <c>{0}</c> is the number of workers running now.</summary>
+		public const string RunningWorkersTip = "Workers running now: {0}";
 		public const string TagChipPrefix = "Tag ";
 		public const string RecentDropdownName = "Recent dropdown";
 

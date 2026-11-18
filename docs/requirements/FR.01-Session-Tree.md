@@ -105,6 +105,7 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 | FR.1.16 Recent tab | FR.1.20 | Rows are as the tree's rows, full width; no project name in a row. |
 | FR.9.5 Recency bars | FR.9.10 | Four tiers (15 min, 1 h, 4 h, 12 h) plus the 24-hour dotted border. Replaces the three tiers 15/30/60 min. |
 | FR.24.11 Tags tab: search | FR.1.24, FR.24.17 | Tag search scope and wildcard rules, and what the tab says when nothing matches. |
+| FR.1.21 Worker count and the recency box | FR.1.28 | The `N workers` total stays as it is. A new badge next to it counts the workers **running now**. |
 
 ### New requirements
 
@@ -141,3 +142,12 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 **FR.1.26 — Resumable flag and worker-only groups (daemon).** The daemon fills `SessionStateDto.resumable` from one cached sweep per minute (one batched check, never a file probe per node; the first sweep sets the baseline and raises nothing; later flips raise `session.changed`). A Group the user created and left empty stays visible. A Group that held at least one session, **all of them Workers**, and whose child groups are all of that kind, is flagged `holdsOnlyWorkers`; clients hide it (an orchestration husk) but it stays a node (the import picker lists it). Wire details: `tdcp-spec` additions (§A2).
 
 **FR.1.27 — Switch profile (WPF).** *Switch profile…* acts on the open session and sits in the session header, right of *Send later* (FR.14). Choice dialogs (this one and the *Send later* delay picker) keep a 44 px margin left and right; every choice button and Cancel is as wide as the dialog, with centred text.
+
+**FR.1.28 — Active workers badge.** A session's row shows how many of its workers are **running right now**: a **red number inside a dark-red outlined square with rounded corners**, in the tree, the Recent tab, the Tags tab's session list and the Recent dropdown (the open list's rows **and** the closed button, which shows the open session).
+- **Active, not total.** The number is the workers running at this moment, **direct and nested** (a worker of a worker counts for every supervisor above it). It is not the `N workers` total of FR.1.21, which counts every worker ever spawned and stays as it is.
+- **Hidden at 0.** A session with no running worker shows no badge and takes no room for it.
+- **Placement.** On the row's name line, at the right: the badge sits **immediately left of the `N workers` total** (in the Recent tab, the Tags tab and the dropdown, which show no total, it sits at the right end of the name line before the schedule clock and the icon slot). The two read as `[3] 104 workers`: the framed number is what is running, the plain text is how many exist. In the closed Recent dropdown the badge is on the button, left of the chevron, and follows the open session.
+- **Live.** It follows the daemon's `session.changed` events (the supervisor's state carries `runningWorkerCount`, TDCP section 10.A6) with no polling per row: workers starting and finishing change it at once in every list.
+- **One face.** The badge is part of the shared session row face (FR.1.20) and of the dropdown row, so all four lists show the same thing. Its tooltip reads `Workers running now: N`.
+- **Colours.** Number and outline are palette entries (FR.9.16).
+- **Daemon.** `SessionStateDto.runningWorkerCount` is computed from the registry's running state of the session's workers (TDCP 10.A6). The daemon publishes `session.changed` for a supervisor when one of its workers starts or stops running, coalesced per session (no event storm).

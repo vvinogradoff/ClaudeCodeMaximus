@@ -13,15 +13,19 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ToggleButton">
-                            <Border x:Name="Chrome" CornerRadius="4" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
-                            </Border>
+                            <Grid>
+                                <!-- The button's own Background (the recency tier of the open session) stays; hover and open lay a faint overlay over it instead of replacing it. -->
+                                <Border x:Name="Chrome" CornerRadius="4" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+                                </Border>
+                                <Border x:Name="Overlay" CornerRadius="4" IsHitTestVisible="False" Visibility="Collapsed" Background="{DynamicResource SubtleFillColorSecondaryBrush}" Opacity="0.6" />
+                            </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                    <Setter TargetName="Overlay" Property="Visibility" Value="Visible" />
                                 </Trigger>
                                 <Trigger Property="IsChecked" Value="True">
-                                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                    <Setter TargetName="Overlay" Property="Visibility" Value="Visible" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -42,6 +46,10 @@
                       IsChecked="{Binding IsOpen, ElementName=Menu, Mode=TwoWay}">
             <DockPanel LastChildFill="True">
                 <TextBlock DockPanel.Dock="Right" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" Text="{StaticResource GlyphChevronDown}" />
+                <!-- The open session's active workers badge (FR.1.28), left of the chevron. -->
+                <Border x:Name="WorkersBadge" DockPanel.Dock="Right" Style="{StaticResource ActiveWorkersBadge}" Margin="6,0,0,0" AutomationProperties.Name="Active workers">
+                    <TextBlock Style="{StaticResource ActiveWorkersBadgeText}" />
+                </Border>
                 <TextBlock x:Name="Label" Text="{Binding ButtonText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
             </DockPanel>
         </ToggleButton>
