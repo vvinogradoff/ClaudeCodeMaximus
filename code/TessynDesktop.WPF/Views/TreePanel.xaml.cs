@@ -65,10 +65,10 @@ public partial class TreePanel : UserControl
 		if (sender is not ListBox list || list.DataContext is not TreeViewModel tree || list.SelectedItem is not TreeNodeViewModel node)
 			return;
 
-		// FR.1.31: Ctrl+Up / Ctrl+Down move a top-level session one place. Handled here (tunnelling) so the ListBox does not take it as a focus move.
+		// FR.1.31 / FR.1.32: Ctrl+Up / Ctrl+Down move a top-level session or a group one place. Handled here (tunnelling) so the ListBox does not take it as a focus move.
 		if (e.Key is Key.Up or Key.Down && CurrentModifiers() == ModifierKeys.Control)
 		{
-			if (tree.Operations != null && TreeOperations.IsMovable(node))
+			if (tree.Operations != null && TreeOperations.CanMoveStep(node))
 			{
 				e.Handled = true;
 				_ = MoveStepAsync(list, tree, node, e.Key == Key.Up ? -1 : 1);
@@ -101,7 +101,7 @@ public partial class TreePanel : UserControl
 		e.Handled = true;
 	}
 
-	/// <summary>Moves the session, then keeps it selected, in view, and the keyboard focus in the tree (the rows were rebuilt, so the old row is gone).</summary>
+	/// <summary>Moves the session or group, then keeps it selected, in view, and the keyboard focus in the tree (the rows were rebuilt, so the old row is gone).</summary>
 	private static async Task MoveStepAsync(ListBox list, TreeViewModel tree, TreeNodeViewModel node, int direction)
 	{
 		await tree.Operations!.MoveStepAsync(node, direction);

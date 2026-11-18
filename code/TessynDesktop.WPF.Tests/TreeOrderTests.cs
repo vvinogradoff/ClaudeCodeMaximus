@@ -169,7 +169,7 @@ public sealed class TreeOrderTests
 		Assert.Equal(0, MoveCalls);
 	}
 
-	/// <summary>TC.TO.12: a worker, a group, a directory, and a search in progress.</summary>
+	/// <summary>TC.TO.12: a worker, a directory, and a search in progress (a group moves since FR.1.32; here the only group of its parent, so there is no place to go: GroupOrderTests).</summary>
 	[Fact]
 	public async Task WorkerGroupDirectory_AndAnActiveSearch_DoNothing()
 	{
