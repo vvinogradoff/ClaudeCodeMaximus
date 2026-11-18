@@ -265,3 +265,17 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 - Both expanders **collapse for every session** and **each time Focus is selected**; a refresh leaves them alone.
 - The **empty state** shows when no item other than Decided is open (`Nothing needs your attention in this session.`); the expanders still show.
 - Header rows of open cards also show the **posted time**.
+
+---
+
+## Amendments and additions (2026-11-18)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.23.10 Guidance | FR.23.24 | The guidance ends with a sentence that names `post_attention` for every decision, approval or action the session needs, and gives it precedence over a project's "ask in plain text" rule. |
+
+**FR.23.24 — Questions go to the Focus view, before any plain-text rule.** The FR.23.10 guidance (`Constants.Instructions.AttentionGuidance`, same gate: once per fresh top-level session) ends with:
+
+> When you need the user's decision, approval or action, post it with `mcp__cmx__post_attention` (kind `ask` with `options` and your `recommendation`, or `todo`), not only in the reply text. Report decisions you made on their behalf as `decided`. When the user answers in chat, close the item with `mcp__cmx__resolve_attention`. This takes precedence over a project's "ask in plain text" rule, which is about the interactive question picker, not the Focus view.
+
+Why: a project rule such as CLAUDE.md's "ask in plain text" was written to avoid the interactive question picker (`AskUserQuestion`). Without a stated precedence a model reads it as "every question goes in plain text" and never pins it. Naming the tool in the guidance also makes the model load its description. Test: `InstructionBlockBuilderTests` (the guidance's last sentence).
