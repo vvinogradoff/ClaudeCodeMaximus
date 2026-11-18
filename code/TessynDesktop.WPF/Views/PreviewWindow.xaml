@@ -1,0 +1,67 @@
+<Window x:Class="TessynDesktop.WPF.Views.PreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="clr-namespace:TessynDesktop.WPF.Views"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="{Binding Title}" Icon="/TessynDesktop.WPF;component/Assets/Tessyn.ico" Width="960" Height="640" MinWidth="360" MinHeight="240"
+        ShowActivated="False" WindowStartupLocation="Manual">
+    <!-- FR.29.7: a custom title bar in the style of the main window's: icon, title, Pin, Auto-close, Minimize, Maximize/Restore, Close. The caption is the empty part, so the window is dragged by it and a double-click maximizes. -->
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="32" ResizeBorderThickness="6" GlassFrameThickness="1" CornerRadius="0" UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/CaptionButtons.xaml" />
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/TitleBarButtons.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis" />
+            <!-- The Pin and Auto-close toggles: the look of the main title bar's tool buttons, the checked tint while on -->
+            <Style x:Key="WindowToggle" TargetType="ToggleButton" BasedOn="{StaticResource BarIconToggle}">
+                <Setter Property="Width" Value="36" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Margin" Value="0" />
+                <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0" Background="{DynamicResource TitleBarBackgroundBrush}" TextElement.Foreground="{DynamicResource TitleBarForegroundBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Image Grid.Column="0" Width="16" Height="16" Margin="10,0,8,0" Source="{Binding Icon, RelativeSource={RelativeSource AncestorType=Window}}" />
+            <TextBlock x:Name="TitleText" Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" AutomationProperties.Name="Preview title" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <ToggleButton x:Name="PinButton" Style="{StaticResource WindowToggle}" Command="{Binding PinCommand}" IsChecked="{Binding IsPinned, Mode=OneWay}"
+                              ToolTip="{Binding PinToolTip}" AutomationProperties.Name="Pin preview">
+                    <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphPin}" />
+                </ToggleButton>
+                <ToggleButton x:Name="AutoCloseButton" Style="{StaticResource WindowToggle}" Command="{Binding ToggleAutoCloseCommand}" IsChecked="{Binding AutoClose, Mode=OneWay}"
+                              Visibility="{Binding CanAutoClose, Converter={StaticResource BoolToVis}}" ToolTip="{Binding AutoCloseToolTip}"
+                              AutomationProperties.Name="Auto-close preview">
+                    <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphAutoClose}" />
+                </ToggleButton>
+                <Button x:Name="MinimizeButton" Style="{StaticResource CaptionButton}" Click="OnMinimizeClick" ToolTip="Minimize" AutomationProperties.Name="Minimize preview">
+                    <TextBlock Style="{StaticResource IconText}" FontSize="10" Text="&#xE921;" />
+                </Button>
+                <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Click="OnMaximizeClick" ToolTip="Maximize" AutomationProperties.Name="Maximize preview">
+                    <TextBlock x:Name="MaximizeGlyph" Style="{StaticResource IconText}" FontSize="10" Text="&#xE922;" />
+                </Button>
+                <Button x:Name="CloseButton" Style="{StaticResource CloseButton}" Click="OnCloseClick" ToolTip="Close" AutomationProperties.Name="Close preview">
+                    <TextBlock Style="{StaticResource IconText}" FontSize="10" Text="&#xE8BB;" />
+                </Button>
+            </StackPanel>
+        </Grid>
+        <!-- The content stretches with the window (NR.7): a file renderer or a browser, created when the content is shown -->
+        <v:FilePreviewPane x:Name="FilePane" Grid.Row="1" ShowCloseButton="False" Visibility="Collapsed" />
+        <Border x:Name="BrowserHost" Grid.Row="1" Visibility="Collapsed" />
+    </Grid>
+</Window>

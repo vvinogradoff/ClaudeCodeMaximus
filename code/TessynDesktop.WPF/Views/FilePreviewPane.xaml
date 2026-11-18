@@ -33,7 +33,7 @@
 
         <!-- Header: file name and actions -->
         <DockPanel Grid.Row="0" Margin="12,8,12,8">
-            <Button DockPanel.Dock="Right" Command="{Binding CloseCommand}" ToolTip="Close the preview" Margin="4,0,0,0" Padding="8,6" AutomationProperties.Name="Close preview">
+            <Button x:Name="CloseButton" DockPanel.Dock="Right" Command="{Binding CloseCommand}" ToolTip="Close the preview" Margin="4,0,0,0" Padding="8,6" AutomationProperties.Name="Close preview">
                 <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphClose}" />
             </Button>
             <Button DockPanel.Dock="Right" Command="{Binding OpenExternalCommand}" ToolTip="Open in default app" Margin="4,0,0,0" Padding="8,6"

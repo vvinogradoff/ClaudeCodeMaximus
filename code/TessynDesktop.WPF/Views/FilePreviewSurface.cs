@@ -17,7 +17,7 @@ namespace TessynDesktop.WPF.Views;
 /// refuses downloads, permissions, new windows and any request to another host, and passes links on to the owner.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class FilePreviewSurface : IPreviewSurface
+public sealed class FilePreviewSurface : IPreviewSurface, IDisposable
 {
 	private static readonly string PageUri = $"https://{Constants.Hosts.AppHost}/{Constants.Paths.PreviewPageFileName}";
 
@@ -32,11 +32,13 @@ public sealed class FilePreviewSurface : IPreviewSurface
 	private readonly UiCoalescer _themeCoalescer;
 	private readonly ILogger<FilePreviewSurface> _logger;
 
+	private readonly EventHandler _appearanceChanged;
 	private WebView2? _control;
 	private CoreWebView2Environment? _env;
 	private bool _ready;
 	private string? _pending;
 	private string? _posted;
+	private bool _disposed;
 
 	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, WebRequestPolicy requests, IAppearanceService appearance, ScreensaverController screensaver, ILogger<FilePreviewSurface> logger)
 	{
@@ -44,11 +46,26 @@ public sealed class FilePreviewSurface : IPreviewSurface
 		_appearance = appearance;
 		_screensaver = screensaver;
 		_themeCoalescer = new UiCoalescer(ApplyTheme);
-		_appearance.Changed += (_, _) => _themeCoalescer.Request(_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher);
+		_appearanceChanged = (_, _) => _themeCoalescer.Request(_control?.Dispatcher ?? System.Windows.Application.Current?.Dispatcher);
+		_appearance.Changed += _appearanceChanged;
 		_environment = environment;
 		_paths = paths;
 		_policy = policy;
 		_logger = logger;
+	}
+
+	/// <summary>Unsubscribes from the app-wide events and disposes the WebView2 (a preview window's own surface goes with its window).</summary>
+	public void Dispose()
+	{
+		if (_disposed)
+			return;
+
+		_disposed = true;
+		_appearance.Changed -= _appearanceChanged;
+		SystemParameters.StaticPropertyChanged -= OnSystemParameterChanged;
+		_ready = false;
+		_control?.Dispose();
+		_control = null;
 	}
 
 	public event EventHandler<string>? LinkClicked;
@@ -64,6 +81,9 @@ public sealed class FilePreviewSurface : IPreviewSurface
 		var controllerOptions = _env.CreateCoreWebView2ControllerOptions();
 		controllerOptions.IsInPrivateModeEnabled = true;   // V11: no cookies or cache survive the run
 		await control.EnsureCoreWebView2Async(_env, controllerOptions);
+		if (_disposed)
+			return;
+
 		var core = control.CoreWebView2;
 		_logger.LogInformation("WebView2 private mode (preview): {Private}", core.Profile.IsInPrivateModeEnabled);
 
