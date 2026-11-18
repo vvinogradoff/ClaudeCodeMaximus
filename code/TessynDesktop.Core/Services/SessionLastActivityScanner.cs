@@ -157,6 +157,24 @@ public sealed class SessionLastActivityScanner : ISessionLastActivityScanner
 			// Unreadable draft: treat as no draft.
 		}
 
+		// FR.9.20: a non-blank Focus reply draft counts like the composer draft.
+		try
+		{
+			foreach (var itemId in _drafts.ListItemDraftIds(fileName))
+			{
+				if (string.IsNullOrWhiteSpace(_drafts.LoadItemDraft(fileName, itemId)))
+					continue;
+
+				var time = _drafts.GetItemDraftTimestamp(fileName, itemId);
+				if (time.HasValue && (!draftTimestamp.HasValue || time > draftTimestamp))
+					draftTimestamp = time;
+			}
+		}
+		catch
+		{
+			// Unreadable reply drafts: they do not count.
+		}
+
 		return new SessionLastActivityModel(fileName, lastUserEntry?.Timestamp, lastAssistant, lastUserEntry?.ProfileName, draftTimestamp);
 	}
 }

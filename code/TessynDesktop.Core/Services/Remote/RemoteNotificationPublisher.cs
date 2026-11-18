@@ -268,12 +268,9 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			() => BuildDraftChangedPayload(fileName, itemId),
 			Constants.Composer.DraftChangedWindow);
 
-		// A Focus reply draft (FR.23.19) is neither HasDraft nor last activity of the session: no row refresh.
-		if (itemId != null)
-			return;
-
-		// HasDraft is part of the session state (and moves the last-activity time), so the row state is refreshed too. The activity service
-		// caches the draft by its file stamp, so the state read when the window ends already sees the write.
+		// HasDraft is part of the session state (and moves the last-activity time), so the row state is refreshed too. A Focus reply draft
+		// (FR.23.19) moves only the last-activity time (FR.9.20), but it takes the same path. The activity service caches the drafts by
+		// their file stamps, so the state read when the window ends already sees the write.
 		_bus.PublishCoalesced(
 			Constants.Remote.Events.SessionChanged, FileKeyPrefix + fileName,
 			() => BuildSessionChangedPayload(_daemon.FindSessionByFileName(fileName)),

@@ -84,7 +84,7 @@ public sealed class ComposerPublisherTests : IDisposable
 
 	// FR.23.19: the notification of a Focus reply draft carries the itemId; the composer draft's notification has no such field (additive).
 	[Fact]
-	public void AFocusReplyDraft_PublishesDraftChangedWithItsItemId_AndNoSessionStateRefresh()
+	public void AFocusReplyDraft_PublishesDraftChangedWithItsItemId()
 	{
 		_drafts.SaveItemDraft(_node.FileName, "A1", "reply");
 
@@ -92,8 +92,32 @@ public sealed class ComposerPublisherTests : IDisposable
 		Assert.Equal("node-1", notification.Params["nodeId"]!.GetValue<string>());
 		Assert.Equal("A1", notification.Params["itemId"]!.GetValue<string>());
 		Assert.Equal(_revisions.Of("reply"), notification.Params["revision"]!.GetValue<string>());
-		Thread.Sleep(400);
-		Assert.Empty(Received("session.changed"));
+	}
+
+	// TC.RT.12 (FR.9.20): a reply draft moves the session's recency, so it refreshes the row state through session.changed like a composer draft does.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void ADraftWrite_PublishesSessionChanged_ForTheComposerAndForAFocusReplyDraft(bool reply)
+	{
+		if (reply)
+			_drafts.SaveItemDraft(_node.FileName, "A1", "reply");
+		else
+			_drafts.SaveDraft(_node.FileName, "text");
+
+		var changed = Assert.Single(WaitFor("session.changed", 1));
+		Assert.Equal("node-1", changed.Params["state"]!["id"]!.GetValue<string>());
+	}
+
+	[Fact]
+	public void DeletingAFocusReplyDraft_PublishesSessionChanged_SoItsRecencyFallsBack()
+	{
+		_drafts.SaveItemDraft(_node.FileName, "A1", "reply");
+		WaitFor("session.changed", 1);
+
+		_drafts.DeleteItemDraft(_node.FileName, "A1");
+
+		Assert.Equal(2, WaitFor("session.changed", 2).Count);
 	}
 
 	[Fact]
