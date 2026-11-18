@@ -72,6 +72,20 @@ public sealed partial class ColoursSectionViewModel : SettingsSectionViewModel, 
 		Read();
 	}
 
+	/// <summary>
+	/// Apply (FR.9.18): commits the colour of any open picker, closes the pickers, and re-applies the palette everywhere by raising the Colours section's change again
+	/// (the one path: <c>ColourApplier</c> sets the brushes, the appearance service sends the transcript its <c>appearance</c> message). The stored values do not change
+	/// by it, so applying the theme that is not active leaves the active brushes as they are.
+	/// </summary>
+	[RelayCommand]
+	private void Apply()
+	{
+		foreach (var row in Rows)
+			row.CommitAndClosePicker();
+
+		_store.Update<ColourSettings>(s => s.Migrate());
+	}
+
 	partial void OnEditingDarkChanged(bool value) => Read();
 
 	/// <summary>Reads the stored colours of the edited theme into the rows.</summary>

@@ -73,6 +73,15 @@ public sealed partial class ColourRowViewModel : ObservableObject
 		_commit(this, IsOverridden ? normal : null);
 	}
 
+	/// <summary>Apply (FR.9.18): takes the colour the open picker shows as the row's colour, then closes the picker.</summary>
+	public void CommitAndClosePicker()
+	{
+		if (IsPickerOpen)
+			Set(Picker.Hex);
+
+		IsPickerOpen = false;
+	}
+
 	/// <summary>Back to the default of the theme.</summary>
 	public void Reset()
 	{
