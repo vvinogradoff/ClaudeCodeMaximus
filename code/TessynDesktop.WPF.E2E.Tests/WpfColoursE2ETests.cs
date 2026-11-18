@@ -206,6 +206,49 @@ public sealed class WpfColoursE2ETests : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// TC.ST.07 (FR.4.7, FR.9.19; also TC.CL.33): a colour is picked and left pending, Settings is closed, the dialog asks, Save stores the colour in the client state.
+	/// Discard on a second round stores nothing.
+	/// </summary>
+	[Fact]
+	public async Task ClosingSettingsWithAPendingColour_Asks_AndSaveStoresIt_DiscardDoesNot()
+	{
+		// The test window answers dialogs from a script (no modal window): first Discard, then Save.
+		using var process = _app.Start("--test-dialog", "choice:discard", "--test-dialog", "choice:save");
+		try
+		{
+			var ready = await _app.WaitForLogAsync(process, StartTimeout, "Connected to daemon run", $"Session {_main} opened", "click-to-first-paint");
+			Assert.True(ready, "The app did not open the session. Log:\n" + _app.ReadLog());
+
+			// Round 1: Discard.
+			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Settings…", StepTimeout), "The Settings entry of the main menu was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.SelectTabAsync(process, "Colours tab", StepTimeout), "The Colours tab was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Colour Window background", StepTimeout), "The swatch was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Palette #1E90FF", StepTimeout), "The palette colour was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickInAnyWindowAsync(process, "Close settings", StepTimeout), "Close could not be pressed. Log:\n" + _app.ReadLog());
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "answered with choice:discard"), "The unsaved-changes dialog was not asked. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.WaitForButtonGoneAsync(process, "Close settings", StepTimeout), "Settings did not close. Log:\n" + _app.ReadLog());
+			await Task.Delay(800);
+			Assert.False(ReadColours().Dark.ContainsKey("WindowBackground"), "Discard stored the colour.");
+
+			// Round 2: Save.
+			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Settings…", StepTimeout), "The Settings entry of the main menu was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.SelectTabAsync(process, "Colours tab", StepTimeout), "The Colours tab was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Colour Window background", StepTimeout), "The swatch was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickAsync(process, "Palette #1E90FF", StepTimeout), "The palette colour was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickInAnyWindowAsync(process, "Close settings", StepTimeout), "Close could not be pressed. Log:\n" + _app.ReadLog());
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "answered with choice:save"), "The unsaved-changes dialog was not asked. Log:\n" + _app.ReadLog());
+			var data = await WaitForColoursAsync(c => c.Dark.TryGetValue("WindowBackground", out var v) && v == "#1E90FF");
+			Assert.False(data.Light.ContainsKey("WindowBackground"));
+			Assert.True(await _clicker.WaitForButtonGoneAsync(process, "Close settings", StepTimeout), "Settings did not close after Save. Log:\n" + _app.ReadLog());
+			Assert.DoesNotContain("[ERR]", _app.ReadLog());
+		}
+		finally
+		{
+			_app.Stop(process);
+		}
+	}
+
 	private StoredColours ReadColours()
 	{
 		using var document = JsonDocument.Parse(File.ReadAllText(_settingsFile));
