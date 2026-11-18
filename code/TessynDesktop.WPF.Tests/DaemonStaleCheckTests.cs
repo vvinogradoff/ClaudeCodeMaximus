@@ -158,15 +158,49 @@ public sealed class DaemonStaleCheckTests : IDisposable
 	// ---- TC.HS.16 ----
 
 	[Fact]
-	public void TC_HS_16_TheSameCommit_ShowsNoBanner_AndNeverAsksGit()
+	public void TC_HS_16_TheSameCommitWithACleanTree_ShowsNoBanner_AndRunsNoDiff()
 	{
-		var git = new FakeGit(new GitResult(true, false, 1, ""));
+		Write("code/TessynDesktop/TessynDesktop.csproj", Project());
+		var git = new FakeGit(new GitResult(true, false, 0, ""));
 
 		var result = Evaluate("1111111", "1111111", git);
 
 		Assert.Equal(DaemonChangeDecision.Unchanged, result.Decision);
-		Assert.Empty(git.Calls);
+		var call = Assert.Single(git.Calls);
+		Assert.Contains("status --porcelain", call);
 		Assert.Null(Restarter(Detector(git)).Check(1)); // although the time rule alone would say stale
+	}
+
+	[Fact]
+	public void TC_HS_16_TheSameCommitWithUncommittedDaemonChanges_LeavesTheDecisionToTheTimeRule()
+	{
+		var commit = InitRepository();
+		Write("code/TessynDesktop.Core/Core.cs", "// uncommitted edit");
+		_commits.Commits[Path.GetFullPath(_running)] = commit;
+		_commits.Commits[Path.GetFullPath(_buildFolder)] = commit;
+
+		Assert.Equal(DaemonChangeDecision.Unknown, Detector().Evaluate(_running, _buildFolder, _source).Decision);
+		Assert.NotNull(Restarter(Detector()).Check(1)); // stale by time
+		_probe.Running = Build;
+		Assert.Null(Restarter(Detector()).Check(1)); // current by time
+	}
+
+	[Fact]
+	public void TC_HS_16_TheSameCommitWithUncommittedChangesOnlyOutsideTheDaemon_ShowsNoBanner()
+	{
+		var commit = InitRepository();
+		Write("code/TessynDesktop.WPF/Window.cs", "// uncommitted wpf edit");
+
+		Assert.Equal(DaemonChangeDecision.Unchanged, Evaluate(commit, commit).Decision);
+	}
+
+	[Fact]
+	public void TC_HS_16_TheSameCommitWhenGitFails_LeavesTheDecisionToTheTimeRule()
+	{
+		Write("code/TessynDesktop/TessynDesktop.csproj", Project());
+
+		Assert.Equal(DaemonChangeDecision.Unknown, Evaluate("1111111", "1111111", new FakeGit(GitResult.NotAvailable)).Decision);
+		Assert.Equal(DaemonChangeDecision.Unknown, Evaluate("1111111", "1111111", new FakeGit(new GitResult(true, false, 128, ""))).Decision);
 	}
 
 	// ---- TC.HS.17 ----
