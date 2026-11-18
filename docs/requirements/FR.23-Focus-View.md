@@ -276,6 +276,7 @@ Behaviour: clicking an option puts the option text in the card's reply box (repl
 | FR.23.20 Selectable Focus text | FR.23.25 | A selection runs **across the whole card text** (paragraphs, lists, code, title, outcome), not one paragraph at a time. |
 | FR.23.14 Card contents (options, "Use recommendation"), FR.23.15 | FR.23.26 | Options are a **vertical list** of full-width buttons; the recommendation is the **last** button, marked by an accent outline, without the "Use recommendation:" prefix. |
 | FR.23.14 Focus view layout | FR.23.27 | No **"Focus"** title at the top of the Focus view (WPF). |
+| FR.23.26 Option buttons (recommendation outline), FR.23.14 reply box | FR.23.28 | The recommended button is an **accent button** (accent background, text on accent) instead of an accent outline; the **reply box** gets the thick accent border and a **resize handle**. |
 
 **FR.23.24 — Questions go to the Focus view, before any plain-text rule.** The FR.23.10 guidance (`Constants.Instructions.AttentionGuidance`, same gate: once per fresh top-level session) ends with:
 
@@ -301,3 +302,8 @@ Why: a project rule such as CLAUDE.md's "ask in plain text" was written to avoid
 | FR.23.18 References on items (a file reference opens the preview pane; a url reference opens the system browser) | FR.29.4 | With the preview windows mode on and a matching group, a file reference and a url reference open in the group's preview window. Otherwise they open as before. A window opened from a Focus item can close with that item (FR.29.9). |
 
 **FR.23.27 — No title in the Focus view (WPF).** The Focus view has no "Focus" header line: the Session/Focus switch in the session header already names it. The list (and the error line, when there is one) starts at the top of the view.
+
+**FR.23.28 — Recommended button and reply box (WPF).** (Amends the *Recommendation last* bullet of FR.23.26 and the reply box of FR.23.14.)
+- **Recommended button.** The last, recommended option button is styled like **Send answers** and **Send**: the window's accent button style (accent background, text in the on-accent colour), with no extra outline. Text, place, tooltip and behaviour are as in FR.23.26.
+- **Reply box border.** The card's reply box has a **2 px accent border** (the accent colour of the accent buttons) with slightly rounded corners, in every state.
+- **Resize handle.** The reply box has a **resize grip** at its bottom-right corner. Dragging it changes the box's height (from 56 px up to 600 px); the width follows the card. The text inside wraps and scrolls as before. The height is kept while the card is shown; it is not stored.
