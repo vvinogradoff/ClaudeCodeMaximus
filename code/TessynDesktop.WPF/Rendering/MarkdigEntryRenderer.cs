@@ -1,4 +1,5 @@
 using Markdig;
+using Markdig.Parsers;
 using Markdig.Renderers;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
@@ -34,12 +35,16 @@ public sealed class MarkdigEntryRenderer : IEntryRenderer, IMarkdownRenderer
 		_media = media;
 		_paths = paths;
 		_sanitizer = new HtmlAllowlistSanitizer(urlPolicy);
-		_pipeline = new MarkdownPipelineBuilder()
+		var builder = new MarkdownPipelineBuilder()
 			.DisableHtml()
 			.UsePipeTables()
 			.UseEmphasisExtras()
-			.UseAutoLinks()
-			.Build();
+			.UseAutoLinks();
+
+		// FR.2.12: no setext headings; a "---" line is a rule and a "===" line is a double rule, the text above stays a paragraph.
+		builder.BlockParsers.Find<ParagraphBlockParser>()!.ParseSetexHeadings = false;
+		builder.BlockParsers.InsertBefore<ParagraphBlockParser>(new RuleLineBlockParser());
+		_pipeline = builder.Build();
 	}
 
 	public TranscriptEntryView Render(SessionEntryDto entry)

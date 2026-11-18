@@ -160,4 +160,63 @@ public sealed class MarkdigEntryRendererTests
 
 		Assert.Contains("<table>", html);
 	}
+
+	// FR.2.12 / TC.TR.09: "---" is a rule and "===" a double rule; the text above stays a paragraph.
+	[Theory]
+	[InlineData("text\n---", "<p>text</p>\n<hr>")]
+	[InlineData("text\n===", "<p>text</p>\n<hr class=\"dbl\">")]
+	[InlineData("===\ntext", "<hr class=\"dbl\">\n<p>text</p>")]
+	[InlineData("---\ntext", "<hr>\n<p>text</p>")]
+	[InlineData("text\n=====  ", "<p>text</p>\n<hr class=\"dbl\">")]
+	[InlineData("text\n  ===", "<p>text</p>\n<hr class=\"dbl\">")]
+	public void RuleLines_AreRulesNotSetextHeadings(string markdown, string expected)
+	{
+		var html = Html(markdown).Replace("\r\n", "\n").Trim();
+
+		Assert.Equal(expected, html);
+	}
+
+	[Theory]
+	[InlineData("==")]
+	[InlineData("a ===")]
+	[InlineData("=== x")]
+	[InlineData("    ===")]
+	public void NotARuleLine_StaysText(string markdown)
+	{
+		Assert.DoesNotContain("<hr", Html(markdown));
+	}
+
+	[Fact]
+	public void UntouchedConstructs_KeepTheirMeaning()
+	{
+		Assert.Contains("<h1>Title</h1>", Html("# Title"));
+		Assert.Contains("<h2>Sub</h2>", Html("## Sub"));
+		Assert.Contains("<li>one</li>", Html("- one\n- two"));
+		Assert.DoesNotContain("<hr", Html("- one\n- two"));
+
+		var table = Html("| a | b |\n|---|---|\n| 1 | 2 |");
+		Assert.Contains("<table>", table);
+		Assert.DoesNotContain("<hr", table);
+
+		var code = Html("```\n===\n---\n```");
+		Assert.Contains("<pre>", code);
+		Assert.DoesNotContain("<hr", code);
+		Assert.Contains("===", code);
+
+		Assert.DoesNotContain("<hr", Html("    ===\n    ---"));
+	}
+
+	[Fact]
+	public void RuleLines_WorkInEveryRowKind()
+	{
+		foreach (var role in new[] { "user", "assistant", "system" })
+		{
+			var view = _renderer.Render(new SessionEntryDto { Index = 1, Role = role, Content = "one\n===\ntwo\n---\nthree", Timestamp = DateTimeOffset.UtcNow });
+
+			Assert.Contains("<hr class=\"dbl\">", view.Html);
+			Assert.Contains("<hr>", view.Html);
+			Assert.DoesNotContain("<h1", view.Html);
+			Assert.DoesNotContain("<h2", view.Html);
+		}
+	}
 }
