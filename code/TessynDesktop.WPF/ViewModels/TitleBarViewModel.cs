@@ -55,8 +55,21 @@ public sealed partial class TitleBarViewModel : ObservableObject
 	/// <summary>Two or more monitors are connected (FR.29.1).</summary>
 	public bool IsMonitorToggleEnabled => _previews?.CanToggle ?? false;
 
-	/// <summary>The preview windows mode is on: the toggle looks checked.</summary>
-	public bool IsPreviewWindowsOn => _previews?.IsActive ?? false;
+	/// <summary>
+	/// The preview windows mode is on: the toggle looks checked. Settable, so that the button works through the Toggle pattern of UI Automation too (a screen reader, a test),
+	/// which flips a ToggleButton without running its command.
+	/// </summary>
+	public bool IsPreviewWindowsOn
+	{
+		get => _previews?.IsActive ?? false;
+		set
+		{
+			if (IsMonitorToggleEnabled && value != IsPreviewWindowsOn)
+				_previews?.SetEnabled(value);
+			else
+				OnPropertyChanged();   // refused: the button goes back to the real state
+		}
+	}
 
 	public string MonitorToggleToolTip => _previews switch
 	{

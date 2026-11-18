@@ -142,7 +142,7 @@ public sealed class PreviewWindowViewTests
 			Assert.False(pin.IsChecked);
 			Assert.Equal(Visibility.Visible, autoClose.Visibility);
 
-			pin.Command.Execute(null);
+			pin.IsChecked = true;   // what a click and the Toggle pattern of UI Automation both do: the two-way binding pins
 			Layout((FrameworkElement)window.Content);
 
 			Assert.True(pin.IsChecked);
@@ -245,7 +245,7 @@ public sealed class PreviewWindowViewTests
 			Assert.True(toggle.IsChecked);
 			Assert.Equal(Constants.PreviewWindow.MonitorOnToolTip, toggle.ToolTip);
 
-			toggle.Command.Execute(null);
+			toggle.IsChecked = false;   // what a click and the Toggle pattern of UI Automation both do: the two-way binding drives the router
 			Layout(bar, 1200, 40);
 			Assert.Equal([false], router.EnabledWrites);
 			Assert.False(toggle.IsChecked);

@@ -85,6 +85,11 @@ public partial class FilePreviewPane : UserControl
 		{
 			await surface.AttachAsync(control);
 		}
+		catch (Exception ex) when (surface.IsDisposed)
+		{
+			// The window (or pane) was closed while the control was still starting: WebView2 aborts the start. That is a close, not a failure.
+			logger?.LogInformation("The preview WebView2 start was abandoned, its surface was closed: {Reason}", ex.Message);
+		}
 		catch (Exception ex)
 		{
 			logger?.LogError(ex, "The preview WebView2 failed to initialize");

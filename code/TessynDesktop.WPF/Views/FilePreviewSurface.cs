@@ -68,6 +68,9 @@ public sealed class FilePreviewSurface : IPreviewSurface, IDisposable
 		_control = null;
 	}
 
+	/// <summary>The surface was disposed (its window or pane closed); a WebView2 start still in flight then aborts.</summary>
+	public bool IsDisposed => _disposed;
+
 	public event EventHandler<string>? LinkClicked;
 
 	public event EventHandler<PreviewRenderedEventArgs>? Rendered;

@@ -40,11 +40,11 @@
             <Image Grid.Column="0" Width="16" Height="16" Margin="10,0,8,0" Source="{Binding Icon, RelativeSource={RelativeSource AncestorType=Window}}" />
             <TextBlock x:Name="TitleText" Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" AutomationProperties.Name="Preview title" />
             <StackPanel Grid.Column="2" Orientation="Horizontal">
-                <ToggleButton x:Name="PinButton" Style="{StaticResource WindowToggle}" Command="{Binding PinCommand}" IsChecked="{Binding IsPinned, Mode=OneWay}"
+                <ToggleButton x:Name="PinButton" Style="{StaticResource WindowToggle}" IsChecked="{Binding PinChecked, Mode=TwoWay}" IsEnabled="{Binding CanAutoClose}"
                               ToolTip="{Binding PinToolTip}" AutomationProperties.Name="Pin preview">
                     <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphPin}" />
                 </ToggleButton>
-                <ToggleButton x:Name="AutoCloseButton" Style="{StaticResource WindowToggle}" Command="{Binding ToggleAutoCloseCommand}" IsChecked="{Binding AutoClose, Mode=OneWay}"
+                <ToggleButton x:Name="AutoCloseButton" Style="{StaticResource WindowToggle}" IsChecked="{Binding AutoCloseChecked, Mode=TwoWay}"
                               Visibility="{Binding CanAutoClose, Converter={StaticResource BoolToVis}}" ToolTip="{Binding AutoCloseToolTip}"
                               AutomationProperties.Name="Auto-close preview">
                     <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphAutoClose}" />

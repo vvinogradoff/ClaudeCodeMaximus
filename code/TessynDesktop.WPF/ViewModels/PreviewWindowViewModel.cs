@@ -29,10 +29,12 @@ public sealed partial class PreviewWindowViewModel : ObservableObject, IDisposab
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(CanAutoClose))]
 	[NotifyPropertyChangedFor(nameof(PinToolTip))]
+	[NotifyPropertyChangedFor(nameof(PinChecked))]
 	[NotifyCanExecuteChangedFor(nameof(PinCommand))]
 	private bool _isPinned;
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(AutoCloseChecked))]
 	private bool _autoClose;
 
 	[ObservableProperty]
@@ -63,6 +65,35 @@ public sealed partial class PreviewWindowViewModel : ObservableObject, IDisposab
 
 	/// <summary>The Pin tooltip; once pinned it says so.</summary>
 	public string PinToolTip => IsPinned ? Constants.PreviewWindow.PinnedToolTip : Constants.PreviewWindow.PinToolTip;
+
+	/// <summary>
+	/// The Pin button's checked state, settable so that the button also works through the Toggle pattern of UI Automation (a screen reader, a test), which flips a
+	/// ToggleButton without running its command. Pinning is one-way: unchecking is refused.
+	/// </summary>
+	public bool PinChecked
+	{
+		get => IsPinned;
+		set
+		{
+			if (value)
+				Pin();
+			else
+				OnPropertyChanged();
+		}
+	}
+
+	/// <summary>The Auto-close button's checked state, settable for the same reason as <see cref="PinChecked"/>; it changes the group's switch.</summary>
+	public bool AutoCloseChecked
+	{
+		get => AutoClose;
+		set
+		{
+			if (value != AutoClose)
+				_settings.SetAutoClose(GroupId, value);
+			else
+				OnPropertyChanged();
+		}
+	}
 
 	public string AutoCloseToolTip => Constants.PreviewWindow.AutoCloseToolTip;
 

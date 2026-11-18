@@ -65,8 +65,8 @@
                 </Grid>
             </Button>
             <!-- FR.6.10: the preview windows toggle; hidden without a router, disabled (with a tooltip) until a second monitor is connected -->
-            <ToggleButton x:Name="PreviewWindowsToggle" Style="{StaticResource BarIconToggle}" Width="36" Height="32" Margin="0" Command="{Binding TogglePreviewWindowsCommand}"
-                          IsChecked="{Binding IsPreviewWindowsOn, Mode=OneWay}" IsEnabled="{Binding IsMonitorToggleEnabled}" ToolTip="{Binding MonitorToggleToolTip}"
+            <ToggleButton x:Name="PreviewWindowsToggle" Style="{StaticResource BarIconToggle}" Width="36" Height="32" Margin="0"
+                          IsChecked="{Binding IsPreviewWindowsOn, Mode=TwoWay}" IsEnabled="{Binding IsMonitorToggleEnabled}" ToolTip="{Binding MonitorToggleToolTip}"
                           ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Preview windows"
                           Visibility="{Binding IsMonitorToggleVisible, Converter={StaticResource BoolToVis}}">
                 <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphMonitor}" />
