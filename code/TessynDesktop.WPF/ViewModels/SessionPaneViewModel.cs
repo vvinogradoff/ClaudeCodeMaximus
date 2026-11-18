@@ -836,6 +836,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_surface.ViewChanged -= OnViewChanged;
 		_surface.PathClicked -= OnPathClicked;
 		_surface.PathImageRequested -= OnPathImageRequested;
+		UnhookPreviewRouter();
 		Focus.RefActivated -= OnRefActivated;
 		Focus.PropertyChanged -= OnSideContentChanged;
 		if (Preview != null)

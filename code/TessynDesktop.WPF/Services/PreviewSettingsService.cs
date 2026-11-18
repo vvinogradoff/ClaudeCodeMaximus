@@ -37,10 +37,32 @@ public sealed class PreviewSettingsService : IPreviewSettingsService
 
 	public bool WindowsEnabled => _store.Get<PreviewWindowsSettings>().Enabled;
 
-	public void SaveGroups(IReadOnlyList<PreviewGroupModel> groups) =>
-		_store.Update<PreviewSettings>(s => s.Groups = groups.Select(g => g.Clone()).ToList());
+	public void SaveGroups(IReadOnlyList<PreviewGroupModel> groups)
+	{
+		var kept = groups.Select(g => g.Clone()).ToList();
+		_store.Update<PreviewSettings>(s => s.Groups = kept);
+		ForgetPlacementsOutside(kept.Select(g => g.Id));
+	}
 
-	public void ResetGroups() => _store.Update<PreviewSettings>(s => s.Groups = null);
+	public void ResetGroups()
+	{
+		_store.Update<PreviewSettings>(s => s.Groups = null);
+		ForgetPlacementsOutside(Groups.Select(g => g.Id));
+	}
+
+	/// <summary>FR.29.2: the remembered placement of a group that no longer exists goes with it.</summary>
+	private void ForgetPlacementsOutside(IEnumerable<string> groupIds)
+	{
+		var ids = groupIds.ToHashSet(StringComparer.Ordinal);
+		if (_store.Get<PreviewWindowsSettings>().Placements.Keys.All(ids.Contains))
+			return;
+
+		_store.Update<PreviewWindowsSettings>(s =>
+		{
+			foreach (var gone in s.Placements.Keys.Where(k => !ids.Contains(k)).ToList())
+				s.Placements.Remove(gone);
+		});
+	}
 
 	public void SetAutoClose(string groupId, bool autoClose)
 	{

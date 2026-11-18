@@ -5,6 +5,7 @@ using TessynDesktop.Client;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.WPF.Rendering;
 using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Transcript;
 
 namespace TessynDesktop.WPF.ViewModels;
@@ -159,12 +160,33 @@ public sealed partial class SessionPaneViewModel
 			case FocusRefViewModel.EntryKind:
 				return JumpToEntryAsync(reference);
 			case FocusRefViewModel.FileKind:
-				if (Preview == null || string.IsNullOrEmpty(reference.RefId))
+				if (string.IsNullOrEmpty(reference.RefId))
+					return Task.CompletedTask;
+
+				var fileName = reference.Name ?? reference.Label ?? "file";
+				var routed = new PreviewItemModel
+				{
+					Kind = PreviewItemKind.File,
+					FileName = fileName,
+					RefId = reference.RefId,
+					SourceNodeId = NodeId,
+					SourceFocusItemId = FocusItemOf(reference),
+				};
+				if (TryRouteFile(routed, new PreviewTarget(reference.RefId, fileName)))
+				{
+					Notice = null;
+					return Task.CompletedTask;   // a preview window shows it (FR.29.4)
+				}
+
+				if (Preview == null)
 					return Task.CompletedTask;
 
 				Notice = null;
 				return Preview.OpenAsync(new PreviewTarget(reference.RefId, reference.Name ?? reference.Label ?? "file"));
 			case FocusRefViewModel.UrlKind:
+				if (_previewRouter?.TryOpenUrl(new PreviewItemModel { Kind = PreviewItemKind.Url, Url = reference.Url, SourceNodeId = NodeId, SourceFocusItemId = FocusItemOf(reference) }) == true)
+					return Task.CompletedTask;
+
 				if (!_launcher.TryOpen(reference.Url))
 					Notice = "Only http and https links can be opened.";
 				return Task.CompletedTask;
@@ -361,6 +383,18 @@ public sealed partial class SessionPaneViewModel
 		{
 			Notice = null;
 			var result = await _client.FilePreviewAsync(nodeId, entry.EntryId, path);
+			var routedItem = new PreviewItemModel
+			{
+				Kind = PreviewItemKind.File,
+				FileName = result.Name,
+				NodeId = nodeId,
+				EntryId = entry.EntryId,
+				Path = path,
+				SourceNodeId = nodeId,
+			};
+			if (TryRouteFile(routedItem, new PreviewTarget(result.Handle, result.Name)))
+				return;   // a preview window shows it, a video too when a group takes its type (FR.29.4); otherwise as before (FR.26.6)
+
 			if (InlinePathMarker.IsInlineVideo(path))
 			{
 				// A video opens in the default media player (FR.26.6), not in the pane.

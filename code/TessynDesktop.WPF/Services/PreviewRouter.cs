@@ -1,0 +1,505 @@
+using Microsoft.Extensions.Logging;
+using TessynDesktop.Client;
+using TessynDesktop.WPF.Infrastructure;
+using TessynDesktop.WPF.State;
+
+namespace TessynDesktop.WPF.Services;
+
+/// <summary>
+/// <see cref="IPreviewRouter"/>: routes previewed files and web addresses to the window of the matching group while the mode is active (two or more
+/// monitors and the toggle on), owns the group windows and the pinned windows, applies auto-close, reacts to the mode and monitor changes and keeps the
+/// list of open windows so that the next start reopens them (FR.29.1, FR.29.3–FR.29.11). Contains no WPF types; every method runs on the UI thread
+/// (settings events, which may come from another thread, are marshalled with <see cref="IUiDispatcher"/>).
+/// </summary>
+/// <remarks>Created by Claude</remarks>
+public sealed class PreviewRouter : IPreviewRouter, IDisposable
+{
+	private readonly IPreviewSettingsService _settings;
+	private readonly PreviewGroupMatcher _matcher;
+	private readonly IMonitorWatcher _monitors;
+	private readonly IPreviewWindowFactory _factory;
+	private readonly UrlPolicy _urls;
+	private readonly IUiDispatcher _ui;
+	private readonly ILogger<PreviewRouter> _logger;
+	private readonly IClientStateStore? _state;
+
+	/// <summary>Every open window in the order it was opened.</summary>
+	private readonly List<OpenWindow> _windows = [];
+
+	/// <summary>Saved windows the restore has not reached yet; they stay in the saved list until it has.</summary>
+	private List<OpenPreviewWindowModel> _pending = [];
+
+	/// <summary>The saved window being restored now (its file is checked); it counts as saved until its window exists.</summary>
+	private OpenPreviewWindowModel? _handling;
+
+	private bool _lastCanToggle;
+	private bool _lastEnabled;
+	private bool _lastActive;
+	private bool _restoreStarted;
+	private bool _exiting;
+	private bool _disposed;
+
+	public PreviewRouter(
+		IPreviewSettingsService settings,
+		PreviewGroupMatcher matcher,
+		IMonitorWatcher monitors,
+		IPreviewWindowFactory factory,
+		UrlPolicy urls,
+		IUiDispatcher ui,
+		ILogger<PreviewRouter> logger,
+		IClientStateStore? state = null)
+	{
+		_settings = settings;
+		_matcher = matcher;
+		_monitors = monitors;
+		_factory = factory;
+		_urls = urls;
+		_ui = ui;
+		_logger = logger;
+		_state = state;
+		_lastCanToggle = CanToggle;
+		_lastEnabled = IsEnabled;
+		_lastActive = IsActive;
+		_monitors.Changed += OnMonitorsChanged;
+		_settings.WindowsEnabledChanged += OnSettingsEvent;
+		_settings.GroupsChanged += OnGroupsEvent;
+	}
+
+	/// <summary>One open window and what the router knows about it.</summary>
+	private sealed class OpenWindow
+	{
+		public OpenWindow(IPreviewWindowHandle handle, string groupId, bool pinned, string groupName)
+		{
+			Handle = handle;
+			GroupId = groupId;
+			IsPinned = pinned;
+			GroupName = groupName;
+		}
+
+		public IPreviewWindowHandle Handle { get; }
+
+		public string GroupId { get; }
+
+		public bool IsPinned { get; set; }
+
+		public string GroupName { get; set; }
+
+		public EventHandler<PreviewWindowClosedEventArgs>? OnClosed { get; set; }
+
+		public EventHandler? OnPinned { get; set; }
+
+		public EventHandler? OnItemChanged { get; set; }
+	}
+
+	public event EventHandler? StateChanged;
+
+	public bool CanToggle => _monitors.Monitors.Count >= 2;
+
+	public bool IsEnabled => _settings.WindowsEnabled;
+
+	public bool IsActive => CanToggle && IsEnabled;
+
+	public string? CurrentNodeId { get; private set; }
+
+	public void SetEnabled(bool enabled)
+	{
+		_settings.SetWindowsEnabled(enabled);
+		Refresh();   // the settings event may come later or on another thread; Refresh is idempotent
+	}
+
+	public bool WouldRouteFile(string? fileName) => IsActive && _matcher.MatchFile(_settings.Groups, fileName) != null;
+
+	public bool TryOpenFile(PreviewItemModel item, PreviewTarget fileHandle, ITessynClient client)
+	{
+		if (!IsActive)
+			return false;
+
+		var match = _matcher.MatchFile(_settings.Groups, item.FileName);
+		if (match == null)
+			return false;
+
+		return OpenInGroupWindow(match.Group, item, fileHandle, client);
+	}
+
+	public bool TryOpenUrl(PreviewItemModel item)
+	{
+		if (!IsActive || !_urls.TryParse(item.Url, out _))
+			return false;
+
+		var match = _matcher.MatchUrl(_settings.Groups, item.Url);
+		if (match == null)
+			return false;
+
+		return OpenInGroupWindow(match.Group, item, null, null);
+	}
+
+	public void OnSessionShown(string? nodeId)
+	{
+		CurrentNodeId = nodeId;
+		if (nodeId == null)
+			return;   // no session shown is not evidence that the user moved on (a transient clear)
+
+		var groups = _settings.Groups;
+		foreach (var window in _windows.ToList())
+		{
+			if (window.IsPinned || window.Handle.Item?.SourceNodeId == nodeId || !IsAutoClose(groups, window.GroupId))
+				continue;
+
+			CloseByRouter(window, "auto-close: another session is shown");
+		}
+	}
+
+	public void OnFocusItemsClosed(string nodeId, IReadOnlyCollection<string> closedItemIds)
+	{
+		if (closedItemIds.Count == 0)
+			return;
+
+		var groups = _settings.Groups;
+		foreach (var window in _windows.ToList())
+		{
+			var item = window.Handle.Item;
+			if (window.IsPinned || item == null || item.SourceNodeId != nodeId || item.SourceFocusItemId == null
+				|| !closedItemIds.Contains(item.SourceFocusItemId) || !IsAutoClose(groups, window.GroupId))
+				continue;
+
+			CloseByRouter(window, "auto-close: its Focus item closed");
+		}
+	}
+
+	public void CloseAllForExit()
+	{
+		SaveList();
+		_exiting = true;
+		foreach (var window in _windows.ToList())
+			CloseByRouter(window, "the app exits");
+	}
+
+	public async Task RestoreAsync(ITessynClient client)
+	{
+		if (_restoreStarted)
+			return;
+
+		_restoreStarted = true;
+		_pending = _settings.OpenWindows.ToList();
+		try
+		{
+			while (_pending.Count > 0)
+			{
+				var saved = _pending[0];
+				_pending.RemoveAt(0);
+				_handling = saved;   // still in the saved list while its file is checked
+				try
+				{
+					await RestoreOneAsync(saved, client);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Restoring a preview window of group {GroupId} failed", saved.GroupId);
+				}
+				finally
+				{
+					_handling = null;
+				}
+			}
+		}
+		finally
+		{
+			_pending = [];
+			_handling = null;
+			SaveList();
+			_logger.LogInformation("Preview windows restored: {Count} open", _windows.Count);
+		}
+	}
+
+	public void Dispose()
+	{
+		if (_disposed)
+			return;
+
+		_disposed = true;
+		_monitors.Changed -= OnMonitorsChanged;
+		_settings.WindowsEnabledChanged -= OnSettingsEvent;
+		_settings.GroupsChanged -= OnGroupsEvent;
+		foreach (var window in _windows.ToList())
+			Detach(window);
+		_windows.Clear();
+	}
+
+	// ---- opening ----
+
+	private bool OpenInGroupWindow(PreviewGroupModel group, PreviewItemModel item, PreviewTarget? fileHandle, ITessynClient? client)
+	{
+		var window = _windows.FirstOrDefault(w => !w.IsPinned && w.GroupId == group.Id);
+		if (window == null)
+		{
+			window = CreateWindow(group, pinned: false, ownPlacement: null);
+			if (window == null)
+				return false;
+		}
+
+		window.Handle.Show(item.Clone(), fileHandle, client);
+		_logger.LogInformation("Preview: {Kind} opened in the window of group {GroupId}", item.Kind, group.Id);
+		SaveList();
+		return true;
+	}
+
+	private OpenWindow? CreateWindow(PreviewGroupModel group, bool pinned, PreviewPlacementModel? ownPlacement)
+	{
+		IPreviewWindowHandle handle;
+		try
+		{
+			handle = _factory.Create(group, pinned, ownPlacement);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "Creating the preview window of group {GroupId} failed", group.Id);
+			return null;
+		}
+
+		var window = new OpenWindow(handle, group.Id, pinned, group.Name);
+		window.OnClosed = (_, args) => OnWindowClosed(window, args);
+		window.OnPinned = (_, _) => OnWindowPinned(window);
+		window.OnItemChanged = (_, _) => SaveList();
+		handle.Closed += window.OnClosed;
+		handle.Pinned += window.OnPinned;
+		handle.ItemChanged += window.OnItemChanged;
+		_windows.Add(window);
+		return window;
+	}
+
+	private void Detach(OpenWindow window)
+	{
+		window.Handle.Closed -= window.OnClosed;
+		window.Handle.Pinned -= window.OnPinned;
+		window.Handle.ItemChanged -= window.OnItemChanged;
+	}
+
+	// ---- window events ----
+
+	private void OnWindowClosed(OpenWindow window, PreviewWindowClosedEventArgs args)
+	{
+		if (!_windows.Remove(window))
+			return;
+
+		Detach(window);
+		_logger.LogInformation("Preview window of group {GroupId} closed ({Reason})", window.GroupId, args.ByUser ? "by the user" : "by the app");
+		if (!_exiting)
+			SaveList();
+	}
+
+	private void OnWindowPinned(OpenWindow window)
+	{
+		if (window.IsPinned)
+			return;
+
+		window.IsPinned = true;   // it leaves the group's slot: the group's next item opens a new window
+		_logger.LogInformation("Preview window of group {GroupId} pinned", window.GroupId);
+		SaveList();
+	}
+
+	private void CloseByRouter(OpenWindow window, string reason)
+	{
+		_logger.LogInformation("Closing the preview window of group {GroupId}: {Reason}", window.GroupId, reason);
+		window.Handle.Close();
+		if (_windows.Contains(window))
+		{
+			// A handle that did not raise Closed: forget it anyway.
+			_windows.Remove(window);
+			Detach(window);
+		}
+	}
+
+	// ---- mode, monitors, groups ----
+
+	private void OnMonitorsChanged(object? sender, EventArgs e) => _ui.Post(Refresh);
+
+	private void OnSettingsEvent(object? sender, EventArgs e) => _ui.Post(Refresh);
+
+	private void OnGroupsEvent(object? sender, EventArgs e) => _ui.Post(ApplyGroupChanges);
+
+	private void Refresh()
+	{
+		if (_disposed)
+			return;
+
+		var canToggle = CanToggle;
+		var enabled = IsEnabled;
+		var active = canToggle && enabled;
+		if (canToggle == _lastCanToggle && enabled == _lastEnabled && active == _lastActive)
+			return;
+
+		var deactivated = _lastActive && !active;
+		_lastCanToggle = canToggle;
+		_lastEnabled = enabled;
+		_lastActive = active;
+		_logger.LogInformation("Preview windows mode: toggle {CanToggle}, enabled {Enabled}, active {Active}", canToggle, enabled, active);
+		if (deactivated)
+		{
+			foreach (var window in _windows.Where(w => !w.IsPinned).ToList())
+				CloseByRouter(window, "the mode turned off");
+		}
+
+		StateChanged?.Invoke(this, EventArgs.Empty);
+	}
+
+	private void ApplyGroupChanges()
+	{
+		if (_disposed)
+			return;
+
+		var groups = _settings.Groups;
+		foreach (var window in _windows.ToList())
+		{
+			var group = groups.FirstOrDefault(g => g.Id == window.GroupId);
+			if (group == null)
+			{
+				if (!window.IsPinned)
+					CloseByRouter(window, "its group was removed");
+
+				continue;
+			}
+
+			if (group.Name != window.GroupName)
+			{
+				window.GroupName = group.Name;
+				window.Handle.SetGroupName(group.Name);
+			}
+		}
+	}
+
+	private static bool IsAutoClose(IReadOnlyList<PreviewGroupModel> groups, string groupId) => groups.FirstOrDefault(g => g.Id == groupId)?.AutoClose == true;
+
+	// ---- the saved list ----
+
+	private void SaveList()
+	{
+		if (_disposed)
+			return;
+
+		var list = new List<OpenPreviewWindowModel>();
+		foreach (var window in _windows)
+		{
+			var item = window.Handle.Item;
+			if (item == null)
+				continue;   // not shown yet
+
+			list.Add(new OpenPreviewWindowModel
+			{
+				GroupId = window.GroupId,
+				Pinned = window.IsPinned,
+				Item = item.Clone(),
+				Placement = window.IsPinned ? window.Handle.CurrentPlacement : null,
+			});
+		}
+
+		if (_handling != null)
+			list.Add(_handling);
+
+		list.AddRange(_pending);   // saved windows the restore has not reached yet are not lost
+		try
+		{
+			_settings.SaveOpenWindows(list);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "Saving the list of open preview windows failed");
+		}
+	}
+
+	// ---- restore ----
+
+	private async Task RestoreOneAsync(OpenPreviewWindowModel saved, ITessynClient client)
+	{
+		var item = saved.Item;
+		var group = _settings.Groups.FirstOrDefault(g => g.Id == saved.GroupId);
+		if (group == null)
+		{
+			_logger.LogInformation("Restore: skipped a window, group {GroupId} no longer exists", saved.GroupId);
+			return;
+		}
+
+		if (!saved.Pinned && !Admissible(group, item))
+			return;
+
+		if (item.Kind == PreviewItemKind.Url && !_urls.IsAllowed(item.Url))
+		{
+			_logger.LogInformation("Restore: skipped a window of group {GroupId}, its address is not http(s)", group.Id);
+			return;
+		}
+
+		PreviewTarget? target = null;
+		if (item.Kind == PreviewItemKind.File)
+		{
+			target = await ResolveFileAsync(item, client);
+			if (target == null)
+				return;
+
+			// The awaits above gave the user time to change things: decide again.
+			group = _settings.Groups.FirstOrDefault(g => g.Id == saved.GroupId);
+			if (group == null || (!saved.Pinned && !Admissible(group, item)))
+				return;
+		}
+
+		_handling = null;   // its window comes now and takes its place in the saved list
+		var window = CreateWindow(group, saved.Pinned, saved.Pinned ? saved.Placement : null);
+		if (window == null)
+			return;
+
+		window.Handle.Show(item.Clone(), target, item.Kind == PreviewItemKind.File ? client : null);
+		_logger.LogInformation("Restore: reopened a {Pinned} window of group {GroupId}", saved.Pinned ? "pinned" : "group", group.Id);
+	}
+
+	/// <summary>A group window comes back only while the mode is active, for the session on show when its group closes automatically, and when the group has no window yet.</summary>
+	private bool Admissible(PreviewGroupModel group, PreviewItemModel item)
+	{
+		if (!IsActive)
+		{
+			_logger.LogInformation("Restore: skipped a window of group {GroupId}, the mode is off", group.Id);
+			return false;
+		}
+
+		if (group.AutoClose && item.SourceNodeId != (CurrentNodeId ?? _state?.State.LastSelectedNodeId))
+		{
+			_logger.LogInformation("Restore: skipped a window of group {GroupId}, it belongs to another session", group.Id);
+			return false;
+		}
+
+		if (_windows.Any(w => !w.IsPinned && w.GroupId == group.Id))
+		{
+			_logger.LogInformation("Restore: skipped a window of group {GroupId}, the group already has one", group.Id);
+			return false;
+		}
+
+		return true;
+	}
+
+	/// <summary>The read handle of a saved file: its Focus reference again, or <c>file.preview</c> again; a 1-byte read proves the daemon still serves it.</summary>
+	private async Task<PreviewTarget?> ResolveFileAsync(PreviewItemModel item, ITessynClient client)
+	{
+		var name = item.FileName ?? "file";
+		try
+		{
+			PreviewTarget target;
+			if (!string.IsNullOrEmpty(item.RefId))
+				target = new PreviewTarget(item.RefId, name);
+			else if (item.NodeId != null && item.EntryId != null && item.Path != null)
+			{
+				var result = await client.FilePreviewAsync(item.NodeId, item.EntryId, item.Path);
+				target = new PreviewTarget(result.Handle, string.IsNullOrEmpty(result.Name) ? name : result.Name);
+			}
+			else
+			{
+				_logger.LogInformation("Restore: skipped {Name}, nothing says how to read it again", name);
+				return null;
+			}
+
+			await client.FileReadAsync(target.Handle, 0, 1);
+			return target;
+		}
+		catch (Exception ex)
+		{
+			_logger.LogInformation("Restore: skipped {Name}: {Reason}", name, ex.Message);
+			return null;
+		}
+	}
+}

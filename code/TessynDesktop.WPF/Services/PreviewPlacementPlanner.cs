@@ -23,7 +23,12 @@ public sealed class PreviewPlacementPlanner
 		var rectangle = remembered.ToWindowPlacement();
 		var home = remembered.MonitorDeviceName == null ? null : monitors.FirstOrDefault(m => m.DeviceName == remembered.MonitorDeviceName);
 		if (remembered.MonitorDeviceName != null && home == null)
-			return Centred(rectangle, target);
+		{
+			// Windows may have renamed the monitor: the one whose work area starts where the remembered one did is the same monitor (FR.29.6).
+			home = monitors.FirstOrDefault(m => m.WorkArea.Left == remembered.MonitorLeft && m.WorkArea.Top == remembered.MonitorTop);
+			if (home == null)
+				return Centred(rectangle, target);
+		}
 
 		if (home != null)
 		{
