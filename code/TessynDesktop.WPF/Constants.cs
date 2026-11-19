@@ -97,7 +97,19 @@ public static partial class Constants
 			"com", "org", "net", "io", "app", "dev", "ai", "co", "gov", "edu", "info", "biz", "me", "us", "uk", "de", "fr", "ru", "ca", "au", "jp", "nl", "xyz"
 		};
 
-		public static readonly IReadOnlySet<string> Pdf = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf" };
+		/// <summary>The host a link may name without a top-level domain; a relative-looking path that starts with it is a web address (FR.26.7).</summary>
+		public const string LocalWebHost = "localhost";
+
+		/// <summary>Extensions that make a bare name in backticks (<c>README.md</c>) a file; any other (<c>obj.method</c>, <c>os.path</c>) is code (FR.26.7).</summary>
+		public static readonly IReadOnlySet<string> KnownBareNameExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+		{
+			".md", ".markdown", ".txt", ".json", ".yml", ".yaml", ".toml", ".xml", ".csv", ".cs", ".csproj", ".sln", ".ts", ".tsx", ".js", ".jsx", ".mjs",
+			".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift", ".c", ".h", ".cpp", ".hpp", ".css", ".scss", ".html", ".htm", ".sh", ".ps1", ".bat", ".cmd",
+			".sql", ".ini", ".cfg", ".config", ".props", ".targets", ".xaml", ".razor", ".log", ".lock", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
+			".tif", ".tiff", ".svg", ".pdf", ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".wmv"
+		};
+
+		public static readonly IReadOnlySet<string> Pdf =new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf" };
 
 		/// <summary>Shown as monospace text, markup and script types included (svg, html, ps1, ...): displayed, never rendered or run.</summary>
 		public static readonly IReadOnlySet<string> Text = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

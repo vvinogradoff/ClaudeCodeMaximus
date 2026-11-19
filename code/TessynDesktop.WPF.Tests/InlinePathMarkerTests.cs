@@ -51,6 +51,16 @@ public sealed class InlinePathMarkerTests
 	}
 
 	[Fact]
+	public void ARelativePath_InACodeBlock_IsMarkedLikeAnAbsoluteOne()
+	{
+		var view = Render("```\nedit src/main.cs now\nsee C:\\w\\a.md\n```");
+
+		Assert.Equal([@"C:\w\a.md", "src/main.cs"], view.Paths);
+		Assert.Contains(@"<span class=""pth"" data-j=""1"">src/main.cs</span>", view.Html);
+		Assert.Contains(@"<span class=""pth"" data-j=""0"">C:\w\a.md</span>", view.Html);
+	}
+
+	[Fact]
 	public void ARelativePath_InAUserEntry_IsNotMarked()
 	{
 		var view = Render("open docs/a.md", role: "user");
