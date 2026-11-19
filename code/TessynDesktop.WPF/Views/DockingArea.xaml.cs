@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Threading;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
@@ -17,6 +16,8 @@ namespace TessynDesktop.WPF.Views;
 /// <remarks>Created by Claude</remarks>
 public partial class DockingArea : UserControl, IDockingSurface
 {
+	private bool _stripHidden;
+
 	public DockingArea() : this(new SessionPane())
 	{
 	}
@@ -38,9 +39,18 @@ public partial class DockingArea : UserControl, IDockingSurface
 		var root = new LayoutPanel { Orientation = Orientation.Horizontal };
 		root.Children.Add(DocumentPane);
 		DockManager.Layout = new LayoutRoot { RootPanel = root };
-		DockManager.Layout.Updated += (_, _) => LayoutChanged?.Invoke(this, EventArgs.Empty);
-		DockManager.LayoutUpdated += (_, _) => LayoutChanged?.Invoke(this, EventArgs.Empty);
-		DockManager.Loaded += (_, _) => HideDocumentTabStrip();
+		DockManager.Layout.Updated += (_, _) =>
+		{
+			_stripHidden = false;   // the library may have built the panes again
+			LayoutChanged?.Invoke(this, EventArgs.Empty);
+		};
+		DockManager.LayoutUpdated += (_, _) =>
+		{
+			if (!_stripHidden)
+				_stripHidden = HideDocumentTabStrip();
+
+			LayoutChanged?.Invoke(this, EventArgs.Empty);
+		};
 		ApplyTheme(dark: false);
 	}
 
@@ -67,20 +77,25 @@ public partial class DockingArea : UserControl, IDockingSurface
 			return;
 
 		DockManager.Theme = dark ? new Vs2013DarkTheme() : new Vs2013LightTheme();
-		Dispatcher.BeginInvoke(HideDocumentTabStrip, DispatcherPriority.Loaded);   // a new theme builds the panes' templates again
+		_stripHidden = false;   // a new theme builds the panes' templates again
 	}
 
 	/// <summary>
 	/// The session pane is the one document, so its pane shows no tab strip (FR.29.19). The library's template has no switch for it, and an implicit style does not reach into
-	/// it, so the strip (the tab panel and the drop-down button around it) is collapsed once the template is built; the template still makes the selected content.
+	/// it, so the strip (the tab panel and the drop-down button around it) is collapsed once the template is built (the next layout pass after the pane is shown); the template still makes the
+	/// selected content. True when the strip was found.
 	/// </summary>
-	public void HideDocumentTabStrip()
+	public bool HideDocumentTabStrip()
 	{
+		var found = false;
 		foreach (var panel in Descendants<DocumentPaneTabPanel>(DockManager))
 		{
+			found = true;
 			if (VisualTreeHelper.GetParent(panel) is UIElement strip && strip.Visibility != Visibility.Collapsed)
 				strip.Visibility = Visibility.Collapsed;
 		}
+
+		return found;
 	}
 
 	private IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject

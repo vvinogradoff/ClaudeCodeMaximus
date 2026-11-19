@@ -163,8 +163,8 @@ public sealed class WpfFocusE2ETests : IDisposable
 			// V11: both controllers really run in private mode (no cookies or cache survive the run).
 			Assert.Contains("WebView2 private mode (transcript): true", _app.ReadLog());
 			Assert.Contains("WebView2 private mode (preview): true", _app.ReadLog());
-			Assert.True(_clicker.Exists(process, "Open in default app"));           // a markdown file may be opened externally
-			Assert.True(_clicker.Exists(process, "Close preview"));
+			Assert.True(_clicker.Exists(process, "Open in default app from panel Text and code"));           // a markdown file may be opened externally; it is shown in the group's docked panel (FR.29.18)
+			Assert.True(_clicker.Exists(process, "Pin panel Text and code"));
 			AssertNoErrors();
 		}
 		finally
@@ -185,8 +185,8 @@ public sealed class WpfFocusE2ETests : IDisposable
 
 			var shown = await _app.WaitForLogAsync(process, StepTimeout, "Preview opened: run.ps1 (\"Text\",", "Preview page rendered text: true");
 			Assert.True(shown, "The script was not shown as text. Log:\n" + _app.ReadLog());
-			Assert.True(_clicker.Exists(process, "Close preview"));
-			Assert.False(_clicker.Exists(process, "Open in default app"), "A script must never be offered for external opening.");
+			Assert.Contains("Preview panel opened: group default", _app.ReadLog());   // no group lists .ps1: the default Preview panel (FR.29.18)
+			Assert.False(_clicker.Exists(process, "Open in default app from panel Preview"), "A script must never be offered for external opening.");
 			AssertNoErrors();
 		}
 		finally

@@ -47,7 +47,7 @@ public partial class MainWindow : Window
 		if (_testWindow)
 			PrepareTestWindow();
 
-		Docking.SessionView.DataContext = viewModel.Session;
+		Docking.SessionView.SetBinding(DataContextProperty, new System.Windows.Data.Binding(nameof(MainViewModel.Session)) { Source = viewModel });   // the session pane view model exists once the client is connected
 		dockingSurface.Register(Docking);   // the docked preview panels are placed in this docking area (FR.29.19)
 		Docking.ApplyTheme(appearance.IsDark);
 		appearance.Changed += (_, _) => Dispatcher.BeginInvoke(() => Docking.ApplyTheme(appearance.IsDark));
