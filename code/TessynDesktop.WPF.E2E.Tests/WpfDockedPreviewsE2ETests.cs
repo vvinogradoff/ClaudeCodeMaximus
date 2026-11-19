@@ -67,7 +67,8 @@ public sealed class WpfDockedPreviewsE2ETests
 			await PreviewWindowsHarness.CtrlClickAsync(page, ".pth", 3);
 			await h.WaitForLogAsync(process, "the Images panel to open", "Preview panel opened: group images");
 			await h.WaitUntilAsync("the Images panel's Pin button", () => Task.FromResult(PreviewWindowsHarness.FindElement(main, "Pin panel Images") != null));
-			Assert.NotNull(PreviewWindowsHarness.FindElement(main, "Open in default app from panel Preview"));   // the default panel is still there
+			// The docked shell opens a preview as a tab in the pane that holds Focus (FR.6.12, TC.DS.26): the default panel is now a tab behind the Images panel, not in the UI Automation tree (the tabs have no names of their own), but still open.
+			Assert.DoesNotContain("Preview panel closed: group default", h.App.ReadLog());
 			h.AssertNoErrors();
 		}
 		finally

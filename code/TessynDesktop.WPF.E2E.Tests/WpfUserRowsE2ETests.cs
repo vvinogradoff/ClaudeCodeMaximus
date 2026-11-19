@@ -18,6 +18,14 @@ namespace TessynDesktop.WPF.E2E.Tests;
 public sealed class WpfUserRowsE2ETests : IDisposable
 {
 	private const int UserEntries = 4;
+	private const string RowsScript = @"(() => {
+				function parse(c) { const srgb = c.startsWith('color(srgb'), m = c.match(/[\d.]+/g).map(Number), k = srgb ? 255 : 1, o = 0; return { r: m[o] * k, g: m[o + 1] * k, b: m[o + 2] * k, a: m.length > o + 3 ? m[o + 3] : 1 }; }
+				function lum(c) { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); }
+				function bg(el) { for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c.a > 0.5) return c; } return { r: 255, g: 255, b: 255, a: 1 }; }
+				return Array.from(document.querySelectorAll('.e.U')).map(e => { const c = e.querySelector('.c'), b = e.querySelector('.b'), cr = c.getBoundingClientRect(), br = b.getBoundingClientRect();
+					const fg = parse(getComputedStyle(b).color), back = bg(c), l1 = lum(fg), l2 = lum(back), page = bg(document.body);
+					return { k: Number(e.dataset.k), text: b.textContent.length, display: getComputedStyle(e).display, vis: getComputedStyle(e).visibility, cw: cr.width, ch: cr.height, bw: br.width, bh: br.height,
+						contrast: (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05), bubbleVsPage: Math.abs(lum(back) - lum(page)) }; }); })()";
 	private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
 	private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(20);
 
@@ -87,14 +95,17 @@ public sealed class WpfUserRowsE2ETests : IDisposable
 		try
 		{
 			// Per user row: exists, display, size of the row and of the bubble, text vs background colour (nearest opaque background up the tree).
-			var rows = (await page.EvalAsync(@"(() => {
-				function parse(c) { const srgb = c.startsWith('color(srgb'), m = c.match(/[\d.]+/g).map(Number), k = srgb ? 255 : 1, o = 0; return { r: m[o] * k, g: m[o + 1] * k, b: m[o + 2] * k, a: m.length > o + 3 ? m[o + 3] : 1 }; }
-				function lum(c) { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); }
-				function bg(el) { for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c.a > 0.5) return c; } return { r: 255, g: 255, b: 255, a: 1 }; }
-				return Array.from(document.querySelectorAll('.e.U')).map(e => { const c = e.querySelector('.c'), b = e.querySelector('.b'), cr = c.getBoundingClientRect(), br = b.getBoundingClientRect();
-					const fg = parse(getComputedStyle(b).color), back = bg(c), l1 = lum(fg), l2 = lum(back), page = bg(document.body);
-					return { text: b.textContent.length, display: getComputedStyle(e).display, vis: getComputedStyle(e).visibility, cw: cr.width, ch: cr.height, bw: br.width, bh: br.height,
-						contrast: (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05), bubbleVsPage: Math.abs(lum(back) - lum(page)) }; }); })()"))!.AsArray();
+			// The page renders only the entries around its viewport (virtual list) and the docked shell gives the transcript a narrow pane: read the rows at the top and at the bottom, by entry index.
+			var byEntry = new SortedDictionary<int, JsonNode>();
+			foreach (var scroll in new[] { "0", "vp.scrollHeight" })
+			{
+				await page.EvalAsync($"vp.scrollTop = {scroll}; null");
+				await Task.Delay(800);
+				foreach (var row in (await page.EvalAsync(RowsScript))!.AsArray())
+					byEntry[row!["k"]!.GetValue<int>()] = row;
+			}
+
+			var rows = byEntry.Values.ToList();
 
 			Assert.Equal(UserEntries, rows.Count);
 			foreach (var row in rows)

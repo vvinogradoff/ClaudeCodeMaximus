@@ -65,7 +65,8 @@ public sealed class WpfInlinePathsE2ETests : IDisposable
 
 		var clients = Directory.CreateDirectory(Path.Combine(_root, "clients"));
 		File.WriteAllText(Path.Combine(clients.FullName, "wpf.json"),
-			$"{{\"lastSelectedNodeId\":\"{_main}\",\"expandedNodeIds\":[\"{_env.Base.Directory.NodeId}\"]}}");
+			$"{{\"lastSelectedNodeId\":\"{_main}\",\"expandedNodeIds\":[\"{_env.Base.Directory.NodeId}\"],\"sections\":{{\"layout\":{{\"version\":1,\"data\":{{\"treeCollapsed\":true}}}}}}}}");
+		// (the left pane starts auto-hidden through the FR.6.18 migration: the transcript keeps the width these path and image layouts were written for)
 		_app = new AppProcessHarness(_root, daemonFile);
 	}
 
@@ -151,6 +152,9 @@ public sealed class WpfInlinePathsE2ETests : IDisposable
 			await WaitAsync("the entry to be measured with its image", async () => (bool)(await page.EvalAsync("(() => { const k = S.b - 1, el = items.lastElementChild; return Math.abs(S.items[k].h - el.offsetHeight) < 1.5 && el.offsetHeight > 200; })()"))!);
 
 			// The image is selectable: a drag from the path down past the image selects it (so it can be copied), and opens nothing.
+			// The docked shell gives the transcript a narrow pane: bring the path and the image into the viewport first, the drag needs both on screen.
+			await page.EvalAsync("document.querySelectorAll('.pth')[2].scrollIntoView({ block: 'start' }); null");
+			await Task.Delay(500);
 			var path = await RectOfAsync(page, ".pth", 2);
 			var image = await RectOfAsync(page, "img.pimg", 0);
 			await page.DragAsync(path.Left + 1, path.Y, image.Left + image.Width / 2, image.Bottom + 6);

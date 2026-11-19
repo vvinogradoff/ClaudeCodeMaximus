@@ -26,7 +26,7 @@ public sealed class WpfPreviewWindowsFocusE2ETests
 	private static async Task ShowFocusAsync(PreviewWindowsHarness h, System.Diagnostics.Process process, int openItems)
 	{
 		await h.WaitForLogAsync(process, "the Focus items to load", $"Focus: {openItems} open item(s) for {h.Main}");
-		Assert.True(await new UiAutomationClicker().SelectRadioAsync(process, "Focus view", PreviewWindowsHarness.StepTimeout), "The Focus view switch was not found. Log:\n" + h.App.ReadLog());
+		Assert.True(await new UiAutomationClicker().ClickAsync(process, "Focus", PreviewWindowsHarness.StepTimeout), "The Focus view switch was not found. Log:\n" + h.App.ReadLog());
 	}
 
 	[Fact]

@@ -91,7 +91,7 @@ public sealed class WpfFocusE2ETests : IDisposable
 		var process = _app.Start();
 		var ready = await _app.WaitForLogAsync(process, StartTimeout, "Connected to daemon run", $"Session {_main} opened", $"Focus: {openItems} open item(s) for {_main}");
 		Assert.True(ready, "The app did not open the main session with its Focus items. Log:\n" + _app.ReadLog());
-		Assert.True(await _clicker.SelectRadioAsync(process, "Focus view", StepTimeout), "The Focus view switch was not found. Log:\n" + _app.ReadLog());   // the Focus view replaces the transcript (FR.23.12)
+		Assert.True(await _clicker.ClickAsync(process, "Focus", StepTimeout), "The Focus view switch was not found. Log:\n" + _app.ReadLog());   // the Focus view replaces the transcript (FR.23.12)
 		return process;
 	}
 

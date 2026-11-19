@@ -94,7 +94,7 @@ public sealed class WpfRecentE2ETests : IDisposable
 		using var process = await StartAsync();
 		try
 		{
-			Assert.True(await _clicker.SelectTabAsync(process, "Recent", StepTimeout), "The Recent tab was not found. Log:\n" + _app.ReadLog());
+			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Recent", StepTimeout), "The Recent tab was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await _clicker.WaitForButtonAsync(process, "Open " + _second.Name, StepTimeout), "The Recent rows did not appear. Log:\n" + _app.ReadLog());
 			Assert.True(_clicker.Exists(process, "Open " + _env.Session.Name));
 			Assert.True(_clicker.Exists(process, "Group " + _env.Base.Directory.Path), "The directory header was not found.");
@@ -118,7 +118,7 @@ public sealed class WpfRecentE2ETests : IDisposable
 		using var process = await StartAsync();
 		try
 		{
-			Assert.True(await _clicker.SelectTabAsync(process, "Recent", StepTimeout), "The Recent tab was not found.");
+			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Recent", StepTimeout), "The Recent tab was not found.");
 			Assert.True(await _clicker.ClickAsync(process, "Favourite " + _second.Name, StepTimeout), "The star of the row was not found. Log:\n" + _app.ReadLog());
 			Assert.True(await WaitForAsync(() => _second.IsFavorite), "The daemon did not get the favourite flag.");
 
