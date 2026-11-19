@@ -1234,11 +1234,13 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 - [DONE] Docked previews: requirements FR.29.17–FR.29.26 approved with the AvalonDock dependency and six decisions (2026-11-19)
 - [DONE] Docked previews, stage 1: AvalonDock in the main window (the session pane as the central document, the side preview pane replaced by the default Preview panel in both modes), the `previewDock` settings, the router's docked target, one panel per group with Pin and Auto-close (FR.29.17–FR.29.21, FR.29.25; merge `6c1b968`); the session area's tab strip shows while a panel shares it (TC.PW.104, merge `dc41941`)
 - [DONE] The whole WPF UI as docked panels: option A chosen (A26), requirements FR.6.11–FR.6.22 approved with seven decisions (A28)
-- [ ] Docked shell, stage 1: the left panels, the Session view, Focus as a panel, layout memory, Reset layout, the Panels menu, the chevron, compact chrome, keyboard, test seam (FR.6.11–FR.6.20, FR.6.22)
+- [DONE] Docked shell, stage 1: the left panels, the Session view, Focus as a panel, layout memory, Reset layout, the Panels menu, the chevron, compact chrome, keyboard, test seam (FR.6.11–FR.6.20, FR.6.22; branch `wpf/docked-shell`, merge `5c91a24`; review fixes F1–F9; all five suites green, WPF E2E 144/144 with `WpfDockedShellE2ETests`). The test seam reports the panels' state in the log; the programmatic test hook of FR.6.22 (dock, tab, float, auto-hide, slide-out by calls) moves to stage 3 together with FR.29.26
+  - [ ] Manual checks (TC.DS MANUAL rows): click into the transcript right after a layout change, Ctrl+F from every panel, the Recent dropdown, a small window, the slide-out (Esc, edge tab), a floating Focus (reply box, Ctrl+Enter, raise over other apps), theme switch, screensaver with a floating panel, idle CPU against the perf baseline
+  - [ ] Panel tabs have no UI Automation name (`AvalonDock.Layout.LayoutAnchorable`); name them after the panel
 - [ ] Docked shell, stage 2: Tessyn's light and dark colours for the docking chrome (FR.6.21; takes over FR.29.24)
-- [ ] Docked shell, stage 3: the remaining docked-preview items (restart of panels, auto-hide behaviours, floating panels across scales; FR.29.19, FR.29.22, FR.29.23)
-- [ ] Docked previews, stage 2: restart, mode changes, auto-hide behaviour (slide-out on a new item, Esc and edge-tab close), floating panels with the FR.29.16 scale rules (FR.29.19, FR.29.22, FR.29.23)
-- [ ] Docked previews, stage 3: Tessyn light/dark theme for the docking area (FR.29.24); review, E2E, manual checks (TC.PW.77–102)
+- [ ] Docked shell, stage 3: the remaining docked-preview items (restart of panels, auto-hide behaviours, floating panels across scales; FR.29.19, FR.29.22, FR.29.23), the programmatic test hook (FR.6.22, FR.29.26) and the test-window guard for floating panels
+- [ ] Docked previews, stage 2: restart, mode changes, auto-hide behaviour (slide-out on a new item, Esc and edge-tab close), floating panels with the FR.29.16 scale rules (FR.29.19, FR.29.22, FR.29.23) — now part of docked shell stage 3
+- [ ] Docked previews, stage 3: Tessyn light/dark theme for the docking area (FR.29.24); review, E2E, manual checks (TC.PW.77–102) — the theme is now docked shell stage 2
 
 ## Phase 45 — The daemon elevated, WPF normal (FR.32.10–FR.32.14); paste of Explorer files (FR.31.2)
 
