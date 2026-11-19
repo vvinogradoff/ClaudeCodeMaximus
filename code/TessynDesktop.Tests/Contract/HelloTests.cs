@@ -53,6 +53,29 @@ public sealed class HelloTests : IDisposable
 			result["capabilities"]!.AsArray().Select(c => c!.GetValue<string>()).ToArray());
 	}
 
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task Elevated_says_whether_the_daemon_process_runs_elevated(bool elevated)
+	{
+		// FR.32.12, tdcp-spec 10.A10.
+		var dispatcher = new TdcpDispatcher([new ClientRpcModule(runInfo: _run, eventLog: _log, elevated: elevated)]);
+
+		var reply = await dispatcher.HandleTextAsync("""{"jsonrpc":"2.0","id":1,"method":"client.hello"}""", TdcpTransport.Loopback, default);
+
+		Assert.Equal(elevated, reply!["result"]!["elevated"]!.GetValue<bool>());
+	}
+
+	[Fact]
+	public async Task Without_an_override_elevated_is_the_process_s_own_elevation_and_the_relay_gets_it_too()
+	{
+		var loopback = (await HelloAsync())["result"]!;
+		var relay = (await HelloAsync(transport: TdcpTransport.Relay))["result"]!;
+
+		Assert.Equal(Environment.IsPrivilegedProcess, loopback["elevated"]!.GetValue<bool>());
+		Assert.Equal(Environment.IsPrivilegedProcess, relay["elevated"]!.GetValue<bool>());
+	}
+
 	[Fact]
 	public async Task EventSeq_is_the_current_head_of_the_event_log()
 	{

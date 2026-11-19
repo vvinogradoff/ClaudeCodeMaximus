@@ -24,6 +24,12 @@ public enum DaemonRestartOutcome
 
 	/// <summary>The daemon ended; the client restarts itself, and the new client starts the host from the newest build and connects.</summary>
 	ClientRestarting,
+
+	/// <summary>FR.32.11: the daemon ended and a new host was started the chosen way; the client reconnects by itself and does not restart.</summary>
+	Restarted,
+
+	/// <summary>FR.32.11: the daemon ended, but no new host could be started.</summary>
+	NotStarted,
 }
 
 /// <summary>The folder a daemon process runs from and the build time of what is in it.</summary>
@@ -37,10 +43,12 @@ public interface IDaemonBuildProbe
 	RunningDaemonBuild? Inspect(int pid);
 }
 
-/// <summary>Reads the build time from the folder of the process's main module.</summary>
+/// <summary>Reads the build time from the folder of the process's executable (FR.32.14: read with the limited query right, so an elevated host can be inspected too).</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class ProcessDaemonBuildProbe : IDaemonBuildProbe
 {
+	private readonly ProcessImagePath _imagePath = new();
+
 	/// <summary>The folder with the newest write time over all its <c>TessynDesktop*.dll</c>; null when it holds none.</summary>
 	public static RunningDaemonBuild? InspectFolder(string folder)
 	{
@@ -52,12 +60,11 @@ public sealed class ProcessDaemonBuildProbe : IDaemonBuildProbe
 	{
 		try
 		{
-			using var process = Process.GetProcessById(pid);
-			var exe = process.MainModule?.FileName;
+			var exe = _imagePath.Get(pid);
 			var folder = exe == null ? null : Path.GetDirectoryName(exe);
 			return folder == null ? null : InspectFolder(folder);
 		}
-		catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+		catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
 		{
 			return null;
 		}
@@ -168,9 +175,12 @@ public sealed class DaemonRestarter
 	private readonly ILogger _logger;
 	private readonly string? _hostFolder;
 	private readonly IDaemonChangeDetector? _changeDetector;
+	private readonly IDaemonHostLauncher? _launcher;
 
-	public DaemonRestarter(string? sourceLocation, IDaemonBuildProbe probe, IDialogService dialogs, IHostExitSignal signal, IProcessExitWaiter waiter, IClientRestarter restarter, TimeSpan exitTimeout, ILogger logger, string? hostFolder = null, IDaemonChangeDetector? changeDetector = null)
+	/// <param name="launcher">Starts the new host after a restart (FR.32.11); without it the restarted client starts one, the way FR.32.7 did.</param>
+	public DaemonRestarter(string? sourceLocation, IDaemonBuildProbe probe, IDialogService dialogs, IHostExitSignal signal, IProcessExitWaiter waiter, IClientRestarter restarter, TimeSpan exitTimeout, ILogger logger, string? hostFolder = null, IDaemonChangeDetector? changeDetector = null, IDaemonHostLauncher? launcher = null)
 	{
+		_launcher = launcher;
 		_changeDetector = changeDetector;
 		_hostFolder = hostFolder;
 		_sourceLocation = sourceLocation;
@@ -251,11 +261,73 @@ public sealed class DaemonRestarter
 		? $"Restart the Tessyn daemon on the newest build? {activeSessions} active session(s) will be terminated, and this window restarts."
 		: "Restart the Tessyn daemon on the newest build? This window restarts.";
 
-	public async Task<DaemonRestartOutcome> RestartAsync(int pid, int activeSessions, CancellationToken cancellationToken)
+	/// <summary>
+	/// The stale banner's restart (FR.32.7): asks, ends the daemon, starts the new host the way the daemon ran (<paramref name="keep"/>, FR.32.11) and restarts
+	/// this client, which attaches to it. Without a launcher the restarted client starts the host, as before.
+	/// </summary>
+	public async Task<DaemonRestartOutcome> RestartAsync(int pid, int activeSessions, CancellationToken cancellationToken, HostStartMode keep = HostStartMode.Normal)
 	{
 		if (!await _dialogs.ConfirmAsync(new ConfirmDialogRequest(Constants.Switch.RestartTitle, ConfirmText(activeSessions), Constants.Switch.RestartConfirm, Constants.DialogTexts.Cancel, IsDestructive: activeSessions > 0)))
 			return DaemonRestartOutcome.Cancelled;
 
+		var ended = await EndDaemonAsync(pid, cancellationToken);
+		if (ended != null)
+			return ended.Value;
+
+		if (_launcher != null)
+		{
+			var started = await _launcher.StartNowAsync(keep, cancellationToken);
+			_logger.LogInformation("The daemon exited; the new host ({Mode}): {Outcome}", keep, started);
+		}
+
+		_logger.LogInformation("Restarting the client");
+		_restarter.RestartClient();
+		return DaemonRestartOutcome.ClientRestarting;
+	}
+
+	/// <summary>The question of Restart daemon elevated and Restart daemon normal (FR.32.11).</summary>
+	public static string SwitchConfirmText(HostStartMode mode, int activeSessions)
+	{
+		var way = mode == HostStartMode.Elevated
+			? "Restart the Tessyn daemon elevated (as administrator)? Windows asks for administrator approval, and every session then runs as administrator."
+			: "Restart the Tessyn daemon normally (not as administrator)?";
+		return activeSessions > 0 ? $"{way} {activeSessions} active session(s) will be terminated." : way;
+	}
+
+	/// <summary>
+	/// Restart daemon elevated and Restart daemon normal (FR.32.11): asks, ends the daemon, waits for it and starts the host <paramref name="mode"/>'s way. This
+	/// client does not restart; it reconnects to the new run by itself (FR.32.6). An elevated start that is declined starts the host normally (FR.32.13).
+	/// </summary>
+	public async Task<DaemonRestartOutcome> SwitchAsync(int pid, int activeSessions, HostStartMode mode, CancellationToken cancellationToken)
+	{
+		var elevated = mode == HostStartMode.Elevated;
+		var request = new ConfirmDialogRequest(
+			elevated ? Constants.Switch.RestartElevatedTitle : Constants.Switch.RestartNormalTitle,
+			SwitchConfirmText(mode, activeSessions),
+			elevated ? Constants.Switch.RestartElevatedConfirm : Constants.Switch.RestartNormalConfirm,
+			Constants.DialogTexts.Cancel,
+			IsDestructive: activeSessions > 0);
+		if (!await _dialogs.ConfirmAsync(request))
+			return DaemonRestartOutcome.Cancelled;
+
+		if (_launcher == null)
+		{
+			_logger.LogWarning("Restart daemon {Mode}: no launcher, so no new host could be started; nothing changed", mode);
+			return DaemonRestartOutcome.NotSupported;
+		}
+
+		var ended = await EndDaemonAsync(pid, cancellationToken);
+		if (ended != null)
+			return ended.Value;
+
+		var started = await _launcher.StartNowAsync(mode, cancellationToken);
+		_logger.LogInformation("The daemon exited; the new host ({Mode}): {Outcome}", mode, started);
+		return started == HostLaunchOutcome.Started ? DaemonRestartOutcome.Restarted : DaemonRestartOutcome.NotStarted;
+	}
+
+	/// <summary>Asks the daemon to exit and waits for it; null when it ended, otherwise why not.</summary>
+	private async Task<DaemonRestartOutcome?> EndDaemonAsync(int pid, CancellationToken cancellationToken)
+	{
 		if (!_signal.Signal())
 		{
 			_logger.LogWarning("The daemon (pid {Pid}) does not listen for an exit request: an older host or a visible Avalonia window", pid);
@@ -268,9 +340,7 @@ public sealed class DaemonRestarter
 			return DaemonRestartOutcome.DidNotExit;
 		}
 
-		_logger.LogInformation("The daemon exited; restarting the client");
-		_restarter.RestartClient();
-		return DaemonRestartOutcome.ClientRestarting;
+		return null;
 	}
 }
 

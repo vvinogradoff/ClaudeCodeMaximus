@@ -36,6 +36,16 @@
                     <TextBlock Text="{Binding Connection.RestartNote, StringFormat=  ({0})}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
+            <!-- FR.32.12, FR.32.13: the daemon runs normally although "Start daemon elevated" is on, or an elevated start was declined: one click restarts it elevated (asks first) -->
+            <Border DockPanel.Dock="Top" Padding="16,6" Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding Connection.IsElevationBannerVisible, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Daemon elevation banner">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding Connection.ElevationBannerText}" Foreground="{DynamicResource TextFillColorPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <Button Content="Restart daemon elevated" Command="{Binding Connection.RestartDaemonElevatedCommand}" Margin="12,0,0,0" Padding="10,2" AutomationProperties.Name="Restart daemon elevated" />
+                    <TextBlock Text="{Binding Connection.RestartNote, StringFormat=  ({0})}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
             <!-- A newer build was made while this client runs: it is installed when the client closes (or now, with the link) -->
             <Border DockPanel.Dock="Top" Padding="16,4" Background="{DynamicResource SystemFillColorSolidNeutralBackgroundBrush}"
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"

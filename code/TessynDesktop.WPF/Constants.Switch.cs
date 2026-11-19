@@ -70,6 +70,38 @@ public static partial class Constants
 		/// <summary>The banner when the daemon runs an older build than the newest host build.</summary>
 		public const string DaemonOlderText = "The daemon is older than the build.";
 
+		/// <summary>FR.32.10: the shell verb that starts a program through the Windows administrator prompt.</summary>
+		public const string RunAsVerb = "runas";
+
+		/// <summary>FR.32.13: the Win32 error of a declined administrator prompt (ERROR_CANCELLED).</summary>
+		public const int ElevationCancelledError = 1223;
+
+		/// <summary>FR.32.12: the banner while "Start daemon elevated" is on and the daemon runs normally.</summary>
+		public const string ElevationExpectedText = "The daemon runs normally, but Start daemon elevated is on.";
+
+		/// <summary>FR.32.13: the notices after a declined or failed elevated start ({0} is the reason).</summary>
+		public const string ElevationDeclinedText = "The daemon runs normally: the administrator prompt was declined.";
+
+		public const string ElevationFailedFormat = "The daemon runs normally: the elevated start failed ({0}).";
+
+		public const string ElevationUnknownReason = "the process did not start";
+
+		/// <summary>FR.32.11: the restart buttons and their confirmation.</summary>
+		public const string RestartElevatedTitle = "Restart the daemon elevated";
+
+		public const string RestartNormalTitle = "Restart the daemon normally";
+
+		public const string RestartElevatedConfirm = "Restart daemon elevated";
+
+		public const string RestartNormalConfirm = "Restart daemon normal";
+
+		/// <summary>FR.32.11: why a restart did not bring a new daemon up.</summary>
+		public const string RestartNotSupportedNote = "this daemon cannot be restarted from here; exit it from its tray icon or window, then start the client";
+
+		public const string RestartDidNotExitNote = "the daemon did not exit in time; exit it from its tray icon";
+
+		public const string RestartNotStartedNote = "the daemon ended, but a new one did not start; start Tessyn again";
+
 		/// <summary>The banner while no daemon runs and starting one is switched off (side-by-side with the Avalonia app).</summary>
 		public const string WaitingText = "Waiting for Tessyn to start…";
 

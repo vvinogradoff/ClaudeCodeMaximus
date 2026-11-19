@@ -6,6 +6,7 @@ using TessynDesktop.Models.Remote;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
+using TessynDesktop.WPF.Switch;
 
 namespace TessynDesktop.WPF.ViewModels.Settings;
 
@@ -46,7 +47,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		IAppearanceService? appearance = null,
 		IPreviewSettingsService? previewSettings = null,
 		PreviewGroupMatcher? previewMatcher = null,
-		IBrowserDataCleaner? browserDataCleaner = null)
+		IBrowserDataCleaner? browserDataCleaner = null,
+		IDaemonModeControl? daemonMode = null)
 	{
 		_client = client;
 		_dialogs = dialogs;
@@ -62,7 +64,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		Appearance = new AppearanceSectionViewModel(store);
 		Screensaver = new ScreensaverSectionViewModel(store, picker);
 		Keyboard = new KeyboardSectionViewModel(store, commands);
-		Startup = new StartupSectionViewModel(store);
+		Startup = new StartupSectionViewModel(store, daemonMode);
 		Colours = new ColoursSectionViewModel(store, appearance);
 		if (previewSettings != null)
 			Previews = new PreviewsSectionViewModel(previewSettings, previewMatcher ?? new PreviewGroupMatcher(), browserDataCleaner, dialogs, ui);

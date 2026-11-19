@@ -37,13 +37,30 @@ public interface IDaemonHostLauncher
 {
 	/// <summary>Starts the background host when <paramref name="status"/> says there is no daemon. At most one host is ever started per cool-down, and never beside a running one.</summary>
 	Task<HostLaunchOutcome> EnsureStartedAsync(DaemonDiscoveryStatus status, CancellationToken cancellationToken);
+
+	/// <summary>
+	/// Starts the host now, <paramref name="mode"/>'s way, whatever the start setting says (FR.32.11): a restart has ended the daemon. Never beside a host that
+	/// holds the guard. An elevated start that is declined or fails starts the host normally and raises <see cref="ElevationRefused"/> (FR.32.13).
+	/// </summary>
+	Task<HostLaunchOutcome> StartNowAsync(HostStartMode mode, CancellationToken cancellationToken);
+
+	/// <summary>An elevated start was declined or failed, and the host was started normally instead (FR.32.13). Raised on the thread that started the host.</summary>
+	event Action<ElevationRefusal>? ElevationRefused;
 }
 
 /// <summary>Never starts anything (a custom environment, and the default of code that does not need a host).</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class NoDaemonHostLauncher : IDaemonHostLauncher
 {
+	public event Action<ElevationRefusal>? ElevationRefused
+	{
+		add { }
+		remove { }
+	}
+
 	public Task<HostLaunchOutcome> EnsureStartedAsync(DaemonDiscoveryStatus status, CancellationToken cancellationToken) => Task.FromResult(HostLaunchOutcome.NotNeeded);
+
+	public Task<HostLaunchOutcome> StartNowAsync(HostStartMode mode, CancellationToken cancellationToken) => Task.FromResult(HostLaunchOutcome.NotNeeded);
 }
 
 /// <summary>A started host process.</summary>
@@ -57,16 +74,43 @@ public interface IHostProcess : IDisposable
 /// <remarks>Created by Claude</remarks>
 public interface IHostProcessStarter
 {
-	/// <summary>Starts <paramref name="executable"/>; null when it did not start.</summary>
-	IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory);
+	/// <summary>
+	/// Starts <paramref name="executable"/>, elevated through the administrator prompt for <see cref="HostStartMode.Elevated"/>; null when it did not start.
+	/// A declined prompt throws a <see cref="System.ComponentModel.Win32Exception"/> with <see cref="Constants.Switch.ElevationCancelledError"/>.
+	/// </summary>
+	IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory, HostStartMode mode);
 }
 
 /// <summary>Starts the real process, without a console window; the host outlives this client.</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class ProcessHostStarter : IHostProcessStarter
 {
-	public IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory)
+	public IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory, HostStartMode mode)
 	{
+		var process = Process.Start(CreateStartInfo(executable, arguments, workingDirectory, mode));
+		return process == null ? null : new ProcessHandle(process);
+	}
+
+	/// <summary>
+	/// How the host is started. Normal: a direct start without a console window. Elevated (FR.32.10): a shell start with the <c>runas</c> verb, which shows
+	/// the administrator prompt; a shell start has no pipes (the host needs none) and takes the arguments as one command line.
+	/// </summary>
+	public ProcessStartInfo CreateStartInfo(string executable, IReadOnlyList<string> arguments, string workingDirectory, HostStartMode mode)
+	{
+		if (mode == HostStartMode.Elevated)
+		{
+			return new ProcessStartInfo
+			{
+				FileName = executable,
+				Arguments = string.Join(' ', arguments.Select(QuoteArgument)),
+				WorkingDirectory = workingDirectory,
+				UseShellExecute = true,
+				Verb = Constants.Switch.RunAsVerb,
+				WindowStyle = ProcessWindowStyle.Hidden,
+				ErrorDialog = false,
+			};
+		}
+
 		var info = new ProcessStartInfo
 		{
 			FileName = executable,
@@ -76,10 +120,11 @@ public sealed class ProcessHostStarter : IHostProcessStarter
 		};
 		foreach (var argument in arguments)
 			info.ArgumentList.Add(argument);
-
-		var process = Process.Start(info);
-		return process == null ? null : new ProcessHandle(process);
+		return info;
 	}
+
+	private string QuoteArgument(string argument) =>
+		argument.Length > 0 && !argument.Any(c => char.IsWhiteSpace(c) || c == '"') ? argument : "\"" + argument.Replace("\"", "\\\"") + "\"";
 
 	private sealed class ProcessHandle(Process process) : IHostProcess
 	{
@@ -91,9 +136,9 @@ public sealed class ProcessHostStarter : IHostProcessStarter
 				{
 					return process.HasExited;
 				}
-				catch (InvalidOperationException)
+				catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
 				{
-					return true;
+					return true;   // gone, or an elevated process this one may not query: the guard and the cool-down still prevent a second host
 				}
 			}
 		}
@@ -157,13 +202,17 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 
 	private readonly Func<string, string, BuildCopyResult> _copier;
 	private readonly Func<bool> _isEnabled;
+	private readonly Func<bool> _isElevated;
 	private IHostProcess? _started;
 	private bool _starting;
+	private bool _elevationRefused;
 	private DateTimeOffset _lastAttempt = DateTimeOffset.MinValue;
 
 	/// <param name="isEnabled">The setting "Start the background daemon when none is running", read at every call (a change takes effect at once); null = always on.</param>
-	public DaemonHostLauncher(string runFolder, string? sourceLocation, IHostProcessStarter starter, IHostPresence presence, TimeProvider time, TimeSpan cooldown, ILogger logger, Func<string, string, BuildCopyResult>? copier = null, Func<bool>? isEnabled = null)
+	/// <param name="isElevated">The setting "Start daemon elevated" (FR.32.10), read at every start; null = always off.</param>
+	public DaemonHostLauncher(string runFolder, string? sourceLocation, IHostProcessStarter starter, IHostPresence presence, TimeProvider time, TimeSpan cooldown, ILogger logger, Func<string, string, BuildCopyResult>? copier = null, Func<bool>? isEnabled = null, Func<bool>? isElevated = null)
 	{
+		_isElevated = isElevated ?? (() => false);
 		_isEnabled = isEnabled ?? (() => true);
 		_copier = copier ?? BuildCopier.Copy;
 		_runFolder = runFolder.TrimEnd('\\', '/');
@@ -174,6 +223,8 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 		_cooldown = cooldown;
 		_logger = logger;
 	}
+
+	public event Action<ElevationRefusal>? ElevationRefused;
 
 	/// <summary>The folder the host runs from.</summary>
 	public string HostFolder => Path.Combine(_runFolder, Constants.Switch.HostFolderName);
@@ -216,11 +267,48 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 			_starting = true;
 		}
 
+		return await CopyAndStartAsync(null, cancellationToken);
+	}
+
+	public async Task<HostLaunchOutcome> StartNowAsync(HostStartMode mode, CancellationToken cancellationToken)
+	{
+		lock (_gate)
+		{
+			if (_starting)
+				return HostLaunchOutcome.AlreadyStarting;
+
+			_started?.Dispose();
+			_started = null;
+
+			if (_presence.IsHostRunning())
+				return HostLaunchOutcome.HostPresent;   // the ended daemon's guard is still held, or another host came up: never a second one
+
+			_lastAttempt = _time.GetUtcNow();
+			_starting = true;
+		}
+
+		return await CopyAndStartAsync(mode, cancellationToken);
+	}
+
+	/// <summary>
+	/// The way an automatic start goes (FR.32.10): elevated when the setting is on, unless an elevated start was declined or failed earlier in this run, so
+	/// a declined prompt never comes back by itself (FR.32.13). Only <see cref="StartNowAsync"/> asks again.
+	/// </summary>
+	private HostStartMode AutomaticMode()
+	{
+		lock (_gate)
+			return _isElevated() && !_elevationRefused ? HostStartMode.Elevated : HostStartMode.Normal;
+	}
+
+	/// <summary>Refreshes the host folder and starts the host (<paramref name="mode"/> null: the automatic way); the caller has set <c>_starting</c>, which this clears.</summary>
+	private async Task<HostLaunchOutcome> CopyAndStartAsync(HostStartMode? mode, CancellationToken cancellationToken)
+	{
 		try
 		{
+			var chosen = mode ?? AutomaticMode();
 			// The copy is blocking disk I/O over several hundred files: never on the caller's (possibly the UI) thread, and never under the lock.
 			await Task.Run(UpdateHostFolder, cancellationToken);
-			return StartHost();
+			return StartHost(chosen);
 		}
 		finally
 		{
@@ -229,7 +317,7 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 		}
 	}
 
-	private HostLaunchOutcome StartHost()
+	private HostLaunchOutcome StartHost(HostStartMode mode)
 	{
 		if (!File.Exists(HostExecutable))
 		{
@@ -237,10 +325,22 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 			return HostLaunchOutcome.HostMissing;
 		}
 
+		if (mode == HostStartMode.Elevated)
+		{
+			var refusal = TryStartElevated();
+			if (refusal == null)
+				return HostLaunchOutcome.Started;
+
+			// FR.32.13: a declined or failed administrator prompt starts the host normally, so Tessyn stays usable, and says so.
+			lock (_gate)
+				_elevationRefused = true;
+			ElevationRefused?.Invoke(refusal);
+		}
+
 		IHostProcess? started;
 		try
 		{
-			started = _starter.Start(HostExecutable, [Constants.Switch.BackgroundArgument], HostFolder);
+			started = _starter.Start(HostExecutable, [Constants.Switch.BackgroundArgument], HostFolder, HostStartMode.Normal);
 		}
 		catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
 		{
@@ -256,6 +356,37 @@ public sealed class DaemonHostLauncher : IDaemonHostLauncher
 
 		_logger.LogInformation("Started the background daemon host {Path}", HostExecutable);
 		return HostLaunchOutcome.Started;
+	}
+
+	/// <summary>Starts the host through the administrator prompt; null when it started, otherwise why it did not.</summary>
+	private ElevationRefusal? TryStartElevated()
+	{
+		IHostProcess? started;
+		try
+		{
+			started = _starter.Start(HostExecutable, [Constants.Switch.BackgroundArgument], HostFolder, HostStartMode.Elevated);
+		}
+		catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == Constants.Switch.ElevationCancelledError)
+		{
+			_logger.LogInformation("The administrator prompt for the daemon host was declined; starting it normally");
+			return new ElevationRefusal(Declined: true, Reason: null);
+		}
+		catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+		{
+			_logger.LogWarning(ex, "Could not start the daemon host {Path} elevated; starting it normally", HostExecutable);
+			return new ElevationRefusal(Declined: false, Reason: ex.Message);
+		}
+
+		lock (_gate)
+		{
+			// A shell start may succeed without handing back a process handle: the host was started all the same, so no normal host is started beside it
+			// (it could take the guard first). Discovery finds the started host; the cool-down and the guard cover the rest.
+			_started = started;
+			_elevationRefused = false;   // approved: a later automatic start may ask again
+		}
+
+		_logger.LogInformation("Started the background daemon host {Path} elevated", HostExecutable);
+		return null;
 	}
 
 	/// <summary>Copies the newest Avalonia build into the host folder (nothing is running there: the guard was free).</summary>

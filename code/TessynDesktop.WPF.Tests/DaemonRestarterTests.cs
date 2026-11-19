@@ -177,7 +177,7 @@ public sealed class DaemonRestarterTests : IDisposable
 
 	private sealed class NoopStarter : IHostProcessStarter
 	{
-		public IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory) => null;
+		public IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory, HostStartMode mode) => null;
 	}
 
 	private sealed class NoopPresence : IHostPresence
@@ -355,7 +355,15 @@ public sealed class DaemonRestarterTests : IDisposable
 
 	private sealed class AlwaysStartingLauncher : IDaemonHostLauncher
 	{
+		public event Action<ElevationRefusal>? ElevationRefused
+		{
+			add { }
+			remove { }
+		}
+
 		public Task<HostLaunchOutcome> EnsureStartedAsync(DaemonDiscoveryStatus status, CancellationToken cancellationToken) => Task.FromResult(HostLaunchOutcome.AlreadyStarting);
+
+		public Task<HostLaunchOutcome> StartNowAsync(HostStartMode mode, CancellationToken cancellationToken) => Task.FromResult(HostLaunchOutcome.AlreadyStarting);
 	}
 
 	[Fact]

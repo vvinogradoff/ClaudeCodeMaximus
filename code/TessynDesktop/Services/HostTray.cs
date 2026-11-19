@@ -20,6 +20,10 @@ public sealed class HostTray : IDisposable
 	/// <summary>Creates the tray icon on the calling (message loop) thread. Exit asks first when sessions are active and terminates them (<paramref name="exit"/>).</summary>
 	public HostTray(DaemonHostExit exit)
 	{
+		// FR.32.14: an elevated host must still get the tray's clicks from the (normal) shell, and its icon back after Explorer restarts.
+		if (!new TrayMessageFilter().AllowWhenElevated())
+			Serilog.Log.Warning("Could not let the tray messages through to this elevated host; its tray icon may not respond");
+
 		_menu = new ContextMenuStrip();
 		_menu.Items.Add(ExitText, null, async (_, _) =>
 		{

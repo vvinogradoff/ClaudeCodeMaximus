@@ -39,7 +39,7 @@ public sealed class DaemonHostLauncherTests : IDisposable
 
 		public Exception? Throw { get; set; }
 
-		public IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory)
+		public IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory, HostStartMode mode)
 		{
 			if (Throw != null)
 				throw Throw;
@@ -278,7 +278,7 @@ public sealed class DaemonHostLauncherTests : IDisposable
 		Directory.CreateDirectory(workDir);
 		var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
 
-		using var process = new ProcessHostStarter().Start(cmd, ["/c", "cd > marker.txt"], workDir);
+		using var process = new ProcessHostStarter().Start(cmd, ["/c", "cd > marker.txt"], workDir, HostStartMode.Normal);
 
 		Assert.NotNull(process);
 		var deadline = DateTime.UtcNow.AddSeconds(15);
@@ -298,6 +298,12 @@ public sealed class DaemonHostLauncherTests : IDisposable
 
 		public Exception? Throw { get; set; }
 
+		public event Action<ElevationRefusal>? ElevationRefused
+		{
+			add { }
+			remove { }
+		}
+
 		public Task<HostLaunchOutcome> EnsureStartedAsync(DaemonDiscoveryStatus status, CancellationToken cancellationToken)
 		{
 			Calls.Add(status);
@@ -306,6 +312,8 @@ public sealed class DaemonHostLauncherTests : IDisposable
 
 			return Task.FromResult(Outcome);
 		}
+
+		public Task<HostLaunchOutcome> StartNowAsync(HostStartMode mode, CancellationToken cancellationToken) => Task.FromResult(Outcome);
 	}
 
 	private static readonly DaemonDiscoveryResult FoundDaemon = new(DaemonDiscoveryStatus.Found, new DaemonEndpoint(new Uri("http://127.0.0.1:1/tdcp"), "token", "run", 1));
