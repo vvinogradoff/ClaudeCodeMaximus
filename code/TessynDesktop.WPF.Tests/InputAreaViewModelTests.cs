@@ -8,7 +8,7 @@ using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Tests;
 
-/// <summary>FR.12.29 and FR.23.12 on the session pane view model (TC.IC.01 to 10): the Session/Focus selection and the collapsible input area, with its default and reset rules.</summary>
+/// <summary>FR.12.29 and FR.6.17 on the session pane view model (TC.IC.01 to 10): the collapsible input area, with its default and reset rules.</summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class InputAreaViewModelTests : IDisposable
 {
@@ -47,93 +47,36 @@ public sealed class InputAreaViewModelTests : IDisposable
 			stateStore: state);
 
 	[Fact]
-	public async Task ASessionOpensOnTheSessionView_WithTheInputAreaExpanded()
+	public async Task ASessionOpens_WithTheInputAreaExpanded()
 	{
 		await _pane.OpenAsync("a");
 
-		Assert.True(_pane.IsSessionSelected);
-		Assert.False(_pane.IsFocusSelected);
 		Assert.False(_pane.IsInputCollapsed);
 		Assert.True(_pane.IsInputExpanded);
 	}
 
 	[Fact]
-	public async Task TheFocusView_AlwaysStartsCollapsed_AndTheSessionViewExpanded()
+	public async Task TheFocusButton_NeverChangesTheInputArea()
 	{
 		await _pane.OpenAsync("a");
-
-		_pane.SelectFocusViewCommand.Execute(null);
+		_pane.ToggleInputAreaCommand.Execute(null);
 		Assert.True(_pane.IsInputCollapsed);
 
-		_pane.SelectSessionViewCommand.Execute(null);
-		Assert.False(_pane.IsInputCollapsed);
+		_pane.BringFocusPanelForwardCommand.Execute(null);
+
+		Assert.True(_pane.IsInputCollapsed);          // FR.6.17: panels never change the composer's collapse state
 	}
 
 	[Fact]
-	public async Task SwitchingTheViewOfTheSameSession_AppliesTheDefaultOfTheViewEntered_EvenAfterAManualChange()
+	public async Task OpeningAnotherSession_ResetsTheInputAreaToExpanded()
 	{
 		await _pane.OpenAsync("a");
-		_pane.SelectFocusViewCommand.Execute(null);
-		_pane.ToggleInputAreaCommand.Execute(null);   // the user expanded it in the Focus view
-		Assert.False(_pane.IsInputCollapsed);
-
-		_pane.SelectSessionViewCommand.Execute(null);
-		_pane.ToggleInputAreaCommand.Execute(null);   // and collapsed it in the Session view
-		Assert.True(_pane.IsInputCollapsed);
-		_pane.SelectFocusViewCommand.Execute(null);
-
-		Assert.True(_pane.IsInputCollapsed);          // collapsed because the Focus default is collapsed
-		_pane.SelectSessionViewCommand.Execute(null);
-		Assert.False(_pane.IsInputCollapsed);
-	}
-
-	[Fact]
-	public async Task OpeningAnotherSession_ResetsToTheDefaultOfTheViewItLandsIn()
-	{
-		await _pane.OpenAsync("a");
-		_pane.ToggleInputAreaCommand.Execute(null);   // Session view, collapsed by hand
+		_pane.ToggleInputAreaCommand.Execute(null);   // collapsed by hand
 		Assert.True(_pane.IsInputCollapsed);
 
 		await _pane.OpenAsync("b");
 
-		Assert.True(_pane.IsSessionSelected);
-		Assert.False(_pane.IsInputCollapsed);         // b lands on its Session view: expanded
-	}
-
-	[Fact]
-	public async Task TheExactScenarioOfTheRequirement_FocusOfAExpandedByHand_BThenAAgain()
-	{
-		await _pane.OpenAsync("a");
-		_pane.SelectFocusViewCommand.Execute(null);
-		_pane.ToggleInputAreaCommand.Execute(null);   // Focus view of A with the input area expanded
 		Assert.False(_pane.IsInputCollapsed);
-
-		await _pane.OpenAsync("b");                   // B has never been on Focus: Session view, expanded
-		Assert.True(_pane.IsSessionSelected);
-		Assert.False(_pane.IsInputCollapsed);
-		_pane.SelectFocusViewCommand.Execute(null);   // landing on the Focus view of B: collapsed
-		Assert.True(_pane.IsInputCollapsed);
-
-		await _pane.OpenAsync("a");                   // back to A: its Focus view is kept, and the area is back to the default of Focus
-		Assert.True(_pane.IsFocusSelected);
-		Assert.True(_pane.IsInputCollapsed);
-	}
-
-	[Fact]
-	public async Task TheSelectedView_IsKeptPerSession_InMemoryOnly()
-	{
-		await _pane.OpenAsync("a");
-		_pane.SelectFocusViewCommand.Execute(null);
-		await _pane.OpenAsync("b");
-		Assert.True(_pane.IsSessionSelected);
-
-		await _pane.OpenAsync("a");
-		Assert.True(_pane.IsFocusSelected);
-
-		using var restarted = Create(new MemoryState());
-		await restarted.OpenAsync("a");
-		Assert.True(restarted.IsSessionSelected);     // a new run starts every session on Session: nothing persisted
-		Assert.False(restarted.IsInputCollapsed);
 	}
 
 	[Fact]
@@ -245,7 +188,7 @@ public sealed class InputAreaViewModelTests : IDisposable
 	}
 
 	[Fact]
-	public async Task TheFocusBadge_ShowsOnlyOnTheSessionView_AndOnlyWithOpenItems()
+	public async Task TheFocusBadge_ShowsOnlyWithOpenItems()
 	{
 		_client.Attention["a"] =
 		[
@@ -258,62 +201,31 @@ public sealed class InputAreaViewModelTests : IDisposable
 		await _pane.Focus.WhenIdleAsync();
 		Assert.True(_pane.IsFocusBadgeVisible);
 
-		_pane.SelectFocusViewCommand.Execute(null);
-		Assert.False(_pane.IsFocusBadgeVisible);
-
 		await _pane.OpenAsync("b");
 		Assert.False(_pane.IsFocusBadgeVisible);   // nothing open there
 	}
 
 	[Fact]
-	public async Task AJumpToAnEntry_LeavesTheFocusViewForTheTranscript()
+	public async Task AJumpToAnEntry_ShowsItInTheTranscript_AndLeavesTheInputAreaAlone()
 	{
 		await _pane.OpenAsync("a");
-		_pane.SelectFocusViewCommand.Execute(null);
-		Assert.True(_pane.IsInputCollapsed);
 
 		await _pane.JumpToEntryAsync(new TessynDesktop.Models.Remote.AttentionRefDto { Kind = "entry", NodeId = "b", EntryId = "fb:2" });
 
 		Assert.Equal("b", _pane.NodeId);
-		Assert.True(_pane.IsSessionSelected);
 		Assert.False(_pane.IsInputCollapsed);
 	}
 
 	[Fact]
-	public async Task FindFromTheFocusView_SwitchesToTheSessionView_BeforeSearching()
-	{
-		await _pane.OpenAsync("a");
-		_pane.SelectFocusViewCommand.Execute(null);
-
-		_pane.ShowFindCommand.Execute(null);
-		Assert.True(_pane.IsSessionSelected);
-		Assert.True(_pane.FindBarVisible);
-		Assert.False(_pane.IsInputCollapsed);          // Session view: its default
-
-		_pane.SelectFocusViewCommand.Execute(null);
-		_pane.FindNextCommand.Execute(null);
-		Assert.True(_pane.IsSessionSelected);
-
-		_pane.SelectFocusViewCommand.Execute(null);
-		_pane.FindPreviousCommand.Execute(null);
-		Assert.True(_pane.IsSessionSelected);
-
-		_pane.SelectFocusViewCommand.Execute(null);
-		_pane.FindText = "entry";
-		await _pane.FindCommand.ExecuteAsync(null);
-		Assert.True(_pane.IsSessionSelected);
-	}
-
-	[Fact]
-	public async Task FindFromTheSessionView_ChangesNothingElse()
+	public async Task Find_ChangesNothingElse()
 	{
 		await _pane.OpenAsync("a");
 		_pane.ToggleInputAreaCommand.Execute(null);
 
 		_pane.ShowFindCommand.Execute(null);
 
-		Assert.True(_pane.IsSessionSelected);
-		Assert.True(_pane.IsInputCollapsed);            // no view change, no reset
+		Assert.True(_pane.FindBarVisible);
+		Assert.True(_pane.IsInputCollapsed);            // no reset
 	}
 
 	/// <summary>FR.12.36: the dragged height is stored in the client state and read back by the next run.</summary>

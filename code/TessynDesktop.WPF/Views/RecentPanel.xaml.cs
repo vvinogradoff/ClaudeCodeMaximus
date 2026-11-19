@@ -5,11 +5,14 @@ namespace TessynDesktop.WPF.Views;
 
 /// <summary>The Recent tab of the left panel (W3, FR.1.16): every top-level session per directory; each time the tab is shown it rebuilds and collapses all groups but the selected session's.</summary>
 /// <remarks>Created by Claude</remarks>
-public partial class RecentPanel : UserControl
+public partial class RecentPanel : UserControl, IPanelSelectionAware
 {
 	public RecentPanel()
 	{
 		InitializeComponent();
-		Loaded += (_, _) => (DataContext as RecentTabViewModel)?.Activate();
+		Loaded += (_, _) => OnPanelSelected();
 	}
+
+	/// <summary>The panel became the selected tab of its pane (or was brought forward): rebuild and collapse every group but the selected session's (FR.1.16).</summary>
+	public void OnPanelSelected() => (DataContext as RecentTabViewModel)?.Activate();
 }

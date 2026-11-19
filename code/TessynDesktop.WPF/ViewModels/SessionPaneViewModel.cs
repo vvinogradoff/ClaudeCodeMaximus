@@ -220,11 +220,9 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		ResetSelectionForOpen();
 		ResetAuthForOpen();
 		if (switching)
-			ResetViewForOpen(nodeId);   // FR.23.12, FR.12.29: the session's view, and that view's default input area
+			ResetViewForOpen();   // FR.12.29: a different session opens with the input area expanded
 		if (switching)
 			ResetTagArea();   // FR.24: every opened session starts collapsed, also one that was expanded before
-		if (target != null)
-			IsFocusSelected = false;   // a jump lands on the transcript
 		Error = null;
 		Tags.Clear();
 		FindBarVisible = false;
@@ -332,7 +330,6 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	[RelayCommand]
 	private void ShowFind()
 	{
-		ShowTranscriptForFind();
 		FindBarVisible = true;
 		FindFocusRequested?.Invoke(this, EventArgs.Empty);
 	}
@@ -348,28 +345,18 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	[RelayCommand]
 	private void FindNext()
 	{
-		ShowTranscriptForFind();
 		_surface.FindStep(1);
 	}
 
 	[RelayCommand]
 	private void FindPrevious()
 	{
-		ShowTranscriptForFind();
 		_surface.FindStep(-1);
-	}
-
-	/// <summary>Search always searches the transcript, so a search from the Focus view switches to the Session view first (FR.23.12).</summary>
-	private void ShowTranscriptForFind()
-	{
-		if (IsFocusSelected)
-			IsFocusSelected = false;
 	}
 
 	[RelayCommand]
 	private Task FindAsync()
 	{
-		ShowTranscriptForFind();
 		_findTask = RunFindAsync(FindText);
 		return _findTask;
 	}

@@ -250,7 +250,6 @@ public sealed partial class SessionPaneViewModel
 				if (loaded != null)
 				{
 					PushBack(origin);
-					IsFocusSelected = false;   // the entry is in the transcript: show it (FR.23.12)
 					_surface.GoToEntry(loaded.Index, QuoteOf(loaded, reference.Offset, reference.Length), highlight: true);
 					return;
 				}

@@ -79,23 +79,17 @@
                         <TextBlock Text="Back" Margin="6,0,0,0" />
                     </StackPanel>
                 </Button>
-                <!-- Session / Focus switch (FR.23.12): exactly one side is checked; the Focus badge shows while Session is selected (FR.23.13) -->
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
-                    <RadioButton x:Name="SessionViewButton" GroupName="SessionFocusView" Style="{StaticResource SegmentButton}" Content="Session"
-                                 IsChecked="{Binding IsSessionSelected, Mode=OneWay}" Command="{Binding SelectSessionViewCommand}" Checked="OnSessionViewChecked"
-                                 AutomationProperties.Name="Session view" ToolTip="Show the transcript" />
-                    <RadioButton x:Name="FocusViewButton" GroupName="SessionFocusView" Style="{StaticResource SegmentButton}" Margin="2,0,0,0"
-                                 IsChecked="{Binding IsFocusSelected, Mode=OneWay}" Command="{Binding SelectFocusViewCommand}" Checked="OnFocusViewChecked"
-                                 AutomationProperties.Name="Focus view" ToolTip="Show what needs your attention">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Focus" />
-                            <Border x:Name="FocusBadgeText" Style="{StaticResource KindPill}" Tag="{Binding FocusBadgeKind}" Margin="6,0,0,0" MinWidth="16"
-                                    Visibility="{Binding IsFocusBadgeVisible, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Focus badge">
-                                <TextBlock Text="{Binding FocusBadge}" FontSize="11" HorizontalAlignment="Center" />
-                            </Border>
-                        </StackPanel>
-                    </RadioButton>
-                </StackPanel>
+                <!-- The Focus button (FR.6.16): brings the Focus panel forward; the badge (FR.23.13) shows whenever something is open. A plain button: it never takes the keyboard focus. -->
+                <Button DockPanel.Dock="Right" x:Name="FocusButton" Margin="8,0,0,0" Padding="10,6" VerticalAlignment="Center" Focusable="False"
+                        Command="{Binding BringFocusPanelForwardCommand}" AutomationProperties.Name="Focus" ToolTip="Show what needs your attention">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Focus" />
+                        <Border x:Name="FocusBadgeText" Style="{StaticResource KindPill}" Tag="{Binding FocusBadgeKind}" Margin="6,0,0,0" MinWidth="16"
+                                Visibility="{Binding IsFocusBadgeVisible, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Focus badge">
+                            <TextBlock Text="{Binding FocusBadge}" FontSize="11" HorizontalAlignment="Center" />
+                        </Border>
+                    </StackPanel>
+                </Button>
                 <!-- Slot: buttons at the right of the header -->
                 <v:SlotHost DockPanel.Dock="Right" SlotId="session.headerToolbar">
                     <v:SlotHost.ItemsPanel>
@@ -104,16 +98,6 @@
                         </ItemsPanelTemplate>
                     </v:SlotHost.ItemsPanel>
                 </v:SlotHost>
-                <!-- "Send answers (n)" (FR.23.14): in the header so it never scrolls away; shown only while Focus is selected. Declared after the switch = docked left of it. -->
-                <Button DockPanel.Dock="Right" x:Name="SendAnswersButton" Command="{Binding Focus.SendAnswersCommand}" Margin="8,0,0,0" Padding="10,6"
-                        Style="{DynamicResource AccentButtonStyle}" VerticalAlignment="Center" AutomationProperties.Name="Send answers"
-                        ToolTip="Send every filled reply box in one prompt (Ctrl+Enter in a reply box)"
-                        Visibility="{Binding IsFocusSelected, Converter={StaticResource BoolToVis}}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />
-                        <TextBlock Text="{Binding Focus.SendAnswersText}" Margin="8,0,0,0" />
-                    </StackPanel>
-                </Button>
                 <!-- The title fills the row, so the rename text box stretches. -->
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Right" Text="{Binding StateText}" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -179,14 +163,8 @@
         </DockPanel>
 
         <!-- Transcript -->
-        <Grid Grid.Row="2">
-            <Grid x:Name="TranscriptHost" Visibility="{Binding IsFocusSelected, Converter={StaticResource InvertedBoolToVis}}">
-                <wv2:WebView2 x:Name="Transcript" />
-            </Grid>
-            <!-- The Focus view replaces the transcript while it is selected (FR.23.12); the transcript is hidden, not unloaded -->
-            <Grid x:Name="FocusHost" Visibility="{Binding IsFocusSelected, Converter={StaticResource BoolToVis}}">
-                <v:FocusPanel x:Name="FocusView" DataContext="{Binding Focus}" />
-            </Grid>
+        <Grid Grid.Row="2" x:Name="TranscriptHost">
+            <wv2:WebView2 x:Name="Transcript" />
         </Grid>
 
         <!-- The splitter that sets the height of the input area; a double click collapses or expands it (FR.12.29) -->
