@@ -79,4 +79,4 @@
 
 > **What elevated means.** While the daemon runs elevated, every turn runs as administrator: typed turns, scheduled turns, orchestration workers, Telegram and Tessyn Web turns. Through Tessyn Web, whoever can sign in can then have a session run administrator commands on this PC.
 
-Status: FR.32.10–FR.32.14 implemented 2026-11-19 (merge `4b979ef`); TC.HS.23–TC.HS.29 automated and green; the manual TC.HS.30 is open. FR.32.15 implemented 2026-11-19 (merge `60286f4`); TC.HS.31 automated and green; the manual TC.HS.32 is open.
+Status: FR.32.10–FR.32.14 implemented 2026-11-19 (merge `4b979ef`); TC.HS.23–TC.HS.29 automated and green; the manual TC.HS.30 is checked in part (2026-11-19: a normal WPF works with an elevated daemon; the restart buttons, the administrator prompt, a decline and the tray are still to check). FR.32.15 implemented 2026-11-19 (merge `60286f4`); TC.HS.31 automated and green; the manual TC.HS.32 checked by the Architect 2026-11-19.

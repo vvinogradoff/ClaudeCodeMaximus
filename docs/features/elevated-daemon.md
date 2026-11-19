@@ -102,7 +102,7 @@ These rules decide the design. A later change that breaks one of them breaks the
 **Suites at the merge:** Core 3983, WPF 2299, Web 146, WPF E2E 130 (through `Run-WpfE2E.ps1` as `tessyn-e2e`), Web E2E 24 and 1 skipped.
 
 **Not automated.**
-- **The real administrator prompt.** It is on the secure desktop and cannot be scripted: TC.HS.30 is a manual list (Focus A4 at the time of writing).
+- **The real administrator prompt.** It is on the secure desktop and cannot be scripted: TC.HS.30 is a manual list. On 2026-11-19 a normal WPF with an elevated daemon was confirmed; the restart buttons, the prompt, a decline and the tray were still to check.
 - **Elevated starts.** They are tested with a fake starter. The real `ProcessHostStarter` is checked through `CreateStartInfo` only.
 - **Access across elevation.** It is not exercised: the tests check the descriptor instead.
 - **The restart buttons in E2E.** Host start is off in test environments (FR.32.3), so no E2E test covers them.

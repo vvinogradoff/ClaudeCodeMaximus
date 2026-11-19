@@ -1247,7 +1247,7 @@ Architect decision 2026-11-19 (Focus A1): WPF always runs normally; the daemon h
 - [DONE] WPF: setting *Start daemon elevated* in Settings → Startup; the launcher starts the host through the administrator prompt; declined or failed prompt starts it normally once, with the notice (FR.32.10, FR.32.13)
 - [DONE] WPF: Restart daemon elevated and Restart daemon normal; the stale banner keeps the daemon's way; the status text and the "runs normally" banner; the build check of an elevated host (FR.32.11, FR.32.12, FR.32.14)
 - [DONE] Tests TC.HS.23–TC.HS.29 (`DaemonElevationTests`, `UserSignalledEventTests`, `HelloTests`); built on branch `wpf/elevated-daemon`, merged to master as `4b979ef`; all five suites green
-- [ ] Manual TC.HS.30 by the Architect (the administrator prompt cannot be scripted)
+- [ ] Manual TC.HS.30 by the Architect (the administrator prompt cannot be scripted): a normal WPF with an elevated daemon confirmed 2026-11-19; still to check Restart daemon normal and elevated, the prompt, a decline and the tray
 - [DONE] Feature summary `docs/features/elevated-daemon.md` (approved by the Architect 2026-11-19)
 - [DONE] FR.32.15 banner when WPF itself runs elevated (decision A8, banner only): docs approved 2026-11-19 (A9); built on branch `wpf/elevated-wpf-banner`, merged as `60286f4`; all five suites green
-- [ ] Manual TC.HS.32 by the Architect (start WPF from a shortcut with Run as administrator: the banner shows; normally: it does not)
+- [DONE] Manual TC.HS.32 by the Architect, 2026-11-19 (an elevated start showed the banner, a normal start did not; both logged at 12:57)
