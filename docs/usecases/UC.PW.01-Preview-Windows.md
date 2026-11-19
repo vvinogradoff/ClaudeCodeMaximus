@@ -90,3 +90,46 @@ Related requirements: FR.29.1–FR.29.13, FR.27.1–FR.27.9, FR.6.10 (see `docs/
 - **A3** — A window of an Auto-close group came from another session than the one the main window opens with: it does not reopen.
 - **A4** — The User had closed a window before quitting: it does not reopen.
 **Covers:** FR.29.11, FR.29.6, FR.29.8.
+---
+
+# Docked previews inside the main window (draft 2026-11-19, FR.29.17 to FR.29.26)
+
+Preconditions: docked mode is active (one monitor, or the toggle off) unless a use case says otherwise.
+
+## UC.PW.17 - Preview in a docked panel on one monitor
+**Main flow:** with one monitor the User Ctrl+clicks the path of a `.md` file in the transcript. A panel "<file name> - Text and code" opens to the right of the session pane with the markdown rendered; the composer keeps the keyboard focus. The User Ctrl+clicks another `.md` path: the same panel shows the new file. A `.cpp` file and a Slack link open their own panels (the Slack panel shows the embedded browser with its bar).
+**Alternative flows:** **A1** - The User closes the panel; the next `.md` item opens it again at its remembered place. **A2** - A file with no group opens in the default Preview panel; a link with no group opens in the system browser. **A3** - The policy refuses a file: a dismissible message in the panel, no dialog. **A4** - The toggle is off with two monitors: the same as with one monitor.
+**Covers:** FR.29.17, FR.29.18.
+
+## UC.PW.18 - Drag a panel to dock it or stack it as a tab
+**Main flow:** the User drags the "Text and code" panel by its title; drop guides show the targets. The User drops it on the left edge of the session pane: it docks to the left. The User drags the "Images" panel onto its tab strip: both are tabs of one pane. The User drags a splitter to resize.
+**Covers:** FR.29.19, FR.29.21.
+
+## UC.PW.19 - Float a panel
+**Main flow:** the User drags a panel out of the main window (or picks Float). It becomes a window of its own that stays part of the docking layout; the User moves it to another monitor and resizes it. The User drags it back into the docking area and it docks again. The web page in it was not reloaded.
+**Alternative flows:** **A1** - A second monitor is plugged in with the toggle on: floating group panels close, windows take over (UC.PW.23).
+**Covers:** FR.29.19, FR.29.21.
+
+## UC.PW.20 - Auto-hide and slide out
+**Main flow:** the User clicks the auto-hide button of the "Linear" panel: it collapses into a tab on the edge of the main window. The User clicks the tab: the panel slides out over the session pane (above the transcript). The User clicks the transcript: it slides away. The User toggles auto-hide again: the panel docks where it was.
+**Alternative flows:** **A1** - A new Linear item arrives while the panel is collapsed: it slides out with the item, without taking the keyboard focus (FR.29.17, Open points 3). **A2** - The pointer is over the web page when the User clicks away: Open points 4.
+**Covers:** FR.29.19, FR.29.17.
+
+## UC.PW.21 - Pin and Auto-close in a panel
+**Main flow:** the User clicks **Pin** in a "Linear" panel: it shows the pinned state and loses its Auto-close button. The User opens another Linear issue: a **new** Linear panel opens at the group's remembered place; the pinned one stays and can still be docked, floated or auto-hidden, without changing the group's layout. With **Auto-close** on in the "Text and code" panel, selecting another session closes the panel; a panel opened from a Focus reference closes when the item is answered.
+**Alternative flows:** **A1** - A pinned panel never auto-closes. **A2** - The default Preview panel has neither button.
+**Covers:** FR.29.20, FR.29.9.
+
+## UC.PW.22 - The dock layout is remembered per group, apart from windows
+**Main flow:** the User docks "Text and code" at the bottom at a chosen height, stacks "Images" with "Linear" as tabs, auto-hides "Slack", floats "CSV". The User closes the panels and opens the items again: each panel is back where it was. The User connects a second monitor, uses preview windows and moves them, then unplugs the monitor: the panels open in the layout from before, and the windows' placements are unchanged.
+**Alternative flows:** **A1** - **Forget window positions** (with confirmation) also forgets the dock layout: the panels open at the first-time place (right, 40 %). **A2** - The remembered monitor of a floating panel is gone: it opens clamped on a monitor present.
+**Covers:** FR.29.21, FR.29.16.
+
+## UC.PW.23 - A second monitor is connected: windows take over
+**Main flow:** with docked group panels and one pinned panel open, the User connects a second monitor with the toggle on: the group panels (also floating ones) and the default Preview panel close with their layout saved, the pinned panel stays docked. The next `.md` item opens in its group window on the other monitor. The User unplugs the monitor: group windows close, pinned windows stay, and the next items open in docked panels at the remembered layout. Nothing reopens by itself.
+**Covers:** FR.29.23, FR.29.10.
+
+## UC.PW.24 - Restart: the docked panels reopen
+**Main flow:** the User quits Tessyn with two group panels (one docked, one auto-hidden) and a pinned panel open and starts it again. Once the main window is connected the panels reopen with their items, in their layout, without taking the keyboard focus; the web page reopens at its settled address.
+**Alternative flows:** **A1** - The file of a panel was deleted (or is refused, or its entry is gone): it does not reopen, the log says why. **A2** - A panel of an Auto-close group came from another session than the one the main window opens with: it does not reopen. **A3** - The mode with external windows is active at start: only pinned panels reopen. **A4** - A panel the User had closed does not reopen.
+**Covers:** FR.29.22, FR.29.11, FR.29.20.
