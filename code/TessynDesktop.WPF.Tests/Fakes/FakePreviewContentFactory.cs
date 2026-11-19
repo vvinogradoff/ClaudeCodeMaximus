@@ -32,6 +32,10 @@ public sealed class TrackedPreviewSurface : IPreviewSurface, IDisposable
 	{
 	}
 
+	public void ShowHtml(string html)
+	{
+	}
+
 	public void ShowImage(string url)
 	{
 	}

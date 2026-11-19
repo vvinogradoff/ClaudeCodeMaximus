@@ -38,7 +38,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" Orientation="Horizontal">
                 <ToggleButton x:Name="SourceButton" Style="{StaticResource PanelToggle}" IsChecked="{Binding File.ShowSource, Mode=TwoWay}"
-                              Visibility="{Binding File.CanToggleSource, FallbackValue=Collapsed, Converter={StaticResource BoolToVis}}" ToolTip="Show the markdown source">
+                              Visibility="{Binding File.CanToggleSource, FallbackValue=Collapsed, Converter={StaticResource BoolToVis}}" ToolTip="Show the source">
                     <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphCode}" />
                 </ToggleButton>
                 <Button x:Name="OpenExternalButton" Style="{StaticResource PanelIconButton}" Command="{Binding File.OpenExternalCommand}"

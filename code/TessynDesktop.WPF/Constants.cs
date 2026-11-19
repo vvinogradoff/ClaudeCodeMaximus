@@ -32,6 +32,9 @@ public static partial class Constants
 	public static class Hosts
 	{
 		public const string AppHost = "app.local";
+
+		/// <summary>The address WebView2 reports for the load of an iframe's <c>srcdoc</c> document (the preview's html frame, FR.26.8).</summary>
+		public const string SrcdocUri = "about:srcdoc";
 		public const string PreviewHost = "preview.local";
 
 		/// <summary>The transcript page's only image host: a virtual name the host answers itself (the media proxy); it is never resolved.</summary>
@@ -116,12 +119,15 @@ public static partial class Constants
 
 		public static readonly IReadOnlySet<string> Pdf =new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf" };
 
-		/// <summary>Shown as monospace text, markup and script types included (svg, html, ps1, ...): displayed, never rendered or run.</summary>
+		/// <summary>Html pages: rendered static in a sandboxed frame, scripts never run (FR.26.8); the source can be shown as text.</summary>
+		public static readonly IReadOnlySet<string> Html = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".html", ".htm" };
+
+		/// <summary>Shown as monospace text, markup and script types included (svg, ps1, ...): displayed, never rendered or run.</summary>
 		public static readonly IReadOnlySet<string> Text = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 		{
 			".txt", ".log", ".json", ".jsonl", ".xml", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".config", ".csv", ".tsv",
 			".cs", ".csproj", ".sln", ".props", ".targets", ".xaml", ".axaml", ".razor", ".cshtml",
-			".js", ".mjs", ".ts", ".tsx", ".jsx", ".css", ".scss", ".html", ".htm", ".svg",
+			".js", ".mjs", ".ts", ".tsx", ".jsx", ".css", ".scss", ".svg",
 			".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift", ".c", ".h", ".cpp", ".hpp", ".php", ".sql", ".sh", ".ps1", ".psm1", ".bat", ".cmd",
 			".diff", ".patch",
 		};

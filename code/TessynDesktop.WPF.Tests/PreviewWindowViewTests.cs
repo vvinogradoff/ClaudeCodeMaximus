@@ -265,7 +265,7 @@ public sealed class PreviewWindowViewTests
 
 			Assert.False(pane.ShowHeader);
 			Assert.Equal(Visibility.Collapsed, ((FrameworkElement)pane.FindName("HeaderRow")!).Visibility);
-			Assert.Equal("Show markdown source", AutomationProperties.GetName(source));
+			Assert.Equal("Show source", AutomationProperties.GetName(source));
 			Assert.Equal("Open in default app", AutomationProperties.GetName(open));
 			Assert.Equal(Visibility.Collapsed, source.Visibility);   // no file yet
 			Assert.Equal(Visibility.Collapsed, open.Visibility);

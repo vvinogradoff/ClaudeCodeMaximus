@@ -42,7 +42,7 @@ Related requirements: FR.26.5, FR.26.6. Use cases: [UC.LK.01](/docs/usecases/UC.
 | TC.LK.34 | A path starting with `~`, one whose first part is `localhost`, and a markdown link target `](docs/a.md)` are not marked and take no path slot | AUTOMATED | UC.LK.07 | FR.26.7 |
 | TC.LK.35 | A relative path inside a code block is marked exactly as an absolute one is | AUTOMATED | UC.LK.07 | FR.26.7 |
 | TC.LK.36 | A `.html` file opens rendered by default (heading and styled text appear as page content, not as markup text); Source is offered | AUTOMATED (view model, surface fake), E2E | UC.LK.08 | FR.26.8 |
-| TC.LK.37 | Source shows the HTML as monospace text (the text kind); Source again shows the page; the choice is per open item and a newly opened file starts rendered, as markdown does | AUTOMATED | UC.LK.08 | FR.26.8 |
+| TC.LK.37 | Source shows the HTML as monospace text (the text kind); Source again shows the page; the choice is per open item and a newly opened file starts rendered, as markdown does | AUTOMATED, E2E | UC.LK.08 | FR.26.8 |
 | TC.LK.38 | A page with `<script>` shows its content and the script does not run (a script that would change the text leaves it unchanged) | E2E | UC.LK.08 | FR.26.8 |
 | TC.LK.39 | A remote image (`https://...`) and a remote stylesheet are not requested (no network call seen) and show as missing | E2E | UC.LK.08 | FR.26.8 |
 | TC.LK.40 | An inline `<style>`, a `style` attribute and an embedded `data:` image show | E2E | UC.LK.08 | FR.26.8 |
@@ -50,14 +50,14 @@ Related requirements: FR.26.5, FR.26.6. Use cases: [UC.LK.01](/docs/usecases/UC.
 | TC.LK.42 | Click on an http(s) link in the page goes through the preview routing (FR.29.4: matching group or system browser) and the preview stays on the page | AUTOMATED (router fake), E2E | UC.LK.08 | FR.26.8 |
 | TC.LK.43 | A `#anchor` link scrolls within the page and the page is not replaced | E2E | UC.LK.08 | FR.26.8 |
 | TC.LK.44 | Relative, `file:`, `javascript:` and `mailto:` links do nothing; the pane never navigates away from the page | AUTOMATED (policy), E2E | UC.LK.08 | FR.26.8 |
-| TC.LK.45 | A `.htm` file and a file served as `text/html` without a known extension both render | AUTOMATED | UC.LK.08 | FR.26.8 |
-| TC.LK.46 | An `.svg` file is still shown as text, with no Source toggle | AUTOMATED | UC.LK.08 | FR.26.8, FR.26.5 |
+| TC.LK.45 | A `.htm` file and a file served as `text/html` without a known extension both render | AUTOMATED, E2E (.htm) | UC.LK.08 | FR.26.8 |
+| TC.LK.46 | An `.svg` file is still shown as text, with no Source toggle | AUTOMATED, E2E | UC.LK.08 | FR.26.8, FR.26.5 |
 | TC.LK.47 | A file over 2 MB shows its first 2 MB (rendered) with the truncation note | AUTOMATED | UC.LK.08 | FR.26.8 |
 | TC.LK.48 | The default Preview panel, a docked group panel and a preview window each render the page and show the Source button (title-bar icon in the window) | E2E | UC.LK.08 | FR.26.8, FR.29.14, FR.29.18 |
-| TC.LK.49 | Switching Tessyn's light/dark theme does not recolour the page (a page without a background stays white); the pane around it follows the theme | E2E, MANUAL (look) | UC.LK.08 | FR.26.8 |
+| TC.LK.49 | Switching Tessyn's light/dark theme does not recolour the page (a page without a background stays white); the pane around it follows the theme | MANUAL (look; E2E not built) | UC.LK.08 | FR.26.8 |
 | TC.LK.50 | Access checks as for other files: `file.preview` refuses a path not in the entry and a FileAccess-denied path; a refusal shows the dismissible message | AUTOMATED | UC.LK.08 | FR.26.8, FR.26.5 |
-| TC.LK.51 | Relative css or images next to the file are not loaded; **Open in default app** is offered for the page | E2E | UC.LK.08 | FR.26.8 |
-| TC.LK.52 | Text selection and copy work on the rendered page; Ctrl+wheel zooms it as the pane does today | MANUAL | UC.LK.08 | FR.26.8 |
+| TC.LK.51 | Relative css or images next to the file are not loaded; **Open in default app** is offered for the page | E2E (not built, see report) | UC.LK.08 | FR.26.8 |
+| TC.LK.52 | Text selection and copy work on the rendered page; Ctrl+wheel zooms it as the pane does today | MANUAL (the page has no Ctrl+wheel zoom today) | UC.LK.08 | FR.26.8 |
 | TC.LK.53 | The page is isolated from the preview page itself: the HTML cannot reach the pane's own script or host messages | AUTOMATED (policy/markup), E2E | UC.LK.08 | FR.26.8 |
 
 ## FR → TC coverage

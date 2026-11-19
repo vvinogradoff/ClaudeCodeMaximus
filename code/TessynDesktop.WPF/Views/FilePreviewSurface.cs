@@ -31,6 +31,7 @@ public sealed class FilePreviewSurface : IPreviewSurface, IDisposable
 	private readonly ScreensaverController _screensaver;
 	private readonly UiCoalescer _themeCoalescer;
 	private readonly ILogger<FilePreviewSurface> _logger;
+	private readonly FramePolicy _frames = new();
 
 	private readonly EventHandler _appearanceChanged;
 	private WebView2? _control;
@@ -106,7 +107,7 @@ public sealed class FilePreviewSurface : IPreviewSurface, IDisposable
 		core.SetVirtualHostNameToFolderMapping(Constants.Hosts.AppHost, _paths.WebAssetsDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
 		core.SetVirtualHostNameToFolderMapping(Constants.Hosts.PreviewHost, _paths.PreviewCacheDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
 		core.NavigationStarting += (_, e) => e.Cancel = e.Uri != PageUri;
-		core.FrameNavigationStarting += (_, e) => e.Cancel = true;
+		core.FrameNavigationStarting += (_, e) => e.Cancel = !_frames.IsAllowed(e.Uri);   // only the html frame's own srcdoc load (FR.26.8)
 		core.NewWindowRequested += (_, e) => e.Handled = true;
 		core.DownloadStarting += (_, e) => e.Cancel = true;
 		core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
@@ -121,6 +122,8 @@ public sealed class FilePreviewSurface : IPreviewSurface, IDisposable
 	public void ShowText(string text) => Send(new { cmd = "text", text });
 
 	public void ShowMarkdown(string html) => Send(new { cmd = "markdown", html });
+
+	public void ShowHtml(string html) => Send(new { cmd = "html", html });
 
 	public void ShowImage(string url) => Send(new { cmd = "image", url });
 
