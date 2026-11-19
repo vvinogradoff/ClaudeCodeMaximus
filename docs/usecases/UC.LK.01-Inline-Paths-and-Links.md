@@ -1,6 +1,6 @@
 # UC.LK.01 — Inline Paths and Links
 
-Related requirements: FR.26.5, FR.26.6 (see `docs/requirements/`). Test cases: [TC.LK.01](/docs/testcases/TC.LK.01-Inline-Paths-and-Links.md).
+Related requirements: FR.26.5, FR.26.6, FR.26.7, FR.26.8 (see `docs/requirements/`). Test cases: [TC.LK.01](/docs/testcases/TC.LK.01-Inline-Paths-and-Links.md).
 
 ## Actors
 - **User**. **Tessyn** (WPF transcript).
@@ -41,3 +41,8 @@ Related requirements: FR.26.5, FR.26.6 (see `docs/requirements/`). Test cases: [
 **Main flow:** the entry names a file relative to the session's working directory (`docs/features/preview-windows.md`, `.\src\a.cs`, or `` `README.md` `` in backticks); it has the dotted underline like an absolute path. The User Ctrl+clicks it and it opens (preview pane, or the group's preview window). A relative image or video path shows its inline preview.
 **Alternative flows:** **A1** — The path leaves the working directory (`..\..\outside.txt`): the daemon refuses, a dismissible message, no dialog. **A2** — The file does not exist: "File not found" (an image: "Image unavailable"). **A3** — A web address or a link target (`example.com/page.html`, `[t](a/b.md)`) and version-like text are not marked.
 **Covers:** FR.26.7.
+
+## UC.LK.08 — Read an HTML file the session names as a page
+**Main flow:** the entry names an `.html` or `.htm` file; the User Ctrl+clicks the path and the page opens **rendered**, as authored (own colours, headings, tables, inline images), in the default Preview panel, a docked group panel or a preview window. The User selects and copies text from the page, zooms with Ctrl+wheel and clicks **Source**: the HTML shows as text (monospace); Source again returns to the page.
+**Alternative flows:** **A1** — The page has a `<script>`, a form, a frame, or a remote image or stylesheet: nothing runs or loads; the rest of the page shows (the policy is in FR.26.8, Static). **A2** — The User clicks an http(s) link in the page: it opens as a link in a markdown preview does (matching group's window or panel, otherwise the system browser); a `#anchor` link scrolls within the page; any other link does nothing and the page stays. **A3** — The file is over 2 MB: the first 2 MB show with the usual note. **A4** — The page relies on files next to it (relative css or images): they show as missing; **Open in default app** opens the full page. **A5** — An svg file: still shown as text, as before.
+**Covers:** FR.26.8.

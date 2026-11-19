@@ -14,7 +14,7 @@ Related requirements: FR.6.11–FR.6.22, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | TC.DS.06 | The Session view cannot be closed or floated (hook calls are refused, state unchanged); it can be tabbed | E2E | UC.DS.02 | FR.6.14 |
 | TC.DS.07 | Hook: float Focus; it is owned by the main window, not in the taskbar, never activated; the transcript widens; Send answers still works | E2E | UC.DS.03 | FR.6.14, FR.6.22 |
 | TC.DS.08 | Drag Focus to the second monitor; it minimizes with the main window; hidden while the screensaver covers the window | MANUAL | UC.DS.03 | FR.6.14 |
-| TC.DS.09 | A floating panel's monitor is removed (`--test-monitors`): it is clamped and the forced move is not saved | E2E | UC.DS.03 | FR.6.18, FR.29.16 |
+| TC.DS.09 | A floating panel's monitor is removed (`--test-monitors`): it is clamped and the forced move is not saved | AUTOMATED (unit tests of the placement rules), MANUAL (a real monitor removal: under `--test-window` a floating rectangle is neither saved nor kept on screen, so the hook has nothing to clamp) | UC.DS.03 | FR.6.18, FR.29.16 |
 | TC.DS.10 | Chevron: auto-hides the pane holding Sessions, icon flips, a second click restores it; state remembered after a restart; disabled while Sessions is closed or floating | E2E | UC.DS.04 | FR.6.15, FR.6.18 |
 | TC.DS.11 | Slide-out of the auto-hidden left pane closes on Esc, on its edge tab and on its collapse button; it is drawn above a WebView2 | MANUAL | UC.DS.04 | FR.6.13 |
 | TC.DS.12 | Hook: close Sessions; the Panels group shows it unchecked; picking it shows it at its last place; picking an open panel brings it forward | E2E | UC.DS.05 | FR.6.14 |
@@ -26,9 +26,9 @@ Related requirements: FR.6.11–FR.6.22, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | TC.DS.18 | An unreadable or newer-version `shellLayout` is ignored: the default layout shows and the log names the reason; an unknown panel id is skipped | AUTOMATED | UC.DS.07 | FR.6.18 |
 | TC.DS.19 | Reset layout asks first; confirming restores the defaults and keeps the session, the composer text and open preview panels; cancelling changes nothing | E2E | UC.DS.08 | FR.6.19 |
 | TC.DS.20 | Update from the old settings: tree width 400 px becomes the left pane width; a collapsed tree becomes an auto-hidden left pane; the old values are kept | AUTOMATED, E2E (the collapsed case) | UC.DS.09 | FR.6.18 |
-| TC.DS.21 | A shell shortcut works with the focus in the composer, the Sessions search box, a Focus reply box and a floating panel | E2E | UC.DS.10 | FR.6.20 |
-| TC.DS.22 | Docking, floating, closing and auto-hiding a panel while the composer has the focus leave the focus in the composer; a click into the panel moves it | E2E | UC.DS.10 | FR.6.20 |
-| TC.DS.23 | Day/night recolours tabs, borders, splitters, edge tabs, the slide-out and floating frames at once; no WebView2 reloads | MANUAL | UC.DS.11 | FR.6.21 |
+| TC.DS.21 | A shell shortcut works with the focus in the composer, the Sessions search box, a Focus reply box and a floating panel | MANUAL (real key presses and focus; the hook cannot send keys) | UC.DS.10 | FR.6.20 |
+| TC.DS.22 | Docking, floating, closing and auto-hiding a panel while the composer has the focus leave the focus in the composer; a click into the panel moves it | MANUAL (real key presses and focus; the hook cannot send keys) | UC.DS.10 | FR.6.20 |
+| TC.DS.23 | Day/night recolours tabs, borders, splitters, edge tabs, the slide-out and floating frames at once; no WebView2 reloads | E2E (no reload, `WpfDockingThemeE2ETests`) + MANUAL (the colours) | UC.DS.11 | FR.6.21 |
 | TC.DS.24 | Theme brushes: the docking resources resolve to Tessyn's tokens in both themes and change on a theme switch (resource check) | AUTOMATED | UC.DS.11 | FR.6.21 |
 | TC.DS.25 | Under `--test-window` nothing is read from or saved to the user's data; the hook's state report covers every panel | E2E | UC.DS.12 | FR.6.22 |
 | TC.DS.26 | A preview panel opens the first time as a tab in the pane holding Focus; with Focus closed or floating, docked right at 40 % | E2E | UC.DS.01 | FR.6.12, FR.29.18, FR.29.21 |

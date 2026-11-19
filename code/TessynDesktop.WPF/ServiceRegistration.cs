@@ -68,6 +68,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<PrivateAddressCheck>();
 		services.AddSingleton<MediaProxyUrl>();
 		services.AddSingleton<WebRequestPolicy>();
+		services.AddTransient<FramePolicy>();   // one per preview surface: it counts that surface's expected frame load
 		services.AddSingleton<RemoteMediaHttpClientFactory>();
 		services.AddSingleton<RemoteMediaFetcher>(sp => new RemoteMediaFetcher(
 			sp.GetRequiredService<RemoteMediaHttpClientFactory>().Create(), sp.GetRequiredService<MediaPreviewPolicy>(), sp.GetRequiredService<PrivateAddressCheck>()));
@@ -197,6 +198,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IPreviewSettingsService, PreviewSettingsService>();
 		services.AddSingleton<PreviewGroupMatcher>();
 		services.AddSingleton<PreviewPlacementPlanner>();
+		services.AddSingleton<IFloatingPanelPlacement>(sp => new FloatingPanelPlacement(sp.GetRequiredService<Win32WindowPlacement>(), sp.GetRequiredService<IMonitorWatcher>(), sp.GetRequiredService<PreviewPlacementPlanner>()));   // floating docked panels follow the preview windows' placement rules (FR.29.16)
 		services.AddSingleton<IPreviewRouter, PreviewRouter>(); // disposed with the container at shutdown; CloseAllForExit runs from MainWindow.Closed
 		services.AddSingleton<IPreviewWindowFactory, PreviewWindowFactory>();
 		services.AddSingleton<DockingSurfaceHost>(); // the main window's docking area registers itself here (FR.29.19)

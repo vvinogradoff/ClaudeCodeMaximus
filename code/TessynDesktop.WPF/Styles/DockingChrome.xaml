@@ -5,8 +5,9 @@
                     xmlns:reskeys="clr-namespace:AvalonDock.Themes.VS2013.Themes;assembly=AvalonDock.Themes.VS2013"
                     xmlns:views="clr-namespace:TessynDesktop.WPF.Views">
 	<!-- The compact docking chrome (FR.6.13): no caption bars, the tabs on top of every pane (also of a pane with one panel), a pin at the right end of the tab row, the tab
-	     context menu. Only structure and layout; the colours are the VS2013 theme's brushes until the Tessyn theme (FR.6.21). The styles are handed to the docking manager as local
-	     values by DockingChrome (a theme switch must not bring the library's own caption bars back). -->
+	     context menu. The colours are Tessyn's (FR.6.21): every brush is a DynamicResource of the VS2013 key, supplied per mode by DockingColours.Light/Dark.xaml in the application resources; the
+	     selected tab's line is the system accent, as in the old left-panel tabs (flat tabs, an accent line under the selected one). The styles are handed to the docking manager as local
+	     values by DockingChrome. -->
 
 	<BooleanToVisibilityConverter x:Key="DockingChromeBoolToVisibility" />
 
@@ -69,6 +70,7 @@
 								<ColumnDefinition Width="*" />
 								<ColumnDefinition Width="Auto" />
 							</Grid.ColumnDefinitions>
+							<Border Grid.ColumnSpan="2" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static reskeys:ResourceKeys.PanelBorderBrush}}" />
 							<avalonDockControls:AnchorablePaneTabPanel x:Name="HeaderPanel" Grid.Column="0" Margin="0" IsItemsHost="True" KeyboardNavigation.TabIndex="1" />
 							<views:DockingPinButton x:Name="PinButton" Grid.Column="1" Style="{StaticResource DockingChromePinButtonStyle}" />
 						</Grid>
@@ -84,16 +86,17 @@
 		<Setter Property="ItemContainerStyle">
 			<Setter.Value>
 				<Style TargetType="{x:Type TabItem}">
-					<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedBackground}}" />
+					<Setter Property="Background" Value="Transparent" />
 					<Setter Property="BorderBrush" Value="Transparent" />
 					<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedText}}" />
 					<Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
 					<Setter Property="ToolTip" Value="{Binding ToolTip}" />
+					<Setter Property="AutomationProperties.Name" Value="{Binding Title}" />   <!-- the tab's UI Automation name (FR.6.22): the panel's title, no tree walk -->
 					<Setter Property="Template">
 						<Setter.Value>
 							<ControlTemplate TargetType="{x:Type TabItem}">
 								<Grid SnapsToDevicePixels="True">
-									<Border x:Name="Bd" Margin="0" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding Background}" BorderThickness="1,1,1,0">
+									<Border x:Name="Bd" Margin="0" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0,0,0,2">
 										<ContentPresenter x:Name="Content" Margin="8,3,8,3" ContentSource="Header" RecognizesAccessKey="True"
 										                  HorizontalAlignment="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
 										                  VerticalAlignment="{Binding VerticalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
@@ -102,25 +105,11 @@
 								</Grid>
 								<ControlTemplate.Triggers>
 									<Trigger Property="Selector.IsSelected" Value="True">
-										<Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource {x:Static reskeys:ResourceKeys.PanelBorderBrush}}" />
-										<Setter Property="Panel.ZIndex" Value="1" />
-									</Trigger>
-									<MultiDataTrigger>
-										<MultiDataTrigger.Conditions>
-											<Condition Binding="{Binding IsSelected}" Value="True" />
-											<Condition Binding="{Binding IsActive}" Value="True" />
-										</MultiDataTrigger.Conditions>
 										<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabSelectedActiveBackground}}" />
 										<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabSelectedActiveText}}" />
-									</MultiDataTrigger>
-									<MultiDataTrigger>
-										<MultiDataTrigger.Conditions>
-											<Condition Binding="{Binding IsSelected}" Value="True" />
-											<Condition Binding="{Binding IsActive}" Value="False" />
-										</MultiDataTrigger.Conditions>
-										<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabSelectedInactiveBackground}}" />
-										<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabSelectedInactiveText}}" />
-									</MultiDataTrigger>
+										<Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+										<Setter Property="Panel.ZIndex" Value="1" />
+									</Trigger>
 									<MultiTrigger>
 										<MultiTrigger.Conditions>
 											<Condition Property="IsMouseOver" Value="True" />
@@ -152,6 +141,50 @@
 				<DataTemplate>
 					<avalonDockControls:LayoutAnchorableControl Model="{Binding}" Template="{StaticResource DockingChromeAnchorableControlTemplate}" />
 				</DataTemplate>
+			</Setter.Value>
+		</Setter>
+	</Style>
+
+	<!-- The document pane's tab row (shown only when the pane holds more than the Session view): the same flat tabs, the accent line under the selected one. The pane style itself is the
+	     library's, derived in DockingChrome with this as its tab item style. -->
+	<Style x:Key="DockingChromeDocumentTabItemStyle" TargetType="{x:Type TabItem}">
+		<Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.DocumentWellTabUnselectedText}}" />
+		<Setter Property="BorderBrush" Value="Transparent" />
+		<Setter Property="ToolTip" Value="{Binding ToolTip}" />
+		<Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+		<Setter Property="Padding" Value="6,1" />
+		<Setter Property="Margin" Value="0" />
+		<Setter Property="Template">
+			<Setter.Value>
+				<ControlTemplate TargetType="{x:Type TabItem}">
+					<Grid SnapsToDevicePixels="True">
+						<Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0,0,0,2" />
+						<ContentPresenter x:Name="Content" HorizontalAlignment="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+						                  VerticalAlignment="{Binding VerticalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+						                  ContentSource="Header" RecognizesAccessKey="True" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+					</Grid>
+					<ControlTemplate.Triggers>
+						<Trigger Property="Selector.IsSelected" Value="True">
+							<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.DocumentWellTabSelectedActiveBackground}}" />
+							<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.DocumentWellTabSelectedActiveText}}" />
+							<Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+							<Setter Property="Panel.ZIndex" Value="1" />
+						</Trigger>
+						<MultiTrigger>
+							<MultiTrigger.Conditions>
+								<Condition Property="IsMouseOver" Value="True" />
+								<Condition Property="Selector.IsSelected" Value="False" />
+							</MultiTrigger.Conditions>
+							<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.DocumentWellTabUnselectedHoveredBackground}}" />
+							<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.DocumentWellTabUnselectedHoveredText}}" />
+						</MultiTrigger>
+						<Trigger Property="IsEnabled" Value="False">
+							<Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+						</Trigger>
+					</ControlTemplate.Triggers>
+				</ControlTemplate>
 			</Setter.Value>
 		</Setter>
 	</Style>

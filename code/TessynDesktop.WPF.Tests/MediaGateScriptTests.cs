@@ -176,7 +176,9 @@ public sealed class MediaGateScriptTests
 		Assert.Contains("frame-src 'none'", html);
 		Assert.Contains("object-src 'none'", html);
 		Assert.DoesNotContain("script-src 'self' 'unsafe", html);
-		Assert.Contains("img-src https://preview.local", preview);
+		Assert.Contains("img-src https://preview.local data:;", preview);   // data: images of a rendered html file (FR.26.8); the transcript's policy has none
+		Assert.Contains("frame-src about:;", preview);                     // the html preview's srcdoc frame only; the frame is sandboxed without scripts
+		Assert.DoesNotContain("data:", html);
 		Assert.Contains("media-src https://preview.local", preview);
 		Assert.Contains("connect-src 'none'", preview);
 
@@ -184,6 +186,8 @@ public sealed class MediaGateScriptTests
 		foreach (var page in new[] { html, preview })
 		{
 			var policy = System.Text.RegularExpressions.Regex.Match(page, "Content-Security-Policy\" content=\"([^\"]*)\"").Groups[1].Value;
+			if (page == preview)
+				policy = policy.Replace("img-src https://preview.local data:;", "img-src https://preview.local;").Replace("frame-src about:;", "frame-src 'none';");
 			Assert.DoesNotMatch(@"(^|[\s;])(https?|data|blob|filesystem|ws|wss):(?!//)", policy);
 			Assert.DoesNotContain("*", policy);
 			var hosts = System.Text.RegularExpressions.Regex.Matches(policy, @"https?://([^\s;/]+)").Select(m => m.Groups[1].Value).Distinct().Order().ToList();

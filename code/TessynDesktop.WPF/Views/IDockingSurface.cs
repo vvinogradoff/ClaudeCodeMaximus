@@ -25,6 +25,15 @@ public interface IDockingSurface
 	/// <summary>Hides or shows the floating panels' windows (the screensaver cover does not reach them); a window created while hidden starts hidden.</summary>
 	void SetFloatingVisible(bool visible);
 
+	/// <summary>
+	/// Brings a panel forward for a new item without taking the keyboard focus (FR.29.17, decision 3): selects a tab that sits behind another, slides an auto-hidden panel out over the
+	/// session pane, lifts a floating panel's window without activating it.
+	/// </summary>
+	void Reveal(LayoutAnchorable panel);
+
+	/// <summary>The window handle of the floating window that holds <paramref name="panel"/>; <see cref="IntPtr.Zero"/> when it does not float or has no window yet.</summary>
+	IntPtr FloatingWindowHandle(LayoutAnchorable panel);
+
 	/// <summary>Something in the layout changed (a dock move, a resize, a tab move, auto-hide, float or dock).</summary>
 	event EventHandler? LayoutChanged;
 }

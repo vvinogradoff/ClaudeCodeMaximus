@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using AvalonDock.Layout;
+using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
 
 namespace TessynDesktop.WPF.Views;
@@ -14,6 +15,14 @@ namespace TessynDesktop.WPF.Views;
 /// <remarks>Created by Claude</remarks>
 public sealed class PreviewDockLayoutApplier
 {
+	private readonly IFloatingPanelPlacement? _floating;
+
+	/// <param name="floating">Converts a remembered floating place to the library's units and clamps it to the monitors present (FR.29.16); null: the place is used as it is.</param>
+	public PreviewDockLayoutApplier(IFloatingPanelPlacement? floating = null)
+	{
+		_floating = floating;
+	}
+
 	/// <summary>Places <paramref name="panel"/> (not yet in the layout) and selects it. <paramref name="areaWidth"/> and <paramref name="areaHeight"/> size the first-time layout (0 when not laid out yet).</summary>
 	public void Apply(LayoutRoot root, LayoutDocumentPane document, LayoutAnchorable panel, PreviewDockLayoutModel? remembered, double areaWidth, double areaHeight)
 	{
@@ -52,10 +61,11 @@ public sealed class PreviewDockLayoutApplier
 
 		if (layout.Floating && layout.FloatingPlacement is { } place)
 		{
-			panel.FloatingLeft = place.Left;
-			panel.FloatingTop = place.Top;
-			panel.FloatingWidth = Math.Max(place.Width, Constants.PreviewDock.MinPaneSize);
-			panel.FloatingHeight = Math.Max(place.Height, Constants.PreviewDock.MinPaneSize);
+			var rectangle = _floating?.Plan(place) ?? place.ToWindowPlacement();
+			panel.FloatingLeft = rectangle.Left;
+			panel.FloatingTop = rectangle.Top;
+			panel.FloatingWidth = Math.Max(rectangle.Width, Constants.PreviewDock.MinPaneSize);
+			panel.FloatingHeight = Math.Max(rectangle.Height, Constants.PreviewDock.MinPaneSize);
 			panel.Float();
 		}
 	}

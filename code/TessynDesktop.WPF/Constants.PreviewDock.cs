@@ -34,7 +34,7 @@ public static partial class Constants
 
 		public const string AutoCloseAutomationNameFormat = "Auto-close panel {0}";
 
-		public const string SourceAutomationNameFormat = "Show markdown source of panel {0}";
+		public const string SourceAutomationNameFormat = "Show source of panel {0}";
 
 		public const string OpenExternalAutomationNameFormat = "Open in default app from panel {0}";
 

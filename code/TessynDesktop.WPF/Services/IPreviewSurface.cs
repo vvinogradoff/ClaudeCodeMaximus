@@ -14,6 +14,9 @@ public interface IPreviewSurface
 	/// <summary>Shows markdown that was rendered to HTML with raw HTML disabled.</summary>
 	void ShowMarkdown(string html);
 
+	/// <summary>Shows an html page static in a sandboxed frame: no script runs, nothing is fetched from the network (FR.26.8).</summary>
+	void ShowHtml(string html);
+
 	/// <summary>Shows an image served from the preview cache.</summary>
 	void ShowImage(string url);
 

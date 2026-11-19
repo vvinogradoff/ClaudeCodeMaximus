@@ -25,7 +25,7 @@ public sealed class PreviewDockFactory : IPreviewDockFactory
 		_services = services;
 	}
 
-	public IPreviewWindowHandle Create(PreviewGroupModel? group, bool pinned, PreviewDockLayoutModel? ownLayout)
+	public IPreviewWindowHandle Create(PreviewGroupModel? group, bool pinned, PreviewDockLayoutModel? ownLayout, string? panelId = null)
 	{
 		var surface = Get<DockingSurfaceHost>().Surface ?? throw new InvalidOperationException("The main window's docking area is not there yet.");
 		var settings = Get<IPreviewSettingsService>();
@@ -38,7 +38,7 @@ public sealed class PreviewDockFactory : IPreviewDockFactory
 		content.Attach(viewModel, logger, isGroupPanel: group != null);
 		var panel = new LayoutAnchorable
 		{
-			ContentId = pinned ? string.Format(Constants.PreviewDock.PinnedContentIdFormat, groupId, Guid.NewGuid().ToString("N")) : groupId,
+			ContentId = !pinned ? groupId : !string.IsNullOrEmpty(panelId) ? panelId : string.Format(Constants.PreviewDock.PinnedContentIdFormat, groupId, Guid.NewGuid().ToString("N")),
 			Title = viewModel.Title,
 			Content = content,
 			CanClose = true,
@@ -46,7 +46,7 @@ public sealed class PreviewDockFactory : IPreviewDockFactory
 			CanAutoHide = true,
 		};
 		var remembered = pinned ? ownLayout : settings.GetDockLayout(groupId);
-		return new DockedPreviewPanelHandle(viewModel, content, panel, surface, settings, remembered, ui, logger);
+		return new DockedPreviewPanelHandle(viewModel, content, panel, surface, settings, remembered, ui, logger, floating: _services.GetService<IFloatingPanelPlacement>());
 	}
 
 	private T Get<T>() where T : notnull => _services.GetRequiredService<T>();

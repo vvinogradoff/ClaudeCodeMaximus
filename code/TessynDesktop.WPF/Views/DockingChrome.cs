@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using AvalonDock;
 using AvalonDock.Controls;
+using AvalonDock.Themes;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Services;
 
@@ -23,6 +24,9 @@ public sealed class DockingChrome
 		if (resourceHost.TryFindResource(Constants.DockingChrome.PaneStyleKey) is Style pane)
 			manager.AnchorablePaneControlStyle = pane;
 
+		if (DocumentPaneStyle(manager, resourceHost) is { } document)
+			manager.DocumentPaneControlStyle = document;
+
 		manager.AnchorableContextMenu = Menu(resourceHost, Constants.DockingChrome.AnchorableMenuKey);
 		manager.DocumentContextMenu = Menu(resourceHost, Constants.DockingChrome.DocumentMenuKey);
 	}
@@ -39,6 +43,22 @@ public sealed class DockingChrome
 
 	/// <summary>Called for every floating window the library creates.</summary>
 	public void OnFloatingWindowCreated(LayoutFloatingWindowControl window) => _router.Attach(window);
+
+	/// <summary>
+	/// The document pane's style: the library's own (from the manager's theme), with the flat tab item style of <c>DockingChrome.xaml</c> (the accent line under the selected tab,
+	/// FR.6.21). Null when the theme has no such style (the library's own tabs stay then).
+	/// </summary>
+	private static Style? DocumentPaneStyle(DockingManager manager, FrameworkElement resourceHost)
+	{
+		if (manager.Theme is not DictionaryTheme { ThemeResourceDictionary: { } library } ||
+		    library[Constants.DockingChrome.LibraryDocumentPaneStyleKey] is not Style baseStyle ||
+		    resourceHost.TryFindResource(Constants.DockingChrome.DocumentTabStyleKey) is not Style tab)
+			return null;
+
+		var style = new Style(typeof(LayoutDocumentPaneControl), baseStyle);
+		style.Setters.Add(new Setter(ItemsControl.ItemContainerStyleProperty, tab));
+		return style;
+	}
 
 	private static ContextMenu? Menu(FrameworkElement resourceHost, string key)
 	{

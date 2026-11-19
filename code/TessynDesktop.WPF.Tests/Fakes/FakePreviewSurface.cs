@@ -30,6 +30,12 @@ public sealed class FakePreviewSurface : IPreviewSurface
 		Calls.Add("markdown");
 	}
 
+	public void ShowHtml(string html)
+	{
+		LastHtml = html;
+		Calls.Add("html");
+	}
+
 	public void ShowImage(string url)
 	{
 		LastUrl = url;

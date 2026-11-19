@@ -1,5 +1,9 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <!-- The docking chrome's colours of this mode (FR.6.21): swapped together with this dictionary -->
+        <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/DockingColours.Light.xaml" />
+    </ResourceDictionary.MergedDictionaries>
     <!-- The colours the app adds to Fluent's own light theme: title bar, usage meters, screensaver. -->
     <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#F3F3F3" />
     <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#1A1A1A" />

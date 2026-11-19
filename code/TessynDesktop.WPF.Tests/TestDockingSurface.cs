@@ -37,5 +37,19 @@ public sealed class TestDockingSurface : IDockingSurface
 
 	public void SetFloatingVisible(bool visible) => FloatingVisible = visible;
 
+	/// <summary>The panels <see cref="Reveal"/> was called for, in order.</summary>
+	public List<LayoutAnchorable> Revealed { get; } = [];
+
+	/// <summary>What <see cref="FloatingWindowHandle"/> answers (a floating window has no real handle over a bare model).</summary>
+	public IntPtr FloatingHandle { get; set; }
+
+	public void Reveal(LayoutAnchorable panel)
+	{
+		Revealed.Add(panel);
+		panel.IsSelected = true;
+	}
+
+	public IntPtr FloatingWindowHandle(LayoutAnchorable panel) => panel.IsFloating ? FloatingHandle : IntPtr.Zero;
+
 	public void RaiseLayoutChanged() => LayoutChanged?.Invoke(this, EventArgs.Empty);
 }

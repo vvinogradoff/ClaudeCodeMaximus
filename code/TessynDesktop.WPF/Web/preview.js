@@ -6,7 +6,7 @@ const root = document.getElementById('root');
 const CACHE_PREFIX = 'https://preview.local/';
 
 function post(o) { chrome.webview.postMessage(o); }
-function clear() { root.replaceChildren(); }
+function clear() { root.replaceChildren(); root.style.padding = ''; root.style.height = ''; }
 function rendered(kind, ok) { post({ ev: 'rendered', kind: kind, ok: ok }); }
 
 function showText(text) {
@@ -14,6 +14,36 @@ function showText(text) {
 }
 function showMarkdown(html) {
   clear(); const div = document.createElement('div'); div.className = 'md'; div.innerHTML = String(html); root.appendChild(div); rendered('markdown', true);
+}
+// Html (FR.26.8): static, in a sandboxed frame. The sandbox has no allow-scripts (and the page CSP forbids scripts in the frame too), no forms,
+// popups, modals or top navigation; allow-same-origin only lets this page reach the frame's document to handle clicks. Anything but an http(s)
+// link or a #anchor does nothing.
+// The frame gets a policy of its own on top of the page's (both apply): only data: images and inline styles. It is a <meta> placed after the doctype
+// (before it the frame would switch to quirks mode); the host allows exactly one srcdoc load per preview, so the document cannot be reloaded.
+const FRAME_CSP = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'\">";
+function withFramePolicy(html) {
+  const m = /^(\s*(?:<!--[\s\S]*?-->\s*)*<!doctype[^>]*>)?/i.exec(html);
+  return m[0] + FRAME_CSP + html.slice(m[0].length);
+}
+function anchorTarget(d, href) {
+  let id; try { id = decodeURIComponent(href.slice(1)); } catch (_) { return null; }   // a malformed %-escape: the link does nothing
+  return d.getElementById(id) || d.getElementsByName(id)[0] || null;
+}
+function showHtml(html) {
+  clear();
+  const f = document.createElement('iframe'); f.className = 'hframe'; f.setAttribute('sandbox', 'allow-same-origin');
+  f.addEventListener('load', () => {   // on every load of the frame, so a reloaded document never loses its handler
+    const d = f.contentDocument; if (!d) { rendered('html', false); return; }
+    d.addEventListener('click', e => {
+      const a = e.target.closest && e.target.closest('a, area'); if (!a) return;
+      e.preventDefault();
+      const href = a.getAttribute('href') || '';
+      if (/^https?:\/\//i.test(href)) post({ ev: 'link', href: href });
+      else if (href.startsWith('#') && href.length > 1) { const t = anchorTarget(d, href); if (t) t.scrollIntoView(); }
+    });
+    rendered('html', true);
+  });
+  f.srcdoc = withFramePolicy(String(html)); root.style.padding = '0'; root.style.height = '100%'; root.appendChild(f);
 }
 function showMedia(kind, url) {
   clear();
@@ -38,6 +68,7 @@ chrome.webview.addEventListener('message', e => {
   switch (m.cmd) {
     case 'text': showText(m.text); break;
     case 'markdown': showMarkdown(m.html); break;
+    case 'html': showHtml(m.html); break;
     case 'image': showMedia('image', m.url); break;
     case 'video': showMedia('video', m.url); break;
     case 'clear': clear(); break;

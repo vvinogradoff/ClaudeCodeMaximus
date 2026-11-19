@@ -57,6 +57,25 @@ public static partial class Constants
 
 		public const string LayoutResetLog = "Shell layout reset to the default";
 
+		/// <summary>Attributes added to a floating panel's element in the saved layout (FR.6.18, FR.29.16): its place in pixels with the monitor's device name and scale. Optional on read (older layouts have none).</summary>
+		public const string PixelLeftAttribute = "TessynPixelLeft";
+
+		public const string PixelTopAttribute = "TessynPixelTop";
+
+		public const string PixelWidthAttribute = "TessynPixelWidth";
+
+		public const string PixelHeightAttribute = "TessynPixelHeight";
+
+		public const string MonitorAttribute = "TessynMonitor";
+
+		public const string MonitorLeftAttribute = "TessynMonitorLeft";
+
+		public const string MonitorTopAttribute = "TessynMonitorTop";
+
+		public const string DpiAttribute = "TessynDpi";
+
+		public const string LayoutFloatingPlacedLog = "Shell layout: floating panel {PanelId} restored by the placement rules (monitor {Monitor}, scale {Dpi})";
+
 		public const string LayoutFloatingClampedLog = "Shell layout: floating panel {PanelId} was off every monitor and was moved onto one";
 
 		public const string ReasonNothingSaved = "nothing saved";

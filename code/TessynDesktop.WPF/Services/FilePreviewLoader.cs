@@ -42,7 +42,7 @@ public sealed class FilePreviewLoader : IFilePreviewLoader
 		if (saveToFile && !_openPolicy.IsAllowed(first.Name))
 			return Refused(first, kind, Constants.Texts.PreviewUnsupported);
 
-		var textKind = kind is PreviewKind.Text or PreviewKind.Markdown;
+		var textKind = kind is PreviewKind.Text or PreviewKind.Markdown or PreviewKind.Html;
 		var isText = !saveToFile && textKind;
 		var limit = saveToFile && textKind ? Constants.Limits.MaxPreviewPdfBytes : _classifier.LimitOf(kind);
 		if (!isText && first.Size > limit)

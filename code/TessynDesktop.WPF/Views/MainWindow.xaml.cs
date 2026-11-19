@@ -26,10 +26,11 @@ public partial class MainWindow : Window
 	private readonly IPreviewRouter? _previews;
 	private bool _closeApproved;
 	private readonly bool _testWindow;
+	private readonly DockingTestHook? _testHook;
 	private readonly CancellationTokenSource _lifetime = new();
 	private readonly DispatcherTimer _placementTimer;
 
-	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands, TitleBarViewModel titleBar, ScreensaverController screensaver, SettingsHost settings, ILogger<MainWindow> logger, DockingSurfaceHost dockingSurface, IAppearanceService appearance, ShellLayoutMemory layoutMemory, ShellLayoutHost layoutHost, IShellSlots slots, IPreviewRouter? previews = null)
+	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands, TitleBarViewModel titleBar, ScreensaverController screensaver, SettingsHost settings, ILogger<MainWindow> logger, DockingSurfaceHost dockingSurface, IAppearanceService appearance, ShellLayoutMemory layoutMemory, ShellLayoutHost layoutHost, IShellSlots slots, IPreviewRouter? previews = null, IFloatingPanelPlacement? floatingPlacement = null)
 	{
 		_previews = previews;
 		_settings = settings;
@@ -42,15 +43,16 @@ public partial class MainWindow : Window
 		DataContext = viewModel;
 		InitializeComponent();
 		if (_testWindow)
+		{
 			PrepareTestWindow();
+			Docking.UseTestMode();   // floating panel windows are off-screen, not in the taskbar and never activated (FR.6.22)
+		}
 
 		Docking.SessionView.SetBinding(DataContextProperty, new System.Windows.Data.Binding(nameof(MainViewModel.Session)) { Source = viewModel });   // the session pane view model exists once the client is connected
 		Docking.Chrome.UseShellCommands(commands);   // the floating panels' keys go to the shell commands too (FR.6.20)
 		dockingSurface.Register(Docking);   // the docked preview panels are placed in this docking area (FR.29.19)
-		Docking.BuildShell(new ShellPanelCatalog().Create(viewModel, slots, logger), layoutMemory, logger, () => placement.GetMonitors());   // the whole shell layout, saved or default (FR.6.11, FR.6.18)
+		Docking.BuildShell(new ShellPanelCatalog().Create(viewModel, slots, logger), layoutMemory, logger, () => placement.GetMonitors(), floatingPlacement);   // the whole shell layout, saved or default (FR.6.11, FR.6.18)
 		layoutHost.Register(Docking);   // the title bar's chevron and the Panels menu drive it through IShellLayout (FR.6.14, FR.6.15)
-		Docking.ApplyTheme(appearance.IsDark);   // the one place the theme is first set
-		appearance.Changed += (_, _) => Dispatcher.BeginInvoke(() => Docking.ApplyTheme(appearance.IsDark));
 		TitleBarView.DataContext = titleBar;
 		Screensaver.Covered = ContentGrid;   // the WebView2 windows cannot be painted over, so the content under the cover is hidden while it is up
 		Screensaver.CoverChanged += (_, covered) => Docking.SetFloatingVisible(!covered);   // the floating panels are windows of their own: the cover does not reach them
@@ -64,6 +66,13 @@ public partial class MainWindow : Window
 
 		SourceInitialized += OnSourceInitialized;
 		Loaded += OnLoaded;
+		if (_testWindow)
+		{
+			// The programmatic test hook (FR.6.22): a named pipe the E2E tests drive; it never exists outside --test-window.
+			_testHook = new DockingTestHook(options, new DockingTestRequestHandler(Docking), work => Dispatcher.InvokeAsync(work).Task, logger);
+			ContentRendered += (_, _) => _testHook.Start();
+		}
+
 		LocationChanged += (_, _) => RestartPlacementTimer();
 		SizeChanged += (_, _) => RestartPlacementTimer();
 		StateChanged += (_, _) =>
@@ -75,6 +84,7 @@ public partial class MainWindow : Window
 		Closing += OnClosing;
 		Closed += (_, _) =>
 		{
+			_testHook?.Stop();
 			_previews?.CloseAllForExit();   // the app really closes now (the Settings guard allowed it): the preview windows go with it (FR.29.11)
 			_lifetime.Cancel();
 		};

@@ -14,9 +14,10 @@ public sealed class PreviewDockLayoutReader
 	/// <summary>
 	/// The layout of <paramref name="panel"/> now; <paramref name="document"/> is the session pane's document pane, the centre every side is relative to.
 	/// While the panel floats, the library does not say where it came from, so <paramref name="lastDocked"/> (what was read while it was docked) gives the side, neighbours,
-	/// tab index and size it returns to.
+	/// tab index and size it returns to. <paramref name="floatingNow"/> is the floating window's place as the window itself reports it (physical pixels, monitor, scale; FR.29.16); without
+	/// it the library's rectangle is kept as it is, without a scale.
 	/// </summary>
-	public PreviewDockLayoutModel Read(LayoutAnchorable panel, LayoutDocumentPane document, PreviewDockLayoutModel? lastDocked = null)
+	public PreviewDockLayoutModel Read(LayoutAnchorable panel, LayoutDocumentPane document, PreviewDockLayoutModel? lastDocked = null, PreviewPlacementModel? floatingNow = null)
 	{
 		var model = new PreviewDockLayoutModel { Shown = !panel.IsHidden && panel.Root != null };
 		if (panel.IsFloating)
@@ -25,7 +26,7 @@ public sealed class PreviewDockLayoutReader
 			model.Side = lastDocked?.Side ?? PreviewDockSide.Right;
 			model.TabIndex = lastDocked?.TabIndex ?? 0;
 			model.Size = lastDocked?.Size ?? 0;
-			model.FloatingPlacement = new PreviewPlacementModel
+			model.FloatingPlacement = floatingNow?.Clone() ?? new PreviewPlacementModel
 			{
 				Left = (int)Math.Round(panel.FloatingLeft),
 				Top = (int)Math.Round(panel.FloatingTop),

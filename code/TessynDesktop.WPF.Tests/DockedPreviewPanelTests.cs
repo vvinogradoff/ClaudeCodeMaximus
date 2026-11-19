@@ -360,7 +360,7 @@ public sealed class DockedPreviewPanelTests
 			Assert.Single(names, "Pin panel Text and code");
 			Assert.Single(names, "Auto-close panel Text and code");
 			Assert.Single(names, "Open in default app from panel Text and code");
-			Assert.Single(names, "Show markdown source of panel Text and code");
+			Assert.Single(names, "Show source of panel Text and code");
 			Assert.Equal(Visibility.Visible, ((FrameworkElement)content.FindName("GroupButtons")!).Visibility);
 			Assert.Equal("PreviewPanel.text-code", AutomationProperties.GetAutomationId(content));
 		});

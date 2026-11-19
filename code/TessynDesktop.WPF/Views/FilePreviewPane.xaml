@@ -44,7 +44,7 @@
                 </StackPanel>
             </Button>
             <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding ShowSource}" Content="Source" Padding="10,5" Margin="4,0,0,0"
-                          Visibility="{Binding CanToggleSource, Converter={StaticResource BoolToVis}}" ToolTip="Show the markdown source instead of the rendered text" />
+                          Visibility="{Binding CanToggleSource, Converter={StaticResource BoolToVis}}" ToolTip="Show the source instead of the rendered content" AutomationProperties.Name="Show source" />
             <TextBlock Text="{Binding Title}" Style="{DynamicResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
         </DockPanel>
 

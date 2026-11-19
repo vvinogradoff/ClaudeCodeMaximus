@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using AvalonDock;
 using AvalonDock.Layout;
-using AvalonDock.Themes;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
@@ -14,7 +13,7 @@ namespace TessynDesktop.WPF.Views;
 /// The main window's docking area (FR.6.11, FR.29.19): AvalonDock holding the whole shell layout. The <see cref="SessionPane"/> is the single, non-closable, non-floatable
 /// document of the central document pane (no tab strip); Sessions, Recent and Tags (left pane) and Focus (right pane) are panels around it (<see cref="BuildShell"/>);
 /// docked preview panels are placed by <see cref="PreviewDockLayoutApplier"/>. Implements <see cref="IDockingSurface"/> for the previews and <see cref="IShellLayout"/> for the
-/// view models and menu commands. The layout is remembered (FR.6.18) through <see cref="ShellLayoutMemory"/>. The theme follows Tessyn's light or dark theme (FR.6.21).
+/// view models and menu commands. The layout is remembered (FR.6.18) through <see cref="ShellLayoutMemory"/>. The docking theme is <see cref="TessynDockTheme"/>, set once; light and dark are the application's colour dictionary (FR.6.21).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
@@ -36,9 +35,12 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	private readonly DockingVisualTree _tree = new();
 	private readonly DockingStripSync _strip;
 	private readonly DockingPanelRaiser _raiser;
+	private readonly DockingAutomationNames _names;
+	private bool _namesDirty = true;
 	private LayoutDocumentPane _documentPane;
 	private LayoutRoot? _subscribedRoot;
 	private ShellLayoutMemory? _memory;
+	private ShellFloatingPlacements? _floatingPlaces;
 	private ILogger? _logger;
 	private Func<(IReadOnlyList<MonitorBounds> Monitors, MonitorBounds Primary)>? _monitors;
 	private string _lastState = string.Empty;
@@ -57,10 +59,12 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	{
 		InitializeComponent();
 		SessionView = sessionView;
+		DockManager.Theme = new TessynDockTheme();   // the one theme, for light and dark alike: the colours are the application resources' (FR.6.21)
 		Chrome = new DockingChrome(DockManager, this);   // the compact chrome, the focus guard, the slide-out closer (FR.6.13, FR.6.20)
 		DockManager.AnchorableHeaderTemplateSelector = new ShellPanelHeaderTemplateSelector();   // the Focus tab shows the badge (FR.6.16)
 		_strip = new DockingStripSync(DockManager, () => _documentPane, _tree);
 		_raiser = new DockingPanelRaiser(DockManager, _tree, () => Chrome.SlideOut.IsOpen);
+		_names = new DockingAutomationNames(DockManager, _tree);   // UI Automation names for the tabs, edge tabs and floating frames (FR.6.22)
 		_documentPane = CreateDocumentPane();
 		var root = new LayoutPanel { Orientation = Orientation.Horizontal };
 		root.Children.Add(_documentPane);
@@ -84,6 +88,10 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 				return;
 
 			Chrome.OnFloatingWindowCreated(created);   // its keys go to the shell commands (FR.6.20)
+			if (_testMode)
+				_floatingPolicy.Apply(created, _logger);   // off-screen, not in the taskbar, never activated (FR.6.22)
+
+			_namesDirty = true;
 
 			// The library shows the window after it is created; while the cover is up it is hidden again at once.
 			created.IsVisibleChanged += (_, _) =>
@@ -131,8 +139,9 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	/// Builds the whole shell layout (FR.6.11, FR.6.12, FR.6.18): from the saved layout when <paramref name="memory"/> has a usable one, else the default layout. Run once, before the
 	/// window is shown. <paramref name="monitors"/> tells where the screens are (a restored floating panel off every monitor is clamped, FR.29.16).
 	/// </summary>
-	public void BuildShell(IReadOnlyList<ShellPanelDefinition> panels, ShellLayoutMemory memory, ILogger logger, Func<(IReadOnlyList<MonitorBounds> Monitors, MonitorBounds Primary)>? monitors = null)
+	public void BuildShell(IReadOnlyList<ShellPanelDefinition> panels, ShellLayoutMemory memory, ILogger logger, Func<(IReadOnlyList<MonitorBounds> Monitors, MonitorBounds Primary)>? monitors = null, IFloatingPanelPlacement? floating = null)
 	{
+		_floatingPlaces = floating == null ? null : new ShellFloatingPlacements(floating, FloatingWindowHandle);   // floating panels are remembered with monitor and scale (FR.6.18, FR.29.16)
 		_memory = memory;
 		_logger = logger;
 		Chrome.UseLogger(logger);
@@ -182,21 +191,22 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	}
 
 	/// <summary>Hides or shows the floating panels' windows (the screensaver cover does not reach them, FR.29.19).</summary>
+	public void Reveal(LayoutAnchorable panel)
+	{
+		panel.IsSelected = true;   // a tab behind another comes forward
+		if (panel.IsAutoHidden)
+			_raiser.SlideOut(panel);
+		else if (panel.IsFloating)
+			_raiser.Raise(panel);   // lifted, not activated: the composer keeps the keyboard
+	}
+
+	public IntPtr FloatingWindowHandle(LayoutAnchorable panel) => _raiser.WindowOf(panel);
+
 	public void SetFloatingVisible(bool visible)
 	{
 		_floatingHidden = !visible;
 		foreach (var window in DockManager.FloatingWindows.ToList())
 			window.Visibility = visible ? Visibility.Visible : Visibility.Hidden;
-	}
-
-	/// <summary>Switches the docking theme with Tessyn's light or dark theme (AvalonDock's own VS2013 pair, recoloured by the chrome resources).</summary>
-	public void ApplyTheme(bool dark)
-	{
-		if (DockManager.Theme is Vs2013DarkTheme && dark || DockManager.Theme is Vs2013LightTheme && !dark)
-			return;
-
-		DockManager.Theme = dark ? new Vs2013DarkTheme() : new Vs2013LightTheme();
-		_strip.Invalidate();   // a new theme builds the panes' templates again
 	}
 
 	/// <summary>Saves a layout change that is still waiting for its delay (the window is closing).</summary>
@@ -389,6 +399,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	private void OnRootUpdated(object? sender, EventArgs e)
 	{
 		_strip.Invalidate();   // the library may have built the panes again
+		_namesDirty = true;
 		Evaluate();
 	}
 
@@ -512,18 +523,45 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			_panels[definition.Id] = panel;
 		}
 
-		ClampFloating();
+		ClampFloating(RestoreFloatingPlaces(xml));
 		return true;
 	}
 
+	/// <summary>
+	/// A floating panel saved with its monitor and scale is put back by the placement rules (FR.29.16): sizes by the ratio of the scales, clamped to the monitors present; one saved without
+	/// them (an older layout) is left to <see cref="ClampFloating"/>. Returns the ids placed here.
+	/// </summary>
+	private HashSet<string> RestoreFloatingPlaces(string xml)
+	{
+		var placed = new HashSet<string>();
+		if (_floatingPlaces == null)
+			return placed;
+
+		var saved = _serializer.ReadFloating(xml);
+		foreach (var panel in _panels.Values.Where(p => p.IsFloating && saved.ContainsKey(p.ContentId)))
+		{
+			var place = saved[panel.ContentId];
+			var rectangle = _floatingPlaces.Plan(place);
+			panel.FloatingLeft = rectangle.Left;
+			panel.FloatingTop = rectangle.Top;
+			panel.FloatingWidth = Math.Max(rectangle.Width, Constants.PreviewDock.MinPaneSize);
+			panel.FloatingHeight = Math.Max(rectangle.Height, Constants.PreviewDock.MinPaneSize);
+			_floatingPlaces.Seed(panel.ContentId, place);
+			placed.Add(panel.ContentId);
+			_logger?.LogInformation(Constants.ShellLayout.LayoutFloatingPlacedLog, panel.ContentId, place.MonitorDeviceName, place.Dpi);
+		}
+
+		return placed;
+	}
+
 	/// <summary>A restored floating panel off every monitor is moved onto one (FR.6.18, FR.29.16).</summary>
-	private void ClampFloating()
+	private void ClampFloating(IReadOnlySet<string> placed)
 	{
 		if (_monitors == null)
 			return;
 
 		var (monitors, primary) = _monitors();
-		foreach (var panel in _panels.Values.Where(p => p.IsFloating))
+		foreach (var panel in _panels.Values.Where(p => p.IsFloating && !placed.Contains(p.ContentId)))
 		{
 			var saved = new WindowPlacementModel { Left = (int)panel.FloatingLeft, Top = (int)panel.FloatingTop, Width = (int)panel.FloatingWidth, Height = (int)panel.FloatingHeight };
 			var clamped = new WindowPlacementClamper().Clamp(saved, monitors, primary);
@@ -575,6 +613,13 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		if (_strip.IsDirty)
 			_strip.Update();
 
+		if (_namesDirty)
+		{
+			_namesDirty = false;
+			if (_testMode)
+				NameEdgeTabsWhenIdle();   // test windows only; the tabs are named by their styles, with no walk (FR.6.22)
+		}
+
 		LayoutChanged?.Invoke(this, EventArgs.Empty);
 		if (_building || _memory == null)
 			return;
@@ -605,7 +650,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			.Select(p => p!.Parent as LayoutAnchorablePane)
 			.OfType<LayoutAnchorablePane>().Where(p => p.DockWidth.IsAbsolute).Distinct().ToList();
 		var fixedWidth = panes.Sum(p => p.DockWidth.Value);
-		var available = ActualWidth - Constants.ShellLayout.MinSessionWidth;
+		var available = ActualWidth - Constants.ShellLayout.MinSessionWidth - panes.Count * DockManager.GridSplitterWidth;   // the theme's splitters (one beside each fixed pane) are not the Session view's
 		if (fixedWidth > 0 && fixedWidth > available)
 		{
 			var factor = Math.Max(available, 0) / fixedWidth;
@@ -616,6 +661,9 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		_lastState = StateText();
 		_lastSignature = _lastState + SizeText();   // the baseline: what the library and this fit made of it is not a change to save
 	}
+
+	/// <summary>Names the edge tabs and floating frames once the dispatcher is idle (test windows only).</summary>
+	private void NameEdgeTabsWhenIdle() => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _names.Update());
 
 	/// <summary>Reads the layout when it really changed (a docking change, a selection, or a size found by the probe): logs the state, tells the listeners, and arms the save.</summary>
 	private void Evaluate()
@@ -629,9 +677,12 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			return;
 
 		_lastSignature = signature;
+		_namesDirty = true;
 		CaptureCount++;
 		foreach (var panel in _panels.Values.Where(IsInLayout))
 			CapturePlace(panel);
+
+		_floatingPlaces?.Observe(_panels.Values.Where(p => IsInLayout(p) && p.IsFloating).ToList());   // a place Windows forced after a display change is not taken over
 
 		if (state != _lastState)
 		{
@@ -652,7 +703,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 
 		try
 		{
-			_memory.Save(_serializer.Serialize(DockManager, new HashSet<string>([.. ShellPanelIds, Constants.PreviewDock.SessionDocumentId])));
+			_memory.Save(_serializer.Serialize(DockManager, new HashSet<string>([.. ShellPanelIds, Constants.PreviewDock.SessionDocumentId]), _floatingPlaces?.Entries));
 		}
 		catch (Exception ex)
 		{
