@@ -804,6 +804,17 @@ public sealed class FocusReferencesTests : IDisposable
 	}
 
 	[Fact]
+	public async Task A_relative_path_that_leaves_the_working_directory_is_refused()
+	{
+		_env.WriteBodies("u", @"see ..\..\outside.txt for it");
+		var entryId = await EntryIdOf("see ..");
+
+		var error = await _env.ErrorAsync("file.preview", PreviewParams(entryId, @"..\..\outside.txt"), TdcpTransport.Loopback);
+
+		Assert.Contains("leaves the working directory", error);
+	}
+
+	[Fact]
 	public async Task Preview_over_the_relay_in_the_referenced_only_mode_allows_only_referenced_files()
 	{
 		_env.Base.Settings.Settings.FileAccess.Mode = FileAccessMode.ReferencedOnly;
