@@ -233,3 +233,11 @@ The Default profile cannot be removed (the Remove button never appears while Def
 - **Unchanged.** FR.19.8: the selectors stay disabled while a Persistent Session Process is alive, and a live process keeps the model and effort it was started with. FR.12.15: a change takes effect from the next send.
 
 **FR.12.36 — The input area height is kept across restarts (WPF).** (Amends the *Splitter* bullet of FR.12.29.) The height the user drags the input area to is stored in the WPF client state (`InputAreaHeight`, one value for the client, like `CommandBarVisible`) when the drag ends, and used from the next start on whenever the area is expanded. Without a stored height the area has the height of its content, as before. A stored height that is not positive is ignored. The collapsed or expanded state itself is not stored (each view applies its default, FR.12.29).
+
+---
+
+## Amendments (2026-11-19, docked shell)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.12.29 Collapsible input area, each view's default input area | FR.6.17 | The input area belongs to the Session view only; Focus is a panel with its own reply boxes. Collapse state and height (FR.12.36) unchanged. |

@@ -331,3 +331,13 @@ Why: a project rule such as CLAUDE.md's "ask in plain text" was written to avoid
 - No inline image or video previews inside Focus cards: an image path opens in the preview on Ctrl+click.
 - Tessyn Web is unchanged (the daemon change makes it possible later).
 - Use case UC.FX.03 ([UC.FX.01](/docs/usecases/UC.FX.01-Focus-Card-Text-and-Options.md)); test cases TC.FX.23 onwards ([TC.FX.01](/docs/testcases/TC.FX.01-Focus-Card-Text-and-Options.md)).
+
+---
+
+## Amendments (2026-11-19, docked shell)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.23.12 Session/Focus switch | FR.6.16 | Replaced by a Focus button in the session header that brings the Focus panel forward; Focus is a panel of the docked shell. |
+| FR.23.13 Focus badge | FR.6.16 | Shown on the Focus button and on the Focus panel's tab whenever the count is above 0. |
+| FR.23.21 Send answers (n) in the session header | FR.6.16 | Moves to the top of the Focus panel; enabling rule and Ctrl+Enter (FR.23.22) unchanged. |

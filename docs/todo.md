@@ -1233,7 +1233,10 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 - [DONE] AvalonDock spike: WebView2 works docked, tabbed, floating and auto-hidden, 54/54 checks (`.mm-work/40-spike.md`, branch `spike/avalondock`)
 - [DONE] Docked previews: requirements FR.29.17–FR.29.26 approved with the AvalonDock dependency and six decisions (2026-11-19)
 - [DONE] Docked previews, stage 1: AvalonDock in the main window (the session pane as the central document, the side preview pane replaced by the default Preview panel in both modes), the `previewDock` settings, the router's docked target, one panel per group with Pin and Auto-close (FR.29.17–FR.29.21, FR.29.25; merge `6c1b968`); the session area's tab strip shows while a panel shares it (TC.PW.104, merge `dc41941`)
-- [ ] The whole WPF UI as docked panels (Architect, 2026-11-19: Sessions, Recent, Tags, Session view, Focus view): design choice A26, then requirements and stages; it absorbs stage 3 (Tessyn colours for the docking chrome)
+- [DONE] The whole WPF UI as docked panels: option A chosen (A26), requirements FR.6.11–FR.6.22 approved with seven decisions (A28)
+- [ ] Docked shell, stage 1: the left panels, the Session view, Focus as a panel, layout memory, Reset layout, the Panels menu, the chevron, compact chrome, keyboard, test seam (FR.6.11–FR.6.20, FR.6.22)
+- [ ] Docked shell, stage 2: Tessyn's light and dark colours for the docking chrome (FR.6.21; takes over FR.29.24)
+- [ ] Docked shell, stage 3: the remaining docked-preview items (restart of panels, auto-hide behaviours, floating panels across scales; FR.29.19, FR.29.22, FR.29.23)
 - [ ] Docked previews, stage 2: restart, mode changes, auto-hide behaviour (slide-out on a new item, Esc and edge-tab close), floating panels with the FR.29.16 scale rules (FR.29.19, FR.29.22, FR.29.23)
 - [ ] Docked previews, stage 3: Tessyn light/dark theme for the docking area (FR.29.24); review, E2E, manual checks (TC.PW.77–102)
 

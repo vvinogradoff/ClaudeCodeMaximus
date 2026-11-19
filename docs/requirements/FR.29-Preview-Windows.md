@@ -204,3 +204,13 @@ Without external preview windows (one monitor, or the toggle off) previews no lo
 5. **Floating panels** are owned by the main window: no taskbar button of their own, they minimize with it.
 6. **First-time place:** docked to the right of the session pane at 40 % of the area's width.
 Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (merge `1d07de9`; unit tests, WPF E2E `WpfPreviewWindows*E2ETests`). FR.29.14 and FR.29.15: approved by the Architect's feedback 2026-11-18, built on branch `wpf/preview-window-polish` (merge `cd82193`). Accepted by the Architect in use on two monitors after both restarts (2026-11-18); the MANUAL rows of TC.PW.01 were not ticked one by one. Summary: `docs/features/preview-windows.md`.
+
+---
+
+## Amendments (2026-11-19, docked shell)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.29.18 and decision 6, first place of a preview panel | FR.6.12 | A preview panel opens the first time as a tab in the pane that holds Focus; right at 40 % stays the fallback. |
+| FR.29.19 the docking area right of the session tree | FR.6.11 | The docking area is the whole window content between the title bar (with banners) and the status bar. |
+| FR.29.24 Theme | FR.6.21 | The theme now covers the whole shell and is specified there. |
