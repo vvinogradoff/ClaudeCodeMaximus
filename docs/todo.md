@@ -1244,7 +1244,7 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 
 ### Round 3 — HTML previews (Architect request 2026-11-19; branch `docs/html-preview`)
 - [ ] HTML previews rendered with a Source toggle (FR.26.8; UC.LK.08, TC.LK.36–53)
-  - [ ] Docs: FR.26.8 drafted (static policy, option 1); awaiting the Architect's decision A31 (static / static + https / full)
+  - [DONE] Docs: FR.26.8 approved with option 1, Static (A31)
   - [ ] Code: render `.html`/`.htm`/`text/html` isolated in the preview pane's renderer, Source toggle, link routing, `CanToggleSource` for html
   - [ ] Tests: TC.LK.36–53 (unit/view, E2E, MANUAL look and selection)
 

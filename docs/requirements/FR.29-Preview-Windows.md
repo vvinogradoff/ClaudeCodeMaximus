@@ -214,4 +214,4 @@ Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/previ
 | FR.29.18 and decision 6, first place of a preview panel | FR.6.12 | A preview panel opens the first time as a tab in the pane that holds Focus; right at 40 % stays the fallback. |
 | FR.29.19 the docking area right of the session tree | FR.6.11 | The docking area is the whole window content between the title bar (with banners) and the status bar. |
 | FR.29.24 Theme | FR.6.21 | The theme now covers the whole shell and is specified there. |
-| FR.29.5, FR.29.14, FR.29.18 file content and **Source** "only for markdown" | FR.26.8 | Source is also shown for an html file, which is rendered by the same renderer in windows, docked group panels and the default Preview panel. Draft, awaiting the Architect (A31). |
+| FR.29.5, FR.29.14, FR.29.18 file content and **Source** "only for markdown" | FR.26.8 | Source is also shown for an html file, which is rendered by the same renderer in windows, docked group panels and the default Preview panel. Approved 2026-11-19 (A31). |
