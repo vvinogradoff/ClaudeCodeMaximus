@@ -48,7 +48,6 @@ public sealed class DockedPanelReviewFixTests
 		StaTestRunner.Run(() =>
 		{
 			var area = new DockingArea(new Border { MinWidth = 100 });
-			area.ApplyTheme(dark: false);
 			var window = new Window { Content = area, Width = 1200, Height = 700, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
 			window.Show();
 			Settle(window);
@@ -124,7 +123,6 @@ public sealed class DockedPanelReviewFixTests
 		{
 			var composer = new TextBox { Name = "Composer" };
 			var area = new DockingArea(new Grid { Children = { composer } });
-			area.ApplyTheme(dark: false);
 			var window = new Window { Content = area, Width = 1200, Height = 700, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
 			window.Show();
 			Settle(window);

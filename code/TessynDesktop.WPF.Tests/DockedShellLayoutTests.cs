@@ -257,12 +257,12 @@ public sealed class DockedShellLayoutTests
 	{
 		StaTestRunner.Run(() =>
 		{
-			var first = new Rig().Start();
+			var first = new Rig(width: 1500).Start();   // wide enough that the fit (the Session view's minimum next to the theme's splitters) leaves the saved size alone
 			first.PaneOf(Constants.DockedShell.SessionsPanelId).DockWidth = new GridLength(410);
 			first.Settle();
 			first.Stop();
 
-			var second = new Rig(state: first.State).Start();
+			var second = new Rig(state: first.State, width: 1500).Start();
 			Assert.Equal(410, second.PaneOf(Constants.DockedShell.SessionsPanelId).DockWidth.Value);
 			second.Stop();
 		});

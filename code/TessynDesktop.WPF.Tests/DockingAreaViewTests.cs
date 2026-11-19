@@ -87,22 +87,6 @@ public sealed class DockingAreaViewTests
 	}
 
 	[Fact]
-	public void TheTheme_FollowsLightAndDark()
-	{
-		StaTestRunner.Run(() =>
-		{
-			var area = new DockingArea(new Border { Name = "Stub", MinWidth = 100 });
-			Assert.Null(area.Manager.Theme);   // the main window sets it once, from the stored look (no throwaway light theme in dark mode)
-
-			area.ApplyTheme(dark: true);
-			Assert.IsType<Vs2013DarkTheme>(area.Manager.Theme);
-
-			area.ApplyTheme(dark: false);
-			Assert.IsType<Vs2013LightTheme>(area.Manager.Theme);
-		});
-	}
-
-	[Fact]
 	public void TheDockingArea_ImplementsTheSurface_AndSaysWhenTheLayoutChanges()
 	{
 		StaTestRunner.Run(() =>
@@ -128,7 +112,6 @@ public sealed class DockingAreaViewTests
 		StaTestRunner.Run(() =>
 		{
 			var area = new DockingArea(new Border { MinWidth = 100 });
-			area.ApplyTheme(dark: false);
 			var window = Host(area);
 			var strips = () => Descendants<DocumentPaneTabPanel>(area).ToList();
 			Assert.NotEmpty(strips());
@@ -146,8 +129,7 @@ public sealed class DockingAreaViewTests
 			Settle(window);
 			Assert.All(strips(), p => Assert.False(p.IsVisible));
 
-			area.DocumentPane.InsertChildAt(1, preview);   // and again after a theme switch
-			area.ApplyTheme(dark: true);
+			area.DocumentPane.InsertChildAt(1, preview);   // and again
 			Settle(window);
 			Assert.All(strips(), p => Assert.True(p.IsVisible));
 			window.Close();

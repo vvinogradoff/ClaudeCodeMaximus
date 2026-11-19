@@ -71,7 +71,6 @@ public sealed class DockingChromeViewTests
 	private static DockingArea NewArea()
 	{
 		var area = new DockingArea(new Border { Name = "Stub", MinWidth = 100 });
-		area.ApplyTheme(dark: false);
 		return area;
 	}
 
@@ -93,8 +92,6 @@ public sealed class DockingChromeViewTests
 			Assert.IsType<ContextMenu>(area.TryFindResource(Constants.DockingChrome.AnchorableMenuKey));
 			Assert.Same(area.TryFindResource(Constants.DockingChrome.PaneStyleKey), area.Manager.AnchorablePaneControlStyle);
 			Assert.NotNull(area.Manager.AnchorableContextMenu);
-			area.ApplyTheme(dark: true);   // a theme switch keeps the compact style
-			Assert.Same(area.TryFindResource(Constants.DockingChrome.PaneStyleKey), area.Manager.AnchorablePaneControlStyle);
 		});
 	}
 
@@ -257,7 +254,6 @@ public sealed class DockingChromeViewTests
 	{
 		var composer = new TextBox { Name = "Composer" };
 		var area = new DockingArea(composer);
-		area.ApplyTheme(dark: false);
 		var window = Host(area);
 		var panel = AddPanel(area, window, "images");
 		var panelBox = new TextBox();
