@@ -19,6 +19,7 @@ What the user sees:
 - **A declined or failed prompt** starts the daemon normally, and the banner says "The daemon runs normally: the administrator prompt was declined." (or names the failure). The prompt does not come back by itself (FR.32.13).
 - **The stale banner's Restart daemon** brings the daemon back the way it ran: an elevated one comes back elevated (FR.32.11).
 - **Pasting files** copied in Explorer into the prompt input works (FR.31.2). It never worked before, elevated or not.
+- **A banner when WPF itself runs as administrator** (FR.32.15, added after first use, merge `60286f4`): "This window runs as administrator. Files can't be dropped from Explorer, and every daemon it starts runs elevated." It has no button; the fix is to start WPF normally. The start log says which way WPF runs.
 
 **What elevated means.** While the daemon runs elevated, every turn runs as administrator: typed, scheduled, worker, Telegram and Tessyn Web turns. Through Tessyn Web, whoever can sign in can then have a session run administrator commands on the PC.
 
@@ -114,7 +115,7 @@ These rules decide the design. A later change that breaks one of them breaks the
 - **Never read an elevated host's memory** (`Process.MainModule`, module lists) and never kill it from WPF. Use `ProcessImagePath`, and end it through the exit event.
 - **The connect loop ends after its first connect.** After an in-place restart nothing else starts a host, so the restarter must (`StartNowAsync`). The starting flag keeps a late connect loop from starting a second host.
 - **The refusal memory must stay.** The connect loop retries every few seconds with a 60 s cool-down; without it a declined prompt would come back every minute.
-- **WPF must never run elevated.** It would block drag-and-drop again, and WebView2 ignores its DevTools port in an elevated process (an NR.6 gotcha).
+- **WPF must never run elevated.** It would block drag-and-drop again, and WebView2 ignores its DevTools port in an elevated process (an NR.6 gotcha). On 2026-11-19 it ran elevated unnoticed: a taskbar pin had *Run as administrator* set, and WPF's own restarts (self-update, Restart daemon) keep the elevation of the process that starts them. That is why FR.32.15 shows a banner (`ConnectionViewModel.IsClientElevated`).
 - **The tray filter depends on WinForms.** It assumes the NotifyIcon callback message is `WM_USER + 1024`, as in WinForms today. If the tray of an elevated host stops answering, check that first (TC.HS.30 has the tray check).
 - **The working directory may be ignored.** Windows may ignore it for an elevated start. Today only Claude Assist calls use the host's working directory (`ClaudeProcessManager.RunPrintModeAsync`, with no tools and no session files), so it does not matter. New code in the host should use `AppContext.BaseDirectory`, not the current directory.
 - **Status updates come from the UI thread.** The Startup tab subscribes weakly (`PropertyChangedEventManager`), so a closed Settings window is not kept alive. The connection raises its changes through the UI dispatcher; keep it that way.
