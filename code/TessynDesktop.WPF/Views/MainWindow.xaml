@@ -97,7 +97,8 @@
                     </TabItem>
                 </v:SlotTabControl>
                 <GridSplitter x:Name="Splitter" Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" />
-                <v:SessionPane Grid.Column="2" DataContext="{Binding Session}" />
+                <!-- FR.29.19: the docking area; the session pane is its central document, the docked preview panels are placed around it -->
+                <v:DockingArea x:Name="Docking" Grid.Column="2" />
             </Grid>
         </DockPanel>
         <!-- The screensaver covers everything, the title bar included -->

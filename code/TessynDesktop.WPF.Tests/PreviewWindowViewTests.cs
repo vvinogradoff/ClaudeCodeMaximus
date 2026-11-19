@@ -133,8 +133,9 @@ public sealed class PreviewWindowViewTests
 			using var _ = content;
 			var client = new FakeTessynClient();
 			client.Files["h"] = ("note.md", "text/markdown", "# hi"u8.ToArray());
-			var pane = (FilePreviewPane)window.FindName("FilePane")!;
-			var browserHost = (Border)window.FindName("BrowserHost")!;
+			var host = (PreviewContentHost)window.FindName("ContentView")!;   // the content shared with the docked panels (FR.29.18)
+			var pane = host.FilePane;
+			var browserHost = host.BrowserHost;
 
 			viewModel.Show(new PreviewItemModel { Kind = PreviewItemKind.File, FileName = "note.md" }, new PreviewTarget("h", "note.md"), client);
 			Layout((FrameworkElement)window.Content);
@@ -255,7 +256,7 @@ public sealed class PreviewWindowViewTests
 		{
 			var (window, viewModel, content) = BuildWindow();
 			using var _ = content;
-			var pane = (FilePreviewPane)window.FindName("FilePane")!;
+			var pane = ((PreviewContentHost)window.FindName("ContentView")!).FilePane;
 			var source = (ToggleButton)window.FindName("SourceButton")!;
 			var open = (Button)window.FindName("OpenExternalButton")!;
 			var title = (TextBlock)window.FindName("TitleText")!;

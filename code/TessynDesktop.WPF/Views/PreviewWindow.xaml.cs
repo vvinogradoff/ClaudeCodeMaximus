@@ -15,7 +15,7 @@ namespace TessynDesktop.WPF.Views;
 
 /// <summary>
 /// A preview window (FR.29.5–FR.29.8): its own top-level window with a custom title bar (Pin, Auto-close, Minimize, Maximize/Restore, Close) and the content of its
-/// <see cref="PreviewWindowViewModel"/>: a <see cref="FilePreviewPane"/> or a <see cref="BrowserPreviewView"/>. A group window opens at the group's remembered
+/// <see cref="PreviewWindowViewModel"/>: a <see cref="PreviewContentHost"/> (a <see cref="FilePreviewPane"/> or a <see cref="BrowserPreviewView"/>). A group window opens at the group's remembered
 /// placement and remembers its moves 500 ms after the last change; a pinned window never writes the group's placement but tells the router (<see cref="PreviewPlacementTracker"/>). It is shown and raised without taking
 /// the keyboard focus. In test mode it is off-screen, not in the taskbar and never activated (FR.29.13).
 /// </summary>
@@ -38,10 +38,8 @@ public partial class PreviewWindow : Window
 	private readonly AppearanceApplier _appearance;
 	private readonly Func<IntPtr> _mainWindow;
 	private readonly PreviewPlacementModel? _ownPlacement;
-	private readonly ILogger _logger;
 	private readonly bool _testWindow;
 	private readonly PreviewPlacementTracker _tracker;
-	private BrowserPreviewView? _browserView;
 	private bool _closed;
 
 	public PreviewWindow(
@@ -69,7 +67,6 @@ public partial class PreviewWindow : Window
 		_restore = new PreviewRestoreGuard(placement);
 		_appearance = appearance;
 		_mainWindow = mainWindow;
-		_logger = logger;
 		_testWindow = options.TestWindow;
 		DataContext = viewModel;
 		InitializeComponent();
@@ -116,8 +113,7 @@ public partial class PreviewWindow : Window
 			_closed = true;
 			_tracker.Dispose();
 		};
-		viewModel.PropertyChanged += OnViewModelPropertyChanged;
-		ApplyContent();
+		ContentView.Attach(viewModel, logger);
 	}
 
 	/// <summary>A pinned window settled at a new place (500 ms after its last move, resize or state change).</summary>
@@ -184,35 +180,6 @@ public partial class PreviewWindow : Window
 			ShowWindow(hwnd, SwShowNoActivate);
 
 		SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);   // HWND_TOP
-	}
-
-	private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-	{
-		if (e.PropertyName is nameof(PreviewWindowViewModel.File) or nameof(PreviewWindowViewModel.Browser))
-			ApplyContent();
-	}
-
-	/// <summary>Shows the pane of the content the view model has: a file renderer or a browser (a new one for every browser content, so it never inherits a disposed WebView2).</summary>
-	private void ApplyContent()
-	{
-		FilePane.DataContext = _viewModel.File;
-		FilePane.Visibility = _viewModel.File == null ? Visibility.Collapsed : Visibility.Visible;
-		if (_viewModel.Browser == null)
-		{
-			BrowserHost.Child = null;
-			_browserView = null;
-			BrowserHost.Visibility = Visibility.Collapsed;
-			return;
-		}
-
-		if (_browserView != null && ReferenceEquals(_browserView.DataContext, _viewModel.Browser))
-			return;
-
-		_browserView = new BrowserPreviewView { DataContext = _viewModel.Browser };
-		BrowserHost.Child = _browserView;
-		BrowserHost.Visibility = Visibility.Visible;
-		if (_viewModel.BrowserContent?.Surface is BrowserSurface surface)
-			_ = _browserView.AttachAsync(surface, _logger);
 	}
 
 	/// <summary>Test mode: shown but never activated, off every monitor, hidden from the taskbar.</summary>

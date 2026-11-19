@@ -182,7 +182,6 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		];
 		await _pane.OpenAsync("a");
 		await _pane.Focus.WhenIdleAsync();
-		Assert.False(_pane.HasSideContent);              // the Focus view has its own place; the side pane is for previews (FR.23.12)
 		Assert.Equal(1, _pane.FocusBadge);
 		Assert.True(_pane.IsFocusBadgeVisible);
 
@@ -197,21 +196,15 @@ public sealed class SessionPaneNavigationTests : IDisposable
 	}
 
 	[Fact]
-	public async Task FileRef_OpensThePreviewPaneWithTheRenderedMarkdown()
+	public async Task FileRef_WithNoPreviewTarget_ShowsTheNoticeAndOpensNothing()
 	{
 		AddSession("a", 5);
 		_client.Files["ref1"] = ("plan.md", "text/markdown", System.Text.Encoding.UTF8.GetBytes("# The plan\n\n- step one"));
 		await _pane.OpenAsync("a");
-		_pane.ToggleSideCommand.Execute(null);
-		Assert.False(_pane.IsSidePaneVisible);
-
 		await _pane.ActivateRefAsync(new AttentionRefDto { Kind = "file", RefId = "ref1", Name = "plan.md", Path = "docs/plan.md" });
 
-		Assert.True(_pane.Preview!.IsOpen);
-		Assert.Equal("plan.md", _pane.Preview.Title);
-		Assert.Contains("<h1>The plan</h1>", _previewSurface.LastHtml);
-		Assert.True(_pane.IsSidePaneVisible);          // opening a preview shows the side pane again
-		Assert.Contains("file.read:ref1:0:" + Constants.Limits.PreviewChunkBytes, _client.Calls);
+		Assert.False(_pane.Preview!.IsOpen);   // the old pane is gone; the router's default Preview panel shows such files (tested with the router)
+		Assert.Equal(Constants.Texts.FilePreviewUnavailable, _pane.Notice);
 	}
 
 	[Fact]
@@ -232,7 +225,7 @@ public sealed class SessionPaneNavigationTests : IDisposable
 	}
 
 	[Fact]
-	public async Task LocalPathChip_AsksTheDaemonForAHandle_ThenOpensThePreview()
+	public async Task LocalPathChip_AsksTheDaemonForAHandle_ThenTheRouterIsOfferedTheFile()
 	{
 		var session = AddSession("a", 10);
 		session.Entries[3] = session.Entries[3] with { Content = $"The plan is at {ChipPath} now" };
@@ -244,9 +237,8 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		await _pane.Preview!.WhenIdleAsync();
 
 		Assert.Contains($"file.preview:a:fa:3:{ChipPath}", _client.Calls);
-		Assert.True(_pane.Preview.IsOpen);
-		Assert.Contains("<h1>Chip plan</h1>", _previewSurface.LastHtml);
-		Assert.Null(_pane.Notice);
+		Assert.False(_pane.Preview.IsOpen);
+		Assert.Equal(Constants.Texts.FilePreviewUnavailable, _pane.Notice);   // no router here, so nothing could show it
 	}
 
 	[Fact]
@@ -604,7 +596,7 @@ public sealed class SessionPaneNavigationTests : IDisposable
 	}
 
 	[Fact]
-	public async Task OpeningASession_ShowsItsFocusItems_AndASideContentFlag()
+	public async Task OpeningASession_ShowsItsFocusItems()
 	{
 		AddSession("a", 5);
 		AddSession("b", 5);
@@ -613,12 +605,9 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		await _pane.OpenAsync("a");
 		await _pane.Focus.WhenIdleAsync();
 		Assert.Single(_pane.Focus.Items);
-		Assert.False(_pane.HasSideContent);     // only a preview fills the side pane
 
 		await _pane.OpenAsync("b");
 		await _pane.Focus.WhenIdleAsync();
 		Assert.Empty(_pane.Focus.Items);
-		Assert.False(_pane.HasSideContent);
-		Assert.False(_pane.IsSidePaneVisible);
 	}
 }

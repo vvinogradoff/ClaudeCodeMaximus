@@ -221,4 +221,72 @@ public sealed class PreviewSettingsServiceTests
 		Assert.Null(StartupOptions.Parse(["--test-monitors", "2"]).TestMonitorCount);
 		Assert.Null(StartupOptions.Parse(["--test-window"]).TestMonitorCount);
 	}
+
+	[Fact]
+	public void DockLayout_RoundTrips_AsCopies()
+	{
+		var layout = new PreviewDockLayoutModel { Side = PreviewDockSide.Bottom, StackedWith = ["csv"], TabIndex = 1, Size = 320, AutoHide = true, Shown = false };
+
+		_service.SaveDockLayout("images", layout);
+		layout.Size = 1;
+
+		var read = _service.GetDockLayout("images")!;
+		Assert.Equal(PreviewDockSide.Bottom, read.Side);
+		Assert.Equal(["csv"], read.StackedWith);
+		Assert.Equal(1, read.TabIndex);
+		Assert.Equal(320, read.Size);
+		Assert.True(read.AutoHide);
+		Assert.False(read.Shown);
+		Assert.Null(_service.GetDockLayout("nope"));
+	}
+
+	[Fact]
+	public void OpenPanels_RoundTrip_AsCopies()
+	{
+		var panel = new OpenPreviewPanelModel { GroupId = "images", Pinned = true, Layout = new PreviewDockLayoutModel { Size = 200 } };
+
+		_service.SaveOpenPanels([panel]);
+		panel.Layout!.Size = 1;
+
+		var read = Assert.Single(_service.OpenPanels);
+		Assert.Equal("images", read.GroupId);
+		Assert.True(read.Pinned);
+		Assert.Equal(200, read.Layout!.Size);
+	}
+
+	[Fact]
+	public void ForgetPlacements_ClearsTheDockLayoutsToo()
+	{
+		_service.SavePlacement("images", new PreviewPlacementModel());
+		_service.SaveDockLayout("images", new PreviewDockLayoutModel());
+
+		_service.ForgetPlacements();
+
+		Assert.Null(_service.GetPlacement("images"));
+		Assert.Null(_service.GetDockLayout("images"));
+	}
+
+	[Fact]
+	public void SaveGroups_PrunesDockLayoutsOfGoneGroups_ButKeepsDefault()
+	{
+		_service.SaveDockLayout("images", new PreviewDockLayoutModel());
+		_service.SaveDockLayout("abc", new PreviewDockLayoutModel());
+		_service.SaveDockLayout(Constants.Previews.DefaultPanelId, new PreviewDockLayoutModel());
+
+		_service.SaveGroups([new PreviewGroupModel { Id = "abc", Name = "Mine" }]);
+
+		Assert.Null(_service.GetDockLayout("images"));
+		Assert.NotNull(_service.GetDockLayout("abc"));
+		Assert.NotNull(_service.GetDockLayout(Constants.Previews.DefaultPanelId));
+	}
+
+	[Fact]
+	public void SavingPanelsAndLayouts_RaisesNeitherEvent()
+	{
+		_service.SaveOpenPanels([new OpenPreviewPanelModel { GroupId = "images" }]);
+		_service.SaveDockLayout("images", new PreviewDockLayoutModel());
+
+		Assert.Equal(0, _groupEvents);
+		Assert.Equal(0, _enabledEvents);
+	}
 }

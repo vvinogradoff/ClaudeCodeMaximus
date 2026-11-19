@@ -522,16 +522,17 @@ public sealed class InputAreaViewTests
 	}
 
 	[Fact]
-	public void TheSidePane_StaysForPreviews_AndTheFocusViewHasNoPlaceInIt()
+	public void TheSidePane_IsGone_TheDefaultPreviewPanelOfTheDockingAreaReplacedIt()
 	{
 		StaTestRunner.Run(() =>
 		{
 			var f = Create();
 
-			Assert.Equal(Visibility.Collapsed, f.Find<Grid>("SidePane").Visibility);
+			foreach (var name in new[] { "SidePane", "SideColumn", "SideSplitter" })
+				Assert.Null(f.Pane.FindName(name));   // FR.29.18: no preview column in the session pane
 			f.Model.SelectFocusViewCommand.Execute(null);
 			f.Settle();
-			Assert.Equal(Visibility.Collapsed, f.Find<Grid>("SidePane").Visibility);   // Focus no longer opens the side column
+			Assert.Null(f.Pane.FindName("SidePane"));
 		});
 	}
 }

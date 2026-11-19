@@ -198,7 +198,7 @@ public sealed class InlineVideoTests : IDisposable
 	}
 
 	[Fact]
-	public async Task ACtrlClickOnANonVideoPath_StillOpensThePane()
+	public async Task ACtrlClickOnANonVideoPath_IsNeverSentToThePlayer()
 	{
 		var session = FakeSession.WithEntries(10, "Session a");
 		session.Entries = [.. session.Entries.Select(e => e with { EntryId = $"fa:{e.Index}", Content = $"entry {e.Index}" })];
@@ -211,8 +211,9 @@ public sealed class InlineVideoTests : IDisposable
 		await _pane.PreviewLocalPathAsync(3, @"C:\work\notes.txt");
 		await _preview.WhenIdleAsync();
 
-		Assert.True(_pane.Preview!.IsOpen);
+		Assert.False(_pane.Preview!.IsOpen);
 		Assert.Empty(_external.Opened);
+		Assert.Equal(Constants.Texts.FilePreviewUnavailable, _pane.Notice);
 	}
 
 	[Theory]

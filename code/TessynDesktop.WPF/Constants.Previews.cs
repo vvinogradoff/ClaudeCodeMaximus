@@ -50,5 +50,11 @@ public static partial class Constants
 		public const int TestMonitorWidth = 1920;
 		public const int TestMonitorHeight = 1080;
 		public const string TestMonitorDevicePrefix = @"\\.\TESTDISPLAY";
+
+		/// <summary>The id of the default Preview panel (files with no group, FR.29.18) in the dock layouts and the open-panel list.</summary>
+		public const string DefaultPanelId = "default";
+
+		/// <summary>The title of the default Preview panel.</summary>
+		public const string DefaultPanelName = "Preview";
 	}
 }

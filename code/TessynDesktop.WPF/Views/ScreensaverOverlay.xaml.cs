@@ -45,6 +45,9 @@ public partial class ScreensaverOverlay : UserControl
 	/// <summary>The content the cover sits on. It is hidden while the screensaver is up, which also hides the WebView2 windows that WPF cannot cover.</summary>
 	public UIElement? Covered { get; set; }
 
+	/// <summary>Raised with true when the cover goes up and false when it goes down, so windows that are not part of <see cref="Covered"/> (floating docked panels) follow it.</summary>
+	public event EventHandler<bool>? CoverChanged;
+
 	/// <summary>True while the input hook and the controller subscription are in place.</summary>
 	public bool IsAttached => _subscribed;
 
@@ -160,6 +163,7 @@ public partial class ScreensaverOverlay : UserControl
 		_coveredHidden = true;
 		Covered.Visibility = Visibility.Hidden;
 		Focusable = true;
+		CoverChanged?.Invoke(this, true);
 	}
 
 	/// <summary>Brings the content back and gives the focus to where it was.</summary>
@@ -172,6 +176,7 @@ public partial class ScreensaverOverlay : UserControl
 		if (Covered != null)
 			Covered.Visibility = Visibility.Visible;
 
+		CoverChanged?.Invoke(this, false);
 		Focusable = false;
 		var before = _focusBefore;
 		_focusBefore = null;

@@ -192,6 +192,8 @@ public sealed class ServiceRegistration
 		services.AddSingleton<PreviewPlacementPlanner>();
 		services.AddSingleton<IPreviewRouter, PreviewRouter>(); // disposed with the container at shutdown; CloseAllForExit runs from MainWindow.Closed
 		services.AddSingleton<IPreviewWindowFactory, PreviewWindowFactory>();
+		services.AddSingleton<DockingSurfaceHost>(); // the main window's docking area registers itself here (FR.29.19)
+		services.AddSingleton<IPreviewDockFactory, PreviewDockFactory>();
 		services.AddSingleton<IPreviewContentFactory, PreviewContentFactory>();
 		services.AddSingleton<BrowserEnvironmentProvider>();
 		services.AddSingleton<BrowserNavigationPolicy>();

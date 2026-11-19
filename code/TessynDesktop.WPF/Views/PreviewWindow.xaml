@@ -82,8 +82,7 @@
         <!-- The content stretches with the window (NR.7): a file renderer or a browser, created when the content is shown -->
         <!-- ContentHost leaves the resize border (FR.29.15) free: the WebView2 children are HWNDs and would swallow the mouse over it -->
         <Grid x:Name="ContentHost" Grid.Row="1">
-            <v:FilePreviewPane x:Name="FilePane" ShowCloseButton="False" ShowHeader="False" Visibility="Collapsed" />
-            <Border x:Name="BrowserHost" Visibility="Collapsed" />
+            <v:PreviewContentHost x:Name="ContentView" />
         </Grid>
     </Grid>
 </Window>
