@@ -184,6 +184,7 @@ public sealed class WpfInlinePathsE2ETests : IDisposable
 			await WaitAsync("both hints", async () => (bool)(await page.EvalAsync("(() => { const t = Array.from(document.querySelectorAll('.pnote')).map(n => n.textContent); return t.includes('Image not allowed') && t.includes('Image unavailable'); })()"))!);
 
 			// Each hint sits in the slot of its own path, and only the allowed image became an <img>.
+			await WaitAsync("both allowed images to load", async () => (int)(await page.EvalAsync("document.querySelectorAll('img.pimg').length"))! == 2);
 			Assert.Equal(2, (int)(await page.EvalAsync("document.querySelectorAll('img.pimg').length"))!);   // the absolute picture and the relative one
 			Assert.Equal("Image unavailable", (string)(await page.EvalAsync("document.querySelectorAll('.pth')[3].nextElementSibling.textContent"))!);
 			Assert.Equal("Image not allowed", (string)(await page.EvalAsync("document.querySelectorAll('.pth')[4].nextElementSibling.textContent"))!);

@@ -38,18 +38,23 @@ public sealed partial class LocalPathDetector
 		foreach (Match match in Bare().Matches(content))
 			Add(found, match.Value);
 
+		var scan = LinkTarget().Replace(content, m => new string(' ', m.Length));   // a link target keeps its link behaviour and takes no path slot; the indexes stay
 		var relative = new List<(int At, string Text)>();
 		var quoted = new List<(int Start, int End)>();
-		foreach (Match match in QuotedRelative().Matches(content))
+		foreach (Match match in QuotedRelative().Matches(scan))
 		{
-			relative.Add((match.Index, match.Groups["p"].Value));
+			var text = match.Groups["p"].Value;
+			if (!IsPathShaped(Clean(text)))   // an apostrophe pair in prose is no quote: only a quoted range that is a path may hide bare hits
+				continue;
+
+			relative.Add((match.Index, text));
 			quoted.Add((match.Index, match.Index + match.Length));
 		}
 
-		foreach (Match match in BacktickName().Matches(content))
+		foreach (Match match in BacktickName().Matches(scan))
 			relative.Add((match.Index, match.Groups[1].Value));
 
-		foreach (Match match in BareRelative().Matches(content))
+		foreach (Match match in BareRelative().Matches(scan))
 		{
 			if (!quoted.Any(q => match.Index >= q.Start && match.Index < q.End))   // the tail of a quoted path with spaces is not a path of its own
 				relative.Add((match.Index, match.Value));
@@ -66,22 +71,27 @@ public sealed partial class LocalPathDetector
 		if (found.Count >= Constants.Limits.MaxPathChipsPerEntry)
 			return;
 
-		var path = raw.TrimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '\'', '"', '*').Trim();
+		var path = Clean(raw);
 		if (IsPathShaped(path) && !found.Contains(path, StringComparer.Ordinal))
 			found.Add(path);
 	}
+
+	private static string Clean(string raw) => raw.TrimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '\'', '"', '*').Trim();
 
 	/// <summary>A relative path (FR.26.7): a folder separator and a lettered extension on the last part, a first part that is no web host; or a bare lower-case file name.</summary>
 	private static bool IsRelativeShaped(string path)
 	{
 		if (BareName().IsMatch(path))
-			return true;
+			return Constants.FileTypes.KnownBareNameExtensions.Contains(path[path.LastIndexOf('.')..]);
 
-		if (!RelativeShape().IsMatch(path) || path[0] is '\\' or '/' || char.IsWhiteSpace(path[^1]))
+		if (!RelativeShape().IsMatch(path) || path[0] is '\\' or '/' or '~' || char.IsWhiteSpace(path[^1]))
 			return false;
 
 		var firstPart = path[..path.IndexOfAny(['\\', '/'])];
 		var dot = firstPart.LastIndexOf('.');
+		if (firstPart.Equals(Constants.FileTypes.LocalWebHost, StringComparison.OrdinalIgnoreCase))
+			return false;
+
 		return dot < 0 || !Constants.FileTypes.WebTopLevelDomains.Contains(firstPart[(dot + 1)..]);
 	}
 
@@ -114,8 +124,12 @@ public sealed partial class LocalPathDetector
 	private static partial Regex BacktickName();
 
 	/// <summary>A relative path with a separator inside a pair of backticks or quotes (spaces allowed there).</summary>
-	[GeneratedRegex(@"(?<q>[`""'])(?<p>(?:(?!\k<q>)[^\r\n<>|?*:])*[\\/](?:(?!\k<q>)[^\r\n<>|?*:])*)\k<q>")]
+	[GeneratedRegex(@"(?m)(?:(?<=^|[\s(\[])(?<q>[""'])|(?<q>`))(?<p>(?:(?!\k<q>)[^\r\n<>|?*:])*[\\/](?:(?!\k<q>)[^\r\n<>|?*:])*)\k<q>(?:(?=$|[\s.,;:!?)\]])|(?<=`))")]
 	private static partial Regex QuotedRelative();
+
+	/// <summary>The target of a markdown link: <c>](...)</c>.</summary>
+	[GeneratedRegex(@"\]\([^)\r\n]*\)")]
+	private static partial Regex LinkTarget();
 
 	/// <summary>A bare relative path starts where no word, path, URL or query character precedes it (so a URL, a link target inside a URL and the tail of an absolute path are never matched).</summary>
 	[GeneratedRegex(@"(?<![\w\\/.:@%#=&~+?\-])[\w.\-@+~]+(?:[\\/][\w.\-@+~]+)+")]

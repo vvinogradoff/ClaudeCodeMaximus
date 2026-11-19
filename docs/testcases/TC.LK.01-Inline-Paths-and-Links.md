@@ -37,10 +37,14 @@ Related requirements: FR.26.5, FR.26.6. Use cases: [UC.LK.01](/docs/usecases/UC.
 | TC.LK.29 | Daemon: `file.preview` with a relative path resolves it against the working directory (`docs/plan.md`); `..\..\outside.txt` is refused with "the relative path leaves the working directory" | AUTOMATED | UC.LK.07 | FR.26.7 |
 | TC.LK.30 | E2E: Ctrl+click on a relative `.md` path asks `file.preview` with the relative text as written and opens the preview; a plain click asks for nothing | E2E | UC.LK.07 | FR.26.7 |
 | TC.LK.31 | E2E: a relative image path gets the inline image preview directly under it; Ctrl+click on it opens the file | E2E | UC.LK.07 | FR.26.7 |
+| TC.LK.32 | Prose with apostrophes ("It's fine; see docs/a.md. Don't worry.", "The user's file is src/main.cs and the dev's note") still marks the paths; only a quoted range that is itself a path suppresses bare hits | AUTOMATED | UC.LK.07 | FR.26.7 |
+| TC.LK.33 | Bare names in backticks need a known file-type extension: `Program.cs` is marked, `obj.method`, `os.path`, `item.name` are not | AUTOMATED | UC.LK.07 | FR.26.7 |
+| TC.LK.34 | A path starting with `~`, one whose first part is `localhost`, and a markdown link target `](docs/a.md)` are not marked and take no path slot | AUTOMATED | UC.LK.07 | FR.26.7 |
+| TC.LK.35 | A relative path inside a code block is marked exactly as an absolute one is | AUTOMATED | UC.LK.07 | FR.26.7 |
 
 ## FR → TC coverage
 | FR | Test cases |
 |---|---|
 | FR.26.5 | TC.LK.01–02, 03, 07–15, 17 |
 | FR.26.6 | TC.LK.03–07, 11, 16, 18–25, 30 |
-| FR.26.7 | TC.LK.26–31 |
+| FR.26.7 | TC.LK.26–35 |

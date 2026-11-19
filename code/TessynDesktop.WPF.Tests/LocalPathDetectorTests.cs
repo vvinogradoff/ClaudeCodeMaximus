@@ -39,6 +39,9 @@ public sealed class LocalPathDetectorTests
 	[InlineData("saved `docs/my notes/final plan.md` there", "docs/my notes/final plan.md")]
 	[InlineData("open \"docs/my notes/plan.md\" now", "docs/my notes/plan.md")]
 	[InlineData("see `README.md`", "README.md")]
+	[InlineData("It's fine; see docs/a.md. Don't worry.", "docs/a.md")]
+	[InlineData("The user's file is src/main.cs and the dev's note", "src/main.cs")]
+	[InlineData("see `Program.cs` and `obj.method`", "Program.cs")]
 	public void FindsRelativePaths(string text, string expected) => Assert.Equal([expected], _detector.Detect(text));
 
 	[Theory]
@@ -52,6 +55,10 @@ public sealed class LocalPathDetectorTests
 	[InlineData("call `string.Empty` or `Console.WriteLine`")]
 	[InlineData("/usr/local/bin/tool.sh")]
 	[InlineData("it's fine, don't worry")]
+	[InlineData("call `obj.method` and `os.path` and `item.name`")]
+	[InlineData("see ~/docs/a.md")]
+	[InlineData("open localhost/docs/a.html")]
+	[InlineData("a [link](docs/a.md) and [t](docs/b.md \"title\")")]
 	public void NotARelativePath_NoMark(string text) => Assert.Empty(_detector.Detect(text));
 
 	[Fact]
