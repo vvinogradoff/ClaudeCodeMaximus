@@ -29,6 +29,7 @@ public partial class DockingArea : UserControl, IDockingSurface
 	{
 		InitializeComponent();
 		SessionView = sessionView;
+		Chrome = new DockingChrome(DockManager, this);   // the compact chrome, the focus guard, the slide-out closer (FR.6.13, FR.6.20)
 		var document = new LayoutDocument
 		{
 			ContentId = Constants.PreviewDock.SessionDocumentId,
@@ -58,6 +59,8 @@ public partial class DockingArea : UserControl, IDockingSurface
 			if (e.LayoutFloatingWindowControl is not { } created)
 				return;
 
+			Chrome.OnFloatingWindowCreated(created);   // its keys go to the shell commands (FR.6.20)
+
 			// The library shows the window after it is created; while the cover is up it is hidden again at once.
 			created.IsVisibleChanged += (_, _) =>
 			{
@@ -79,6 +82,9 @@ public partial class DockingArea : UserControl, IDockingSurface
 
 	/// <summary>The session pane, the central document.</summary>
 	public FrameworkElement SessionView { get; }
+
+	/// <summary>The compact chrome, keyboard routing for floating panels, focus guard and slide-out closer (FR.6.13, FR.6.20).</summary>
+	public DockingChrome Chrome { get; }
 
 	/// <summary>The AvalonDock manager.</summary>
 	public DockingManager Manager => DockManager;

@@ -48,6 +48,7 @@ public partial class MainWindow : Window
 			PrepareTestWindow();
 
 		Docking.SessionView.SetBinding(DataContextProperty, new System.Windows.Data.Binding(nameof(MainViewModel.Session)) { Source = viewModel });   // the session pane view model exists once the client is connected
+		Docking.Chrome.UseShellCommands(commands);   // the floating panels' keys go to the shell commands too (FR.6.20)
 		dockingSurface.Register(Docking);   // the docked preview panels are placed in this docking area (FR.29.19)
 		Docking.ApplyTheme(appearance.IsDark);   // the one place the theme is first set
 		appearance.Changed += (_, _) => Dispatcher.BeginInvoke(() => Docking.ApplyTheme(appearance.IsDark));
