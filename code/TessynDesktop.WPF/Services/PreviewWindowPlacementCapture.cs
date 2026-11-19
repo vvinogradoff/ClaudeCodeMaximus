@@ -12,11 +12,15 @@ namespace TessynDesktop.WPF.Services;
 public sealed class PreviewWindowPlacementCapture
 {
 	private readonly IWindowPlacementApi _api;
+	private readonly Func<IntPtr, MonitorInfo?> _monitorOf;
 	private CapturedPlacement? _lastRestored;
 
-	public PreviewWindowPlacementCapture(IWindowPlacementApi api)
+	/// <param name="api">The Win32 calls.</param>
+	/// <param name="monitorOf">The monitor a window is on now; null (the default) when monitors are not tracked.</param>
+	public PreviewWindowPlacementCapture(IWindowPlacementApi api, Func<IntPtr, MonitorInfo?>? monitorOf = null)
 	{
 		_api = api;
+		_monitorOf = monitorOf ?? (_ => null);
 	}
 
 	/// <summary>Notes the window's rectangle when it is restored; call it whenever the window moved or changed size.</summary>
@@ -34,11 +38,11 @@ public sealed class PreviewWindowPlacementCapture
 			return null;
 
 		if (_lastRestored == null)
-			return new CapturedPlacement(behind, _api.GetDpi(hwnd));
+			return new CapturedPlacement(behind, _api.GetDpi(hwnd), _monitorOf(hwnd));
 
 		var rectangle = _lastRestored.Placement.Clone();
 		rectangle.Maximized = behind.Maximized;
-		return new CapturedPlacement(rectangle, _lastRestored.Dpi);
+		return new CapturedPlacement(rectangle, _lastRestored.Dpi, _lastRestored.Monitor);   // the monitor of that rectangle, not the one the window was moved to meanwhile
 	}
 
 	private CapturedPlacement? ReadRestored(IntPtr hwnd)
@@ -51,7 +55,7 @@ public sealed class PreviewWindowPlacementCapture
 			return null;
 
 		actual.Maximized = false;
-		_lastRestored = new CapturedPlacement(actual, _api.GetDpi(hwnd));
+		_lastRestored = new CapturedPlacement(actual, _api.GetDpi(hwnd), _monitorOf(hwnd));
 		return _lastRestored;
 	}
 }
