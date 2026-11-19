@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using AvalonDock;
 using AvalonDock.Layout;
-using AvalonDock.Themes;
 using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
@@ -14,7 +13,7 @@ namespace TessynDesktop.WPF.Views;
 /// The main window's docking area (FR.6.11, FR.29.19): AvalonDock holding the whole shell layout. The <see cref="SessionPane"/> is the single, non-closable, non-floatable
 /// document of the central document pane (no tab strip); Sessions, Recent and Tags (left pane) and Focus (right pane) are panels around it (<see cref="BuildShell"/>);
 /// docked preview panels are placed by <see cref="PreviewDockLayoutApplier"/>. Implements <see cref="IDockingSurface"/> for the previews and <see cref="IShellLayout"/> for the
-/// view models and menu commands. The layout is remembered (FR.6.18) through <see cref="ShellLayoutMemory"/>. The theme follows Tessyn's light or dark theme (FR.6.21).
+/// view models and menu commands. The layout is remembered (FR.6.18) through <see cref="ShellLayoutMemory"/>. The docking theme is <see cref="TessynDockTheme"/>, set once; light and dark are the application's colour dictionary (FR.6.21).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
@@ -57,6 +56,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	{
 		InitializeComponent();
 		SessionView = sessionView;
+		DockManager.Theme = new TessynDockTheme();   // the one theme, for light and dark alike: the colours are the application resources' (FR.6.21)
 		Chrome = new DockingChrome(DockManager, this);   // the compact chrome, the focus guard, the slide-out closer (FR.6.13, FR.6.20)
 		DockManager.AnchorableHeaderTemplateSelector = new ShellPanelHeaderTemplateSelector();   // the Focus tab shows the badge (FR.6.16)
 		_strip = new DockingStripSync(DockManager, () => _documentPane, _tree);
@@ -187,16 +187,6 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		_floatingHidden = !visible;
 		foreach (var window in DockManager.FloatingWindows.ToList())
 			window.Visibility = visible ? Visibility.Visible : Visibility.Hidden;
-	}
-
-	/// <summary>Switches the docking theme with Tessyn's light or dark theme (AvalonDock's own VS2013 pair, recoloured by the chrome resources).</summary>
-	public void ApplyTheme(bool dark)
-	{
-		if (DockManager.Theme is Vs2013DarkTheme && dark || DockManager.Theme is Vs2013LightTheme && !dark)
-			return;
-
-		DockManager.Theme = dark ? new Vs2013DarkTheme() : new Vs2013LightTheme();
-		_strip.Invalidate();   // a new theme builds the panes' templates again
 	}
 
 	/// <summary>Saves a layout change that is still waiting for its delay (the window is closing).</summary>
@@ -605,7 +595,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			.Select(p => p!.Parent as LayoutAnchorablePane)
 			.OfType<LayoutAnchorablePane>().Where(p => p.DockWidth.IsAbsolute).Distinct().ToList();
 		var fixedWidth = panes.Sum(p => p.DockWidth.Value);
-		var available = ActualWidth - Constants.ShellLayout.MinSessionWidth;
+		var available = ActualWidth - Constants.ShellLayout.MinSessionWidth - panes.Count * DockManager.GridSplitterWidth;   // the theme's splitters (one beside each fixed pane) are not the Session view's
 		if (fixedWidth > 0 && fixedWidth > available)
 		{
 			var factor = Math.Max(available, 0) / fixedWidth;
