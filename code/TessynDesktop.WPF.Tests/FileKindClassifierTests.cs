@@ -22,13 +22,24 @@ public sealed class FileKindClassifierTests
 
 	[Theory]
 	[InlineData("drawing.svg", "image/svg+xml")]
-	[InlineData("page.html", "text/html")]
-	[InlineData("page.htm", null)]
+	[InlineData("page.html.txt", "text/plain")]
 	[InlineData("run.ps1", "text/plain")]
 	[InlineData("run.bat", null)]
 	[InlineData("run.cmd", null)]
 	[InlineData("noext", "image/svg+xml")]
 	public void SvgHtmlAndScripts_AreTextNeverRendered(string name, string? mime) => Assert.Equal(PreviewKind.Text, _classifier.Classify(name, mime));
+
+	[Theory]
+	[InlineData("page.html", "text/html")]
+	[InlineData("page.htm", null)]
+	[InlineData("PAGE.HTML", null)]
+	[InlineData("Index.HtM", "text/plain")]
+	[InlineData("noext", "text/html")]
+	[InlineData(null, "TEXT/HTML; charset=utf-8")]
+	public void Html_IsItsOwnKind_ByExtensionAndByMime(string? name, string? mime) => Assert.Equal(PreviewKind.Html, _classifier.Classify(name, mime));
+
+	[Fact]
+	public void Html_HasTheTextLimit() => Assert.Equal(_classifier.LimitOf(PreviewKind.Text), _classifier.LimitOf(PreviewKind.Html));
 
 	[Theory]
 	[InlineData("setup.exe", "application/octet-stream")]

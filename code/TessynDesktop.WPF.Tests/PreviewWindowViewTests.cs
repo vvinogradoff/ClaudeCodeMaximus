@@ -265,7 +265,7 @@ public sealed class PreviewWindowViewTests
 
 			Assert.False(pane.ShowHeader);
 			Assert.Equal(Visibility.Collapsed, ((FrameworkElement)pane.FindName("HeaderRow")!).Visibility);
-			Assert.Equal("Show markdown source", AutomationProperties.GetName(source));
+			Assert.Equal("Show source", AutomationProperties.GetName(source));
 			Assert.Equal("Open in default app", AutomationProperties.GetName(open));
 			Assert.Equal(Visibility.Collapsed, source.Visibility);   // no file yet
 			Assert.Equal(Visibility.Collapsed, open.Visibility);
@@ -381,7 +381,7 @@ public sealed class PreviewWindowViewTests
 			var appearance = new CountingAppearanceService();
 			var options = new StartupOptions();
 			var surface = new FilePreviewSurface(
-				new WebViewEnvironmentProvider(temp.Paths, options), temp.Paths, new UrlPolicy(), new WebRequestPolicy(new MediaProxyUrl()), appearance,
+				new WebViewEnvironmentProvider(temp.Paths, options), temp.Paths, new UrlPolicy(), new WebRequestPolicy(new MediaProxyUrl()), new FramePolicy(), appearance,
 				new ScreensaverController(store, new FolderScreensaverImages(), DateTime.UtcNow), NullLogger<FilePreviewSurface>.Instance);
 			Assert.Equal(1, appearance.Subscribers);
 

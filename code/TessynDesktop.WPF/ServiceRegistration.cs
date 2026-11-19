@@ -68,6 +68,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<PrivateAddressCheck>();
 		services.AddSingleton<MediaProxyUrl>();
 		services.AddSingleton<WebRequestPolicy>();
+		services.AddTransient<FramePolicy>();   // one per preview surface: it counts that surface's expected frame load
 		services.AddSingleton<RemoteMediaHttpClientFactory>();
 		services.AddSingleton<RemoteMediaFetcher>(sp => new RemoteMediaFetcher(
 			sp.GetRequiredService<RemoteMediaHttpClientFactory>().Create(), sp.GetRequiredService<MediaPreviewPolicy>(), sp.GetRequiredService<PrivateAddressCheck>()));

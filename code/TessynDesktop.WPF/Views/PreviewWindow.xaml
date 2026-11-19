@@ -44,11 +44,11 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Image Grid.Column="0" Width="16" Height="16" Margin="10,0,8,0" Source="{Binding Icon, RelativeSource={RelativeSource AncestorType=Window}}" />
-            <!-- FR.29.14: the file window's own controls, left of the title: Source (markdown only) and Open in default app (only the types FR.23.18 allows) -->
+            <!-- FR.29.14: the file window's own controls, left of the title: Source (markdown and html) and Open in default app (only the types FR.23.18 allows) -->
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <ToggleButton x:Name="SourceButton" Style="{StaticResource WindowToggle}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
                               IsChecked="{Binding File.ShowSource, Mode=TwoWay}" Visibility="{Binding File.CanToggleSource, FallbackValue=Collapsed, Converter={StaticResource BoolToVis}}"
-                              ToolTip="Show the markdown source" AutomationProperties.Name="Show markdown source">
+                              ToolTip="Show the source" AutomationProperties.Name="Show source">
                     <TextBlock Style="{StaticResource IconText}" Text="{StaticResource GlyphCode}" />
                 </ToggleButton>
                 <Button x:Name="OpenExternalButton" Style="{StaticResource WindowIconButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True"

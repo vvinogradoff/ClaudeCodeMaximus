@@ -66,6 +66,49 @@ public sealed class FilePreviewViewModelTests : IDisposable
 		Assert.Equal("markdown", _surface.Calls[^1]);
 	}
 
+	[Theory]
+	[InlineData("page.html", "text/html")]
+	[InlineData("page.htm", null)]
+	public async Task Html_IsRenderedStatic_AndTheSourceToggleShowsTheCodeAndResetsPerItem(string name, string? mime)
+	{
+		var content = "<h1>Hi</h1><script>bad()</script>";
+
+		await Open("h", name, mime ?? "text/plain", content);
+
+		Assert.Equal(PreviewKind.Html, _preview.Kind);
+		Assert.True(_preview.CanToggleSource);
+		Assert.Equal(content, _surface.LastHtml);
+		Assert.Equal("html", _surface.Calls[^1]);
+
+		_preview.ShowSource = true;
+		Assert.Equal(content, _surface.LastText);
+		Assert.Equal("text", _surface.Calls[^1]);
+
+		_preview.ShowSource = false;
+		Assert.Equal("html", _surface.Calls[^1]);
+
+		_preview.ShowSource = true;
+		await Open("h2", name, mime ?? "text/plain", "<p>other</p>");   // a new item starts rendered
+		Assert.False(_preview.ShowSource);
+		Assert.Equal("html", _surface.Calls[^1]);
+		Assert.Equal("<p>other</p>", _surface.LastHtml);
+	}
+
+	[Fact]
+	public async Task Html_OffersNoToggleWhileLoadingOrOnError()
+	{
+		_preview.ShowError("page.html", "nope");
+		Assert.False(_preview.CanToggleSource);
+
+		_client.Files["big"] = ("big.html", "text/html", new byte[Constants.Limits.MaxPreviewTextBytes + 10]);
+		await _preview.OpenAsync(new PreviewTarget("big", "big.html"));
+		Assert.True(_preview.CanToggleSource);   // the first 2 MB are shown, with the note
+		Assert.Equal(Constants.Texts.PreviewTruncated, _preview.Message);
+
+		_preview.OpenAsync(new PreviewTarget("missing", "x.html")).Wait();
+		Assert.False(_preview.CanToggleSource);
+	}
+
 	[Fact]
 	public async Task Links_InRenderedMarkdown_OpenInTheSystemBrowserOnlyWhenHttp()
 	{
@@ -82,7 +125,6 @@ public sealed class FilePreviewViewModelTests : IDisposable
 	[Theory]
 	[InlineData("code.cs", "text/plain")]
 	[InlineData("drawing.svg", "image/svg+xml")]
-	[InlineData("page.html", "text/html")]
 	[InlineData("run.ps1", "text/plain")]
 	public async Task TextCodeSvgHtmlAndScripts_AreShownAsTextNeverRendered(string name, string mime)
 	{

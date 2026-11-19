@@ -10,7 +10,10 @@ public enum PreviewKind
 	/// <summary>Markdown, rendered with raw HTML disabled; the source can be shown instead.</summary>
 	Markdown,
 
-	/// <summary>Text and code in a monospace font. Also svg, html and scripts: shown as text, never rendered or run.</summary>
+	/// <summary>An html page, rendered static in a sandboxed frame (no scripts, no network); the source can be shown instead (FR.26.8).</summary>
+	Html,
+
+	/// <summary>Text and code in a monospace font. Also svg and scripts: shown as text, never rendered or run.</summary>
 	Text,
 
 	Image,

@@ -11,7 +11,7 @@ namespace TessynDesktop.WPF.E2E.Tests;
 public sealed class WpfPreviewWindowsPolishE2ETests
 {
 	private const string Plan1 = "plan1.md - Text and code";
-	private const string SourceName = "Show markdown source";
+	private const string SourceName = "Show source";
 	private const string OpenName = "Open in default app";
 	private const string AddressName = "Page address";
 

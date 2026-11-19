@@ -12,6 +12,8 @@ public sealed class FileKindClassifier
 		{
 			if (Constants.FileTypes.Markdown.Contains(extension))
 				return PreviewKind.Markdown;
+			if (Constants.FileTypes.Html.Contains(extension))
+				return PreviewKind.Html;
 			if (Constants.FileTypes.Image.Contains(extension))
 				return PreviewKind.Image;
 			if (Constants.FileTypes.Video.Contains(extension) || Constants.FileTypes.InlineVideo.Contains(extension))
@@ -28,6 +30,8 @@ public sealed class FileKindClassifier
 			return PreviewKind.Text;
 		if (type == "text/markdown")
 			return PreviewKind.Markdown;
+		if (type == "text/html" || type.StartsWith("text/html;", StringComparison.Ordinal))
+			return PreviewKind.Html;
 		if (type.StartsWith("text/", StringComparison.Ordinal) || type == "application/json" || type == "application/xml")
 			return PreviewKind.Text;
 		if (type is "image/png" or "image/jpeg" or "image/gif" or "image/webp" or "image/bmp")
@@ -43,7 +47,7 @@ public sealed class FileKindClassifier
 	/// <summary>The most bytes the client reads for a preview of this kind.</summary>
 	public long LimitOf(PreviewKind kind) => kind switch
 	{
-		PreviewKind.Markdown or PreviewKind.Text => Constants.Limits.MaxPreviewTextBytes,
+		PreviewKind.Markdown or PreviewKind.Html or PreviewKind.Text => Constants.Limits.MaxPreviewTextBytes,
 		PreviewKind.Image => Constants.Limits.MaxPreviewImageBytes,
 		PreviewKind.Video => Constants.Limits.MaxPreviewVideoBytes,
 		PreviewKind.Pdf => Constants.Limits.MaxPreviewPdfBytes,

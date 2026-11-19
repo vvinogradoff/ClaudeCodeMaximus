@@ -9,8 +9,8 @@ namespace TessynDesktop.WPF.ViewModels;
 
 /// <summary>
 /// The file preview pane (FR.23.18, FR.26.5): reads the file behind a handle through <see cref="IFilePreviewLoader"/> (chunked, with
-/// progress, cancel and size limits) and shows it on the sandboxed <see cref="IPreviewSurface"/>. Markdown is rendered (source/rendered
-/// toggle), text and code are shown as monospace text (svg and html too: displayed, never rendered), images and video play from the
+/// progress, cancel and size limits) and shows it on the sandboxed <see cref="IPreviewSurface"/>. Markdown and html are rendered (source/rendered
+/// toggle; html static in a sandboxed frame, FR.26.8), text and code are shown as monospace text (svg too: displayed, never rendered), images and video play from the
 /// preview cache, and a PDF only offers "Open in default app". Opening externally is limited to <see cref="ExternalOpenPolicy"/>'s
 /// allowlist and goes through <see cref="IExternalFileLauncher"/>. Contains no WPF types.
 /// </summary>
@@ -37,6 +37,7 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 	private string? _cachedPath;
 	private string? _markdownSource;
 	private string? _markdownHtml;
+	private string? _htmlSource;
 	private Task _loadTask = Task.CompletedTask;
 
 	[ObservableProperty]
@@ -99,8 +100,8 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 	/// <summary>The surface this view model draws on; the pane attaches its WebView2 to it (a preview window has its own, the side pane the shared one).</summary>
 	public IPreviewSurface Surface => _surface;
 
-	/// <summary>True for a markdown file, which can be shown as rendered output or as source.</summary>
-	public bool CanToggleSource => Kind == PreviewKind.Markdown && !IsLoading && Error == null;
+	/// <summary>True for a markdown or html file, which can be shown as rendered output or as source.</summary>
+	public bool CanToggleSource => Kind is PreviewKind.Markdown or PreviewKind.Html && !IsLoading && Error == null;
 
 	/// <summary>The size limit applies to a PDF too, but it is never shown; the pane only offers to open it.</summary>
 	public bool IsPdf => Kind == PreviewKind.Pdf;
@@ -271,6 +272,10 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 					ShowCurrentMarkdown();
 				Message = renderNote;
 				break;
+			case PreviewKind.Html:
+				_htmlSource = loaded.Text ?? string.Empty;
+				ShowCurrentHtml();
+				break;
 			case PreviewKind.Text:
 				_surface.ShowText(loaded.Text ?? string.Empty);
 				break;
@@ -300,8 +305,22 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 			_surface.ShowMarkdown(_markdownHtml ?? string.Empty);
 	}
 
+	private void ShowCurrentHtml()
+	{
+		if (ShowSource)
+			_surface.ShowText(_htmlSource ?? string.Empty);
+		else
+			_surface.ShowHtml(_htmlSource ?? string.Empty);
+	}
+
 	partial void OnShowSourceChanged(bool value)
 	{
+		if (Kind == PreviewKind.Html && _htmlSource != null)
+		{
+			ShowCurrentHtml();
+			return;
+		}
+
 		if (Kind == PreviewKind.Markdown && _markdownHtml != null)
 			ShowCurrentMarkdown();
 	}
@@ -418,6 +437,7 @@ public sealed partial class FilePreviewViewModel : ObservableObject, IDisposable
 		_rawName = null;
 		_markdownSource = null;
 		_markdownHtml = null;
+		_htmlSource = null;
 		Kind = PreviewKind.Unsupported;
 		Error = null;
 		Message = null;

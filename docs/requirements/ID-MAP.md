@@ -68,6 +68,7 @@ The amendment paragraphs of the FR.25 commit (FR.1.8 amendment, FR.1.17, FR.3.3 
 | **FR.2.14** | readable Markdown tables (session output, preview pane and windows, Focus cards) | 2026-11-19, Architect feedback; UC.MT.01, TC.MT.01–05 (new code MT) |
 | **FR.23.29** | references on expanded closed Focus items; a preview from a closed item is not tied to it | 2026-11-19, Architect feedback, amends FR.23.14, FR.23.18; UC.FC.04, TC.FC.11–13 |
 | **FR.26.7** | relative paths in assistant entries are marked and open on Ctrl+click | 2026-11-19, Architect feedback, amends FR.26.5; UC.LK.07, TC.LK.26–35 |
+| **FR.26.8** | HTML files are previewed rendered (static policy) with a Source toggle like markdown | 2026-11-19, Architect request, approved with option 1, Static (A31); amends FR.23.18, FR.29.5, FR.29.14, FR.29.18; UC.LK.08, TC.LK.36–53 |
 | **FR.29.16** | placement with Snap (the actual rectangle) and monitor scaling | 2026-11-19, Architect feedback, amends FR.29.6, FR.29.11; TC.PW.71–76, UC.PW.04 A5 |
 | UC/TC code MT | UC.MT.01, TC.MT.01–05 (Markdown tables) | no clash with the codes above |
 | **FR.23.30** | file paths (absolute and relative) in Focus card titles and bodies are marked and open on Ctrl+click; `file.preview` with `itemId` (tdcp-spec 10.A11) | 2026-11-19, Architect feedback, amends FR.23.18, FR.23.25; UC.FX.03, TC.FX.23–32 |
