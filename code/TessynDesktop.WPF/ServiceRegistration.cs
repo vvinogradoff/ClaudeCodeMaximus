@@ -106,7 +106,7 @@ public sealed class ServiceRegistration
 		{
 			TestDropPaths = options.TestDropPaths,
 			PreviewRouter = sp.GetRequiredService<IPreviewRouter>(),
-			ShellLayout = sp.GetService<IShellLayout>(),   // FR.6.16: null until the docked shell registers it
+			ShellLayout = sp.GetRequiredService<IShellLayout>(),   // FR.6.16: the Focus button brings the Focus panel forward
 			Dialogs = sp.GetRequiredService<IDialogService>(),
 		});
 		services.AddSingleton<IClientStateStore, JsonClientStateStore>();

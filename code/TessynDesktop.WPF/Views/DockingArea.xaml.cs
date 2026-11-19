@@ -59,6 +59,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		InitializeComponent();
 		SessionView = sessionView;
 		Chrome = new DockingChrome(DockManager, this);   // the compact chrome, the focus guard, the slide-out closer (FR.6.13, FR.6.20)
+		DockManager.AnchorableHeaderTemplateSelector = new ShellPanelHeaderTemplateSelector();   // the Focus tab shows the badge (FR.6.16)
 		_documentPane = CreateDocumentPane();
 		var root = new LayoutPanel { Orientation = Orientation.Horizontal };
 		root.Children.Add(_documentPane);
@@ -207,12 +208,32 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		}
 
 		panel.IsSelected = true;
+		NotifySelected(panel);   // also when it already was the selected tab (the change event does not fire then)
 		if (panel.IsAutoHidden)
 			SlideOut(panel);
 		else if (panel.IsFloating)
 			Raise(panel);
 
 		OnLayoutChanged();
+	}
+
+	/// <summary>A panel's tab became the selected one of its pane (FR.6.11): its content reacts (the Recent panel's collapse rule, the Focus panel's Closed expander).</summary>
+	private void TrackSelection(LayoutAnchorable panel)
+	{
+		panel.IsSelectedChanged -= OnPanelIsSelectedChanged;
+		panel.IsSelectedChanged += OnPanelIsSelectedChanged;
+	}
+
+	private void OnPanelIsSelectedChanged(object? sender, EventArgs e)
+	{
+		if (sender is LayoutAnchorable { IsSelected: true } panel)
+			NotifySelected(panel);
+	}
+
+	private static void NotifySelected(LayoutAnchorable panel)
+	{
+		if (panel.Content is IPanelSelectionAware aware)
+			aware.OnPanelSelected();
 	}
 
 	public void Close(string panelId)
@@ -380,6 +401,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		foreach (var definition in _definitions.Values.Where(d => d.IsLeft).OrderBy(d => LeftOrder(d.Id)))
 		{
 			var panel = CreatePanel(definition);
+			TrackSelection(panel);
 			_panels[definition.Id] = panel;
 			left.Add(panel);
 		}
@@ -388,6 +410,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		if (_definitions.TryGetValue(Constants.DockedShell.FocusPanelId, out var focusDefinition))
 		{
 			focus = CreatePanel(focusDefinition);
+			TrackSelection(focus);
 			_panels[focus.ContentId] = focus;
 		}
 
@@ -451,6 +474,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			panel.CanClose = true;
 			panel.CanFloat = true;
 			panel.CanAutoHide = true;
+			TrackSelection(panel);
 			_panels[definition.Id] = panel;
 		}
 

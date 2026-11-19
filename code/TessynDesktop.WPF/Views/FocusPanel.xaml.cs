@@ -7,7 +7,7 @@ namespace TessynDesktop.WPF.Views;
 
 /// <summary>The Focus view: open items of the selected session as cards (FR.23). Pure view; everything is bound to <c>FocusViewModel</c>.</summary>
 /// <remarks>Created by Claude</remarks>
-public partial class FocusPanel : UserControl
+public partial class FocusPanel : UserControl, IPanelSelectionAware
 {
 	public FocusPanel()
 	{
@@ -94,6 +94,13 @@ public partial class FocusPanel : UserControl
 		}
 
 		return false;
+	}
+
+	/// <summary>The layout core selected or brought forward the Focus tab (FR.6.16): the Closed expander collapses again (FR.23.14).</summary>
+	public void OnPanelSelected()
+	{
+		if (DataContext is FocusViewModel focus)
+			focus.OnFocusSelected();
 	}
 
 	/// <summary>The panel shows when Focus is selected (its host is collapsed under Session): the Closed expander collapses again (FR.23.14).</summary>
