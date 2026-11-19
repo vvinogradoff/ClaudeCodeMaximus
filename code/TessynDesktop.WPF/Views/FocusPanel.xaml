@@ -46,6 +46,37 @@
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
+            <!-- references of an item (FR.23.18, FR.23.29): the open card shows them always, the closed card when it is expanded -->
+            <DataTemplate x:Key="RefListTemplate" DataType="{x:Type vm:FocusItemViewModel}">
+                <ItemsControl ItemsSource="{Binding Refs}" Margin="0,4,0,0" Visibility="{Binding HasRefs, Converter={StaticResource BoolToVis}}" Focusable="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:FocusRefViewModel}">
+                            <Button Command="{Binding OpenCommand}" ToolTip="{Binding ToolTip}" Margin="0,0,6,6" Padding="8,3" AutomationProperties.Name="{Binding Label}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource RefGlyph}" />
+
+                                    <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" MaxWidth="240" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DataTemplate>
+            <Style x:Key="ClosedRefs" TargetType="ContentControl">
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="ContentTemplate" Value="{StaticResource RefListTemplate}" />
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsBodyExpanded}" Value="True">
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
             <DataTemplate x:Key="OpenCardTemplate" DataType="{x:Type vm:FocusItemViewModel}">
 
                     <Border Style="{StaticResource CardBorder}">
@@ -60,24 +91,7 @@
                             <v:FocusCardText Item="{Binding}" />
 
                             <!-- references (FR.23.18) -->
-                            <ItemsControl ItemsSource="{Binding Refs}" Margin="0,4,0,0" Visibility="{Binding HasRefs, Converter={StaticResource BoolToVis}}" Focusable="False">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:FocusRefViewModel}">
-                                        <Button Command="{Binding OpenCommand}" ToolTip="{Binding ToolTip}" Margin="0,0,6,6" Padding="8,3" AutomationProperties.Name="{Binding Label}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Style="{StaticResource RefGlyph}" />
-
-                                                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" MaxWidth="240" />
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <ContentControl Content="{Binding}" ContentTemplate="{StaticResource RefListTemplate}" Focusable="False" />
 
                             <!-- options, the recommendation last (FR.23.26): one vertical list of full-width buttons -->
                             <ItemsControl ItemsSource="{Binding Options}" Margin="0,6,0,4" Visibility="{Binding HasOptions, Converter={StaticResource BoolToVis}}" Focusable="False">
@@ -132,6 +146,8 @@
                             <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                         </DockPanel>
                         <v:FocusCardText Item="{Binding}" />
+                        <!-- references only while expanded (FR.23.29) -->
+                        <ContentControl Content="{Binding}" Style="{StaticResource ClosedRefs}" />
                     </StackPanel>
                 </Border>
             </DataTemplate>
