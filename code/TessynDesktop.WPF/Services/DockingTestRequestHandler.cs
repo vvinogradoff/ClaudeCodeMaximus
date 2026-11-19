@@ -20,6 +20,9 @@ public sealed class DockingTestRequestHandler
 	}
 
 	/// <summary>One request line in, one reply line (compact JSON, no line break) out.</summary>
+	/// <summary>A failed reply as one JSON line (for what the pipe itself refuses or catches, outside <see cref="Handle"/>).</summary>
+	public string Failure(string error) => JsonSerializer.Serialize(new DockingTestReply { Ok = false, Error = error }, Json);
+
 	public string Handle(string line) => JsonSerializer.Serialize(Reply(line), Json);
 
 	private DockingTestReply Reply(string line)

@@ -1,7 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:ad="clr-namespace:AvalonDock.Controls;assembly=AvalonDock"
-                    xmlns:reskeys="clr-namespace:AvalonDock.Themes.VS2013.Themes;assembly=AvalonDock.Themes.VS2013">
+                    xmlns:reskeys="clr-namespace:AvalonDock.Themes.VS2013.Themes;assembly=AvalonDock.Themes.VS2013"
+                    xmlns:menukeys="clr-namespace:AvalonDock.Themes.VS2013.Themes.Menu;assembly=AvalonDock.Themes.VS2013">
 	<!-- The docking chrome's dark colours (FR.6.21): every brush key AvalonDock's VS2013 templates look up (the templates are loaded without the library's own brushes, see
 	     TessynDockTheme), in Tessyn's palette. Merged by Theme.Dark.xaml, so the day/night switch recolours the whole docking chrome by swapping that one dictionary
 	     (every window, also the slide-out, the drop guides and the floating windows, reads these from the application resources). Row = the tab row and the splitters, content = the
@@ -97,4 +98,25 @@
 	<SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ControlAccentBrushKey}" Color="#60CDFF" />
 	<SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingDocumentWindowBackground}" Color="#2B2B2B" />
 	<SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowCaptionButtonInactiveHoveredGlyph}" Color="#FFFFFF" />
+	<!-- The keys of the theme's menu class (MenuKeys: the tab overflow dropdown, a floating window's context menu). -->
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.CheckMarkBackgroundBrushKey}" Color="#2B2B2B" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.CheckMarkBorderBrushKey}" Color="#3C3C3C" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.CheckMarkForegroundBrushKey}" Color="#FFFFFF" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.DisabledSubMenuItemBackgroundBrushKey}" Color="#2B2B2B" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.DisabledSubMenuItemBorderBrushKey}" Color="#3C3C3C" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.FocusScrollButtonBrushKey}" Color="#C5C5C5" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.MenuItemHighlightedBackgroundKey}" Color="#1AFFFFFF" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.MenuSeparatorBorderBrushKey}" Color="#3C3C3C" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.NormalBackgroundBrushKey}" Color="#2B2B2B" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.TopLevelHeaderMenuBackgroundKey}" Color="#2B2B2B" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.SubmenuItemBackgroundKey}" Color="#2B2B2B" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.SubmenuItemBackgroundHighlightedKey}" Color="#1AFFFFFF" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.ScrollButtonBrushKey}" Color="#C5C5C5" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.MenuBorderBrushKey}" Color="#3C3C3C" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.MenuBackgroundKey}" Color="#2B2B2B" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.TextBrushKey}" Color="#FFFFFF" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.ItemBackgroundSelectedKey}" Color="#26FFFFFF" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.ItemTextDisabledKey}" Color="#808080" />
+	<SolidColorBrush x:Key="{x:Static menukeys:MenuKeys.ItemBackgroundHoverKey}" Color="#1AFFFFFF" />
+	<DropShadowEffect x:Key="{x:Static menukeys:MenuKeys.DropShadowEffectKey}" BlurRadius="8" ShadowDepth="2" Opacity="0.35" Color="Black" />
 </ResourceDictionary>

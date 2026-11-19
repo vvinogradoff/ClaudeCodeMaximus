@@ -13,6 +13,9 @@ public sealed class FloatingPlacementGuard
 	private PreviewPlacementModel? _good;
 	private PreviewPlacementModel? _forced;
 
+	/// <summary>A panel restored at <paramref name="place"/>: it is the last good place until its window can be read, so a first read taken while Windows is settling is not taken over.</summary>
+	public void Seed(PreviewPlacementModel place) => _good = place;
+
 	/// <summary>The place to remember for what was read now (<paramref name="read"/> null: the window cannot be read, nothing is remembered); the last good one while the read is forced.</summary>
 	public PreviewPlacementModel? Filter(PreviewPlacementModel? read, bool settling)
 	{

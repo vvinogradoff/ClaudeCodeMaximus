@@ -45,7 +45,7 @@ public sealed class FloatingPanelPlacement : IFloatingPanelPlacement
 
 	public WindowPlacementModel ToLibraryUnits(PreviewPlacementModel pixels) => pixels.Dpi <= 0 ? pixels.ToWindowPlacement() : Scale(pixels.ToWindowPlacement(), pixels.Dpi);
 
-	private static int? DpiAt(WindowPlacementModel rectangle, IReadOnlyList<MonitorInfo> monitors)
+	private int? DpiAt(WindowPlacementModel rectangle, IReadOnlyList<MonitorInfo> monitors)
 	{
 		var x = rectangle.Left + rectangle.Width / 2;
 		var y = rectangle.Top + rectangle.Height / 2;
@@ -54,7 +54,7 @@ public sealed class FloatingPanelPlacement : IFloatingPanelPlacement
 	}
 
 	/// <summary>Pixels to device-independent units at <paramref name="dpi"/> (96 = 100 %).</summary>
-	private static WindowPlacementModel Scale(WindowPlacementModel pixels, int dpi)
+	private WindowPlacementModel Scale(WindowPlacementModel pixels, int dpi)
 	{
 		var factor = (double)Constants.Previews.BaseDpi / dpi;
 		return new WindowPlacementModel

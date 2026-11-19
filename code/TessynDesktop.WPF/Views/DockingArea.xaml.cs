@@ -616,7 +616,8 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		if (_namesDirty)
 		{
 			_namesDirty = false;
-			NameTabsWhenIdle(Constants.DockingTestHook.NameAttempts);   // after the passes that build the tab controls
+			if (_testMode)
+				NameEdgeTabsWhenIdle();   // test windows only; the tabs are named by their styles, with no walk (FR.6.22)
 		}
 
 		LayoutChanged?.Invoke(this, EventArgs.Empty);
@@ -661,15 +662,8 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		_lastSignature = _lastState + SizeText();   // the baseline: what the library and this fit made of it is not a change to save
 	}
 
-	/// <summary>Names the tab controls once the dispatcher is idle; tries again (a few times) while the library has not yet filled a tab.</summary>
-	private void NameTabsWhenIdle(int attempts)
-	{
-		Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
-		{
-			if (!_names.Update() && attempts > 1)
-				NameTabsWhenIdle(attempts - 1);
-		});
-	}
+	/// <summary>Names the edge tabs and floating frames once the dispatcher is idle (test windows only).</summary>
+	private void NameEdgeTabsWhenIdle() => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _names.Update());
 
 	/// <summary>Reads the layout when it really changed (a docking change, a selection, or a size found by the probe): logs the state, tells the listeners, and arms the save.</summary>
 	private void Evaluate()

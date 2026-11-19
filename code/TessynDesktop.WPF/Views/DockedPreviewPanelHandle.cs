@@ -57,6 +57,8 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 		_surface = surface;
 		_settings = settings;
 		_remembered = remembered;
+		if (remembered is { Floating: true, FloatingPlacement: { } restored })
+			_guard.Seed(restored);   // as ShellFloatingPlacements.Seed does for the shell panels (FR.29.21)
 		_logger = logger;
 		_reader = new PreviewDockLayoutReader();
 		_applier = new PreviewDockLayoutApplier(floating);

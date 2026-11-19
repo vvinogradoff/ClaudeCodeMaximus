@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Xml.Linq;
@@ -56,6 +57,10 @@ public sealed class ShellLayoutSerializer
 			if (id == null || panel.Attribute(Constants.ShellLayout.DpiAttribute) == null)
 				continue;
 
+			// A scale that cannot be read (or is not positive) drops the saved place: the pixels would otherwise be read as device-independent units (old data, FloatingPanelPlacement.Plan).
+			if (!TryInt(panel, Constants.ShellLayout.DpiAttribute, out var dpi) || dpi <= 0)
+				continue;
+
 			var place = new PreviewPlacementModel
 			{
 				Left = IntOf(panel, Constants.ShellLayout.PixelLeftAttribute),
@@ -65,7 +70,7 @@ public sealed class ShellLayoutSerializer
 				MonitorDeviceName = (string?)panel.Attribute(Constants.ShellLayout.MonitorAttribute),
 				MonitorLeft = IntOf(panel, Constants.ShellLayout.MonitorLeftAttribute),
 				MonitorTop = IntOf(panel, Constants.ShellLayout.MonitorTopAttribute),
-				Dpi = IntOf(panel, Constants.ShellLayout.DpiAttribute),
+				Dpi = dpi,
 			};
 			if (place.Width > 0 && place.Height > 0)
 				places[id] = place;
@@ -97,7 +102,11 @@ public sealed class ShellLayoutSerializer
 		}
 	}
 
-	private static int IntOf(XElement element, string attribute) => int.TryParse((string?)element.Attribute(attribute), out var value) ? value : 0;
+	/// <summary>The attribute's number read with the invariant culture (the text was written so); 0 when it is not a number.</summary>
+	private int IntOf(XElement element, string attribute) => TryInt(element, attribute, out var value) ? value : 0;
+
+	private bool TryInt(XElement element, string attribute, out int value) =>
+		int.TryParse((string?)element.Attribute(attribute), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
 
 	/// <summary>
 	/// Replaces the layout of <paramref name="manager"/> with <paramref name="xml"/>. <paramref name="contentOf"/> gives a panel's content by id (null = unknown id, the panel is

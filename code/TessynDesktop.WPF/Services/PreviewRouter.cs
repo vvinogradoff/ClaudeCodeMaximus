@@ -39,6 +39,11 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 	/// <summary>The saved panel being restored now; it counts as saved until its panel exists.</summary>
 	private OpenPreviewPanelModel? _handlingPanel;
 
+	/// <summary>Saved windows and panels the restore skipped for a transient reason; they stay in the saved list for the whole run, so the next start tries them again (FR.29.22).</summary>
+	private List<OpenPreviewWindowModel> _keptWindows = [];
+
+	private List<OpenPreviewPanelModel> _keptPanels = [];
+
 	private bool _lastCanToggle;
 	private bool _lastEnabled;
 	private bool _lastActive;
@@ -218,10 +223,11 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 			return;
 
 		_restoreStarted = true;
-		_pending = _settings.OpenWindows.ToList();
-		_pendingPanels = _settings.OpenPanels.ToList();
 		try
 		{
+			// Read inside the try: a damaged saved list must never stop the restore (the settings drop unusable entries; this guards the rest).
+			_pending = _settings.OpenWindows.Where(w => w?.Item != null).ToList();
+			_pendingPanels = _settings.OpenPanels.Where(p => p?.Item != null).ToList();
 			while (_pending.Count > 0)
 			{
 				var saved = _pending[0];
@@ -229,7 +235,8 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 				_handling = saved;   // still in the saved list while its file is checked
 				try
 				{
-					await RestoreOneAsync(saved, client);
+					if (await RestoreOneAsync(saved, client) == PreviewRestoreOutcome.Kept)
+						_keptWindows.Add(saved);
 				}
 				catch (Exception ex)
 				{
@@ -248,7 +255,8 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 				_handlingPanel = saved;
 				try
 				{
-					await RestorePanelAsync(saved, client);
+					if (await RestorePanelAsync(saved, client) == PreviewRestoreOutcome.Kept)
+						_keptPanels.Add(saved);
 				}
 				catch (Exception ex)
 				{
@@ -499,6 +507,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 			list.Add(_handlingPanel);
 
 		list.AddRange(_pendingPanels);   // saved panels the restore has not reached yet are not lost
+		list.AddRange(_keptPanels);   // and the ones skipped for a transient reason come back at the next start
 		try
 		{
 			_settings.SaveOpenPanels(list);
@@ -531,6 +540,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 			list.Add(_handling);
 
 		list.AddRange(_pending);   // saved windows the restore has not reached yet are not lost
+		list.AddRange(_keptWindows);   // and the ones skipped for a transient reason come back at the next start
 		try
 		{
 			_settings.SaveOpenWindows(list);
@@ -543,52 +553,55 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 
 	// ---- restore ----
 
-	private async Task RestoreOneAsync(OpenPreviewWindowModel saved, ITessynClient client)
+	private async Task<PreviewRestoreOutcome> RestoreOneAsync(OpenPreviewWindowModel saved, ITessynClient client)
 	{
 		var item = saved.Item;
 		var group = _settings.Groups.FirstOrDefault(g => g.Id == saved.GroupId);
 		if (group == null)
 		{
 			_logger.LogInformation("Restore: skipped a window, group {GroupId} no longer exists", saved.GroupId);
-			return;
+			return PreviewRestoreOutcome.Dropped;
 		}
 
 		if (!saved.Pinned && !Admissible(group, item))
-			return;
+			return PreviewRestoreOutcome.Dropped;
 
 		if (item.Kind == PreviewItemKind.Url && !_urls.IsAllowed(item.Url))
 		{
 			_logger.LogInformation("Restore: skipped a window of group {GroupId}, its address is not http(s)", group.Id);
-			return;
+			return PreviewRestoreOutcome.Dropped;
 		}
 
 		PreviewTarget? target = null;
 		if (item.Kind == PreviewItemKind.File)
 		{
-			target = await ResolveFileAsync(item, client);
-			if (target == null)
-				return;
+			var resolved = await ResolveFileAsync(item, client);
+			if (resolved.Target == null)
+				return resolved.Transient ? PreviewRestoreOutcome.Kept : PreviewRestoreOutcome.Dropped;
+
+			target = resolved.Target;
 
 			// The awaits above gave the user time to change things: decide again.
 			group = _settings.Groups.FirstOrDefault(g => g.Id == saved.GroupId);
 			if (group == null || (!saved.Pinned && !Admissible(group, item)))
-				return;
+				return PreviewRestoreOutcome.Dropped;
 		}
 
 		_handling = null;   // its window comes now and takes its place in the saved list
 		var window = CreateWindow(group, saved.Pinned, saved.Pinned ? saved.Placement : null);
 		if (window == null)
-			return;
+			return PreviewRestoreOutcome.Dropped;
 
 		window.Handle.Show(item.Clone(), target, item.Kind == PreviewItemKind.File ? client : null);
 		_logger.LogInformation("Restore: reopened a {Pinned} window of group {GroupId}", saved.Pinned ? "pinned" : "group", group.Id);
+		return PreviewRestoreOutcome.Reopened;
 	}
 
 	/// <summary>
 	/// Reopens one saved docked panel (FR.29.22, FR.29.11): a group panel only in docked mode, a pinned panel in either mode (it stays a docked panel); a file is checked again, a web
 	/// page comes back at its address; whatever cannot open is skipped with a log line. Never takes the keyboard focus (the panel's own Show does not).
 	/// </summary>
-	private async Task RestorePanelAsync(OpenPreviewPanelModel saved, ITessynClient client)
+	private async Task<PreviewRestoreOutcome> RestorePanelAsync(OpenPreviewPanelModel saved, ITessynClient client)
 	{
 		var item = saved.Item;
 		var isDefault = saved.GroupId == Constants.Previews.DefaultPanelId;
@@ -596,7 +609,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		if (_dock == null)
 		{
 			_logger.LogInformation("Restore: skipped a panel of group {GroupId}, there is no docking area", saved.GroupId);
-			return;
+			return PreviewRestoreOutcome.Kept;
 		}
 
 		PreviewGroupModel? group = null;
@@ -606,45 +619,48 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 			if (group == null)
 			{
 				_logger.LogInformation("Restore: skipped a panel, group {GroupId} no longer exists", saved.GroupId);
-				return;
+				return PreviewRestoreOutcome.Dropped;
 			}
 		}
 
 		if (!pinned && !PanelAdmissible(group, item))
-			return;
+			return PreviewRestoreOutcome.Dropped;
 
 		if (item.Kind == PreviewItemKind.Url && !_urls.IsAllowed(item.Url))
 		{
 			_logger.LogInformation("Restore: skipped a panel of group {GroupId}, its address is not http(s)", saved.GroupId);
-			return;
+			return PreviewRestoreOutcome.Dropped;
 		}
 
 		PreviewTarget? target = null;
 		if (item.Kind == PreviewItemKind.File)
 		{
-			target = await ResolveFileAsync(item, client);
-			if (target == null)
-				return;
+			var resolved = await ResolveFileAsync(item, client);
+			if (resolved.Target == null)
+				return resolved.Transient ? PreviewRestoreOutcome.Kept : PreviewRestoreOutcome.Dropped;
+
+			target = resolved.Target;
 
 			// The awaits above gave the user time to change things: decide again.
 			if (!isDefault)
 			{
 				group = _settings.Groups.FirstOrDefault(g => g.Id == saved.GroupId);
 				if (group == null)
-					return;
+					return PreviewRestoreOutcome.Dropped;
 			}
 
 			if (!pinned && !PanelAdmissible(group, item))
-				return;
+				return PreviewRestoreOutcome.Dropped;
 		}
 
 		_handlingPanel = null;   // its panel comes now and takes its place in the saved list
 		var window = CreateWindow(group, pinned, null, panel: true, ownLayout: pinned ? saved.Layout : null);
 		if (window == null)
-			return;
+			return PreviewRestoreOutcome.Dropped;
 
 		window.Handle.Show(item.Clone(), target, item.Kind == PreviewItemKind.File ? client : null);
 		_logger.LogInformation("Restore: reopened a {Kind} panel of group {GroupId}", pinned ? "pinned" : "group", saved.GroupId);
+		return PreviewRestoreOutcome.Reopened;
 	}
 
 	/// <summary>A group panel comes back only in docked mode, for the session on show when its group closes automatically, and when the group has no panel yet; the default panel in both modes when it has none.</summary>
@@ -706,8 +722,8 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		return true;
 	}
 
-	/// <summary>The read handle of a saved file: its Focus reference again, or <c>file.preview</c> again; a 1-byte read proves the daemon still serves it.</summary>
-	private async Task<PreviewTarget?> ResolveFileAsync(PreviewItemModel item, ITessynClient client)
+	/// <summary>The read handle of a saved file: its Focus reference again, or <c>file.preview</c> again; a 1-byte read proves the daemon still serves it. A daemon that answers with an error refused it (permanent); any other failure is transient.</summary>
+	private async Task<RestoredFileTarget> ResolveFileAsync(PreviewItemModel item, ITessynClient client)
 	{
 		var name = item.FileName ?? "file";
 		try
@@ -728,16 +744,21 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 			else
 			{
 				_logger.LogInformation("Restore: skipped {Name}, nothing says how to read it again", name);
-				return null;
+				return new RestoredFileTarget(null, Transient: false);
 			}
 
 			await client.FileReadAsync(target.Handle, 0, 1);
-			return target;
+			return new RestoredFileTarget(target, Transient: false);
+		}
+		catch (TessynRpcException ex)
+		{
+			_logger.LogInformation("Restore: skipped {Name}: {Reason}", name, ex.Message);
+			return new RestoredFileTarget(null, Transient: false);
 		}
 		catch (Exception ex)
 		{
-			_logger.LogInformation("Restore: skipped {Name}: {Reason}", name, ex.Message);
-			return null;
+			_logger.LogInformation("Restore: kept {Name} for the next start: {Reason}", name, ex.Message);
+			return new RestoredFileTarget(null, Transient: true);
 		}
 	}
 }

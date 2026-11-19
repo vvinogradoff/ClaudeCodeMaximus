@@ -256,4 +256,26 @@ public sealed class DockedPanelPlacementAndRevealTests
 			handle.Close();
 		});
 	}
+
+	[Fact]
+	public void ARestoredFloatingPanel_FirstReadWhileWindowsSettles_DoesNotReplaceTheRestoredPlace()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var time = new ManualTimeProvider();
+			var surface = new TestDockingSurface(manager: new DockingManager()) { FloatingHandle = new IntPtr(7) };
+			var placement = new ScriptedPlacement { IsSettling = true, Now = At(200, @"\\.\DISPLAY1") };   // the first read: Windows has just pulled the window onto the first monitor
+			var restored = new PreviewDockLayoutModel { Floating = true, FloatingPlacement = At(2100, @"\\.\DISPLAY2") };
+			var (handle, _, content, panel) = NewHandle(surface, restored, time, placement);
+			using var _ = content;
+			handle.Show(Md("a.md"), new PreviewTarget("h", "a.md"), new FakeTessynClient());
+			panel.Float();
+
+			var layout = handle.CurrentLayout!;
+
+			Assert.Equal(2100, layout.FloatingPlacement!.Left);
+			Assert.Equal(@"\\.\DISPLAY2", layout.FloatingPlacement.MonitorDeviceName);
+			handle.Close();
+		});
+	}
 }
