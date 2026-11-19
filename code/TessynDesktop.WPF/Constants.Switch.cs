@@ -76,6 +76,9 @@ public static partial class Constants
 		/// <summary>FR.32.13: the Win32 error of a declined administrator prompt (ERROR_CANCELLED).</summary>
 		public const int ElevationCancelledError = 1223;
 
+		/// <summary>FR.32.15: the banner while this window itself runs elevated.</summary>
+		public const string ClientElevatedText = "This window runs as administrator. Files can't be dropped from Explorer, and every daemon it starts runs elevated.";
+
 		/// <summary>FR.32.12: the banner while "Start daemon elevated" is on and the daemon runs normally.</summary>
 		public const string ElevationExpectedText = "The daemon runs normally, but Start daemon elevated is on.";
 

@@ -36,6 +36,12 @@
                     <TextBlock Text="{Binding Connection.RestartNote, StringFormat=  ({0})}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
+            <!-- FR.32.15: this window itself runs as administrator (for example from a shortcut with "Run as administrator"); no button: start it normally -->
+            <Border DockPanel.Dock="Top" Padding="16,6" Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding Connection.IsClientElevated, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Window elevation banner">
+                <TextBlock Text="{Binding Connection.ClientElevatedText}" Foreground="{DynamicResource TextFillColorPrimaryBrush}" FontWeight="SemiBold" TextWrapping="Wrap" />
+            </Border>
             <!-- FR.32.12, FR.32.13: the daemon runs normally although "Start daemon elevated" is on, or an elevated start was declined: one click restarts it elevated (asks first) -->
             <Border DockPanel.Dock="Top" Padding="16,6" Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"

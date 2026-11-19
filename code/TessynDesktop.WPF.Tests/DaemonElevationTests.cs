@@ -637,6 +637,27 @@ public sealed class DaemonElevationTests : IDisposable
 		Assert.False(section.RestartDaemonNormalCommand.CanExecute(null));
 	}
 
+	// ── TC.HS.31: an elevated WPF says so ─────────────────────────────────────
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task ClientBanner_ShowsOnlyWhileThisWindowRunsElevated_ForTheWholeRun_AndTheStartLogsIt(bool elevated)
+	{
+		var logger = new CapturingLogger<ConnectionViewModel>();
+		var locator = new ScriptedLocator();
+		locator.Results.Enqueue(Found);
+		var connection = new ConnectionViewModel(locator, new FixedClientFactory(new FakeTessynClient { ServerInfo = Hello(elevated: false) }), new ImmediateUiDispatcher(), logger,
+			TimeSpan.FromMilliseconds(5), clientElevated: elevated);
+
+		Assert.Equal(elevated, connection.IsClientElevated);
+		Assert.Equal("This window runs as administrator. Files can't be dropped from Explorer, and every daemon it starts runs elevated.", connection.ClientElevatedText);
+		Assert.Contains(elevated ? "This window runs elevated (as administrator)" : "This window runs normally", logger.Messages);
+
+		await connection.RunAsync(CancellationToken.None);   // connecting, and whichever way the daemon runs, changes nothing
+		Assert.Equal(elevated, connection.IsClientElevated);
+	}
+
 	// ── TC.HS.29: reading an elevated host's folder ───────────────────────────
 
 	[Fact]
