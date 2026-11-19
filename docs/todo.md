@@ -1229,7 +1229,9 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 - [DONE] Preview windows remember their actual (snapped) rectangle and keep their size across monitor scales (FR.29.16; TC.PW.71–76; branch `wpf/preview-placement-snap-dpi`)
 - [DONE] Separate review (`.mm-work/30-review.md`) and fixes on all three branches
 - [ ] Manual checks: Snap to a half, quarter and a Snap layout, then reopen (TC.PW.71); a window saved on a 100 % monitor reopened on a 150 % one (TC.PW.72); a Focus card with one very long cell
-- [ ] Docked previews inside the main window (Architect item 5): AvalonDock spike first (branch `spike/avalondock`, `.mm-work/40-spike-brief.md`), then the requirements and the build; fall back to a built-in docked panel if WebView2 does not behave
+- [DONE] File paths in Focus card text are Ctrl+clickable; the daemon checks the path against the item's title and body (`file.preview` with `itemId`, tdcp-spec 10.A11) (FR.23.30; UC.FX.03, TC.FX.23–32; branch `wpf/focus-card-paths`, merge `66d826e`; needs a daemon restart)
+- [DONE] AvalonDock spike: WebView2 works docked, tabbed, floating and auto-hidden, 54/54 checks (`.mm-work/40-spike.md`, branch `spike/avalondock`)
+- [ ] Docked previews inside the main window (Architect item 5): requirements FR.29.17–FR.29.26 drafted on branch `docs/docked-previews`, awaiting the Architect's approval with the AvalonDock dependency; then the build in stages
 
 ## Phase 45 — The daemon elevated, WPF normal (FR.32.10–FR.32.14); paste of Explorer files (FR.31.2)
 

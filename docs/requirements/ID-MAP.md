@@ -70,6 +70,7 @@ The amendment paragraphs of the FR.25 commit (FR.1.8 amendment, FR.1.17, FR.3.3 
 | **FR.26.7** | relative paths in assistant entries are marked and open on Ctrl+click | 2026-11-19, Architect feedback, amends FR.26.5; UC.LK.07, TC.LK.26–35 |
 | **FR.29.16** | placement with Snap (the actual rectangle) and monitor scaling | 2026-11-19, Architect feedback, amends FR.29.6, FR.29.11; TC.PW.71–76, UC.PW.04 A5 |
 | UC/TC code MT | UC.MT.01, TC.MT.01–05 (Markdown tables) | no clash with the codes above |
+| **FR.23.30** | file paths (absolute and relative) in Focus card titles and bodies are marked and open on Ctrl+click; `file.preview` with `itemId` (tdcp-spec 10.A11) | 2026-11-19, Architect feedback, amends FR.23.18, FR.23.25; UC.FX.03, TC.FX.23–32 |
 | NR.6, NR.7 | E2E running, stretching rule | |
 | UC/TC codes | LP, TR, IN, CL, SH, TA, FC, HS | no clash with 15, 21, DL, FD, FV, IC, LC, RT, TG, WEB |
 
