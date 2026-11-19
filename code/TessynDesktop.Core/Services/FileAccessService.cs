@@ -78,6 +78,27 @@ public sealed class FileAccessService : IFileAccessService
 		    || !OccursIn(entry.Content, wanted))
 			throw new TdcpException("That path does not occur in the entry's text");
 
+		return IssuePreview(node, wanted, transport);
+	}
+
+	/// <inheritdoc />
+	public FilePreviewResult PreviewForItem(string nodeId, string itemId, string path, TdcpTransport transport)
+	{
+		var node = RemoteSessionLookup.Require(_registry, nodeId);
+		var item = _attention.GetItems(node.NodeId).FirstOrDefault(i => string.Equals(i.Id, itemId, StringComparison.OrdinalIgnoreCase))
+		           ?? throw new TdcpException("No such Focus item");
+
+		// Only the text the session wrote counts (title and body): the user's answer and the resolution note are not searched.
+		var wanted = path.Trim();
+		if (wanted.Length == 0 || !(OccursIn(item.Title, wanted) || OccursIn(item.Body, wanted)))
+			throw new TdcpException("That path does not occur in the item's text");
+
+		return IssuePreview(node, wanted, transport);
+	}
+
+	/// <summary>The checks and the handle shared by both variants, once the path is known to occur in the source text.</summary>
+	private FilePreviewResult IssuePreview(SessionNodeModel node, string wanted, TdcpTransport transport)
+	{
 		// The lexical gate comes before the first filesystem call: a UNC path must never be touched, not even to see if it exists.
 		if (!SafeFilePath.TryNormalize(wanted, node.WorkingDirectory, out var full, out var reason))
 			throw new TdcpException($"Not a usable path: {reason}");

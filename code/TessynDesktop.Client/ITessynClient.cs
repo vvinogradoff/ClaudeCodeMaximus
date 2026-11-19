@@ -123,6 +123,9 @@ public partial interface ITessynClient : IAsyncDisposable
 	/// <summary><c>file.preview</c>: a handle for a path that occurs in the text of the given entry.</summary>
 	Task<FilePreviewResult> FilePreviewAsync(string nodeId, string entryId, string path, CancellationToken cancellationToken = default);
 
+	/// <summary><c>file.preview</c> with <c>itemId</c> (FR.23.30): a handle for a path that occurs in the title or body of the given Focus item.</summary>
+	Task<FilePreviewResult> FilePreviewForItemAsync(string nodeId, string itemId, string path, CancellationToken cancellationToken = default);
+
 	// ── Attachments (additive) ───────────────────────────────────────────────────────────────
 
 	/// <summary>

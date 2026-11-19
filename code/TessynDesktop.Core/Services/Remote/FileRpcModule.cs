@@ -36,9 +36,16 @@ public sealed class FileRpcModule : IRemoteRpcModule
 	private object? Preview(JsonNode? @params)
 	{
 		var nodeId  = TdcpParams.RequireString(@params, "nodeId");
-		var entryId = TdcpParams.RequireString(@params, "entryId");
+		var entryId = TdcpParams.OptionalString(@params, "entryId");
+		var itemId  = TdcpParams.OptionalString(@params, "itemId");
 		var path    = TdcpParams.RequireString(@params, "path");
 
-		return _files.Preview(nodeId, entryId, path, TdcpCallContext.Transport);
+		// Exactly one source of text: an entry of the transcript or a Focus item (tdcp-spec 10.A11).
+		if ((entryId == null) == (itemId == null))
+			throw new TdcpInvalidParamsException("Give exactly one of 'entryId' and 'itemId'");
+
+		return itemId != null
+			? _files.PreviewForItem(nodeId, itemId, path, TdcpCallContext.Transport)
+			: _files.Preview(nodeId, entryId!, path, TdcpCallContext.Transport);
 	}
 }

@@ -150,6 +150,58 @@ public sealed partial class SessionPaneViewModel
 		}
 	}
 
+	private void OnFocusPathActivated(object? sender, FocusPathRequest request) => _ui.Post(() => _ = PreviewFocusPathAsync(request));
+
+	/// <summary>
+	/// A path written in a Focus card was Ctrl+clicked or invoked (FR.23.30): ask the daemon for a handle (it checks that the path occurs in that item's
+	/// title or body), then open it like a path of the transcript. The preview is tied to the item only while the item is open (FR.23.29, FR.29.9).
+	/// </summary>
+	public async Task PreviewFocusPathAsync(FocusPathRequest request)
+	{
+		var nodeId = request.NodeId;
+		if (string.IsNullOrEmpty(nodeId) || nodeId != NodeId || Preview == null)
+			return;
+
+		if (!_pathDetector.IsPathShaped(request.Path))
+		{
+			Notice = Constants.Texts.FocusPathNotPreviewable;
+			return;
+		}
+
+		try
+		{
+			Notice = null;
+			var result = await _client.FilePreviewForItemAsync(nodeId, request.ItemId, request.Path);
+			var routedItem = new PreviewItemModel
+			{
+				Kind = PreviewItemKind.File,
+				FileName = result.Name,
+				NodeId = nodeId,
+				ItemId = request.ItemId,
+				Path = request.Path,
+				SourceNodeId = nodeId,
+				SourceFocusItemId = request.IsClosed ? null : request.ItemId,
+			};
+			if (TryRouteFile(routedItem, new PreviewTarget(result.Handle, result.Name)))
+				return;   // a preview window shows it (FR.29.4)
+
+			if (InlinePathMarker.IsInlineVideo(request.Path))
+			{
+				// A video opens in the default media player (FR.26.6), not in the pane.
+				if (!await Preview.OpenVideoInDefaultPlayerAsync(result.Handle, nodeId + "|" + request.ItemId + "|" + request.Path, CancellationToken.None))
+					Notice = "The video could not be opened in the default player.";
+				return;
+			}
+
+			await Preview.OpenAsync(new PreviewTarget(result.Handle, result.Name));
+		}
+		catch (Exception ex)
+		{
+			_logger.LogInformation(ex, "file.preview was refused for an item of {NodeId}", nodeId);
+			Notice = "Cannot preview this file: " + ex.Message;
+		}
+	}
+
 	private void OnRefActivated(object? sender, AttentionRefDto reference) => _ui.Post(() => _ = ActivateRefAsync(reference));
 
 	/// <summary>Acts on a reference of a Focus item: entry → jump, file → preview, url → system browser (http/https only).</summary>

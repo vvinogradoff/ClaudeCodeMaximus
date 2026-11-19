@@ -133,6 +133,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		Focus = focus ?? new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance);
 		Preview = preview;
 		Focus.RefActivated += OnRefActivated;
+		Focus.PathActivated += OnFocusPathActivated;
 		Focus.PropertyChanged += OnSideContentChanged;
 		if (Preview != null)
 			Preview.PropertyChanged += OnSideContentChanged;
@@ -838,6 +839,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_surface.PathImageRequested -= OnPathImageRequested;
 		UnhookPreviewRouter();
 		Focus.RefActivated -= OnRefActivated;
+		Focus.PathActivated -= OnFocusPathActivated;
 		Focus.PropertyChanged -= OnSideContentChanged;
 		if (Preview != null)
 			Preview.PropertyChanged -= OnSideContentChanged;

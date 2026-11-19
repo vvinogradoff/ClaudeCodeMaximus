@@ -65,6 +65,23 @@ public sealed class FocusRefsClientTests : IDisposable
 	}
 
 	[Fact]
+	public async Task FilePreviewForItem_sends_itemId_and_opens_a_path_written_in_the_item()
+	{
+		var plan = _env.WriteFile("plan.md", "# The plan\n");
+		await _env.PostAsync(new JsonObject { ["kind"] = "ask", ["title"] = "Plan", ["body"] = "the plan is in docs-less plan.md here" });
+		await using var client = new TessynClient(_host.Endpoint, ClientTestHost.Token);
+		await client.ConnectAsync();
+		var itemId = (await client.AttentionListAsync(_env.Session.NodeId)).Items.Single().Id;
+
+		var preview = await client.FilePreviewForItemAsync(_env.Session.NodeId, itemId, "plan.md");
+		Assert.Equal("plan.md", preview.Name);
+		Assert.Equal("# The", (await client.FileReadAsync(preview.Handle, 0, 5)).Data);
+
+		var error = await Assert.ThrowsAsync<TessynRpcException>(() => client.FilePreviewForItemAsync(_env.Session.NodeId, itemId, plan + ".nope"));
+		Assert.Contains("does not occur", error.Message);
+	}
+
+	[Fact]
 	public async Task A_refused_read_is_a_rpc_error_on_the_client()
 	{
 		await using var client = new TessynClient(_host.Endpoint, ClientTestHost.Token);

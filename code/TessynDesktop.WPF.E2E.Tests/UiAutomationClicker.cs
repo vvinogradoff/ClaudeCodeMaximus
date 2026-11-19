@@ -10,6 +10,40 @@ namespace TessynDesktop.WPF.E2E.Tests;
 /// <remarks>Created by Claude</remarks>
 public sealed class UiAutomationClicker
 {
+	/// <summary>Waits for an element with this automation id (any control type) and invokes it through its Invoke pattern; false on timeout. For the paths marked in a Focus card (FR.23.30).</summary>
+	public async Task<bool> InvokeByAutomationIdAsync(Process process, string automationId, TimeSpan timeout)
+	{
+		var finder = new AppWindowFinder();
+		var deadline = DateTime.UtcNow + timeout;
+		while (DateTime.UtcNow < deadline && !process.HasExited)
+		{
+			var hwnd = finder.Find(process.Id);
+			if (hwnd != IntPtr.Zero && TryInvokeById(hwnd, automationId))
+				return true;
+
+			await Task.Delay(250);
+		}
+
+		return false;
+	}
+
+	private static bool TryInvokeById(IntPtr hwnd, string automationId)
+	{
+		try
+		{
+			var element = AutomationElement.FromHandle(hwnd).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, automationId));
+			if (element == null || !element.TryGetCurrentPattern(InvokePattern.Pattern, out var pattern))
+				return false;
+
+			((InvokePattern)pattern).Invoke();
+			return true;
+		}
+		catch (Exception ex) when (ex is ElementNotAvailableException or ElementNotEnabledException)
+		{
+			return false;
+		}
+	}
+
 	/// <summary>Waits for a button with this name to exist and invokes it; false on timeout.</summary>
 	public async Task<bool> ClickAsync(Process process, string buttonName, TimeSpan timeout)
 	{

@@ -242,4 +242,88 @@ public sealed class SessionPanePreviewWindowsTests : IDisposable
 
 		Assert.Empty(_router.ClosedFocus);
 	}
+
+	// ---- paths written in a Focus card (FR.23.30, TC.FX.27-29) ----
+
+	private async Task OpenWithPathItemAsync(AttentionStatus status = AttentionStatus.Open)
+	{
+		AddSession("a", 10);
+		_client.Attention["a"] =
+		[
+			new AttentionItemDto { Id = "A1", Number = 1, Kind = AttentionKind.Ask, Status = status, Title = "Plan", Body = "see docs/plan.md for the plan", CreatedUtc = DateTimeOffset.UnixEpoch },
+		];
+		_client.Files["h1"] = ("plan.md", "text/markdown", System.Text.Encoding.UTF8.GetBytes("# Item plan"));
+		_client.PreviewHandles["a|A1|docs/plan.md"] = "h1";
+		await _pane.OpenAsync("a");
+		await _pane.Focus.WhenIdleAsync();
+	}
+
+	[Fact]
+	public async Task TC_FX_27_FocusPath_AsksTheDaemonWithTheItemId_AndTheRouterGetsTheOpenItemAsSource()
+	{
+		await OpenWithPathItemAsync();
+		_router.TakesFiles = true;
+
+		_pane.Focus.Items.Single().OpenPath("docs/plan.md");
+
+		Assert.Contains("file.preview:a:item:A1:docs/plan.md", _client.Calls);
+		Assert.DoesNotContain(_client.Calls, c => c.StartsWith("file.preview:a:fa:", StringComparison.Ordinal));
+		var (item, target) = Assert.Single(_router.Files);
+		Assert.Equal(("plan.md", "a", "A1", "docs/plan.md", "a", "A1"), (item.FileName, item.NodeId, item.ItemId, item.Path, item.SourceNodeId, item.SourceFocusItemId));
+		Assert.Null(item.EntryId);
+		Assert.Equal(new PreviewTarget("h1", "plan.md"), target);
+		Assert.False(_pane.Preview!.IsOpen);
+	}
+
+	[Fact]
+	public async Task TC_FX_27_FocusPath_WhenTheRouterRefuses_OpensThePane()
+	{
+		await OpenWithPathItemAsync();
+		_router.TakesFiles = false;
+
+		_pane.Focus.Items.Single().OpenPath("docs/plan.md");
+		await _pane.Preview!.WhenIdleAsync();
+
+		Assert.True(_pane.Preview.IsOpen);
+		Assert.Null(_pane.Notice);
+	}
+
+	[Fact]
+	public async Task TC_FX_28_FocusPath_TheDaemonRefusing_ShowsANotice_AndOpensNothing()
+	{
+		await OpenWithPathItemAsync();
+		_router.TakesFiles = true;
+		_client.FilePreviewRefusal = "This file cannot be read remotely: it is not inside an allowed folder.";
+
+		_pane.Focus.Items.Single().OpenPath("docs/plan.md");
+
+		Assert.NotNull(_pane.Notice);
+		Assert.Contains("cannot be read remotely", _pane.Notice);
+		Assert.Empty(_router.Files);
+		Assert.False(_pane.Preview!.IsOpen);
+	}
+
+	[Fact]
+	public async Task TC_FX_29_FocusPath_OfAClosedItem_HasNoSourceItem()
+	{
+		await OpenWithPathItemAsync(AttentionStatus.Answered);
+		_router.TakesFiles = true;
+
+		_pane.Focus.ClosedItems.Single().OpenPath("docs/plan.md");
+
+		var (item, _) = Assert.Single(_router.Files);
+		Assert.Equal("A1", item.ItemId);
+		Assert.Null(item.SourceFocusItemId);
+		Assert.Equal("a", item.SourceNodeId);
+	}
+
+	[Fact]
+	public async Task FocusPath_ForAnotherSessionThanTheShownOne_IsIgnored()
+	{
+		await OpenWithPathItemAsync();
+
+		await _pane.PreviewFocusPathAsync(new FocusPathRequest("other", "A1", "docs/plan.md", false));
+
+		Assert.DoesNotContain(_client.Calls, c => c.Contains(":item:", StringComparison.Ordinal));
+	}
 }

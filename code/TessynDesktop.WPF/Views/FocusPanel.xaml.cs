@@ -88,7 +88,9 @@ public partial class FocusPanel : UserControl
 		if (panel.Children.OfType<FocusCardText>().FirstOrDefault() is { } text)
 		{
 			var point = e.GetPosition(text);
-			return new Rect(text.RenderSize).Contains(point) && text.IsHeaderAt(point);
+			// Ctrl+click on a path opens the file (FR.23.30); it must not also toggle the card.
+			var onPath = (Keyboard.Modifiers & ModifierKeys.Control) != 0 && text.IsPathAt(point);
+			return new Rect(text.RenderSize).Contains(point) && !onPath && text.IsHeaderAt(point);
 		}
 
 		return false;
