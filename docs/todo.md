@@ -1228,7 +1228,8 @@ Architect decision 2026-11-19 (Focus A1): WPF always runs normally; the daemon h
 
 - [DONE] Ctrl+V of files copied in Explorer did nothing (FR.31.2): a TextBox turns Paste off without text on the clipboard, so `DataObject.Pasting` never came; the input now takes over the Paste command for a file list without text
 - [DONE] Docs approved by the Architect (FR.32.10–FR.32.14, UC.HS.08, TC.HS.23–TC.HS.30, tdcp-spec 10.A10)
-- [ ] Daemon: `client.hello` `elevated`; the exit event can be signalled by the User's normal processes; the tray icon works elevated (FR.32.12, FR.32.14)
-- [ ] WPF: setting *Start daemon elevated* in Settings → Startup; the launcher starts the host through the administrator prompt; declined or failed prompt starts it normally once, with the notice (FR.32.10, FR.32.13)
-- [ ] WPF: Restart daemon elevated and Restart daemon normal; the stale banner keeps the daemon's way; the status text and the "runs normally" banner; the build check of an elevated host (FR.32.11, FR.32.12, FR.32.14)
-- [ ] Tests TC.HS.23–TC.HS.29; manual list TC.HS.30 for the Architect
+- [DONE] Daemon: `client.hello` `elevated`; the exit event can be signalled by the User's normal processes; the tray messages pass UIPI on an elevated host (FR.32.12, FR.32.14)
+- [DONE] WPF: setting *Start daemon elevated* in Settings → Startup; the launcher starts the host through the administrator prompt; declined or failed prompt starts it normally once, with the notice (FR.32.10, FR.32.13)
+- [DONE] WPF: Restart daemon elevated and Restart daemon normal; the stale banner keeps the daemon's way; the status text and the "runs normally" banner; the build check of an elevated host (FR.32.11, FR.32.12, FR.32.14)
+- [DONE] Tests TC.HS.23–TC.HS.29 (`DaemonElevationTests`, `UserSignalledEventTests`, `HelloTests`); built on branch `wpf/elevated-daemon`, merged to master as `4b979ef`; all five suites green
+- [ ] Manual TC.HS.30 by the Architect (the administrator prompt cannot be scripted)

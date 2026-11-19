@@ -72,3 +72,5 @@
 - **Drag-and-drop.** With WPF normal, files dropped from Explorer into the prompt input are accepted (FR.31.2).
 
 > **What elevated means.** While the daemon runs elevated, every turn runs as administrator: typed turns, scheduled turns, orchestration workers, Telegram and Tessyn Web turns. Through Tessyn Web, whoever can sign in can then have a session run administrator commands on this PC.
+
+Status: FR.32.10–FR.32.14 implemented 2026-11-19 (merge `4b979ef`); TC.HS.23–TC.HS.29 automated and green; the manual TC.HS.30 is open.
