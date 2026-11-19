@@ -44,4 +44,16 @@ public interface IPreviewSettingsService
 
 	/// <summary>Replaces the saved list of open preview windows.</summary>
 	void SaveOpenWindows(IReadOnlyList<OpenPreviewWindowModel> windows);
+
+	/// <summary>The remembered layout of a group's docked panel (or of the default Preview panel); null when none (FR.29.21).</summary>
+	PreviewDockLayoutModel? GetDockLayout(string groupId);
+
+	/// <summary>Remembers a group's docked panel layout.</summary>
+	void SaveDockLayout(string groupId, PreviewDockLayoutModel layout);
+
+	/// <summary>The saved list of open docked panels (copies), for reopening them at start (FR.29.22).</summary>
+	IReadOnlyList<OpenPreviewPanelModel> OpenPanels { get; }
+
+	/// <summary>Replaces the saved list of open docked panels.</summary>
+	void SaveOpenPanels(IReadOnlyList<OpenPreviewPanelModel> panels);
 }

@@ -67,4 +67,14 @@ public sealed class FakePreviewSettingsService : IPreviewSettingsService
 	public void ForgetPlacements() => _placements.Clear();
 
 	public void SaveOpenWindows(IReadOnlyList<OpenPreviewWindowModel> windows) => OpenWindows = windows;
+
+	public Dictionary<string, PreviewDockLayoutModel> DockLayouts { get; } = [];
+
+	public IReadOnlyList<OpenPreviewPanelModel> OpenPanels { get; private set; } = [];
+
+	public PreviewDockLayoutModel? GetDockLayout(string groupId) => DockLayouts.TryGetValue(groupId, out var layout) ? layout.Clone() : null;
+
+	public void SaveDockLayout(string groupId, PreviewDockLayoutModel layout) => DockLayouts[groupId] = layout.Clone();
+
+	public void SaveOpenPanels(IReadOnlyList<OpenPreviewPanelModel> panels) => OpenPanels = panels;
 }

@@ -63,6 +63,9 @@ public static partial class Constants
 
 		/// <summary>Runtime state of the preview windows: the monitor toggle and the remembered placements (written by the app only).</summary>
 		public const string PreviewWindows = "previewWindows";
+
+		/// <summary>The docked preview panels' layouts and open panels (FR.29.21, FR.29.22).</summary>
+		public const string PreviewDock = "previewDock";
 	}
 
 	/// <summary>Defaults of the client settings sections; they mirror the Avalonia client's.</summary>

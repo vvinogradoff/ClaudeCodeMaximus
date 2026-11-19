@@ -54,13 +54,24 @@ public sealed class PreviewSettingsService : IPreviewSettingsService
 	private void ForgetPlacementsOutside(IEnumerable<string> groupIds)
 	{
 		var ids = groupIds.ToHashSet(StringComparer.Ordinal);
-		if (_store.Get<PreviewWindowsSettings>().Placements.Keys.All(ids.Contains))
+		if (!_store.Get<PreviewWindowsSettings>().Placements.Keys.All(ids.Contains))
+		{
+			_store.Update<PreviewWindowsSettings>(s =>
+			{
+				foreach (var gone in s.Placements.Keys.Where(k => !ids.Contains(k)).ToList())
+					s.Placements.Remove(gone);
+			});
+		}
+
+		// The default Preview panel is not a group and keeps its layout.
+		ids.Add(Constants.Previews.DefaultPanelId);
+		if (_store.Get<PreviewDockSettings>().Layouts.Keys.All(ids.Contains))
 			return;
 
-		_store.Update<PreviewWindowsSettings>(s =>
+		_store.Update<PreviewDockSettings>(s =>
 		{
-			foreach (var gone in s.Placements.Keys.Where(k => !ids.Contains(k)).ToList())
-				s.Placements.Remove(gone);
+			foreach (var gone in s.Layouts.Keys.Where(k => !ids.Contains(k)).ToList())
+				s.Layouts.Remove(gone);
 		});
 	}
 
@@ -89,7 +100,36 @@ public sealed class PreviewSettingsService : IPreviewSettingsService
 		_store.Update<PreviewWindowsSettings>(s => s.Placements[groupId] = placement);
 	}
 
-	public void ForgetPlacements() => _store.Update<PreviewWindowsSettings>(s => s.Placements.Clear());
+	public void ForgetPlacements()
+	{
+		_store.Update<PreviewWindowsSettings>(s => s.Placements.Clear());
+		_store.Update<PreviewDockSettings>(s => s.Layouts.Clear());
+	}
+
+	public PreviewDockLayoutModel? GetDockLayout(string groupId) =>
+		_store.Get<PreviewDockSettings>().Layouts.TryGetValue(groupId, out var layout) ? layout.Clone() : null;
+
+	public void SaveDockLayout(string groupId, PreviewDockLayoutModel layout)
+	{
+		var copy = layout.Clone();
+		_store.Update<PreviewDockSettings>(s => s.Layouts[groupId] = copy);
+	}
+
+	public IReadOnlyList<OpenPreviewPanelModel> OpenPanels => _store.Get<PreviewDockSettings>().OpenPanels.Select(CloneOpenPanel).ToList();
+
+	public void SaveOpenPanels(IReadOnlyList<OpenPreviewPanelModel> panels)
+	{
+		var copies = panels.Select(CloneOpenPanel).ToList();
+		_store.Update<PreviewDockSettings>(s => s.OpenPanels = copies);
+	}
+
+	private static OpenPreviewPanelModel CloneOpenPanel(OpenPreviewPanelModel p) => new()
+	{
+		GroupId = p.GroupId,
+		Pinned = p.Pinned,
+		Item = p.Item,
+		Layout = p.Layout?.Clone(),
+	};
 
 	public IReadOnlyList<OpenPreviewWindowModel> OpenWindows => _store.Get<PreviewWindowsSettings>().OpenWindows;
 
