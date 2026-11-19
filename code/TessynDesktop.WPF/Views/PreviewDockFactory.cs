@@ -46,7 +46,7 @@ public sealed class PreviewDockFactory : IPreviewDockFactory
 			CanAutoHide = true,
 		};
 		var remembered = pinned ? ownLayout : settings.GetDockLayout(groupId);
-		return new DockedPreviewPanelHandle(viewModel, content, panel, surface, settings, remembered, ui, logger);
+		return new DockedPreviewPanelHandle(viewModel, content, panel, surface, settings, remembered, ui, logger, floating: _services.GetService<IFloatingPanelPlacement>());
 	}
 
 	private T Get<T>() where T : notnull => _services.GetRequiredService<T>();

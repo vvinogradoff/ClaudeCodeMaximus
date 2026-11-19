@@ -54,6 +54,13 @@ public sealed class DockingPanelRaiser
 		return false;
 	}
 
+	/// <summary>The handle of the window of a floating panel; zero when it has none (yet).</summary>
+	public IntPtr WindowOf(LayoutAnchorable panel)
+	{
+		var window = _manager.FloatingWindows.FirstOrDefault(w => w.Model is ILayoutContainer container && container.Descendents().Contains(panel));
+		return window == null ? IntPtr.Zero : new WindowInteropHelper(window).Handle;
+	}
+
 	/// <summary>Lifts the window of a floating panel to the top of the z-order; it is not activated.</summary>
 	public void Raise(LayoutAnchorable panel)
 	{

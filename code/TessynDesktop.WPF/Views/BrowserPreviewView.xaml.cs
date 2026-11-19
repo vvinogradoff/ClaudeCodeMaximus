@@ -76,6 +76,18 @@ public partial class BrowserPreviewView : UserControl
 		}
 	}
 
+	/// <summary>
+	/// Esc inside the page (the browser swallows it): raised again as a key event of the page's control, so the slide-out closer, which listens at the docking manager, sees it as it sees
+	/// Esc anywhere else in the slide-out (FR.29 decision 4). Nothing happens when no slide-out is open.
+	/// </summary>
+	private void OnPageEscape(object? sender, EventArgs e)
+	{
+		if (Page is not { } control || PresentationSource.FromVisual(control) is not { } source)
+			return;
+
+		control.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+	}
+
 	private void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		_loaded = true;
@@ -93,6 +105,7 @@ public partial class BrowserPreviewView : UserControl
 		PageHost.Children.Add(control);
 		try
 		{
+			_surface.EscapePressed += OnPageEscape;
 			await _surface.AttachAsync(control);
 		}
 		catch (Exception ex)

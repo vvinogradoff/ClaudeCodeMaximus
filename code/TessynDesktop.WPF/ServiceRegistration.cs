@@ -197,6 +197,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IPreviewSettingsService, PreviewSettingsService>();
 		services.AddSingleton<PreviewGroupMatcher>();
 		services.AddSingleton<PreviewPlacementPlanner>();
+		services.AddSingleton<IFloatingPanelPlacement>(sp => new FloatingPanelPlacement(sp.GetRequiredService<Win32WindowPlacement>(), sp.GetRequiredService<IMonitorWatcher>(), sp.GetRequiredService<PreviewPlacementPlanner>()));   // floating docked panels follow the preview windows' placement rules (FR.29.16)
 		services.AddSingleton<IPreviewRouter, PreviewRouter>(); // disposed with the container at shutdown; CloseAllForExit runs from MainWindow.Closed
 		services.AddSingleton<IPreviewWindowFactory, PreviewWindowFactory>();
 		services.AddSingleton<DockingSurfaceHost>(); // the main window's docking area registers itself here (FR.29.19)

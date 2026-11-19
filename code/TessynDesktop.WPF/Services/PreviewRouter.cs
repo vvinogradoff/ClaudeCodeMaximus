@@ -33,6 +33,12 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 	/// <summary>The saved window being restored now (its file is checked); it counts as saved until its window exists.</summary>
 	private OpenPreviewWindowModel? _handling;
 
+	/// <summary>Saved panels the restore has not reached yet (FR.29.22); they stay in the saved panel list until it has.</summary>
+	private List<OpenPreviewPanelModel> _pendingPanels = [];
+
+	/// <summary>The saved panel being restored now; it counts as saved until its panel exists.</summary>
+	private OpenPreviewPanelModel? _handlingPanel;
+
 	private bool _lastCanToggle;
 	private bool _lastEnabled;
 	private bool _lastActive;
@@ -213,6 +219,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 
 		_restoreStarted = true;
 		_pending = _settings.OpenWindows.ToList();
+		_pendingPanels = _settings.OpenPanels.ToList();
 		try
 		{
 			while (_pending.Count > 0)
@@ -233,11 +240,32 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 					_handling = null;
 				}
 			}
+
+			while (_pendingPanels.Count > 0)
+			{
+				var saved = _pendingPanels[0];
+				_pendingPanels.RemoveAt(0);
+				_handlingPanel = saved;
+				try
+				{
+					await RestorePanelAsync(saved, client);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Restoring a docked preview panel of group {GroupId} failed", saved.GroupId);
+				}
+				finally
+				{
+					_handlingPanel = null;
+				}
+			}
 		}
 		finally
 		{
 			_pending = [];
 			_handling = null;
+			_pendingPanels = [];
+			_handlingPanel = null;
 			SaveList();
 			_logger.LogInformation("Preview windows restored: {Count} open", _windows.Count);
 		}
@@ -284,17 +312,18 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 
 		panel.Handle.Show(item.Clone(), fileHandle, client);
 		_logger.LogInformation("Preview: {Kind} opened in the default Preview panel", item.Kind);
+		SaveList();
 		return true;
 	}
 
 	/// <summary>Creates the window, or the docked panel (<paramref name="panel"/>); a null <paramref name="group"/> is the default Preview panel.</summary>
-	private OpenWindow? CreateWindow(PreviewGroupModel? group, bool pinned, PreviewPlacementModel? ownPlacement, bool panel = false)
+	private OpenWindow? CreateWindow(PreviewGroupModel? group, bool pinned, PreviewPlacementModel? ownPlacement, bool panel = false, PreviewDockLayoutModel? ownLayout = null)
 	{
 		var groupId = group?.Id ?? Constants.Previews.DefaultPanelId;
 		IPreviewWindowHandle handle;
 		try
 		{
-			handle = panel ? _dock!.Create(group, pinned, null) : _factory.Create(group!, pinned, ownPlacement);
+			handle = panel ? _dock!.Create(group, pinned, ownLayout) : _factory.Create(group!, pinned, ownPlacement);
 		}
 		catch (Exception ex)
 		{
@@ -339,8 +368,8 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 	/// <summary>A pinned window settled at a new place: the list is saved again, so a crash does not lose the move (FR.29.11).</summary>
 	private void OnWindowPlacementChanged(OpenWindow window)
 	{
-		if (window.IsPinned && !window.IsPanel)
-			SaveList();
+		if (window.IsPinned)
+			SaveList();   // a pinned window's place, or a pinned panel's own layout (FR.29.22)
 	}
 
 	private void OnWindowPinned(OpenWindow window)
@@ -443,12 +472,51 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		if (_disposed)
 			return;
 
+		SaveWindows();
+		SavePanels();
+	}
+
+	/// <summary>The open docked panels with their items (FR.29.22); a pinned panel also with its own layout, a group panel's layout is the group's (<c>previewDock</c> layouts).</summary>
+	private void SavePanels()
+	{
+		var list = new List<OpenPreviewPanelModel>();
+		foreach (var window in _windows)
+		{
+			var item = window.Handle.Item;
+			if (item == null || !window.IsPanel)
+				continue;   // not shown yet
+
+			list.Add(new OpenPreviewPanelModel
+			{
+				GroupId = window.GroupId,
+				Pinned = window.IsPinned,
+				Item = item.Clone(),
+				Layout = window.IsPinned ? (window.Handle as IDockedPreviewPanelHandle)?.CurrentLayout : null,
+			});
+		}
+
+		if (_handlingPanel != null)
+			list.Add(_handlingPanel);
+
+		list.AddRange(_pendingPanels);   // saved panels the restore has not reached yet are not lost
+		try
+		{
+			_settings.SaveOpenPanels(list);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "Saving the list of open preview panels failed");
+		}
+	}
+
+	private void SaveWindows()
+	{
 		var list = new List<OpenPreviewWindowModel>();
 		foreach (var window in _windows)
 		{
 			var item = window.Handle.Item;
 			if (item == null || window.IsPanel)
-				continue;   // not shown yet; panels are not in this list (stage 2 saves them)
+				continue;   // not shown yet; panels are in their own list (SavePanels)
 
 			list.Add(new OpenPreviewWindowModel
 			{
@@ -514,6 +582,104 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 
 		window.Handle.Show(item.Clone(), target, item.Kind == PreviewItemKind.File ? client : null);
 		_logger.LogInformation("Restore: reopened a {Pinned} window of group {GroupId}", saved.Pinned ? "pinned" : "group", group.Id);
+	}
+
+	/// <summary>
+	/// Reopens one saved docked panel (FR.29.22, FR.29.11): a group panel only in docked mode, a pinned panel in either mode (it stays a docked panel); a file is checked again, a web
+	/// page comes back at its address; whatever cannot open is skipped with a log line. Never takes the keyboard focus (the panel's own Show does not).
+	/// </summary>
+	private async Task RestorePanelAsync(OpenPreviewPanelModel saved, ITessynClient client)
+	{
+		var item = saved.Item;
+		var isDefault = saved.GroupId == Constants.Previews.DefaultPanelId;
+		var pinned = saved.Pinned && !isDefault;   // the default panel has no Pin
+		if (_dock == null)
+		{
+			_logger.LogInformation("Restore: skipped a panel of group {GroupId}, there is no docking area", saved.GroupId);
+			return;
+		}
+
+		PreviewGroupModel? group = null;
+		if (!isDefault)
+		{
+			group = _settings.Groups.FirstOrDefault(g => g.Id == saved.GroupId);
+			if (group == null)
+			{
+				_logger.LogInformation("Restore: skipped a panel, group {GroupId} no longer exists", saved.GroupId);
+				return;
+			}
+		}
+
+		if (!pinned && !PanelAdmissible(group, item))
+			return;
+
+		if (item.Kind == PreviewItemKind.Url && !_urls.IsAllowed(item.Url))
+		{
+			_logger.LogInformation("Restore: skipped a panel of group {GroupId}, its address is not http(s)", saved.GroupId);
+			return;
+		}
+
+		PreviewTarget? target = null;
+		if (item.Kind == PreviewItemKind.File)
+		{
+			target = await ResolveFileAsync(item, client);
+			if (target == null)
+				return;
+
+			// The awaits above gave the user time to change things: decide again.
+			if (!isDefault)
+			{
+				group = _settings.Groups.FirstOrDefault(g => g.Id == saved.GroupId);
+				if (group == null)
+					return;
+			}
+
+			if (!pinned && !PanelAdmissible(group, item))
+				return;
+		}
+
+		_handlingPanel = null;   // its panel comes now and takes its place in the saved list
+		var window = CreateWindow(group, pinned, null, panel: true, ownLayout: pinned ? saved.Layout : null);
+		if (window == null)
+			return;
+
+		window.Handle.Show(item.Clone(), target, item.Kind == PreviewItemKind.File ? client : null);
+		_logger.LogInformation("Restore: reopened a {Kind} panel of group {GroupId}", pinned ? "pinned" : "group", saved.GroupId);
+	}
+
+	/// <summary>A group panel comes back only in docked mode, for the session on show when its group closes automatically, and when the group has no panel yet; the default panel in both modes when it has none.</summary>
+	private bool PanelAdmissible(PreviewGroupModel? group, PreviewItemModel item)
+	{
+		if (group == null)
+		{
+			if (_windows.Any(w => w.IsDefaultPanel))
+			{
+				_logger.LogInformation("Restore: skipped the default Preview panel, one is already open");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (!IsDocked)
+		{
+			_logger.LogInformation("Restore: skipped a panel of group {GroupId}, external windows are active", group.Id);
+			return false;
+		}
+
+		if (group.AutoClose && item.SourceNodeId != (CurrentNodeId ?? _state?.State.LastSelectedNodeId))
+		{
+			_logger.LogInformation("Restore: skipped a panel of group {GroupId}, it belongs to another session", group.Id);
+			return false;
+		}
+
+		if (_windows.Any(w => !w.IsPinned && w.IsPanel && w.GroupId == group.Id))
+		{
+			_logger.LogInformation("Restore: skipped a panel of group {GroupId}, the group already has one", group.Id);
+			return false;
+		}
+
+		return true;
 	}
 
 	/// <summary>A group window comes back only while the mode is active, for the session on show when its group closes automatically, and when the group has no window yet.</summary>
