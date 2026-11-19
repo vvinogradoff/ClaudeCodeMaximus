@@ -9,17 +9,11 @@ namespace TessynDesktop.WPF.Tests;
 /// <summary>
 /// FR.2.14 in a real browser (TC.MT.03): the real tables of this repo's docs are rendered by <see cref="MarkdigEntryRenderer"/>, put into the CSS of the preview
 /// page and of the transcript page, and laid out by headless Edge. Every cell must be at least as wide as its longest word, and a table that is too wide must
-/// scroll in its own box while the entry and the page do not. Passes without measuring when Edge is not installed.
+/// scroll in its own box while the entry and the page do not. Reported as skipped when Edge is not installed.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed class TableLayoutBrowserTests : IDisposable
 {
-	private static readonly string[] EdgePaths =
-	[
-		@"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-		@"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-	];
-
 	private const string MeasureScript = """
 		<script>
 		function words(td){var out=[];var w=document.createTreeWalker(td,NodeFilter.SHOW_TEXT);var n;while(n=w.nextNode()){var cs=getComputedStyle(n.parentElement);
@@ -48,8 +42,6 @@ public sealed class TableLayoutBrowserTests : IDisposable
 			// Edge may still hold the profile folder for a moment; it is in %TEMP%.
 		}
 	}
-
-	private static string? Edge() => EdgePaths.FirstOrDefault(File.Exists);
 
 	private static string RepoFile(string relative)
 	{
@@ -83,7 +75,7 @@ public sealed class TableLayoutBrowserTests : IDisposable
 
 	private TableReport? Measure(string html, int width)
 	{
-		var edge = Edge();
+		var edge = new EdgeBrowser().Find();
 		if (edge == null)
 			return null;   // no Edge on this machine: nothing to measure
 
@@ -179,7 +171,7 @@ public sealed class TableLayoutBrowserTests : IDisposable
 
 		throw new TimeoutException("the page produced no measurement");
 	}
-	[Fact]
+	[EdgeFact]
 	public void TheTcPwTable_ScrollsInItsOwnBox_WhenTheViewIsTooNarrow()
 	{
 		var html = Html("docs/testcases/TC.PW.01-Preview-Windows.md");
@@ -197,7 +189,7 @@ public sealed class TableLayoutBrowserTests : IDisposable
 
 	public sealed record TableBox(int Cells, bool Scrolls, double BoxWidth);
 
-	[Theory]
+	[EdgeTheory]
 	[InlineData("docs/testcases/TC.PW.01-Preview-Windows.md", 1000)]
 	[InlineData("docs/testcases/TC.PW.01-Preview-Windows.md", 420)]
 	[InlineData("docs/features/preview-windows.md", 1000)]
@@ -214,7 +206,7 @@ public sealed class TableLayoutBrowserTests : IDisposable
 		Assert.False(report.PageOverflow, "the page scrolls sideways");
 	}
 
-	[Theory]
+	[EdgeTheory]
 	[InlineData("docs/testcases/TC.PW.01-Preview-Windows.md", 900)]
 	[InlineData("docs/testcases/TC.PW.01-Preview-Windows.md", 420)]
 	[InlineData("docs/features/preview-windows.md", 900)]
