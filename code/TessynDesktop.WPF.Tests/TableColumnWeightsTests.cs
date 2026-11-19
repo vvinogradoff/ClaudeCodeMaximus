@@ -22,6 +22,28 @@ public sealed class TableColumnWeightsTests
 	}
 
 	[Fact]
+	public void OneVeryLongCell_DoesNotStarveTheShortColumns_OnA600PixelCard()
+	{
+		const double CardWidth = 600;
+		const double AverageCharWidth = 7;   // px of an average character at the card text size
+		var longCell = string.Join(' ', Enumerable.Repeat("ordinary", 75));   // 600 characters
+		var rows = Rows(["Id", "Status", "Owner", longCell], ["1", "done", "me", "x"]);
+
+		var weights = new TableColumnWeights().Compute(rows);
+
+		var total = weights.Sum();
+		Assert.Equal(4, weights.Count);
+		for (var column = 0; column < 3; column++)
+		{
+			var share = CardWidth * weights[column] / total;
+			var longestWord = rows.Max(r => r[column].Length);
+			Assert.True(share >= longestWord * AverageCharWidth, $"column {column}: {share:F0}px < {longestWord * AverageCharWidth}px");
+		}
+
+		Assert.True(weights[3] > weights[1]);
+	}
+
+	[Fact]
 	public void EmptyOrOneCharacterColumns_KeepTheFloor()
 	{
 		var weights = new TableColumnWeights().Compute(Rows(["", "x"], ["", "y"]));
