@@ -91,6 +91,12 @@ public static partial class Constants
 		/// <summary>Video types a local path may show a first-frame preview for (FR.26.6); the shell makes the frame with the installed codecs. Wider than <see cref="Video"/>, which is what the preview pane and remote links play.</summary>
 		public static readonly IReadOnlySet<string> InlineVideo = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".wmv" };
 
+		/// <summary>Top-level domains that make the first part of a relative-looking path a web host (<c>example.com/page.html</c>), so it is not marked as a relative file path (FR.26.7).</summary>
+		public static readonly IReadOnlySet<string> WebTopLevelDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+		{
+			"com", "org", "net", "io", "app", "dev", "ai", "co", "gov", "edu", "info", "biz", "me", "us", "uk", "de", "fr", "ru", "ca", "au", "jp", "nl", "xyz"
+		};
+
 		public static readonly IReadOnlySet<string> Pdf = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf" };
 
 		/// <summary>Shown as monospace text, markup and script types included (svg, html, ps1, ...): displayed, never rendered or run.</summary>
