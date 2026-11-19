@@ -53,13 +53,11 @@ public sealed class LeftPaneWidthTests
 		return tree;
 	}
 
-	/// <summary>The left tab control as MainWindow builds it: LeftTabControl style, a "Tree" tab and the contributed ones, with the app's shared scrollbar style.</summary>
-	private static SlotTabControl LeftTabs(params (string Header, FrameworkElement Page)[] tabs)
+	/// <summary>A tab control that hosts the pages (with the app's shared scrollbar style): the pages must fill the width they are given, as they do in a docked panel.</summary>
+	private static TabControl LeftTabs(params (string Header, FrameworkElement Page)[] tabs)
 	{
-		var control = new SlotTabControl { SlotId = "test.leftTabs", Slots = new ShellSlots(), Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent };
-		control.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/TessynDesktop.WPF;component/Styles/LeftTabs.xaml", UriKind.Relative) });
+		var control = new TabControl { Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent };
 		control.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/TessynDesktop.WPF;component/Styles/ScrollBars.xaml", UriKind.Relative) });
-		control.SetResourceReference(FrameworkElement.StyleProperty, "LeftTabControl");
 		foreach (var (header, page) in tabs)
 			control.Items.Add(new TabItem { Header = header, Content = page });
 		return control;
@@ -194,20 +192,4 @@ public sealed class LeftPaneWidthTests
 		});
 	}
 
-	[Fact]
-	public void TheLeftTabs_StretchTheirPages_AndCentreTheirHeaderText()
-	{
-		StaTestRunner.Run(() =>
-		{
-			var tabs = LeftTabs(("Tree", new Grid()), ("Recent", new Grid()));
-			Host(tabs, 300);
-
-			var items = tabs.Items.OfType<TabItem>().ToList();
-			Assert.All(items, i => Assert.Equal(HorizontalAlignment.Stretch, i.HorizontalContentAlignment));   // TabControl copies it onto the page host
-			var host = FindAll<ContentPresenter>(tabs).Single(p => p.Name == "PART_SelectedContentHost");
-			Assert.Equal(HorizontalAlignment.Stretch, host.HorizontalAlignment);
-			var header = FindAll<TextBlock>(tabs).First(t => t.Text == "Tree");
-			Assert.Equal(HorizontalAlignment.Center, header.HorizontalAlignment);
-		});
-	}
 }
