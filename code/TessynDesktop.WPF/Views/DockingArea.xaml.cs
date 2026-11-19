@@ -35,6 +35,8 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	private readonly DockingVisualTree _tree = new();
 	private readonly DockingStripSync _strip;
 	private readonly DockingPanelRaiser _raiser;
+	private readonly DockingAutomationNames _names;
+	private bool _namesDirty = true;
 	private LayoutDocumentPane _documentPane;
 	private LayoutRoot? _subscribedRoot;
 	private ShellLayoutMemory? _memory;
@@ -62,6 +64,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		DockManager.AnchorableHeaderTemplateSelector = new ShellPanelHeaderTemplateSelector();   // the Focus tab shows the badge (FR.6.16)
 		_strip = new DockingStripSync(DockManager, () => _documentPane, _tree);
 		_raiser = new DockingPanelRaiser(DockManager, _tree, () => Chrome.SlideOut.IsOpen);
+		_names = new DockingAutomationNames(DockManager, _tree);   // UI Automation names for the tabs, edge tabs and floating frames (FR.6.22)
 		_documentPane = CreateDocumentPane();
 		var root = new LayoutPanel { Orientation = Orientation.Horizontal };
 		root.Children.Add(_documentPane);
@@ -85,6 +88,10 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 				return;
 
 			Chrome.OnFloatingWindowCreated(created);   // its keys go to the shell commands (FR.6.20)
+			if (_testMode)
+				_floatingPolicy.Apply(created, _logger);   // off-screen, not in the taskbar, never activated (FR.6.22)
+
+			_namesDirty = true;
 
 			// The library shows the window after it is created; while the cover is up it is hidden again at once.
 			created.IsVisibleChanged += (_, _) =>
@@ -392,6 +399,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	private void OnRootUpdated(object? sender, EventArgs e)
 	{
 		_strip.Invalidate();   // the library may have built the panes again
+		_namesDirty = true;
 		Evaluate();
 	}
 
@@ -605,6 +613,12 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		if (_strip.IsDirty)
 			_strip.Update();
 
+		if (_namesDirty)
+		{
+			_namesDirty = false;
+			NameTabsWhenIdle(Constants.DockingTestHook.NameAttempts);   // after the passes that build the tab controls
+		}
+
 		LayoutChanged?.Invoke(this, EventArgs.Empty);
 		if (_building || _memory == null)
 			return;
@@ -647,6 +661,16 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		_lastSignature = _lastState + SizeText();   // the baseline: what the library and this fit made of it is not a change to save
 	}
 
+	/// <summary>Names the tab controls once the dispatcher is idle; tries again (a few times) while the library has not yet filled a tab.</summary>
+	private void NameTabsWhenIdle(int attempts)
+	{
+		Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+		{
+			if (!_names.Update() && attempts > 1)
+				NameTabsWhenIdle(attempts - 1);
+		});
+	}
+
 	/// <summary>Reads the layout when it really changed (a docking change, a selection, or a size found by the probe): logs the state, tells the listeners, and arms the save.</summary>
 	private void Evaluate()
 	{
@@ -659,6 +683,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			return;
 
 		_lastSignature = signature;
+		_namesDirty = true;
 		CaptureCount++;
 		foreach (var panel in _panels.Values.Where(IsInLayout))
 			CapturePlace(panel);
