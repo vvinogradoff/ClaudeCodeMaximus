@@ -92,7 +92,7 @@ public partial class DockingArea : IDockingTestOperations
 
 		var side = ReferenceEquals(container, _documentPane) ? Constants.DockingTestHook.SideCenter : SideName(_reader.SideOf(panel, _documentPane));
 		if (panel.IsAutoHidden)
-			return common with { Side = side, AutoHide = true, Edge = side, Width = panel.AutoHideWidth, Height = panel.AutoHideHeight };
+			return common with { Side = side, AutoHide = true, SlidOut = Chrome.SlideOut.IsOpenFor(panel.Parent) || Chrome.SlideOut.IsOpenFor(panel), Edge = side, Width = panel.AutoHideWidth, Height = panel.AutoHideHeight };
 
 		var size = PaneSize(container as ILayoutElement);
 		return common with { Side = side, Width = size.Width, Height = size.Height };

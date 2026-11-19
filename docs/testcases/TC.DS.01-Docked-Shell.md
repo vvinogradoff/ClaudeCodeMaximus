@@ -14,7 +14,7 @@ Related requirements: FR.6.11–FR.6.22, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | TC.DS.06 | The Session view cannot be closed or floated (hook calls are refused, state unchanged); it can be tabbed | E2E | UC.DS.02 | FR.6.14 |
 | TC.DS.07 | Hook: float Focus; it is owned by the main window, not in the taskbar, never activated; the transcript widens; Send answers still works | E2E | UC.DS.03 | FR.6.14, FR.6.22 |
 | TC.DS.08 | Drag Focus to the second monitor; it minimizes with the main window; hidden while the screensaver covers the window | MANUAL | UC.DS.03 | FR.6.14 |
-| TC.DS.09 | A floating panel's monitor is removed (`--test-monitors`): it is clamped and the forced move is not saved | E2E | UC.DS.03 | FR.6.18, FR.29.16 |
+| TC.DS.09 | A floating panel's monitor is removed (`--test-monitors`): it is clamped and the forced move is not saved | AUTOMATED (unit tests of the placement rules), MANUAL (a real monitor removal: under `--test-window` a floating rectangle is neither saved nor kept on screen, so the hook has nothing to clamp) | UC.DS.03 | FR.6.18, FR.29.16 |
 | TC.DS.10 | Chevron: auto-hides the pane holding Sessions, icon flips, a second click restores it; state remembered after a restart; disabled while Sessions is closed or floating | E2E | UC.DS.04 | FR.6.15, FR.6.18 |
 | TC.DS.11 | Slide-out of the auto-hidden left pane closes on Esc, on its edge tab and on its collapse button; it is drawn above a WebView2 | MANUAL | UC.DS.04 | FR.6.13 |
 | TC.DS.12 | Hook: close Sessions; the Panels group shows it unchecked; picking it shows it at its last place; picking an open panel brings it forward | E2E | UC.DS.05 | FR.6.14 |

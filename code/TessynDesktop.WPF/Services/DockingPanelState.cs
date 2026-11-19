@@ -31,6 +31,9 @@ public sealed record DockingPanelState
 
 	public bool AutoHide { get; init; }
 
+	/// <summary>True while this auto-hidden panel's slide-out is open (shown over the layout).</summary>
+	public bool SlidOut { get; init; }
+
 	/// <summary>The edge an auto-hidden panel sits at: left, right, top or bottom.</summary>
 	public string? Edge { get; init; }
 

@@ -17,13 +17,13 @@ public sealed class FakePreviewDockFactory : IPreviewDockFactory
 	/// <summary>Called with the group of every panel being created (null = the default panel), before it exists.</summary>
 	public Action<PreviewGroupModel?>? OnCreate { get; set; }
 
-	public IPreviewWindowHandle Create(PreviewGroupModel? group, bool pinned, PreviewDockLayoutModel? ownLayout)
+	public IPreviewWindowHandle Create(PreviewGroupModel? group, bool pinned, PreviewDockLayoutModel? ownLayout, string? panelId = null)
 	{
 		OnCreate?.Invoke(group);
 		if (ThrowOnCreate)
 			throw new InvalidOperationException("no docking area");
 
-		var handle = new FakePreviewWindowHandle(group?.Id ?? Constants.Previews.DefaultPanelId, pinned, null, group?.Name ?? Constants.Previews.DefaultPanelName) { OwnLayout = ownLayout, CurrentLayout = ownLayout };
+		var handle = new FakePreviewWindowHandle(group?.Id ?? Constants.Previews.DefaultPanelId, pinned, null, group?.Name ?? Constants.Previews.DefaultPanelName) { OwnLayout = ownLayout, CurrentLayout = ownLayout, PanelId = pinned ? panelId ?? "pinned-" + Guid.NewGuid().ToString("N") : group?.Id ?? Constants.Previews.DefaultPanelId };
 		Created.Add(handle);
 		return handle;
 	}

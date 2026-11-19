@@ -78,6 +78,8 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 	/// <summary>A panel's layout is saved by the dock layer itself (FR.29.21), so there is no window placement.</summary>
 	public PreviewPlacementModel? CurrentPlacement => null;
 
+	public string? PanelId => _panel.ContentId;
+
 	public PreviewDockLayoutModel? CurrentLayout => _closed || !_opened ? null : Capture()?.Clone();
 
 	/// <summary>The panel, for tests and the dock layer.</summary>

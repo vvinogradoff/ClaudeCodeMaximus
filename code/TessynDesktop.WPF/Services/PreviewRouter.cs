@@ -317,13 +317,13 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 	}
 
 	/// <summary>Creates the window, or the docked panel (<paramref name="panel"/>); a null <paramref name="group"/> is the default Preview panel.</summary>
-	private OpenWindow? CreateWindow(PreviewGroupModel? group, bool pinned, PreviewPlacementModel? ownPlacement, bool panel = false, PreviewDockLayoutModel? ownLayout = null)
+	private OpenWindow? CreateWindow(PreviewGroupModel? group, bool pinned, PreviewPlacementModel? ownPlacement, bool panel = false, PreviewDockLayoutModel? ownLayout = null, string? panelId = null)
 	{
 		var groupId = group?.Id ?? Constants.Previews.DefaultPanelId;
 		IPreviewWindowHandle handle;
 		try
 		{
-			handle = panel ? _dock!.Create(group, pinned, ownLayout) : _factory.Create(group!, pinned, ownPlacement);
+			handle = panel ? _dock!.Create(group, pinned, ownLayout, panelId) : _factory.Create(group!, pinned, ownPlacement);
 		}
 		catch (Exception ex)
 		{
@@ -469,8 +469,8 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 
 	private void SaveList()
 	{
-		if (_disposed)
-			return;
+		if (_disposed || _exiting)
+			return;   // at exit the list was saved whole first; a panel that flushes its layout while closing must not save the shorter list
 
 		SaveWindows();
 		SavePanels();
@@ -492,6 +492,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 				Pinned = window.IsPinned,
 				Item = item.Clone(),
 				Layout = window.IsPinned ? (window.Handle as IDockedPreviewPanelHandle)?.CurrentLayout : null,
+				PanelId = window.IsPinned ? (window.Handle as IDockedPreviewPanelHandle)?.PanelId : null,
 			});
 		}
 
@@ -639,7 +640,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		}
 
 		_handlingPanel = null;   // its panel comes now and takes its place in the saved list
-		var window = CreateWindow(group, pinned, null, panel: true, ownLayout: pinned ? saved.Layout : null);
+		var window = CreateWindow(group, pinned, null, panel: true, ownLayout: pinned ? saved.Layout : null, panelId: pinned ? saved.PanelId : null);
 		if (window == null)
 			return;
 

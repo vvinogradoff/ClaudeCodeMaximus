@@ -8,4 +8,7 @@ public interface IDockedPreviewPanelHandle : IPreviewWindowHandle
 {
 	/// <summary>The panel's layout now; null before it is shown and after it closed.</summary>
 	PreviewDockLayoutModel? CurrentLayout { get; }
+
+	/// <summary>The panel's content id in the layout (a pinned panel's own id, saved so its neighbours still match after a restart); null when the handle has none.</summary>
+	string? PanelId { get; }
 }

@@ -35,6 +35,9 @@ public sealed class FakePreviewWindowHandle : IDockedPreviewPanelHandle
 	/// <summary>What <see cref="CurrentLayout"/> answers: the panel's layout now (a test sets it).</summary>
 	public PreviewDockLayoutModel? CurrentLayout { get; set; }
 
+	/// <summary>The panel's content id (a test sets it; the dock factory assigns one).</summary>
+	public string? PanelId { get; set; }
+
 	public List<PreviewItemModel> Shown { get; } = [];
 
 	public PreviewTarget? LastTarget { get; private set; }
@@ -52,9 +55,13 @@ public sealed class FakePreviewWindowHandle : IDockedPreviewPanelHandle
 
 	public void SetGroupName(string name) => GroupName = name;
 
+	/// <summary>Runs while the handle closes, before <see cref="Closed"/> (a real panel flushes its layout there).</summary>
+	public Action? OnClosing { get; set; }
+
 	public void Close()
 	{
 		CloseCalls++;
+		OnClosing?.Invoke();
 		RaiseClosed(byUser: false);
 	}
 
@@ -93,6 +100,7 @@ public sealed class FakePreviewWindowHandle : IDockedPreviewPanelHandle
 	public void Pin()
 	{
 		IsPinned = true;
+		PanelId = GroupId + "#pinned" + Guid.NewGuid().ToString("N");   // as the real panel: a pinned panel gets an id of its own
 		Pinned?.Invoke(this, EventArgs.Empty);
 	}
 

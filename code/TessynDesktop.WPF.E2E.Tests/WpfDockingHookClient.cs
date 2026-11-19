@@ -78,6 +78,24 @@ internal sealed class WpfDockingHookClient : IDisposable
 
 	public Task<DockingHookReply> ResetAsync() => SendAsync(new JsonObject { ["op"] = "reset" });
 
+	/// <summary>Asks for the state until <paramref name="predicate"/> holds; fails the test with the panels' places when it does not within the step timeout.</summary>
+	public async Task<DockingHookReply> WaitStateAsync(Func<DockingHookReply, bool> predicate, string what)
+	{
+		var deadline = DateTime.UtcNow + PreviewWindowsHarness.StepTimeout;
+		DockingHookReply? last = null;
+		while (DateTime.UtcNow < deadline)
+		{
+			last = await StateAsync();
+			if (predicate(last))
+				return last;
+
+			await Task.Delay(200);
+		}
+
+		Xunit.Assert.Fail($"Expected {what}. Panels: " + string.Join(" | ", last?.Panels.Select(p => $"{p.Id}={(p.Shown ? p.Side : "closed")},pane{p.Pane},tab{p.TabIndex},sel{p.Selected},hide{p.AutoHide},slid{p.SlidOut}") ?? []));
+		return last!;
+	}
+
 	/// <summary>Sends one request and parses the reply line.</summary>
 	public async Task<DockingHookReply> SendAsync(JsonObject request)
 	{
@@ -117,7 +135,7 @@ internal sealed class WpfDockingHookClient : IDisposable
 			p["id"]!.GetValue<string>(), p["kind"]!.GetValue<string>(), p["shown"]!.GetValue<bool>(), p["side"]!.GetValue<string>(), p["pane"]!.GetValue<int>(), p["tabIndex"]!.GetValue<int>(),
 			p["selected"]!.GetValue<bool>(), p["width"]!.GetValue<double>(), p["height"]!.GetValue<double>(), p["autoHide"]!.GetValue<bool>(), p["edge"]?.GetValue<string>(), p["floating"]!.GetValue<bool>(),
 			p["floatRect"] is JsonObject r ? new DockingHookRect(r["left"]!.GetValue<double>(), r["top"]!.GetValue<double>(), r["width"]!.GetValue<double>(), r["height"]!.GetValue<double>()) : null,
-			p["badge"]?.GetValue<string>())).ToList();
+			p["badge"]?.GetValue<string>(), p["slidOut"]?.GetValue<bool>() ?? false)).ToList();
 		return new DockingHookReply(node["ok"]!.GetValue<bool>(), node["error"]?.GetValue<string>(), panels);
 	}
 }

@@ -129,6 +129,7 @@ public sealed class PreviewSettingsService : IPreviewSettingsService
 		Pinned = p.Pinned,
 		Item = p.Item.Clone(),
 		Layout = p.Layout?.Clone(),
+		PanelId = p.PanelId,
 	};
 
 	public IReadOnlyList<OpenPreviewWindowModel> OpenWindows => _store.Get<PreviewWindowsSettings>().OpenWindows;

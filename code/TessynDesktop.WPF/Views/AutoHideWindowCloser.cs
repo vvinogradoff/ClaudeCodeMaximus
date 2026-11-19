@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using AvalonDock;
 using AvalonDock.Controls;
+using AvalonDock.Layout;
 
 namespace TessynDesktop.WPF.Views;
 
@@ -56,6 +57,9 @@ public sealed class AutoHideWindowCloser
 
 	/// <summary>True while a slide-out is open.</summary>
 	public bool IsOpen => _manager.AutoHideWindow is { Model: not null, Visibility: Visibility.Visible };
+
+	/// <summary>True while the open slide-out shows <paramref name="element"/> (an auto-hide group or the panel itself).</summary>
+	public bool IsOpenFor(ILayoutElement? element) => element != null && IsOpen && ReferenceEquals(_manager.AutoHideWindow.Model, element);
 
 	/// <summary>Closes the open slide-out; false when none is open or the library has no such method.</summary>
 	public bool Close()

@@ -42,8 +42,8 @@ public sealed class PreviewRouterPanelRestartTests : IDisposable
 
 	private string[] SavedPanels() => _settings.OpenPanels.Select(p => p.GroupId + (p.Pinned ? "*" : string.Empty)).ToArray();
 
-	private static OpenPreviewPanelModel SavedPanel(string group, PreviewItemModel item, bool pinned = false, PreviewDockLayoutModel? layout = null) =>
-		new() { GroupId = group, Pinned = pinned, Item = item, Layout = layout };
+	private static OpenPreviewPanelModel SavedPanel(string group, PreviewItemModel item, bool pinned = false, PreviewDockLayoutModel? layout = null, string? panelId = null) =>
+		new() { GroupId = group, Pinned = pinned, Item = item, Layout = layout, PanelId = panelId };
 
 	/// <summary>A new run of the app: a fresh router over the same saved settings and a fresh set of panels.</summary>
 	private async Task RestartAsync(params OpenPreviewPanelModel[] saved)
@@ -155,6 +155,56 @@ public sealed class PreviewRouterPanelRestartTests : IDisposable
 		Assert.Equal(250, panel.OwnLayout!.Size);
 		Assert.Equal(PreviewDockSide.Top, panel.OwnLayout.Side);
 		Assert.Equal(["web*"], SavedPanels());
+	}
+
+	[Fact]
+	public void APinnedPanel_IsSavedWithItsId_AGroupPanelAndTheDefaultPanelHaveNone()
+	{
+		OpenFile("a.md");
+		var panel = Panel("text-code");
+		panel.Pin();
+		OpenFile("b.md");
+
+		var saved = _settings.OpenPanels.Single(p => p.Pinned);
+		Assert.False(string.IsNullOrEmpty(saved.PanelId));
+		Assert.Equal(panel.PanelId, saved.PanelId);
+		Assert.All(_settings.OpenPanels.Where(p => !p.Pinned), p => Assert.Null(p.PanelId));
+	}
+
+	[Fact]
+	public void AtExit_AFlushOfAPinnedPanelWhileTheOthersCloseDoesNotShortenTheSavedList()
+	{
+		OpenFile("a.md");
+		Panel("text-code").Pin();
+		OpenFile("a.png");
+		Panel("images").Pin();
+		var second = Panel("images", pinned: true);
+		second.CurrentLayout = new PreviewDockLayoutModel { Side = PreviewDockSide.Bottom, Size = 200 };
+		second.OnClosing = () => second.ChangeLayout(second.CurrentLayout!);   // a panel flushes its layout while it closes, when the first panel is already gone
+
+		_router.CloseAllForExit();
+
+		Assert.Equal(["text-code*", "images*"], SavedPanels());   // the list is whole, as it was at the start of the exit
+	}
+
+	[Fact]
+	public async Task Restart_APinnedPanel_KeepsItsSavedId_SoItsSavedNeighboursStillMatch()
+	{
+		await RestartAsync(
+			SavedPanel("web", Url("https://example.com/a"), pinned: true, panelId: "web#pinnedaaa"),
+			SavedPanel("web", Url("https://example.com/b"), pinned: true, panelId: "web#pinnedbbb"));
+
+		Assert.Equal(["web#pinnedaaa", "web#pinnedbbb"], _dock.Created.Select(h => h.PanelId));
+		Assert.Equal(["web#pinnedaaa", "web#pinnedbbb"], _settings.OpenPanels.Select(p => p.PanelId));   // saved again, unchanged
+	}
+
+	[Fact]
+	public async Task Restart_APinnedPanelSavedWithoutAnId_GetsANewOne()
+	{
+		await RestartAsync(SavedPanel("web", Url("https://example.com/a"), pinned: true));
+
+		Assert.False(string.IsNullOrEmpty(_dock.Created.Single().PanelId));
+		Assert.Equal(_dock.Created.Single().PanelId, _settings.OpenPanels.Single().PanelId);
 	}
 
 	[Fact]
