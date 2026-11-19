@@ -32,6 +32,8 @@ public partial class PreviewWindow : Window
 	private readonly IMonitorWatcher _monitors;
 	private readonly PreviewPlacementPlanner _planner;
 	private readonly Win32WindowPlacement _placement;
+	private readonly PreviewWindowPlacementCapture _capture;
+	private readonly PreviewRestoreGuard _restore;
 	private readonly AppearanceApplier _appearance;
 	private readonly Func<IntPtr> _mainWindow;
 	private readonly PreviewPlacementModel? _ownPlacement;
@@ -61,6 +63,8 @@ public partial class PreviewWindow : Window
 		_monitors = monitors;
 		_planner = planner;
 		_placement = placement;
+		_capture = new PreviewWindowPlacementCapture(placement);
+		_restore = new PreviewRestoreGuard(placement);
 		_appearance = appearance;
 		_mainWindow = mainWindow;
 		_logger = logger;
@@ -77,19 +81,25 @@ public partial class PreviewWindow : Window
 		{
 			_appearance.ApplyToWindow(this);   // ... and again once its first frame is up
 			_tracker.Tracking = true;
+			Dispatcher.BeginInvoke(_restore.End, System.Windows.Threading.DispatcherPriority.ApplicationIdle);   // FR.29.16: the restore phase ends once the first frame is up
 		};
 
 		_tracker = new PreviewPlacementTracker(
 			viewModel.GroupId, settings, monitors, ui, () => viewModel.IsPinned, () => WindowState == WindowState.Minimized, CurrentPlacement, _testWindow, time, placementDelay);
 		SourceInitialized += OnSourceInitialized;
-		LocationChanged += (_, _) => _tracker.Changed();
-		SizeChanged += (_, _) => _tracker.Changed();
+		LocationChanged += (_, _) => OnPlacementChanged();
+		SizeChanged += (_, _) => OnPlacementChanged();
 		StateChanged += (_, _) =>
 		{
 			_tracker.Changed();
 			ApplyWindowState();
 		};
-		DpiChanged += (_, _) => FitMaximized();
+		DpiChanged += (_, _) =>
+		{
+			FitMaximized();
+			if (_restore.Active)
+				Dispatcher.BeginInvoke(() => _restore.OnDpiChanged(new WindowInteropHelper(this).Handle), System.Windows.Threading.DispatcherPriority.Send);   // FR.29.16: after WPF applied the rescaled rectangle Windows suggested, put the remembered one back
+		};
 		Closing += (_, _) => _tracker.Flush();
 		Closed += (_, _) => _tracker.Dispose();
 		viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -113,12 +123,25 @@ public partial class PreviewWindow : Window
 		if (hwnd == IntPtr.Zero)
 			return null;
 
-		var captured = _placement.Capture(hwnd);
+		var captured = _capture.Capture(hwnd);   // FR.29.16: the actual rectangle, also after Snap
 		if (captured == null)
 			return null;
 
 		var device = _monitors.MonitorOf(hwnd);
-		return _planner.Remember(captured, device == null ? null : _monitors.Monitors.FirstOrDefault(m => m.DeviceName == device));
+		return _planner.Remember(captured.Placement, device == null ? null : _monitors.Monitors.FirstOrDefault(m => m.DeviceName == device), captured.Dpi);
+	}
+
+	/// <summary>The window moved or was resized: notes its actual rectangle while it is restored (so a later maximize remembers it) and restarts the save wait.</summary>
+	private void OnPlacementChanged()
+	{
+		if (!_testWindow && WindowState == WindowState.Normal)
+		{
+			var hwnd = new WindowInteropHelper(this).Handle;
+			if (hwnd != IntPtr.Zero)
+				_capture.Observe(hwnd);
+		}
+
+		_tracker.Changed();
 	}
 
 	/// <summary>Restores the window when it is minimized and brings it to the top, without activating it (FR.29.5).</summary>
@@ -185,6 +208,7 @@ public partial class PreviewWindow : Window
 		var remembered = _viewModel.IsPinned ? _ownPlacement : _settings.GetPlacement(_viewModel.GroupId);
 		var planned = _planner.Plan(remembered, _monitors.Monitors, _monitors.MonitorOf(_mainWindow()));
 		_placement.Apply(hwnd, planned);
+		_restore.Begin(planned);
 	}
 
 	/// <summary>Called when the window state changes (and by tests, since an unshown window raises no state change). A maximized window with a custom frame reaches over the screen edge by the resize border; pull the content back in. The maximize button shows "restore" while maximized.</summary>

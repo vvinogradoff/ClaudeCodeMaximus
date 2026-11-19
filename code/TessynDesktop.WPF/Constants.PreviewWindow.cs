@@ -60,6 +60,9 @@ public static partial class Constants
 
 		public const double CaptionHeight = 32;
 		public const double ResizeBorder = 6;
+
+		/// <summary>How often the remembered rectangle is applied again while a window is being restored onto a monitor of another scale (FR.29.16).</summary>
+		public const int MaxRestoreReapplies = 3;
 		public const double DefaultWidth = 960;
 		public const double DefaultHeight = 640;
 

@@ -124,4 +124,16 @@ The Architect works with two or more monitors and wants previews out of the main
 
 **FR.29.15 — Resizing.** A preview window that is not maximized can be resized from every edge and corner: the resize cursor appears on all four edges, and the page content never covers the resize border. Maximized windows have no border.
 
+## Amendments (2026-11-19, preview improvements)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.29.6 Remembered placement | FR.29.16 | The remembered rectangle is the window's actual one, also after Snap; sizes keep their pixels across monitors of different scales. |
+| FR.29.11 Restart | FR.29.16 | A pinned window's own last place follows the same rules. |
+
+**FR.29.16 — Placement with Snap and monitor scaling.**
+- The remembered placement is the window's **actual** rectangle as the user sees it, also when Windows arranged it (Snap to a half or a quarter, Snap layouts from the top of the screen). The next window of the group opens at exactly that rectangle on that monitor (Windows does not treat it as snapped then; it is a normal window of the same place and size).
+- Sizes are kept in the pixels of the monitor the window was on, together with that monitor's scale (DPI). A window that reopens on a monitor with another scale than the one it was created on gets **exactly the remembered size** there; it is not rescaled on the way (a `DpiChanged` during the restore applies the remembered rectangle again; later ones, when the user drags the window across monitors, rescale normally). When the remembered monitor is gone and the window opens on another monitor, its size is converted by the ratio of the two scales, then clamped; a placement saved without a scale is only clamped.
+- The same rules hold for a pinned window's own last place (FR.29.11) and for maximized windows: what is remembered behind the maximized state is the actual normal rectangle the window had before it was maximized.
+
 Status: Specified and approved 2026-11-18; built 2026-11-18 on branch `wpf/preview-windows` (merge `1d07de9`; unit tests, WPF E2E `WpfPreviewWindows*E2ETests`). FR.29.14 and FR.29.15: approved by the Architect's feedback 2026-11-18, built on branch `wpf/preview-window-polish` (merge `cd82193`). Accepted by the Architect in use on two monitors after both restarts (2026-11-18); the MANUAL rows of TC.PW.01 were not ticked one by one. Summary: `docs/features/preview-windows.md`.
