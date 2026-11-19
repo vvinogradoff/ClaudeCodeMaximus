@@ -38,6 +38,33 @@ public sealed class TableColumnWeightsTests
 		Assert.Empty(new TableColumnWeights().Compute([]));
 	}
 
+	[Fact]
+	public void TheTcPwTable_InAFocusCard_GivesTheTitleColumnTheLargestShare_AndNoColumnLessThanItsLongestWord()
+	{
+		var lines = File.ReadAllLines(FindRepoFile("docs/testcases/TC.PW.01-Preview-Windows.md")).Where(l => l.StartsWith("| TC.PW.", StringComparison.Ordinal)).ToList();
+		var rows = lines.Select(l => (IReadOnlyList<string>)l.Trim('|').Split('|').Select(c => c.Trim()).ToList()).ToList();
+		Assert.NotEmpty(rows);
+
+		var weights = new TableColumnWeights().Compute(rows);
+
+		Assert.Equal(5, weights.Count);
+		Assert.Equal(1, weights.Select((w, i) => (w, i)).OrderByDescending(x => x.w).First().i);   // Title
+		for (var column = 0; column < 5; column++)
+			Assert.True(weights[column] >= rows.Max(r => r[column].Split(' ', StringSplitOptions.RemoveEmptyEntries).Max(w => w.Length)));
+	}
+
+	private static string FindRepoFile(string relative)
+	{
+		for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+		{
+			var candidate = Path.Combine(dir.FullName, relative);
+			if (File.Exists(candidate))
+				return candidate;
+		}
+
+		throw new FileNotFoundException(relative);
+	}
+
 	[Theory]
 	[InlineData("transcript.html", ".b table", ".b th,.b td")]
 	[InlineData("preview.html", ".md table", ".md th,.md td")]
