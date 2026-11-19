@@ -19,6 +19,15 @@ public static partial class Constants
 
 		public const string StartBackgroundDaemonHint = "On (the default): when no daemon runs, this window starts the daemon in the background itself. Off: this window waits for the Tessyn (Avalonia) app and connects as soon as it is up, so the Avalonia window can be started after this one. Takes effect at once.";
 
+		/// <summary>FR.32.10–FR.32.12: the elevated daemon on the Startup tab.</summary>
+		public const string StartDaemonElevatedHint = "Off (the default): the daemon starts normally. On: when this window starts the daemon, Windows asks for administrator approval, and every session then runs as administrator (typed, scheduled, worker, Telegram and Tessyn Web turns). This window itself always runs normally. Counts at the next start; a running daemon is never restarted by itself.";
+
+		public const string RestartDaemonModeHint = "Each button asks first, terminates the running sessions, and starts the daemon again that way. It keeps that way until it ends.";
+
+		public const string DaemonRunsElevated = "The daemon runs elevated (as administrator).";
+
+		public const string DaemonRunsNormally = "The daemon runs normally.";
+
 		public const string Saved = "Saved.";
 		public const string NothingToSave = "No changes to save.";
 

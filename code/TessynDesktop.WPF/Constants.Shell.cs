@@ -80,6 +80,9 @@ public static partial class Constants
 
 		/// <summary>WPF is the only client: it starts the background daemon host itself when none runs (it was off while the Avalonia window ran side by side). A stored file without the key gets this value too.</summary>
 		public const bool StartBackgroundDaemon = true;
+
+		/// <summary>FR.32.10: the host starts normally unless the User turns "Start daemon elevated" on.</summary>
+		public const bool StartDaemonElevated = false;
 	}
 
 	/// <summary>Labels of the dialogs.</summary>

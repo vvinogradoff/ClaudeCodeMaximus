@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TessynDesktop.Client;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.State;
 using TessynDesktop.WPF.Switch;
 
 namespace TessynDesktop.WPF.ViewModels;
@@ -14,7 +15,7 @@ namespace TessynDesktop.WPF.ViewModels;
 /// (reconnects and resume are its own job); this view model reports its state changes.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDisposable
+public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDisposable, IDaemonModeControl
 {
 	private readonly IDaemonLocator _locator;
 	private readonly ITessynClientFactory _factory;
@@ -23,6 +24,7 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	private readonly TimeSpan _retryDelay;
 	private readonly IDaemonHostLauncher _hostLauncher;
 	private readonly DaemonRestarter? _restarter;
+	private readonly IClientSettingsStore? _settings;
 	private long _startingSince;
 	private int _daemonPid;
 	private int _daemonCheckRunning;
@@ -30,21 +32,36 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	private ITessynClient? _client;
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(BannerText), nameof(IsBannerVisible))]
+	[NotifyPropertyChangedFor(nameof(BannerText), nameof(IsBannerVisible), nameof(IsElevationBannerVisible))]
 	private ConnectionBannerState _state = ConnectionBannerState.Connecting;
+
+	/// <summary>FR.32.12: true when the connected daemon runs elevated, false when it runs normally; null while unknown (not connected, an older daemon).</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsElevationBannerVisible))]
+	private bool? _daemonElevated;
+
+	/// <summary>FR.32.13: the notice after a declined or failed elevated start; null when there is none.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsElevationBannerVisible), nameof(ElevationBannerText))]
+	private string? _elevationNote;
 
 	[ObservableProperty]
 	private string? _detail;
 
-	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null)
-		: this(locator, factory, ui, logger, Constants.Timeouts.DaemonDiscoveryRetry, hostLauncher, restarter)
+	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null, IClientSettingsStore? settings = null)
+		: this(locator, factory, ui, logger, Constants.Timeouts.DaemonDiscoveryRetry, hostLauncher, restarter, settings)
 	{
 	}
 
-	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, TimeSpan retryDelay, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null)
+	/// <param name="settings">The client settings: "Start daemon elevated" decides the elevation banner (FR.32.12); null = the setting is off.</param>
+	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, TimeSpan retryDelay, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null, IClientSettingsStore? settings = null)
 	{
 		_restarter = restarter;
+		_settings = settings;
 		_hostLauncher = hostLauncher ?? new NoDaemonHostLauncher();
+		_hostLauncher.ElevationRefused += OnElevationRefused;
+		if (_settings != null)
+			_settings.Changed += OnSettingsChanged;
 		_locator = locator;
 		_factory = factory;
 		_ui = ui;
@@ -120,10 +137,13 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 				_client = client;
 				_startingSince = 0; // a later disconnect starts its own "Starting..." clock
 				_daemonPid = found.Daemon.Pid;
-				_logger.LogInformation("Connected to daemon run {RunId} (protocol {Protocol})", client.ServerInfo?.RunId, client.ServerInfo?.ProtocolVersion);
+				client.Resynced += OnClientResynced;
+				var elevated = client.ServerInfo?.Elevated;
+				_logger.LogInformation("Connected to daemon run {RunId} (protocol {Protocol}, elevated {Elevated})", client.ServerInfo?.RunId, client.ServerInfo?.ProtocolVersion, elevated?.ToString() ?? "unknown");
 				_ui.Post(() =>
 				{
 					Apply(ConnectionBannerState.Connected, null);
+					ApplyElevation(elevated);
 					ClientReady?.Invoke(client);
 				});
 				_ = CheckDaemonBuildAsync(found.Daemon.Pid);
@@ -197,32 +217,123 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 		}
 	}
 
-	/// <summary>The banner's "Restart daemon": asks, ends the daemon, restarts this client (the new start brings the host back on the newest build).</summary>
+	/// <summary>
+	/// The banner's "Restart daemon": asks, ends the daemon, starts the new host the way the daemon ran (FR.32.11) and restarts this client, which attaches to it.
+	/// </summary>
 	[RelayCommand]
 	private async Task RestartDaemonAsync()
 	{
 		if (_restarter == null)
 			return;
 
-		var sessions = 0;
+		var sessions = await RunningSessionsAsync();
+		var keep = DaemonElevated == true ? HostStartMode.Elevated : HostStartMode.Normal;
+		var outcome = await _restarter.RestartAsync(_daemonPid, sessions, CancellationToken.None, keep);
+		_ui.Post(() => RestartNote = NoteFor(outcome));
+	}
+
+	/// <summary>FR.32.12: the banner while the daemon runs normally and "Start daemon elevated" is on, or after a declined or failed elevated start.</summary>
+	public bool IsElevationBannerVisible => State == ConnectionBannerState.Connected && DaemonElevated == false && (ElevationNote != null || IsStartElevatedOn());
+
+	public string ElevationBannerText => ElevationNote ?? Constants.Switch.ElevationExpectedText;
+
+	/// <summary>True when the daemon can be restarted from here: the real launcher and a connected daemon.</summary>
+	public bool CanRestartDaemon => _restarter != null && _client != null && _daemonPid != 0;
+
+	/// <summary>Restart daemon elevated (FR.32.11), on the elevation banner and in Settings, Startup.</summary>
+	[RelayCommand]
+	private Task RestartDaemonElevatedAsync() => SwitchDaemonAsync(HostStartMode.Elevated);
+
+	/// <summary>Restart daemon normal (FR.32.11), in Settings, Startup.</summary>
+	[RelayCommand]
+	private Task RestartDaemonNormalAsync() => SwitchDaemonAsync(HostStartMode.Normal);
+
+	/// <summary>Asks first, ends the daemon and starts the host <paramref name="mode"/>'s way (FR.32.11); this client reconnects to the new run by itself.</summary>
+	public async Task SwitchDaemonAsync(HostStartMode mode)
+	{
+		if (!CanRestartDaemon || _restarter == null)
+			return;
+
+		var sessions = await RunningSessionsAsync();
+		var outcome = await _restarter.SwitchAsync(_daemonPid, sessions, mode, CancellationToken.None);
+		_ui.Post(() =>
+		{
+			RestartNote = NoteFor(outcome);
+			if (outcome != DaemonRestartOutcome.Restarted)
+				return;
+
+			DaemonElevated = null;   // unknown until the new run's hello
+			if (mode == HostStartMode.Normal)
+				ElevationNote = null;   // the User chose normal: no notice about a declined prompt
+		});
+	}
+
+	private async Task<int> RunningSessionsAsync()
+	{
 		try
 		{
 			if (_client != null)
-				sessions = (await _client.DaemonHealthAsync()).SessionsRunning;
+				return (await _client.DaemonHealthAsync()).SessionsRunning;
 		}
 		catch (Exception ex) when (ex is not OperationCanceledException)
 		{
 			_logger.LogInformation(ex, "Could not read the number of running sessions");
 		}
 
-		var outcome = await _restarter.RestartAsync(_daemonPid, sessions, CancellationToken.None);
-		var detail = outcome switch
+		return 0;
+	}
+
+	private static string? NoteFor(DaemonRestartOutcome outcome) => outcome switch
+	{
+		DaemonRestartOutcome.NotSupported => Constants.Switch.RestartNotSupportedNote,
+		DaemonRestartOutcome.DidNotExit => Constants.Switch.RestartDidNotExitNote,
+		DaemonRestartOutcome.NotStarted => Constants.Switch.RestartNotStartedNote,
+		_ => null,
+	};
+
+	private bool IsStartElevatedOn() => _settings?.Get<DaemonHostSettings>().StartDaemonElevated == true;
+
+	private void ApplyElevation(bool? elevated)
+	{
+		DaemonElevated = elevated;
+		if (elevated == true)
+			ElevationNote = null;
+		OnPropertyChanged(nameof(CanRestartDaemon));
+	}
+
+	private void OnElevationRefused(ElevationRefusal refusal) => _ui.Post(() => ElevationNote = refusal.NoticeText);
+
+	private void OnSettingsChanged(object? sender, ClientSettingsChangedEventArgs e)
+	{
+		if (e.Section == Constants.SettingsSections.DaemonHost)
+			_ui.Post(() => OnPropertyChanged(nameof(IsElevationBannerVisible)));
+	}
+
+	/// <summary>A new daemon run (a restart, FR.32.6): its pid, its way of running and its build are read again.</summary>
+	private void OnClientResynced(object? sender, ResyncedEventArgs e)
+	{
+		if (e.Reason == ResyncedEventArgs.RunChangedReason)
+			_ = FollowNewRunAsync();
+	}
+
+	private async Task FollowNewRunAsync()
+	{
+		try
 		{
-			DaemonRestartOutcome.NotSupported => "this daemon cannot be restarted from here; exit it from its tray icon or window, then start the client",
-			DaemonRestartOutcome.DidNotExit => "the daemon did not exit in time; exit it from its tray icon",
-			_ => null,
-		};
-		_ui.Post(() => RestartNote = detail);
+			var found = await _locator.DiscoverAsync(CancellationToken.None);
+			if (found.Status == DaemonDiscoveryStatus.Found && found.Daemon != null)
+				_daemonPid = found.Daemon.Pid;
+		}
+		catch (Exception ex) when (ex is not OperationCanceledException)
+		{
+			_logger.LogInformation(ex, "Could not read the new daemon run's discovery file");
+		}
+
+		var elevated = _client?.ServerInfo?.Elevated;
+		_logger.LogInformation("Following the new daemon run {RunId} (pid {Pid}, elevated {Elevated})", _client?.ServerInfo?.RunId, _daemonPid, elevated?.ToString() ?? "unknown");
+		_ui.Post(() => ApplyElevation(elevated));
+		if (_daemonPid != 0)
+			_ = CheckDaemonBuildAsync(_daemonPid);
 	}
 
 	/// <summary>Asks the launcher to start the background host; a failure of that never ends the connect loop.</summary>
@@ -261,6 +372,10 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 			return;
 
 		client.StateChanged -= OnClientStateChanged;
+		client.Resynced -= OnClientResynced;
+		_hostLauncher.ElevationRefused -= OnElevationRefused;
+		if (_settings != null)
+			_settings.Changed -= OnSettingsChanged;
 		await client.DisposeAsync().ConfigureAwait(false);
 	}
 
@@ -277,7 +392,13 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 
 	private void OnClientStateChanged(object? sender, TessynClientStateChangedEventArgs e)
 	{
-		_ui.Post(() => Apply(MapClientState(e.Current), null));
+		// FR.32.12: nothing is said about the daemon's elevation while it is not connected; a reconnect to the same run says it again.
+		var elevated = e.Current == TessynClientState.Connected ? _client?.ServerInfo?.Elevated : null;
+		_ui.Post(() =>
+		{
+			Apply(MapClientState(e.Current), null);
+			ApplyElevation(elevated);
+		});
 	}
 
 	private void Set(ConnectionBannerState state, string? detail) => _ui.Post(() => Apply(state, detail));

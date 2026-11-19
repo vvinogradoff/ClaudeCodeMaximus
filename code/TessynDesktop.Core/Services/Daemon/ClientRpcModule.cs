@@ -42,6 +42,7 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool            _hasRelaySettings;
 	private readonly bool            _hasModelsAdmin;
 	private readonly string          _daemonVersion;
+	private readonly bool            _elevated;
 
 	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
 		ISettingsSectionService? settingsSections = null, IProfileAdminService? profileAdmin = null, ISessionSoundService? sounds = null,
@@ -50,8 +51,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		ITreeMutationService? treeMutation = null, ISessionOptionsService? sessionOptions = null, ILocalToolsService? localTools = null,
 		IImportService? import = null, IGlobalSearchService? search = null, IScheduleApiService? schedules = null,
 		IAttentionOverviewService? attentionOverview = null, IDaemonHealthService? health = null,
-		IMcpRegistryService? mcpRegistry = null, ITelegramTokenStore? telegramTokens = null, IRelayConfigStore? relayConfig = null, IClaudeModelService? models = null)
+		IMcpRegistryService? mcpRegistry = null, ITelegramTokenStore? telegramTokens = null, IRelayConfigStore? relayConfig = null, IClaudeModelService? models = null,
+		bool? elevated = null)
 	{
+		_elevated      = elevated ?? Environment.IsPrivilegedProcess;   // FR.32.12: read once; a process cannot change its elevation
 		_presence      = presence;
 		_acks          = acks;
 		_hasDrafts     = drafts != null;
@@ -191,7 +194,8 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 			_time.GetUtcNow(),
 			Capabilities(),
 			Constants.Remote.MinProtocolVersion,
-			_eventLog?.HeadSeq ?? 0);
+			_eventLog?.HeadSeq ?? 0,
+			_elevated);
 	}
 
 	/// <summary>Only what is really wired: the event capabilities need the event log.</summary>

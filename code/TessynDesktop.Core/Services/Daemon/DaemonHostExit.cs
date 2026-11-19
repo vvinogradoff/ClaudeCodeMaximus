@@ -84,7 +84,7 @@ public sealed class DaemonHostExit
 public sealed class DaemonHostExitListener : IDisposable
 {
 	private readonly string _name;
-	private EventWaitHandle? _event;
+	private WaitHandle? _event;
 	private RegisteredWaitHandle? _wait;
 
 	public DaemonHostExitListener() : this(TessynDesktop.Models.Remote.RemoteProtocol.Discovery.HostExitEventName)
@@ -99,7 +99,7 @@ public sealed class DaemonHostExitListener : IDisposable
 	/// <summary>Starts listening; <paramref name="onRequest"/> runs on a thread-pool thread each time a client signals.</summary>
 	public void Start(Action onRequest)
 	{
-		_event = new EventWaitHandle(initialState: false, EventResetMode.AutoReset, _name);
+		_event = new UserSignalledEvent().Create(_name);   // FR.32.14: a normal client may signal an elevated host
 		_wait = ThreadPool.RegisterWaitForSingleObject(_event, (_, _) => onRequest(), null, Timeout.Infinite, executeOnlyOnce: false);
 	}
 

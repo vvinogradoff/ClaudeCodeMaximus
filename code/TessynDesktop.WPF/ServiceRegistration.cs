@@ -37,7 +37,8 @@ public sealed class ServiceRegistration
 		services.AddSingleton<ConnectionViewModel>(sp => new ConnectionViewModel(
 			sp.GetRequiredService<IDaemonLocator>(), sp.GetRequiredService<ITessynClientFactory>(), sp.GetRequiredService<IUiDispatcher>(),
 			sp.GetRequiredService<ILogger<ConnectionViewModel>>(), sp.GetRequiredService<IDaemonHostLauncher>(),
-			RestarterFor(sp.GetRequiredService<IDaemonHostLauncher>(), () => sp.GetRequiredService<DaemonRestarter>())));
+			RestarterFor(sp.GetRequiredService<IDaemonHostLauncher>(), () => sp.GetRequiredService<DaemonRestarter>()),
+			sp.GetRequiredService<IClientSettingsStore>()));
 
 		services.AddSingleton<TreeContext>();
 		services.AddSingleton<IShellModule, TreeShellModule>();
@@ -142,7 +143,8 @@ public sealed class ServiceRegistration
 			client, sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(), sp.GetRequiredService<IDialogService>(),
 			sp.GetRequiredService<IFolderPicker>(), sp.GetRequiredService<IMcpServerEditorPresenter>(), sp.GetRequiredService<ProfileViewModel>(),
 			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILoggerFactory>(), sp.GetRequiredService<IAppearanceService>(),
-			sp.GetRequiredService<IPreviewSettingsService>(), sp.GetRequiredService<PreviewGroupMatcher>(), sp.GetRequiredService<IBrowserDataCleaner>()));
+			sp.GetRequiredService<IPreviewSettingsService>(), sp.GetRequiredService<PreviewGroupMatcher>(), sp.GetRequiredService<IBrowserDataCleaner>(),
+			sp.GetRequiredService<ConnectionViewModel>()));
 		services.AddSingleton<SettingsHost>();
 		services.AddSingleton<IShellModule, SettingsShellModule>();
 
@@ -218,7 +220,8 @@ public sealed class ServiceRegistration
 		return new DaemonRestarter(sourceLocation, new ProcessDaemonBuildProbe(), sp.GetRequiredService<IDialogService>(), new NamedEventHostExitSignal(),
 			new ProcessExitWaiter(), restarter, Constants.Switch.DaemonExitTimeout, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonRestarter>(),
 			Path.Combine(AppContext.BaseDirectory.TrimEnd('\\', '/'), Constants.Switch.HostFolderName),
-			new DaemonChangeDetector(new AssemblyDaemonCommitReader(), new ProcessGitRunner(), new DaemonSourcePathResolver(), Constants.Switch.GitCheckTimeout));
+			new DaemonChangeDetector(new AssemblyDaemonCommitReader(), new ProcessGitRunner(), new DaemonSourcePathResolver(), Constants.Switch.GitCheckTimeout),
+			sp.GetRequiredService<IDaemonHostLauncher>());
 	}
 
 	/// <summary>The running client's update check, notice and copy-on-exit: only in the real environment and from the run folder.</summary>
@@ -242,9 +245,13 @@ public sealed class ServiceRegistration
 		var sourceLocation = new SourceBuilds(Path.Combine(paths.DataRoot, Constants.Switch.AppSettingsFileName)).ReadSourceLocation();
 		return new DaemonHostLauncher(runFolder, sourceLocation, new ProcessHostStarter(), new MutexHostPresence(), TimeProvider.System,
 			Constants.Switch.HostStartCooldown, sp.GetRequiredService<ILoggerFactory>().CreateLogger<DaemonHostLauncher>(),
-			isEnabled: IsHostStartEnabled(sp.GetRequiredService<IClientSettingsStore>()));
+			isEnabled: IsHostStartEnabled(sp.GetRequiredService<IClientSettingsStore>()),
+			isElevated: IsHostStartElevated(sp.GetRequiredService<IClientSettingsStore>()));
 	}
 
 	/// <summary>The setting "Start the background daemon when none is running", read at every call so a change in Settings counts at once (off by default).</summary>
 	public static Func<bool> IsHostStartEnabled(IClientSettingsStore store) => () => store.Get<DaemonHostSettings>().StartBackgroundDaemon;
+
+	/// <summary>The setting "Start daemon elevated" (FR.32.10), read at every start of the host (off by default).</summary>
+	public static Func<bool> IsHostStartElevated(IClientSettingsStore store) => () => store.Get<DaemonHostSettings>().StartDaemonElevated;
 }

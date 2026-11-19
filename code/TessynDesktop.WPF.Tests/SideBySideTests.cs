@@ -30,7 +30,7 @@ public sealed class SideBySideTests : IDisposable
 	{
 		public int Starts { get; private set; }
 
-		public IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory)
+		public IHostProcess? Start(string executable, IReadOnlyList<string> arguments, string workingDirectory, HostStartMode mode)
 		{
 			Starts++;
 			return new FakeProcess();
