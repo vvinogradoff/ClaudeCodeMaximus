@@ -16,4 +16,7 @@ public sealed class ShellSlotContribution
 
 	/// <summary>The tab header; only used by the <see cref="Constants.Slots.LeftPanelTabs"/> slot.</summary>
 	public string? Title { get; init; }
+
+	/// <summary>The stable panel id of a left-panel contribution in the docked shell (FR.6.11), e.g. <see cref="Constants.DockedShell.RecentPanelId"/>; only used by the <see cref="Constants.Slots.LeftPanelTabs"/> slot.</summary>
+	public string? PanelId { get; init; }
 }

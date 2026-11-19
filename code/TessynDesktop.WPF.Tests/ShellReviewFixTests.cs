@@ -82,33 +82,6 @@ public sealed class ShellReviewFixTests
 		});
 	}
 
-	[Fact]
-	public void SlotTabControl_ATabThatFailsToCreate_IsSkipped_AndTheStripStaysHiddenOnlyWhenNothingWorked()
-	{
-		StaTestRunner.Run(() =>
-		{
-			var slots = new ShellSlots();
-			slots.Add(new ShellSlotContribution { SlotId = Constants.Slots.LeftPanelTabs, Order = 1, Title = "Broken", Create = () => throw new InvalidOperationException("boom") });
-			slots.Add(new ShellSlotContribution { SlotId = Constants.Slots.LeftPanelTabs, Order = 2, Title = "Good", Create = () => new TextBlock { Text = "ok" } });
-			var tabs = new SlotTabControl { SlotId = Constants.Slots.LeftPanelTabs, Slots = slots, Logger = new CapturingLogger<SlotTabControl>() };
-			tabs.Items.Add(new TabItem { Header = "Tree", Content = new TextBlock() });
-
-			tabs.Populate();
-
-			Assert.Equal(["Tree", "Good"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header));
-			Assert.All(tabs.Items.Cast<TabItem>(), t => Assert.NotEqual(Visibility.Collapsed, t.Visibility));
-
-			var onlyBroken = new ShellSlots();
-			onlyBroken.Add(new ShellSlotContribution { SlotId = Constants.Slots.LeftPanelTabs, Create = () => throw new InvalidOperationException("boom") });
-			var hidden = new SlotTabControl { SlotId = Constants.Slots.LeftPanelTabs, Slots = onlyBroken, Logger = new CapturingLogger<SlotTabControl>() };
-			hidden.Items.Add(new TabItem { Header = "Tree", Content = new TextBlock() });
-			hidden.Populate();
-
-			Assert.Single(hidden.Items);
-			Assert.Equal(Visibility.Collapsed, ((TabItem)hidden.Items[0]!).Visibility);
-		});
-	}
-
 	// ---- S2
 
 	private sealed class HalfwayModule : IShellModule

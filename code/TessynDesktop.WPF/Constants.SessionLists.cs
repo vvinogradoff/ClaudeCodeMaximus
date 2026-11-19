@@ -45,7 +45,6 @@ public static partial class Constants
 		public const string GroupPrefix = "Group ";
 		public const string ScopeToggleName = "Project scope";
 		public const string TagsNoTagsScopedText = "No tags in this directory";
-		public const string LeftTabsName = "LeftTabs";
 		public const string OpenInBrowserTitle = "Open in browser";
 		public const string RecentEmptyText = "No sessions in the last 24 hours.";
 		public const string TagsSelectTagsText = "Select one or more tags to list their sessions.";

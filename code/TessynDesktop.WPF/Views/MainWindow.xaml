@@ -10,7 +10,7 @@
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/LeftTabs.xaml" /></ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" /></ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
         </ResourceDictionary>
     </Window.Resources>
@@ -91,20 +91,8 @@
                 </StatusBarItem>
             </StatusBar>
             <Grid x:Name="ContentGrid">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="TreeColumn" Width="320" MinWidth="160" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" MinWidth="320" />
-                </Grid.ColumnDefinitions>
-                <!-- Left panel: the Tree tab, plus the tabs later packages contribute (Recent, Tags); the tab strip stays hidden until one exists -->
-                <v:SlotTabControl Grid.Column="0" x:Name="LeftTabs" SlotId="main.leftPanelTabs" Style="{StaticResource LeftTabControl}" Padding="0" BorderThickness="0" Background="Transparent">
-                    <TabItem Header="Tree">
-                        <v:TreePanel DataContext="{Binding Tree}" />
-                    </TabItem>
-                </v:SlotTabControl>
-                <GridSplitter x:Name="Splitter" Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" />
-                <!-- FR.29.19: the docking area; the session pane is its central document, the docked preview panels are placed around it -->
-                <v:DockingArea x:Name="Docking" Grid.Column="2" />
+                <!-- FR.6.11: the docking area is the whole content: Sessions, Recent and Tags on the left, the session pane as the central document, Focus on the right, the docked preview panels around them -->
+                <v:DockingArea x:Name="Docking" />
             </Grid>
         </DockPanel>
         <!-- The screensaver covers everything, the title bar included -->

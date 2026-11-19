@@ -135,7 +135,7 @@ public sealed class ChromeFeedbackTests : IDisposable
 			var commands = new ShellCommands(store, NullLogger<ShellCommands>.Instance);
 			var slots = new ShellSlots();
 			new SessionListsModule(_host).Register(slots, commands);
-			var titleBar = new TitleBarViewModel(new AppearanceService(store, new FixedProbe()), store, commands, _ui, "202611.17.0900", false);
+			var titleBar = new TitleBarViewModel(new AppearanceService(store, new FixedProbe()), store, commands, new FakeShellLayout(), _ui, "202611.17.0900", false);
 			var bar = new TitleBar { DataContext = titleBar };
 			var center = (SlotHost)bar.FindName("CenterSlot")!;
 			center.Slots = slots;
@@ -198,7 +198,7 @@ public sealed class ChromeFeedbackTests : IDisposable
 		var connection = new ConnectionViewModel(new ScriptedLocator(), new FixedClientFactory(_client), ui, NullLogger<ConnectionViewModel>.Instance, TimeSpan.FromMilliseconds(5));
 		var bar = new StatusBarViewModel(connection, _main, ui, NullLogger<StatusBarViewModel>.Instance);
 		var appearance = new AppearanceService(store, new FixedProbe());
-		new ChromeShellModule(bar, new TitleBarViewModel(appearance, store, commands, ui, "x", false), _main, appearance).Register(slots, commands);
+		new ChromeShellModule(bar, new TitleBarViewModel(appearance, store, commands, new FakeShellLayout(), ui, "x", false), _main, appearance).Register(slots, commands);
 
 		Assert.Single(slots.For(Constants.Slots.StatusBarItems));
 		Assert.Empty(slots.For(Constants.Slots.StatusBarRight));

@@ -7,8 +7,8 @@ using TessynDesktop.WPF.State;
 namespace TessynDesktop.WPF.ViewModels;
 
 /// <summary>
-/// The custom title bar (FR.6.3): the chevron that collapses the left panel, the menu, the day/night toggle, the build number and the warning shown when the
-/// app runs from a build output folder. The collapse is remembered in the client settings. Contains no WPF types.
+/// The custom title bar (FR.6.3): the chevron that auto-hides the pane that holds Sessions (FR.6.15, remembered with the layout), the menu, the day/night toggle, the build
+/// number and the warning shown when the app runs from a build output folder. Contains no WPF types.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class TitleBarViewModel : ObservableObject
@@ -16,26 +16,25 @@ public sealed partial class TitleBarViewModel : ObservableObject
 	private readonly IAppearanceService _appearance;
 	private readonly IClientSettingsStore _settings;
 	private readonly IShellCommands _commands;
+	private readonly IShellLayout _layout;
 	private readonly IUiDispatcher _ui;
 	private readonly IPreviewRouter? _previews;
 
 	[ObservableProperty]
-	private bool _isTreeVisible;
-
-	[ObservableProperty]
 	private bool _isDark;
 
-	public TitleBarViewModel(IAppearanceService appearance, IClientSettingsStore settings, IShellCommands commands, IUiDispatcher ui, string buildNumber, bool isBuildOutput, IPreviewRouter? previews = null)
+	public TitleBarViewModel(IAppearanceService appearance, IClientSettingsStore settings, IShellCommands commands, IShellLayout layout, IUiDispatcher ui, string buildNumber, bool isBuildOutput, IPreviewRouter? previews = null)
 	{
 		_previews = previews;
 		_appearance = appearance;
 		_settings = settings;
 		_commands = commands;
+		_layout = layout;
 		_ui = ui;
 		BuildNumber = buildNumber;
 		IsBuildOutput = isBuildOutput;
-		_isTreeVisible = !settings.Get<ShellLayoutSettings>().TreeCollapsed;
 		_isDark = appearance.IsDark;
+		layout.Changed += (_, _) => _ui.Post(RaiseTreeState);
 		appearance.Changed += (_, _) => _ui.Post(() => IsDark = _appearance.IsDark);
 		if (previews != null)
 			previews.StateChanged += (_, _) => _ui.Post(RaisePreviewState);
@@ -78,11 +77,21 @@ public sealed partial class TitleBarViewModel : ObservableObject
 		_ => Constants.PreviewWindow.MonitorOffToolTip,
 	};
 
-	/// <summary>The left panel was shown or hidden (the window lays itself out).</summary>
-	public event EventHandler? TreeVisibilityChanged;
+	/// <summary>The pane that holds Sessions is shown (not auto-hidden); the chevron's icon follows it (FR.6.15).</summary>
+	public bool IsTreeVisible => !_layout.IsAutoHidden(Constants.DockedShell.SessionsPanelId);
 
-	[RelayCommand]
-	private void ToggleTree() => SetTreeVisible(!IsTreeVisible);
+	/// <summary>The chevron works while the Sessions panel is open and docked; it is disabled when it is closed or floating (FR.6.15).</summary>
+	public bool CanToggleTree => _layout.CanToggleAutoHide(Constants.DockedShell.SessionsPanelId);
+
+	[RelayCommand(CanExecute = nameof(CanToggleTree))]
+	private void ToggleTree() => _layout.ToggleAutoHide(Constants.DockedShell.SessionsPanelId);
+
+	private void RaiseTreeState()
+	{
+		OnPropertyChanged(nameof(IsTreeVisible));
+		OnPropertyChanged(nameof(CanToggleTree));
+		ToggleTreeCommand.NotifyCanExecuteChanged();
+	}
 
 	[RelayCommand(CanExecute = nameof(IsMonitorToggleEnabled))]
 	private void TogglePreviewWindows() => _previews?.SetEnabled(!_previews.IsEnabled);
@@ -101,14 +110,12 @@ public sealed partial class TitleBarViewModel : ObservableObject
 	[RelayCommand]
 	private Task OpenSettingsAsync() => _commands.ExecuteAsync(Constants.Settings.OpenCommandId, null);
 
-	/// <summary>Shows or hides the left panel and remembers it.</summary>
+	/// <summary>Shows (expands) or hides (auto-hides) the pane that holds Sessions; the layout remembers it.</summary>
 	public void SetTreeVisible(bool visible)
 	{
 		if (visible == IsTreeVisible)
 			return;
 
-		IsTreeVisible = visible;
-		_settings.Update<ShellLayoutSettings>(s => s.TreeCollapsed = !visible);
-		TreeVisibilityChanged?.Invoke(this, EventArgs.Empty);
+		_layout.ToggleAutoHide(Constants.DockedShell.SessionsPanelId);
 	}
 }

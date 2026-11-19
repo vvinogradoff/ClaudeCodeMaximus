@@ -81,14 +81,15 @@ public sealed class FocusBadgeTests : IDisposable
 	}
 
 	[Fact]
-	public async Task TheBadge_IsHiddenWhileFocusIsSelected()
+	public async Task TheBadge_ShowsWheneverSomethingIsOpen_AlsoWhileTheFocusPanelIsShown()
 	{
 		await OpenWith("a", Item(1, AttentionKind.Ask));
 		Assert.True(_pane.IsFocusBadgeVisible);
-		_pane.SelectFocusViewCommand.Execute(null);
-		Assert.False(_pane.IsFocusBadgeVisible);
-		_pane.SelectSessionViewCommand.Execute(null);
+		_pane.BringFocusPanelForwardCommand.Execute(null);
 		Assert.True(_pane.IsFocusBadgeVisible);
+
+		await OpenWith("b", Item(1, AttentionKind.Decided));
+		Assert.False(_pane.IsFocusBadgeVisible);
 	}
 
 	/// <summary>Pumps the dispatcher until the task is done: its continuations touch the live view, as in the app.</summary>

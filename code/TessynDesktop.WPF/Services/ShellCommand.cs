@@ -19,6 +19,9 @@ public sealed class ShellCommand
 	/// <summary>Whether the command applies to the parameter; null = always.</summary>
 	public Func<object?, bool>? CanExecute { get; init; }
 
+	/// <summary>Whether the menu entry shows a check mark for the parameter (the Panels entries while their panel is open); null = never.</summary>
+	public Func<object?, bool>? IsChecked { get; init; }
+
 	/// <summary>
 	/// Supplies the parameter when the command is run from its key gesture (e.g. the selected tree node), so a command bound to both a
 	/// menu and a key sees the same kind of parameter. Null = the key passes null, and the command has to cope with that.

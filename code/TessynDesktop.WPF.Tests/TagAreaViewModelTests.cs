@@ -88,18 +88,13 @@ public sealed class TagAreaViewModelTests
 	}
 
 	[Fact]
-	public async Task Switching_between_the_session_and_focus_views_keeps_the_state()
+	public async Task Pressing_the_focus_button_keeps_the_state()
 	{
 		var pane = Pane();
 		await pane.OpenAsync("a");
 		pane.TagArea.IsExpanded = true;
 
-		pane.SelectFocusViewCommand.Execute(null);
-		Assert.True(pane.IsFocusSelected);
-		Assert.True(pane.TagArea.IsExpanded);
-
-		pane.SelectSessionViewCommand.Execute(null);
-		Assert.False(pane.IsFocusSelected);
+		pane.BringFocusPanelForwardCommand.Execute(null);
 		Assert.True(pane.TagArea.IsExpanded);
 	}
 

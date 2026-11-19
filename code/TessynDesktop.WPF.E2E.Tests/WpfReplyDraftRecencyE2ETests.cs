@@ -111,7 +111,7 @@ public sealed class WpfReplyDraftRecencyE2ETests : IDisposable
 		{
 			// Without the reply draft the session (kept in the dropdown by its open Ask item, FR.9.8) has activity days old and sits below the other one,
 			// whose composer draft is an hour old; the order is checked once, after the reply is typed (the open popup cannot be closed through UI Automation).
-			Assert.True(await _clicker.SelectRadioAsync(process, "Focus view", StepTimeout));
+			Assert.True(await _clicker.ClickAsync(process, "Focus", StepTimeout));
 			Assert.True(await _clicker.SetTextAsync(process, ReplyBoxName, "Yes, but only on staging", StepTimeout), "The reply box was not found. Log:\n" + _app.ReadLog());
 
 			// The list reloads on the session.changed of the reply draft (no polling); wait for the order to flip.

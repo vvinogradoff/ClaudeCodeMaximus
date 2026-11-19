@@ -143,6 +143,29 @@ public sealed class SessionListsReviewFixTests
 	}
 
 	[Fact]
+	public async Task RecentPanel_OnPanelSelected_ActsLikeShowingTheTab_CollapsingEveryGroupButTheSelectedSessionsOne()
+	{
+		var tree = await LoadTreeAsync(
+			_b.Directory("d1", "Repo", [], _b.Session("s1", "One")),
+			_b.Directory("d2", "Other", [], _b.Session("s2", "Two")));
+		using var tab = CreateTab();
+		tab.Attach(tree);
+		tree.SelectNodeById("s2");
+
+		var shown = new List<string>();
+		StaTestRunner.Run(() =>
+		{
+			var panel = new TessynDesktop.WPF.Views.RecentPanel { DataContext = tab };
+			Assert.IsAssignableFrom<TessynDesktop.WPF.Views.IPanelSelectionAware>(panel);
+			tab.List.ToggleGroupCommand.Execute(tab.List.Items.OfType<SessionGroupHeaderViewModel>().First());   // the user opened d1 earlier
+			panel.OnPanelSelected();                                                                            // the panel became the selected tab of its pane (FR.1.16)
+			shown.AddRange(Shown(tab.List));
+		});
+
+		Assert.Equal(["[d1]", "[d2]", "s2"], shown);
+	}
+
+	[Fact]
 	public async Task RecentTab_Activate_WithNoSelectionExpandsEverything()
 	{
 		var tree = await LoadTreeAsync(_b.Directory("d1", "Repo", [], _b.Session("s1", "One")), _b.Directory("d2", "Other", [], _b.Session("s2", "Two")));

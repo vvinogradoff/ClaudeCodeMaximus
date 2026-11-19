@@ -1,0 +1,20 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.FocusTabHeader"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The header of the Focus panel's tab (FR.6.16, FR.23.13): "Focus" and the badge (count, colour of the most severe open kind); DataContext = FocusViewModel. -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/KindPill.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <StackPanel Orientation="Horizontal">
+        <TextBlock Text="Focus" VerticalAlignment="Center" />
+        <Border x:Name="BadgePill" Style="{StaticResource KindPill}" Tag="{Binding TopOpenKind}" Margin="6,0,0,0" MinWidth="16" VerticalAlignment="Center"
+                Visibility="{Binding IsBadgeVisible, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Focus badge">
+            <TextBlock Text="{Binding OpenCount}" FontSize="11" HorizontalAlignment="Center" />
+        </Border>
+    </StackPanel>
+</UserControl>

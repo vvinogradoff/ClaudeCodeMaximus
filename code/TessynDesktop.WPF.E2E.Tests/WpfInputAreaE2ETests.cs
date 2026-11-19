@@ -99,8 +99,6 @@ public sealed class WpfInputAreaE2ETests : IDisposable
 		using var process = await StartAsync();
 		try
 		{
-			Assert.True(_clicker.IsRadioSelected(process, "Session view"));
-			Assert.False(_clicker.IsRadioSelected(process, "Focus view"));
 			Assert.True(await _clicker.WaitForButtonAsync(process, "Settings", StepTimeout), "The expanded input area shows the settings toggle. Log:\n" + _app.ReadLog());
 			Assert.True(_clicker.Exists(process, "Send"));
 			Assert.True(_clicker.Exists(process, "File mode"));
@@ -113,19 +111,18 @@ public sealed class WpfInputAreaE2ETests : IDisposable
 	}
 
 	[Fact]
-	public async Task The_Focus_view_starts_with_the_input_area_collapsed_and_the_Session_view_expands_it_again()
+	public async Task Bringing_the_Focus_panel_forward_leaves_the_input_area_of_the_Session_view_expanded()
 	{
+		// The docked shell (FR.6.17): the composer belongs to the Session view and no longer collapses when Focus is shown.
 		using var process = await StartAsync();
 		try
 		{
-			Assert.True(await _clicker.SelectRadioAsync(process, "Focus view", StepTimeout));
-			Assert.True(await _clicker.WaitForButtonGoneAsync(process, "Settings", StepTimeout), "Collapsed: the settings toggle is not shown. Log:\n" + _app.ReadLog());
-			Assert.False(_clicker.Exists(process, "File mode"));
-			Assert.True(_clicker.Exists(process, "Send"));       // the one button of the collapsed side column
+			Assert.True(await _clicker.ClickAsync(process, "Focus", StepTimeout));
+			await Task.Delay(500);
+			Assert.True(await _clicker.WaitForButtonAsync(process, "Settings", StepTimeout), "The settings toggle of the expanded input area is gone. Log: " + _app.ReadLog());
+			Assert.True(_clicker.Exists(process, "File mode"));
+			Assert.True(_clicker.Exists(process, "Send"));
 			Assert.False(_clicker.Exists(process, "Stop"));
-
-			Assert.True(await _clicker.SelectRadioAsync(process, "Session view", StepTimeout));
-			Assert.True(await _clicker.WaitForButtonAsync(process, "Settings", StepTimeout), "Expanded again. Log:\n" + _app.ReadLog());
 		}
 		finally
 		{
@@ -159,7 +156,7 @@ public sealed class WpfInputAreaE2ETests : IDisposable
 		{
 			try
 			{
-				Assert.True(await _clicker.SelectRadioAsync(first, "Focus view", StepTimeout));
+				Assert.True(await _clicker.ClickAsync(first, "Focus", StepTimeout));
 				Assert.True(await _clicker.SetTextAsync(first, ReplyBoxName, "Yes, but only on staging", StepTimeout), "The reply box was not found. Log:\n" + _app.ReadLog());
 			}
 			finally
@@ -173,7 +170,7 @@ public sealed class WpfInputAreaE2ETests : IDisposable
 		using var second = await StartAsync(openItems: 1);
 		try
 		{
-			Assert.True(await _clicker.SelectRadioAsync(second, "Focus view", StepTimeout));
+			Assert.True(await _clicker.ClickAsync(second, "Focus", StepTimeout));
 			Assert.True(await WaitForAsync(() => _clicker.GetText(second, ReplyBoxName) == "Yes, but only on staging"), "The reply text was not restored. Log:\n" + _app.ReadLog());
 		}
 		finally
@@ -189,7 +186,7 @@ public sealed class WpfInputAreaE2ETests : IDisposable
 		using var process = await StartAsync(openItems: 1);
 		try
 		{
-			Assert.True(await _clicker.SelectRadioAsync(process, "Focus view", StepTimeout));
+			Assert.True(await _clicker.ClickAsync(process, "Focus", StepTimeout));
 			Assert.True(await _clicker.SetTextAsync(process, ReplyBoxName, "Go", StepTimeout));
 			Assert.True(await _clicker.ClickAsync(process, "Send answers", StepTimeout), "Send answers was not available. Log:\n" + _app.ReadLog());
 

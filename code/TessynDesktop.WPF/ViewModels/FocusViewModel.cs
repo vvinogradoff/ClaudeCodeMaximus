@@ -113,6 +113,16 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 	public bool HasItems => Items.Count > 0;
 
+	/// <summary>A session is shown: the Focus panel shows its items; without one it shows <see cref="Constants.Texts.NoFocusSession"/>.</summary>
+	public bool HasSession => NodeId != null;
+
+	/// <summary>The badge of the Focus panel's tab shows whenever there is something open (FR.23.13).</summary>
+	public bool IsBadgeVisible => OpenCount > 0;
+
+	partial void OnNodeIdChanged(string? value) => OnPropertyChanged(nameof(HasSession));
+
+	partial void OnOpenCountChanged(int value) => OnPropertyChanged(nameof(IsBadgeVisible));
+
 	/// <summary>True when there is nothing open: the view shows <see cref="Constants.Texts.NoOpenItems"/>.</summary>
 	public bool IsEmpty => OpenItems.Count == 0;
 

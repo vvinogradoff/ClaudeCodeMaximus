@@ -2,6 +2,13 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ad="clr-namespace:AvalonDock;assembly=AvalonDock">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/DockingChrome.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
     <ad:DockingManager x:Name="DockManager" AllowMixedOrientation="True" />
     <!-- The layout (the session pane as the central document) is built in code: the side panels are placed around it at run time -->
 </UserControl>

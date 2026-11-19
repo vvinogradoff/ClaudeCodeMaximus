@@ -208,26 +208,6 @@ public sealed class LeftPanel2Tests
 
 	// ---- the tabs ----
 
-	[Fact]
-	public void TheLeftTabs_AreOfEqualWidth_AndTakeTheWholePanel()
-	{
-		StaTestRunner.Run(() =>
-		{
-			var tabs = new TabControl { Padding = new Thickness(0), BorderThickness = new Thickness(0) };
-			tabs.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/TessynDesktop.WPF;component/Styles/LeftTabs.xaml", UriKind.Relative) });
-			tabs.SetResourceReference(FrameworkElement.StyleProperty, "LeftTabControl");
-			foreach (var title in new[] { "Tree", "Recent", "Tags" })
-				tabs.Items.Add(new TabItem { Header = title, Content = new Grid() });
-
-			Layout(tabs, 321, 200);
-
-			var items = tabs.Items.OfType<TabItem>().ToList();
-			var slots = items.Select(i => System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(i).Width).ToList();   // the header cell of each tab (the selected tab draws a little wider than its cell)
-			Assert.All(slots, w => Assert.True(Math.Abs(w - 107) < 1, $"Tab cell: {w}"));
-			Assert.Equal(321, Math.Round(slots.Sum()));
-		});
-	}
-
 	// ---- the tree search bar ----
 
 	[Fact]

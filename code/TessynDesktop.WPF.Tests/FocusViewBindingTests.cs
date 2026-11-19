@@ -118,14 +118,16 @@ public sealed class FocusViewBindingTests
 			preview.OpenAsync(new PreviewTarget("r", "plan.md")).GetAwaiter().GetResult();
 			var view = new SessionPane { DataContext = pane };
 			Layout(view);
+			var panel = new FocusPanel { DataContext = pane.Focus };   // the Focus panel works standalone as a docked panel's content (FR.6.16)
 			pane.Focus.Items[1].ReplyText = "Postgres";
 			pane.Notice = "Something to know";
 			Layout(view);
+			Layout(panel);
 
 			sideGone = view.FindName("SidePane") == null && view.FindName("SideColumn") == null && view.FindName("SideSplitter") == null;   // FR.29.18: the default Preview panel of the docking area replaced the side pane
-			var panel = Descendants<FocusPanel>(view).Single();
+			Assert.Empty(Descendants<FocusPanel>(view));   // the session pane no longer hosts Focus
 			cardTexts.AddRange(Texts(panel));
-			cardTexts.AddRange(Descendants<TextBlock>((DependencyObject)view.FindName("SendAnswersButton")).Select(t => t.Text));   // "Send answers (n)" now lives in the session header (FR.23.14)
+			cardTexts.AddRange(Descendants<TextBlock>((DependencyObject)panel.FindName("SendAnswersButton")).Select(t => t.Text));   // "Send answers (n)" is at the top of the Focus panel (FR.23.21)
 			markdownBlocks = CardsShowingABody(panel);
 		});
 
@@ -144,11 +146,10 @@ public sealed class FocusViewBindingTests
 	}
 
 	[Fact]
-	public void SendAnswersButton_SitsInTheHeader_VisibleOnlyInFocus_AndCtrlEnterInAReplyBoxSendsIt()
+	public void SendAnswersButton_SitsAtTheTopOfTheStandaloneFocusPanel_AlwaysVisible_AndCtrlEnterInAReplyBoxSendsIt()
 	{
-		var visibleInFocus = Visibility.Collapsed;
-		var visibleInSession = Visibility.Visible;
-		var insideFocusPanel = true;
+		var visible = Visibility.Collapsed;
+		var insideFocusPanel = false;
 		var plainEnterHandled = true;
 		var ctrlEnterHandled = false;
 		var calls = new List<string>();
@@ -167,18 +168,11 @@ public sealed class FocusViewBindingTests
 				new FocusViewModel(client, ui, NullLogger<FocusViewModel>.Instance), null!, new MediaPreviewPolicy());
 			pane.OpenAsync("a", "A").GetAwaiter().GetResult();
 			pane.Focus.WhenIdleAsync().GetAwaiter().GetResult();
-			var view = new SessionPane { DataContext = pane };
-			Layout(view);
-			var button = (Button)view.FindName("SendAnswersButton");
-			var panel = Descendants<FocusPanel>(view).Single();
+			var panel = new FocusPanel { DataContext = pane.Focus };
+			Layout(panel);
+			var button = (Button)panel.FindName("SendAnswersButton");
 			insideFocusPanel = Descendants<Button>(panel).Contains(button);
-
-			pane.IsFocusSelected = false;
-			Layout(view);
-			visibleInSession = button.Visibility;
-			pane.IsFocusSelected = true;
-			Layout(view);
-			visibleInFocus = button.Visibility;
+			visible = button.Visibility;
 
 			var reply = Descendants<TextBox>(panel).First();
 			plainEnterHandled = panel.HandleReplyKey(reply, System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.None);
@@ -189,9 +183,8 @@ public sealed class FocusViewBindingTests
 			calls.AddRange(client.Calls);
 		});
 
-		Assert.False(insideFocusPanel);
-		Assert.Equal(Visibility.Collapsed, visibleInSession);
-		Assert.Equal(Visibility.Visible, visibleInFocus);
+		Assert.True(insideFocusPanel);
+		Assert.Equal(Visibility.Visible, visible);
 		Assert.False(plainEnterHandled);
 		Assert.True(ctrlEnterHandled);
 		Assert.Contains(calls, c => c.StartsWith("attention.reply:a:A1=Postgres", StringComparison.Ordinal));
@@ -213,7 +206,10 @@ public sealed class FocusViewBindingTests
 		StaTestRunner.Run(() =>
 		{
 			var client = new FakeTessynClient();
+			client.Sessions["a"] = FakeSession.WithEntries(2);
 			var focus = new FocusViewModel(client, new ImmediateUiDispatcher(), NullLogger<FocusViewModel>.Instance);
+			focus.SetSessionAsync("a").GetAwaiter().GetResult();
+			focus.WhenIdleAsync().GetAwaiter().GetResult();
 			var panel = new FocusPanel { DataContext = focus };
 			Layout(panel);
 			texts.AddRange(Texts(panel, visibleOnly: true));
@@ -222,7 +218,7 @@ public sealed class FocusViewBindingTests
 		Assert.Contains(Constants.Texts.NoOpenItems, texts);
 	}
 
-	/// <summary>FR.23.27: no "Focus" title line; the switch in the session header names the view.</summary>
+	/// <summary>FR.23.27: no "Focus" title line; the panel's tab names the view.</summary>
 	[Fact]
 	public void FocusPanel_HasNoTitleLine()
 	{

@@ -34,7 +34,7 @@ public sealed class ChromeModuleTests
 		_commands = new ShellCommands(_store, NullLogger<ShellCommands>.Instance);
 		_appearance = new AppearanceService(_store, new FixedProbe());
 		var ui = new ImmediateUiDispatcher();
-		_titleBar = new TitleBarViewModel(_appearance, _store, _commands, ui, "1", false);
+		_titleBar = new TitleBarViewModel(_appearance, _store, _commands, new FakeShellLayout(), ui, "1", false);
 		var connection = new ConnectionViewModel(new ScriptedLocator(), new FixedClientFactory(new FakeTessynClient()), ui, NullLogger<ConnectionViewModel>.Instance);
 		var main = new MainViewModel(connection, _ => throw new InvalidOperationException(), _ => throw new InvalidOperationException(), new MemoryClientState(), NullLogger<MainViewModel>.Instance);
 		var bar = new StatusBarViewModel(connection, main, ui, NullLogger<StatusBarViewModel>.Instance);
