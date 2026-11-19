@@ -1231,7 +1231,10 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 - [ ] Manual checks: Snap to a half, quarter and a Snap layout, then reopen (TC.PW.71); a window saved on a 100 % monitor reopened on a 150 % one (TC.PW.72); a Focus card with one very long cell
 - [DONE] File paths in Focus card text are Ctrl+clickable; the daemon checks the path against the item's title and body (`file.preview` with `itemId`, tdcp-spec 10.A11) (FR.23.30; UC.FX.03, TC.FX.23–32; branch `wpf/focus-card-paths`, merge `66d826e`; needs a daemon restart)
 - [DONE] AvalonDock spike: WebView2 works docked, tabbed, floating and auto-hidden, 54/54 checks (`.mm-work/40-spike.md`, branch `spike/avalondock`)
-- [ ] Docked previews inside the main window (Architect item 5): requirements FR.29.17–FR.29.26 drafted on branch `docs/docked-previews`, awaiting the Architect's approval with the AvalonDock dependency; then the build in stages
+- [DONE] Docked previews: requirements FR.29.17–FR.29.26 approved with the AvalonDock dependency and six decisions (2026-11-19)
+- [ ] Docked previews, stage 1: AvalonDock in the main window (the session pane as the central document, the side preview pane replaced by the default Preview panel), the `previewDock` settings, the router's docked target, one panel per group with Pin and Auto-close, the test seam (FR.29.17–FR.29.21, FR.29.25, FR.29.26)
+- [ ] Docked previews, stage 2: restart, mode changes, auto-hide behaviour (slide-out on a new item, Esc and edge-tab close), floating panels with the FR.29.16 scale rules (FR.29.19, FR.29.22, FR.29.23)
+- [ ] Docked previews, stage 3: Tessyn light/dark theme for the docking area (FR.29.24); review, E2E, manual checks (TC.PW.77–102)
 
 ## Phase 45 — The daemon elevated, WPF normal (FR.32.10–FR.32.14); paste of Explorer files (FR.31.2)
 
