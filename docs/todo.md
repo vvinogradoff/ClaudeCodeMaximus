@@ -1242,6 +1242,12 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 - [ ] Docked previews, stage 2: restart, mode changes, auto-hide behaviour (slide-out on a new item, Esc and edge-tab close), floating panels with the FR.29.16 scale rules (FR.29.19, FR.29.22, FR.29.23) — now part of docked shell stage 3
 - [ ] Docked previews, stage 3: Tessyn light/dark theme for the docking area (FR.29.24); review, E2E, manual checks (TC.PW.77–102) — the theme is now docked shell stage 2
 
+### Round 3 — HTML previews (Architect request 2026-11-19; branch `docs/html-preview`)
+- [ ] HTML previews rendered with a Source toggle (FR.26.8; UC.LK.08, TC.LK.36–53)
+  - [ ] Docs: FR.26.8 drafted (static policy, option 1); awaiting the Architect's decision A31 (static / static + https / full)
+  - [ ] Code: render `.html`/`.htm`/`text/html` isolated in the preview pane's renderer, Source toggle, link routing, `CanToggleSource` for html
+  - [ ] Tests: TC.LK.36–53 (unit/view, E2E, MANUAL look and selection)
+
 ## Phase 45 — The daemon elevated, WPF normal (FR.32.10–FR.32.14); paste of Explorer files (FR.31.2)
 
 Architect decision 2026-11-19 (Focus A1): WPF always runs normally; the daemon host runs elevated only on request. Docs approved by the Architect 2026-11-19 (Focus A3): FR.32.10–FR.32.14, UC.HS.08, TC.HS.23–TC.HS.30, tdcp-spec 10.A10.
