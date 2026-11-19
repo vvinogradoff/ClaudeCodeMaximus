@@ -45,6 +45,7 @@ public partial class MainWindow : Window
 			PrepareTestWindow();
 
 		Docking.SessionView.SetBinding(DataContextProperty, new System.Windows.Data.Binding(nameof(MainViewModel.Session)) { Source = viewModel });   // the session pane view model exists once the client is connected
+		Docking.Chrome.UseShellCommands(commands);   // the floating panels' keys go to the shell commands too (FR.6.20)
 		dockingSurface.Register(Docking);   // the docked preview panels are placed in this docking area (FR.29.19)
 		Docking.BuildShell(new ShellPanelCatalog().Create(viewModel, slots, logger), layoutMemory, logger, () => placement.GetMonitors());   // the whole shell layout, saved or default (FR.6.11, FR.6.18)
 		layoutHost.Register(Docking);   // the title bar's chevron and the Panels menu drive it through IShellLayout (FR.6.14, FR.6.15)

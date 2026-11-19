@@ -1,0 +1,178 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:avalonDock="clr-namespace:AvalonDock;assembly=AvalonDock"
+                    xmlns:avalonDockControls="clr-namespace:AvalonDock.Controls;assembly=AvalonDock"
+                    xmlns:reskeys="clr-namespace:AvalonDock.Themes.VS2013.Themes;assembly=AvalonDock.Themes.VS2013"
+                    xmlns:views="clr-namespace:TessynDesktop.WPF.Views">
+	<!-- The compact docking chrome (FR.6.13): no caption bars, the tabs on top of every pane (also of a pane with one panel), a pin at the right end of the tab row, the tab
+	     context menu. Only structure and layout; the colours are the VS2013 theme's brushes until the Tessyn theme (FR.6.21). The styles are handed to the docking manager as local
+	     values by DockingChrome (a theme switch must not bring the library's own caption bars back). -->
+
+	<BooleanToVisibilityConverter x:Key="DockingChromeBoolToVisibility" />
+
+	<!-- The panel content without the library's caption bar (AnchorablePaneTitle) -->
+	<ControlTemplate x:Key="DockingChromeAnchorableControlTemplate" TargetType="{x:Type avalonDockControls:LayoutAnchorableControl}">
+		<Border Background="{TemplateBinding Background}"
+		        BorderBrush="{DynamicResource {x:Static reskeys:ResourceKeys.PanelBorderBrush}}"
+		        BorderThickness="1,0,1,1">
+			<ContentPresenter Content="{Binding LayoutItem.View, RelativeSource={RelativeSource TemplatedParent}}"
+			                  ContentTemplate="{Binding LayoutItem.View.ContentTemplate, RelativeSource={RelativeSource TemplatedParent}}"
+			                  ContentTemplateSelector="{Binding LayoutItem.View.ContentTemplateSelector, RelativeSource={RelativeSource TemplatedParent}}"
+			                  FlowDirection="{TemplateBinding FlowDirection}" />
+		</Border>
+	</ControlTemplate>
+
+	<!-- The pin at the right end of the tab row: toggles the auto-hide of the pane (a flat button, a pin drawn as one path) -->
+	<Style x:Key="DockingChromePinButtonStyle" TargetType="{x:Type views:DockingPinButton}">
+		<Setter Property="Width" Value="24" />
+		<Setter Property="Focusable" Value="False" />
+		<Setter Property="ToolTip" Value="Auto-hide" />
+		<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedText}}" />
+		<Setter Property="Template">
+			<Setter.Value>
+				<ControlTemplate TargetType="{x:Type views:DockingPinButton}">
+					<Border x:Name="Bd" Background="Transparent" SnapsToDevicePixels="True">
+						<Path x:Name="Glyph" HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="Uniform" Width="11" Height="11"
+						      Fill="{TemplateBinding Foreground}" Data="M 4,0 L 8,0 L 8,1 L 7,1 L 7,5 L 9,7 L 9,8 L 6.5,8 L 6.5,11 L 5.5,11 L 5.5,8 L 3,8 L 3,7 L 5,5 L 5,1 L 4,1 Z" />
+					</Border>
+					<ControlTemplate.Triggers>
+						<Trigger Property="IsMouseOver" Value="True">
+							<Setter TargetName="Bd" Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedHoveredBackground}}" />
+						</Trigger>
+						<Trigger Property="IsEnabled" Value="False">
+							<Setter TargetName="Glyph" Property="Opacity" Value="0.35" />
+						</Trigger>
+					</ControlTemplate.Triggers>
+				</ControlTemplate>
+			</Setter.Value>
+		</Setter>
+	</Style>
+
+	<!-- The pane of panels: the tab row on top (also with one tab), the pin at its right end, the content below -->
+	<Style x:Key="DockingChromeAnchorablePaneControlStyle" TargetType="{x:Type avalonDockControls:LayoutAnchorablePaneControl}">
+		<Setter Property="TabStripPlacement" Value="Top" />
+		<Setter Property="Padding" Value="0" />
+		<Setter Property="BorderThickness" Value="0" />
+		<Setter Property="Foreground" Value="{Binding Model.Root.Manager.Foreground, RelativeSource={RelativeSource Self}}" />
+		<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.TabBackground}}" />
+		<Setter Property="Template">
+			<Setter.Value>
+				<ControlTemplate TargetType="{x:Type avalonDockControls:LayoutAnchorablePaneControl}">
+					<Grid ClipToBounds="True" KeyboardNavigation.TabNavigation="Local" SnapsToDevicePixels="True">
+						<Grid.RowDefinitions>
+							<RowDefinition Height="Auto" />
+							<RowDefinition Height="*" />
+						</Grid.RowDefinitions>
+						<Border Grid.RowSpan="2" Background="Transparent" />   <!-- catches the mouse events -->
+						<Grid x:Name="TabRow" Grid.Row="0" Background="{TemplateBinding Background}" Panel.ZIndex="1">
+							<Grid.ColumnDefinitions>
+								<ColumnDefinition Width="*" />
+								<ColumnDefinition Width="Auto" />
+							</Grid.ColumnDefinitions>
+							<avalonDockControls:AnchorablePaneTabPanel x:Name="HeaderPanel" Grid.Column="0" Margin="0" IsItemsHost="True" KeyboardNavigation.TabIndex="1" />
+							<views:DockingPinButton x:Name="PinButton" Grid.Column="1" Style="{StaticResource DockingChromePinButtonStyle}" />
+						</Grid>
+						<Border x:Name="ContentPanel" Grid.Row="1" Margin="0" Background="{TemplateBinding Background}" BorderThickness="0"
+						        KeyboardNavigation.DirectionalNavigation="Contained" KeyboardNavigation.TabIndex="2" KeyboardNavigation.TabNavigation="Cycle">
+							<ContentPresenter x:Name="PART_SelectedContentHost" Margin="{TemplateBinding Padding}" ContentSource="SelectedContent"
+							                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+						</Border>
+					</Grid>
+				</ControlTemplate>
+			</Setter.Value>
+		</Setter>
+		<Setter Property="ItemContainerStyle">
+			<Setter.Value>
+				<Style TargetType="{x:Type TabItem}">
+					<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedBackground}}" />
+					<Setter Property="BorderBrush" Value="Transparent" />
+					<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedText}}" />
+					<Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+					<Setter Property="ToolTip" Value="{Binding ToolTip}" />
+					<Setter Property="Template">
+						<Setter.Value>
+							<ControlTemplate TargetType="{x:Type TabItem}">
+								<Grid SnapsToDevicePixels="True">
+									<Border x:Name="Bd" Margin="0" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding Background}" BorderThickness="1,1,1,0">
+										<ContentPresenter x:Name="Content" Margin="8,3,8,3" ContentSource="Header" RecognizesAccessKey="True"
+										                  HorizontalAlignment="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+										                  VerticalAlignment="{Binding VerticalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+										                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+									</Border>
+								</Grid>
+								<ControlTemplate.Triggers>
+									<Trigger Property="Selector.IsSelected" Value="True">
+										<Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource {x:Static reskeys:ResourceKeys.PanelBorderBrush}}" />
+										<Setter Property="Panel.ZIndex" Value="1" />
+									</Trigger>
+									<MultiDataTrigger>
+										<MultiDataTrigger.Conditions>
+											<Condition Binding="{Binding IsSelected}" Value="True" />
+											<Condition Binding="{Binding IsActive}" Value="True" />
+										</MultiDataTrigger.Conditions>
+										<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabSelectedActiveBackground}}" />
+										<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabSelectedActiveText}}" />
+									</MultiDataTrigger>
+									<MultiDataTrigger>
+										<MultiDataTrigger.Conditions>
+											<Condition Binding="{Binding IsSelected}" Value="True" />
+											<Condition Binding="{Binding IsActive}" Value="False" />
+										</MultiDataTrigger.Conditions>
+										<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabSelectedInactiveBackground}}" />
+										<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabSelectedInactiveText}}" />
+									</MultiDataTrigger>
+									<MultiTrigger>
+										<MultiTrigger.Conditions>
+											<Condition Property="IsMouseOver" Value="True" />
+											<Condition Property="Selector.IsSelected" Value="False" />
+										</MultiTrigger.Conditions>
+										<Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedHoveredBackground}}" />
+										<Setter Property="Foreground" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedHoveredText}}" />
+										<Setter Property="Panel.ZIndex" Value="0" />
+									</MultiTrigger>
+									<Trigger Property="IsEnabled" Value="False">
+										<Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+									</Trigger>
+								</ControlTemplate.Triggers>
+							</ControlTemplate>
+						</Setter.Value>
+					</Setter>
+				</Style>
+			</Setter.Value>
+		</Setter>
+		<Setter Property="ItemTemplate">
+			<Setter.Value>
+				<DataTemplate>
+					<avalonDockControls:LayoutAnchorableTabItem Model="{Binding}" />
+				</DataTemplate>
+			</Setter.Value>
+		</Setter>
+		<Setter Property="ContentTemplate">
+			<Setter.Value>
+				<DataTemplate>
+					<avalonDockControls:LayoutAnchorableControl Model="{Binding}" Template="{StaticResource DockingChromeAnchorableControlTemplate}" />
+				</DataTemplate>
+			</Setter.Value>
+		</Setter>
+	</Style>
+
+	<!-- The tab context menu of a panel (FR.6.13): each item only where the panel allows it (FR.6.14; a disabled command hides its item) -->
+	<ContextMenu x:Key="DockingChromeAnchorableContextMenu">
+		<MenuItem Header="Float" Command="{Binding Path=FloatCommand}"
+		          Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={StaticResource DockingChromeBoolToVisibility}}" />
+		<MenuItem Header="Dock" Command="{Binding Path=DockCommand}"
+		          Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={StaticResource DockingChromeBoolToVisibility}}" />
+		<MenuItem Header="Auto-hide" Command="{Binding Path=AutoHideCommand}"
+		          Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={StaticResource DockingChromeBoolToVisibility}}" />
+		<MenuItem Header="Close" Command="{Binding Path=HideCommand}"
+		          Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={StaticResource DockingChromeBoolToVisibility}}" />
+	</ContextMenu>
+
+	<!-- The tab context menu of a document tab (the Session view allows none of it; a preview tabbed beside it allows Float and Close) -->
+	<ContextMenu x:Key="DockingChromeDocumentContextMenu">
+		<MenuItem Header="Float" Command="{Binding Path=FloatCommand}"
+		          Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={StaticResource DockingChromeBoolToVisibility}}" />
+		<MenuItem Header="Close" Command="{Binding Path=CloseCommand}"
+		          Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={StaticResource DockingChromeBoolToVisibility}}" />
+	</ContextMenu>
+</ResourceDictionary>
