@@ -14,9 +14,10 @@ public sealed class PreviewPlacementPlanner
 	/// <param name="remembered">The group's remembered placement; null when none.</param>
 	/// <param name="monitors">The monitors present.</param>
 	/// <param name="mainWindowMonitor">Device name of the monitor holding the main window.</param>
-	public WindowPlacementModel Plan(PreviewPlacementModel? remembered, IReadOnlyList<MonitorInfo> monitors, string? mainWindowMonitor)
+	/// <param name="nearMainWindow">A floating docked panel (FR.29.21): a place without a monitor goes near the main window's monitor (else the primary) instead of the largest other one.</param>
+	public WindowPlacementModel Plan(PreviewPlacementModel? remembered, IReadOnlyList<MonitorInfo> monitors, string? mainWindowMonitor, bool nearMainWindow = false)
 	{
-		var target = TargetOf(monitors, mainWindowMonitor);
+		var target = nearMainWindow ? MainTargetOf(monitors, mainWindowMonitor) : TargetOf(monitors, mainWindowMonitor);
 		var targetDpi = monitors.FirstOrDefault(m => m.WorkArea == target)?.Dpi ?? 0;
 		if (remembered == null || remembered.Width <= 0 || remembered.Height <= 0)
 			return First(target);
@@ -92,6 +93,10 @@ public sealed class PreviewPlacementPlanner
 		best ??= monitors.FirstOrDefault(m => m.DeviceName == mainWindowMonitor) ?? monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors.FirstOrDefault();
 		return best?.WorkArea ?? FallbackBounds;
 	}
+
+	/// <summary>The monitor holding the main window, else the primary, else the first.</summary>
+	private static MonitorBounds MainTargetOf(IReadOnlyList<MonitorInfo> monitors, string? mainWindowMonitor) =>
+		(monitors.FirstOrDefault(m => m.DeviceName == mainWindowMonitor) ?? monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors.FirstOrDefault())?.WorkArea ?? FallbackBounds;
 
 	private static long Area(MonitorBounds bounds) => (long)bounds.Width * bounds.Height;
 

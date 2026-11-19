@@ -38,6 +38,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	private LayoutDocumentPane _documentPane;
 	private LayoutRoot? _subscribedRoot;
 	private ShellLayoutMemory? _memory;
+	private ShellFloatingPlacements? _floatingPlaces;
 	private ILogger? _logger;
 	private Func<(IReadOnlyList<MonitorBounds> Monitors, MonitorBounds Primary)>? _monitors;
 	private string _lastState = string.Empty;
@@ -131,8 +132,9 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	/// Builds the whole shell layout (FR.6.11, FR.6.12, FR.6.18): from the saved layout when <paramref name="memory"/> has a usable one, else the default layout. Run once, before the
 	/// window is shown. <paramref name="monitors"/> tells where the screens are (a restored floating panel off every monitor is clamped, FR.29.16).
 	/// </summary>
-	public void BuildShell(IReadOnlyList<ShellPanelDefinition> panels, ShellLayoutMemory memory, ILogger logger, Func<(IReadOnlyList<MonitorBounds> Monitors, MonitorBounds Primary)>? monitors = null)
+	public void BuildShell(IReadOnlyList<ShellPanelDefinition> panels, ShellLayoutMemory memory, ILogger logger, Func<(IReadOnlyList<MonitorBounds> Monitors, MonitorBounds Primary)>? monitors = null, IFloatingPanelPlacement? floating = null)
 	{
+		_floatingPlaces = floating == null ? null : new ShellFloatingPlacements(floating, FloatingWindowHandle);   // floating panels are remembered with monitor and scale (FR.6.18, FR.29.16)
 		_memory = memory;
 		_logger = logger;
 		Chrome.UseLogger(logger);
@@ -182,6 +184,17 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	}
 
 	/// <summary>Hides or shows the floating panels' windows (the screensaver cover does not reach them, FR.29.19).</summary>
+	public void Reveal(LayoutAnchorable panel)
+	{
+		panel.IsSelected = true;   // a tab behind another comes forward
+		if (panel.IsAutoHidden)
+			_raiser.SlideOut(panel);
+		else if (panel.IsFloating)
+			_raiser.Raise(panel);   // lifted, not activated: the composer keeps the keyboard
+	}
+
+	public IntPtr FloatingWindowHandle(LayoutAnchorable panel) => _raiser.WindowOf(panel);
+
 	public void SetFloatingVisible(bool visible)
 	{
 		_floatingHidden = !visible;
@@ -502,18 +515,45 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			_panels[definition.Id] = panel;
 		}
 
-		ClampFloating();
+		ClampFloating(RestoreFloatingPlaces(xml));
 		return true;
 	}
 
+	/// <summary>
+	/// A floating panel saved with its monitor and scale is put back by the placement rules (FR.29.16): sizes by the ratio of the scales, clamped to the monitors present; one saved without
+	/// them (an older layout) is left to <see cref="ClampFloating"/>. Returns the ids placed here.
+	/// </summary>
+	private HashSet<string> RestoreFloatingPlaces(string xml)
+	{
+		var placed = new HashSet<string>();
+		if (_floatingPlaces == null)
+			return placed;
+
+		var saved = _serializer.ReadFloating(xml);
+		foreach (var panel in _panels.Values.Where(p => p.IsFloating && saved.ContainsKey(p.ContentId)))
+		{
+			var place = saved[panel.ContentId];
+			var rectangle = _floatingPlaces.Plan(place);
+			panel.FloatingLeft = rectangle.Left;
+			panel.FloatingTop = rectangle.Top;
+			panel.FloatingWidth = Math.Max(rectangle.Width, Constants.PreviewDock.MinPaneSize);
+			panel.FloatingHeight = Math.Max(rectangle.Height, Constants.PreviewDock.MinPaneSize);
+			_floatingPlaces.Seed(panel.ContentId, place);
+			placed.Add(panel.ContentId);
+			_logger?.LogInformation(Constants.ShellLayout.LayoutFloatingPlacedLog, panel.ContentId, place.MonitorDeviceName, place.Dpi);
+		}
+
+		return placed;
+	}
+
 	/// <summary>A restored floating panel off every monitor is moved onto one (FR.6.18, FR.29.16).</summary>
-	private void ClampFloating()
+	private void ClampFloating(IReadOnlySet<string> placed)
 	{
 		if (_monitors == null)
 			return;
 
 		var (monitors, primary) = _monitors();
-		foreach (var panel in _panels.Values.Where(p => p.IsFloating))
+		foreach (var panel in _panels.Values.Where(p => p.IsFloating && !placed.Contains(p.ContentId)))
 		{
 			var saved = new WindowPlacementModel { Left = (int)panel.FloatingLeft, Top = (int)panel.FloatingTop, Width = (int)panel.FloatingWidth, Height = (int)panel.FloatingHeight };
 			var clamped = new WindowPlacementClamper().Clamp(saved, monitors, primary);
@@ -623,6 +663,8 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		foreach (var panel in _panels.Values.Where(IsInLayout))
 			CapturePlace(panel);
 
+		_floatingPlaces?.Observe(_panels.Values.Where(p => IsInLayout(p) && p.IsFloating).ToList());   // a place Windows forced after a display change is not taken over
+
 		if (state != _lastState)
 		{
 			_lastState = state;
@@ -642,7 +684,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 
 		try
 		{
-			_memory.Save(_serializer.Serialize(DockManager, new HashSet<string>([.. ShellPanelIds, Constants.PreviewDock.SessionDocumentId])));
+			_memory.Save(_serializer.Serialize(DockManager, new HashSet<string>([.. ShellPanelIds, Constants.PreviewDock.SessionDocumentId]), _floatingPlaces?.Entries));
 		}
 		catch (Exception ex)
 		{

@@ -6,7 +6,7 @@ namespace TessynDesktop.WPF.Tests.Fakes;
 
 /// <summary>A preview window that records what it was asked to do; tests raise its events themselves.</summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class FakePreviewWindowHandle : IPreviewWindowHandle
+public sealed class FakePreviewWindowHandle : IDockedPreviewPanelHandle
 {
 	public FakePreviewWindowHandle(string groupId, bool pinned, PreviewPlacementModel? ownPlacement, string groupName)
 	{
@@ -28,6 +28,12 @@ public sealed class FakePreviewWindowHandle : IPreviewWindowHandle
 	public PreviewPlacementModel? OwnPlacement { get; }
 
 	public string GroupName { get; private set; }
+
+	/// <summary>The layout a (pinned) panel was created with (FR.29.22).</summary>
+	public PreviewDockLayoutModel? OwnLayout { get; init; }
+
+	/// <summary>What <see cref="CurrentLayout"/> answers: the panel's layout now (a test sets it).</summary>
+	public PreviewDockLayoutModel? CurrentLayout { get; set; }
 
 	public List<PreviewItemModel> Shown { get; } = [];
 
@@ -59,6 +65,13 @@ public sealed class FakePreviewWindowHandle : IPreviewWindowHandle
 	public event EventHandler? ItemChanged;
 
 	public event EventHandler? PlacementChanged;
+
+	/// <summary>The (pinned) panel settled at a new layout.</summary>
+	public void ChangeLayout(PreviewDockLayoutModel layout)
+	{
+		CurrentLayout = layout;
+		PlacementChanged?.Invoke(this, EventArgs.Empty);
+	}
 
 	/// <summary>The (pinned) window settled at a new place.</summary>
 	public void MoveTo(PreviewPlacementModel placement)

@@ -28,6 +28,8 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 	private readonly IPreviewSettingsService _settings;
 	private readonly PreviewDockLayoutModel? _remembered;
 	private readonly ILogger _logger;
+	private readonly IFloatingPanelPlacement? _floating;
+	private readonly FloatingPlacementGuard _guard = new();
 	private PreviewDockLayoutModel? _last;
 	private PreviewDockLayoutModel? _lastDocked;
 	private bool _opened;
@@ -45,8 +47,10 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 		Infrastructure.IUiDispatcher ui,
 		ILogger logger,
 		TimeProvider? time = null,
-		TimeSpan? layoutDelay = null)
+		TimeSpan? layoutDelay = null,
+		IFloatingPanelPlacement? floating = null)
 	{
+		_floating = floating;
 		_viewModel = viewModel;
 		_content = content;
 		_panel = panel;
@@ -55,7 +59,7 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 		_remembered = remembered;
 		_logger = logger;
 		_reader = new PreviewDockLayoutReader();
-		_applier = new PreviewDockLayoutApplier();
+		_applier = new PreviewDockLayoutApplier(floating);
 		_tracker = new PreviewDockLayoutTracker(viewModel.GroupId, settings, ui, () => _viewModel.IsPinned, Capture, time, layoutDelay);
 		_tracker.PinnedLayoutChanged += (_, _) => PlacementChanged?.Invoke(this, EventArgs.Empty);
 		_viewModel.Pinned += OnPinned;
@@ -123,13 +127,13 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 		Finish();   // a panel that was never shown raises no Closed
 	}
 
-	/// <summary>A new item for a panel that was hidden or tabbed behind another: it comes forward (no keyboard focus, FR.29.17).</summary>
+	/// <summary>A new item for a panel that was hidden, tabbed behind another, auto-hidden or floating: it comes forward, never with the keyboard focus (FR.29.17, decision 3).</summary>
 	private void Reveal()
 	{
 		if (_panel.IsHidden)
 			_panel.Show();
 
-		_panel.IsSelected = true;
+		_surface.Reveal(_panel);
 	}
 
 	private PreviewDockLayoutModel? Capture()
@@ -137,11 +141,27 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 		if (_closed || !_opened || _panel.Root == null || _panel.IsHidden || _panel.Parent == null)
 			return _last;   // a hidden or removed panel reads as nothing: keep the last good layout
 
-		_last = _reader.Read(_panel, _surface.DocumentPane, _lastDocked);
+		_last = _reader.Read(_panel, _surface.DocumentPane, _lastDocked, FloatingNow());
 		if (!_last.Floating)
 			_lastDocked = _last;
 
 		return _last;
+	}
+
+	/// <summary>
+	/// The floating window's place as the window reports it, with its monitor and scale (FR.29.16); null while it does not float, has no window or no placement service is there. A place
+	/// read while Windows rearranges windows after a display change, and the same place read again later, is not remembered (FR.29.21): the last good one is kept.
+	/// </summary>
+	private PreviewPlacementModel? FloatingNow()
+	{
+		if (_floating == null || !_panel.IsFloating)
+			return null;
+
+		var handle = _surface.FloatingWindowHandle(_panel);
+		if (handle == IntPtr.Zero)
+			return null;
+
+		return _guard.Filter(_floating.Capture(handle), _floating.IsSettling);
 	}
 
 	private void OnLayoutChanged(object? sender, EventArgs e)

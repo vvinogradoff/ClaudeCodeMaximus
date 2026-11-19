@@ -38,6 +38,9 @@ public static partial class Constants
 		/// <summary>A first window takes this share of the target monitor's work area, each way.</summary>
 		public const int FirstWindowPercent = 60;
 
+		/// <summary>The DPI of a 100 % scale: pixels are device-independent units at it.</summary>
+		public const int BaseDpi = 96;
+
 		/// <summary>The monitor list is read once the display settings stayed quiet for this long.</summary>
 		public static readonly TimeSpan MonitorDebounce = TimeSpan.FromSeconds(1);
 

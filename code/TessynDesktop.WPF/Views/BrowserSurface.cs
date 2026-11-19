@@ -42,6 +42,9 @@ public sealed class BrowserSurface : IBrowserSurface, IDisposable
 
 	public event EventHandler? BrowserLost;
 
+	/// <summary>Esc was pressed with the keyboard focus inside the page (it does not reach WPF's key events); on the UI thread. The slide-out of an auto-hidden panel closes on it.</summary>
+	public event EventHandler? EscapePressed;
+
 	public bool CanGoBack => _control?.CoreWebView2?.CanGoBack ?? false;
 
 	public bool CanGoForward => _control?.CoreWebView2?.CanGoForward ?? false;
@@ -62,6 +65,7 @@ public sealed class BrowserSurface : IBrowserSurface, IDisposable
 			return;
 
 		var core = control.CoreWebView2;
+		new WebViewEscapeTap().Hook(control, () => EscapePressed?.Invoke(this, EventArgs.Empty), _logger);
 		Configure(core, Window.GetWindow(control), isMain: true);
 		var pending = _pending;
 		_pending = null;
