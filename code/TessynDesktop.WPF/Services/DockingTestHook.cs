@@ -62,10 +62,10 @@ public sealed class DockingTestHook : IDisposable
 		if (_stop == null)
 			return;
 
-		_stop.Cancel();
+		_stop.Cancel();   // the loop never waits for the UI thread past this (WaitAsync(token) in ServeConnectionAsync), so this may run on it
 		try
 		{
-			_loop?.Wait(TimeSpan.FromSeconds(2));
+			_loop?.Wait(TimeSpan.FromMilliseconds(Constants.DockingTestHook.StopWaitMilliseconds));
 		}
 		catch (Exception)
 		{
@@ -108,7 +108,14 @@ public sealed class DockingTestHook : IDisposable
 		await using var writer = new StreamWriter(server, new UTF8Encoding(false), 4096, leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
 		while (!token.IsCancellationRequested && server.IsConnected)
 		{
-			var line = await reader.ReadLineAsync(token);
+			var (line, tooLong) = await ReadRequestLineAsync(reader, token);
+			if (tooLong)
+			{
+				_logger.LogWarning(Constants.DockingTestHook.RequestTooLongLog, Constants.DockingTestHook.MaxRequestLineChars);
+				await writer.WriteLineAsync(_handler.Failure(string.Format(Constants.DockingTestHook.RequestTooLongError, Constants.DockingTestHook.MaxRequestLineChars)).AsMemory(), token);
+				return;   // the rest of the line cannot be told from a new request: the connection ends
+			}
+
 			if (line == null)
 				return;
 
@@ -118,24 +125,60 @@ public sealed class DockingTestHook : IDisposable
 			string reply;
 			try
 			{
-				reply = await _runOnUi(() => _handler.Handle(line));
+				reply = await _runOnUi(() => _handler.Handle(line)).WaitAsync(token);
+			}
+			catch (OperationCanceledException) when (token.IsCancellationRequested)
+			{
+				return;
 			}
 			catch (Exception ex)
 			{
 				_logger.LogWarning(ex, Constants.DockingTestHook.RequestFailedLog);
-				reply = "{\"ok\":false,\"error\":\"" + ex.Message.Replace("\\", "\\\\").Replace("\"", "\\\"").ReplaceLineEndings(" ") + "\",\"panels\":[]}";
+				reply = _handler.Failure(ex.Message);
 			}
 
 			await writer.WriteLineAsync(reply.AsMemory(), token);
 		}
 	}
 
-	/// <summary>A one-instance pipe the current user (and nobody else) may open.</summary>
+	/// <summary>One request line, read one character at a time up to <see cref="Constants.DockingTestHook.MaxRequestLineChars"/>: null at the end of the stream, or <c>TooLong</c> when the limit is passed.</summary>
+	private async Task<(string? Line, bool TooLong)> ReadRequestLineAsync(StreamReader reader, CancellationToken token)
+	{
+		var line = new StringBuilder();
+		var one = new char[1];
+		while (true)
+		{
+			if (await reader.ReadAsync(one.AsMemory(), token) == 0)
+				return (line.Length == 0 ? null : line.ToString(), false);
+
+			if (one[0] == '\n')
+				return (line.ToString().TrimEnd('\r'), false);
+
+			if (line.Length >= Constants.DockingTestHook.MaxRequestLineChars)
+				return (null, true);
+
+			line.Append(one[0]);
+		}
+	}
+
+	/// <summary>
+	/// A one-instance pipe the current user (and nobody else) may open: <see cref="PipeOptions.CurrentUserOnly"/> gives it the current user's access (the library refuses an explicit ACL with that
+	/// option, so the ACL is completed after the pipe exists) and every network logon is denied on top of it.
+	/// </summary>
 	private NamedPipeServerStream CreateServer()
 	{
-		var security = new PipeSecurity();
-		var user = WindowsIdentity.GetCurrent().User ?? throw new InvalidOperationException("The current user has no SID.");
-		security.AddAccessRule(new PipeAccessRule(user, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
-		return NamedPipeServerStreamAcl.Create(PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 4096, 4096, security);
+		var server = NamedPipeServerStreamAcl.Create(PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 4096, 4096, null, HandleInheritability.None, PipeAccessRights.ChangePermissions);
+		try
+		{
+			var security = server.GetAccessControl();
+			security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.NetworkSid, null), PipeAccessRights.FullControl, AccessControlType.Deny));
+			server.SetAccessControl(security);
+			return server;
+		}
+		catch (Exception)
+		{
+			server.Dispose();
+			throw;
+		}
 	}
 }

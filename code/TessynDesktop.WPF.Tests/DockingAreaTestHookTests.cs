@@ -309,8 +309,6 @@ public sealed class DockingAreaTestHookTests
 			var (area, window) = Start(testMode: true);
 			var names = new DockingAutomationNames(area.Manager, new DockingVisualTree());
 
-			names.Update();
-
 			var tabNames = Descendants<TabItem>(area).Select(AutomationProperties.GetName).Where(n => n.Length > 0).ToList();
 			Assert.Contains("Sessions", tabNames);
 			Assert.Contains("Recent", tabNames);

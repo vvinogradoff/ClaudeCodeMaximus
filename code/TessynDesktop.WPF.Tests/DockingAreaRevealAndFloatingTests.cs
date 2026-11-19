@@ -222,10 +222,10 @@ public sealed class DockingAreaRevealAndFloatingTests
 	[Fact]
 	public void TheBrowsersEscapeTap_NeedsTheControllerFieldOfTheWpfControl_ItIsStillThere()
 	{
-		var field = typeof(Microsoft.Web.WebView2.Wpf.WebView2).GetField(WebViewEscapeTap.BaseField, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+		var field = typeof(Microsoft.Web.WebView2.Wpf.WebView2).GetField(Constants.WebViewEscapeTap.BaseField, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 
 		Assert.NotNull(field);   // a WebView2 update that renames it must fail here, not at run time
-		var property = field!.FieldType.GetProperty(WebViewEscapeTap.ControllerProperty, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+		var property = field!.FieldType.GetProperty(Constants.WebViewEscapeTap.ControllerProperty, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
 		Assert.NotNull(property);
 		Assert.Equal(typeof(Microsoft.Web.WebView2.Core.CoreWebView2Controller), property!.PropertyType);
 	}

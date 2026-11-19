@@ -21,6 +21,7 @@ public sealed class BrowserSurface : IBrowserSurface, IDisposable
 	private readonly ILogger<BrowserSurface> _logger;
 	private readonly List<BrowserPopupWindow> _popups = [];
 	private readonly BrowserPopupPolicy _popupPolicy = new();
+	private readonly WebViewEscapeTap _escapeTap;
 
 	private WebView2? _control;
 	private CoreWebView2Environment? _env;
@@ -28,8 +29,9 @@ public sealed class BrowserSurface : IBrowserSurface, IDisposable
 	private bool _isLoading;
 	private bool _disposed;
 
-	public BrowserSurface(BrowserEnvironmentProvider environment, BrowserNavigationPolicy policy, StartupOptions options, ILogger<BrowserSurface> logger)
+	public BrowserSurface(BrowserEnvironmentProvider environment, BrowserNavigationPolicy policy, StartupOptions options, ILogger<BrowserSurface> logger, WebViewEscapeTap? escapeTap = null)
 	{
+		_escapeTap = escapeTap ?? new WebViewEscapeTap();
 		_environment = environment;
 		_policy = policy;
 		_options = options;
@@ -65,7 +67,7 @@ public sealed class BrowserSurface : IBrowserSurface, IDisposable
 			return;
 
 		var core = control.CoreWebView2;
-		new WebViewEscapeTap().Hook(control, () => EscapePressed?.Invoke(this, EventArgs.Empty), _logger);
+		_escapeTap.Hook(control, () => EscapePressed?.Invoke(this, EventArgs.Empty), _logger);
 		Configure(core, Window.GetWindow(control), isMain: true);
 		var pending = _pending;
 		_pending = null;

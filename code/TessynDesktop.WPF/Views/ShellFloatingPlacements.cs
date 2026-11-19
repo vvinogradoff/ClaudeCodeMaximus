@@ -54,7 +54,9 @@ public sealed class ShellFloatingPlacements
 	/// <summary>A panel restored at <paramref name="saved"/>: the place counts as remembered until its window can be read.</summary>
 	public void Seed(string panelId, PreviewPlacementModel saved)
 	{
-		_guards[panelId] = new FloatingPlacementGuard();
+		var guard = new FloatingPlacementGuard();
+		guard.Seed(saved);
+		_guards[panelId] = guard;
 		_entries[panelId] = new ShellFloatingEntry(_placement.ToLibraryUnits(saved), saved);
 	}
 

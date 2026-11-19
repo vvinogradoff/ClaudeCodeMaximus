@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.WPF.State;
 
 namespace TessynDesktop.WPF.Services;
@@ -10,11 +12,14 @@ namespace TessynDesktop.WPF.Services;
 public sealed class PreviewSettingsService : IPreviewSettingsService
 {
 	private readonly IClientSettingsStore _store;
+	private readonly ILogger<PreviewSettingsService> _logger;
 	private bool _lastEnabled;
+	private bool _loggedDamaged;
 
-	public PreviewSettingsService(IClientSettingsStore store)
+	public PreviewSettingsService(IClientSettingsStore store, ILogger<PreviewSettingsService>? logger = null)
 	{
 		_store = store;
+		_logger = logger ?? NullLogger<PreviewSettingsService>.Instance;
 		_lastEnabled = store.Get<PreviewWindowsSettings>().Enabled;
 		_store.Changed += OnStoreChanged;
 	}
@@ -115,12 +120,34 @@ public sealed class PreviewSettingsService : IPreviewSettingsService
 		_store.Update<PreviewDockSettings>(s => s.Layouts[groupId] = copy);
 	}
 
-	public IReadOnlyList<OpenPreviewPanelModel> OpenPanels => _store.Get<PreviewDockSettings>().OpenPanels.Select(CloneOpenPanel).ToList();
+	/// <summary>The saved docked panels; an entry that cannot be used (null, no item, an unknown kind, no group) is left out, with one warning per run, so one damaged entry never stops the others.</summary>
+	public IReadOnlyList<OpenPreviewPanelModel> OpenPanels
+	{
+		get
+		{
+			var stored = _store.Get<PreviewDockSettings>().OpenPanels ?? [];
+			var usable = stored.Where(p => IsUsable(p?.GroupId, p?.Item)).ToList();
+			ReportDamaged(stored.Count - usable.Count, "panel");
+			return usable.Select(CloneOpenPanel).ToList();
+		}
+	}
 
 	public void SaveOpenPanels(IReadOnlyList<OpenPreviewPanelModel> panels)
 	{
 		var copies = panels.Select(CloneOpenPanel).ToList();
 		_store.Update<PreviewDockSettings>(s => s.OpenPanels = copies);
+	}
+
+	private static bool IsUsable(string? groupId, PreviewItemModel? item) =>
+		!string.IsNullOrEmpty(groupId) && item != null && Enum.IsDefined(item.Kind);
+
+	private void ReportDamaged(int count, string what)
+	{
+		if (count == 0 || _loggedDamaged)
+			return;
+
+		_loggedDamaged = true;
+		_logger.LogWarning("Ignoring {Count} damaged saved preview {What} entries in the settings", count, what);
 	}
 
 	private OpenPreviewPanelModel CloneOpenPanel(OpenPreviewPanelModel p) => new()
@@ -132,7 +159,17 @@ public sealed class PreviewSettingsService : IPreviewSettingsService
 		PanelId = p.PanelId,
 	};
 
-	public IReadOnlyList<OpenPreviewWindowModel> OpenWindows => _store.Get<PreviewWindowsSettings>().OpenWindows;
+	/// <summary>The saved windows; damaged entries are left out like in <see cref="OpenPanels"/>.</summary>
+	public IReadOnlyList<OpenPreviewWindowModel> OpenWindows
+	{
+		get
+		{
+			var stored = _store.Get<PreviewWindowsSettings>().OpenWindows ?? [];
+			var usable = stored.Where(w => IsUsable(w?.GroupId, w?.Item)).ToList();
+			ReportDamaged(stored.Count - usable.Count, "window");
+			return usable;
+		}
+	}
 
 	public void SaveOpenWindows(IReadOnlyList<OpenPreviewWindowModel> windows) =>
 		_store.Update<PreviewWindowsSettings>(s => s.OpenWindows = windows.ToList());

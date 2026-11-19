@@ -20,6 +20,7 @@ public sealed class PreviewContentFactory : IPreviewContentFactory
 	private readonly IServiceProvider _services;
 	private BrowserEnvironmentProvider? _browserEnvironment;
 	private BrowserNavigationPolicy? _browserPolicy;
+	private readonly WebViewEscapeTap _escapeTap = new();   // one for every surface: its warning is logged once per process
 
 	public PreviewContentFactory(IServiceProvider services)
 	{
@@ -40,7 +41,7 @@ public sealed class PreviewContentFactory : IPreviewContentFactory
 		var surface = new BrowserSurface(
 			_services.GetService<BrowserEnvironmentProvider>() ?? (_browserEnvironment ??= ActivatorUtilities.CreateInstance<BrowserEnvironmentProvider>(_services)),
 			_services.GetService<BrowserNavigationPolicy>() ?? (_browserPolicy ??= new BrowserNavigationPolicy()),
-			Get<StartupOptions>(), Get<ILogger<BrowserSurface>>());
+			Get<StartupOptions>(), Get<ILogger<BrowserSurface>>(), _escapeTap);
 		var systemBrowser = Get<SystemUrlLauncher>();   // the concrete launcher: a link in the address bar's "Open in system browser" never routes
 		var viewModel = new BrowserPreviewViewModel(surface, Get<UrlPolicy>(), systemBrowser, Get<IUiDispatcher>(), Get<ILogger<BrowserPreviewViewModel>>(), Get<BrowserAddressInput>());
 		return new PreviewBrowserContent(viewModel, surface);

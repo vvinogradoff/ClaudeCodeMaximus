@@ -98,7 +98,7 @@ public partial class DockingArea : IDockingTestOperations
 		return common with { Side = side, Width = size.Width, Height = size.Height };
 	}
 
-	private static string SideName(PreviewDockSide? side) => side?.ToString().ToLowerInvariant() ?? Constants.DockingTestHook.SideCenter;
+	private string SideName(PreviewDockSide? side) => side?.ToString().ToLowerInvariant() ?? Constants.DockingTestHook.SideCenter;
 
 	/// <summary>The size of the pane's control (0 when it has none now).</summary>
 	private (double Width, double Height) PaneSize(ILayoutElement? pane)

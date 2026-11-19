@@ -9,9 +9,6 @@ public static partial class Constants
 		/// <summary>The pipe is named <c>tessyn-wpf-test-&lt;pid&gt;</c>.</summary>
 		public const string PipeNamePrefix = "tessyn-wpf-test-";
 
-		/// <summary>How often the UI Automation names of the tabs are tried while the library has not filled all of them yet (FR.6.22).</summary>
-		public const int NameAttempts = 10;
-
 		/// <summary>Joins the titles of the panels of a floating frame that holds several, in its UI Automation name.</summary>
 		public const string TitleSeparator = ", ";
 
@@ -57,10 +54,19 @@ public static partial class Constants
 		public const string TabIntoSessionError = "Panel '{0}' cannot become a tab of the session area.";
 		public const string OperationFailedError = "Operation '{0}' failed: {1}";
 
+		/// <summary>The longest request line the pipe reads (characters); a longer one is refused and the connection closed.</summary>
+		public const int MaxRequestLineChars = 64 * 1024;
+
+		/// <summary>How long Stop waits for the serving loop to end (it never waits for the UI thread, so this is only the pipe closing).</summary>
+		public const int StopWaitMilliseconds = 500;
+
+		public const string RequestTooLongError = "The request line is longer than {0} characters.";
+
 		public const string StartedLog = "Docking test hook listening on pipe {Pipe}";
 		public const string NotStartedLog = "Docking test hook not started: {Reason}";
 		public const string RequestFailedLog = "Docking test hook request failed";
 		public const string ConnectionFailedLog = "Docking test hook connection failed";
+		public const string RequestTooLongLog = "Docking test hook: a request line over {Max} characters was refused";
 		public const string StoppedLog = "Docking test hook stopped";
 
 		public const string FloatingPlacedLog = "Test window: floating panel window made non-activating, off-screen and out of the taskbar";
