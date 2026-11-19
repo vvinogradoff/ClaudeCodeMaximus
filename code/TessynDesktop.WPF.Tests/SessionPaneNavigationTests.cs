@@ -265,7 +265,7 @@ public sealed class SessionPaneNavigationTests : IDisposable
 
 	[Theory]
 	[InlineData(@"C:\Windows\System32")]
-	[InlineData(@"relative\file.md")]
+	[InlineData(@"relative\file")]
 	[InlineData("C:\\a.md\nC:\\b.md")]
 	public async Task LocalPathChip_WithAPathThatIsNotPathShaped_NeverReachesTheDaemon(string path)
 	{
@@ -365,7 +365,7 @@ public sealed class SessionPaneNavigationTests : IDisposable
 
 	[Theory]
 	[InlineData(@"C:\Windows\System32")]
-	[InlineData(@"relative\shot.png")]
+	[InlineData(@"relative\shot")]
 	public async Task InlineImage_WithAPathThatIsNotPathShaped_NeverReachesTheDaemon(string path)
 	{
 		AddSession("a", 10);

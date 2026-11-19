@@ -58,9 +58,9 @@ public sealed partial class SessionPaneViewModel
 			_previewRouter?.OnFocusItemsClosed(NodeId, ids);
 	}
 
-	/// <summary>The Focus item a reference belongs to; null when none shows it.</summary>
+	/// <summary>The Focus item a reference belongs to; null when none shows it. A closed item gives none (FR.23.29: its previews are not tied to it).</summary>
 	private string? FocusItemOf(AttentionRefDto reference) =>
-		Focus.Items.FirstOrDefault(i => i.Refs.Any(r => ReferenceEquals(r.Reference, reference)))?.Id;
+		Focus.Items.FirstOrDefault(i => !i.IsClosed && i.Refs.Any(r => ReferenceEquals(r.Reference, reference)))?.Id;
 
 	/// <summary>Offers a file to its group's preview window; false when the mode is off or no group matches.</summary>
 	private bool TryRouteFile(PreviewItemModel item, PreviewTarget target) =>

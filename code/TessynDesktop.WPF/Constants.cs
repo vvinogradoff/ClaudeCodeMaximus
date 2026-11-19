@@ -91,7 +91,25 @@ public static partial class Constants
 		/// <summary>Video types a local path may show a first-frame preview for (FR.26.6); the shell makes the frame with the installed codecs. Wider than <see cref="Video"/>, which is what the preview pane and remote links play.</summary>
 		public static readonly IReadOnlySet<string> InlineVideo = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".wmv" };
 
-		public static readonly IReadOnlySet<string> Pdf = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf" };
+		/// <summary>Top-level domains that make the first part of a relative-looking path a web host (<c>example.com/page.html</c>), so it is not marked as a relative file path (FR.26.7).</summary>
+		public static readonly IReadOnlySet<string> WebTopLevelDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+		{
+			"com", "org", "net", "io", "app", "dev", "ai", "co", "gov", "edu", "info", "biz", "me", "us", "uk", "de", "fr", "ru", "ca", "au", "jp", "nl", "xyz"
+		};
+
+		/// <summary>The host a link may name without a top-level domain; a relative-looking path that starts with it is a web address (FR.26.7).</summary>
+		public const string LocalWebHost = "localhost";
+
+		/// <summary>Extensions that make a bare name in backticks (<c>README.md</c>) a file; any other (<c>obj.method</c>, <c>os.path</c>) is code (FR.26.7).</summary>
+		public static readonly IReadOnlySet<string> KnownBareNameExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+		{
+			".md", ".markdown", ".txt", ".json", ".yml", ".yaml", ".toml", ".xml", ".csv", ".cs", ".csproj", ".sln", ".ts", ".tsx", ".js", ".jsx", ".mjs",
+			".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift", ".c", ".h", ".cpp", ".hpp", ".css", ".scss", ".html", ".htm", ".sh", ".ps1", ".bat", ".cmd",
+			".sql", ".ini", ".cfg", ".config", ".props", ".targets", ".xaml", ".razor", ".log", ".lock", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
+			".tif", ".tiff", ".svg", ".pdf", ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".wmv"
+		};
+
+		public static readonly IReadOnlySet<string> Pdf =new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf" };
 
 		/// <summary>Shown as monospace text, markup and script types included (svg, html, ps1, ...): displayed, never rendered or run.</summary>
 		public static readonly IReadOnlySet<string> Text = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

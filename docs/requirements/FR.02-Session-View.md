@@ -89,3 +89,16 @@ Wire: `SessionEntryDto.source` (`tdcp-spec` additions §A1).
 - **Where.** Every row kind (user, assistant, system), in markdown and plain modes. Inline path chips and link chips (FR.26) copy as their text or link. Images and video previews copy as their Markdown link.
 - **No selection.** A right-click without a selection shows no menu (as today). A right-click on a link or a path chip keeps its own behaviour.
 - **Keyboard.** Ctrl+Shift+C does Copy as Markdown while the transcript has the focus and a selection exists.
+
+---
+
+## Amendments (2026-11-19, preview improvements)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.2.3 Markdown rendering of tables (session output); FR.20 preview pane and FR.29 preview windows (Markdown files); FR.23.14 Focus card body | FR.2.14 | Table columns follow their content: never narrower than the longest word, a wide table scrolls inside its own box (session output, preview pane and windows); in a Focus card the column widths are weighted by content. |
+
+**FR.2.14 — Readable Markdown tables.** (Applies to the session output, the preview pane and preview windows, and the Focus view's cards.)
+- **Session output, preview pane and preview windows (HTML).** A table column is **never narrower than its longest word**. Text in a cell wraps at spaces only; a single very long token (a URL, a path) may still break. A table **wider than its column scrolls sideways inside its own box**; the rest of the entry (and the page) does not scroll. Header cells follow the same rules. Tables keep their borders, padding and alignment (`al-left`, `al-center`, `al-right`). The table's DOM is unchanged, so selection, Find (FR.2.3) and Copy as Markdown (FR.2.13) work as before.
+- **Focus card (WPF `Table`).** Column widths **follow the content**: each column gets a star share of the card width in proportion to its text (the longest cell, with a floor so that an empty or one-character column stays usable), and at least the width of its longest word where the card is wide enough.
+- Use case [UC.MT.01](/docs/usecases/UC.MT.01-Markdown-Tables.md); test cases [TC.MT.01](/docs/testcases/TC.MT.01-Markdown-Tables.md).

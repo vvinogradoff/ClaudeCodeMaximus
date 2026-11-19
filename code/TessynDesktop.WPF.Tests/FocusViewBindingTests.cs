@@ -242,6 +242,63 @@ public sealed class FocusViewBindingTests
 		Assert.DoesNotContain("Focus", texts);
 	}
 
+	private static bool ShowsRefButton(DependencyObject panel, string label) =>
+		Descendants<Button>(panel).Any(b => System.Windows.Automation.AutomationProperties.GetName(b) == label && ShownUpTo(b, panel));
+
+	private static bool ShownUpTo(DependencyObject element, DependencyObject root)
+	{
+		for (var current = element; current != null && !ReferenceEquals(current, root); current = System.Windows.Media.VisualTreeHelper.GetParent(current))
+		{
+			if (current is UIElement { Visibility: not Visibility.Visible })
+				return false;
+		}
+
+		return true;
+	}
+
+	[Fact]
+	public void FocusPanel_ClosedCard_ShowsItsReferencesOnlyWhenExpanded_FR23_29()
+	{
+		var listener = new BindingErrorListener();
+		bool collapsedShows = true, expandedShows = false, openShows = false, collapsedAgain = true;
+		StaTestRunner.Run(() =>
+		{
+			PresentationTraceSources.Refresh();
+			PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
+			PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
+
+			var t0 = DateTimeOffset.UnixEpoch;
+			var client = new FakeTessynClient();
+			client.Attention["a"] =
+			[
+				new AttentionItemDto { Id = "A1", Number = 1, Kind = AttentionKind.Ask, Status = AttentionStatus.Open, Title = "Open one", Body = "text", CreatedUtc = t0, Refs = [new AttentionRefDto { Kind = "file", RefId = "r1", Name = "open.md" }] },
+				new AttentionItemDto { Id = "A2", Number = 2, Kind = AttentionKind.Ask, Status = AttentionStatus.Answered, Title = "Closed one", Body = "text", Answer = "ok", CreatedUtc = t0, ClosedUtc = t0.AddMinutes(5), Refs = [new AttentionRefDto { Kind = "file", RefId = "r2", Name = "closed.md" }] },
+			];
+			var focus = new FocusViewModel(client, new ImmediateUiDispatcher(), NullLogger<FocusViewModel>.Instance);
+			focus.SetSessionAsync("a").GetAwaiter().GetResult();
+			var panel = new FocusPanel { DataContext = focus };
+			Layout(panel);
+			focus.IsClosedExpanded = true;
+			Layout(panel);
+			openShows = ShowsRefButton(panel, "open.md");
+			collapsedShows = ShowsRefButton(panel, "closed.md");
+
+			focus.ClosedItems.Single().ToggleBodyCommand.Execute(null);
+			Layout(panel);
+			expandedShows = ShowsRefButton(panel, "closed.md");
+
+			focus.ClosedItems.Single().ToggleBodyCommand.Execute(null);
+			Layout(panel);
+			collapsedAgain = ShowsRefButton(panel, "closed.md");
+		});
+
+		Assert.Empty(listener.Errors);
+		Assert.True(openShows);
+		Assert.False(collapsedShows);
+		Assert.True(expandedShows);
+		Assert.False(collapsedAgain);
+	}
+
 	[Fact]
 	public void FocusPanel_ShowsDecisionsAndClosedCollapsed_WithEmptyStateWhenOnlyThoseExist_AndTheClosedCardsAreCompact()
 	{

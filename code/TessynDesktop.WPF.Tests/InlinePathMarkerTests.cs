@@ -24,6 +24,52 @@ public sealed class InlinePathMarkerTests
 	}
 
 	[Fact]
+	public void ARelativePath_IsMarkedInPlace_LikeAnAbsoluteOne()
+	{
+		var view = Render("Details are in docs/features/preview-windows.md and in `README.md`.");
+
+		Assert.Equal(["docs/features/preview-windows.md", "README.md"], view.Paths);
+		Assert.Contains(@"<span class=""pth"" data-j=""0"">docs/features/preview-windows.md</span>", view.Html);
+		Assert.Contains(@"<code><span class=""pth"" data-j=""1"">README.md</span></code>", view.Html);
+	}
+
+	[Fact]
+	public void ARelativeImagePath_GetsAPreviewSlot()
+	{
+		var view = Render(@"Look at shots\home.png please");
+
+		Assert.Equal([@"shots\home.png"], view.Paths);
+		Assert.Contains(@"<span class=""pslot"" data-j=""0""></span>", view.Html);
+	}
+
+	[Fact]
+	public void LinksUrlsAndWebHosts_AreNotMarkedAsRelativePaths()
+	{
+		var view = Render("See [the doc](docs/a.md), [docs/b.md](docs/b.md), https://x.io/c/d.md and example.com/page.html.");
+
+		Assert.DoesNotContain("pth", view.Html);
+	}
+
+	[Fact]
+	public void ARelativePath_InACodeBlock_IsMarkedLikeAnAbsoluteOne()
+	{
+		var view = Render("```\nedit src/main.cs now\nsee C:\\w\\a.md\n```");
+
+		Assert.Equal([@"C:\w\a.md", "src/main.cs"], view.Paths);
+		Assert.Contains(@"<span class=""pth"" data-j=""1"">src/main.cs</span>", view.Html);
+		Assert.Contains(@"<span class=""pth"" data-j=""0"">C:\w\a.md</span>", view.Html);
+	}
+
+	[Fact]
+	public void ARelativePath_InAUserEntry_IsNotMarked()
+	{
+		var view = Render("open docs/a.md", role: "user");
+
+		Assert.DoesNotContain("pth", view.Html);
+		Assert.Null(view.Paths);
+	}
+
+	[Fact]
 	public void APathInBackticks_IsMarkedInsideTheCodeSpan()
 	{
 		var view = Render(@"Open `C:\my docs\a b.txt` please");

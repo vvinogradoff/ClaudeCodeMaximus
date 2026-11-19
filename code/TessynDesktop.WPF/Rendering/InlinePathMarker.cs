@@ -145,7 +145,7 @@ public sealed class InlinePathMarker
 
 	private static bool IsBoundary(string data, int at, int length)
 	{
-		if (at > 0 && IsPathChar(data[at - 1]))
+		if (at > 0 && (IsPathChar(data[at - 1]) || data[at - 1] is '-' or '.' or '@' or '~' or '%'))   // a relative path (FR.26.7) never starts inside a longer name or URL
 			return false;
 
 		var end = at + length;

@@ -64,7 +64,12 @@ The amendment paragraphs of the FR.25 commit (FR.1.8 amendment, FR.1.17, FR.3.3 
 | **FR.29.1–FR.29.13** | **new area** preview windows: monitor toggle, groups, patterns and matching, routing, group window, placement, chrome, pinned window, auto-close, monitors change, restart (windows reopen), file kinds, test seam | 2026-11-18, amends FR.23.18, FR.24.7, FR.26.3, FR.26.5, FR.26.6 |
 | **FR.27.10** | typeable address in the browser bar | 2026-11-18, Architect feedback, amends FR.27.4 |
 | **FR.29.14**, **FR.29.15** | file controls in the title bar; resizable edges | 2026-11-18, Architect feedback, amend FR.29.7 and FR.29.5 |
-| UC/TC code PW | UC.PW.01–16, TC.PW.01–70 | no clash with the codes above |
+| UC/TC code PW | UC.PW.01–16, TC.PW.01–76 | no clash with the codes above |
+| **FR.2.14** | readable Markdown tables (session output, preview pane and windows, Focus cards) | 2026-11-19, Architect feedback; UC.MT.01, TC.MT.01–05 (new code MT) |
+| **FR.23.29** | references on expanded closed Focus items; a preview from a closed item is not tied to it | 2026-11-19, Architect feedback, amends FR.23.14, FR.23.18; UC.FC.04, TC.FC.11–13 |
+| **FR.26.7** | relative paths in assistant entries are marked and open on Ctrl+click | 2026-11-19, Architect feedback, amends FR.26.5; UC.LK.07, TC.LK.26–35 |
+| **FR.29.16** | placement with Snap (the actual rectangle) and monitor scaling | 2026-11-19, Architect feedback, amends FR.29.6, FR.29.11; TC.PW.71–76, UC.PW.04 A5 |
+| UC/TC code MT | UC.MT.01, TC.MT.01–05 (Markdown tables) | no clash with the codes above |
 | NR.6, NR.7 | E2E running, stretching rule | |
 | UC/TC codes | LP, TR, IN, CL, SH, TA, FC, HS | no clash with 15, 21, DL, FD, FV, IC, LC, RT, TG, WEB |
 

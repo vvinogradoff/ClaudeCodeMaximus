@@ -27,8 +27,8 @@ Related requirements: FR.29.1–FR.29.13, FR.27.1–FR.27.9, FR.6.10 (see `docs/
 
 ## UC.PW.04 — Place a group window once and get it back there
 **Main flow:** the first `.md` window opens centred on the largest monitor that does not hold the main window, at 60 % of its work area. The User moves it to the left of that monitor and makes it taller. The User closes it. The next `.md` item opens in exactly that place and size, on the same monitor.
-**Alternative flows:** **A1** — The User maximized the window: the next one opens maximized, on that monitor. **A2** — The remembered monitor is gone: the window opens centred on a monitor other than the main window's. **A3** — The User picks **Forget window positions**: the next window opens at the first-time position. **A4** — Windows moves a window because of a display change: that move is not remembered.
-**Covers:** FR.29.5, FR.29.6, FR.29.2.
+**Alternative flows:** **A1** — The User maximized the window: the next one opens maximized, on that monitor. **A2** — The remembered monitor is gone: the window opens centred on a monitor other than the main window's. **A3** — The User picks **Forget window positions**: the next window opens at the first-time position. **A4** — Windows moves a window because of a display change: that move is not remembered. **A5** — The User snaps the window to the right half of a monitor with Snap layouts (or drags it to a screen edge): the next window of the group opens in that half, at the same size, also when the monitors have different scales.
+**Covers:** FR.29.5, FR.29.6, FR.29.2, FR.29.16.
 
 ## UC.PW.05 — Preview a web page and sign in once
 **Main flow:** the User Ctrl+clicks a Slack link in the transcript. A window "<page title> - Slack" opens with the embedded browser and shows Slack's sign-in. The User signs in with the User's email code. Later the User opens another Slack link: the same window shows it, signed in. After a restart of Tessyn the sign-in is still there, and a GitHub link opens in the "Windows app" group's own window.

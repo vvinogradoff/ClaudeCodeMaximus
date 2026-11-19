@@ -22,12 +22,59 @@ public sealed class LocalPathDetectorTests
 
 	[Theory]
 	[InlineData(@"the folder C:\Projects\Tessyn is big")]
-	[InlineData(@"relative docs\plan.md")]
 	[InlineData("https://example.com/C:/a/b.png")]
 	[InlineData("/usr/local/bin/tool.sh")]
 	[InlineData("no paths here")]
 	[InlineData("")]
 	public void NotAFilePath_NoChip(string text) => Assert.Empty(_detector.Detect(text));
+
+	[Theory]
+	[InlineData("see docs/features/preview-windows.md for it", "docs/features/preview-windows.md")]
+	[InlineData(@"open code\App.xaml.cs now", @"code\App.xaml.cs")]
+	[InlineData("run ./src/a.ts.", "./src/a.ts")]
+	[InlineData(@"in ..\x\y.cs", @"..\x\y.cs")]
+	[InlineData("the .github/workflows/ci.yml file", ".github/workflows/ci.yml")]
+	[InlineData("see (docs/a.md)", "docs/a.md")]
+	[InlineData("**docs/a.md**", "docs/a.md")]
+	[InlineData("saved `docs/my notes/final plan.md` there", "docs/my notes/final plan.md")]
+	[InlineData("open \"docs/my notes/plan.md\" now", "docs/my notes/plan.md")]
+	[InlineData("see `README.md`", "README.md")]
+	[InlineData("It's fine; see docs/a.md. Don't worry.", "docs/a.md")]
+	[InlineData("The user's file is src/main.cs and the dev's note", "src/main.cs")]
+	[InlineData("see `Program.cs` and `obj.method`", "Program.cs")]
+	public void FindsRelativePaths(string text, string expected) => Assert.Equal([expected], _detector.Detect(text));
+
+	[Theory]
+	[InlineData("https://x/a.md")]
+	[InlineData("https://example.com/docs/a.md")]
+	[InlineData("example.com/page.html")]
+	[InlineData("www.example.org/a/b.html")]
+	[InlineData("v2.0 and 1.2.3 and 1.2.3/x")]
+	[InlineData("docs/plan")]
+	[InlineData("README.md is here")]
+	[InlineData("call `string.Empty` or `Console.WriteLine`")]
+	[InlineData("/usr/local/bin/tool.sh")]
+	[InlineData("it's fine, don't worry")]
+	[InlineData("call `obj.method` and `os.path` and `item.name`")]
+	[InlineData("see ~/docs/a.md")]
+	[InlineData("open localhost/docs/a.html")]
+	[InlineData("a [link](docs/a.md) and [t](docs/b.md \"title\")")]
+	public void NotARelativePath_NoMark(string text) => Assert.Empty(_detector.Detect(text));
+
+	[Fact]
+	public void AnAbsolutePathIsNotAlsoFoundAsARelativeOne()
+	{
+		Assert.Equal([@"C:\a\b\c.md"], _detector.Detect(@"see C:\a\b\c.md"));
+		Assert.Equal([@"\\srv\share\b\c.md"], _detector.Detect(@"see \\srv\share\b\c.md"));
+	}
+
+	[Fact]
+	public void RelativePathsFollowTheAbsoluteOnesAndAreMergedWithoutDuplicates()
+	{
+		var found = _detector.Detect(@"docs/a.md then C:\p\q.md then docs/a.md and `README.md`");
+
+		Assert.Equal([@"C:\p\q.md", "docs/a.md", "README.md"], found);
+	}
 
 	[Fact]
 	public void DuplicatesAreMergedAndTheCountIsCapped()
@@ -46,7 +93,13 @@ public sealed class LocalPathDetectorTests
 	[InlineData(@"\\srv\share\b.md", true)]
 	[InlineData(@"C:\a\b", false)]
 	[InlineData(@"C:\a\b.", false)]
-	[InlineData(@"a\b.md", false)]
+	[InlineData(@"a\b.md", true)]
+	[InlineData("docs/a.md", true)]
+	[InlineData("README.md", true)]
+	[InlineData("README", false)]
+	[InlineData("example.com/page.html", false)]
+	[InlineData("1.2.3/x", false)]
+	[InlineData("/a/b.md", false)]
 	[InlineData("C:\\a\\b.md\n", false)]
 	[InlineData(null, false)]
 	public void IsPathShaped_IsTheSameTestTheHostAppliesToAClickedPath(string? path, bool expected) => Assert.Equal(expected, _detector.IsPathShaped(path));

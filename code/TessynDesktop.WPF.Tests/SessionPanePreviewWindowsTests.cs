@@ -205,6 +205,28 @@ public sealed class SessionPanePreviewWindowsTests : IDisposable
 	}
 
 	[Fact]
+	public async Task FileRefOfAClosedItem_ReachesTheRouterWithNoFocusItem()
+	{
+		AddSession("a", 5);
+		_client.Attention["a"] =
+		[
+			new AttentionItemDto
+			{
+				Id = "A1", Number = 1, Kind = AttentionKind.Ask, Status = AttentionStatus.Answered, Title = "Q", CreatedUtc = DateTimeOffset.UnixEpoch,
+				ClosedUtc = DateTimeOffset.UnixEpoch, Refs = [new AttentionRefDto { Kind = "file", RefId = "ref1", Name = "plan.md" }],
+			},
+		];
+		await _pane.OpenAsync("a");
+		await _pane.Focus.WhenIdleAsync();
+		_router.TakesFiles = true;
+
+		await _pane.ActivateRefAsync(_pane.Focus.ClosedItems.Single().Refs.Single().Reference);
+
+		var (item, _) = Assert.Single(_router.Files);
+		Assert.Equal(("plan.md", "a", null), (item.FileName, item.SourceNodeId, item.SourceFocusItemId));
+	}
+
+	[Fact]
 	public async Task ClearingTheFocusView_NeverAnnouncesClosedItems()
 	{
 		AddSession("a", 5);

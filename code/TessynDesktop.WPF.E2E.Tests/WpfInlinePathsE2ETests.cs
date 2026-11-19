@@ -39,6 +39,8 @@ public sealed class WpfInlinePathsE2ETests : IDisposable
 		_notes = _env.WriteFile("out/notes.txt", "Some notes.\n");
 		_plan = _env.WriteFile("out/plan.md", "# The inline plan\n\nOpened by a Ctrl+click.\n");
 		_picture = _env.WriteFile("shots/pic.png", MakePng(240, 120));
+		_env.WriteFile("docs/rel-plan.md", "# The relative plan\n\nOpened by a Ctrl+click on a relative path.\n");
+		_env.WriteFile("shots/rel.png", MakePng(200, 100));
 		var missing = Path.Combine(_env.WorkDir, "shots", "gone.png");
 		var secret = Path.Combine(_env.UserProfile, ".ssh", "key.png");
 		Directory.CreateDirectory(Path.GetDirectoryName(secret)!);
@@ -47,7 +49,7 @@ public sealed class WpfInlinePathsE2ETests : IDisposable
 		_env.WriteBodies(
 			"what did you produce?",
 			$"The notes are in {_notes} and the plan is `{_plan}` as well. The screenshot is {_picture} and it shows the result; " +
-			$"a stale one was {missing} and a private one {secret}. Docs: [the docs](https://example.com/docs) end.");
+			$"a stale one was {missing} and a private one {secret}. Relative: docs/rel-plan.md and shots/rel.png (FR.26.7). Docs: [the docs](https://example.com/docs) end.");
 		_main = _env.Session.NodeId;
 
 		var activity = new ActivityByNodeService();
@@ -89,7 +91,7 @@ public sealed class WpfInlinePathsE2ETests : IDisposable
 		{
 			// No chip row any more: the paths are spans inside the paragraph, with the text around them.
 			Assert.Null(await page.EvalAsync("document.querySelector('.chips, button.chip')"));
-			Assert.Equal(5, (int)(await page.EvalAsync("document.querySelectorAll('.pth').length"))!);
+			Assert.Equal(7, (int)(await page.EvalAsync("document.querySelectorAll('.pth').length"))!);
 			Assert.True((bool)(await page.EvalAsync("document.querySelector('.pth').parentElement.textContent.startsWith('The notes are in ')"))!, "the path is not inside the sentence");
 			Assert.Contains("dotted", (string)(await page.EvalAsync("getComputedStyle(document.querySelector('.pth')).textDecorationStyle + ' ' + getComputedStyle(document.querySelector('.pth')).textDecorationLine"))!);
 
@@ -182,10 +184,40 @@ public sealed class WpfInlinePathsE2ETests : IDisposable
 			await WaitAsync("both hints", async () => (bool)(await page.EvalAsync("(() => { const t = Array.from(document.querySelectorAll('.pnote')).map(n => n.textContent); return t.includes('Image not allowed') && t.includes('Image unavailable'); })()"))!);
 
 			// Each hint sits in the slot of its own path, and only the allowed image became an <img>.
-			Assert.Equal(1, (int)(await page.EvalAsync("document.querySelectorAll('img.pimg').length"))!);
+			await WaitAsync("both allowed images to load", async () => (int)(await page.EvalAsync("document.querySelectorAll('img.pimg').length"))! == 2);
+			Assert.Equal(2, (int)(await page.EvalAsync("document.querySelectorAll('img.pimg').length"))!);   // the absolute picture and the relative one
 			Assert.Equal("Image unavailable", (string)(await page.EvalAsync("document.querySelectorAll('.pth')[3].nextElementSibling.textContent"))!);
 			Assert.Equal("Image not allowed", (string)(await page.EvalAsync("document.querySelectorAll('.pth')[4].nextElementSibling.textContent"))!);
 			Assert.DoesNotContain("Blocked a request to a foreign host", _app.ReadLog());
+			AssertNoErrors();
+		}
+		finally
+		{
+			Stop(process, page);
+		}
+	}
+
+	[Fact]
+	public async Task A_relative_path_opens_on_ctrl_click_through_the_daemon_and_a_relative_image_shows_inline()
+	{
+		var (process, page) = await StartAsync();
+		try
+		{
+			// Marked like an absolute path (dotted underline), written exactly as in the text.
+			Assert.Equal("docs/rel-plan.md", (string)(await page.EvalAsync("document.querySelectorAll('.pth')[5].textContent"))!);
+			Assert.Contains("dotted", (string)(await page.EvalAsync("getComputedStyle(document.querySelectorAll('.pth')[5]).textDecorationStyle"))!);
+
+			// A plain click opens nothing; Ctrl+left-click resolves it against the working directory and opens it.
+			var plan = await PointOfAsync(page, ".pth", 5);
+			await page.ClickAsync(plan.X, plan.Y);
+			await Task.Delay(1000);
+			Assert.DoesNotContain("Preview opened", _app.ReadLog());
+			await page.ClickAsync(plan.X, plan.Y, modifiers: Ctrl);
+			Assert.True(await _app.WaitForLogAsync(process, StepTimeout, "Preview opened: rel-plan.md (\"Markdown\",", "Preview page rendered markdown: true"), "The Ctrl+click on the relative path did not open the preview. Log:\n" + _app.ReadLog());
+
+			// The relative image shows inline, directly under its path.
+			await WaitAsync("the relative image to load", async () => (bool)(await page.EvalAsync("(() => { const i = document.querySelectorAll('img.pimg')[1]; return !!i && i.complete && i.naturalWidth === 200; })()"))!);
+			Assert.True((bool)(await page.EvalAsync("(() => { const p = document.querySelectorAll('.pth')[6], s = p.nextElementSibling; return s.classList.contains('pslot') && s.firstElementChild.tagName === 'IMG'; })()"))!, "the relative image slot does not follow its path");
 			AssertNoErrors();
 		}
 		finally
@@ -229,7 +261,7 @@ public sealed class WpfInlinePathsE2ETests : IDisposable
 		var process = _app.Start(CdpPage.EnvironmentFor(port));
 		Assert.True(await _app.WaitForLogAsync(process, StartTimeout, $"Session {_main} opened"), "The session did not open. Log:\n" + _app.ReadLog());
 		var page = await CdpPage.ConnectAsync(port, "transcript.html", StartTimeout);
-		await WaitAsync("the paths to render inline", async () => (int)(await page.EvalAsync("document.querySelectorAll('.pth').length"))! == 5);
+		await WaitAsync("the paths to render inline", async () => (int)(await page.EvalAsync("document.querySelectorAll('.pth').length"))! == 7);
 		return (process, page);
 	}
 

@@ -22,5 +22,8 @@ public sealed class PreviewPlacementModel
 
 	public int MonitorTop { get; set; }
 
+	/// <summary>DPI of that monitor when saved (96 = 100 %); 0 for a placement saved before it was kept: the size is then used as it is (FR.29.16).</summary>
+	public int Dpi { get; set; }
+
 	public WindowPlacementModel ToWindowPlacement() => new() { Left = Left, Top = Top, Width = Width, Height = Height, Maximized = Maximized };
 }

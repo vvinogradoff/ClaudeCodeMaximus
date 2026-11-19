@@ -8,12 +8,13 @@ namespace TessynDesktop.WPF.State;
 /// <c>GetWindowPlacement</c> uses, so remembered and clamped values are directly comparable.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-public sealed class Win32WindowPlacement
+public sealed class Win32WindowPlacement : IWindowPlacementApi
 {
 	private const int ShowNormal = 1;
 	private const int ShowMaximized = 3;
 	private const int ShowMinimized = 2;
 	private const uint PrimaryMonitorFlag = 1;
+	private const uint SpiGetWorkArea = 0x0030;
 
 	/// <summary>The window's normal (restored) placement and whether it is maximized; null when it cannot be read.</summary>
 	public WindowPlacementModel? Capture(IntPtr hwnd)
@@ -31,6 +32,42 @@ public sealed class Win32WindowPlacement
 			Height = rect.Bottom - rect.Top,
 			Maximized = placement.showCmd == ShowMaximized,
 		};
+	}
+
+	/// <summary>True when the window is neither minimized nor maximized.</summary>
+	public bool IsRestored(IntPtr hwnd)
+	{
+		var placement = new WINDOWPLACEMENT { length = Marshal.SizeOf<WINDOWPLACEMENT>() };
+		return GetWindowPlacement(hwnd, ref placement) && placement.showCmd == ShowNormal;
+	}
+
+	/// <summary>
+	/// Where the window is now (<c>GetWindowRect</c>), in workspace coordinates. Unlike <c>rcNormalPosition</c> this is right for a window Windows arranged (Snap), and it is
+	/// the same outer rectangle <c>SetWindowPlacement</c> takes back, so it round-trips (the extended frame bounds would leave out the invisible resize frame).
+	/// </summary>
+	public WindowPlacementModel? GetActualRectangle(IntPtr hwnd)
+	{
+		if (!GetWindowRect(hwnd, out var rect))
+			return null;
+
+		var work = new RECT();
+		if (!SystemParametersInfo(SpiGetWorkArea, 0, ref work, 0))
+			return null;
+
+		return new WindowPlacementModel { Left = rect.Left - work.Left, Top = rect.Top - work.Top, Width = rect.Right - rect.Left, Height = rect.Bottom - rect.Top };
+	}
+
+	/// <summary>The DPI of the monitor the window is on; 0 when it cannot be read.</summary>
+	public int GetDpi(IntPtr hwnd)
+	{
+		try
+		{
+			return (int)GetDpiForWindow(hwnd);
+		}
+		catch (EntryPointNotFoundException)
+		{
+			return 0;
+		}
 	}
 
 	/// <summary>Moves and sizes the window to <paramref name="model"/> (maximized when remembered so).</summary>
@@ -113,6 +150,17 @@ public sealed class Win32WindowPlacement
 	[DllImport("user32.dll")]
 	[return: MarshalAs(UnmanagedType.Bool)]
 	private static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+	[DllImport("user32.dll")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+	[DllImport("user32.dll")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref RECT pvParam, uint fWinIni);
+
+	[DllImport("user32.dll")]
+	private static extern uint GetDpiForWindow(IntPtr hWnd);
 
 	[DllImport("user32.dll")]
 	[return: MarshalAs(UnmanagedType.Bool)]

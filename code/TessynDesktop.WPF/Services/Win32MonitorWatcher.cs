@@ -17,6 +17,7 @@ public sealed class Win32MonitorWatcher : IMonitorWatcher, IDisposable
 	private const uint PrimaryMonitorFlag = 1;
 	private const uint DefaultToNearest = 2;
 	private const int DeviceNameLength = 32;
+	private const int EffectiveDpi = 0;
 
 	private readonly IUiDispatcher _dispatcher;
 	private readonly Timer _debounce;
@@ -102,11 +103,15 @@ public sealed class Win32MonitorWatcher : IMonitorWatcher, IDisposable
 	private static IReadOnlyList<MonitorInfo> Read()
 	{
 		var raw = new List<MONITORINFOEX>();
+		var dpis = new Dictionary<string, int>();
 		EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr monitor, IntPtr dc, ref RECT rect, IntPtr data) =>
 		{
 			var info = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
-			if (GetMonitorInfo(monitor, ref info))
-				raw.Add(info);
+			if (!GetMonitorInfo(monitor, ref info))
+				return true;
+
+			raw.Add(info);
+			dpis[info.szDevice] = DpiOf(monitor);
 			return true;
 		}, IntPtr.Zero);
 
@@ -123,8 +128,26 @@ public sealed class Win32MonitorWatcher : IMonitorWatcher, IDisposable
 			.Select(m => new MonitorInfo(
 				m.szDevice,
 				new MonitorBounds(m.rcWork.Left - originX, m.rcWork.Top - originY, m.rcWork.Right - m.rcWork.Left, m.rcWork.Bottom - m.rcWork.Top),
-				(m.dwFlags & PrimaryMonitorFlag) != 0))
+				(m.dwFlags & PrimaryMonitorFlag) != 0,
+				dpis.GetValueOrDefault(m.szDevice)))
 			.ToList();
+	}
+
+	/// <summary>The effective DPI of a monitor (96 = 100 %); 0 when Windows cannot tell.</summary>
+	private static int DpiOf(IntPtr monitor)
+	{
+		try
+		{
+			return GetDpiForMonitor(monitor, EffectiveDpi, out var dpiX, out _) == 0 ? (int)dpiX : 0;
+		}
+		catch (DllNotFoundException)
+		{
+			return 0;
+		}
+		catch (EntryPointNotFoundException)
+		{
+			return 0;
+		}
 	}
 
 	private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr dc, ref RECT rect, IntPtr data);
@@ -157,6 +180,9 @@ public sealed class Win32MonitorWatcher : IMonitorWatcher, IDisposable
 	[DllImport("user32.dll", CharSet = CharSet.Unicode)]
 	[return: MarshalAs(UnmanagedType.Bool)]
 	private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+	[DllImport("shcore.dll")]
+	private static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
 
 	[DllImport("user32.dll")]
 	private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
