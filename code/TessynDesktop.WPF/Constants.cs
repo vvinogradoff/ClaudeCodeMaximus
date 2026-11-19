@@ -148,8 +148,6 @@ public static partial class Constants
 		public const double MinTreeWidth = 160;
 		public const double OffScreenCoordinate = -32000;
 		public const double MaxTreeWidth = 2000;
-		public const double DefaultSidePaneWidth = 400;
-		public const double MinSidePaneWidth = 280;
 		public const int PreviewChunkBytes = 512 * 1024;
 		public const long MaxPreviewTextBytes = 2L * 1024 * 1024;
 		public const long MaxPreviewImageBytes = 25L * 1024 * 1024;

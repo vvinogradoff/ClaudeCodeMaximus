@@ -79,13 +79,6 @@
                         <TextBlock Text="Back" Margin="6,0,0,0" />
                     </StackPanel>
                 </Button>
-                <Button DockPanel.Dock="Right" Command="{Binding ToggleSideCommand}" Margin="8,0,0,0" Padding="8,6" ToolTip="Show or hide the preview pane"
-                        Visibility="{Binding HasSideContent, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Preview pane">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="{StaticResource GlyphFile}" />
-                        <TextBlock Text="Preview" Margin="6,0,0,0" />
-                    </StackPanel>
-                </Button>
                 <!-- Session / Focus switch (FR.23.12): exactly one side is checked; the Focus badge shows while Session is selected (FR.23.13) -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
                     <RadioButton x:Name="SessionViewButton" GroupName="SessionFocusView" Style="{StaticResource SegmentButton}" Content="Session"
@@ -187,23 +180,12 @@
 
         <!-- Transcript -->
         <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="240" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition x:Name="SideColumn" Width="0" />
-            </Grid.ColumnDefinitions>
-            <Grid Grid.Column="0" x:Name="TranscriptHost" Visibility="{Binding IsFocusSelected, Converter={StaticResource InvertedBoolToVis}}">
+            <Grid x:Name="TranscriptHost" Visibility="{Binding IsFocusSelected, Converter={StaticResource InvertedBoolToVis}}">
                 <wv2:WebView2 x:Name="Transcript" />
             </Grid>
             <!-- The Focus view replaces the transcript while it is selected (FR.23.12); the transcript is hidden, not unloaded -->
-            <Grid Grid.Column="0" x:Name="FocusHost" Visibility="{Binding IsFocusSelected, Converter={StaticResource BoolToVis}}">
+            <Grid x:Name="FocusHost" Visibility="{Binding IsFocusSelected, Converter={StaticResource BoolToVis}}">
                 <v:FocusPanel x:Name="FocusView" DataContext="{Binding Focus}" />
-            </Grid>
-
-            <!-- Side pane: the file preview while one is open (WebView2 cannot be overlapped, so it has its own cell). -->
-            <GridSplitter Grid.Column="1" x:Name="SideSplitter" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Visibility="Collapsed" />
-            <Grid Grid.Column="2" x:Name="SidePane" Visibility="Collapsed">
-                <v:FilePreviewPane DataContext="{Binding Preview}" Visibility="{Binding IsOpen, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
             </Grid>
         </Grid>
 

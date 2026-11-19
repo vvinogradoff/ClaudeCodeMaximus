@@ -74,12 +74,11 @@ public sealed class FocusViewBindingTests
 		Descendants<FocusCardText>(panel).Count(t => t.Visibility == Visibility.Visible && t.ParagraphMetrics.Count > (t.PlainText.Contains("Answered:") || t.PlainText.Contains("Dismissed") ? 2 : 1));
 
 	[Fact]
-	public void SessionPane_WithFocusItemsAndAPreview_BindsWithoutBindingErrors_AndShowsTheSideColumn()
+	public void SessionPane_WithFocusItemsAndAPreview_BindsWithoutBindingErrors_AndHasNoSidePane()
 	{
 		var listener = new BindingErrorListener();
 		var cardTexts = new List<string>();
-		var sideVisible = false;
-		var sideWidth = 0.0;
+		var sideGone = false;
 		var markdownBlocks = 0;
 		using var temp = new TempAppPaths();
 		StaTestRunner.Run(() =>
@@ -123,9 +122,7 @@ public sealed class FocusViewBindingTests
 			pane.Notice = "Something to know";
 			Layout(view);
 
-			var side = (Grid)view.FindName("SidePane");
-			sideVisible = side.Visibility == Visibility.Visible;
-			sideWidth = ((ColumnDefinition)view.FindName("SideColumn")).ActualWidth;
+			sideGone = view.FindName("SidePane") == null && view.FindName("SideColumn") == null && view.FindName("SideSplitter") == null;   // FR.29.18: the default Preview panel of the docking area replaced the side pane
 			var panel = Descendants<FocusPanel>(view).Single();
 			cardTexts.AddRange(Texts(panel));
 			cardTexts.AddRange(Descendants<TextBlock>((DependencyObject)view.FindName("SendAnswersButton")).Select(t => t.Text));   // "Send answers (n)" now lives in the session header (FR.23.14)
@@ -133,8 +130,7 @@ public sealed class FocusViewBindingTests
 		});
 
 		Assert.Empty(listener.Errors);
-		Assert.True(sideVisible);
-		Assert.True(sideWidth >= Constants.Limits.MinSidePaneWidth);
+		Assert.True(sideGone);
 		Assert.Contains("Which database?", cardTexts);
 		Assert.Contains("Disk is full", cardTexts);
 		Assert.Contains("A1", cardTexts);

@@ -14,7 +14,6 @@ namespace TessynDesktop.WPF.Views;
 public partial class SessionPane : UserControl
 {
 	private SessionPaneViewModel? _subscribed;
-	private double _sideWidth = Constants.Limits.DefaultSidePaneWidth;
 	private readonly FileDropReader _fileDrops = new();
 	private bool _caretIsOurs;
 
@@ -106,7 +105,6 @@ public partial class SessionPane : UserControl
 			_subscribed.PropertyChanged += OnViewModelPropertyChanged;
 		}
 
-		ApplySidePane();
 		ApplyInputArea();
 	}
 
@@ -219,37 +217,11 @@ public partial class SessionPane : UserControl
 
 	private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
-		if (e.PropertyName == nameof(SessionPaneViewModel.IsSidePaneVisible))
-			ApplySidePane();
-
 		if (e.PropertyName == nameof(SessionPaneViewModel.IsInputCollapsed))
 			ApplyInputArea();
 
 		if (e.PropertyName == nameof(SessionPaneViewModel.IsLoading))
 			TryTestDrop();
-	}
-
-	/// <summary>Opens or closes the side column; the width the user dragged it to is kept while the pane is hidden.</summary>
-	private void ApplySidePane()
-	{
-		var visible = _subscribed?.IsSidePaneVisible == true;
-		if (visible == (SidePane.Visibility == Visibility.Visible))
-			return;
-
-		SidePane.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-		SideSplitter.Visibility = SidePane.Visibility;
-		if (visible)
-		{
-			SideColumn.MinWidth = Constants.Limits.MinSidePaneWidth;
-			SideColumn.Width = new GridLength(_sideWidth);
-		}
-		else
-		{
-			if (SideColumn.ActualWidth > 0)
-				_sideWidth = SideColumn.ActualWidth;
-			SideColumn.MinWidth = 0;
-			SideColumn.Width = new GridLength(0);
-		}
 	}
 
 	private void OnFindFocusRequested(object? sender, EventArgs e)

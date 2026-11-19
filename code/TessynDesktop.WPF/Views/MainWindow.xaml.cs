@@ -11,7 +11,7 @@ using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Views;
 
-/// <summary>The main window: banner, tree, session pane and status bar. Restores and remembers its placement and splitter.</summary>
+/// <summary>The main window: banner, tree, the docking area (session pane and docked preview panels) and status bar. Restores and remembers its placement and splitter.</summary>
 /// <remarks>Created by Claude</remarks>
 public partial class MainWindow : Window
 {
@@ -31,7 +31,7 @@ public partial class MainWindow : Window
 	private readonly CancellationTokenSource _lifetime = new();
 	private readonly DispatcherTimer _placementTimer;
 
-	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands, TitleBarViewModel titleBar, ScreensaverController screensaver, SettingsHost settings, ILogger<MainWindow> logger, IPreviewRouter? previews = null)
+	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands, TitleBarViewModel titleBar, ScreensaverController screensaver, SettingsHost settings, ILogger<MainWindow> logger, DockingSurfaceHost dockingSurface, IAppearanceService appearance, IPreviewRouter? previews = null)
 	{
 		_previews = previews;
 		_settings = settings;
@@ -47,6 +47,10 @@ public partial class MainWindow : Window
 		if (_testWindow)
 			PrepareTestWindow();
 
+		Docking.SessionView.DataContext = viewModel.Session;
+		dockingSurface.Register(Docking);   // the docked preview panels are placed in this docking area (FR.29.19)
+		Docking.ApplyTheme(appearance.IsDark);
+		appearance.Changed += (_, _) => Dispatcher.BeginInvoke(() => Docking.ApplyTheme(appearance.IsDark));
 		TitleBarView.DataContext = titleBar;
 		Screensaver.Covered = ContentGrid;   // the WebView2 windows cannot be painted over, so the content under the cover is hidden while it is up
 		Screensaver.Attach(screensaver, logger);

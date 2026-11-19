@@ -182,7 +182,6 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		];
 		await _pane.OpenAsync("a");
 		await _pane.Focus.WhenIdleAsync();
-		Assert.False(_pane.HasSideContent);              // the Focus view has its own place; the side pane is for previews (FR.23.12)
 		Assert.Equal(1, _pane.FocusBadge);
 		Assert.True(_pane.IsFocusBadgeVisible);
 
@@ -202,15 +201,11 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		AddSession("a", 5);
 		_client.Files["ref1"] = ("plan.md", "text/markdown", System.Text.Encoding.UTF8.GetBytes("# The plan\n\n- step one"));
 		await _pane.OpenAsync("a");
-		_pane.ToggleSideCommand.Execute(null);
-		Assert.False(_pane.IsSidePaneVisible);
-
 		await _pane.ActivateRefAsync(new AttentionRefDto { Kind = "file", RefId = "ref1", Name = "plan.md", Path = "docs/plan.md" });
 
 		Assert.True(_pane.Preview!.IsOpen);
 		Assert.Equal("plan.md", _pane.Preview.Title);
 		Assert.Contains("<h1>The plan</h1>", _previewSurface.LastHtml);
-		Assert.True(_pane.IsSidePaneVisible);          // opening a preview shows the side pane again
 		Assert.Contains("file.read:ref1:0:" + Constants.Limits.PreviewChunkBytes, _client.Calls);
 	}
 
@@ -604,7 +599,7 @@ public sealed class SessionPaneNavigationTests : IDisposable
 	}
 
 	[Fact]
-	public async Task OpeningASession_ShowsItsFocusItems_AndASideContentFlag()
+	public async Task OpeningASession_ShowsItsFocusItems()
 	{
 		AddSession("a", 5);
 		AddSession("b", 5);
@@ -613,12 +608,9 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		await _pane.OpenAsync("a");
 		await _pane.Focus.WhenIdleAsync();
 		Assert.Single(_pane.Focus.Items);
-		Assert.False(_pane.HasSideContent);     // only a preview fills the side pane
 
 		await _pane.OpenAsync("b");
 		await _pane.Focus.WhenIdleAsync();
 		Assert.Empty(_pane.Focus.Items);
-		Assert.False(_pane.HasSideContent);
-		Assert.False(_pane.IsSidePaneVisible);
 	}
 }

@@ -134,9 +134,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		Preview = preview;
 		Focus.RefActivated += OnRefActivated;
 		Focus.PathActivated += OnFocusPathActivated;
-		Focus.PropertyChanged += OnSideContentChanged;
-		if (Preview != null)
-			Preview.PropertyChanged += OnSideContentChanged;
+		Focus.PropertyChanged += OnFocusPropertyChanged;
 		_surface.ViewChanged += OnViewChanged;
 		_surface.PathClicked += OnPathClicked;
 		_surface.PathImageRequested += OnPathImageRequested;
@@ -840,9 +838,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		UnhookPreviewRouter();
 		Focus.RefActivated -= OnRefActivated;
 		Focus.PathActivated -= OnFocusPathActivated;
-		Focus.PropertyChanged -= OnSideContentChanged;
-		if (Preview != null)
-			Preview.PropertyChanged -= OnSideContentChanged;
+		Focus.PropertyChanged -= OnFocusPropertyChanged;
 		Focus.Dispose();
 		Preview?.Dispose();
 	}

@@ -38,21 +38,11 @@ public sealed partial class SessionPaneViewModel
 	[ObservableProperty]
 	private string? _notice;
 
-	/// <summary>The user hid the side pane; opening a preview shows it again.</summary>
-	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsSidePaneVisible))]
-	private bool _sideCollapsed;
-
 	/// <summary>Raised after a jump or Back opened a session (argument: its node id), so the tree can select it without reopening it.</summary>
 	public event EventHandler<string>? Navigated;
 
 	/// <summary>There is a place to go back to.</summary>
 	public bool CanGoBack => _back.Count > 0;
-
-	/// <summary>The side pane has something to show: a file preview (the Focus view has its own place, FR.23.12).</summary>
-	public bool HasSideContent => Preview?.IsOpen == true;
-
-	public bool IsSidePaneVisible => HasSideContent && !SideCollapsed;
 
 	/// <summary>Number shown on the Focus toggle: open items other than Decided.</summary>
 	public int FocusBadge => Focus.OpenCount;
@@ -69,23 +59,15 @@ public sealed partial class SessionPaneViewModel
 		BackCommand.NotifyCanExecuteChanged();
 	}
 
-	private void OnSideContentChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	private void OnFocusPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
-		if (e.PropertyName == nameof(FilePreviewViewModel.IsOpen) && Preview?.IsOpen == true)
-			SideCollapsed = false;
-
-		if (e.PropertyName is nameof(FocusViewModel.HasItems) or nameof(FocusViewModel.OpenCount) or nameof(FocusViewModel.TopOpenKind) or nameof(FilePreviewViewModel.IsOpen))
+		if (e.PropertyName is nameof(FocusViewModel.HasItems) or nameof(FocusViewModel.OpenCount) or nameof(FocusViewModel.TopOpenKind))
 		{
-			OnPropertyChanged(nameof(HasSideContent));
-			OnPropertyChanged(nameof(IsSidePaneVisible));
 			OnPropertyChanged(nameof(FocusBadge));
 			OnPropertyChanged(nameof(FocusBadgeKind));
 			OnPropertyChanged(nameof(IsFocusBadgeVisible));
 		}
 	}
-
-	[RelayCommand]
-	private void ToggleSide() => SideCollapsed = !SideCollapsed;
 
 	[RelayCommand]
 	private void DismissNotice() => Notice = null;
