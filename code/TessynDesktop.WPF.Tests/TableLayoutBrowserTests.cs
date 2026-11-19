@@ -17,7 +17,7 @@ public sealed class TableLayoutBrowserTests : IDisposable
 	private const string MeasureScript = """
 		<script>
 		function words(td){var out=[];var w=document.createTreeWalker(td,NodeFilter.SHOW_TEXT);var n;while(n=w.nextNode()){var cs=getComputedStyle(n.parentElement);
-		n.textContent.split(/\s+/).filter(Boolean).forEach(function(x){var s=document.createElement('span');s.style.cssText='position:absolute;visibility:hidden;white-space:nowrap;font:'+cs.font;s.textContent=x;document.body.appendChild(s);out.push({t:x,w:s.getBoundingClientRect().width});s.remove();});}return out;}
+		n.textContent.split(/\s+|(?<=-)/).filter(Boolean).forEach(function(x){var s=document.createElement('span');s.style.cssText='position:absolute;visibility:hidden;white-space:nowrap;font:'+cs.font;s.textContent=x;document.body.appendChild(s);out.push({t:x,w:s.getBoundingClientRect().width});s.remove();});}return out;}
 		var bad=[],tables=[],host=document.querySelector('#host');
 		document.querySelectorAll('table').forEach(function(t){var scrolls=t.scrollWidth>t.clientWidth+1,cells=0;
 		t.querySelectorAll('th,td').forEach(function(td){cells++;var cs=getComputedStyle(td),inner=td.getBoundingClientRect().width-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight)-parseFloat(cs.borderLeftWidth)-parseFloat(cs.borderRightWidth);
@@ -43,21 +43,11 @@ public sealed class TableLayoutBrowserTests : IDisposable
 		}
 	}
 
-	private static string RepoFile(string relative)
-	{
-		for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
-		{
-			var candidate = Path.Combine(dir.FullName, relative);
-			if (File.Exists(candidate))
-				return candidate;
-		}
-
-		throw new FileNotFoundException(relative);
-	}
-
 	private static string Web(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Web", name));
 
-	private static string Html(string markdownFile) => new MarkdigEntryRenderer(new UrlPolicy()).RenderMarkdown(File.ReadAllText(RepoFile(markdownFile)));
+	/// <summary>The frozen copies of two docs with real tables (<c>TestData/tables</c>): a doc edit must not break a layout test.</summary>
+	private static string Html(string markdownFile, [System.Runtime.CompilerServices.CallerFilePath] string here = "") =>
+		new MarkdigEntryRenderer(new UrlPolicy()).RenderMarkdown(File.ReadAllText(Path.Combine(Path.GetDirectoryName(here)!, "TestData", "tables", markdownFile)));
 
 	/// <summary>The page's CSS and body, with the measuring script; the host element holds the rendered markdown.</summary>
 	private static string PreviewPage(string rendered)
@@ -174,7 +164,7 @@ public sealed class TableLayoutBrowserTests : IDisposable
 	[EdgeFact]
 	public void TheTcPwTable_ScrollsInItsOwnBox_WhenTheViewIsTooNarrow()
 	{
-		var html = Html("docs/testcases/TC.PW.01-Preview-Windows.md");
+		var html = Html("TC.PW.01-tables.md");
 		var preview = Measure(PreviewPage(html), 300);
 		var transcript = Measure(TranscriptPage(html), 300);
 		if (preview == null || transcript == null)
@@ -190,10 +180,10 @@ public sealed class TableLayoutBrowserTests : IDisposable
 	public sealed record TableBox(int Cells, bool Scrolls, double BoxWidth);
 
 	[EdgeTheory]
-	[InlineData("docs/testcases/TC.PW.01-Preview-Windows.md", 1000)]
-	[InlineData("docs/testcases/TC.PW.01-Preview-Windows.md", 420)]
-	[InlineData("docs/features/preview-windows.md", 1000)]
-	[InlineData("docs/features/preview-windows.md", 420)]
+	[InlineData("TC.PW.01-tables.md", 1000)]
+	[InlineData("TC.PW.01-tables.md", 420)]
+	[InlineData("preview-windows-tables.md", 1000)]
+	[InlineData("preview-windows-tables.md", 420)]
 	public void Preview_EveryColumnKeepsItsLongestWord_AndAWideTableScrollsInItsOwnBox(string file, int width)
 	{
 		var report = Measure(PreviewPage(Html(file)), width);
@@ -207,10 +197,10 @@ public sealed class TableLayoutBrowserTests : IDisposable
 	}
 
 	[EdgeTheory]
-	[InlineData("docs/testcases/TC.PW.01-Preview-Windows.md", 900)]
-	[InlineData("docs/testcases/TC.PW.01-Preview-Windows.md", 420)]
-	[InlineData("docs/features/preview-windows.md", 900)]
-	[InlineData("docs/features/preview-windows.md", 420)]
+	[InlineData("TC.PW.01-tables.md", 900)]
+	[InlineData("TC.PW.01-tables.md", 420)]
+	[InlineData("preview-windows-tables.md", 900)]
+	[InlineData("preview-windows-tables.md", 420)]
 	public void Transcript_EveryColumnKeepsItsLongestWord_AndTheEntryNeverScrollsSideways(string file, int width)
 	{
 		var report = Measure(TranscriptPage(Html(file)), width);
