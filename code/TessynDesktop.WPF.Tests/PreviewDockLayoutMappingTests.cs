@@ -161,4 +161,22 @@ public sealed class PreviewDockLayoutMappingTests
 			Assert.Equal(500, floating.FloatingPlacement!.Width);
 		});
 	}
+
+	[Fact]
+	public void APreviewTabbedIntoTheDocumentPane_KeepsItsLastDockedSide_AndNeverThrows()
+	{
+		var surface = new TestDockingSurface();
+		var panel = Panel("images");
+		_applier.Apply(surface.Root, surface.DocumentPane, panel, new PreviewDockLayoutModel { Side = PreviewDockSide.Left, Size = 300 }, 1000, 600);
+		var docked = _reader.Read(panel, surface.DocumentPane);
+
+		((ILayoutContainer)panel.Parent!).RemoveChild(panel);
+		surface.DocumentPane.InsertChildAt(1, panel);   // dropped onto the centre of the session pane
+
+		var tabbed = _reader.Read(panel, surface.DocumentPane, docked);
+		Assert.Equal(PreviewDockSide.Left, tabbed.Side);
+		Assert.False(tabbed.Floating);
+		Assert.Equal(PreviewDockSide.Right, _reader.Read(panel, surface.DocumentPane).Side);   // nothing known before: the default
+		Assert.Equal(2, surface.DocumentPane.ChildrenCount);
+	}
 }
