@@ -1,6 +1,6 @@
 # TC.HS.01 — WPF Client Hosting and Coexistence
 
-Related requirements: FR.32.1–FR.32.8. Use cases: [UC.HS.01](/docs/usecases/UC.HS.01-Client-Hosting.md).
+Related requirements: FR.32.1–FR.32.14. Use cases: [UC.HS.01](/docs/usecases/UC.HS.01-Client-Hosting.md).
 
 **Legend.** AUTOMATED = unit / integration (WPF.Tests, Core tests, real PowerShell for scripts); MANUAL = checked by hand in the real apps (they were not started in the work reports; the checklist is in `.wpf-work\471-side-by-side.md` section 7 and `458-wpf-daily-switch.md` section 3).
 
@@ -28,6 +28,14 @@ Related requirements: FR.32.1–FR.32.8. Use cases: [UC.HS.01](/docs/usecases/UC
 | TC.HS.20 | The daemon source paths come from the host project references, transitively | AUTOMATED | UC.HS.07 | FR.32.9 |
 | TC.HS.21 | Unknown commit, no git, a commit missing from the repo, or a git timeout: the time rule of FR.32.7 decides | AUTOMATED | UC.HS.07 | FR.32.9 |
 | TC.HS.22 | The check runs off the UI thread and logs both commits and the decision | AUTOMATED | UC.HS.07 | FR.32.9 |
+| TC.HS.23 | *Start daemon elevated*: default off, stored in `daemonHost`, an older settings file without it reads as off, the Settings close guard (FR.4.7) sees an unsaved change | AUTOMATED | UC.HS.08 | FR.32.10 |
+| TC.HS.24 | Launcher: with the setting on the host is started through the administrator prompt (`runas`, no pipes), off it starts as before; the newest build is copied first in both ways | AUTOMATED | UC.HS.08 | FR.32.10 |
+| TC.HS.25 | Declined prompt (`ERROR_CANCELLED`) and a failed elevated start: a normal start, the notice text, no second prompt from the connect loop until the next start; Restart daemon elevated prompts again | AUTOMATED | UC.HS.08 | FR.32.13 |
+| TC.HS.26 | Restart daemon elevated and Restart daemon normal: the confirmation names the running sessions; Cancel changes nothing; exit, wait, start the chosen way, reconnect; the connect loop starts no host meanwhile; the client does not restart; works with *Start the background daemon* off | AUTOMATED | UC.HS.08 | FR.32.11 |
+| TC.HS.27 | The stale banner's Restart daemon keeps the way the daemon runs (elevated comes back elevated, normal comes back normal) | AUTOMATED | UC.HS.08 | FR.32.11 |
+| TC.HS.28 | `client.hello` `elevated`: the Startup status text for both values, nothing without it (older daemon) or without a connection; the banner shows only with the setting on and a normal daemon, and goes when either changes | AUTOMATED | UC.HS.08 | FR.32.12 |
+| TC.HS.29 | Elevated host and normal WPF: the exit event accepts a signal from a normal process (its security descriptor allows the User's normal processes), and the build check reads the host folder without reading the process | AUTOMATED | UC.HS.08 | FR.32.14 |
+| TC.HS.30 | Real elevation (the administrator prompt cannot be scripted): from a normal WPF, Restart daemon elevated shows the prompt; after approval a session's `whoami /groups` shows `High Mandatory Level`; files dropped from Explorer are accepted; the stale banner appears for an elevated host; the tray icon and *Exit Tessyn daemon* work; Restart daemon normal returns `Medium Mandatory Level`; declining the prompt gives the notice and a normal daemon | MANUAL | UC.HS.08 | FR.32.10–FR.32.14 |
 
 ## FR → TC coverage
 | FR | Test cases |
@@ -41,3 +49,8 @@ Related requirements: FR.32.1–FR.32.8. Use cases: [UC.HS.01](/docs/usecases/UC
 | FR.32.7 | TC.HS.07 |
 | FR.32.8 | TC.HS.04 |
 | FR.32.9 | TC.HS.16–22 |
+| FR.32.10 | TC.HS.23, 24, 30 |
+| FR.32.11 | TC.HS.26, 27, 30 |
+| FR.32.12 | TC.HS.28, 30 |
+| FR.32.13 | TC.HS.25, 30 |
+| FR.32.14 | TC.HS.29, 30 |

@@ -35,3 +35,40 @@
 4. **Fallback.** When either commit is unknown, git is not available, a commit is not in the repository, or git fails or takes longer than 5 s, the FR.32.7 time rule decides, as before.
 - **Off the UI thread.** The check runs in the background at connect and after each self-update check (FR.32.3); it never blocks the window. The result is logged (both commits, the decision and its reason).
 - **Restart daemon** and its confirmation are unchanged.
+
+## Additions (2026-11-19): the daemon elevated, WPF normal
+
+> **Why.** When WPF itself runs as administrator, Windows refuses drag-and-drop from Explorer into it (a normal program may not drop into an elevated one), and every session runs elevated whether it needs to or not. Some work does need it: the WPF end-to-end runner `tools\e2e\Run-WpfE2E.ps1` needs an elevated caller (NR.6), and so do administrator tasks a session is asked to do. So **WPF always runs normally**, and the **daemon host** runs elevated only when the User chooses so. Windows elevates a program only through its administrator prompt (UAC), and a program started that way cannot have its input and output piped to a normal one. The host is started without pipes, so it can be elevated as a whole; everything it starts (each session's `claude` process and its tools) runs elevated with it. Elevating single sessions is not part of this. Use case: [UC.HS.08](/docs/usecases/UC.HS.01-Client-Hosting.md). Test cases: TC.HS.23–TC.HS.30.
+
+**FR.32.10 — Start daemon elevated (setting).** Settings tab **Startup**, below *Start the background daemon when none is running* (FR.32.5): checkbox **Start daemon elevated**, **default off**, stored with that setting (client settings section `daemonHost`).
+- **On:** when WPF starts the host (FR.32.5), it starts it through the Windows administrator prompt, so the host and everything it starts run as administrator.
+- **Off:** the host starts normally, as before.
+- The setting only decides how WPF starts a host. WPF never restarts a running daemon because of it (FR.32.6; for a daemon that runs normally see the banner of FR.32.12). A change counts at the next start.
+- WPF itself never runs elevated because of this setting.
+
+**FR.32.11 — Restart daemon elevated, Restart daemon normal.** Settings tab **Startup** has two buttons: **Restart daemon elevated** and **Restart daemon normal**.
+- Each asks first, as *Restart daemon* does (FR.32.7): the confirmation names the running sessions, which are terminated. Cancel changes nothing.
+- Confirmed: WPF asks the daemon to exit, waits for it, starts the host from `host\` the chosen way (refreshed from the newest build first, as on every start; elevated through the administrator prompt) and reconnects (FR.32.6). While the restart runs, WPF does not start a host by itself (FR.32.5), so no normal host gets in between. WPF itself does not restart.
+- The buttons work whatever *Start the background daemon when none is running* says and whichever way the daemon runs now (a normal WPF can end an elevated daemon, FR.32.14).
+- The daemon keeps the chosen way until it ends. *Start daemon elevated* decides only how WPF starts the next host by itself.
+- *Restart daemon* on the stale banner (FR.32.7) restarts the daemon the way it runs now: an elevated daemon comes back elevated, through the administrator prompt.
+
+**FR.32.12 — Which way the daemon runs.** The daemon reports whether it runs elevated (`client.hello`, member `elevated`, tdcp-spec 10.A10).
+- Settings tab **Startup** shows **"The daemon runs elevated (as administrator)."** or **"The daemon runs normally."**; nothing while no daemon is connected or when the daemon does not report it (an older host).
+- When *Start daemon elevated* is on and WPF is connected to a daemon that runs normally (one started before the setting was turned on, started by hand, or started after a declined prompt), a banner says **"The daemon runs normally, but Start daemon elevated is on."** with **Restart daemon elevated** (FR.32.11). WPF never restarts it without the User. The banner goes when the daemon runs elevated or the setting is turned off.
+
+**FR.32.13 — A declined or failed administrator prompt.** When the User declines the administrator prompt, or the elevated start fails:
+- WPF starts the host normally, so Tessyn stays usable, and says so: **"The daemon runs normally: the administrator prompt was declined."** or **"The daemon runs normally: the elevated start failed (<reason>)."**
+- WPF does not show the prompt again by itself until its next start; only *Restart daemon elevated* shows it earlier. A declined prompt never comes back every minute (the once-per-60 s rule of FR.32.5 would otherwise repeat it).
+- The banner of FR.32.12 then offers *Restart daemon elevated*.
+
+**FR.32.14 — A normal WPF with an elevated daemon.** Everything WPF does with the daemon works when the daemon runs elevated and WPF does not:
+- Discovery, the token and TDCP (FR.32.6) already work: `daemon.json` stays readable, and a daemon process that cannot be inspected counts as running.
+- The host guard (FR.32.2) already counts an elevated host as running.
+- **Exit request.** WPF can ask an elevated host to exit (FR.32.7, FR.32.11). Today a normal process may not signal the exit event of an elevated host, so *Restart daemon* answers "this daemon cannot be restarted from here"; the host must let the User's normal processes signal it.
+- **Build check.** The stale check (FR.32.7, FR.32.9) finds the folder of an elevated host; today it cannot read the elevated process and shows no banner.
+- **Tray icon.** The host's tray icon and *Exit Tessyn daemon* (FR.32.1) work when the host runs elevated.
+- **Data root.** Files the elevated daemon writes under `%AppData%\TessynDesktop` and in the profile folders stay usable by a later normal daemon: they keep the folder's inherited permissions, and no special permissions are set.
+- **Drag-and-drop.** With WPF normal, files dropped from Explorer into the prompt input are accepted (FR.31.2).
+
+> **What elevated means.** While the daemon runs elevated, every turn runs as administrator: typed turns, scheduled turns, orchestration workers, Telegram and Tessyn Web turns. Through Tessyn Web, whoever can sign in can then have a session run administrator commands on this PC.

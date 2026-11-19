@@ -383,3 +383,9 @@ Part 2 adds `mcp.list`, `mcp.upsert`, `mcp.remove`, `mcp.setEnabled`, `mcp.disco
 - **Sticky picks.** For `turn.send`, `session.send` and `attention.reply`, a `modelId` or `effort` that differs from what `lastUsed` shows for the session is stored on the session when the request is accepted, an explicit `default` included. A value equal to `lastUsed` changes nothing, so a `default` sent back for a model that is not in the catalog leaves the session's model. `schedules.add` picks (10.A4) and `session.compact` options are never stored.
 - **No new method.** `create_session` (FR.15.15) is an MCP tool, not a TDCP method. The session it creates reaches clients through the usual `tree.changed`.
 - **Compatibility.** An older client reads the same fields. Golden files `session.get` and `session.headers`: `lastUsed.effort` becomes `default`. The fixture's transcript records `high`, but the session has no effort of its own.
+
+### 10.A10 — Daemon elevation (`client.hello`) — FR.32.12
+- **`elevated`** (bool) in the `client.hello` result: `true` when the daemon process runs elevated (as administrator: its Windows token is elevated), `false` when it runs normally. Read once when the daemon starts; it cannot change during a run.
+- **Clients.** WPF shows it in Settings → Startup and uses it for the banner of FR.32.12. An absent member (an older daemon) means "unknown": nothing is shown and there is no banner.
+- **Relay.** Also returned on the relay; it reveals no secret, and Tessyn Web may show it later.
+- **Compatibility.** Additive: an older client ignores it. Golden files that hold the hello result gain the member.

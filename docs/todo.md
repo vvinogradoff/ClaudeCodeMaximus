@@ -1221,3 +1221,14 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 - [DONE] Feature summary `docs/features/preview-windows.md` (approved 2026-11-18)
 - [ ] Tick the MANUAL rows of TC.PW.01 one by one (sign-in persistence across restarts, popups, downloads, unplugging a monitor, mixed DPI; list in `.mm-work/07-review.md` 'Manual checks')
 - [ ] E2E for TC.PW.11, 21, 26, 31, 34, 49 and the remaining TC.PW.16 sources (tag chip, markdown-preview link, Focus-card-text link)
+
+## Phase 45 — The daemon elevated, WPF normal (FR.32.10–FR.32.14); paste of Explorer files (FR.31.2)
+
+Architect decision 2026-11-19 (Focus A1): WPF always runs normally; the daemon host runs elevated only on request. Docs approved by the Architect 2026-11-19 (Focus A3): FR.32.10–FR.32.14, UC.HS.08, TC.HS.23–TC.HS.30, tdcp-spec 10.A10.
+
+- [DONE] Ctrl+V of files copied in Explorer did nothing (FR.31.2): a TextBox turns Paste off without text on the clipboard, so `DataObject.Pasting` never came; the input now takes over the Paste command for a file list without text
+- [DONE] Docs approved by the Architect (FR.32.10–FR.32.14, UC.HS.08, TC.HS.23–TC.HS.30, tdcp-spec 10.A10)
+- [ ] Daemon: `client.hello` `elevated`; the exit event can be signalled by the User's normal processes; the tray icon works elevated (FR.32.12, FR.32.14)
+- [ ] WPF: setting *Start daemon elevated* in Settings → Startup; the launcher starts the host through the administrator prompt; declined or failed prompt starts it normally once, with the notice (FR.32.10, FR.32.13)
+- [ ] WPF: Restart daemon elevated and Restart daemon normal; the stale banner keeps the daemon's way; the status text and the "runs normally" banner; the build check of an elevated host (FR.32.11, FR.32.12, FR.32.14)
+- [ ] Tests TC.HS.23–TC.HS.29; manual list TC.HS.30 for the Architect
