@@ -38,7 +38,7 @@
 
 ## Additions (2026-11-19): the daemon elevated, WPF normal
 
-> **Why.** When WPF itself runs as administrator, Windows refuses drag-and-drop from Explorer into it (a normal program may not drop into an elevated one), and every session runs elevated whether it needs to or not. Some work does need it: the WPF end-to-end runner `tools\e2e\Run-WpfE2E.ps1` needs an elevated caller (NR.6), and so do administrator tasks a session is asked to do. So **WPF always runs normally**, and the **daemon host** runs elevated only when the User chooses so. Windows elevates a program only through its administrator prompt (UAC), and a program started that way cannot have its input and output piped to a normal one. The host is started without pipes, so it can be elevated as a whole; everything it starts (each session's `claude` process and its tools) runs elevated with it. Elevating single sessions is not part of this. Use case: [UC.HS.08](/docs/usecases/UC.HS.01-Client-Hosting.md). Test cases: TC.HS.23–TC.HS.30.
+> **Why.** When WPF itself runs as administrator, Windows refuses drag-and-drop from Explorer into it (a normal program may not drop into an elevated one), and every session runs elevated whether it needs to or not. Some work does need it: the WPF end-to-end runner `tools\e2e\Run-WpfE2E.ps1` needs an elevated caller (NR.6), and so do administrator tasks a session is asked to do. So **WPF always runs normally**, and the **daemon host** runs elevated only when the User chooses so. Windows elevates a program only through its administrator prompt (UAC), and a program started that way cannot have its input and output piped to a normal one. The host is started without pipes, so it can be elevated as a whole; everything it starts (each session's `claude` process and its tools) runs elevated with it. Elevating single sessions is not part of this. Use case: [UC.HS.08](/docs/usecases/UC.HS.01-Client-Hosting.md). Test cases: TC.HS.23–TC.HS.32.
 
 **FR.32.10 — Start daemon elevated (setting).** Settings tab **Startup**, below *Start the background daemon when none is running* (FR.32.5): checkbox **Start daemon elevated**, **default off**, stored with that setting (client settings section `daemonHost`).
 - **On:** when WPF starts the host (FR.32.5), it starts it through the Windows administrator prompt, so the host and everything it starts run as administrator.
@@ -71,6 +71,12 @@
 - **Data root.** Files the elevated daemon writes under `%AppData%\TessynDesktop` and in the profile folders stay usable by a later normal daemon: they keep the folder's inherited permissions, and no special permissions are set.
 - **Drag-and-drop.** With WPF normal, files dropped from Explorer into the prompt input are accepted (FR.31.2).
 
+**FR.32.15 — An elevated WPF says so.** (Added after first use, decision A8: a taskbar pin with *Run as administrator* kept WPF elevated unnoticed.) When the WPF client itself runs elevated (as administrator), a banner says **"This window runs as administrator. Files can't be dropped from Explorer, and every daemon it starts runs elevated."**
+- It is read once at start (a process cannot change its elevation) and stays for the whole run. It has no button: the fix is to close WPF and start it normally.
+- It never shows when WPF runs normally.
+- WPF's own restarts (the self-update, FR.32.3, and *Restart daemon*, FR.32.7) start the new WPF from the running one, so they keep its elevation, and the banner shows again.
+- The start is logged with WPF's elevation.
+
 > **What elevated means.** While the daemon runs elevated, every turn runs as administrator: typed turns, scheduled turns, orchestration workers, Telegram and Tessyn Web turns. Through Tessyn Web, whoever can sign in can then have a session run administrator commands on this PC.
 
-Status: FR.32.10–FR.32.14 implemented 2026-11-19 (merge `4b979ef`); TC.HS.23–TC.HS.29 automated and green; the manual TC.HS.30 is open.
+Status: FR.32.10–FR.32.14 implemented 2026-11-19 (merge `4b979ef`); TC.HS.23–TC.HS.29 automated and green; the manual TC.HS.30 is open. FR.32.15 is not built yet.

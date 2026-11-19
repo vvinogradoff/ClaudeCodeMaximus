@@ -1,6 +1,6 @@
 # UC.HS.01 — WPF Client Hosting and Coexistence
 
-Related requirements: FR.32.1–FR.32.14 (see `docs/requirements/`). Test cases: [TC.HS.01](/docs/testcases/TC.HS.01-Client-Hosting.md).
+Related requirements: FR.32.1–FR.32.15 (see `docs/requirements/`). Test cases: [TC.HS.01](/docs/testcases/TC.HS.01-Client-Hosting.md).
 
 ## Actors
 - **User** (the Architect). **WPF client**, **Background host** (the daemon host, `TessynDesktop.exe --background`).
@@ -49,4 +49,5 @@ Was: the previous client hosting the daemon in its window while WPF attached. Th
 - **A3** — *Start daemon elevated* is on and WPF finds a daemon that runs normally: the banner "The daemon runs normally, but Start daemon elevated is on." offers Restart daemon elevated; nothing restarts without the User (FR.32.12).
 - **A4** — The stale banner's *Restart daemon* while the daemon runs elevated: it comes back elevated (FR.32.11).
 - **A5** — The User exits the elevated host from its tray icon (FR.32.1, FR.32.14).
-**Covers:** FR.32.10–FR.32.14.
+- **A6** — WPF itself was started as administrator, for example from a shortcut with *Run as administrator*: the banner "This window runs as administrator. …" says so, and files cannot be dropped. The User closes WPF and starts it normally (FR.32.15).
+**Covers:** FR.32.10–FR.32.15.

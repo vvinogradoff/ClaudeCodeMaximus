@@ -1,6 +1,6 @@
 # TC.HS.01 — WPF Client Hosting and Coexistence
 
-Related requirements: FR.32.1–FR.32.14. Use cases: [UC.HS.01](/docs/usecases/UC.HS.01-Client-Hosting.md).
+Related requirements: FR.32.1–FR.32.15. Use cases: [UC.HS.01](/docs/usecases/UC.HS.01-Client-Hosting.md).
 
 **Legend.** AUTOMATED = unit / integration (WPF.Tests, Core tests, real PowerShell for scripts); MANUAL = checked by hand in the real apps (they were not started in the work reports; the checklist is in `.wpf-work\471-side-by-side.md` section 7 and `458-wpf-daily-switch.md` section 3).
 
@@ -36,6 +36,8 @@ Related requirements: FR.32.1–FR.32.14. Use cases: [UC.HS.01](/docs/usecases/U
 | TC.HS.28 | `client.hello` `elevated`: the Startup status text for both values, nothing without it (older daemon) or without a connection; the banner shows only with the setting on and a normal daemon, and goes when either changes | AUTOMATED | UC.HS.08 | FR.32.12 |
 | TC.HS.29 | Elevated host and normal WPF: the exit event accepts a signal from a normal process (its security descriptor allows the User's normal processes), and the build check reads the host folder without reading the process | AUTOMATED | UC.HS.08 | FR.32.14 |
 | TC.HS.30 | Real elevation (the administrator prompt cannot be scripted): from a normal WPF, Restart daemon elevated shows the prompt; after approval a session's `whoami /groups` shows `High Mandatory Level`; files dropped from Explorer are accepted; the stale banner appears for an elevated host; the tray icon and *Exit Tessyn daemon* work; Restart daemon normal returns `Medium Mandatory Level`; declining the prompt gives the notice and a normal daemon | MANUAL | UC.HS.08 | FR.32.10–FR.32.14 |
+| TC.HS.31 | An elevated WPF shows the banner "This window runs as administrator. …" for the whole run and a normal one never does (an elevation seam); the start is logged with the elevation | AUTOMATED | UC.HS.08 | FR.32.15 |
+| TC.HS.32 | Real: WPF started from a shortcut with *Run as administrator* shows the banner; started normally, it does not | MANUAL | UC.HS.08 | FR.32.15 |
 
 ## FR → TC coverage
 | FR | Test cases |
@@ -54,3 +56,4 @@ Related requirements: FR.32.1–FR.32.14. Use cases: [UC.HS.01](/docs/usecases/U
 | FR.32.12 | TC.HS.28, 30 |
 | FR.32.13 | TC.HS.25, 30 |
 | FR.32.14 | TC.HS.29, 30 |
+| FR.32.15 | TC.HS.31, 32 |
