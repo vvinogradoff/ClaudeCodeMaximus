@@ -22,8 +22,9 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<PreviewRouter> _logger;
 	private readonly IClientStateStore? _state;
+	private readonly IPreviewDockFactory? _dock;
 
-	/// <summary>Every open window in the order it was opened.</summary>
+	/// <summary>Every open window or docked panel in the order it was opened (one registry; the target kind is <see cref="OpenWindow.IsPanel"/>).</summary>
 	private readonly List<OpenWindow> _windows = [];
 
 	/// <summary>Saved windows the restore has not reached yet; they stay in the saved list until it has.</summary>
@@ -47,8 +48,10 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		UrlPolicy urls,
 		IUiDispatcher ui,
 		ILogger<PreviewRouter> logger,
-		IClientStateStore? state = null)
+		IClientStateStore? state = null,
+		IPreviewDockFactory? dock = null)
 	{
+		_dock = dock;
 		_settings = settings;
 		_matcher = matcher;
 		_monitors = monitors;
@@ -68,15 +71,22 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 	/// <summary>One open window and what the router knows about it.</summary>
 	private sealed class OpenWindow
 	{
-		public OpenWindow(IPreviewWindowHandle handle, string groupId, bool pinned, string groupName)
+		public OpenWindow(IPreviewWindowHandle handle, string groupId, bool pinned, string groupName, bool isPanel)
 		{
 			Handle = handle;
+			IsPanel = isPanel;
 			GroupId = groupId;
 			IsPinned = pinned;
 			GroupName = groupName;
 		}
 
 		public IPreviewWindowHandle Handle { get; }
+
+		/// <summary>A docked panel in the main window (FR.29.17) rather than an external window.</summary>
+		public bool IsPanel { get; }
+
+		/// <summary>The default Preview panel: the files that match no group (FR.29.18); never pinned, never auto-closed.</summary>
+		public bool IsDefaultPanel => IsPanel && GroupId == Constants.Previews.DefaultPanelId;
 
 		public string GroupId { get; }
 
@@ -109,30 +119,53 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		Refresh();   // the settings event may come later or on another thread; Refresh is idempotent
 	}
 
-	public bool WouldRouteFile(string? fileName) => IsActive && _matcher.MatchFile(_settings.Groups, fileName) != null;
+	/// <summary>Docked mode (FR.29.17): the external windows are off (not <see cref="IsActive"/>) and the main window can dock panels.</summary>
+	private bool IsDocked => !IsActive && _dock != null;
+
+	public bool WouldRouteFile(string? fileName)
+	{
+		if (!IsActive && !IsDocked)
+			return false;
+
+		return _matcher.MatchFile(_settings.Groups, fileName) != null || (IsDocked && GoesToDefaultPanel(fileName));
+	}
 
 	public bool TryOpenFile(PreviewItemModel item, PreviewTarget fileHandle, ITessynClient client)
 	{
-		if (!IsActive)
+		var docked = IsDocked;
+		if (!IsActive && !docked)
 			return false;
 
 		var match = _matcher.MatchFile(_settings.Groups, item.FileName);
-		if (match == null)
-			return false;
+		if (match != null)
+			return OpenInGroupTarget(match.Group, docked, item, fileHandle, client);
 
-		return OpenInGroupWindow(match.Group, item, fileHandle, client);
+		if (!docked || !GoesToDefaultPanel(item.FileName))
+			return false;   // a video is left to the default media player (FR.26.6)
+
+		return OpenInDefaultPanel(item, fileHandle, client);
 	}
 
 	public bool TryOpenUrl(PreviewItemModel item)
 	{
-		if (!IsActive || !_urls.TryParse(item.Url, out _))
+		var docked = IsDocked;
+		if ((!IsActive && !docked) || !_urls.TryParse(item.Url, out _))
 			return false;
 
 		var match = _matcher.MatchUrl(_settings.Groups, item.Url);
 		if (match == null)
+			return false;   // the system browser (FR.29.18)
+
+		return OpenInGroupTarget(match.Group, docked, item, null, null);
+	}
+
+	/// <summary>A file that matches no group goes to the default Preview panel, except a video (FR.29.18, decision 1).</summary>
+	private static bool GoesToDefaultPanel(string? fileName)
+	{
+		if (string.IsNullOrEmpty(fileName))
 			return false;
 
-		return OpenInGroupWindow(match.Group, item, null, null);
+		return !Constants.FileTypes.InlineVideo.Contains(Path.GetExtension(fileName));
 	}
 
 	public void OnSessionShown(string? nodeId)
@@ -144,7 +177,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		var groups = _settings.Groups;
 		foreach (var window in _windows.ToList())
 		{
-			if (window.IsPinned || window.Handle.Item == null || window.Handle.Item.SourceNodeId == nodeId || !IsAutoClose(groups, window.GroupId))
+			if (window.IsPinned || window.IsDefaultPanel || window.Handle.Item == null || window.Handle.Item.SourceNodeId == nodeId || !IsAutoClose(groups, window.GroupId))
 				continue;
 
 			CloseByRouter(window, "auto-close: another session is shown");
@@ -160,7 +193,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		foreach (var window in _windows.ToList())
 		{
 			var item = window.Handle.Item;
-			if (window.IsPinned || item == null || item.SourceNodeId != nodeId || item.SourceFocusItemId == null
+			if (window.IsPinned || window.IsDefaultPanel || item == null || item.SourceNodeId != nodeId || item.SourceFocusItemId == null
 				|| !closedItemIds.Contains(item.SourceFocusItemId) || !IsAutoClose(groups, window.GroupId))
 				continue;
 
@@ -229,36 +262,50 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 
 	// ---- opening ----
 
-	private bool OpenInGroupWindow(PreviewGroupModel group, PreviewItemModel item, PreviewTarget? fileHandle, ITessynClient? client)
+	/// <summary>Shows the item in the group's window, or in the group's docked panel; the group's slot holds the one target that is not pinned.</summary>
+	private bool OpenInGroupTarget(PreviewGroupModel group, bool panel, PreviewItemModel item, PreviewTarget? fileHandle, ITessynClient? client)
 	{
-		var window = _windows.FirstOrDefault(w => !w.IsPinned && w.GroupId == group.Id);
+		var window = _windows.FirstOrDefault(w => !w.IsPinned && w.IsPanel == panel && w.GroupId == group.Id);
 		if (window == null)
 		{
-			window = CreateWindow(group, pinned: false, ownPlacement: null);
+			window = CreateWindow(group, pinned: false, ownPlacement: null, panel);
 			if (window == null)
 				return false;
 		}
 
 		window.Handle.Show(item.Clone(), fileHandle, client);
-		_logger.LogInformation("Preview: {Kind} opened in the window of group {GroupId}", item.Kind, group.Id);
+		_logger.LogInformation("Preview: {Kind} opened in the {Target} of group {GroupId}", item.Kind, panel ? "panel" : "window", group.Id);
 		SaveList();
 		return true;
 	}
 
-	private OpenWindow? CreateWindow(PreviewGroupModel group, bool pinned, PreviewPlacementModel? ownPlacement)
+	private bool OpenInDefaultPanel(PreviewItemModel item, PreviewTarget fileHandle, ITessynClient client)
 	{
+		var panel = _windows.FirstOrDefault(w => w.IsDefaultPanel) ?? CreateWindow(null, pinned: false, ownPlacement: null, panel: true);
+		if (panel == null)
+			return false;
+
+		panel.Handle.Show(item.Clone(), fileHandle, client);
+		_logger.LogInformation("Preview: {Kind} opened in the default Preview panel", item.Kind);
+		return true;
+	}
+
+	/// <summary>Creates the window, or the docked panel (<paramref name="panel"/>); a null <paramref name="group"/> is the default Preview panel.</summary>
+	private OpenWindow? CreateWindow(PreviewGroupModel? group, bool pinned, PreviewPlacementModel? ownPlacement, bool panel = false)
+	{
+		var groupId = group?.Id ?? Constants.Previews.DefaultPanelId;
 		IPreviewWindowHandle handle;
 		try
 		{
-			handle = _factory.Create(group, pinned, ownPlacement);
+			handle = panel ? _dock!.Create(group, pinned, null) : _factory.Create(group!, pinned, ownPlacement);
 		}
 		catch (Exception ex)
 		{
-			_logger.LogWarning(ex, "Creating the preview window of group {GroupId} failed", group.Id);
+			_logger.LogWarning(ex, "Creating the preview {Target} of group {GroupId} failed", panel ? "panel" : "window", groupId);
 			return null;
 		}
 
-		var window = new OpenWindow(handle, group.Id, pinned, group.Name);
+		var window = new OpenWindow(handle, groupId, pinned, group?.Name ?? Constants.Previews.DefaultPanelName, panel);
 		window.OnClosed = (_, args) => OnWindowClosed(window, args);
 		window.OnPinned = (_, _) => OnWindowPinned(window);
 		window.OnItemChanged = (_, _) => SaveList();
@@ -295,14 +342,14 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 	/// <summary>A pinned window settled at a new place: the list is saved again, so a crash does not lose the move (FR.29.11).</summary>
 	private void OnWindowPlacementChanged(OpenWindow window)
 	{
-		if (window.IsPinned)
+		if (window.IsPinned && !window.IsPanel)
 			SaveList();
 	}
 
 	private void OnWindowPinned(OpenWindow window)
 	{
-		if (window.IsPinned)
-			return;
+		if (window.IsPinned || window.IsDefaultPanel)
+			return;   // the default panel has no Pin (FR.29.18)
 
 		window.IsPinned = true;   // it leaves the group's slot: the group's next item opens a new window
 		_logger.LogInformation("Preview window of group {GroupId} pinned", window.GroupId);
@@ -341,14 +388,22 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 			return;
 
 		var deactivated = _lastActive && !active;
+		var activated = !_lastActive && active;
 		_lastCanToggle = canToggle;
 		_lastEnabled = enabled;
 		_lastActive = active;
 		_logger.LogInformation("Preview windows mode: toggle {CanToggle}, enabled {Enabled}, active {Active}", canToggle, enabled, active);
 		if (deactivated)
 		{
-			foreach (var window in _windows.Where(w => !w.IsPinned).ToList())
+			foreach (var window in _windows.Where(w => !w.IsPinned && !w.IsPanel).ToList())
 				CloseByRouter(window, "the mode turned off");
+		}
+
+		if (activated)
+		{
+			// The external windows take over: the group panels and the default panel close, pinned panels stay (FR.29.23, decision 2).
+			foreach (var window in _windows.Where(w => !w.IsPinned && w.IsPanel).ToList())
+				CloseByRouter(window, "the mode turned on");
 		}
 
 		StateChanged?.Invoke(this, EventArgs.Empty);
@@ -362,6 +417,9 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		var groups = _settings.Groups;
 		foreach (var window in _windows.ToList())
 		{
+			if (window.IsDefaultPanel)
+				continue;
+
 			var group = groups.FirstOrDefault(g => g.Id == window.GroupId);
 			if (group == null)
 			{
@@ -392,8 +450,8 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		foreach (var window in _windows)
 		{
 			var item = window.Handle.Item;
-			if (item == null)
-				continue;   // not shown yet
+			if (item == null || window.IsPanel)
+				continue;   // not shown yet; panels are not in this list (stage 2 saves them)
 
 			list.Add(new OpenPreviewWindowModel
 			{
@@ -476,7 +534,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 			return false;
 		}
 
-		if (_windows.Any(w => !w.IsPinned && w.GroupId == group.Id))
+		if (_windows.Any(w => !w.IsPinned && !w.IsPanel && w.GroupId == group.Id))
 		{
 			_logger.LogInformation("Restore: skipped a window of group {GroupId}, the group already has one", group.Id);
 			return false;
