@@ -237,7 +237,7 @@ public sealed class PreviewPlacementSnapDpiTests
 
 	// F3: Win+Shift+Arrow while maximized
 	[Fact]
-	public void Capture_MaximizedAndMovedToAnotherMonitor_KeepsTheRectangleWithItsOwnMonitorAndScale()
+	public void Capture_MaximizedAndMovedToAnotherMonitor_TranslatesTheRectangleOntoIt()
 	{
 		var a = Mon(D1, 0, 1920, 96, true);
 		var b = Mon(D2, 1920, 3840, 192);
@@ -252,9 +252,11 @@ public sealed class PreviewPlacementSnapDpiTests
 
 		var captured = capture.Capture(Hwnd)!;
 
-		Assert.Equal(D1, captured.Monitor!.DeviceName);
-		Assert.Equal(96, captured.Dpi);
-		Assert.Equal(200, captured.Placement.Left);
+		Assert.Equal(D2, captured.Monitor!.DeviceName);   // it reopens maximized on the monitor it is on
+		Assert.Equal(192, captured.Dpi);
+		Assert.Equal(1920 + 200, captured.Placement.Left);   // same offset from the work-area origin
+		Assert.Equal(100, captured.Placement.Top);
+		Assert.Equal(1800, captured.Placement.Width);        // 900 * 192 / 96
 		Assert.True(captured.Placement.Maximized);
 	}
 }
