@@ -436,4 +436,29 @@ public sealed class ComposerAttachmentTests : IDisposable
 			Assert.Empty(reader.Read(null));
 		});
 	}
+
+	[Fact]
+	public void FileDropReader_TakesPasteOnlyForAFileListWithoutText()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var reader = new FileDropReader();
+			var files = new System.Windows.DataObject();
+			files.SetFileDropList([@"C:\a.txt", @"C:\b folder"]);   // Explorer's Ctrl+C on files: a file list and no text
+			var both = new System.Windows.DataObject();
+			both.SetFileDropList([@"C:\c.txt"]);
+			both.SetText("c.txt");   // some apps put the name beside the list: that pastes as text
+			var text = new System.Windows.DataObject();
+			text.SetText(@"C:\a.txt");
+
+			Assert.True(reader.HasPastedFiles(files));
+			Assert.Equal([@"C:\a.txt", @"C:\b folder"], reader.ReadPastedFiles(files));
+			Assert.False(reader.HasPastedFiles(both));
+			Assert.Empty(reader.ReadPastedFiles(both));
+			Assert.False(reader.HasPastedFiles(text));
+			Assert.Empty(reader.ReadPastedFiles(text));
+			Assert.False(reader.HasPastedFiles(null));
+			Assert.Empty(reader.ReadPastedFiles(null));
+		});
+	}
 }

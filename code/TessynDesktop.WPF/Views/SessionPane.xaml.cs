@@ -23,7 +23,11 @@ public partial class SessionPane : UserControl
 		InitializeComponent();
 		DataContextChanged += OnDataContextChanged;
 		Loaded += OnLoaded;
-		DataObject.AddPastingHandler(InputBox, OnInputPasting);
+		// Paste of files copied in Explorer (FR.31.2). A plain TextBox turns Paste off when the clipboard holds no text, and Explorer's Copy of files
+		// holds none, so Ctrl+V, Shift+Insert and the context menu never raised DataObject.Pasting for them: the Paste command itself is taken over.
+		ClipboardSource = ReadSystemClipboard;
+		CommandManager.AddPreviewCanExecuteHandler(InputBox, OnInputPasteCanExecute);
+		CommandManager.AddPreviewExecutedHandler(InputBox, OnInputPasteExecuted);
 		SuggestionsPopup.CustomPopupPlacementCallback = PlaceSuggestionsAt;
 		Suggestions.ItemChosen += OnSuggestionChosen;
 	}
@@ -299,17 +303,42 @@ public partial class SessionPane : UserControl
 		_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
 	}
 
-	/// <summary>Ctrl+V of files copied in Explorer behaves like a drop; text on the clipboard pastes as usual.</summary>
-	private void OnInputPasting(object sender, DataObjectPastingEventArgs e)
+	/// <summary>The clipboard that Paste in the prompt input reads: the system clipboard (a seam for tests, which must not touch the user's clipboard).</summary>
+	public Func<IDataObject?> ClipboardSource { get; set; }
+
+	private IDataObject? ReadSystemClipboard()
 	{
-		if (_subscribed == null || e.DataObject.GetDataPresent(DataFormats.UnicodeText) || e.DataObject.GetDataPresent(DataFormats.Text))
+		try
+		{
+			return Clipboard.GetDataObject();
+		}
+		catch (System.Runtime.InteropServices.ExternalException)
+		{
+			return null;   // another program holds the clipboard open: nothing to paste now
+		}
+	}
+
+	/// <summary>Enables Paste (Ctrl+V, Shift+Insert, the context menu) for files copied in Explorer; any other clipboard is left to the text box.</summary>
+	private void OnInputPasteCanExecute(object sender, CanExecuteRoutedEventArgs e)
+	{
+		if (e.Command != ApplicationCommands.Paste || _subscribed == null || InputBox.IsReadOnly || !_fileDrops.HasPastedFiles(ClipboardSource()))
 			return;
 
-		var paths = _fileDrops.Read(e.DataObject);
+		e.CanExecute = true;
+		e.Handled = true;
+	}
+
+	/// <summary>Paste of files copied in Explorer behaves like a drop; text on the clipboard pastes as usual.</summary>
+	private void OnInputPasteExecuted(object sender, ExecutedRoutedEventArgs e)
+	{
+		if (e.Command != ApplicationCommands.Paste || _subscribed == null || InputBox.IsReadOnly)
+			return;
+
+		var paths = _fileDrops.ReadPastedFiles(ClipboardSource());
 		if (paths.Count == 0)
 			return;
 
-		e.CancelCommand();
+		e.Handled = true;
 		_ = _subscribed.HandleFilesAsync(paths, InputBox.SelectionStart, InputBox.SelectionLength);
 	}
 

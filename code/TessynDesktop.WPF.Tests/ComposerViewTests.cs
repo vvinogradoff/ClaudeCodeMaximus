@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using Microsoft.Extensions.Logging.Abstractions;
 using TessynDesktop.WPF.Infrastructure;
 using TessynDesktop.WPF.Rendering;
@@ -109,35 +110,45 @@ public sealed class ComposerViewTests
 		});
 	}
 
+	// The former paste test raised DataObject.Pasting with the FileDrop format by hand. A TextBox never raises it that way: with no text on the
+	// clipboard it turns Paste off before any Pasting event, so the test passed while Ctrl+V of an Explorer file copy did nothing in the app.
+	// Pasting runs the real Paste command now (what Ctrl+V, Shift+Insert and the context menu run); the formats are covered by
+	// FileDropReader_TakesPasteOnlyForAFileListWithoutText.
 	[Fact]
-	public void Pasting_a_file_list_behaves_like_a_drop_and_pasting_text_is_unchanged()
+	public void Paste_of_files_copied_in_Explorer_runs_through_the_Paste_command_and_inserts_their_paths_like_a_drop()
 	{
 		StaTestRunner.Run(() =>
 		{
-			var (_, input, _, _) = Create();
+			var (pane, input, _, model) = Create();
 			input.Text = "go: ";
 			input.Select(4, 0);
+			pane.ClipboardSource = () => Files(@"D:\a.txt", @"D:\b.txt");   // Explorer's Copy of files: a file list and no text
 
-			var filesPaste = new DataObjectPastingEventArgs(Files(@"D:\a.txt", @"D:\b.txt"), isDragDrop: false, DataFormats.FileDrop) { RoutedEvent = DataObject.PastingEvent };
-			input.RaiseEvent(filesPaste);
-			Assert.True(filesPaste.CommandCancelled);
+			// Ctrl+V runs Paste only when it can execute; a plain TextBox answers no for a clipboard without text.
+			Assert.True(ApplicationCommands.Paste.CanExecute(null, input));
+			ApplicationCommands.Paste.Execute(null, input);
+
 			var inserted = @"D:\a.txt" + Environment.NewLine + @"D:\b.txt";
 			Assert.Equal("go: " + inserted, input.Text);
+			Assert.Equal("go: " + inserted, model.InputText);
 			Assert.Equal(4 + inserted.Length, input.CaretIndex);
+		});
+	}
 
-			var text = new DataObject();
-			text.SetText("plain text");
-			var textPaste = new DataObjectPastingEventArgs(text, isDragDrop: false, DataFormats.UnicodeText) { RoutedEvent = DataObject.PastingEvent };
-			input.RaiseEvent(textPaste);
-			Assert.False(textPaste.CommandCancelled);
+	[Fact]
+	public void Paste_of_files_replaces_a_selection_like_a_drop()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var (pane, input, _, _) = Create();
+			input.Text = "see HERE ok";
+			input.Select(4, 4);
+			pane.ClipboardSource = () => Files(@"C:\f.txt");
 
-			// A clipboard that carries both files and text (some apps put the name as text) pastes the text.
-			var both = new DataObject();
-			both.SetFileDropList([@"D:\c.txt"]);
-			both.SetText("c.txt");
-			var bothPaste = new DataObjectPastingEventArgs(both, isDragDrop: false, DataFormats.UnicodeText) { RoutedEvent = DataObject.PastingEvent };
-			input.RaiseEvent(bothPaste);
-			Assert.False(bothPaste.CommandCancelled);
+			ApplicationCommands.Paste.Execute(null, input);
+
+			Assert.Equal(@"see C:\f.txt ok", input.Text);
+			Assert.Equal(4 + @"C:\f.txt".Length, input.CaretIndex);
 		});
 	}
 
