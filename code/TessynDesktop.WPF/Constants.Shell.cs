@@ -55,6 +55,7 @@ public static partial class Constants
 		public const string KeyBindings = "keyBindings";
 		public const string Screensaver = "screensaver";
 		public const string Layout = "layout";
+		public const string ShellLayout = "shellLayout";
 		public const string DaemonHost = "daemonHost";
 		public const string Colours = "colours";
 

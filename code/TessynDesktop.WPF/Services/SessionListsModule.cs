@@ -24,6 +24,7 @@ public sealed class SessionListsModule : IShellModule
 			SlotId = Constants.Slots.LeftPanelTabs,
 			Order = Constants.SessionLists.RecentTabOrder,
 			Title = Constants.SessionLists.RecentTabTitle,
+			PanelId = Constants.DockedShell.RecentPanelId,
 			Create = () => new RecentPanel { DataContext = _host.RecentTab },
 		});
 		slots.Add(new ShellSlotContribution
@@ -31,6 +32,7 @@ public sealed class SessionListsModule : IShellModule
 			SlotId = Constants.Slots.LeftPanelTabs,
 			Order = Constants.SessionLists.TagsTabOrder,
 			Title = Constants.SessionLists.TagsTabTitle,
+			PanelId = Constants.DockedShell.TagsPanelId,
 			Create = () => new TagsPanel { DataContext = _host.Tags },
 		});
 		slots.Add(new ShellSlotContribution
