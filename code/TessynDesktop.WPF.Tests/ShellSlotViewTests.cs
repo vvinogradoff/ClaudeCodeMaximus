@@ -178,7 +178,9 @@ public sealed class ShellSlotViewTests
 		var ids = typeof(Constants.Slots).GetFields(BindingFlags.Public | BindingFlags.Static).Select(f => (string)f.GetRawConstantValue()!).ToList();
 
 		Assert.NotEmpty(ids);
-		foreach (var id in ids)
+		var catalog = File.ReadAllText(Path.Combine(FindViews(), "ShellPanelCatalog.cs"));
+		Assert.Contains(nameof(Constants.Slots.LeftPanelTabs), catalog);   // FR.6.11: the left-panel slot is hosted by the docking area's panel catalog (Recent and Tags are panels), no longer by XAML
+		foreach (var id in ids.Where(i => i != Constants.Slots.LeftPanelTabs))
 			Assert.True(xaml.Split($"SlotId=\"{id}\"").Length == 2, $"The slot '{id}' must be hosted exactly once in the XAML");
 
 		Assert.Contains($"CommandMenu.Menu=\"{Constants.Menus.TreeNode}\"", xaml);

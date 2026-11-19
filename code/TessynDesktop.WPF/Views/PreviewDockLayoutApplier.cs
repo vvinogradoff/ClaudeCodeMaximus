@@ -7,8 +7,8 @@ namespace TessynDesktop.WPF.Views;
 
 /// <summary>
 /// Puts a docked panel into AvalonDock's layout model the way it was remembered (FR.29.21): stacked as a tab with a remembered neighbour that is open, else docked to
-/// its side of the session pane (the outermost edge of the docking area) at its size; then auto-hidden or floating as remembered. Nothing remembered: docked right at
-/// <see cref="Constants.PreviewDock.FirstTimeWidthFraction"/> of the area. A remembered neighbour that is not open is ignored (the panel docks to the same side). Works
+/// its side of the session pane (the outermost edge of the docking area) at its size; then auto-hidden or floating as remembered. Nothing remembered: a tab in the pane that
+/// holds Focus (FR.6.12) when Focus is docked in a pane; otherwise docked right at <see cref="Constants.PreviewDock.FirstTimeWidthFraction"/> of the area. A remembered neighbour that is not open is ignored (the panel docks to the same side). Works
 /// on the model only (no controls), so it is tested without a window.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -17,6 +17,12 @@ public sealed class PreviewDockLayoutApplier
 	/// <summary>Places <paramref name="panel"/> (not yet in the layout) and selects it. <paramref name="areaWidth"/> and <paramref name="areaHeight"/> size the first-time layout (0 when not laid out yet).</summary>
 	public void Apply(LayoutRoot root, LayoutDocumentPane document, LayoutAnchorable panel, PreviewDockLayoutModel? remembered, double areaWidth, double areaHeight)
 	{
+		if (remembered == null && TryTabNextToFocus(root, panel))
+		{
+			panel.IsSelected = true;
+			return;
+		}
+
 		var layout = remembered ?? new PreviewDockLayoutModel();
 		if (!layout.AutoHide && !layout.Floating && TryStack(root, panel, layout))
 		{
@@ -70,6 +76,21 @@ public sealed class PreviewDockLayoutApplier
 			pane.DockHeight = new GridLength(size);
 
 		return true;
+	}
+
+	/// <summary>A panel with no remembered place opens as the last tab of the pane that holds Focus (FR.6.12); false when Focus is closed, floating or auto-hidden.</summary>
+	private bool TryTabNextToFocus(LayoutRoot root, LayoutAnchorable panel)
+	{
+		foreach (var other in root.Descendents().OfType<LayoutAnchorable>())
+		{
+			if (ReferenceEquals(other, panel) || other.ContentId != Constants.DockedShell.FocusPanelId || other.IsFloating || other.IsAutoHidden || other.IsHidden || other.Parent is not LayoutAnchorablePane pane)
+				continue;
+
+			pane.Children.Add(panel);
+			return true;
+		}
+
+		return false;
 	}
 
 	private bool TryStack(LayoutRoot root, LayoutAnchorable panel, PreviewDockLayoutModel layout)

@@ -87,6 +87,7 @@ public sealed class ShellCommands : IShellCommands
 				Gesture = GetGesture(command.Id),
 				IsEnabled = CanExecute(command, parameter),
 				BeginsGroup = items.Count > 0 && entry.Group != previousGroup,
+				IsChecked = command.IsChecked?.Invoke(parameter) ?? false,
 			});
 			previousGroup = entry.Group;
 		}

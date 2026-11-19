@@ -14,4 +14,7 @@ public sealed class ShellMenuItemModel
 	public bool IsEnabled { get; init; }
 
 	public bool BeginsGroup { get; init; }
+
+	/// <summary>The command shows a check mark (a panel that is open, FR.6.14); false for the usual entry.</summary>
+	public bool IsChecked { get; init; }
 }

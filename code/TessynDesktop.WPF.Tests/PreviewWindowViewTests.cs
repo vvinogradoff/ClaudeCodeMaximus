@@ -47,7 +47,7 @@ public sealed class PreviewWindowViewTests
 	{
 		var store = new ClientSettingsStore(new MemoryClientState(), NullLogger<ClientSettingsStore>.Instance);
 		return new TitleBarViewModel(
-			new AppearanceService(store, new FixedProbe()), store, new ShellCommands(store, NullLogger<ShellCommands>.Instance), new ImmediateUiDispatcher(), "202611.18.1000", false, router);
+			new AppearanceService(store, new FixedProbe()), store, new ShellCommands(store, NullLogger<ShellCommands>.Instance), new FakeShellLayout(), new ImmediateUiDispatcher(), "202611.18.1000", false, router);
 	}
 
 	private static (PreviewWindow Window, PreviewWindowViewModel ViewModel, FakePreviewContentFactory Content) BuildWindow(bool pinned = false)
@@ -413,7 +413,7 @@ public sealed class TitleBarMonitorToggleTests
 	{
 		var store = new ClientSettingsStore(new MemoryClientState(), NullLogger<ClientSettingsStore>.Instance);
 		return new TitleBarViewModel(
-			new AppearanceService(store, new FixedProbe()), store, new ShellCommands(store, NullLogger<ShellCommands>.Instance), new ImmediateUiDispatcher(), "1", false, router);
+			new AppearanceService(store, new FixedProbe()), store, new ShellCommands(store, NullLogger<ShellCommands>.Instance), new FakeShellLayout(), new ImmediateUiDispatcher(), "1", false, router);
 	}
 
 	[Fact]

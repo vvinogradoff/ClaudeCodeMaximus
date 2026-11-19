@@ -385,7 +385,7 @@ public sealed class ChromeReviewFixTests
 		var connection = new ConnectionViewModel(new ScriptedLocator(), new FixedClientFactory(new FakeTessynClient()), ui, NullLogger<ConnectionViewModel>.Instance);
 		var main = new MainViewModel(connection, _ => throw new InvalidOperationException(), _ => throw new InvalidOperationException(), new MemoryClientState(), NullLogger<MainViewModel>.Instance);
 		var bar = new StatusBarViewModel(connection, main, ui, NullLogger<StatusBarViewModel>.Instance);
-		new ChromeShellModule(bar, new TitleBarViewModel(appearance, store, commands, ui, "1", false), main, appearance).Register(new ShellSlots(), commands);
+		new ChromeShellModule(bar, new TitleBarViewModel(appearance, store, commands, new FakeShellLayout(), ui, "1", false), main, appearance).Register(new ShellSlots(), commands);
 
 		var send = commands.Find(Constants.Appearance.SendCommandId)!;
 

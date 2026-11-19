@@ -157,8 +157,14 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IScreensaverImages, FolderScreensaverImages>();
 		services.AddSingleton(sp => new ScreensaverController(sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IScreensaverImages>(), DateTime.UtcNow));
 		services.AddSingleton(sp => new TitleBarViewModel(sp.GetRequiredService<IAppearanceService>(), sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IShellCommands>(),
-			sp.GetRequiredService<IUiDispatcher>(), BuildNumber.Read(typeof(App).Assembly), SourceBuilds.IsBuildOutput(AppContext.BaseDirectory), sp.GetRequiredService<IPreviewRouter>()));
+			sp.GetRequiredService<IShellLayout>(), sp.GetRequiredService<IUiDispatcher>(), BuildNumber.Read(typeof(App).Assembly), SourceBuilds.IsBuildOutput(AppContext.BaseDirectory), sp.GetRequiredService<IPreviewRouter>()));
 		services.AddSingleton<StatusBarViewModel>();
+
+		// FR.6.11-FR.6.19, FR.6.22: the docked shell's layout. The docking area of the main window registers with the host; the layout is remembered unless this is a test window without a test data root.
+		services.AddSingleton<ShellLayoutHost>();
+		services.AddSingleton<IShellLayout>(sp => sp.GetRequiredService<ShellLayoutHost>());
+		services.AddSingleton(sp => new ShellLayoutMemory(sp.GetRequiredService<IClientSettingsStore>(), sp.GetRequiredService<IClientStateStore>(), !options.TestWindow || options.DataRoot != null));
+		services.AddSingleton<IShellModule, ShellLayoutModule>();
 		services.AddSingleton<IShellModule, ChromeShellModule>();
 
 		// W1b: the Focus item sound (FR.22). A test window never plays one (the sound is the one thing an off-screen window cannot hide).

@@ -240,7 +240,7 @@ public sealed class SessionListsViewTests
 	}
 
 	[Fact]
-	public void RecentDropdown_OpeningReloadsTheList_AndPickingASessionSelectsTheTreeTab()
+	public void RecentDropdown_OpeningReloadsTheList_AndPickingASessionBringsTheSessionsPanelForward()
 	{
 		StaTestRunner.Run(() =>
 		{
@@ -251,12 +251,9 @@ public sealed class SessionListsViewTests
 				RecentListHandler = () => new RecentListResult(DateTimeOffset.UtcNow, [new RecentRowDto("a", "Alpha", "proj", State("a"), false, false, true)]),
 			};
 			recent.AttachAsync(client).GetAwaiter().GetResult();
-			var dropdown = new RecentDropdown { DataContext = recent };
-			var tabs = new TabControl { Name = Constants.SessionLists.LeftTabsName, Items = { new TabItem { Header = "Tree" }, new TabItem { Header = "Recent" } }, SelectedIndex = 1 };
-			var stack = new StackPanel { Children = { dropdown, tabs } };
-			var window = new Window { Content = stack, Width = 400, Height = 400, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
-			NameScope.SetNameScope(window, new NameScope());
-			window.RegisterName(Constants.SessionLists.LeftTabsName, tabs);
+			var layout = new FakeShellLayout();
+			var dropdown = new RecentDropdown { DataContext = recent, Layout = layout };
+			var window = new Window { Content = dropdown, Width = 400, Height = 400, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
 			window.Show();
 			try
 			{
@@ -271,7 +268,7 @@ public sealed class SessionListsViewTests
 				var open = Descendants<Button>((DependencyObject)menu.Child).Single(b => AutomationProperties.GetName(b) == "Open Alpha");
 				open.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, open));
 				Assert.False(menu.IsOpen);
-				Assert.Equal(0, tabs.SelectedIndex);
+				Assert.Equal([Constants.DockedShell.SessionsPanelId], layout.BroughtForward);   // FR.1.15: the Sessions panel comes forward
 			}
 			finally
 			{

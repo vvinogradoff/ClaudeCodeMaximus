@@ -11,7 +11,7 @@ using TessynDesktop.WPF.ViewModels;
 
 namespace TessynDesktop.WPF.Views;
 
-/// <summary>The main window: banner, tree, the docking area (session pane and docked preview panels) and status bar. Restores and remembers its placement and splitter.</summary>
+/// <summary>The main window: banner, the docking area (the whole shell layout: Sessions, Recent, Tags, the session pane, Focus and the docked preview panels) and status bar. Restores and remembers its placement.</summary>
 /// <remarks>Created by Claude</remarks>
 public partial class MainWindow : Window
 {
@@ -22,20 +22,17 @@ public partial class MainWindow : Window
 	private readonly Win32WindowPlacement _placement;
 	private readonly WindowPlacementClamper _clamper;
 	private readonly IShellCommands _commands;
-	private readonly TitleBarViewModel _titleBar;
 	private readonly SettingsHost _settings;
 	private readonly IPreviewRouter? _previews;
 	private bool _closeApproved;
-	private double _treeWidth;
 	private readonly bool _testWindow;
 	private readonly CancellationTokenSource _lifetime = new();
 	private readonly DispatcherTimer _placementTimer;
 
-	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands, TitleBarViewModel titleBar, ScreensaverController screensaver, SettingsHost settings, ILogger<MainWindow> logger, DockingSurfaceHost dockingSurface, IAppearanceService appearance, IPreviewRouter? previews = null)
+	public MainWindow(MainViewModel viewModel, IClientStateStore stateStore, Win32WindowPlacement placement, WindowPlacementClamper clamper, StartupOptions options, IShellCommands commands, TitleBarViewModel titleBar, ScreensaverController screensaver, SettingsHost settings, ILogger<MainWindow> logger, DockingSurfaceHost dockingSurface, IAppearanceService appearance, ShellLayoutMemory layoutMemory, ShellLayoutHost layoutHost, IShellSlots slots, IPreviewRouter? previews = null)
 	{
 		_previews = previews;
 		_settings = settings;
-		_titleBar = titleBar;
 		_commands = commands;
 		_testWindow = options.TestWindow;
 		_viewModel = viewModel;
@@ -49,15 +46,14 @@ public partial class MainWindow : Window
 
 		Docking.SessionView.SetBinding(DataContextProperty, new System.Windows.Data.Binding(nameof(MainViewModel.Session)) { Source = viewModel });   // the session pane view model exists once the client is connected
 		dockingSurface.Register(Docking);   // the docked preview panels are placed in this docking area (FR.29.19)
+		Docking.BuildShell(new ShellPanelCatalog().Create(viewModel, slots, logger), layoutMemory, logger, () => placement.GetMonitors());   // the whole shell layout, saved or default (FR.6.11, FR.6.18)
+		layoutHost.Register(Docking);   // the title bar's chevron and the Panels menu drive it through IShellLayout (FR.6.14, FR.6.15)
 		Docking.ApplyTheme(appearance.IsDark);   // the one place the theme is first set
 		appearance.Changed += (_, _) => Dispatcher.BeginInvoke(() => Docking.ApplyTheme(appearance.IsDark));
 		TitleBarView.DataContext = titleBar;
 		Screensaver.Covered = ContentGrid;   // the WebView2 windows cannot be painted over, so the content under the cover is hidden while it is up
 		Screensaver.CoverChanged += (_, covered) => Docking.SetFloatingVisible(!covered);   // the floating panels are windows of their own: the cover does not reach them
 		Screensaver.Attach(screensaver, logger);
-		_treeWidth = JsonClientStateStore.ClampTreeWidth(stateStore.State.TreeWidth);
-		titleBar.TreeVisibilityChanged += (_, _) => ApplyTreeVisibility();
-		ApplyTreeVisibility();
 		_placementTimer = new DispatcherTimer { Interval = PlacementSaveDelay };
 		_placementTimer.Tick += (_, _) =>
 		{
@@ -81,11 +77,6 @@ public partial class MainWindow : Window
 			_previews?.CloseAllForExit();   // the app really closes now (the Settings guard allowed it): the preview windows go with it (FR.29.11)
 			_lifetime.Cancel();
 		};
-		Splitter.DragCompleted += (_, _) =>
-		{
-			_treeWidth = TreeColumn.ActualWidth;
-			_stateStore.Update(state => state.TreeWidth = _treeWidth);
-		};
 	}
 
 	/// <summary>
@@ -97,6 +88,7 @@ public partial class MainWindow : Window
 		if (_closeApproved || !_settings.HasUnsavedChanges)
 		{
 			CapturePlacement();
+			Docking.FlushLayout();   // a layout change that still waits for its 500 ms is saved now (FR.6.18)
 			return;
 		}
 
@@ -106,19 +98,6 @@ public partial class MainWindow : Window
 			_closeApproved = true;
 			Dispatcher.BeginInvoke(new Action(Close));   // not inside the Closing event
 		}
-	}
-
-	/// <summary>Shows or hides the left panel (the title bar's chevron); the width it had comes back when it is shown again.</summary>
-	private void ApplyTreeVisibility()
-	{
-		var visible = _titleBar.IsTreeVisible;
-		if (!visible && TreeColumn.ActualWidth > 0)
-			_treeWidth = TreeColumn.ActualWidth;
-
-		LeftTabs.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-		Splitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-		TreeColumn.MinWidth = visible ? Constants.Limits.MinTreeWidth : 0;
-		TreeColumn.Width = visible ? new GridLength(_treeWidth) : new GridLength(0);
 	}
 
 	/// <summary>A maximized window with a custom frame reaches over the screen edge by the resize border; pull the content back in.</summary>

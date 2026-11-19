@@ -46,6 +46,19 @@
                                     <Button Click="OnMenuEntryClick" Tag="{Binding CommandId}" IsEnabled="{Binding IsEnabled}" AutomationProperties.Name="{Binding Title}"
                                             Background="Transparent" BorderThickness="0" Padding="12,5" HorizontalContentAlignment="Stretch" Focusable="True">
                                         <DockPanel>
+                                            <!-- The check mark of a Panels entry whose panel is open (FR.6.14); the space stays so that the titles line up -->
+                                            <TextBlock DockPanel.Dock="Left" Width="20" Text="&#xE73E;" AutomationProperties.Name="Open" VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
                                             <TextBlock DockPanel.Dock="Right" Margin="24,0,0,0" Text="{Binding Gesture}" Opacity="0.6" />
                                             <TextBlock Text="{Binding Title}" />
                                         </DockPanel>

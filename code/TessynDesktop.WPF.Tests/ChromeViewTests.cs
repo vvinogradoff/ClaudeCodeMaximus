@@ -59,7 +59,9 @@ public sealed class ChromeViewTests
 
 		public ShellCommands Commands { get; }
 
-		public TitleBarViewModel TitleBar(bool buildOutput = false) => new(Appearance, Store, Commands, new ImmediateUiDispatcher(), "202611.16.0930", buildOutput);
+		public FakeShellLayout Layout { get; } = new();
+
+		public TitleBarViewModel TitleBar(bool buildOutput = false) => new(Appearance, Store, Commands, Layout, new ImmediateUiDispatcher(), "202611.16.0930", buildOutput);
 	}
 
 	private static Color ColorOf(ResourceDictionary resources, string key) => ((SolidColorBrush)resources[key]).Color;
@@ -87,7 +89,8 @@ public sealed class ChromeViewTests
 
 			tree.Command.Execute(null);
 			Assert.False(vm.IsTreeVisible);
-			Assert.True(rig.Store.Get<ShellLayoutSettings>().TreeCollapsed);
+			Assert.True(rig.Layout.IsAutoHidden(Constants.DockedShell.SessionsPanelId));   // the chevron auto-hides the pane that holds Sessions (FR.6.15)
+			Assert.False(rig.Store.Get<ShellLayoutSettings>().TreeCollapsed);   // and leaves the old setting alone
 
 			theme.Command.Execute(null);
 			Assert.True(vm.IsDark);
@@ -145,21 +148,24 @@ public sealed class ChromeViewTests
 	}
 
 	[Fact]
-	public void TitleBarViewModel_RestoresTheCollapsedPanel_AndRaisesTheChange()
+	public void TitleBarViewModel_FollowsTheLayoutsAutoHide_AndIsDisabledWhileSessionsIsClosed()
 	{
 		var rig = new Rig();
-		rig.Store.Update<ShellLayoutSettings>(s => s.TreeCollapsed = true);
 		var vm = rig.TitleBar();
-		var raised = 0;
-		vm.TreeVisibilityChanged += (_, _) => raised++;
+		Assert.True(vm.IsTreeVisible);
+		Assert.True(vm.ToggleTreeCommand.CanExecute(null));
 
+		rig.Layout.ToggleAutoHide(Constants.DockedShell.SessionsPanelId);   // the pane collapsed by another route (the tab menu)
 		Assert.False(vm.IsTreeVisible);
 
 		vm.SetTreeVisible(true);
-		vm.SetTreeVisible(true);   // no change, no event
+		vm.SetTreeVisible(true);   // no change, no toggle
+		Assert.True(vm.IsTreeVisible);
+		Assert.False(rig.Layout.IsAutoHidden(Constants.DockedShell.SessionsPanelId));
 
-		Assert.Equal(1, raised);
-		Assert.False(rig.Store.Get<ShellLayoutSettings>().TreeCollapsed);
+		rig.Layout.Close(Constants.DockedShell.SessionsPanelId);
+		Assert.False(vm.CanToggleTree);
+		Assert.False(vm.ToggleTreeCommand.CanExecute(null));   // closed or floating: the chevron is disabled (FR.6.15)
 	}
 
 	[Fact]
