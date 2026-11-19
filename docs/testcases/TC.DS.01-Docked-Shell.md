@@ -26,8 +26,8 @@ Related requirements: FR.6.11–FR.6.22, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | TC.DS.18 | An unreadable or newer-version `shellLayout` is ignored: the default layout shows and the log names the reason; an unknown panel id is skipped | AUTOMATED | UC.DS.07 | FR.6.18 |
 | TC.DS.19 | Reset layout asks first; confirming restores the defaults and keeps the session, the composer text and open preview panels; cancelling changes nothing | E2E | UC.DS.08 | FR.6.19 |
 | TC.DS.20 | Update from the old settings: tree width 400 px becomes the left pane width; a collapsed tree becomes an auto-hidden left pane; the old values are kept | AUTOMATED, E2E (the collapsed case) | UC.DS.09 | FR.6.18 |
-| TC.DS.21 | A shell shortcut works with the focus in the composer, the Sessions search box, a Focus reply box and a floating panel | E2E | UC.DS.10 | FR.6.20 |
-| TC.DS.22 | Docking, floating, closing and auto-hiding a panel while the composer has the focus leave the focus in the composer; a click into the panel moves it | E2E | UC.DS.10 | FR.6.20 |
+| TC.DS.21 | A shell shortcut works with the focus in the composer, the Sessions search box, a Focus reply box and a floating panel | MANUAL (real key presses and focus; the hook cannot send keys) | UC.DS.10 | FR.6.20 |
+| TC.DS.22 | Docking, floating, closing and auto-hiding a panel while the composer has the focus leave the focus in the composer; a click into the panel moves it | MANUAL (real key presses and focus; the hook cannot send keys) | UC.DS.10 | FR.6.20 |
 | TC.DS.23 | Day/night recolours tabs, borders, splitters, edge tabs, the slide-out and floating frames at once; no WebView2 reloads | MANUAL | UC.DS.11 | FR.6.21 |
 | TC.DS.24 | Theme brushes: the docking resources resolve to Tessyn's tokens in both themes and change on a theme switch (resource check) | AUTOMATED | UC.DS.11 | FR.6.21 |
 | TC.DS.25 | Under `--test-window` nothing is read from or saved to the user's data; the hook's state report covers every panel | E2E | UC.DS.12 | FR.6.22 |

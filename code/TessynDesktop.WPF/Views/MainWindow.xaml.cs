@@ -26,6 +26,7 @@ public partial class MainWindow : Window
 	private readonly IPreviewRouter? _previews;
 	private bool _closeApproved;
 	private readonly bool _testWindow;
+	private readonly DockingTestHook? _testHook;
 	private readonly CancellationTokenSource _lifetime = new();
 	private readonly DispatcherTimer _placementTimer;
 
@@ -42,7 +43,10 @@ public partial class MainWindow : Window
 		DataContext = viewModel;
 		InitializeComponent();
 		if (_testWindow)
+		{
 			PrepareTestWindow();
+			Docking.UseTestMode();   // floating panel windows are off-screen, not in the taskbar and never activated (FR.6.22)
+		}
 
 		Docking.SessionView.SetBinding(DataContextProperty, new System.Windows.Data.Binding(nameof(MainViewModel.Session)) { Source = viewModel });   // the session pane view model exists once the client is connected
 		Docking.Chrome.UseShellCommands(commands);   // the floating panels' keys go to the shell commands too (FR.6.20)
@@ -64,6 +68,13 @@ public partial class MainWindow : Window
 
 		SourceInitialized += OnSourceInitialized;
 		Loaded += OnLoaded;
+		if (_testWindow)
+		{
+			// The programmatic test hook (FR.6.22): a named pipe the E2E tests drive; it never exists outside --test-window.
+			_testHook = new DockingTestHook(options, new DockingTestRequestHandler(Docking), work => Dispatcher.InvokeAsync(work).Task, logger);
+			ContentRendered += (_, _) => _testHook.Start();
+		}
+
 		LocationChanged += (_, _) => RestartPlacementTimer();
 		SizeChanged += (_, _) => RestartPlacementTimer();
 		StateChanged += (_, _) =>
@@ -75,6 +86,7 @@ public partial class MainWindow : Window
 		Closing += OnClosing;
 		Closed += (_, _) =>
 		{
+			_testHook?.Stop();
 			_previews?.CloseAllForExit();   // the app really closes now (the Settings guard allowed it): the preview windows go with it (FR.29.11)
 			_lifetime.Cancel();
 		};
