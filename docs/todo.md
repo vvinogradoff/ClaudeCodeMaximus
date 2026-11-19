@@ -1222,6 +1222,15 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 - [ ] Tick the MANUAL rows of TC.PW.01 one by one (sign-in persistence across restarts, popups, downloads, unplugging a monitor, mixed DPI; list in `.mm-work/07-review.md` 'Manual checks')
 - [ ] E2E for TC.PW.11, 21, 26, 31, 34, 49 and the remaining TC.PW.16 sources (tag chip, markdown-preview link, Focus-card-text link)
 
+### Round 2 — preview improvements (Architect feedback 2026-11-19; branch `wpf/preview-improvements`)
+- [DONE] Relative paths in the session output are Ctrl+clickable, with inline image and video previews; the daemon resolves them against the working directory (FR.26.7; UC.LK.07, TC.LK.26–35; branch `wpf/relative-paths`)
+- [DONE] Readable Markdown tables: no column narrower than its longest word, wide tables scroll in their own box, Focus column widths follow the content (FR.2.14; UC.MT.01, TC.MT.01–05; branch `wpf/tables-closed-refs`)
+- [DONE] Expanded closed Focus items show and open their references; a preview from a closed item is not tied to it (FR.23.29; UC.FC.04, TC.FC.11–13; branch `wpf/tables-closed-refs`)
+- [DONE] Preview windows remember their actual (snapped) rectangle and keep their size across monitor scales (FR.29.16; TC.PW.71–76; branch `wpf/preview-placement-snap-dpi`)
+- [DONE] Separate review (`.mm-work/30-review.md`) and fixes on all three branches
+- [ ] Manual checks: Snap to a half, quarter and a Snap layout, then reopen (TC.PW.71); a window saved on a 100 % monitor reopened on a 150 % one (TC.PW.72); a Focus card with one very long cell
+- [ ] Docked previews inside the main window (Architect item 5): AvalonDock spike first (branch `spike/avalondock`, `.mm-work/40-spike-brief.md`), then the requirements and the build; fall back to a built-in docked panel if WebView2 does not behave
+
 ## Phase 45 — The daemon elevated, WPF normal (FR.32.10–FR.32.14); paste of Explorer files (FR.31.2)
 
 Architect decision 2026-11-19 (Focus A1): WPF always runs normally; the daemon host runs elevated only on request. Docs approved by the Architect 2026-11-19 (Focus A3): FR.32.10–FR.32.14, UC.HS.08, TC.HS.23–TC.HS.30, tdcp-spec 10.A10.
