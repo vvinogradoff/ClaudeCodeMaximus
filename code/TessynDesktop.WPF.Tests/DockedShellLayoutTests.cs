@@ -22,14 +22,17 @@ public sealed class DockedShellLayoutTests
 
 	private sealed class Rig
 	{
-		public Rig(bool persistent = true, MemoryClientState? state = null)
+		public Rig(bool persistent = true, MemoryClientState? state = null, double width = 1400)
 		{
+			Width = width;
 			State = state ?? new MemoryClientState();
 			Settings = new ClientSettingsStore(State, NullLogger<ClientSettingsStore>.Instance);
 			Persistent = persistent;
 		}
 
 		public MemoryClientState State { get; }
+
+		public double Width { get; }
 
 		public ClientSettingsStore Settings { get; }
 
@@ -47,7 +50,7 @@ public sealed class DockedShellLayoutTests
 		public Rig Build()
 		{
 			Area = new DockingArea(new Border { Name = "Stub", MinWidth = 100 });
-			Window = new Window { Content = Area, Width = 1400, Height = 800, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
+			Window = new Window { Content = Area, Width = Width, Height = 800, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
 			Area.BuildShell(Panels(), new ShellLayoutMemory(Settings, State, Persistent), Log, () => ([Screen], Screen));
 			return this;
 		}
@@ -64,6 +67,20 @@ public sealed class DockedShellLayoutTests
 			Window.UpdateLayout();
 			Window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
 			Window.UpdateLayout();
+		}
+
+		/// <summary>Lets the dispatcher run for a while (the layout's 500 ms timers).</summary>
+		public void Wait(int milliseconds)
+		{
+			var frame = new System.Windows.Threading.DispatcherFrame();
+			var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
+			timer.Tick += (_, _) =>
+			{
+				timer.Stop();
+				frame.Continue = false;
+			};
+			timer.Start();
+			System.Windows.Threading.Dispatcher.PushFrame(frame);
 		}
 
 		public void Stop()
@@ -455,6 +472,143 @@ public sealed class DockedShellLayoutTests
 			Assert.Contains("Shell layout: sessions=left,tab0,open,selected recent=left,tab1,open tags=closed session=center focus=right,tab0,open,selected", rig.Log.Messages);
 			rig.Stop();
 			Assert.NotNull(rig.Settings.Get<DockedShellLayoutSettings>().Layout);
+		});
+	}
+
+	[Fact]
+	public void ALayoutPassWithoutADockingChange_ReadsNothing_AndSavesNothing()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var rig = new Rig().Start();
+			rig.Wait(700);   // the first probe runs and finds nothing to save
+			var captures = rig.Area.CaptureCount;
+
+			rig.Area.InvalidateMeasure();
+			rig.Settle();
+			rig.Area.SessionView.InvalidateMeasure();
+			rig.Settle();
+			Assert.Equal(captures, rig.Area.CaptureCount);   // the pass itself reads nothing
+			rig.Wait(700);
+
+			Assert.Equal(captures, rig.Area.CaptureCount);   // and the probe finds no change
+			Assert.Null(rig.Settings.Get<DockedShellLayoutSettings>().Layout);   // so nothing was saved
+			rig.Window.Close();
+		});
+	}
+
+	[Fact]
+	public void ASplitterMove_IsFoundByTheProbe_AndSaved()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var rig = new Rig().Start();
+			rig.Wait(700);
+			rig.PaneOf(Constants.DockedShell.SessionsPanelId).DockWidth = new GridLength(390);
+			rig.Settle();
+			rig.Wait(1300);   // the probe, then the save delay
+
+			Assert.NotNull(rig.Settings.Get<DockedShellLayoutSettings>().Layout);
+			rig.Window.Close();
+		});
+	}
+
+	[Fact]
+	public void FixedPaneWidthsFromABiggerScreen_AreShrunkProportionally_SoTheSessionViewKeepsItsMinimum()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var first = new Rig().Start();
+			first.PaneOf(Constants.DockedShell.SessionsPanelId).DockWidth = new GridLength(700);
+			first.PaneOf(Constants.DockedShell.FocusPanelId).DockWidth = new GridLength(500);
+			first.Settle();
+			first.Stop();
+
+			var second = new Rig(state: first.State, width: 1000).Start();
+			var left = second.PaneOf(Constants.DockedShell.SessionsPanelId).DockWidth.Value;
+			var focus = second.PaneOf(Constants.DockedShell.FocusPanelId).DockWidth.Value;
+			Assert.True(left + focus <= 1000 - Constants.ShellLayout.MinSessionWidth + 2, $"{left} + {focus}");
+			Assert.InRange(left / focus, 1.3, 1.5);   // the proportion stays (700 : 500)
+			Assert.True(second.Area.SessionView.ActualWidth >= Constants.ShellLayout.MinSessionWidth - 20, second.Area.SessionView.ActualWidth.ToString());
+			second.Window.Close();
+		});
+	}
+
+	[Fact]
+	public void AClosedPanel_SurvivesTwoRestartsWithoutADuplicateInTheSavedText()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var first = new Rig().Start();
+			first.Area.Close(Constants.DockedShell.TagsPanelId);
+			first.Settle();
+			first.Stop();
+			Assert.Equal(1, Count(first.Settings.Get<DockedShellLayoutSettings>().Layout!, "ContentId=\"tags\""));
+
+			var second = new Rig(state: first.State).Start();
+			Assert.Equal(1, second.Area.Root.Hidden.Count(h => h.ContentId == Constants.DockedShell.TagsPanelId));
+			second.Area.BringForward(Constants.DockedShell.TagsPanelId);
+			second.Settle();
+			Assert.Empty(second.Area.Root.Hidden.Where(h => h.ContentId == Constants.DockedShell.TagsPanelId));
+			second.Area.Close(Constants.DockedShell.TagsPanelId);
+			second.Settle();
+			second.Stop();
+			Assert.Equal(1, Count(second.Settings.Get<DockedShellLayoutSettings>().Layout!, "ContentId=\"tags\""));
+
+			var third = new Rig(state: first.State).Start();
+			Assert.Contains("tags=closed", third.Area.StateText());
+			Assert.Equal(1, third.Area.Root.Hidden.Count(h => h.ContentId == Constants.DockedShell.TagsPanelId));
+			third.Window.Close();
+		});
+	}
+
+	private static int Count(string text, string part) => text.Split(part).Length - 1;
+
+	[Fact]
+	public void ALayoutOfANewerVersion_IsKeptUntilTheFirstRealChange()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var state = new MemoryClientState();
+			var settings = new ClientSettingsStore(state, NullLogger<ClientSettingsStore>.Instance);
+			settings.Update<DockedShellLayoutSettings>(s =>
+			{
+				s.Version = Constants.DockedShell.LayoutVersion + 1;
+				s.Layout = "<newer layout/>";
+			});
+			var rig = new Rig(state: state).Start();
+			rig.Wait(700);
+			rig.Area.FlushLayout();
+			var kept = settings.Get<DockedShellLayoutSettings>();
+			Assert.Equal("<newer layout/>", kept.Layout);   // the default is used, the stored text is left alone
+			Assert.Equal(Constants.DockedShell.LayoutVersion + 1, kept.Version);
+
+			rig.Area.Close(Constants.DockedShell.FocusPanelId);   // the user changes the layout
+			rig.Settle();
+			rig.Area.FlushLayout();
+			var replaced = settings.Get<DockedShellLayoutSettings>();
+			Assert.Equal(Constants.DockedShell.LayoutVersion, replaced.Version);
+			Assert.NotEqual("<newer layout/>", replaced.Layout);
+			rig.Window.Close();
+		});
+	}
+
+	[Fact]
+	public void BringingAnAutoHiddenPanelForward_OpensTheSlideOut()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var rig = new Rig().Start();
+			rig.Area.ToggleAutoHide(Constants.DockedShell.SessionsPanelId);
+			rig.Settle();
+			Assert.False(rig.Area.Chrome.SlideOut.IsOpen);
+
+			rig.Area.BringForward(Constants.DockedShell.RecentPanelId);
+			rig.Settle();
+
+			Assert.True(rig.Area.Chrome.SlideOut.IsOpen);   // the synthetic click on the edge tab is what the library reacts to
+			Assert.DoesNotContain(rig.Log.Messages, m => m.Contains("did not open"));
+			rig.Window.Close();
 		});
 	}
 }

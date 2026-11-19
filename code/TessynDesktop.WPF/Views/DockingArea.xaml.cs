@@ -1,10 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
 using AvalonDock;
-using AvalonDock.Controls;
 using AvalonDock.Layout;
 using AvalonDock.Themes;
 using Microsoft.Extensions.Logging;
@@ -17,7 +14,7 @@ namespace TessynDesktop.WPF.Views;
 /// The main window's docking area (FR.6.11, FR.29.19): AvalonDock holding the whole shell layout. The <see cref="SessionPane"/> is the single, non-closable, non-floatable
 /// document of the central document pane (no tab strip); Sessions, Recent and Tags (left pane) and Focus (right pane) are panels around it (<see cref="BuildShell"/>);
 /// docked preview panels are placed by <see cref="PreviewDockLayoutApplier"/>. Implements <see cref="IDockingSurface"/> for the previews and <see cref="IShellLayout"/> for the
-/// view models and menu commands. The layout is remembered (FR.6.18) through <see cref="ShellLayoutMemory"/>. The theme is AvalonDock's VS2013 light or dark for now (FR.6.21 is stage 2).
+/// view models and menu commands. The layout is remembered (FR.6.18) through <see cref="ShellLayoutMemory"/>. The theme follows Tessyn's light or dark theme (FR.6.21).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
@@ -36,6 +33,9 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	private readonly Dictionary<string, PreviewDockLayoutModel> _places = new();
 	private readonly Dictionary<string, PreviewDockLayoutModel> _lastDocked = new();
 	private readonly DispatcherTimer _saveTimer;
+	private readonly DockingVisualTree _tree = new();
+	private readonly DockingStripSync _strip;
+	private readonly DockingPanelRaiser _raiser;
 	private LayoutDocumentPane _documentPane;
 	private LayoutRoot? _subscribedRoot;
 	private ShellLayoutMemory? _memory;
@@ -43,10 +43,9 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	private Func<(IReadOnlyList<MonitorBounds> Monitors, MonitorBounds Primary)>? _monitors;
 	private string _lastState = string.Empty;
 	private string _lastSignature = string.Empty;
-	private bool _focusSizePending;
-	private bool _building;
-	private bool _stripSynced;
-	private Visibility _stripState = Visibility.Visible;
+	private bool _widthsPending;
+	private bool _savePending;
+	private int _buildDepth;
 	private bool _floatingHidden;
 
 	public DockingArea() : this(new SessionPane())
@@ -60,23 +59,25 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		SessionView = sessionView;
 		Chrome = new DockingChrome(DockManager, this);   // the compact chrome, the focus guard, the slide-out closer (FR.6.13, FR.6.20)
 		DockManager.AnchorableHeaderTemplateSelector = new ShellPanelHeaderTemplateSelector();   // the Focus tab shows the badge (FR.6.16)
+		_strip = new DockingStripSync(DockManager, () => _documentPane, _tree);
+		_raiser = new DockingPanelRaiser(DockManager, _tree, () => Chrome.SlideOut.IsOpen);
 		_documentPane = CreateDocumentPane();
 		var root = new LayoutPanel { Orientation = Orientation.Horizontal };
 		root.Children.Add(_documentPane);
 		SetLayout(new LayoutRoot { RootPanel = root });
+		UseDocumentPane(_documentPane);
 		_saveTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = Constants.DockedShell.LayoutSaveDelay };
 		_saveTimer.Tick += (_, _) =>
 		{
 			_saveTimer.Stop();
+			Evaluate();   // a splitter drag or a window resize has no event of its own: it is found here, at most once per delay
+			if (!_savePending)
+				return;
+
+			_savePending = false;
 			SaveNow();
 		};
-		DockManager.LayoutUpdated += (_, _) =>
-		{
-			if (!_stripSynced || _stripState != WantedStrip())
-				_stripSynced = UpdateDocumentTabStrip();
-
-			OnLayoutChanged();
-		};
+		DockManager.LayoutUpdated += (_, _) => OnLayoutPass();
 		DockManager.LayoutFloatingWindowControlCreated += (_, e) =>
 		{
 			if (e.LayoutFloatingWindowControl is not { } created)
@@ -114,6 +115,12 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 
 	public event EventHandler? LayoutChanged;
 
+	/// <summary>How many times the places of the panels were read (a layout pass without a docking change reads none); for tests.</summary>
+	public int CaptureCount { get; private set; }
+
+	/// <summary>The layout is being replaced: the library's events during it are not changes.</summary>
+	private bool _building => _buildDepth > 0;
+
 	/// <summary>Raised after any change of the shell layout (a panel opened, closed, moved, tabbed, floated, auto-hidden, resized).</summary>
 	public event EventHandler? Changed;
 
@@ -128,10 +135,29 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	{
 		_memory = memory;
 		_logger = logger;
+		_raiser.Logger = logger;
 		_monitors = monitors;
 		foreach (var definition in panels)
 			_definitions[definition.Id] = definition;
 
+		_buildDepth++;
+		try
+		{
+			BuildCore(memory, logger);
+		}
+		finally
+		{
+			_buildDepth--;
+		}
+
+		_widthsPending = true;
+		_lastState = StateText();
+		_lastSignature = _lastState + SizeText();
+		logger.LogInformation(Constants.ShellLayout.LayoutLogFormat, _lastState);
+	}
+
+	private void BuildCore(ShellLayoutMemory memory, ILogger logger)
+	{
 		var start = memory.ReadStart();
 		string? failure = null;
 		if (start.Xml != null && TryRestore(start.Xml, out failure))
@@ -152,10 +178,6 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 
 			InstallDefault(start.LeftWidth, start.LeftAutoHidden, []);
 		}
-
-		_lastState = StateText();
-		_lastSignature = _lastState + SizeText();
-		logger.LogInformation(Constants.ShellLayout.LayoutLogFormat, _lastState);
 	}
 
 	/// <summary>Hides or shows the floating panels' windows (the screensaver cover does not reach them, FR.29.19).</summary>
@@ -166,23 +188,25 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			window.Visibility = visible ? Visibility.Visible : Visibility.Hidden;
 	}
 
-	/// <summary>Switches the docking theme with Tessyn's light or dark theme (FR.29.24, first stage: AvalonDock's own VS2013 pair).</summary>
+	/// <summary>Switches the docking theme with Tessyn's light or dark theme (AvalonDock's own VS2013 pair, recoloured by the chrome resources).</summary>
 	public void ApplyTheme(bool dark)
 	{
 		if (DockManager.Theme is Vs2013DarkTheme && dark || DockManager.Theme is Vs2013LightTheme && !dark)
 			return;
 
 		DockManager.Theme = dark ? new Vs2013DarkTheme() : new Vs2013LightTheme();
-		_stripSynced = false;   // a new theme builds the panes' templates again
+		_strip.Invalidate();   // a new theme builds the panes' templates again
 	}
 
 	/// <summary>Saves a layout change that is still waiting for its delay (the window is closing).</summary>
 	public void FlushLayout()
 	{
-		if (!_saveTimer.IsEnabled)
+		_saveTimer.Stop();
+		Evaluate();
+		if (!_savePending)
 			return;
 
-		_saveTimer.Stop();
+		_savePending = false;
 		SaveNow();
 	}
 
@@ -210,11 +234,11 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		panel.IsSelected = true;
 		NotifySelected(panel);   // also when it already was the selected tab (the change event does not fire then)
 		if (panel.IsAutoHidden)
-			SlideOut(panel);
+			_raiser.SlideOut(panel);
 		else if (panel.IsFloating)
-			Raise(panel);
+			_raiser.Raise(panel);
 
-		OnLayoutChanged();
+		Evaluate();
 	}
 
 	/// <summary>A panel's tab became the selected one of its pane (FR.6.11): its content reacts (the Recent panel's collapse rule, the Focus panel's Closed expander).</summary>
@@ -228,9 +252,11 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	{
 		if (sender is LayoutAnchorable { IsSelected: true } panel)
 			NotifySelected(panel);
+
+		Evaluate();
 	}
 
-	private static void NotifySelected(LayoutAnchorable panel)
+	private void NotifySelected(LayoutAnchorable panel)
 	{
 		if (panel.Content is IPanelSelectionAware aware)
 			aware.OnPanelSelected();
@@ -243,7 +269,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 
 		CapturePlace(panel);   // the place it comes back to
 		panel.Hide();
-		OnLayoutChanged();
+		Evaluate();
 	}
 
 	public bool CanToggleAutoHide(string panelId) => _panels.TryGetValue(panelId, out var panel) && IsInLayout(panel) && !panel.IsFloating && panel.Parent != null;
@@ -256,7 +282,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			return;
 
 		_panels[panelId].ToggleAutoHide();
-		OnLayoutChanged();
+		Evaluate();
 	}
 
 	public void ResetLayout()
@@ -267,33 +293,14 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		var others = Root.Descendents().OfType<LayoutAnchorable>().Where(a => !ShellPanelIds.Contains(a.ContentId)).ToList();
 		InstallDefault(Constants.DockedShell.DefaultLeftPaneWidth, false, others);
 		_logger?.LogInformation(Constants.ShellLayout.LayoutResetLog);
+		Evaluate();
 		_saveTimer.Stop();
-		OnLayoutChanged();
+		_savePending = false;
 		SaveNow();
 	}
 
-	/// <summary>
-	/// The document pane shows no tab strip while it holds the session alone (FR.29.19); as soon as it holds another item (a preview panel dropped onto the centre of the session
-	/// pane becomes a tab beside the session) the strip shows, so the tabs can be selected and the preview dragged out again. The library's template has no switch for it, and an
-	/// implicit style does not reach into it, so the strip (the tab panel and the drop-down button around it) is collapsed or shown after the template is built; the template still
-	/// makes the selected content. Run on every layout update and theme switch. True when the strip was found.
-	/// </summary>
-	public bool UpdateDocumentTabStrip()
-	{
-		var found = false;
-		var wanted = WantedStrip();
-		foreach (var panel in Descendants<DocumentPaneTabPanel>(DockManager))
-		{
-			found = true;
-			if (VisualTreeHelper.GetParent(panel) is UIElement strip && strip.Visibility != wanted)
-				strip.Visibility = wanted;
-		}
-
-		if (found)
-			_stripState = wanted;
-
-		return found;
-	}
+	/// <summary>Collapses or shows the document pane's tab strip now (<see cref="DockingStripSync"/>); true when the strip was found.</summary>
+	public bool UpdateDocumentTabStrip() => _strip.Update();
 
 	/// <summary>The one line the E2E tests read: every shell panel's state (side, tab index, open / autohide / floating, selected) or <c>closed</c>.</summary>
 	public string StateText()
@@ -335,7 +342,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	}
 
 	/// <summary>The panel is part of the layout: docked, tabbed, auto-hidden or floating, and not hidden or closed.</summary>
-	private static bool IsInLayout(LayoutAnchorable panel) => panel.Root != null && !panel.IsHidden && panel.Parent is ILayoutContainer container && container.Children.Contains(panel);
+	private bool IsInLayout(LayoutAnchorable panel) => panel.Root != null && !panel.IsHidden && panel.Parent is ILayoutContainer container && container.Children.Contains(panel);
 
 	private LayoutDocumentPane CreateDocumentPane()
 	{
@@ -362,7 +369,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 
 	private void SetLayout(LayoutRoot layout)
 	{
-		_building = true;
+		_buildDepth++;
 		try
 		{
 			if (_subscribedRoot != null)
@@ -374,14 +381,21 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		}
 		finally
 		{
-			_building = false;
+			_buildDepth--;
 		}
 	}
 
 	private void OnRootUpdated(object? sender, EventArgs e)
 	{
-		_stripSynced = false;   // the library may have built the panes again
-		OnLayoutChanged();
+		_strip.Invalidate();   // the library may have built the panes again
+		Evaluate();
+	}
+
+	private void UseDocumentPane(LayoutDocumentPane pane)
+	{
+		_documentPane = pane;
+		pane.ChildrenCollectionChanged += (_, _) => _strip.Invalidate();
+		_strip.Invalidate();
 	}
 
 	/// <summary>
@@ -390,13 +404,28 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	/// </summary>
 	private void InstallDefault(double leftWidth, bool leftAutoHidden, IReadOnlyList<LayoutAnchorable> others)
 	{
+		_buildDepth++;
+		try
+		{
+			InstallDefaultCore(leftWidth, leftAutoHidden, others);
+		}
+		finally
+		{
+			_buildDepth--;
+		}
+
+		_widthsPending = true;
+	}
+
+	private void InstallDefaultCore(double leftWidth, bool leftAutoHidden, IReadOnlyList<LayoutAnchorable> others)
+	{
 		foreach (var other in others)
 			(other.Parent as ILayoutContainer)?.RemoveChild(other);
 
 		_places.Clear();
 		_lastDocked.Clear();
 		_panels.Clear();
-		_documentPane = CreateDocumentPane();
+		UseDocumentPane(CreateDocumentPane());
 		var left = new List<LayoutAnchorable>();
 		foreach (var definition in _definitions.Values.Where(d => d.IsLeft).OrderBy(d => LeftOrder(d.Id)))
 		{
@@ -414,7 +443,6 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			_panels[focus.ContentId] = focus;
 		}
 
-		_focusSizePending = focus != null && ActualWidth <= 0;
 		SetLayout(_builder.Build(_documentPane, left, focus, leftWidth, ActualWidth));
 		if (leftAutoHidden && _panels.TryGetValue(Constants.DockedShell.SessionsPanelId, out var sessions))
 		{
@@ -428,7 +456,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			_applier.Apply(Root, _documentPane, other, null, ActualWidth, ActualHeight);
 	}
 
-	private static int LeftOrder(string id) => id switch
+	private int LeftOrder(string id) => id switch
 	{
 		Constants.DockedShell.SessionsPanelId => 0,
 		Constants.DockedShell.RecentPanelId => 1,
@@ -457,7 +485,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 
 		session.CanClose = false;
 		session.CanFloat = false;
-		_documentPane = pane;
+		UseDocumentPane(pane);
 		if (_subscribedRoot != null)
 			_subscribedRoot.Updated -= OnRootUpdated;
 
@@ -467,9 +495,14 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		_lastDocked.Clear();
 		_panels.Clear();
 		var found = Root.Descendents().OfType<LayoutAnchorable>().Where(a => ShellPanelIds.Contains(a.ContentId)).ToList();
+		var hidden = Root.Hidden.Where(h => ShellPanelIds.Contains(h.ContentId)).ToList();
 		foreach (var definition in _definitions.Values)
 		{
-			var panel = found.FirstOrDefault(a => a.ContentId == definition.Id) ?? CreatePanel(definition);   // not in the saved layout: closed, shown at its default place later
+			// A panel saved as closed sits in the hidden list: that one is the panel in use (one element per id, so the next save writes one). Not saved at all: a new one, shown at its default place later.
+			var panel = found.FirstOrDefault(a => a.ContentId == definition.Id) ?? hidden.FirstOrDefault(h => h.ContentId == definition.Id) ?? CreatePanel(definition);
+			foreach (var duplicate in hidden.Where(h => h.ContentId == definition.Id && !ReferenceEquals(h, panel)))
+				Root.Hidden.Remove(duplicate);
+
 			panel.Title = definition.Title;
 			panel.CanClose = true;
 			panel.CanFloat = true;
@@ -535,43 +568,59 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			_lastDocked[panel.ContentId] = read;
 	}
 
-	/// <summary>Shows an auto-hidden panel's slide-out without moving the keyboard focus (FR.6.16, FR.6.20): the click on its edge tab, raised in code.</summary>
-	private void SlideOut(LayoutAnchorable panel)
+	/// <summary>One layout pass of the manager (it runs often): nothing is read here; a probe for a size change is armed, and the tab strip is looked at only when it may be wrong.</summary>
+	private void OnLayoutPass()
 	{
-		var anchor = Descendants<LayoutAnchorControl>(DockManager).FirstOrDefault(a => ReferenceEquals(a.Model, panel.Parent));
-		anchor?.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseDownEvent, Source = anchor });
-	}
+		if (_strip.IsDirty)
+			_strip.Update();
 
-	/// <summary>Brings a floating panel's window to the front without activating it.</summary>
-	private void Raise(LayoutAnchorable panel)
-	{
-		foreach (var window in DockManager.FloatingWindows.Where(w => w.Model is ILayoutElement model && ContainsPanel(model, panel)))
-		{
-			window.Topmost = true;
-			window.Topmost = false;
-		}
-	}
-
-	private static bool ContainsPanel(ILayoutElement element, LayoutAnchorable panel) => element is ILayoutContainer container && container.Descendents().Contains(panel);
-
-	private void OnLayoutChanged()
-	{
 		LayoutChanged?.Invoke(this, EventArgs.Empty);
 		if (_building || _memory == null)
 			return;
 
-		if (_focusSizePending && ActualWidth > 0)
+		if (_widthsPending && ActualWidth > 0)
+			FitWidths();
+
+		if (!_saveTimer.IsEnabled)
+			_saveTimer.Start();
+	}
+
+	/// <summary>
+	/// After the first measure: Focus gets its exact 35 % when it was given a proportional share, and fixed pane widths that would leave the Session view narrower than
+	/// <see cref="Constants.ShellLayout.MinSessionWidth"/> (a layout saved on a bigger screen) are shrunk proportionally. Not a change of the user's: it is not saved.
+	/// </summary>
+	private void FitWidths()
+	{
+		_widthsPending = false;
+		if (_panels.TryGetValue(Constants.DockedShell.FocusPanelId, out var focus) && focus.Parent is LayoutAnchorablePane { DockWidth.IsStar: true } starPane && !focus.IsAutoHidden && !focus.IsFloating)
 		{
-			_focusSizePending = false;
-			if (_panels.TryGetValue(Constants.DockedShell.FocusPanelId, out var focus) && focus.Parent is LayoutAnchorablePane { DockWidth.IsStar: true } pane && !focus.IsAutoHidden && !focus.IsFloating)
-			{
-				pane.DockWidth = new GridLength(_builder.FocusWidth(ActualWidth));
-				_documentPane.DockWidth = new GridLength(1, GridUnitType.Star);
-			}
+			starPane.DockWidth = new GridLength(_builder.FocusWidth(ActualWidth));
+			_documentPane.DockWidth = new GridLength(1, GridUnitType.Star);
 		}
 
-		foreach (var panel in _panels.Values.Where(IsInLayout))
-			CapturePlace(panel);
+		var panes = new[] { Constants.DockedShell.SessionsPanelId, Constants.DockedShell.FocusPanelId }
+			.Select(id => _panels.GetValueOrDefault(id))
+			.Where(p => p is { IsAutoHidden: false, IsFloating: false } && IsInLayout(p))
+			.Select(p => p!.Parent as LayoutAnchorablePane)
+			.OfType<LayoutAnchorablePane>().Where(p => p.DockWidth.IsAbsolute).Distinct().ToList();
+		var fixedWidth = panes.Sum(p => p.DockWidth.Value);
+		var available = ActualWidth - Constants.ShellLayout.MinSessionWidth;
+		if (fixedWidth > 0 && fixedWidth > available)
+		{
+			var factor = Math.Max(available, 0) / fixedWidth;
+			foreach (var pane in panes)
+				pane.DockWidth = new GridLength(Math.Max(Constants.PreviewDock.MinPaneSize, Math.Round(pane.DockWidth.Value * factor)));
+		}
+
+		_lastState = StateText();
+		_lastSignature = _lastState + SizeText();   // the baseline: what the library and this fit made of it is not a change to save
+	}
+
+	/// <summary>Reads the layout when it really changed (a docking change, a selection, or a size found by the probe): logs the state, tells the listeners, and arms the save.</summary>
+	private void Evaluate()
+	{
+		if (_building || _memory == null)
+			return;
 
 		var state = StateText();
 		var signature = state + SizeText();
@@ -579,12 +628,17 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			return;
 
 		_lastSignature = signature;
+		CaptureCount++;
+		foreach (var panel in _panels.Values.Where(IsInLayout))
+			CapturePlace(panel);
+
 		if (state != _lastState)
 		{
 			_lastState = state;
 			_logger?.LogInformation(Constants.ShellLayout.LayoutLogFormat, state);
 		}
 
+		_savePending = true;
 		_saveTimer.Stop();
 		_saveTimer.Start();
 		Changed?.Invoke(this, EventArgs.Empty);
@@ -601,24 +655,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		}
 		catch (Exception ex)
 		{
-			_logger?.LogWarning(ex, "The shell layout could not be saved");
-		}
-	}
-
-	/// <summary>The strip shows only while the document pane holds more than the session.</summary>
-	private Visibility WantedStrip() => DocumentPane.ChildrenCount > 1 ? Visibility.Visible : Visibility.Collapsed;
-
-	private IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
-	{
-		var count = VisualTreeHelper.GetChildrenCount(root);
-		for (var i = 0; i < count; i++)
-		{
-			var child = VisualTreeHelper.GetChild(root, i);
-			if (child is T match)
-				yield return match;
-
-			foreach (var nested in Descendants<T>(child))
-				yield return nested;
+			_logger?.LogWarning(ex, Constants.ShellLayout.SaveFailedLog);
 		}
 	}
 }
