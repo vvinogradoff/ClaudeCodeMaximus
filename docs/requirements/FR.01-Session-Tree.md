@@ -182,3 +182,12 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 - **Same behaviour as FR.1.31.** The group stays selected and in view, the tree keeps the keyboard focus, a press while a move is in flight is ignored, and the keys do nothing while a tree search is active. A directory selected: nothing happens.
 - **Daemon.** `tree.moveNode` accepts a group whose `parentId` is its current parent, with the new index among the parent's groups (TDCP section 10.A8). Moving a group to another parent stays refused.
 - **Stored.** The order is saved in `appsettings.json` like any tree change and is kept after a restart; the web's tree shows the same order.
+
+---
+
+## Amendments (2026-11-19, docked shell)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.1.15 Left panel tabs (Tree, Recent, Tags) | FR.6.11, FR.6.12 | Sessions (the Tree), Recent and Tags are panels of the docked shell, tabs of the left pane by default; their content is unchanged. |
+| FR.1.19 Equal tabs | FR.6.13 | Replaced by the docking tabs of the pane (compact chrome). |

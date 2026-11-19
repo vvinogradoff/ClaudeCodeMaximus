@@ -72,6 +72,7 @@ The amendment paragraphs of the FR.25 commit (FR.1.8 amendment, FR.1.17, FR.3.3 
 | UC/TC code MT | UC.MT.01, TC.MT.01–05 (Markdown tables) | no clash with the codes above |
 | **FR.23.30** | file paths (absolute and relative) in Focus card titles and bodies are marked and open on Ctrl+click; `file.preview` with `itemId` (tdcp-spec 10.A11) | 2026-11-19, Architect feedback, amends FR.23.18, FR.23.25; UC.FX.03, TC.FX.23–32 |
 | **FR.29.17–FR.29.26** | in-window docked previews on AvalonDock: docked mode, one panel per group and the default Preview panel, docking/tabs/floating/auto-hide, Pin and Auto-close, the `previewDock` layout per group, restart, mode changes, theme, the library, the test seam | 2026-11-19, Architect item 5, approved with six decisions; amends FR.29.1, FR.29.3, FR.29.4, FR.29.8–FR.29.11, FR.23.18, FR.27; UC.PW.17–24, TC.PW.77–103 (stage 1 built 2026-11-19, merge `6c1b968`) |
+| **FR.6.11–FR.6.22** | the docked shell: the whole WPF UI as docked panels (Sessions, Recent, Tags, Session view, Focus, previews), default layout, compact chrome, the Panels menu, the chevron, Focus as a panel, composer, layout memory (`shellLayout`), Reset layout, keyboard, theme, test seam | 2026-11-19, Architect, option A, approved with seven decisions; amends FR.6.1–FR.6.3, FR.1.15, FR.1.19, FR.12.29, FR.23.12, FR.23.13, FR.23.21, FR.29.18, FR.29.19, FR.29.24; UC.DS.01–12, TC.DS.01–26 (new code DS) |
 | NR.6, NR.7 | E2E running, stretching rule | |
 | UC/TC codes | LP, TR, IN, CL, SH, TA, FC, HS | no clash with 15, 21, DL, FD, FV, IC, LC, RT, TG, WEB |
 
