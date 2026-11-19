@@ -36,3 +36,8 @@ Related requirements: FR.26.5, FR.26.6 (see `docs/requirements/`). Test cases: [
 **Main flow:** the entry mentions a video path (mp4, mov, webm, mkv, avi, m4v, wmv); right under the path the first frame of the video appears, fitted to the column, with a small play badge. The User Ctrl+clicks the path or the frame and the video plays in the default media player. A plain click does nothing, so the User can select and copy the frame or the path.
 **Alternative flows:** **A1** — The policy refuses the file: the path stays with "Video not allowed". **A2** — No frame can be made (damaged file, no codec, too large for a preview, shell timeout): "Preview unavailable"; Ctrl+click still opens the file. **A3** — The frame appears late: the entry is measured again and the view does not jump. **A4** — The daemon refuses on Ctrl+click: a dismissible notice, no dialog, no player.
 **Covers:** FR.26.5, FR.26.6.
+
+## UC.LK.07 — Open a file the session names by a relative path
+**Main flow:** the entry names a file relative to the session's working directory (`docs/features/preview-windows.md`, `.\src\a.cs`, or `` `README.md` `` in backticks); it has the dotted underline like an absolute path. The User Ctrl+clicks it and it opens (preview pane, or the group's preview window). A relative image or video path shows its inline preview.
+**Alternative flows:** **A1** — The path leaves the working directory (`..\..\outside.txt`): the daemon refuses, a dismissible message, no dialog. **A2** — The file does not exist: "File not found" (an image: "Image unavailable"). **A3** — A web address or a link target (`example.com/page.html`, `[t](a/b.md)`) and version-like text are not marked.
+**Covers:** FR.26.7.

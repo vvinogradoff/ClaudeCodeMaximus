@@ -31,9 +31,16 @@ Related requirements: FR.26.5, FR.26.6. Use cases: [UC.LK.01](/docs/usecases/UC.
 | TC.LK.23 | Ctrl+click on a video path opens a copy from the preview cache through the allowlisted launcher, not the pane; a second Ctrl+click does not fetch again; a daemon refusal gives a notice and starts nothing; non-video paths still open the pane | AUTOMATED | UC.LK.06 | FR.26.6 |
 | TC.LK.24 | E2E over CDP with a real 3 KB clip: the first frame (made by the shell in the test user's session) appears directly under the path, centred play badge, fitted to the column, entry re-measured; a plain click on the path or the frame asks for nothing; the pointer cursor only with Ctrl; Ctrl+click on the frame and on the path asks the host to open it in the default player (a test window only logs the request) and the pane stays closed | E2E | UC.LK.06 | FR.26.6 |
 | TC.LK.25 | E2E: a file named .mp4 that is not a video shows "Preview unavailable", a clip under a credentials folder "Video not allowed", and only the real clip became a frame | E2E | UC.LK.06 | FR.26.6 |
+| TC.LK.26 | Marking, positive: `docs/features/preview-windows.md`, `code\App.xaml.cs`, `./src/a.ts`, `..\x\y.cs`, `.github/workflows/ci.yml` and a spaced path inside backticks or quotes are marked in place (dotted underline); `IsPathShaped` accepts exactly these shapes | AUTOMATED | UC.LK.07 | FR.26.7 |
+| TC.LK.27 | Marking, negative: `https://x/a.md`, `[t](a/b.md)` (link behaviour kept), `example.com/page.html` (top-level-domain list), `1.2.3`, `v2.0`, a path without extension, an absolute path (not marked twice) and paths in user entries are not marked as relative paths | AUTOMATED | UC.LK.07 | FR.26.7 |
+| TC.LK.28 | A bare file name with an extension (`README.md` in backticks) is marked only inside backticks; outside them, or with a capitalised extension (`string.Empty`), it is not | AUTOMATED | UC.LK.07 | FR.26.7 |
+| TC.LK.29 | Daemon: `file.preview` with a relative path resolves it against the working directory (`docs/plan.md`); `..\..\outside.txt` is refused with "the relative path leaves the working directory" | AUTOMATED | UC.LK.07 | FR.26.7 |
+| TC.LK.30 | E2E: Ctrl+click on a relative `.md` path asks `file.preview` with the relative text as written and opens the preview; a plain click asks for nothing | E2E | UC.LK.07 | FR.26.7 |
+| TC.LK.31 | E2E: a relative image path gets the inline image preview directly under it; Ctrl+click on it opens the file | E2E | UC.LK.07 | FR.26.7 |
 
 ## FR → TC coverage
 | FR | Test cases |
 |---|---|
 | FR.26.5 | TC.LK.01–02, 03, 07–15, 17 |
-| FR.26.6 | TC.LK.03–07, 11, 16, 18–25 |
+| FR.26.6 | TC.LK.03–07, 11, 16, 18–25, 30 |
+| FR.26.7 | TC.LK.26–31 |
