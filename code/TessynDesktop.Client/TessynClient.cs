@@ -751,6 +751,13 @@ public sealed partial class TessynClient : ITessynClient
 			cancellationToken);
 
 	/// <inheritdoc />
+	public Task<FilePreviewResult> FilePreviewForItemAsync(string nodeId, string itemId, string path, CancellationToken cancellationToken = default) =>
+		CallAsync<FilePreviewResult>(
+			RemoteProtocol.Methods.FilePreview,
+			Params(("nodeId", Node(nodeId)), ("itemId", Node(itemId)), ("path", Node(path))),
+			cancellationToken);
+
+	/// <inheritdoc />
 	public Task<AttachmentDto> AttachmentImportAsync(string nodeId, string sourcePath, CancellationToken cancellationToken = default) =>
 		CallAsync<AttachmentDto>(
 			RemoteProtocol.LoopbackMethods.AttachmentImport,

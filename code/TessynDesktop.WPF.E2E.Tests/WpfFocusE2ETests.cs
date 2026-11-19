@@ -129,6 +129,26 @@ public sealed class WpfFocusE2ETests : IDisposable
 	}
 
 	[Fact]
+	public async Task TC_FX_32_Invoking_a_path_written_in_a_Focus_card_opens_the_file_preview()
+	{
+		_env.WriteFile("docs/notes.md", "# Card notes\n\nOpened from a path in a card.\n");
+		await PostAsync(new JsonObject { ["kind"] = "ask", ["title"] = "Read the notes?", ["body"] = "The notes are in docs/notes.md, please read them." });
+		using var process = await StartAndWaitForFocusAsync(1);
+		try
+		{
+			Assert.True(await _clicker.InvokeByAutomationIdAsync(process, "FocusPath:docs/notes.md", StepTimeout), "The path element was not found or not invokable. Log:\n" + _app.ReadLog());
+
+			var shown = await _app.WaitForLogAsync(process, StepTimeout, "Preview opened: notes.md (\"Markdown\",", "Preview page rendered markdown: true");
+			Assert.True(shown, "The path in the card did not open the preview. Log:\n" + _app.ReadLog());
+			AssertNoErrors();
+		}
+		finally
+		{
+			_app.Stop(process);
+		}
+	}
+
+	[Fact]
 	public async Task A_Focus_item_file_reference_opens_the_markdown_preview()
 	{
 		_env.WriteFile("docs/plan.md", "# The plan\n\n- step **one**\n- step two\n\nSee [the docs](https://example.com).\n");

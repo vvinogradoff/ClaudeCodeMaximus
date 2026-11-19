@@ -447,6 +447,19 @@ public sealed partial class FakeTessynClient : ITessynClient
 		return Task.FromResult(new FilePreviewResult(handle, file.Name, file.Mime, file.Bytes.Length, DateTimeOffset.UnixEpoch));
 	}
 
+	public Task<FilePreviewResult> FilePreviewForItemAsync(string nodeId, string itemId, string path, CancellationToken cancellationToken = default)
+	{
+		Record($"file.preview:{nodeId}:item:{itemId}:{path}");
+		if (FilePreviewRefusal != null)
+			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, FilePreviewRefusal);
+
+		if (!PreviewHandles.TryGetValue($"{nodeId}|{itemId}|{path}", out var handle))
+			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, "The path does not occur in this item");
+
+		var file = Files[handle];
+		return Task.FromResult(new FilePreviewResult(handle, file.Name, file.Mime, file.Bytes.Length, DateTimeOffset.UnixEpoch));
+	}
+
 	/// <summary>When set, answers every <see cref="AttachmentImportAsync"/> (nodeId, sourcePath); throw a <see cref="TessynRpcException"/> to refuse. Default: succeeds with a path under <c>a temp folder</c>.</summary>
 	public Func<string, string, CancellationToken, Task<AttachmentDto>>? AttachmentImportHandler { get; set; }
 

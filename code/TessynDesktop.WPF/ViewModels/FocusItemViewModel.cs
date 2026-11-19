@@ -60,6 +60,9 @@ public sealed partial class FocusItemViewModel : ObservableObject
 
 	public ObservableCollection<FocusRefViewModel> Refs { get; } = [];
 
+	/// <summary>A path written in this card's title or body was activated (Ctrl+click or Invoke, FR.23.30).</summary>
+	public void OpenPath(string path) => _owner.ActivatePath(this, path);
+
 	public bool HasBody => !string.IsNullOrWhiteSpace(Body);
 
 	public bool HasOptions => Options.Count > 0;

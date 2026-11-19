@@ -28,6 +28,9 @@ public sealed class FocusCardText : RichTextBox
 		DependencyProperty.Register(nameof(Item), typeof(FocusItemViewModel), typeof(FocusCardText), new PropertyMetadata(null, OnItemChanged));
 
 	private readonly Paragraph _header = new() { Margin = new Thickness(0) };
+	private readonly LocalPathDetector _pathDetector = new();
+	private readonly FocusCardPathMarker _pathMarker = new();
+	private readonly List<FocusPathSpan> _pathSpans = [];
 	private (string Id, string Title, string? Body, string Outcome)? _shown;
 	private double _lineSpacing;
 
@@ -64,6 +67,99 @@ public sealed class FocusCardText : RichTextBox
 
 	/// <summary>Opens a clicked link; the application's URL launcher unless a caller sets its own.</summary>
 	public Action<string>? OpenLink { get; set; }
+
+	/// <summary>The paths marked in the card's title and body, in document order (FR.23.30). For tests and diagnostics.</summary>
+	public IReadOnlyList<string> MarkedPaths => _pathSpans.Select(s => s.Path).ToList();
+
+	/// <summary>The path marked at the point (in this control's coordinates), or null.</summary>
+	public string? PathAt(Point point)
+	{
+		var position = GetPositionFromPoint(point, snapToText: false);
+		for (var element = position?.Parent as DependencyObject; element != null; element = (element as FrameworkContentElement)?.Parent)
+		{
+			if (element is FocusPathSpan span)
+				return span.Path;
+		}
+
+		return null;
+	}
+
+	/// <summary>True when the point is over a marked path.</summary>
+	public bool IsPathAt(Point point) => PathAt(point) != null;
+
+	/// <summary>The control-coordinate rectangle of the first line of a marked path, or <see cref="Rect.Empty"/> when it is not laid out.</summary>
+	public Rect RectOf(FocusPathSpan span)
+	{
+		var start = span.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+		var end = span.ContentEnd.GetCharacterRect(LogicalDirection.Backward);
+		if (start.IsEmpty || end.IsEmpty)
+			return Rect.Empty;
+
+		return end.Top > start.Top + start.Height / 2 ? start : Rect.Union(start, end);   // a path that wraps shows its first line
+	}
+
+	/// <summary>The marked paths with their rectangles, for tests and diagnostics.</summary>
+	public IReadOnlyList<(string Path, Rect Bounds)> PathBounds => _pathSpans.Select(s => (s.Path, RectOf(s))).ToList();
+
+	/// <summary>Opens a marked path: the card's item asks the session to preview it (FR.23.30).</summary>
+	public void ActivatePath(string path) => Item?.OpenPath(path);
+
+	/// <summary>
+	/// A press at <paramref name="point"/> with <paramref name="modifiers"/>: Ctrl+left on a marked path opens it and the press is taken (true); any other
+	/// press is left to the text selection (false), so a plain click and a drag select as before (FR.23.25).
+	/// </summary>
+	public bool TryActivatePathAt(Point point, ModifierKeys modifiers)
+	{
+		if ((modifiers & ModifierKeys.Control) == 0 || PathAt(point) is not { } path)
+			return false;
+
+		ActivatePath(path);
+		return true;
+	}
+
+	protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
+	{
+		if (TryActivatePathAt(e.GetPosition(this), Keyboard.Modifiers))
+		{
+			e.Handled = true;
+			return;
+		}
+
+		base.OnPreviewMouseLeftButtonDown(e);
+	}
+
+	protected override void OnPreviewMouseMove(MouseEventArgs e)
+	{
+		base.OnPreviewMouseMove(e);
+		UpdatePathCursor(e.GetPosition(this));
+	}
+
+	protected override void OnPreviewKeyDown(KeyEventArgs e)
+	{
+		base.OnPreviewKeyDown(e);
+		RefreshCursorAfterModifier(e.Key);
+	}
+
+	protected override void OnPreviewKeyUp(KeyEventArgs e)
+	{
+		base.OnPreviewKeyUp(e);
+		RefreshCursorAfterModifier(e.Key);
+	}
+
+	private void RefreshCursorAfterModifier(Key key)
+	{
+		if (key is Key.LeftCtrl or Key.RightCtrl && IsMouseOver)
+			UpdatePathCursor(Mouse.GetPosition(this));
+	}
+
+	/// <summary>The pointer shows a hand over a path only while Ctrl is held (FR.23.30); otherwise the text cursor stays.</summary>
+	private void UpdatePathCursor(Point point)
+	{
+		if ((Keyboard.Modifiers & ModifierKeys.Control) != 0 && IsPathAt(point))
+			Cursor = Cursors.Hand;
+		else
+			ClearValue(CursorProperty);
+	}
 
 	/// <summary>The text as shown, paragraphs separated by line breaks.</summary>
 	public string PlainText => new TextRange(Document.ContentStart, Document.ContentEnd).Text.TrimEnd('\r', '\n');
@@ -107,6 +203,13 @@ public sealed class FocusCardText : RichTextBox
 		protected override string GetNameCore() => owner.PlainText;
 
 		protected override string GetClassNameCore() => nameof(FocusCardText);
+
+		protected override List<AutomationPeer> GetChildrenCore()
+		{
+			var children = base.GetChildrenCore() ?? [];
+			children.AddRange(owner._pathSpans.Select(span => new FocusPathAutomationPeer(owner, span)));
+			return children;
+		}
 	}
 
 	private static void OnItemChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e)
@@ -136,6 +239,7 @@ public sealed class FocusCardText : RichTextBox
 			return;
 
 		_shown = state;
+		_pathSpans.Clear();
 		Document.Blocks.Clear();
 
 		_header.Inlines.Clear();
@@ -146,6 +250,9 @@ public sealed class FocusCardText : RichTextBox
 		_header.Inlines.Add(new Run(IdGap));
 		_header.Inlines.Add(new Run(item.Title) { FontWeight = FontWeights.SemiBold });
 		Document.Blocks.Add(_header);
+		var paths = PathsOf(item.Title, state.Body);
+		var underline = TryFindResource("TextFillColorSecondaryBrush") as Brush ?? Brushes.Gray;
+		_pathSpans.AddRange(_pathMarker.Mark(_header, paths, underline));   // the id and the title; the outcome line below is the user's own text and is never marked
 
 		if (state.Outcome.Length > 0)
 		{
@@ -162,11 +269,23 @@ public sealed class FocusCardText : RichTextBox
 				var last = Document.Blocks.LastBlock;
 				last.Margin = new Thickness(0, last.Margin.Top, 0, TitleGap);
 				foreach (var block in blocks)
+				{
 					Document.Blocks.Add(block);
+					_pathSpans.AddRange(_pathMarker.Mark(block, paths, underline));
+				}
 			}
 		}
 
 		ApplyLineSpacing();
+	}
+
+	/// <summary>The paths the title and the body spell, by the same rules as the session output (FR.26.5, FR.26.7): one detector, no second set of rules.</summary>
+	private List<string> PathsOf(string title, string? body)
+	{
+		var paths = new List<string>(_pathDetector.Detect(title));
+		if (!string.IsNullOrEmpty(body))
+			paths.AddRange(_pathDetector.Detect(body).Where(p => !paths.Contains(p, StringComparer.Ordinal)));
+		return paths;
 	}
 
 	private void Open(string url)

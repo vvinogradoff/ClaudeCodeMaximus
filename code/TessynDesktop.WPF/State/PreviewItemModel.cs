@@ -25,7 +25,10 @@ public sealed class PreviewItemModel
 	/// <summary>File from a transcript path: the entry.</summary>
 	public string? EntryId { get; set; }
 
-	/// <summary>File from a transcript path: the path as written in the entry.</summary>
+	/// <summary>File from a path written in a Focus item's text (FR.23.30): the item id, instead of <see cref="EntryId"/>; the daemon's ledger keeps closed items, so it can be asked again after a restart.</summary>
+	public string? ItemId { get; set; }
+
+	/// <summary>File from a transcript entry or a Focus item: the path as written there.</summary>
 	public string? Path { get; set; }
 
 	/// <summary>The session the main window showed when the item was opened (auto-close rule 1).</summary>

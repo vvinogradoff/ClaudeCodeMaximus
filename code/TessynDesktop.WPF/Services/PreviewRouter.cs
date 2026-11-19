@@ -494,6 +494,11 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 			PreviewTarget target;
 			if (!string.IsNullOrEmpty(item.RefId))
 				target = new PreviewTarget(item.RefId, name);
+			else if (item.NodeId != null && item.ItemId != null && item.Path != null)
+			{
+				var result = await client.FilePreviewForItemAsync(item.NodeId, item.ItemId, item.Path);
+				target = new PreviewTarget(result.Handle, string.IsNullOrEmpty(result.Name) ? name : result.Name);
+			}
 			else if (item.NodeId != null && item.EntryId != null && item.Path != null)
 			{
 				var result = await client.FilePreviewAsync(item.NodeId, item.EntryId, item.Path);

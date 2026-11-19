@@ -17,6 +17,12 @@ public interface IFileAccessService
 	FilePreviewResult Preview(string nodeId, string entryId, string path, TdcpTransport transport);
 
 	/// <summary>
+	/// <see cref="Preview"/> for a path written in the title or body of a Focus item (FR.23.30, tdcp-spec 10.A11): the same checks, the same
+	/// handle. The user's answer and the resolution note do not count as text the path may occur in.
+	/// </summary>
+	FilePreviewResult PreviewForItem(string nodeId, string itemId, string path, TdcpTransport transport);
+
+	/// <summary>
 	/// One chunk of the file behind <paramref name="handle"/>. Text types come back as UTF-8, everything else as base64; the chunk is
 	/// capped per call. Throws <see cref="TdcpException"/> for an unknown handle or a refused file.
 	/// </summary>
