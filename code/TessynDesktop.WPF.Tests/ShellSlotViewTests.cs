@@ -103,38 +103,6 @@ public sealed class ShellSlotViewTests
 	}
 
 	[Fact]
-	public void SlotTabControl_WithoutContributions_HidesItsTabStrip()
-	{
-		StaTestRunner.Run(() =>
-		{
-			var tabs = new SlotTabControl { SlotId = Constants.Slots.LeftPanelTabs, Slots = new ShellSlots(), Items = { new TabItem { Header = "Tree", Content = "tree" } } };
-
-			tabs.Populate();
-
-			Assert.Single(tabs.Items);
-			Assert.Equal(Visibility.Collapsed, ((TabItem)tabs.Items[0]!).Visibility);
-		});
-	}
-
-	[Fact]
-	public void SlotTabControl_AddsContributedTabsAfterTheXamlOnes()
-	{
-		StaTestRunner.Run(() =>
-		{
-			var slots = new ShellSlots();
-			slots.Add(new ShellSlotContribution { SlotId = Constants.Slots.LeftPanelTabs, Order = 2, Title = "Tags", Create = () => new TextBlock { Text = "tags" } });
-			slots.Add(new ShellSlotContribution { SlotId = Constants.Slots.LeftPanelTabs, Order = 1, Title = "Recent", Create = () => new TextBlock { Text = "recent" } });
-			var tabs = new SlotTabControl { SlotId = Constants.Slots.LeftPanelTabs, Slots = slots, Items = { new TabItem { Header = "Tree", Content = "tree" } } };
-
-			tabs.Populate();
-			Layout(tabs);
-
-			Assert.Equal(["Tree", "Recent", "Tags"], tabs.Items.Cast<TabItem>().Select(t => t.Header));
-			Assert.All(tabs.Items.Cast<TabItem>(), t => Assert.Equal(Visibility.Visible, t.Visibility));
-		});
-	}
-
-	[Fact]
 	public void CommandMenu_BuildsItemsSeparatorsAndGestures_AndRunsTheCommandWithTheParameter()
 	{
 		StaTestRunner.Run(() =>

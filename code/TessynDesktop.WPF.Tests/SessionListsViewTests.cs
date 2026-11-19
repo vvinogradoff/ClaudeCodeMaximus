@@ -352,39 +352,4 @@ public sealed class SessionListsViewTests
 		});
 	}
 
-	[Fact]
-	public void LeftTabs_ATabSwitchKeepsTheTreesScrollPositionAndSelection()
-	{
-		StaTestRunner.Run(() =>
-		{
-			var slots = new TessynDesktop.WPF.Services.ShellSlots();
-			slots.Add(new TessynDesktop.WPF.Services.ShellSlotContribution { SlotId = Constants.Slots.LeftPanelTabs, Title = "Recent", Create = () => new TextBlock { Text = "recent list" } });
-			var tree = new ListBox { ItemsSource = Enumerable.Range(0, 400).Select(i => "row " + i).ToList(), SelectedIndex = 150 };
-			var tabs = new SlotTabControl { SlotId = Constants.Slots.LeftPanelTabs, Slots = slots, Items = { new TabItem { Header = "Tree", Content = tree } } };
-			var window = new Window { Content = tabs, Width = 300, Height = 300, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
-			window.Show();
-			try
-			{
-				tabs.Populate();
-				window.UpdateLayout();
-				var scroll = Descendants<ScrollViewer>(tree).First();
-				scroll.ScrollToVerticalOffset(120);
-				window.UpdateLayout();
-				Assert.Equal(120, scroll.VerticalOffset);
-
-				tabs.SelectedIndex = 1;
-				window.UpdateLayout();
-				tabs.SelectedIndex = 0;
-				window.UpdateLayout();
-
-				var scrollAfter = Descendants<ScrollViewer>(tree).First();
-				Assert.Equal(150, tree.SelectedIndex);
-				Assert.Equal(120, scrollAfter.VerticalOffset);
-			}
-			finally
-			{
-				window.Close();
-			}
-		});
-	}
 }

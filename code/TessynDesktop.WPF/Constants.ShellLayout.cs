@@ -42,6 +42,13 @@ public static partial class Constants
 		/// <summary>Smallest width of the left pane a remembered or migrated width is brought to.</summary>
 		public const double MinLeftPaneWidth = 160;
 
+		/// <summary>The Session view keeps at least this width (DIP) when a saved layout is restored into a smaller window (FR.6.18).</summary>
+		public const double MinSessionWidth = 480;
+
+		public const string SaveFailedLog = "The shell layout could not be saved";
+
+		public const string SlideOutFailedLog = "The slide-out of panel {PanelId} did not open";
+
 		public const string LayoutLogFormat = "Shell layout: {State}";
 
 		public const string LayoutRestoredLog = "Shell layout restored from the saved section";
