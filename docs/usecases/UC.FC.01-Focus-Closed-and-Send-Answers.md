@@ -23,3 +23,8 @@ Related requirements: FR.23.20–FR.23.23 (see `docs/requirements/`), FR.23.14, 
 **Main flow:** 1. In Focus the header shows **Send answers (0)**, disabled. 2. The User types in two reply boxes: **(2)**, enabled. 3. Clicking it, or pressing **Ctrl+Enter** in a box, sends one prompt with both answers; items close as Answered; the main input and its draft are untouched.
 **Alternative flows:** **A1** — Ctrl+Enter with all boxes empty: nothing happens, no newline. **A2** — Plain Enter, Shift+Enter: newline; Ctrl+Shift+Enter: no send. **A3** — In Session the button is hidden. **A4** — While a turn runs the send is allowed.
 **Covers:** FR.23.21, FR.23.22, FR.23.15.
+
+## UC.FC.04 — Use the references of a closed item
+**Main flow:** 1. The User expands Closed and clicks a card's header to show the body. 2. The card shows its references (entry, file, url) below the text. 3. The User clicks a file reference: the preview pane (or the group's preview window) shows the file; clicking an entry reference jumps to the entry; a url reference opens as a link.
+**Alternative flows:** **A1** — A collapsed closed card shows no references. **A2** — A preview opened this way is not tied to the item: closing or answering Focus items never closes it (FR.29.9 rule 2 does not apply).
+**Covers:** FR.23.29, FR.23.18.

@@ -24,3 +24,13 @@ Related requirements: FR.23.20–FR.23.23. Use cases: [UC.FC.01](/docs/usecases/
 | FR.23.21 | TC.FC.07, 09, 10 |
 | FR.23.22 | TC.FC.08, 10 |
 | FR.23.23 | TC.FC.01–05 |
+
+## Additions (2026-11-19) — references on closed items
+
+Use case: UC.FC.04. Requirement: FR.23.29.
+
+| TC | Title | Kind | UC | FR |
+|---|---|---|---|---|
+| TC.FC.11 | An expanded closed card shows its references; a collapsed one shows none (the closed template's reference list is bound to `HasRefs` and the body being expanded) | AUTOMATED | UC.FC.04 | FR.23.29 |
+| TC.FC.12 | Activating a file reference of a closed item opens it in the preview pane; an entry reference jumps; a url reference opens as a link | AUTOMATED | UC.FC.04 | FR.23.29, FR.23.18 |
+| TC.FC.13 | A preview opened from a closed item's reference carries no Focus item id (no Auto-close by Focus item) | AUTOMATED | UC.FC.04 | FR.23.29, FR.29.9 |
