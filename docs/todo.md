@@ -1236,17 +1236,20 @@ Plan: `.mm-work/00-plan.md` (session "Multi Monitor Support"). Docs approved by 
 - [DONE] The whole WPF UI as docked panels: option A chosen (A26), requirements FR.6.11–FR.6.22 approved with seven decisions (A28)
 - [DONE] Docked shell, stage 1: the left panels, the Session view, Focus as a panel, layout memory, Reset layout, the Panels menu, the chevron, compact chrome, keyboard, test seam (FR.6.11–FR.6.20, FR.6.22; branch `wpf/docked-shell`, merge `5c91a24`; review fixes F1–F9; all five suites green, WPF E2E 144/144 with `WpfDockedShellE2ETests`). The test seam reports the panels' state in the log; the programmatic test hook of FR.6.22 (dock, tab, float, auto-hide, slide-out by calls) moves to stage 3 together with FR.29.26
   - [ ] Manual checks (TC.DS MANUAL rows): click into the transcript right after a layout change, Ctrl+F from every panel, the Recent dropdown, a small window, the slide-out (Esc, edge tab), a floating Focus (reply box, Ctrl+Enter, raise over other apps), theme switch, screensaver with a floating panel, idle CPU against the perf baseline
-  - [ ] Panel tabs have no UI Automation name (`AvalonDock.Layout.LayoutAnchorable`); name them after the panel
-- [ ] Docked shell, stage 2: Tessyn's light and dark colours for the docking chrome (FR.6.21; takes over FR.29.24)
-- [ ] Docked shell, stage 3: the remaining docked-preview items (restart of panels, auto-hide behaviours, floating panels across scales; FR.29.19, FR.29.22, FR.29.23), the programmatic test hook (FR.6.22, FR.29.26) and the test-window guard for floating panels
-- [ ] Docked previews, stage 2: restart, mode changes, auto-hide behaviour (slide-out on a new item, Esc and edge-tab close), floating panels with the FR.29.16 scale rules (FR.29.19, FR.29.22, FR.29.23) — now part of docked shell stage 3
-- [ ] Docked previews, stage 3: Tessyn light/dark theme for the docking area (FR.29.24); review, E2E, manual checks (TC.PW.77–102) — the theme is now docked shell stage 2
+  - [DONE] Panel tabs have no UI Automation name (`AvalonDock.Layout.LayoutAnchorable`); name them after the panel (stage 3: bound to the panel title in the tab styles)
+- [DONE] Docked shell, stage 2: Tessyn's light and dark colours for the docking chrome (FR.6.21; takes over FR.29.24): one docking theme set once, per-mode colour dictionaries swapped with the app theme, flat tabs with the accent line (branch `wpf/shell-theme`; integrated on `wpf/docked-shell-23`)
+- [DONE] Docked shell, stage 3: the remaining docked-preview items (restart of panels, auto-hide behaviours, floating panels across scales; FR.29.19, FR.29.22, FR.29.23), the programmatic test hook (FR.6.22, FR.29.26) and the test-window guard for floating panels (branches `wpf/dock-panels`, `wpf/dock-testhook`; QA and review fixes 1–9 on `wpf/docked-shell-23`; all five suites green, WPF E2E 175/175; the WPF unit clipboard test `TC_FX_02` failed only because Windows was locked, rerun it unlocked)
+  - [ ] Manual checks: two monitors at 100 % and 150 % (float Sessions and a preview, restart, same monitor and size; then with the second monitor unplugged); Esc and click-away over a web page in a slide-out; a new item for an auto-hidden panel keeps the composer's focus; day/night with a floating panel, the slide-out, the drop guides and the tab overflow menu open; the screensaver cover with a floating panel; idle CPU 2 minutes after dragging panels
+  - [ ] FR.6.18 wording: preview panels' places are kept in `previewDock` (Focus A32)
+- [DONE] Docked previews, stage 2: restart, mode changes, auto-hide behaviour (slide-out on a new item, Esc and edge-tab close), floating panels with the FR.29.16 scale rules (FR.29.19, FR.29.22, FR.29.23) — built as docked shell stage 3
+- [DONE] Docked previews, stage 3: Tessyn light/dark theme for the docking area (FR.29.24); review, E2E, manual checks (TC.PW.77–102) — built as docked shell stage 2; the manual checks are listed under stage 3 above
 
 ### Round 3 — HTML previews (Architect request 2026-11-19; branch `docs/html-preview`)
-- [ ] HTML previews rendered with a Source toggle (FR.26.8; UC.LK.08, TC.LK.36–53)
+- [DONE] HTML previews rendered with a Source toggle (FR.26.8; UC.LK.08, TC.LK.36–53; branch `wpf/html-preview`, review A2 and fixes A3, integrated on `wpf/docked-shell-23`)
   - [DONE] Docs: FR.26.8 approved with option 1, Static (A31)
-  - [ ] Code: render `.html`/`.htm`/`text/html` isolated in the preview pane's renderer, Source toggle, link routing, `CanToggleSource` for html
-  - [ ] Tests: TC.LK.36–53 (unit/view, E2E, MANUAL look and selection)
+  - [DONE] Code: render `.html`/`.htm`/`text/html` isolated in the preview pane's renderer (sandboxed frame with its own CSP), Source toggle, link routing, `CanToggleSource` for html
+  - [DONE] Tests: TC.LK.36–53 (unit/view, E2E `WpfHtmlPreviewE2ETests`; MANUAL: look and selection)
+  - [ ] Docs correction (Focus A33): Open in default app is not offered for html (the FR.23.18 allow-list stays); the preview pane has no Ctrl+wheel zoom (FR.26.8, UC.LK.08 A4, TC.LK.51, TC.LK.52)
 
 ## Phase 45 — The daemon elevated, WPF normal (FR.32.10–FR.32.14); paste of Explorer files (FR.31.2)
 
