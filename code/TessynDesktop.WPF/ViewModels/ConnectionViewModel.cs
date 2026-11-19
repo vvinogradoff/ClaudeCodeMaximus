@@ -48,14 +48,18 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 	[ObservableProperty]
 	private string? _detail;
 
-	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null, IClientSettingsStore? settings = null)
-		: this(locator, factory, ui, logger, Constants.Timeouts.DaemonDiscoveryRetry, hostLauncher, restarter, settings)
+	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null, IClientSettingsStore? settings = null, bool? clientElevated = null)
+		: this(locator, factory, ui, logger, Constants.Timeouts.DaemonDiscoveryRetry, hostLauncher, restarter, settings, clientElevated)
 	{
 	}
 
 	/// <param name="settings">The client settings: "Start daemon elevated" decides the elevation banner (FR.32.12); null = the setting is off.</param>
-	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, TimeSpan retryDelay, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null, IClientSettingsStore? settings = null)
+	/// <param name="clientElevated">Whether this window runs elevated (FR.32.15, a seam for tests); null = this process's own elevation.</param>
+	public ConnectionViewModel(IDaemonLocator locator, ITessynClientFactory factory, IUiDispatcher ui, ILogger<ConnectionViewModel> logger, TimeSpan retryDelay, IDaemonHostLauncher? hostLauncher = null, DaemonRestarter? restarter = null, IClientSettingsStore? settings = null, bool? clientElevated = null)
 	{
+		// FR.32.15: read once (a process cannot change its elevation) and logged, so the start says which way this window runs.
+		IsClientElevated = clientElevated ?? Environment.IsPrivilegedProcess;
+		logger.LogInformation(IsClientElevated ? "This window runs elevated (as administrator)" : "This window runs normally");
 		_restarter = restarter;
 		_settings = settings;
 		_hostLauncher = hostLauncher ?? new NoDaemonHostLauncher();
@@ -231,6 +235,11 @@ public sealed partial class ConnectionViewModel : ObservableObject, IAsyncDispos
 		var outcome = await _restarter.RestartAsync(_daemonPid, sessions, CancellationToken.None, keep);
 		_ui.Post(() => RestartNote = NoteFor(outcome));
 	}
+
+	/// <summary>FR.32.15: this window itself runs elevated, for the whole run; the banner says so (it has no button: start the window normally).</summary>
+	public bool IsClientElevated { get; }
+
+	public string ClientElevatedText => Constants.Switch.ClientElevatedText;
 
 	/// <summary>FR.32.12: the banner while the daemon runs normally and "Start daemon elevated" is on, or after a declined or failed elevated start.</summary>
 	public bool IsElevationBannerVisible => State == ConnectionBannerState.Connected && DaemonElevated == false && (ElevationNote != null || IsStartElevatedOn());
