@@ -157,11 +157,15 @@ public sealed class MarkdownBlockBuilder
 		var group = new TableRowGroup();
 		result.RowGroups.Add(group);
 		var columns = 0;
+		var texts = new List<IReadOnlyList<string>>();
 		foreach (var row in table.OfType<Markdig.Extensions.Tables.TableRow>())
 		{
 			var wrow = new WTableRow();
+			var rowTexts = new List<string>();
+			texts.Add(rowTexts);
 			foreach (var cell in row.OfType<Markdig.Extensions.Tables.TableCell>())
 			{
+				rowTexts.Add(PlainTextOf(cell));
 				var blocks = new List<WBlock>();
 				foreach (var child in cell)
 					AddBlock(child, blocks);
@@ -184,9 +188,42 @@ public sealed class MarkdownBlockBuilder
 			group.Rows.Add(wrow);
 		}
 
+		// Column widths follow the content (FR.2.14): a star weight per column from its text.
+		var weights = new TableColumnWeights().Compute(texts);
 		for (var i = 0; i < columns; i++)
-			result.Columns.Add(new TableColumn());
+			result.Columns.Add(new TableColumn { Width = new GridLength(i < weights.Count ? weights[i] : TableColumnWeights.FloorWeight, GridUnitType.Star) });
 		return result;
+	}
+
+	/// <summary>The plain text of a table cell (literal and code text of its inlines), for the column weights.</summary>
+	private static string PlainTextOf(ContainerBlock cell)
+	{
+		var text = new System.Text.StringBuilder();
+		foreach (var leaf in cell.Descendants().OfType<LeafBlock>())
+		{
+			if (leaf.Inline == null)
+				continue;
+
+			foreach (var inline in leaf.Inline.Descendants())
+			{
+				switch (inline)
+				{
+					case LiteralInline literal:
+						text.Append(literal.Content.ToString());
+						break;
+					case CodeInline code:
+						text.Append(code.Content);
+						break;
+					case LineBreakInline:
+						text.Append(' ');
+						break;
+				}
+			}
+
+			text.Append(' ');
+		}
+
+		return text.ToString();
 	}
 
 	private Paragraph TextOf(ContainerInline? inline)

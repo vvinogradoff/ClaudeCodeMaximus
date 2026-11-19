@@ -147,6 +147,21 @@ public sealed class MarkdownBlockBuilderTests
 		Assert.Equal(FontWeights.SemiBold, headerWeight);
 	}
 
+	[Fact]
+	public void ATable_GivesEachColumnAStarWeightFromItsText()
+	{
+		var widths = new List<GridLength>();
+		StaTestRunner.Run(() =>
+		{
+			var blocks = new MarkdownBlockBuilder(new UrlPolicy(), _ => { }).Build("| # | Notes |\n|---|---|\n| 1 | a long sentence of ordinary words that wraps in its cell |");
+			widths.AddRange(((Table)blocks.Single()).Columns.Select(c => c.Width));
+		});
+
+		Assert.Equal(2, widths.Count);
+		Assert.All(widths, w => Assert.True(w.IsStar));
+		Assert.True(widths[1].Value > widths[0].Value);
+	}
+
 	private static IEnumerable<Inline> Descendants(InlineCollection inlines)
 	{
 		foreach (var inline in inlines)

@@ -307,3 +307,17 @@ Why: a project rule such as CLAUDE.md's "ask in plain text" was written to avoid
 - **Recommended button.** The last, recommended option button is styled like **Send answers** and **Send**: the window's accent button style (accent background, text in the on-accent colour), with no extra outline. Text, place, tooltip and behaviour are as in FR.23.26.
 - **Reply box border.** The card's reply box has a **2 px accent border** (the accent colour of the accent buttons) with slightly rounded corners, in every state.
 - **Resize handle.** The reply box has a **resize grip** at its bottom-right corner. Dragging it changes the box's height (from 56 px up to 600 px); the width follows the card. The text inside wraps and scrolls as before. The height is kept while the card is shown; it is not stored.
+
+---
+
+## Amendments (2026-11-19, preview improvements)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.23.14 closed card, FR.23.23 Closed list (a closed card shows header, outcome line and body) | FR.23.29 | An **expanded** closed card also shows its **references**. A collapsed one shows none. |
+| FR.23.18 References on items | FR.23.29 | References act the same on a closed item as on an open one. |
+
+**FR.23.29 — References on expanded closed items (WPF).** (Amends FR.23.14, FR.23.18 and the Closed list of FR.23.23.)
+- An **expanded** closed card (Closed list; the body is shown after a click on the header) shows its references **exactly like an open card**, below the text, and they act the same: *entry* jumps to the entry and highlights the quote; *file* opens the preview pane or the group's preview window (FR.29.4); *url* opens as a link (FR.29.4 or the system browser). Links in its text work as in an open card. A **collapsed** closed card shows no references. This holds whether the item was answered, dismissed or decided.
+- A preview opened from a closed item's reference is **not tied to that item**: Auto-close rule 2 (FR.29.9) cannot apply to an item that is already closed, so the preview counts as opened from the session (rule 1 only); it carries no Focus item id.
+- Use case UC.FC.04 ([UC.FC.01](/docs/usecases/UC.FC.01-Focus-Closed-and-Send-Answers.md)); test cases TC.FC.11 onwards ([TC.FC.01](/docs/testcases/TC.FC.01-Focus-Closed-and-Send-Answers.md)).
