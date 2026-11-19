@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -16,17 +17,42 @@ namespace TessynDesktop.WPF.Views;
 public sealed class AutoHideWindowCloser
 {
 	private readonly DockingManager _manager;
-	private readonly MethodInfo? _hide;
+	private MethodInfo? _hide;
+	private ILogger? _logger;
+	private bool _failureLogged;
 
 	public AutoHideWindowCloser(DockingManager manager)
 	{
 		_manager = manager;
-		_hide = typeof(DockingManager).GetMethod(Constants.DockingChrome.HideAutoHideWindowMethod, BindingFlags.Instance | BindingFlags.NonPublic);
+		_hide = FindHide();
 		manager.PreviewKeyDown += OnPreviewKeyDown;
 		manager.PreviewMouseDown += OnPreviewMouseDown;
 	}
 
 	public bool Available => _hide != null;
+
+	/// <summary>Gives the closer a log and logs, once, whether the library's method was found.</summary>
+	public void UseLogger(ILogger logger)
+	{
+		_logger = logger;
+		if (_hide != null)
+			logger.LogInformation("Docking: the slide-out can be closed with Esc and the edge tab (library method {Method} found)", Constants.DockingChrome.HideAutoHideWindowMethod);
+		else
+			logger.LogWarning("Docking: the library method {Method} was not found; Esc and the edge tab do not close the slide-out", Constants.DockingChrome.HideAutoHideWindowMethod);
+	}
+
+	/// <summary>The library's internal method by its exact shape (one <see cref="LayoutAnchorControl"/> parameter); null when it is missing, ambiguous or the lookup fails.</summary>
+	private static MethodInfo? FindHide()
+	{
+		try
+		{
+			return typeof(DockingManager).GetMethod(Constants.DockingChrome.HideAutoHideWindowMethod, BindingFlags.Instance | BindingFlags.NonPublic, null, [typeof(LayoutAnchorControl)], null);
+		}
+		catch (Exception)
+		{
+			return null;
+		}
+	}
 
 	/// <summary>True while a slide-out is open.</summary>
 	public bool IsOpen => _manager.AutoHideWindow is { Model: not null, Visibility: Visibility.Visible };
@@ -37,8 +63,22 @@ public sealed class AutoHideWindowCloser
 		if (_hide == null || !IsOpen)
 			return false;
 
-		_hide.Invoke(_manager, [null]);
-		return true;
+		try
+		{
+			_hide.Invoke(_manager, [null]);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			if (!_failureLogged)
+			{
+				_failureLogged = true;
+				_logger?.LogWarning(ex, "Docking: closing the slide-out through the library method {Method} failed; Esc and the edge tab no longer close it", Constants.DockingChrome.HideAutoHideWindowMethod);
+			}
+
+			_hide = null;   // Available is false from now on
+			return false;
+		}
 	}
 
 	private void OnPreviewKeyDown(object sender, KeyEventArgs e)

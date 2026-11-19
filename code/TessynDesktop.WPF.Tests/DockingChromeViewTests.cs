@@ -246,32 +246,85 @@ public sealed class DockingChromeViewTests
 		Assert.False(policy.IsFocusSteal(true, true));   // the window has passed
 	}
 
+	private static bool MoveFocus(UIElement from, UIElement to)
+	{
+		var args = new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, 0, from, to) { RoutedEvent = Keyboard.PreviewLostKeyboardFocusEvent, Source = from };
+		from.RaiseEvent(args);
+		return args.Handled;
+	}
+
+	private static (DockingArea Area, Window Window, TextBox Composer, TextBox PanelBox) FocusSetup()
+	{
+		var composer = new TextBox { Name = "Composer" };
+		var area = new DockingArea(composer);
+		area.ApplyTheme(dark: false);
+		var window = Host(area);
+		var panel = AddPanel(area, window, "images");
+		var panelBox = new TextBox();
+		panel.Content = panelBox;
+		Settle(window);
+		return (area, window, composer, panelBox);
+	}
+
 	[Fact]
-	public void ALayoutChange_DoesNotMoveTheFocusOutOfTheSessionView_ButAClickDoes()
+	public void ARealDockingChange_WithoutInput_StillBlocksAProgrammaticPanelToPanelFocusMove()
 	{
 		StaTestRunner.Run(() =>
 		{
-			var composer = new TextBox { Name = "Composer" };
-			var area = new DockingArea(composer);
-			area.ApplyTheme(dark: false);
-			var window = Host(area);
-			var panel = AddPanel(area, window, "images");
-			var panelBox = new TextBox();
-			panel.Content = panelBox;
-			Settle(window);
+			var (area, window, composer, panelBox) = FocusSetup();
+			Thread.Sleep(450);   // the setup's own docking changes and input are out of the window
+			AddPanel(area, window, "tags");   // a real docking change
+			Assert.True(MoveFocus(composer, panelBox));
+			window.Close();
+		});
+	}
 
-			bool Move(UIElement from, UIElement to)
+	[Fact]
+	public void AClickLikeInputOutsideTheDockingManager_JustBeforeTheMove_IsNotBlocked()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var (area, window, composer, panelBox) = FocusSetup();
+			Thread.Sleep(450);
+			AddPanel(area, window, "tags");
+			var elsewhere = new Window { Width = 50, Height = 50, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };   // a floating panel, a popup, a menu
+			elsewhere.Show();
+			InputManager.Current.ProcessInput(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseDownEvent, Source = elsewhere });
+			Assert.False(MoveFocus(composer, panelBox));
+			elsewhere.Close();
+			window.Close();
+		});
+	}
+
+	[Fact]
+	public void AKeyPressOutsideTheDockingManager_JustBeforeTheMove_IsNotBlocked()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var (area, window, composer, panelBox) = FocusSetup();
+			Thread.Sleep(450);
+			AddPanel(area, window, "tags");
+			var source = (HwndSource)PresentationSource.FromVisual(window)!;
+			InputManager.Current.ProcessInput(new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, Key.A) { RoutedEvent = Keyboard.PreviewKeyDownEvent, Source = composer });
+			Assert.False(MoveFocus(composer, panelBox));
+			window.Close();
+		});
+	}
+
+	[Fact]
+	public void ALayoutPassWithNoDockingChange_DoesNotArmTheGuard()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var (area, window, composer, panelBox) = FocusSetup();
+			Thread.Sleep(450);
+			for (var i = 0; i < 5; i++)
 			{
-				var args = new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, 0, from, to) { RoutedEvent = Keyboard.PreviewLostKeyboardFocusEvent, Source = from };
-				from.RaiseEvent(args);
-				return args.Handled;
+				window.InvalidateMeasure();   // UIElement.LayoutUpdated fires on every pass: no docking change
+				Settle(window);
 			}
 
-			area.Chrome.Focus.Policy.NoteLayoutChange();   // a panel was shown, docked, floated, tabbed or auto-hidden
-			Assert.True(Move(composer, panelBox));   // the library's focus follow is cancelled
-
-			area.Manager.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseDownEvent, Source = panelBox });
-			Assert.False(Move(composer, panelBox));   // the user clicked into the panel
+			Assert.False(MoveFocus(composer, panelBox));
 			window.Close();
 		});
 	}
@@ -328,6 +381,23 @@ public sealed class DockingChromeViewTests
 			area.Manager.RaiseEvent(esc);
 			Assert.False(esc.Handled);
 			window.Close();
+		});
+	}
+
+	[Fact]
+	public void TheLibraryMethodTheSlideOutCloserNeeds_StillHasTheExpectedShape()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var method = typeof(AvalonDock.DockingManager).GetMethod(Constants.DockingChrome.HideAutoHideWindowMethod, BindingFlags.Instance | BindingFlags.NonPublic, null, [typeof(LayoutAnchorControl)], null);
+			Assert.NotNull(method);   // a library update that changes it must fail here, not at run time
+			Assert.Equal(typeof(void), method!.ReturnType);
+
+			var log = new CapturingLogger<DockingChromeViewTests>();
+			var closer = new AutoHideWindowCloser(new AvalonDock.DockingManager());
+			Assert.True(closer.Available);
+			closer.UseLogger(log);
+			Assert.Contains(log.Messages, m => m.Contains(Constants.DockingChrome.HideAutoHideWindowMethod));
 		});
 	}
 }

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using AvalonDock;
 using AvalonDock.Controls;
+using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Services;
 
 namespace TessynDesktop.WPF.Views;
@@ -29,6 +30,9 @@ public sealed class DockingChrome
 	public DockingFocusGuard Focus { get; }
 
 	public AutoHideWindowCloser SlideOut { get; }
+
+	/// <summary>Gives the parts a log (the slide-out closer logs whether the library's method was found).</summary>
+	public void UseLogger(ILogger logger) => SlideOut.UseLogger(logger);
 
 	/// <summary>The command registry the floating panels' keys go to (FR.6.20).</summary>
 	public void UseShellCommands(IShellCommands commands) => _router.UseCommands(commands);
