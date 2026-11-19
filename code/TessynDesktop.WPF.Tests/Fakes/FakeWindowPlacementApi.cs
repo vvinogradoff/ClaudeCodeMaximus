@@ -32,5 +32,12 @@ public sealed class FakeWindowPlacementApi : IWindowPlacementApi
 
 	public int GetDpi(IntPtr hwnd) => Dpi;
 
-	public void Apply(IntPtr hwnd, WindowPlacementModel model) => Applied.Add(model.Clone());
+	/// <summary>Runs inside <see cref="Apply"/>, where Windows raises WM_DPICHANGED.</summary>
+	public Action? OnApply { get; set; }
+
+	public void Apply(IntPtr hwnd, WindowPlacementModel model)
+	{
+		Applied.Add(model.Clone());
+		OnApply?.Invoke();
+	}
 }

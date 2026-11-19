@@ -174,23 +174,23 @@ public sealed class PreviewPlacementSnapDpiTests
 	public void RestoreGuard_DpiChangedDuringTheRestore_AppliesTheRememberedRectangleAgain()
 	{
 		var guard = new PreviewRestoreGuard(_api);
-		guard.Begin(new WindowPlacementModel { Left = 10, Top = 20, Width = 1500, Height = 900 });
+		guard.Restore(Hwnd, new WindowPlacementModel { Left = 10, Top = 20, Width = 1500, Height = 900 });
 
 		Assert.True(guard.OnDpiChanged(Hwnd));
 
-		Assert.Single(_api.Applied);
-		Assert.Equal(1500, _api.Applied[0].Width);
+		Assert.Equal(2, _api.Applied.Count);   // the restore itself, then the re-apply
+		Assert.Equal(1500, _api.Applied[1].Width);
 	}
 
 	[Fact]
 	public void RestoreGuard_AfterTheRestore_LeavesTheUserAlone()
 	{
 		var guard = new PreviewRestoreGuard(_api);
-		guard.Begin(new WindowPlacementModel { Width = 1500, Height = 900 });
+		guard.Restore(Hwnd, new WindowPlacementModel { Width = 1500, Height = 900 });
 		guard.End();
 
 		Assert.False(guard.OnDpiChanged(Hwnd));
-		Assert.Empty(_api.Applied);
+		Assert.Single(_api.Applied);
 		Assert.False(guard.Active);
 	}
 
@@ -204,11 +204,59 @@ public sealed class PreviewPlacementSnapDpiTests
 	public void RestoreGuard_StopsAfterTheBudget()
 	{
 		var guard = new PreviewRestoreGuard(_api);
-		guard.Begin(new WindowPlacementModel { Width = 1500, Height = 900 });
+		guard.Restore(Hwnd, new WindowPlacementModel { Width = 1500, Height = 900 });
 
 		for (var i = 0; i < Constants.PreviewWindow.MaxRestoreReapplies + 3; i++)
 			guard.OnDpiChanged(Hwnd);
 
-		Assert.Equal(Constants.PreviewWindow.MaxRestoreReapplies, _api.Applied.Count);
+		Assert.Equal(Constants.PreviewWindow.MaxRestoreReapplies + 1, _api.Applied.Count);
+	}
+
+	// F1: Windows raises the DPI change inside the apply, so the phase must already be active then.
+	[Fact]
+	public void RestoreGuard_IsActiveWhileTheRememberedRectangleIsBeingApplied()
+	{
+		var guard = new PreviewRestoreGuard(_api);
+		var activeDuringApply = false;
+		var reapplied = false;
+		_api.OnApply = () =>
+		{
+			activeDuringApply = guard.Active;
+			if (guard.Active && !reapplied)
+			{
+				reapplied = true;
+				guard.OnDpiChanged(Hwnd);   // what the window does when WM_DPICHANGED arrives inside SetWindowPlacement
+			}
+		};
+
+		guard.Restore(Hwnd, new WindowPlacementModel { Width = 1500, Height = 900 });
+
+		Assert.True(activeDuringApply);
+		Assert.Equal(2, _api.Applied.Count);
+	}
+
+	// F3: Win+Shift+Arrow while maximized
+	[Fact]
+	public void Capture_MaximizedAndMovedToAnotherMonitor_TranslatesTheRectangleOntoIt()
+	{
+		var a = Mon(D1, 0, 1920, 96, true);
+		var b = Mon(D2, 1920, 3840, 192);
+		var current = a;
+		var capture = new PreviewWindowPlacementCapture(_api, _ => current);
+		_api.Actual = new WindowPlacementModel { Left = 200, Top = 100, Width = 900, Height = 700 };
+		capture.Observe(Hwnd);
+		_api.Restored = false;
+		_api.Maximized = true;
+		_api.Dpi = 192;
+		current = b;
+
+		var captured = capture.Capture(Hwnd)!;
+
+		Assert.Equal(D2, captured.Monitor!.DeviceName);   // it reopens maximized on the monitor it is on
+		Assert.Equal(192, captured.Dpi);
+		Assert.Equal(1920 + 200, captured.Placement.Left);   // same offset from the work-area origin
+		Assert.Equal(100, captured.Placement.Top);
+		Assert.Equal(1800, captured.Placement.Width);        // 900 * 192 / 96
+		Assert.True(captured.Placement.Maximized);
 	}
 }

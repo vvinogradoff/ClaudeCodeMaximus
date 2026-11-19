@@ -19,14 +19,18 @@ public sealed class PreviewRestoreGuard
 		_api = api;
 	}
 
-	/// <summary>True from <see cref="Begin"/> until <see cref="End"/>.</summary>
+	/// <summary>True from <see cref="Restore"/> until <see cref="End"/>.</summary>
 	public bool Active => _planned != null;
 
-	/// <summary>The restore phase starts: <paramref name="planned"/> was just applied.</summary>
-	public void Begin(WindowPlacementModel planned)
+	/// <summary>
+	/// Starts the restore phase and then applies <paramref name="planned"/>. The phase begins first because placing the window on a monitor of another scale
+	/// raises <c>WM_DPICHANGED</c> synchronously inside the apply, and that is the change the guard exists for.
+	/// </summary>
+	public void Restore(IntPtr hwnd, WindowPlacementModel planned)
 	{
 		_planned = planned.Clone();
 		_applied = 0;
+		_api.Apply(hwnd, planned);
 	}
 
 	/// <summary>The window's DPI changed; applies the planned rectangle again while the restore phase lasts. Returns whether it did.</summary>
@@ -40,6 +44,6 @@ public sealed class PreviewRestoreGuard
 		return true;
 	}
 
-	/// <summary>The restore phase is over (the first frame is up).</summary>
+	/// <summary>The restore phase is over (the first frame is up, or the user started to move or size the window).</summary>
 	public void End() => _planned = null;
 }
