@@ -1,6 +1,6 @@
 # TC.FX.01 — Focus card text and options
 
-Related requirements: FR.23.25, FR.23.26, FR.23.28. Use cases: [UC.FX.01](/docs/usecases/UC.FX.01-Focus-Card-Text-and-Options.md).
+Related requirements: FR.23.25, FR.23.26, FR.23.28, FR.23.30. Use cases: [UC.FX.01](/docs/usecases/UC.FX.01-Focus-Card-Text-and-Options.md).
 
 **Legend.** AUTOMATED = view-model tests (VM), STA view tests with real layout (WPF), or end to end through `tools\e2e\Run-WpfE2E.ps1`.
 
@@ -18,6 +18,16 @@ Related requirements: FR.23.25, FR.23.26, FR.23.28. Use cases: [UC.FX.01](/docs/
 | TC.FX.20 | The recommended button uses the accent button style (accent background, on-accent text) and has no extra outline; other options keep the default style | AUTOMATED (STA) | UC.FX.02 | FR.23.28 |
 | TC.FX.21 | The reply box sits in a 2 px accent border | AUTOMATED (STA) | UC.FX.02 | FR.23.28 |
 | TC.FX.22 | Dragging the resize grip changes the reply box height, clamped to 56–600 px | AUTOMATED (STA) | UC.FX.02 | FR.23.28 |
+| TC.FX.23 | Absolute and relative paths in a card's title and body are marked (dotted underline); words that are not paths are not | AUTOMATED (STA) | UC.FX.03 | FR.23.30 |
+| TC.FX.24 | A path in the outcome line or a reply of a closed card is not marked; option buttons carry no path marking | AUTOMATED (STA) | UC.FX.03 | FR.23.30 |
+| TC.FX.25 | Ctrl+left-click on a path raises the path request with the item id and the path; a plain click and a drag raise none and select as before | AUTOMATED (STA) | UC.FX.03 | FR.23.30, FR.23.25 |
+| TC.FX.26 | UI Automation Invoke on a path raises the request | AUTOMATED (STA) | UC.FX.03 | FR.23.30 |
+| TC.FX.27 | The request reaches the client as `file.preview` with `itemId` (not `entryId`); an open item opens the file with the item as source, through the router when preview windows are on, else the pane | AUTOMATED (VM) | UC.FX.03 | FR.23.30 |
+| TC.FX.28 | A refusal by the daemon shows the dismissible notice and opens nothing | AUTOMATED (VM) | UC.FX.03 | FR.23.30 |
+| TC.FX.29 | An expanded closed card's path opens the file with no source item | AUTOMATED (VM) | UC.FX.03 | FR.23.30, FR.23.29 |
+| TC.FX.30 | Core: `file.preview` with `itemId` returns a handle for a path in the item's title or body (absolute, and relative to the working directory) | AUTOMATED (Core) | UC.FX.03 | FR.23.30 |
+| TC.FX.31 | Core: a path that is not in the item, one only in the user's answer, a `..` path leaving the working directory, an unknown item, and both or neither of `itemId`/`entryId` are refused | AUTOMATED (Core) | UC.FX.03 | FR.23.30 |
+| TC.FX.32 | End to end: Invoke on a path in a Focus card opens the file preview pane | AUTOMATED (E2E) | UC.FX.03 | FR.23.30 |
 
 ## FR → TC coverage
 | FR | Test cases |
@@ -25,3 +35,4 @@ Related requirements: FR.23.25, FR.23.26, FR.23.28. Use cases: [UC.FX.01](/docs/
 | FR.23.25 | TC.FX.01–04, 14 |
 | FR.23.26 | TC.FX.10–14 |
 | FR.23.28 | TC.FX.20–22 |
+| FR.23.30 | TC.FX.23–32 |

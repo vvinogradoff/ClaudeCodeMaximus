@@ -389,3 +389,10 @@ Part 2 adds `mcp.list`, `mcp.upsert`, `mcp.remove`, `mcp.setEnabled`, `mcp.disco
 - **Clients.** WPF shows it in Settings → Startup and uses it for the banner of FR.32.12. An absent member (an older daemon) means "unknown": nothing is shown and there is no banner.
 - **Relay.** Also returned on the relay; it reveals no secret, and Tessyn Web may show it later.
 - **Compatibility.** Additive: an older client ignores it. Golden files that hold the hello result gain the member.
+
+### 10.A11 — `file.preview` for a Focus item — FR.23.30
+- **`itemId`.** `file.preview` accepts `itemId` (the Focus item id, e.g. `A12`) **instead of** `entryId`: exactly one of the two; both or none → `-32602`. The params are `{ nodeId, itemId, path }`.
+- **Where the path must occur.** In the item's **title or body** (the text the session wrote; the user's answer and the resolution note do not count). Matching is as for entries: case-insensitive, slashes of both kinds equal. An unknown item id, or a path not in the text, is refused with a `TdcpException` message like the entry variant.
+- **Same result and policy.** The result (`FilePreviewResult`), the handle lifetime, the lexical and link checks and the FileAccess policy are exactly those of the entry variant; a relative path is resolved against the session's working directory and one that leaves it is refused.
+- **Relay.** Remote-callable like `file.preview` today (the relay policy applies; the method is already on the web allowlist, so the allowlist is unchanged).
+- **Compatibility.** Additive. `protocolVersion` unchanged.

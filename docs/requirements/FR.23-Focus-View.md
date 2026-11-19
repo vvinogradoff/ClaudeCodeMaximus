@@ -316,8 +316,18 @@ Why: a project rule such as CLAUDE.md's "ask in plain text" was written to avoid
 |---|---|---|
 | FR.23.14 closed card, FR.23.23 Closed list (a closed card shows header, outcome line and body) | FR.23.29 | An **expanded** closed card also shows its **references**. A collapsed one shows none. |
 | FR.23.18 References on items | FR.23.29 | References act the same on a closed item as on an open one. |
+| FR.23.18 References on items, FR.23.25 Card text | FR.23.30 | A local path **written in the title or body** of a card is itself marked and Ctrl+clickable (WPF), through `file.preview` with `itemId`. |
 
 **FR.23.29 — References on expanded closed items (WPF).** (Amends FR.23.14, FR.23.18 and the Closed list of FR.23.23.)
 - An **expanded** closed card (Closed list; the body is shown after a click on the header) shows its references **exactly like an open card**, below the text, and they act the same: *entry* jumps to the entry and highlights the quote; *file* opens the preview pane or the group's preview window (FR.29.4); *url* opens as a link (FR.29.4 or the system browser). Links in its text work as in an open card. A **collapsed** closed card shows no references. This holds whether the item was answered, dismissed or decided.
 - A preview opened from a closed item's reference is **not tied to that item**: Auto-close rule 2 (FR.29.9) cannot apply to an item that is already closed, so the preview counts as opened from the session (rule 1 only); it carries no Focus item id.
 - Use case UC.FC.04 ([UC.FC.01](/docs/usecases/UC.FC.01-Focus-Closed-and-Send-Answers.md)); test cases TC.FC.11 onwards ([TC.FC.01](/docs/testcases/TC.FC.01-Focus-Closed-and-Send-Answers.md)).
+
+**FR.23.30 — Paths in Focus card text (WPF).** (Amends FR.23.18 and FR.23.25.)
+- A local path in the **title or body** of a Focus card (the text the session wrote) is **marked and opens like a path in the session output**: the rules of FR.26.5 (absolute) and FR.26.7 (relative, resolved against the session's working directory) decide what is a path. It has a dotted underline; **Ctrl+left-click** opens it (FR.26.6) in the preview pane or its group's preview window (FR.29.4). The pointer cursor shows only while Ctrl is held; a plain click and a drag select text as before (FR.23.25). Keyboard and accessibility activation (UI Automation Invoke on the path) also opens it.
+- The user's own text on the card (a reply, the outcome line of a closed card) is **never marked**. Option buttons are not marked.
+- Opening asks the daemon `file.preview { nodeId, itemId, path }` ([tdcp-spec 10.A11](/docs/refactoring/tdcp-spec.md)): the path must occur in that item's title or body; the FileAccess policy applies; a relative path that leaves the working directory is refused. A refusal shows the same dismissible notice as in the session output.
+- Works on open cards and on expanded closed cards (FR.23.29). A preview opened from an **open** item has that item as its source (Auto-close rule 2, FR.29.9); from a **closed** item it has none (FR.23.29).
+- No inline image or video previews inside Focus cards: an image path opens in the preview on Ctrl+click.
+- Tessyn Web is unchanged (the daemon change makes it possible later).
+- Use case UC.FX.03 ([UC.FX.01](/docs/usecases/UC.FX.01-Focus-Card-Text-and-Options.md)); test cases TC.FX.23 onwards ([TC.FX.01](/docs/testcases/TC.FX.01-Focus-Card-Text-and-Options.md)).
