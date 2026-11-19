@@ -381,7 +381,7 @@ public sealed class PreviewWindowViewTests
 			var appearance = new CountingAppearanceService();
 			var options = new StartupOptions();
 			var surface = new FilePreviewSurface(
-				new WebViewEnvironmentProvider(temp.Paths, options), temp.Paths, new UrlPolicy(), new WebRequestPolicy(new MediaProxyUrl()), appearance,
+				new WebViewEnvironmentProvider(temp.Paths, options), temp.Paths, new UrlPolicy(), new WebRequestPolicy(new MediaProxyUrl()), new FramePolicy(), appearance,
 				new ScreensaverController(store, new FolderScreensaverImages(), DateTime.UtcNow), NullLogger<FilePreviewSurface>.Instance);
 			Assert.Equal(1, appearance.Subscribers);
 

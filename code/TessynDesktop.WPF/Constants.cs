@@ -32,13 +32,13 @@ public static partial class Constants
 	public static class Hosts
 	{
 		public const string AppHost = "app.local";
-
-		/// <summary>The address WebView2 reports for the load of an iframe's <c>srcdoc</c> document (the preview's html frame, FR.26.8).</summary>
-		public const string SrcdocUri = "about:srcdoc";
 		public const string PreviewHost = "preview.local";
 
 		/// <summary>The transcript page's only image host: a virtual name the host answers itself (the media proxy); it is never resolved.</summary>
 		public const string MediaHost = "media.local";
+
+		/// <summary>The address WebView2 reports for the load of an iframe's <c>srcdoc</c> document (the preview's html frame, FR.26.8).</summary>
+		public const string SrcdocUri = "about:srcdoc";
 	}
 
 	/// <summary>Texts the Focus view and the preview pane show; tests refer to them too.</summary>

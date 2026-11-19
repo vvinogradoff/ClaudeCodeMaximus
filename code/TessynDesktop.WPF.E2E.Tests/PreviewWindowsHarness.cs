@@ -580,6 +580,18 @@ internal sealed class PreviewWindowsHarness : IDisposable
 	}
 
 	private HttpListener? _webListener;
+	private readonly System.Collections.Concurrent.ConcurrentQueue<string> _webRequests = new();
+
+	/// <summary>The paths the test web server was asked for so far (proof that a page never fetched something).</summary>
+	public IReadOnlyCollection<string> WebRequests => _webRequests.ToArray();
+
+	/// <summary>Writes a file into the app's preview cache folder (served to the preview page as <c>preview.local</c>); returns its name.</summary>
+	public string WriteCacheFile(string name, byte[] content)
+	{
+		var folder = Directory.CreateDirectory(Path.Combine(_root, "preview-cache")).FullName;
+		File.WriteAllBytes(Path.Combine(folder, name), content);
+		return name;
+	}
 
 	private async Task ServeAsync(HttpListener listener)
 	{
@@ -596,6 +608,7 @@ internal sealed class PreviewWindowsHarness : IDisposable
 			}
 
 			var path = context.Request.Url?.AbsolutePath ?? "/";
+			_webRequests.Enqueue(path);
 			var title = path.TrimStart('/').ToUpperInvariant();
 			var body = Encoding.UTF8.GetBytes($"<!doctype html><html><head><title>Page {title}</title></head><body><h1>Page {title}</h1></body></html>");
 			context.Response.ContentType = "text/html; charset=utf-8";

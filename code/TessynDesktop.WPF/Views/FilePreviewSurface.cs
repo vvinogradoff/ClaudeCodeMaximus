@@ -31,7 +31,7 @@ public sealed class FilePreviewSurface : IPreviewSurface, IDisposable
 	private readonly ScreensaverController _screensaver;
 	private readonly UiCoalescer _themeCoalescer;
 	private readonly ILogger<FilePreviewSurface> _logger;
-	private readonly FramePolicy _frames = new();
+	private readonly FramePolicy _frames;
 
 	private readonly EventHandler _appearanceChanged;
 	private WebView2? _control;
@@ -41,9 +41,10 @@ public sealed class FilePreviewSurface : IPreviewSurface, IDisposable
 	private string? _posted;
 	private bool _disposed;
 
-	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, WebRequestPolicy requests, IAppearanceService appearance, ScreensaverController screensaver, ILogger<FilePreviewSurface> logger)
+	public FilePreviewSurface(WebViewEnvironmentProvider environment, AppPaths paths, UrlPolicy policy, WebRequestPolicy requests, FramePolicy frames, IAppearanceService appearance, ScreensaverController screensaver, ILogger<FilePreviewSurface> logger)
 	{
 		_requests = requests;
+		_frames = frames;
 		_appearance = appearance;
 		_screensaver = screensaver;
 		_themeCoalescer = new UiCoalescer(ApplyTheme);
@@ -119,17 +120,41 @@ public sealed class FilePreviewSurface : IPreviewSurface, IDisposable
 		core.Navigate(PageUri);
 	}
 
-	public void ShowText(string text) => Send(new { cmd = "text", text });
+	public void ShowText(string text)
+	{
+		_frames.ExpectNothing();
+		Send(new { cmd = "text", text });
+	}
 
-	public void ShowMarkdown(string html) => Send(new { cmd = "markdown", html });
+	public void ShowMarkdown(string html)
+	{
+		_frames.ExpectNothing();
+		Send(new { cmd = "markdown", html });
+	}
 
-	public void ShowHtml(string html) => Send(new { cmd = "html", html });
+	public void ShowHtml(string html)
+	{
+		_frames.ExpectSrcdocLoad();   // the one frame load this preview starts (a refresh in the page must not get a second)
+		Send(new { cmd = "html", html });
+	}
 
-	public void ShowImage(string url) => Send(new { cmd = "image", url });
+	public void ShowImage(string url)
+	{
+		_frames.ExpectNothing();
+		Send(new { cmd = "image", url });
+	}
 
-	public void ShowVideo(string url) => Send(new { cmd = "video", url });
+	public void ShowVideo(string url)
+	{
+		_frames.ExpectNothing();
+		Send(new { cmd = "video", url });
+	}
 
-	public void Clear() => Send(new { cmd = "clear" });
+	public void Clear()
+	{
+		_frames.ExpectNothing();
+		Send(new { cmd = "clear" });
+	}
 
 	private void Send(object message)
 	{
