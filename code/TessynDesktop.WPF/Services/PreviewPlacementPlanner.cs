@@ -17,6 +17,7 @@ public sealed class PreviewPlacementPlanner
 	public WindowPlacementModel Plan(PreviewPlacementModel? remembered, IReadOnlyList<MonitorInfo> monitors, string? mainWindowMonitor)
 	{
 		var target = TargetOf(monitors, mainWindowMonitor);
+		var targetDpi = monitors.FirstOrDefault(m => m.WorkArea == target)?.Dpi ?? 0;
 		if (remembered == null || remembered.Width <= 0 || remembered.Height <= 0)
 			return First(target);
 
@@ -27,7 +28,7 @@ public sealed class PreviewPlacementPlanner
 			// Windows may have renamed the monitor: the one whose work area starts where the remembered one did is the same monitor (FR.29.6).
 			home = monitors.FirstOrDefault(m => m.WorkArea.Left == remembered.MonitorLeft && m.WorkArea.Top == remembered.MonitorTop);
 			if (home == null)
-				return Centred(rectangle, target);
+				return Centred(Scaled(rectangle, remembered.Dpi, targetDpi), target);
 		}
 
 		if (home != null)
@@ -35,6 +36,14 @@ public sealed class PreviewPlacementPlanner
 			// The monitor moved in the layout since the window was saved: the window moves with it.
 			rectangle.Left += home.WorkArea.Left - remembered.MonitorLeft;
 			rectangle.Top += home.WorkArea.Top - remembered.MonitorTop;
+
+			// The same monitor now has another scale than when it was saved: the pixels follow it (FR.29.16).
+			if (remembered.Dpi > 0 && home.Dpi > 0 && remembered.Dpi != home.Dpi)
+			{
+				rectangle = Scaled(rectangle, remembered.Dpi, home.Dpi);
+				rectangle.Left = home.WorkArea.Left + (int)Math.Round((double)(remembered.Left - remembered.MonitorLeft) * home.Dpi / remembered.Dpi);
+				rectangle.Top = home.WorkArea.Top + (int)Math.Round((double)(remembered.Top - remembered.MonitorTop) * home.Dpi / remembered.Dpi);
+			}
 		}
 
 		var workAreas = monitors.Select(m => m.WorkArea).ToList();
@@ -42,7 +51,7 @@ public sealed class PreviewPlacementPlanner
 	}
 
 	/// <summary>What to remember for a window now at <paramref name="current"/> on <paramref name="monitor"/>.</summary>
-	public PreviewPlacementModel Remember(WindowPlacementModel current, MonitorInfo? monitor) => new()
+	public PreviewPlacementModel Remember(WindowPlacementModel current, MonitorInfo? monitor, int dpi = 0) => new()
 	{
 		Left = current.Left,
 		Top = current.Top,
@@ -52,7 +61,20 @@ public sealed class PreviewPlacementPlanner
 		MonitorDeviceName = monitor?.DeviceName,
 		MonitorLeft = monitor?.WorkArea.Left ?? 0,
 		MonitorTop = monitor?.WorkArea.Top ?? 0,
+		Dpi = dpi > 0 ? dpi : monitor?.Dpi ?? 0,
 	};
+
+	/// <summary>The size converted by the ratio of two scales; as it is when either is unknown or they are equal. The position is the caller's to set (it centres or clamps).</summary>
+	private static WindowPlacementModel Scaled(WindowPlacementModel rectangle, int fromDpi, int toDpi)
+	{
+		if (fromDpi <= 0 || toDpi <= 0 || fromDpi == toDpi)
+			return rectangle;
+
+		var scaled = rectangle.Clone();
+		scaled.Width = (int)Math.Round((double)rectangle.Width * toDpi / fromDpi);
+		scaled.Height = (int)Math.Round((double)rectangle.Height * toDpi / fromDpi);
+		return scaled;
+	}
 
 	/// <summary>The largest monitor that does not hold the main window (the first on a tie); else the main window's monitor, else the primary, else the first.</summary>
 	private static MonitorBounds TargetOf(IReadOnlyList<MonitorInfo> monitors, string? mainWindowMonitor)
