@@ -54,6 +54,24 @@ public sealed class PreviewDockLayoutApplier
 		}
 	}
 
+	/// <summary>
+	/// The panel opened while the docking area had no size yet, so it got the stand-in size; now the area is measured: the first-time size (40 %) replaces it. False when the panel is
+	/// not docked in a pane of its own any more (the user moved it meanwhile).
+	/// </summary>
+	public bool ApplyFirstTimeSize(LayoutAnchorable panel, PreviewDockSide side, double areaWidth, double areaHeight)
+	{
+		if (panel.Parent is not LayoutAnchorablePane pane || panel.IsAutoHidden || panel.IsFloating)
+			return false;
+
+		var size = SizeOf(new PreviewDockLayoutModel { Side = side }, areaWidth, areaHeight);
+		if (side is PreviewDockSide.Left or PreviewDockSide.Right)
+			pane.DockWidth = new GridLength(size);
+		else
+			pane.DockHeight = new GridLength(size);
+
+		return true;
+	}
+
 	private bool TryStack(LayoutRoot root, LayoutAnchorable panel, PreviewDockLayoutModel layout)
 	{
 		if (layout.StackedWith.Count == 0)

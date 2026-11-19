@@ -33,5 +33,9 @@ public sealed class TestDockingSurface : IDockingSurface
 
 	public event EventHandler? LayoutChanged;
 
+	public bool FloatingVisible { get; private set; } = true;
+
+	public void SetFloatingVisible(bool visible) => FloatingVisible = visible;
+
 	public void RaiseLayoutChanged() => LayoutChanged?.Invoke(this, EventArgs.Empty);
 }

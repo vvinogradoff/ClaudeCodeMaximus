@@ -124,23 +124,20 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 
 	public bool WouldRouteFile(string? fileName)
 	{
-		if (!IsActive && !IsDocked)
-			return false;
+		if ((IsActive || IsDocked) && _matcher.MatchFile(_settings.Groups, fileName) != null)
+			return true;
 
-		return _matcher.MatchFile(_settings.Groups, fileName) != null || (IsDocked && GoesToDefaultPanel(fileName));
+		return _dock != null && GoesToDefaultPanel(fileName);   // the default Preview panel replaces the old preview pane in both modes (FR.29.18)
 	}
 
 	public bool TryOpenFile(PreviewItemModel item, PreviewTarget fileHandle, ITessynClient client)
 	{
 		var docked = IsDocked;
-		if (!IsActive && !docked)
-			return false;
-
-		var match = _matcher.MatchFile(_settings.Groups, item.FileName);
+		var match = IsActive || docked ? _matcher.MatchFile(_settings.Groups, item.FileName) : null;
 		if (match != null)
 			return OpenInGroupTarget(match.Group, docked, item, fileHandle, client);
 
-		if (!docked || !GoesToDefaultPanel(item.FileName))
+		if (_dock == null || !GoesToDefaultPanel(item.FileName))
 			return false;   // a video is left to the default media player (FR.26.6)
 
 		return OpenInDefaultPanel(item, fileHandle, client);
@@ -159,8 +156,8 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		return OpenInGroupTarget(match.Group, docked, item, null, null);
 	}
 
-	/// <summary>A file that matches no group goes to the default Preview panel, except a video (FR.29.18, decision 1).</summary>
-	private static bool GoesToDefaultPanel(string? fileName)
+	/// <summary>A file that matches no group goes to the default Preview panel, except a video (FR.29.18, decision 1); in both modes.</summary>
+	private bool GoesToDefaultPanel(string? fileName)
 	{
 		if (string.IsNullOrEmpty(fileName))
 			return false;
@@ -401,8 +398,8 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 
 		if (activated)
 		{
-			// The external windows take over: the group panels and the default panel close, pinned panels stay (FR.29.23, decision 2).
-			foreach (var window in _windows.Where(w => !w.IsPinned && w.IsPanel).ToList())
+			// The external windows take over: the group panels close; pinned panels and the default Preview panel (the old pane's replacement) stay (FR.29.23, decision 2).
+			foreach (var window in _windows.Where(w => !w.IsPinned && w.IsPanel && !w.IsDefaultPanel).ToList())
 				CloseByRouter(window, "the mode turned on");
 		}
 
@@ -437,7 +434,7 @@ public sealed class PreviewRouter : IPreviewRouter, IDisposable
 		}
 	}
 
-	private static bool IsAutoClose(IReadOnlyList<PreviewGroupModel> groups, string groupId) => groups.FirstOrDefault(g => g.Id == groupId)?.AutoClose == true;
+	private bool IsAutoClose(IReadOnlyList<PreviewGroupModel> groups, string groupId) => groups.FirstOrDefault(g => g.Id == groupId)?.AutoClose == true;
 
 	// ---- the saved list ----
 

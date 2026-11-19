@@ -175,7 +175,7 @@ public sealed partial class SessionPaneViewModel
 				return;
 			}
 
-			await Preview.OpenAsync(new PreviewTarget(result.Handle, result.Name));
+			Notice = Constants.Texts.FilePreviewUnavailable;   // no preview target could show it
 		}
 		catch (Exception ex)
 		{
@@ -212,11 +212,8 @@ public sealed partial class SessionPaneViewModel
 					return Task.CompletedTask;   // a preview window shows it (FR.29.4)
 				}
 
-				if (Preview == null)
-					return Task.CompletedTask;
-
-				Notice = null;
-				return Preview.OpenAsync(new PreviewTarget(reference.RefId, reference.Name ?? reference.Label ?? "file"));
+				Notice = Constants.Texts.FilePreviewUnavailable;   // no preview target could show it
+				return Task.CompletedTask;
 			case FocusRefViewModel.UrlKind:
 				if (_previewRouter?.TryOpenUrl(new PreviewItemModel { Kind = PreviewItemKind.Url, Url = reference.Url, SourceNodeId = NodeId, SourceFocusItemId = FocusItemOf(reference) }) == true)
 					return Task.CompletedTask;
@@ -427,7 +424,7 @@ public sealed partial class SessionPaneViewModel
 				SourceNodeId = nodeId,
 			};
 			if (TryRouteFile(routedItem, new PreviewTarget(result.Handle, result.Name)))
-				return;   // a preview window shows it, a video too when a group takes its type (FR.29.4); otherwise as before (FR.26.6)
+				return;   // a preview window or panel shows it, a video too when a group takes its type (FR.29.4); otherwise as before (FR.26.6)
 
 			if (InlinePathMarker.IsInlineVideo(path))
 			{
@@ -437,7 +434,7 @@ public sealed partial class SessionPaneViewModel
 				return;
 			}
 
-			await Preview.OpenAsync(new PreviewTarget(result.Handle, result.Name));
+			Notice = Constants.Texts.FilePreviewUnavailable;   // no preview target could show it
 		}
 		catch (Exception ex)
 		{

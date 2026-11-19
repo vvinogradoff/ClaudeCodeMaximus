@@ -52,6 +52,9 @@ public static partial class Constants
 		public const string RecommendedTooltip = "Recommended";
 		public const string OptionTooltip = "Use this as your answer";
 		public const string FocusPathNotPreviewable = "This file cannot be previewed.";
+
+		/// <summary>Shown when a file could not be shown in any preview target (no docking area, or the panel could not be created).</summary>
+		public const string FilePreviewUnavailable = "This file cannot be previewed here.";
 		public const string EntryGone = "The referenced entry no longer exists in that session.";
 		public const string PreviewTooLarge = "This file is too large to preview";
 		/// <summary>The part of the daemon's FileAccess refusal text ("That file cannot be read remotely. ...") that tells a refusal by the access rules from a missing file or a wrong path.</summary>

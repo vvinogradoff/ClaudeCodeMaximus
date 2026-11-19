@@ -17,6 +17,7 @@ namespace TessynDesktop.WPF.Views;
 public partial class DockingArea : UserControl, IDockingSurface
 {
 	private bool _stripHidden;
+	private bool _floatingHidden;
 
 	public DockingArea() : this(new SessionPane())
 	{
@@ -51,7 +52,28 @@ public partial class DockingArea : UserControl, IDockingSurface
 
 			LayoutChanged?.Invoke(this, EventArgs.Empty);
 		};
-		ApplyTheme(dark: false);
+		DockManager.LayoutFloatingWindowControlCreated += (_, e) =>
+		{
+			if (e.LayoutFloatingWindowControl is not { } created)
+				return;
+
+			// The library shows the window after it is created; while the cover is up it is hidden again at once.
+			created.IsVisibleChanged += (_, _) =>
+			{
+				if (_floatingHidden && created.IsVisible)
+					created.Visibility = Visibility.Hidden;
+			};
+			if (_floatingHidden)
+				created.Visibility = Visibility.Hidden;
+		};
+	}
+
+	/// <summary>Hides or shows the floating panels' windows (the screensaver cover does not reach them, FR.29.19).</summary>
+	public void SetFloatingVisible(bool visible)
+	{
+		_floatingHidden = !visible;
+		foreach (var window in DockManager.FloatingWindows.ToList())
+			window.Visibility = visible ? Visibility.Visible : Visibility.Hidden;
 	}
 
 	/// <summary>The session pane, the central document.</summary>
@@ -73,7 +95,7 @@ public partial class DockingArea : UserControl, IDockingSurface
 	/// <summary>Switches the docking theme with Tessyn's light or dark theme (FR.29.24, first stage: AvalonDock's own VS2013 pair).</summary>
 	public void ApplyTheme(bool dark)
 	{
-		if (dark && DockManager.Theme is Vs2013DarkTheme || !dark && DockManager.Theme is Vs2013LightTheme)
+		if (DockManager.Theme is Vs2013DarkTheme && dark || DockManager.Theme is Vs2013LightTheme && !dark)
 			return;
 
 		DockManager.Theme = dark ? new Vs2013DarkTheme() : new Vs2013LightTheme();

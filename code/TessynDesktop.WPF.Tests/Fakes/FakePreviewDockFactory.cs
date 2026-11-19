@@ -11,8 +11,14 @@ public sealed class FakePreviewDockFactory : IPreviewDockFactory
 
 	public IEnumerable<FakePreviewWindowHandle> Open => Created.Where(h => !h.IsClosed);
 
+	/// <summary>True: <see cref="Create"/> fails, as when the main window's docking area is not there.</summary>
+	public bool ThrowOnCreate { get; set; }
+
 	public IPreviewWindowHandle Create(PreviewGroupModel? group, bool pinned, PreviewDockLayoutModel? ownLayout)
 	{
+		if (ThrowOnCreate)
+			throw new InvalidOperationException("no docking area");
+
 		var handle = new FakePreviewWindowHandle(group?.Id ?? Constants.Previews.DefaultPanelId, pinned, null, group?.Name ?? Constants.Previews.DefaultPanelName);
 		Created.Add(handle);
 		return handle;

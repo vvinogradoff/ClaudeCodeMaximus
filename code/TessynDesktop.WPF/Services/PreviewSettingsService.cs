@@ -123,11 +123,11 @@ public sealed class PreviewSettingsService : IPreviewSettingsService
 		_store.Update<PreviewDockSettings>(s => s.OpenPanels = copies);
 	}
 
-	private static OpenPreviewPanelModel CloneOpenPanel(OpenPreviewPanelModel p) => new()
+	private OpenPreviewPanelModel CloneOpenPanel(OpenPreviewPanelModel p) => new()
 	{
 		GroupId = p.GroupId,
 		Pinned = p.Pinned,
-		Item = p.Item,
+		Item = p.Item.Clone(),
 		Layout = p.Layout?.Clone(),
 	};
 

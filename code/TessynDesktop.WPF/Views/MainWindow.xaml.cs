@@ -49,10 +49,11 @@ public partial class MainWindow : Window
 
 		Docking.SessionView.SetBinding(DataContextProperty, new System.Windows.Data.Binding(nameof(MainViewModel.Session)) { Source = viewModel });   // the session pane view model exists once the client is connected
 		dockingSurface.Register(Docking);   // the docked preview panels are placed in this docking area (FR.29.19)
-		Docking.ApplyTheme(appearance.IsDark);
+		Docking.ApplyTheme(appearance.IsDark);   // the one place the theme is first set
 		appearance.Changed += (_, _) => Dispatcher.BeginInvoke(() => Docking.ApplyTheme(appearance.IsDark));
 		TitleBarView.DataContext = titleBar;
 		Screensaver.Covered = ContentGrid;   // the WebView2 windows cannot be painted over, so the content under the cover is hidden while it is up
+		Screensaver.CoverChanged += (_, covered) => Docking.SetFloatingVisible(!covered);   // the floating panels are windows of their own: the cover does not reach them
 		Screensaver.Attach(screensaver, logger);
 		_treeWidth = JsonClientStateStore.ClampTreeWidth(stateStore.State.TreeWidth);
 		titleBar.TreeVisibilityChanged += (_, _) => ApplyTreeVisibility();

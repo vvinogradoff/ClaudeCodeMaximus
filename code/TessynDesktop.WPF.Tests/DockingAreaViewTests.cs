@@ -92,7 +92,7 @@ public sealed class DockingAreaViewTests
 		StaTestRunner.Run(() =>
 		{
 			var area = new DockingArea(new Border { Name = "Stub", MinWidth = 100 });
-			Assert.IsType<Vs2013LightTheme>(area.Manager.Theme);
+			Assert.Null(area.Manager.Theme);   // the main window sets it once, from the stored look (no throwaway light theme in dark mode)
 
 			area.ApplyTheme(dark: true);
 			Assert.IsType<Vs2013DarkTheme>(area.Manager.Theme);

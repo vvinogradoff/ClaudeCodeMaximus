@@ -200,7 +200,7 @@ public sealed class PreviewRouterDockedTests : IDisposable
 	}
 
 	[Fact]
-	public void ModeOn_ClosesGroupAndDefaultPanels_PinnedPanelsStay_NothingReopens()
+	public void ModeOn_ClosesGroupPanels_PinnedAndDefaultPanelsStay_NothingReopens()
 	{
 		OpenFile("a.png");
 		OpenFile("a.md");
@@ -211,7 +211,7 @@ public sealed class PreviewRouterDockedTests : IDisposable
 		_monitors.Set(2);
 
 		Assert.True(_router.IsActive);
-		Assert.Equal(["text-code*"], OpenPanels());
+		Assert.Equal(["text-code*", DefaultId], OpenPanels());   // the default panel is the old pane's replacement in both modes (FR.29.18)
 		Assert.Empty(_windows.Created);
 	}
 
@@ -237,9 +237,46 @@ public sealed class PreviewRouterDockedTests : IDisposable
 		_monitors.Set(2);
 
 		Assert.True(OpenFile("a.png"));
-		Assert.False(OpenFile("data.xyz"));   // no group: not routed, as before
 		Assert.Single(_windows.Open);
-		Assert.Empty(_dock.Created);
+		Assert.Empty(_dock.Created);   // a group file goes to its window
+	}
+
+	[Fact]
+	public void ActiveMode_FileWithNoGroup_OpensTheDefaultPanelInTheMainWindow_NotAWindow()
+	{
+		_monitors.Set(2);
+
+		Assert.True(_router.WouldRouteFile("data.xyz"));
+		Assert.True(OpenFile("data.xyz"));
+		Assert.True(OpenFile("other.bin"));
+
+		Assert.Equal([DefaultId], OpenPanels());
+		Assert.Equal(["data.xyz", "other.bin"], _dock.Open.Single().Shown.Select(i => i.FileName));
+		Assert.Empty(_windows.Created);
+		Assert.False(OpenFile("clip.MP4"));   // a video is still left to the default media player
+		Assert.False(_router.WouldRouteFile("clip.MP4"));
+	}
+
+	[Fact]
+	public void TheDefaultPanel_SurvivesTheModeChangingBothWays()
+	{
+		OpenFile("data.xyz");
+
+		_monitors.Set(2);
+		Assert.Equal([DefaultId], OpenPanels());
+		_monitors.Set(1);
+		Assert.Equal([DefaultId], OpenPanels());
+	}
+
+	[Fact]
+	public void WhenThePanelCannotBeCreated_NothingIsRouted_SoTheCallerCanSayWhy()
+	{
+		_dock.ThrowOnCreate = true;
+
+		Assert.False(OpenFile("data.xyz"));
+		Assert.False(OpenFile("a.png"));
+		Assert.False(OpenFile(string.Empty));
+		Assert.Empty(_dock.Open);
 	}
 
 	[Fact]

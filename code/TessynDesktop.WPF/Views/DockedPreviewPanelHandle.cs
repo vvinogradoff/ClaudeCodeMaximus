@@ -31,6 +31,7 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 	private PreviewDockLayoutModel? _last;
 	private PreviewDockLayoutModel? _lastDocked;
 	private bool _opened;
+	private bool _awaitingFirstSize;
 	private bool _routerClose;
 	private bool _closed;
 
@@ -102,6 +103,7 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 		_panel.Title = _viewModel.Title;
 		_applier.Apply(_surface.Root, _surface.DocumentPane, _panel, _remembered, _surface.AreaWidth, _surface.AreaHeight);
 		_surface.LayoutChanged += OnLayoutChanged;
+		_awaitingFirstSize = (_remembered == null || _remembered.Size < Constants.PreviewDock.MinPaneSize) && !_panel.IsAutoHidden && !_panel.IsFloating && _surface.AreaWidth <= 0;
 		_tracker.Settle();
 		_tracker.Tracking = true;
 		_logger.LogInformation(Constants.PreviewDock.PanelOpenedLog, GroupId);
@@ -132,8 +134,8 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 
 	private PreviewDockLayoutModel? Capture()
 	{
-		if (_closed || !_opened || _panel.Root == null)
-			return _last;
+		if (_closed || !_opened || _panel.Root == null || _panel.IsHidden || _panel.Parent == null)
+			return _last;   // a hidden or removed panel reads as nothing: keep the last good layout
 
 		_last = _reader.Read(_panel, _surface.DocumentPane, _lastDocked);
 		if (!_last.Floating)
@@ -142,7 +144,18 @@ public sealed class DockedPreviewPanelHandle : IDockedPreviewPanelHandle
 		return _last;
 	}
 
-	private void OnLayoutChanged(object? sender, EventArgs e) => _tracker.Changed();
+	private void OnLayoutChanged(object? sender, EventArgs e)
+	{
+		if (_awaitingFirstSize && _surface.AreaWidth > 0)
+		{
+			_awaitingFirstSize = false;
+			var side = _last?.Side ?? PreviewDockSide.Right;
+			if (_applier.ApplyFirstTimeSize(_panel, side, _surface.AreaWidth, _surface.AreaHeight))
+				_tracker.Settle();   // the first-time size is where the panel opens, not a change of the user's
+		}
+
+		_tracker.Changed();
+	}
 
 	private void OnPinned(object? sender, EventArgs e)
 	{

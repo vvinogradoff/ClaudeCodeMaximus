@@ -104,7 +104,7 @@ public sealed class SessionPanePreviewWindowsTests : IDisposable
 	}
 
 	[Fact]
-	public async Task PathChip_WhenTheRouterRefuses_OpensInThePaneAsBefore()
+	public async Task PathChip_WhenTheRouterRefuses_SaysSo_InsteadOfDoingNothing()
 	{
 		AddSession("a", 10, ChipPath);
 		_client.Files["h1"] = ("plan.md", "text/markdown", System.Text.Encoding.UTF8.GetBytes("# Chip plan"));
@@ -115,7 +115,37 @@ public sealed class SessionPanePreviewWindowsTests : IDisposable
 		await _pane.PreviewLocalPathAsync(3, ChipPath);
 
 		Assert.Single(_router.Files);
-		Assert.True(_pane.Preview!.IsOpen);
+		Assert.False(_pane.Preview!.IsOpen);   // the old preview pane is gone (FR.29.18): the default Preview panel takes such files, and a failure is said
+		Assert.Equal(Constants.Texts.FilePreviewUnavailable, _pane.Notice);
+	}
+
+	[Fact]
+	public async Task FileRef_WhenTheRouterRefuses_SaysSo()
+	{
+		var reference = new AttentionRefDto { Kind = "file", RefId = "ref1", Name = "plan.md", Path = "docs/plan.md" };
+		await OpenWithFocusItemAsync("a", reference);
+		_router.TakesFiles = false;
+
+		await _pane.ActivateRefAsync(_pane.Focus.Items.Single().Refs.Single().Reference);
+
+		Assert.Single(_router.Files);
+		Assert.Equal(Constants.Texts.FilePreviewUnavailable, _pane.Notice);
+		Assert.False(_pane.Preview!.IsOpen);
+	}
+
+	[Fact]
+	public async Task PathChip_WhenTheRouterTakes_ClearsAnEarlierNotice()
+	{
+		AddSession("a", 10, ChipPath);
+		_client.Files["h1"] = ("plan.md", "text/markdown", System.Text.Encoding.UTF8.GetBytes("# Chip plan"));
+		_client.PreviewHandles[$"a|fa:3|{ChipPath}"] = "h1";
+		await _pane.OpenAsync("a");
+		_pane.Notice = "old";
+		_router.TakesFiles = true;
+
+		await _pane.PreviewLocalPathAsync(3, ChipPath);
+
+		Assert.Null(_pane.Notice);
 	}
 
 	[Fact]
@@ -150,7 +180,7 @@ public sealed class SessionPanePreviewWindowsTests : IDisposable
 	}
 
 	[Fact]
-	public async Task FileRef_WhenTheRouterRefuses_OpensThePane()
+	public async Task FileRef_WhenTheRouterRefuses_OnlyShowsTheNotice_NoPaneExistsAnyMore()
 	{
 		_client.Files["ref1"] = ("plan.md", "text/markdown", System.Text.Encoding.UTF8.GetBytes("# The plan"));
 		await OpenWithFocusItemAsync("a", new AttentionRefDto { Kind = "file", RefId = "ref1", Name = "plan.md" });
@@ -159,7 +189,8 @@ public sealed class SessionPanePreviewWindowsTests : IDisposable
 		await _pane.ActivateRefAsync(_pane.Focus.Items.Single().Refs.Single().Reference);
 		await _pane.Preview!.WhenIdleAsync();
 
-		Assert.True(_pane.Preview.IsOpen);
+		Assert.False(_pane.Preview.IsOpen);
+		Assert.Equal(Constants.Texts.FilePreviewUnavailable, _pane.Notice);
 	}
 
 	[Fact]
@@ -276,7 +307,7 @@ public sealed class SessionPanePreviewWindowsTests : IDisposable
 	}
 
 	[Fact]
-	public async Task TC_FX_27_FocusPath_WhenTheRouterRefuses_OpensThePane()
+	public async Task TC_FX_27_FocusPath_WhenTheRouterRefuses_ShowsTheNotice()
 	{
 		await OpenWithPathItemAsync();
 		_router.TakesFiles = false;
@@ -284,8 +315,8 @@ public sealed class SessionPanePreviewWindowsTests : IDisposable
 		_pane.Focus.Items.Single().OpenPath("docs/plan.md");
 		await _pane.Preview!.WhenIdleAsync();
 
-		Assert.True(_pane.Preview.IsOpen);
-		Assert.Null(_pane.Notice);
+		Assert.False(_pane.Preview.IsOpen);
+		Assert.Equal(Constants.Texts.FilePreviewUnavailable, _pane.Notice);
 	}
 
 	[Fact]

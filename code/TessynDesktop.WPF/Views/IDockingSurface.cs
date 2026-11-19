@@ -22,6 +22,9 @@ public interface IDockingSurface
 	/// <summary>The height of the docking area in device-independent pixels; 0 before it is laid out.</summary>
 	double AreaHeight { get; }
 
+	/// <summary>Hides or shows the floating panels' windows (the screensaver cover does not reach them); a window created while hidden starts hidden.</summary>
+	void SetFloatingVisible(bool visible);
+
 	/// <summary>Something in the layout changed (a dock move, a resize, a tab move, auto-hide, float or dock).</summary>
 	event EventHandler? LayoutChanged;
 }
