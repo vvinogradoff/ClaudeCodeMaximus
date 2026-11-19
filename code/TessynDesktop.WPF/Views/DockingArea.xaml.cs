@@ -128,6 +128,7 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 	{
 		_memory = memory;
 		_logger = logger;
+		Chrome.UseLogger(logger);
 		_monitors = monitors;
 		foreach (var definition in panels)
 			_definitions[definition.Id] = definition;
