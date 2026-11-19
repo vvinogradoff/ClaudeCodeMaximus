@@ -1196,7 +1196,7 @@ Plan: `.wpf-work/root-sessions-plan.md`, approved 2026-11-18 (Focus A1–A3; A3 
 - [DONE] `create_session` tool: arguments, placement, settings, guardrails, first prompt, result text; the tool in `NoWorkflowTool` and the `cmx-orchestration` skill (FR.15.15)
 - [DONE] Tests: TC.15.8 and TC.ME.01–ME.04 (Core), TC.15.9 and TC.ME.05 (WPF E2E)
 - [DONE] Review (`.wpf-work/rootsess-review.md`: SHIP; M1 sticky-pick reset, L1-L3, L5, L6 fixed), merge `f4df779`, all suites green: Core 3964, WPF 1812, Web 146, Web E2E 24 (+1 skipped), WPF E2E 103/103
-- [ ] After the restart onto the build: create "Root level sessions" (Opus, Max, Default profile, streaming, sound) right under "Load session output" (manual UC.15.4)
+- [DONE] After the restart onto the build (2026-11-19): created "Root level sessions" (Opus, Max, Default profile, streaming, sound) right under "Load session output" (manual UC.15.4)
 
 ## Phase 44 — Multi-monitor preview windows (FR.27, FR.29)
 
