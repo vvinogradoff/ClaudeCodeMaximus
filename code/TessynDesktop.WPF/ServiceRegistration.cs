@@ -106,6 +106,7 @@ public sealed class ServiceRegistration
 		{
 			TestDropPaths = options.TestDropPaths,
 			PreviewRouter = sp.GetRequiredService<IPreviewRouter>(),
+			ShellLayout = sp.GetService<IShellLayout>(),   // FR.6.16: null until the docked shell registers it
 			Dialogs = sp.GetRequiredService<IDialogService>(),
 		});
 		services.AddSingleton<IClientStateStore, JsonClientStateStore>();

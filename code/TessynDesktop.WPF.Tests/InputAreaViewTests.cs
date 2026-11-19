@@ -54,13 +54,16 @@ public sealed class InputAreaViewTests
 		}
 	}
 
-	private static Fixture Create(double? storedHeight = null)
+	private static Fixture Create(double? storedHeight = null, FakeShellLayout? layout = null)
 	{
 		var client = new FakeTessynClient();
 		client.Sessions["a"] = FakeSession.WithEntries(3);
 		client.Sessions["b"] = FakeSession.WithEntries(3);
 		var model = new SessionPaneViewModel(client, new FakeTranscriptSurface(), new MarkdigEntryRenderer(new UrlPolicy()), new FakeUrlLauncher(),
-			new ImmediateUiDispatcher(), new SwitchLatencyTracker(NullLogger<SwitchLatencyTracker>.Instance), NullLogger<SessionPaneViewModel>.Instance);
+			new ImmediateUiDispatcher(), new SwitchLatencyTracker(NullLogger<SwitchLatencyTracker>.Instance), NullLogger<SessionPaneViewModel>.Instance)
+		{
+			ShellLayout = layout,
+		};
 		model.OpenAsync("a", "A").GetAwaiter().GetResult();
 		model.ExpandedInputHeight = storedHeight;   // as read from the client state at start (FR.12.36)
 		var pane = new SessionPane { DataContext = model };
@@ -230,50 +233,38 @@ public sealed class InputAreaViewTests
 	}
 
 	[Fact]
-	public void TheFocusView_ReplacesTheTranscript_AndTheSwitchHasExactlyOneSideChecked()
+	public void TheFocusButton_BringsTheFocusPanelForward_AndTheTranscriptIsAlwaysShown()
 	{
 		StaTestRunner.Run(() =>
 		{
-			var f = Create();
-			var session = f.Find<RadioButton>("SessionViewButton");
-			var focus = f.Find<RadioButton>("FocusViewButton");
-			Assert.True(session.IsChecked);
-			Assert.False(focus.IsChecked);
+			var layout = new FakeShellLayout();
+			var f = Create(layout: layout);
+			var button = f.Find<Button>("FocusButton");
+			Assert.Null(f.Pane.FindName("FocusHost"));
+			Assert.Null(f.Pane.FindName("SessionViewButton"));
 			Assert.Equal(Visibility.Visible, f.Find<Grid>("TranscriptHost").Visibility);
-			Assert.Equal(Visibility.Collapsed, f.Find<Grid>("FocusHost").Visibility);
+			Assert.Equal("Focus", System.Windows.Automation.AutomationProperties.GetName(button));
 
-			f.Model.SelectFocusViewCommand.Execute(null);
+			button.Command.Execute(null);
 			f.Settle();
 
-			Assert.False(session.IsChecked);
-			Assert.True(focus.IsChecked);
-			Assert.Equal(Visibility.Collapsed, f.Find<Grid>("TranscriptHost").Visibility);
-			Assert.Equal(Visibility.Visible, f.Find<Grid>("FocusHost").Visibility);
-			Assert.True(f.Model.IsInputCollapsed);   // and the input area follows the view's default
-			Assert.Equal(Visibility.Collapsed, f.Find<Button>("StopButton").Visibility);
-
-			f.Model.SelectSessionViewCommand.Execute(null);
-			f.Settle();
-			Assert.True(session.IsChecked);
-			Assert.False(focus.IsChecked);
+			Assert.Equal([Constants.DockedShell.FocusPanelId], layout.BroughtForward);
 			Assert.Equal(Visibility.Visible, f.Find<Grid>("TranscriptHost").Visibility);
-			Assert.False(f.Model.IsInputCollapsed);
+			Assert.False(f.Model.IsInputCollapsed);   // FR.6.17: the composer is not touched
 		});
 	}
 
 	[Fact]
-	public void TheSwitchButtons_AreNamedForAutomation_AndClickingTheCheckedSideKeepsItChecked()
+	public void TheFocusButton_WithoutAShell_DoesNothing_AndIsNotFocusable()
 	{
 		StaTestRunner.Run(() =>
 		{
 			var f = Create();
-			var session = f.Find<RadioButton>("SessionViewButton");
+			var button = f.Find<Button>("FocusButton");
 
-			Assert.Equal("Session view", System.Windows.Automation.AutomationProperties.GetName(session));
-			Assert.Equal("Focus view", System.Windows.Automation.AutomationProperties.GetName(f.Find<RadioButton>("FocusViewButton")));
-			session.Command.Execute(null);
-			Assert.True(f.Model.IsSessionSelected);
-			Assert.True(session.IsChecked);
+			button.Command.Execute(null);
+
+			Assert.False(button.Focusable);   // a click never takes the keyboard focus away (FR.6.20)
 		});
 	}
 
@@ -530,8 +521,6 @@ public sealed class InputAreaViewTests
 
 			foreach (var name in new[] { "SidePane", "SideColumn", "SideSplitter" })
 				Assert.Null(f.Pane.FindName(name));   // FR.29.18: no preview column in the session pane
-			f.Model.SelectFocusViewCommand.Execute(null);
-			f.Settle();
 			Assert.Null(f.Pane.FindName("SidePane"));
 		});
 	}

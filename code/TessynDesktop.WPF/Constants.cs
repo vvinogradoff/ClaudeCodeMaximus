@@ -42,6 +42,7 @@ public static partial class Constants
 	public static class Texts
 	{
 		public const string NoOpenItems = "Nothing needs your attention in this session.";
+		public const string NoFocusSession = "Open a session to see what needs your attention.";
 		public const string DecisionsHeaderFormat = "Decisions ({0})";
 		public const string ClosedHeaderFormat = "Closed ({0})";
 		public const string OutcomeAnswered = "Answered";

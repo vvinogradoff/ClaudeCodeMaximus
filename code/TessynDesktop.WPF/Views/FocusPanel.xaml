@@ -160,7 +160,15 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- No title row (FR.23.27): the Session/Focus switch in the session header names the view; "Send answers (n)" lives there too (FR.23.21). -->
+        <!-- "Send answers (n)" (FR.23.21 amended): always visible at the top of the panel, so it never scrolls away; same enabling rule, Ctrl+Enter in a reply box unchanged (FR.23.22). -->
+        <Button Grid.Row="0" x:Name="SendAnswersButton" Command="{Binding SendAnswersCommand}" HorizontalAlignment="Right" Margin="12,8,12,0" Padding="10,6"
+                Style="{DynamicResource AccentButtonStyle}" AutomationProperties.Name="Send answers"
+                ToolTip="Send every filled reply box in one prompt (Ctrl+Enter in a reply box)">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSend}" />
+                <TextBlock Text="{Binding SendAnswersText}" Margin="8,0,0,0" />
+            </StackPanel>
+        </Button>
         <TextBlock Grid.Row="1" Text="{Binding Error}" TextWrapping="Wrap" Margin="12,8,12,0" Foreground="{DynamicResource SystemFillColorCriticalBrush}">
             <TextBlock.Style>
                 <Style TargetType="TextBlock">
@@ -176,8 +184,34 @@
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="12,8,12,12">
-                <TextBlock Text="Nothing needs your attention in this session." TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}" />
+                <TextBlock x:Name="NoSessionText" Text="Open a session to see what needs your attention." TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasSession}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock x:Name="NothingOpenText" Text="Nothing needs your attention in this session." TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding HasSession}" Value="True" />
+                                        <Condition Binding="{Binding IsEmpty}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 <ItemsControl ItemsSource="{Binding OpenItems}" ItemTemplate="{StaticResource OpenCardTemplate}" Focusable="False" />
 
                 <Expander Header="{Binding DecisionsHeader}" IsExpanded="{Binding IsDecisionsExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.AutomationId="FocusDecisionsExpander"

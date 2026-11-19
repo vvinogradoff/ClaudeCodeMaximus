@@ -173,7 +173,7 @@ public sealed class SessionPaneNavigationTests : IDisposable
 	}
 
 	[Fact]
-	public async Task FocusItemEntryRef_JumpsThroughTheFocusView()
+	public async Task FocusItemEntryRef_JumpsInTheTranscript()
 	{
 		AddSession("a", 40);
 		_client.Attention["a"] =
@@ -185,14 +185,11 @@ public sealed class SessionPaneNavigationTests : IDisposable
 		Assert.Equal(1, _pane.FocusBadge);
 		Assert.True(_pane.IsFocusBadgeVisible);
 
-		_pane.SelectFocusViewCommand.Execute(null);
-		Assert.False(_pane.IsFocusBadgeVisible);          // the badge shows only while Session is selected (FR.23.13)
 		_pane.Focus.Items.Single().Refs.Single().OpenCommand.Execute(null);
 		await Task.Yield();
 
 		Assert.Contains(_surface.Calls, c => c.StartsWith("goto:12:", StringComparison.Ordinal));
 		Assert.True(_pane.CanGoBack);
-		Assert.True(_pane.IsSessionSelected);             // a jump lands on the transcript
 	}
 
 	[Fact]

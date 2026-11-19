@@ -1,26 +1,28 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
 
 namespace TessynDesktop.WPF.ViewModels;
 
 /// <summary>
-/// The Session/Focus switch (FR.23.12) and the collapsible input area (FR.12.29) of the session pane.
+/// The Focus button (FR.6.16) and the collapsible input area (FR.12.29) of the session pane.
 /// <para>
-/// The selected view is kept per session in memory, never persisted; a session that was not opened yet starts on Session. The input area is expanded in the
-/// Session view and collapsed in the Focus view, never persisted and never carried over: opening a different session, or switching the view, sets the state
-/// to the default of the view entered. The command bar's visibility (FR.12.11) is a separate switch the collapse leaves alone.
+/// The Focus button brings the Focus panel forward through <see cref="IShellLayout"/>. The input area belongs to the Session view only (FR.6.17): it is expanded
+/// when a different session opens, never persisted and never carried over. The command bar's visibility (FR.12.11) is a separate switch the collapse leaves alone.
 /// </para>
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class SessionPaneViewModel
 {
-	private readonly Dictionary<string, bool> _focusSelection = new(StringComparer.Ordinal);
-	private bool _applyingView;
+	private IShellLayout? _shellLayout;
 
-	/// <summary>The Focus view is selected: it replaces the transcript (FR.23.12).</summary>
-	[ObservableProperty]
-	private bool _isFocusSelected;
+	/// <summary>The docked shell the Focus button brings the Focus panel forward in (FR.6.16); null in tests and tools without a shell. Set once, when the pane is created.</summary>
+	public IShellLayout? ShellLayout
+	{
+		get => _shellLayout;
+		init => _shellLayout = value;
+	}
 
 	/// <summary>The input area is collapsed (FR.12.29): the command bar only while it is visible, otherwise one line of the input text.</summary>
 	[ObservableProperty]
@@ -48,10 +50,8 @@ public sealed partial class SessionPaneViewModel
 		}
 	}
 
-	public bool IsSessionSelected => !IsFocusSelected;
-
-	/// <summary>The Focus badge shows only while the Session view is selected and there is something open (FR.23.13).</summary>
-	public bool IsFocusBadgeVisible => !IsFocusSelected && FocusBadge > 0;
+	/// <summary>The Focus button's badge shows whenever there is something open (FR.23.13, FR.6.16).</summary>
+	public bool IsFocusBadgeVisible => FocusBadge > 0;
 
 	public bool IsInputExpanded => !IsInputCollapsed;
 
@@ -71,19 +71,6 @@ public sealed partial class SessionPaneViewModel
 	{
 		_isCommandBarVisible = stateStore?.State.CommandBarVisible ?? true;
 		_expandedInputHeight = stateStore?.State.InputAreaHeight is > 0 and var height ? height : null;
-	}
-
-	partial void OnIsFocusSelectedChanged(bool value)
-	{
-		OnPropertyChanged(nameof(IsSessionSelected));
-		OnPropertyChanged(nameof(IsFocusBadgeVisible));
-		if (_applyingView)
-			return;
-
-		if (NodeId != null)
-			_focusSelection[NodeId] = value;
-
-		IsInputCollapsed = value;   // entering a view applies its default (FR.12.29)
 	}
 
 	partial void OnIsInputCollapsedChanged(bool value) => RaiseInputAreaChanged();
@@ -111,29 +98,12 @@ public sealed partial class SessionPaneViewModel
 		OnPropertyChanged(nameof(ShowStopButton));
 	}
 
-	/// <summary>A different session opened: its remembered view (Session for a new one) is selected and the input area takes that view's default.</summary>
-	private void ResetViewForOpen(string nodeId)
-	{
-		_applyingView = true;
-		try
-		{
-			IsFocusSelected = _focusSelection.GetValueOrDefault(nodeId);
-		}
-		finally
-		{
-			_applyingView = false;
-		}
+	/// <summary>A different session opened: the input area takes its default, expanded (FR.12.29).</summary>
+	private void ResetViewForOpen() => IsInputCollapsed = false;
 
-		IsInputCollapsed = IsFocusSelected;
-	}
-
-	/// <summary>The Session view was chosen (FR.23.12).</summary>
+	/// <summary>The Focus button was pressed (FR.6.16): brings the Focus panel forward; it never moves the keyboard focus (FR.6.20).</summary>
 	[RelayCommand]
-	private void SelectSessionView() => IsFocusSelected = false;
-
-	/// <summary>The Focus view was chosen (FR.23.12).</summary>
-	[RelayCommand]
-	private void SelectFocusView() => IsFocusSelected = true;
+	private void BringFocusPanelForward() => _shellLayout?.BringForward(Constants.DockedShell.FocusPanelId);
 
 	/// <summary>Collapses an expanded input area and expands a collapsed one (a double click on the splitter above it, FR.12.29).</summary>
 	[RelayCommand]
