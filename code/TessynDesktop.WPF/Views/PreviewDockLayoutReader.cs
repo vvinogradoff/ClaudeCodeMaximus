@@ -36,7 +36,8 @@ public sealed class PreviewDockLayoutReader
 			return model;
 		}
 
-		model.Side = SideOf(panel, document) ?? PreviewDockSide.Right;
+		// A panel dropped onto the centre is a tab of the document pane: it has no side of its own, so it keeps the last docked one.
+		model.Side = (ReferenceEquals(panel.Parent, document) ? lastDocked?.Side : SideOf(panel, document)) ?? lastDocked?.Side ?? PreviewDockSide.Right;
 		model.AutoHide = panel.IsAutoHidden;
 		var container = panel.Parent as ILayoutContainer;
 		model.StackedWith = StackedWith(panel, container);

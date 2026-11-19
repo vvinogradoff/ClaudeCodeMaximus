@@ -121,4 +121,36 @@ public sealed class DockingAreaViewTests
 			window.Close();
 		});
 	}
+
+	[Fact]
+	public void TheTabStrip_ShowsWhileTheDocumentPaneHoldsMoreThanTheSession_AndHidesAgain()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var area = new DockingArea(new Border { MinWidth = 100 });
+			area.ApplyTheme(dark: false);
+			var window = Host(area);
+			var strips = () => Descendants<DocumentPaneTabPanel>(area).ToList();
+			Assert.NotEmpty(strips());
+			Assert.All(strips(), p => Assert.False(p.IsVisible));
+
+			var preview = new LayoutAnchorable { ContentId = "images", Title = "images", Content = new TextBlock { Text = "panel" } };
+			area.DocumentPane.InsertChildAt(1, preview);   // dropped onto the centre of the session pane
+			Settle(window);
+			Assert.All(strips(), p => Assert.True(p.IsVisible));   // the user can select the tabs and drag the preview out
+			var session = area.Root.Descendents().OfType<LayoutDocument>().Single();
+			Assert.False(session.CanClose);
+			Assert.False(session.CanFloat);
+
+			area.DocumentPane.RemoveChild(preview);
+			Settle(window);
+			Assert.All(strips(), p => Assert.False(p.IsVisible));
+
+			area.DocumentPane.InsertChildAt(1, preview);   // and again after a theme switch
+			area.ApplyTheme(dark: true);
+			Settle(window);
+			Assert.All(strips(), p => Assert.True(p.IsVisible));
+			window.Close();
+		});
+	}
 }

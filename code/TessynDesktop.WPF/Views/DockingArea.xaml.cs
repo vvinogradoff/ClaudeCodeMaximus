@@ -16,7 +16,8 @@ namespace TessynDesktop.WPF.Views;
 /// <remarks>Created by Claude</remarks>
 public partial class DockingArea : UserControl, IDockingSurface
 {
-	private bool _stripHidden;
+	private bool _stripSynced;
+	private Visibility _stripState = Visibility.Visible;
 	private bool _floatingHidden;
 
 	public DockingArea() : this(new SessionPane())
@@ -42,13 +43,13 @@ public partial class DockingArea : UserControl, IDockingSurface
 		DockManager.Layout = new LayoutRoot { RootPanel = root };
 		DockManager.Layout.Updated += (_, _) =>
 		{
-			_stripHidden = false;   // the library may have built the panes again
+			_stripSynced = false;   // the library may have built the panes again
 			LayoutChanged?.Invoke(this, EventArgs.Empty);
 		};
 		DockManager.LayoutUpdated += (_, _) =>
 		{
-			if (!_stripHidden)
-				_stripHidden = HideDocumentTabStrip();
+			if (!_stripSynced || _stripState != WantedStrip())
+				_stripSynced = UpdateDocumentTabStrip();
 
 			LayoutChanged?.Invoke(this, EventArgs.Empty);
 		};
@@ -99,26 +100,34 @@ public partial class DockingArea : UserControl, IDockingSurface
 			return;
 
 		DockManager.Theme = dark ? new Vs2013DarkTheme() : new Vs2013LightTheme();
-		_stripHidden = false;   // a new theme builds the panes' templates again
+		_stripSynced = false;   // a new theme builds the panes' templates again
 	}
 
 	/// <summary>
-	/// The session pane is the one document, so its pane shows no tab strip (FR.29.19). The library's template has no switch for it, and an implicit style does not reach into
-	/// it, so the strip (the tab panel and the drop-down button around it) is collapsed once the template is built (the next layout pass after the pane is shown); the template still makes the
-	/// selected content. True when the strip was found.
+	/// The document pane shows no tab strip while it holds the session alone (FR.29.19); as soon as it holds another item (a preview panel dropped onto the centre of the session
+	/// pane becomes a tab beside the session) the strip shows, so the tabs can be selected and the preview dragged out again. The library's template has no switch for it, and an
+	/// implicit style does not reach into it, so the strip (the tab panel and the drop-down button around it) is collapsed or shown after the template is built; the template still
+	/// makes the selected content. Run on every layout update and theme switch. True when the strip was found.
 	/// </summary>
-	public bool HideDocumentTabStrip()
+	public bool UpdateDocumentTabStrip()
 	{
 		var found = false;
+		var wanted = WantedStrip();
 		foreach (var panel in Descendants<DocumentPaneTabPanel>(DockManager))
 		{
 			found = true;
-			if (VisualTreeHelper.GetParent(panel) is UIElement strip && strip.Visibility != Visibility.Collapsed)
-				strip.Visibility = Visibility.Collapsed;
+			if (VisualTreeHelper.GetParent(panel) is UIElement strip && strip.Visibility != wanted)
+				strip.Visibility = wanted;
 		}
+
+		if (found)
+			_stripState = wanted;
 
 		return found;
 	}
+
+	/// <summary>The strip shows only while the document pane holds more than the session.</summary>
+	private Visibility WantedStrip() => DocumentPane.ChildrenCount > 1 ? Visibility.Visible : Visibility.Collapsed;
 
 	private IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
 	{
