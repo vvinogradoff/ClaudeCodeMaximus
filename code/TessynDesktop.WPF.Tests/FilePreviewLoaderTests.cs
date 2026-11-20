@@ -117,7 +117,6 @@ public sealed class FilePreviewLoaderTests : IDisposable
 	[InlineData("run.ps1", "text/plain")]
 	[InlineData("setup.exe", "application/octet-stream")]
 	[InlineData("run.bat", "text/plain")]
-	[InlineData("page.html", "text/html")]
 	[InlineData("drawing.svg", "image/svg+xml")]
 	[InlineData("code.js", "text/javascript")]
 	public async Task SavingForExternalOpen_IsRefusedForTypesOffTheAllowlist_AndNothingReachesTheDisk(string name, string mime)

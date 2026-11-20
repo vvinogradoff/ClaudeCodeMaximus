@@ -201,7 +201,6 @@ public sealed class FilePreviewViewModelTests : IDisposable
 	[InlineData("code.vbs", "text/plain")]
 	[InlineData("installer.msi", "application/octet-stream")]
 	[InlineData("saver.scr", "application/octet-stream")]
-	[InlineData("page.html", "text/html")]
 	public async Task ExecutablesAndScripts_CanNeverBeOpenedExternally(string name, string mime)
 	{
 		await Open("h", name, mime, "MZ payload");
@@ -212,6 +211,23 @@ public sealed class FilePreviewViewModelTests : IDisposable
 
 		Assert.Empty(_external.Opened);
 		Assert.False(Directory.Exists(_temp.Paths.PreviewCacheDirectory) && Directory.EnumerateFiles(_temp.Paths.PreviewCacheDirectory, "*", SearchOption.AllDirectories).Any());
+	}
+
+	[Theory]
+	[InlineData("page.html", "text/html", ".html")]
+	[InlineData("old.HTM", "text/html", ".htm")]
+	public async Task Html_CanBeOpenedExternally_AsTheCacheCopyCalledContent(string name, string mime, string extension)
+	{
+		// Decision A33: the whole page (not the previewed prefix) is written to the cache under the fixed name and handed to the default app.
+		await Open("h", name, mime, "<h1>Hi</h1><script>1</script>");
+
+		Assert.True(_preview.CanOpenExternally);
+		Assert.True(_preview.OpenExternalCommand.CanExecute(null));
+		await _preview.OpenExternalCommand.ExecuteAsync(null);
+
+		var opened = Assert.Single(_external.Opened);
+		Assert.Equal("content" + extension, Path.GetFileName(opened));
+		Assert.Equal("<h1>Hi</h1><script>1</script>", await File.ReadAllTextAsync(opened));
 	}
 
 	[Fact]

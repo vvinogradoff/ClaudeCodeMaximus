@@ -26,6 +26,8 @@ public sealed class ExternalOpenPolicyTests
 	[InlineData("clip.mov")]
 	[InlineData("doc.pdf")]
 	[InlineData(@"C:\work\docs\report.pdf")]
+	[InlineData("page.html")]
+	[InlineData("page.HTM")]
 	[InlineData("dir/with/slashes/readme.md")]
 	public void DocumentsAndMedia_AreAllowed(string name) => Assert.True(_policy.IsAllowed(name));
 
@@ -43,6 +45,7 @@ public sealed class ExternalOpenPolicyTests
 	[InlineData("code.vbe")]
 	[InlineData("code.wsf")]
 	[InlineData("code.hta")]
+	[InlineData("page.html.js")]
 	[InlineData("installer.msi")]
 	[InlineData("saver.scr")]
 	[InlineData("old.com")]
@@ -51,7 +54,6 @@ public sealed class ExternalOpenPolicyTests
 	[InlineData("tool.jar")]
 	[InlineData("settings.reg")]
 	[InlineData("applet.cpl")]
-	[InlineData("page.html")]
 	[InlineData("drawing.svg")]
 	[InlineData("script.sh")]
 	[InlineData("Program.cs")]
