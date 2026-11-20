@@ -244,6 +244,38 @@ public sealed class FocusCardTextViewTests
 		Assert.Equal(["https://example.com/doc"], opened);
 	}
 
+	[Fact]
+	public void ALinkInACardsText_InsideTheDockingArea_FocusesWithoutAnException_AndOpensTheUrl()
+	{
+		var opened = new List<string>();
+		StaTestRunner.Run(() =>
+		{
+			var focus = Create(Open(1));
+			var panel = new FocusPanel { DataContext = focus };
+			var area = new DockingArea(new TextBox());
+			var window = new Window { Content = area, Width = 1200, Height = 700, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
+			window.Show();
+			var layoutPanel = new AvalonDock.Layout.LayoutAnchorable { ContentId = "focus-test", Title = "Focus", Content = panel };
+			new PreviewDockLayoutApplier().Apply(area.Root, area.DocumentPane, layoutPanel, null, area.AreaWidth, area.AreaHeight);
+			window.UpdateLayout();
+			window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+			window.UpdateLayout();
+			Thread.Sleep(450);
+			area.Chrome.Focus.NoteDockingChange();   // armed
+
+			var card = Descendants<FocusCardText>(panel).Single();
+			card.OpenLink = opened.Add;
+			var link = card.Document.Blocks.SelectMany(Inlines).OfType<Hyperlink>().Single();
+			var from = new TextBox();
+			var args = new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, 0, from, link) { RoutedEvent = Keyboard.PreviewLostKeyboardFocusEvent, Source = from };
+			area.Manager.RaiseEvent(args);   // the guard sees the focus move onto the link (a content element)
+			link.RaiseEvent(new RoutedEventArgs(Hyperlink.ClickEvent));
+			window.Close();
+		});
+
+		Assert.Equal(["https://example.com/doc"], opened);
+	}
+
 	private static IEnumerable<Inline> Inlines(Block block) => block switch
 	{
 		Paragraph p => p.Inlines.SelectMany(Flatten),

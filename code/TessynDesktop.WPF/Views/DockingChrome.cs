@@ -36,7 +36,11 @@ public sealed class DockingChrome
 	public AutoHideWindowCloser SlideOut { get; }
 
 	/// <summary>Gives the parts a log (the slide-out closer logs whether the library's method was found).</summary>
-	public void UseLogger(ILogger logger) => SlideOut.UseLogger(logger);
+	public void UseLogger(ILogger logger)
+	{
+		SlideOut.UseLogger(logger);
+		Focus.UseLogger(logger);
+	}
 
 	/// <summary>The command registry the floating panels' keys go to (FR.6.20).</summary>
 	public void UseShellCommands(IShellCommands commands) => _router.UseCommands(commands);

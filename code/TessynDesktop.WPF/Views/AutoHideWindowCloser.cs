@@ -18,9 +18,11 @@ namespace TessynDesktop.WPF.Views;
 public sealed class AutoHideWindowCloser
 {
 	private readonly DockingManager _manager;
+	private readonly DockingVisualTree _tree = new();
 	private MethodInfo? _hide;
 	private ILogger? _logger;
 	private bool _failureLogged;
+	private bool _handlerFailureLogged;
 
 	public AutoHideWindowCloser(DockingManager manager)
 	{
@@ -87,26 +89,50 @@ public sealed class AutoHideWindowCloser
 
 	private void OnPreviewKeyDown(object sender, KeyEventArgs e)
 	{
-		if (e.Key != Key.Escape || e.Handled || !IsOpen)
-			return;
+		try
+		{
+			if (e.Key != Key.Escape || e.Handled || !IsOpen)
+				return;
 
-		if (e.OriginalSource is DependencyObject source && IsInside(source, _manager.AutoHideWindow) && Close())
-			e.Handled = true;
+			if (e.OriginalSource is DependencyObject source && IsInside(source, _manager.AutoHideWindow) && Close())
+				e.Handled = true;
+		}
+		catch (Exception ex)
+		{
+			LogHandlerFailure(ex);
+		}
 	}
 
 	private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
 	{
-		if (e.Handled || !IsOpen || e.OriginalSource is not DependencyObject source)
-			return;
+		try
+		{
+			if (e.Handled || !IsOpen || e.OriginalSource is not DependencyObject source)
+				return;
 
-		var anchor = Ancestor<LayoutAnchorControl>(source);
-		if (anchor != null && ReferenceEquals(anchor.Model, _manager.AutoHideWindow.Model) && Close())
-			e.Handled = true;   // the click on the edge tab of the open slide-out closes it
+			var anchor = Ancestor<LayoutAnchorControl>(source);
+			if (anchor != null && ReferenceEquals(anchor.Model, _manager.AutoHideWindow.Model) && Close())
+				e.Handled = true;   // the click on the edge tab of the open slide-out closes it
+		}
+		catch (Exception ex)
+		{
+			LogHandlerFailure(ex);
+		}
 	}
 
-	private static bool IsInside(DependencyObject element, DependencyObject container)
+	/// <summary>Input handlers of the docking chrome never throw: the failure is logged once and the key or click goes on untouched.</summary>
+	private void LogHandlerFailure(Exception ex)
 	{
-		for (var current = element; current != null; current = VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current))
+		if (_handlerFailureLogged)
+			return;
+
+		_handlerFailureLogged = true;
+		_logger?.LogWarning(ex, "Docking: the slide-out input handler failed; the input proceeds untouched");
+	}
+
+	private bool IsInside(DependencyObject element, DependencyObject container)
+	{
+		for (var current = element; current != null; current = _tree.ParentOf(current))
 		{
 			if (ReferenceEquals(current, container))
 				return true;
@@ -115,9 +141,9 @@ public sealed class AutoHideWindowCloser
 		return false;
 	}
 
-	private static T? Ancestor<T>(DependencyObject element) where T : DependencyObject
+	private T? Ancestor<T>(DependencyObject element) where T : DependencyObject
 	{
-		for (var current = element; current != null; current = VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current))
+		for (var current = element; current != null; current = _tree.ParentOf(current))
 		{
 			if (current is T match)
 				return match;
