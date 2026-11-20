@@ -29,6 +29,21 @@ public static partial class Constants
 
 		public const string ShowFocusCommandId = "view.showFocus";
 
+		/// <summary>The command that brings the Session view forward (FR.6.23.8); not in the Panels menu, the Session view never closes.</summary>
+		public const string ShowSessionCommandId = "view.showSession";
+
+		/// <summary>Default keys of Session and Focus (FR.6.23.8, A35).</summary>
+		public const string ShowSessionGesture = "Ctrl+1";
+
+		public const string ShowFocusGesture = "Ctrl+2";
+
+		/// <summary>Tooltips of the Focus and Session buttons; the current key is added in brackets when the command has one (FR.6.23.7, FR.6.23.8).</summary>
+		public const string FocusButtonToolTip = "Show what needs your attention";
+
+		public const string SessionButtonToolTip = "Show the session";
+
+		public const string ToolTipKeyFormat = "{0} ({1})";
+
 		public const string ResetCommandId = "view.resetLayout";
 
 		public const string ResetCommandTitle = "Reset layout…";

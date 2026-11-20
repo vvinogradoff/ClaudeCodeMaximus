@@ -487,13 +487,13 @@ public sealed class TreeFeedbackTests
 				Assert.True(delete.ActualWidth > 0, "The delete icon is left of the title");
 				Assert.True(System.Windows.Automation.AutomationProperties.GetName(delete).Length > 0);
 
-				pane.BeginRenameCommand.Execute(null);
+				title.BeginEdit(pane);   // the editing state belongs to the view (FR.6.23.2)
 				Layout(title);
 				Assert.Equal(Visibility.Collapsed, text.Visibility);
 				Assert.Equal(Visibility.Visible, box.Visibility);
 				Assert.Equal("Old name", box.Text);
 
-				pane.CancelRenameCommand.Execute(null);
+				title.CancelEdit();
 				Layout(title);
 				Assert.Equal(Visibility.Visible, text.Visibility);
 
@@ -526,14 +526,14 @@ public sealed class TreeFeedbackTests
 
 			KeyEventArgs Press(System.Windows.Input.Key key) => new(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = UIElement.PreviewKeyDownEvent };
 
-			pane.BeginRenameCommand.Execute(null);
+			title.BeginEdit(pane);
 			box.RaiseEvent(Press(System.Windows.Input.Key.Escape));
-			Assert.False(pane.IsRenaming);
+			Assert.False(title.IsEditing);
 
-			pane.BeginRenameCommand.Execute(null);
-			pane.RenameText = "Via Enter";
+			title.BeginEdit(pane);
+			box.Text = "Via Enter";
 			box.RaiseEvent(Press(System.Windows.Input.Key.Enter));
-			Assert.False(pane.IsRenaming);
+			Assert.False(title.IsEditing);
 		});
 
 		await Task.Delay(50);

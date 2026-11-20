@@ -231,6 +231,12 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 
 	public void BringForward(string panelId)
 	{
+		if (panelId == Constants.DockedShell.SessionPanelId)
+		{
+			BringSessionForward();
+			return;
+		}
+
 		if (!_panels.TryGetValue(panelId, out var panel))
 			return;
 
@@ -248,6 +254,25 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 			_raiser.SlideOut(panel);
 		else if (panel.IsFloating)
 			_raiser.Raise(panel);
+
+		Evaluate();
+	}
+
+	/// <summary>The Session view's document in the layout; null before the layout is built.</summary>
+	private LayoutDocument? SessionDocument() => Root.Descendents().OfType<LayoutDocument>().FirstOrDefault(d => d.ContentId == Constants.PreviewDock.SessionDocumentId);
+
+	/// <summary>
+	/// The Session view comes forward (FR.6.23.7): its document tab is selected when a panel is tabbed over it in the session area, and a minimized main window is restored.
+	/// Only the selection changes; the keyboard focus stays where it is (FR.6.20).
+	/// </summary>
+	private void BringSessionForward()
+	{
+		var session = SessionDocument();
+		if (session is { IsSelected: false })
+			session.IsSelected = true;
+
+		if (Window.GetWindow(this) is { WindowState: WindowState.Minimized } window)
+			window.WindowState = WindowState.Normal;
 
 		Evaluate();
 	}

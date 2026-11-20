@@ -10,9 +10,18 @@ namespace TessynDesktop.WPF.Views;
 /// <remarks>Created by Claude</remarks>
 public partial class SessionTitle : UserControl
 {
+	/// <summary>The name is being edited in this view (not in any other header showing the same session).</summary>
+	public static readonly DependencyProperty IsEditingProperty = DependencyProperty.Register(nameof(IsEditing), typeof(bool), typeof(SessionTitle), new PropertyMetadata(false));
+
 	public SessionTitle()
 	{
 		InitializeComponent();
+	}
+
+	public bool IsEditing
+	{
+		get => (bool)GetValue(IsEditingProperty);
+		private set => SetValue(IsEditingProperty, value);
 	}
 
 	/// <summary>The command registry and the tree the Delete icon acts through; the running app supplies them, view tests set them (null: the icon does nothing).</summary>
@@ -24,12 +33,35 @@ public partial class SessionTitle : UserControl
 
 	private void OnTitleMouseDown(object sender, MouseButtonEventArgs e)
 	{
-		if (e.ClickCount != 2 || Pane is not { } pane || !pane.BeginRenameCommand.CanExecute(null))
+		if (e.ClickCount != 2 || Pane is not { HasSession: true } pane)
 			return;
 
 		e.Handled = true;
-		pane.BeginRenameCommand.Execute(null);
+		BeginEdit(pane);
 	}
+
+	/// <summary>Shows the box with the current name; only this view opens it.</summary>
+	public void BeginEdit(SessionPaneViewModel pane)
+	{
+		RenameBox.Text = pane.Title;
+		IsEditing = true;
+	}
+
+	/// <summary>Enter: hands the typed name to the pane's rename command (an empty or unchanged name only closes the box, a refusal shows as the pane's notice).</summary>
+	public void CommitEdit()
+	{
+		if (!IsEditing)
+			return;
+
+		IsEditing = false;
+		if (Pane is not { } pane)
+			return;
+
+		pane.RenameText = RenameBox.Text;
+		pane.CommitRenameCommand.Execute(null);
+	}
+
+	public void CancelEdit() => IsEditing = false;
 
 	private void OnRenameVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
 	{
@@ -47,18 +79,15 @@ public partial class SessionTitle : UserControl
 
 	private void OnRenameKeyDown(object sender, KeyEventArgs e)
 	{
-		if (Pane is not { } pane)
-			return;
-
 		switch (e.Key)
 		{
 			case Key.Enter:
 				e.Handled = true;
-				pane.CommitRenameCommand.Execute(null);
+				CommitEdit();
 				break;
 			case Key.Escape:
 				e.Handled = true;
-				pane.CancelRenameCommand.Execute(null);
+				CancelEdit();
 				break;
 		}
 	}
@@ -66,8 +95,7 @@ public partial class SessionTitle : UserControl
 	/// <summary>Leaving the box any other way (a click elsewhere) is a cancel: only Enter accepts.</summary>
 	private void OnRenameLostFocus(object sender, KeyboardFocusChangedEventArgs e)
 	{
-		if (Pane is { IsRenaming: true } pane)
-			pane.CancelRenameCommand.Execute(null);
+		CancelEdit();
 	}
 
 	private async void OnDeleteClick(object sender, RoutedEventArgs e)

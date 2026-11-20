@@ -24,6 +24,9 @@ public sealed partial class SessionPaneViewModel
 		init => _shellLayout = value;
 	}
 
+	/// <summary>The tooltips of the Focus and Session buttons with the keys in effect (FR.6.23.8); without a registry (tests, tools) they carry no key.</summary>
+	public ShellButtonHints Hints { get; init; } = new();
+
 	/// <summary>The input area is collapsed (FR.12.29): the command bar only while it is visible, otherwise one line of the input text.</summary>
 	[ObservableProperty]
 	private bool _isInputCollapsed;
@@ -104,6 +107,10 @@ public sealed partial class SessionPaneViewModel
 	/// <summary>The Focus button was pressed (FR.6.16): brings the Focus panel forward; it never moves the keyboard focus (FR.6.20).</summary>
 	[RelayCommand]
 	private void BringFocusPanelForward() => _shellLayout?.BringForward(Constants.DockedShell.FocusPanelId);
+
+	/// <summary>The Session button of the Focus header was pressed (FR.6.23.7): brings the Session view forward; it never moves the keyboard focus (FR.6.20).</summary>
+	[RelayCommand]
+	private void BringSessionForward() => _shellLayout?.BringForward(Constants.DockedShell.SessionPanelId);
 
 	/// <summary>Collapses an expanded input area and expands a collapsed one (a double click on the splitter above it, FR.12.29).</summary>
 	[RelayCommand]
