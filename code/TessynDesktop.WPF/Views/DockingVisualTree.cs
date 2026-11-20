@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 
 namespace TessynDesktop.WPF.Views;
 
@@ -7,6 +9,22 @@ namespace TessynDesktop.WPF.Views;
 /// <remarks>Created by Claude</remarks>
 public sealed class DockingVisualTree
 {
+	/// <summary>The parent of an element for any kind of node: <see cref="VisualTreeHelper.GetParent"/> throws for a content element (a Hyperlink, a Run, a Span), so those go through their own parent chain.</summary>
+	public DependencyObject? ParentOf(DependencyObject node)
+	{
+		switch (node)
+		{
+			case Visual or Visual3D:
+				return VisualTreeHelper.GetParent(node) ?? LogicalTreeHelper.GetParent(node);
+			case FrameworkContentElement framework:
+				return framework.Parent ?? ContentOperations.GetParent(framework);
+			case ContentElement content:
+				return ContentOperations.GetParent(content) ?? LogicalTreeHelper.GetParent(content);
+			default:
+				return LogicalTreeHelper.GetParent(node);
+		}
+	}
+
 	public IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
 	{
 		var count = VisualTreeHelper.GetChildrenCount(root);

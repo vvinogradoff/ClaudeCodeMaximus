@@ -23,7 +23,20 @@ public sealed class ShellLayoutModule : IShellModule
 		AddPanel(commands, Constants.ShellLayout.ShowSessionsCommandId, Constants.ShellLayout.SessionsTitle, Constants.DockedShell.SessionsPanelId, order++);
 		AddPanel(commands, Constants.ShellLayout.ShowRecentCommandId, Constants.SessionLists.RecentTabTitle, Constants.DockedShell.RecentPanelId, order++);
 		AddPanel(commands, Constants.ShellLayout.ShowTagsCommandId, Constants.SessionLists.TagsTabTitle, Constants.DockedShell.TagsPanelId, order++);
-		AddPanel(commands, Constants.ShellLayout.ShowFocusCommandId, Constants.ShellLayout.FocusTitle, Constants.DockedShell.FocusPanelId, order++);
+		AddPanel(commands, Constants.ShellLayout.ShowFocusCommandId, Constants.ShellLayout.FocusTitle, Constants.DockedShell.FocusPanelId, order++, Constants.ShellLayout.ShowFocusGesture);
+		// Session (FR.6.23.8): the Session button's command; in the registry (so Settings lists its key) but not in the Panels menu, the Session view never closes.
+		commands.Register(new ShellCommand
+		{
+			Id = Constants.ShellLayout.ShowSessionCommandId,
+			Title = Constants.ShellLayout.SessionTitle,
+			DefaultGesture = Constants.ShellLayout.ShowSessionGesture,
+			AllowInTextInput = true,
+			ExecuteAsync = _ =>
+			{
+				_layout.BringForward(Constants.DockedShell.SessionPanelId);
+				return Task.CompletedTask;
+			},
+		});
 		commands.Register(new ShellCommand
 		{
 			Id = Constants.ShellLayout.ResetCommandId,
@@ -34,12 +47,13 @@ public sealed class ShellLayoutModule : IShellModule
 		commands.AddMenuEntry(Constants.Menus.Main, Constants.ShellLayout.ResetCommandId, order, Constants.ShellLayout.PanelsMenuGroup);
 	}
 
-	private void AddPanel(IShellCommands commands, string commandId, string title, string panelId, int order)
+	private void AddPanel(IShellCommands commands, string commandId, string title, string panelId, int order, string? gesture = null)
 	{
 		commands.Register(new ShellCommand
 		{
 			Id = commandId,
 			Title = title,
+			DefaultGesture = gesture,
 			AllowInTextInput = true,
 			IsChecked = _ => _layout.IsOpen(panelId),
 			ExecuteAsync = _ =>

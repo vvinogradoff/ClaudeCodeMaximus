@@ -81,7 +81,7 @@
                 </Button>
                 <!-- The Focus button (FR.6.16): brings the Focus panel forward; the badge (FR.23.13) shows whenever something is open. A plain button: it never takes the keyboard focus. -->
                 <Button DockPanel.Dock="Right" x:Name="FocusButton" Margin="8,0,0,0" Padding="10,6" VerticalAlignment="Center" Focusable="False"
-                        Command="{Binding BringFocusPanelForwardCommand}" AutomationProperties.Name="Focus" ToolTip="Show what needs your attention">
+                        Command="{Binding BringFocusPanelForwardCommand}" AutomationProperties.Name="Focus" ToolTip="{Binding Hints.FocusToolTip}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Focus" />
                         <Border x:Name="FocusBadgeText" Style="{StaticResource KindPill}" Tag="{Binding FocusBadgeKind}" Margin="6,0,0,0" MinWidth="16"
@@ -98,11 +98,8 @@
                         </ItemsPanelTemplate>
                     </v:SlotHost.ItemsPanel>
                 </v:SlotHost>
-                <!-- The title fills the row, so the rename text box stretches. -->
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Text="{Binding StateText}" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    <v:SessionTitle />
-                </DockPanel>
+                <!-- The identity (Delete, name, Running / Idle) fills the row, so the rename text box stretches; the Focus panel's header shows the same view. -->
+                <v:SessionIdentity />
             </DockPanel>
             <v:SessionTagArea DataContext="{Binding TagArea}" Margin="0,4,0,0" />
             <TextBlock Text="{Binding Error}" Foreground="{DynamicResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Margin="0,4,0,0">

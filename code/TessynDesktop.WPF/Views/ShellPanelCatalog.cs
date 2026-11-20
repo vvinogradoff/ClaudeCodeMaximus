@@ -29,6 +29,7 @@ public sealed class ShellPanelCatalog
 
 		var focus = new FocusPanel();
 		focus.SetBinding(FrameworkElement.DataContextProperty, new Binding($"{nameof(MainViewModel.Session)}.{nameof(SessionPaneViewModel.Focus)}") { Source = main });
+		focus.SetBinding(FocusPanel.SessionProperty, new Binding(nameof(MainViewModel.Session)) { Source = main });   // the header acts on the session the Session view shows (FR.6.23)
 		panels.Add(new ShellPanelDefinition { Id = Constants.DockedShell.FocusPanelId, Title = Constants.ShellLayout.FocusTitle, Content = focus });
 		return panels;
 	}

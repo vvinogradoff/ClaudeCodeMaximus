@@ -41,7 +41,7 @@ public partial class DockingArea : IDockingTestOperations
 			Shown = true,
 			Side = Constants.DockingTestHook.SideCenter,
 			Pane = panes.IndexOf(_documentPane),
-			Selected = true,
+			Selected = SessionDocument()?.IsSelected ?? true,   // false while a panel is tabbed over the Session view in the session area
 			Width = PaneSize(_documentPane).Width,
 			Height = PaneSize(_documentPane).Height,
 		};
@@ -257,7 +257,10 @@ public partial class DockingArea : IDockingTestOperations
 	public DockingTestResult Show(string panel)
 	{
 		if (panel == Constants.DockedShell.SessionPanelId)
+		{
+			BringSessionForward();
 			return DockingTestResult.Success;
+		}
 
 		var target = Find(panel);
 		if (target == null)

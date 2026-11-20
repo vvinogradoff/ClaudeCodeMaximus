@@ -1,0 +1,12 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.SessionIdentity"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:TessynDesktop.WPF.Views">
+    <!-- Who the session is (FR.6.23): the Delete icon, the name with its double-click rename, and the Running / Idle text. The one definition behind the Session view header and the
+         Focus panel header, so the two rows can never drift apart. The name fills the row and trims with an ellipsis; the text keeps its place (NR.7). DataContext: the session pane. -->
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding StateText}" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   AutomationProperties.Name="Session state" />
+        <v:SessionTitle x:Name="Title" />
+    </DockPanel>
+</UserControl>

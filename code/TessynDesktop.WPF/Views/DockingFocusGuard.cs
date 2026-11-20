@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Extensions.Logging;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
@@ -34,6 +35,9 @@ public sealed class DockingFocusGuard : IDisposable
 	private const int WmTouch = 0x0240;
 
 	private readonly DockingManager _manager;
+	private readonly DockingVisualTree _tree = new();
+	private bool _failureLogged;
+	private ILogger? _logger;
 	private readonly DependencyPropertyDescriptor? _layoutProperty;
 	private LayoutRoot? _hooked;
 	private bool _subscribed;
@@ -137,22 +141,36 @@ public sealed class DockingFocusGuard : IDisposable
 
 	private void OnPreviewLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
 	{
-		if (e.OldFocus is not DependencyObject oldFocus || e.NewFocus is not DependencyObject newFocus)
-			return;
+		try
+		{
+			if (e.OldFocus is not DependencyObject oldFocus || e.NewFocus is not DependencyObject newFocus)
+				return;
 
-		if (newFocus is HwndHost)
-			return;   // native content (the WebView2) takes the focus by a click or Tab only
+			if (newFocus is HwndHost)
+				return;   // native content (the WebView2) takes the focus by a click or Tab only
 
-		var from = PanelOf(oldFocus);
-		var to = PanelOf(newFocus);
-		if (Policy.IsFocusSteal(from != null, to != null && !ReferenceEquals(from, to)))
-			e.Handled = true;
+			var from = PanelOf(oldFocus);
+			var to = PanelOf(newFocus);
+			if (Policy.IsFocusSteal(from != null, to != null && !ReferenceEquals(from, to)))
+				e.Handled = true;
+		}
+		catch (Exception ex)
+		{
+			if (_failureLogged)
+				return;
+
+			_failureLogged = true;
+			_logger?.LogWarning(ex, "Docking: the focus guard failed; the focus move proceeds untouched");
+		}
 	}
 
+	/// <summary>Gives the guard a log for the failures it swallows (a focus move is never blocked by a guard failure).</summary>
+	public void UseLogger(ILogger logger) => _logger = logger;
+
 	/// <summary>The panel (anchorable or document control) an element sits in; tab items are no panel content.</summary>
-	private static DependencyObject? PanelOf(DependencyObject element)
+	private DependencyObject? PanelOf(DependencyObject element)
 	{
-		for (var current = element; current != null; current = VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current))
+		for (var current = element; current != null; current = _tree.ParentOf(current))
 		{
 			if (current is LayoutAnchorableTabItem or LayoutDocumentTabItem)
 				return null;

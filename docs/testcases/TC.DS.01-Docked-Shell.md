@@ -33,16 +33,16 @@ Related requirements: FR.6.11–FR.6.24, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | TC.DS.25 | Under `--test-window` nothing is read from or saved to the user's data; the hook's state report covers every panel | E2E | UC.DS.12 | FR.6.22 |
 | TC.DS.26 | A preview panel opens the first time as a tab in the pane holding Focus; with Focus closed or floating, docked right at 40 % | E2E | UC.DS.01 | FR.6.12, FR.29.18, FR.29.21 |
 | TC.DS.27 | Focus header shows Delete, name, Running / Idle, star and Send answers (n) at its right end, bound to the session of the Session view; not Back, tag chips, profile switch, Send later, Focus button, MD/JSONL, search | E2E | UC.DS.13 | FR.6.23.1 |
-| TC.DS.28 | Double-click the name in Focus: Enter renames; the Session view header and the tree show the new name; no text box opens in the Session view header | E2E | UC.DS.13 | FR.6.23.1, FR.6.23.2 |
+| TC.DS.28 | Double-click the name in Focus: Enter renames; the Session view header and the tree show the new name; no text box opens in the Session view header | AUTOMATED (view) + MANUAL (the double-click) | UC.DS.13 | FR.6.23.1, FR.6.23.2 |
 | TC.DS.29 | Esc, leaving the box, an empty or an unchanged name in the Focus rename box change nothing; a refusal shows a notice | AUTOMATED | UC.DS.13 | FR.6.23.1 |
 | TC.DS.30 | Delete in Focus asks first; Cancel keeps the session; confirming removes it, like the Session view header | E2E | UC.DS.13 | FR.6.23.1, FR.6.23.2 |
 | TC.DS.31 | The star in Focus toggles the same favourite flag as the Session view's star and the tree's; all three agree after each click | E2E | UC.DS.13 | FR.6.23.1, FR.6.23.2 |
-| TC.DS.32 | Running / Idle in Focus follows a turn (Running while it runs, Idle after), same as the Session view | E2E | UC.DS.13 | FR.6.23.1 |
+| TC.DS.32 | Running / Idle in Focus follows a turn (Running while it runs, Idle after), same as the Session view | AUTOMATED (binding) | UC.DS.13 | FR.6.23.1 |
 | TC.DS.33 | No session shown: Delete, name, Running / Idle and star are hidden; Send answers (n) unchanged | AUTOMATED | UC.DS.13 | FR.6.23.5 |
 | TC.DS.34 | Row height, margins (16,10,16,8), name font size and control sizes equal the Session view header's first row (view test comparing both) | AUTOMATED | UC.DS.13 | FR.6.23.3 |
 | TC.DS.35 | The header row has an 8 px bottom padding above the first card or the error line | AUTOMATED | UC.DS.13 | FR.6.23.4 |
-| TC.DS.36 | Send answers (n) in the header: enabling rule and Ctrl+Enter unchanged | E2E | UC.DS.13 | FR.6.23.1, FR.23.21, FR.23.22 |
-| TC.DS.37 | The header works with Focus floating, tabbed beside or over the Session view, and in the auto-hide slide-out; it takes the keyboard focus only by a click | E2E | UC.DS.13 | FR.6.23.6, FR.6.20 |
+| TC.DS.36 | Send answers (n) in the header: enabling rule and Ctrl+Enter unchanged | AUTOMATED | UC.DS.13 | FR.6.23.1, FR.23.21, FR.23.22 |
+| TC.DS.37 | The header works with Focus floating, tabbed beside or over the Session view, and in the auto-hide slide-out; it takes the keyboard focus only by a click | E2E (tabbed over the Session view) + MANUAL (floating, slide-out, keyboard focus) | UC.DS.13 | FR.6.23.6, FR.6.20 |
 | TC.DS.38 | A narrow panel trims the name with an ellipsis and keeps the buttons in place; the two rows line up when Focus is docked beside the Session view (look) | MANUAL | UC.DS.13 | FR.6.23.3 |
 | TC.DS.39 | The Session button sits right of Send answers (n); with Focus tabbed over the session area a click selects the Session view's tab; with Focus floating it leaves the Session view shown; it never takes the keyboard focus | E2E | UC.DS.13 | FR.6.23.7 |
 | TC.DS.40 | Ctrl+1 brings the Session view forward and Ctrl+2 the Focus panel, from the composer, the Sessions panel and a floating Focus; Settings → Keyboard shortcuts lists Session and Focus with these defaults, and a changed key works and shows in the buttons' tooltips | AUTOMATED (commands, defaults, tooltips) + MANUAL (real key presses) | UC.DS.13 | FR.6.23.8 |

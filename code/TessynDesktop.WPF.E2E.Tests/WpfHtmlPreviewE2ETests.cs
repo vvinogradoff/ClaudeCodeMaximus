@@ -215,7 +215,7 @@ public sealed class WpfHtmlPreviewE2ETests
 	}
 
 	[Fact]
-	public async Task TC_LK_48_a_group_window_on_a_second_monitor_renders_the_html_and_has_the_Source_button()
+	public async Task TC_LK_48_a_group_window_on_a_second_monitor_renders_the_html_and_has_the_Source_and_Open_in_default_app_buttons()
 	{
 		const string groups = "{\"groups\":[{\"id\":\"web-pages\",\"name\":\"Web pages\",\"patterns\":\"html htm\",\"autoClose\":false}]}";
 		using var h = Harness(groups);
@@ -231,6 +231,9 @@ public sealed class WpfHtmlPreviewE2ETests
 			await h.WaitUntilAsync("the source as text", async () => await CountAsync(preview, "pre.src") == 1);
 			Assert.True(await h.PressAsync(process, window, SourceInWindow));
 			await WaitForFrameAsync(h, preview, "h1");
+			// TC.LK.51: Open in default app is offered for the page; the test launcher receives the cache copy (content.html), nothing is started.
+			Assert.True(await h.PressAsync(process, window, "Open in default app"), "The window has no Open in default app button for an html file.");
+			await h.WaitForLogAsync(process, "the test launcher logs the html open", "External open requested (test window, nothing started): .html file");
 			h.AssertNoErrors();
 		}
 		finally
