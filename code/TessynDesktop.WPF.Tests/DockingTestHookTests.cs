@@ -185,7 +185,8 @@ public sealed class DockingTestHookTests
 
 			var network = new SecurityIdentifier(WellKnownSidType.NetworkSid, null);
 			Assert.Contains(rules, r => r.AccessControlType == AccessControlType.Deny && r.IdentityReference.Equals(network));
-			Assert.Contains(rules, r => r.AccessControlType == AccessControlType.Allow && r.IdentityReference.Equals(WindowsIdentity.GetCurrent().User));
+			// PipeOptions.CurrentUserOnly grants the token owner: BUILTIN\Administrators in an elevated process, the user SID otherwise.
+				Assert.Contains(rules, r => r.AccessControlType == AccessControlType.Allow && r.IdentityReference.Equals(WindowsIdentity.GetCurrent().Owner));
 			Assert.DoesNotContain(rules, r => r.AccessControlType == AccessControlType.Allow && r.IdentityReference.Equals(new SecurityIdentifier(WellKnownSidType.WorldSid, null)));
 		}
 		finally
