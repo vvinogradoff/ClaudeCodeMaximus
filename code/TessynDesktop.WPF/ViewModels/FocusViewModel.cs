@@ -108,6 +108,9 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	/// <summary>A reference of an item was activated (the argument is the reference); the owner jumps, previews or opens it.</summary>
 	public event EventHandler<AttentionRefDto>? RefActivated;
 
+	/// <summary>A url reference was sent to the system browser (FR.26.9: Ctrl+click or the menu entry); the owner opens it without routing.</summary>
+	public event EventHandler<AttentionRefDto>? RefSystemActivated;
+
 	/// <summary>A path written in a card's title or body was activated (FR.23.30); the owner asks the daemon to preview it.</summary>
 	public event EventHandler<FocusPathRequest>? PathActivated;
 
@@ -464,6 +467,8 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		PathActivated?.Invoke(this, new FocusPathRequest(item.NodeId, item.Id, path, item.IsClosed));
 
 	internal void ActivateRef(FocusRefViewModel reference) => RefActivated?.Invoke(this, reference.Reference);
+
+	internal void ActivateRefInSystemBrowser(FocusRefViewModel reference) => RefSystemActivated?.Invoke(this, reference.Reference);
 
 	private bool CanSendAnswers() => NodeId != null && AnswerCount > 0;
 

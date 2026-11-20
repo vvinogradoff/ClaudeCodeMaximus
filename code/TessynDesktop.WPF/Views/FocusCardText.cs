@@ -68,6 +68,9 @@ public sealed class FocusCardText : RichTextBox
 	/// <summary>Opens a clicked link; the application's URL launcher unless a caller sets its own.</summary>
 	public Action<string>? OpenLink { get; set; }
 
+	/// <summary>Opens a link in the system browser (FR.26.9: Ctrl+click and the link's menu entry); the application's system launcher unless a caller sets its own.</summary>
+	public Action<string>? OpenSystemLink { get; set; }
+
 	/// <summary>The paths marked in the card's title and body, in document order (FR.23.30). For tests and diagnostics.</summary>
 	public IReadOnlyList<string> MarkedPaths => _pathSpans.Select(s => s.Path).ToList();
 
@@ -263,7 +266,7 @@ public sealed class FocusCardText : RichTextBox
 
 		if (state.Body is { Length: > 0 } body)
 		{
-			var blocks = new MarkdownBlockBuilder(new UrlPolicy(), Open).Build(body);
+			var blocks = new MarkdownBlockBuilder(new UrlPolicy(), Open, OpenInSystemBrowser).Build(body);
 			if (blocks.Count > 0)
 			{
 				var last = Document.Blocks.LastBlock;
@@ -294,6 +297,14 @@ public sealed class FocusCardText : RichTextBox
 			OpenLink(url);
 		else
 			(Application.Current as App)?.Services.GetService<IUrlLauncher>()?.TryOpen(url);
+	}
+
+	private void OpenInSystemBrowser(string url)
+	{
+		if (OpenSystemLink != null)
+			OpenSystemLink(url);
+		else
+			(Application.Current as App)?.Services.GetService<ISystemUrlLauncher>()?.TryOpen(url);
 	}
 
 	private void ApplyLineSpacing()

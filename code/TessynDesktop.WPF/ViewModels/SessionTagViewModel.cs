@@ -10,10 +10,12 @@ namespace TessynDesktop.WPF.ViewModels;
 public sealed partial class SessionTagViewModel
 {
 	private readonly IUrlLauncher _launcher;
+	private readonly ISystemUrlLauncher _systemLauncher;
 
-	public SessionTagViewModel(SessionTagDto tag, IUrlLauncher launcher)
+	public SessionTagViewModel(SessionTagDto tag, IUrlLauncher launcher, ISystemUrlLauncher systemLauncher)
 	{
 		_launcher = launcher;
+		_systemLauncher = systemLauncher;
 		Label = tag.Label;
 		Url = tag.Url;
 		KindText = tag.Kind switch
@@ -29,8 +31,15 @@ public sealed partial class SessionTagViewModel
 
 	public string Url { get; }
 
+	/// <summary>The chip's tooltip: the address and the FR.26.9 gesture line.</summary>
+	public string ToolTipText => Url + "\n" + Constants.SystemBrowser.CtrlClickLine;
+
 	public string KindText { get; }
 
 	[RelayCommand]
 	private void Open() => _launcher.TryOpen(Url);
+
+	/// <summary>FR.26.9: Ctrl+click on the chip; the system browser, never routed (the tag url already passed <c>SessionTagUrlPolicy</c> in the daemon).</summary>
+	[RelayCommand]
+	private void OpenInSystemBrowser() => _systemLauncher.TryOpen(Url);
 }

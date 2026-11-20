@@ -86,7 +86,7 @@ public sealed class WpfCopyAsMarkdownE2ETests : IDisposable
 			heading = await PointOfAsync(page, "h2", 0);
 			await page.RightClickAsync(heading.X, heading.Y);
 			Assert.True(await MenuOpenAsync(page), "the menu did not open on the selection");
-			Assert.Equal("Copy|Copy as Markdown", string.Join("|", ((JsonArray)(await page.EvalAsync("Array.from(document.querySelectorAll('.cm button')).map(b => b.firstChild.textContent)"))!).Select(n => n!.GetValue<string>())));
+			Assert.Equal("Copy|Copy as Markdown", string.Join("|", ((JsonArray)(await page.EvalAsync("Array.from(document.querySelectorAll('.cm button:not([hidden])')).map(b => b.firstChild.textContent)"))!).Select(n => n!.GetValue<string>())));
 			Assert.Contains("Plan", (string)(await page.EvalAsync("getSelection().toString()"))!);
 
 			// The selection survives the menu; Esc closes it and keeps the selection.
@@ -94,10 +94,11 @@ public sealed class WpfCopyAsMarkdownE2ETests : IDisposable
 			Assert.False(await MenuOpenAsync(page), "Esc did not close the menu");
 			Assert.False((bool)(await page.EvalAsync("getSelection().isCollapsed"))!, "the selection was lost");
 
-			// On a link inside the selection the page keeps the link's own behaviour: no menu.
+			// On a link inside the selection the menu adds "Open in system browser" (FR.26.9) to the Copy entries.
 			var link = await PointOfAsync(page, ".b a", 0);
 			await page.RightClickAsync(link.X, link.Y);
-			Assert.False(await MenuOpenAsync(page), "a menu opened on a link");
+			Assert.True(await MenuOpenAsync(page), "no menu opened on a link inside the selection");
+			Assert.Equal("Open in system browser|Copy|Copy as Markdown", string.Join("|", ((JsonArray)(await page.EvalAsync("Array.from(document.querySelectorAll('.cm button:not([hidden])')).map(b => b.firstChild.textContent)"))!).Select(n => n!.GetValue<string>())));
 			AssertNoErrors();
 		}
 		finally

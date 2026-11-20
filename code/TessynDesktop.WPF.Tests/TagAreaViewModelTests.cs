@@ -19,7 +19,7 @@ namespace TessynDesktop.WPF.Tests;
 public sealed class TagAreaViewModelTests
 {
 	private static ObservableCollection<SessionTagViewModel> Tags(int count) =>
-		new(Enumerable.Range(0, count).Select(i => new SessionTagViewModel(new SessionTagDto { Label = "tag" + i, Url = "https://example.com/" + i }, new FakeUrlLauncher())));
+		new(Enumerable.Range(0, count).Select(i => new SessionTagViewModel(new SessionTagDto { Label = "tag" + i, Url = "https://example.com/" + i }, new FakeUrlLauncher(), new FakeSystemUrlLauncher())));
 
 	private static SessionPaneViewModel Pane() =>
 		new(new FakeTessynClient(), new FakeTranscriptSurface(), new MarkdigEntryRenderer(new UrlPolicy()), new FakeUrlLauncher(),

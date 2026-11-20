@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using Markdig;
 using Markdig.Extensions.Tables;
@@ -33,11 +35,17 @@ public sealed class MarkdownBlockBuilder
 
 	private readonly UrlPolicy _policy;
 	private readonly Action<string> _onLink;
+	private readonly Action<string>? _onSystemLink;
+	private readonly Func<ModifierKeys> _modifiers;
 
-	public MarkdownBlockBuilder(UrlPolicy policy, Action<string> onLink)
+	/// <param name="onSystemLink">FR.26.9: opens a link in the system browser (Ctrl+click and the link's menu entry); null leaves links with the plain click only.</param>
+	/// <param name="modifiers">The keys held at a click; the keyboard unless a test supplies its own.</param>
+	public MarkdownBlockBuilder(UrlPolicy policy, Action<string> onLink, Action<string>? onSystemLink = null, Func<ModifierKeys>? modifiers = null)
 	{
 		_policy = policy;
 		_onLink = onLink;
+		_onSystemLink = onSystemLink;
+		_modifiers = modifiers ?? (() => Keyboard.Modifiers);
 	}
 
 	/// <summary>The blocks of <paramref name="markdown"/>, to add to a <see cref="FlowDocument"/> in order.</summary>
@@ -300,8 +308,21 @@ public sealed class MarkdownBlockBuilder
 			return;
 		}
 
-		var hyperlink = new Hyperlink { ToolTip = uri.AbsoluteUri };
-		hyperlink.Click += (_, _) => _onLink(uri.AbsoluteUri);
+		var hyperlink = new Hyperlink { ToolTip = _onSystemLink == null ? uri.AbsoluteUri : uri.AbsoluteUri + "\n" + Constants.SystemBrowser.CtrlClickLine };
+		hyperlink.Click += (_, _) =>
+		{
+			if (_onSystemLink != null && new SystemBrowserGesture().Matches(_modifiers()))
+				_onSystemLink(uri.AbsoluteUri);   // FR.26.9: Ctrl+click goes straight to the system browser
+			else
+				_onLink(uri.AbsoluteUri);
+		};
+		if (_onSystemLink != null)
+		{
+			var entry = new MenuItem { Header = Constants.SystemBrowser.OpenInSystemBrowser };
+			entry.Click += (_, _) => _onSystemLink(uri.AbsoluteUri);
+			hyperlink.ContextMenu = new ContextMenu { Items = { entry } };
+		}
+
 		target.Add(hyperlink);
 		if (link != null && link.FirstChild != null)
 			AddInlines(hyperlink.Inlines, link);
