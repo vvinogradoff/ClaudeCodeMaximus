@@ -90,6 +90,8 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 
 	public event EventHandler<string>? LinkClicked;
 
+	public event EventHandler<string>? SystemLinkClicked;
+
 	public event EventHandler? FindRequested;
 
 	public event EventHandler<int>? FindStepRequested;
@@ -398,7 +400,13 @@ public sealed class WebView2TranscriptSurface : ITranscriptSurface
 					break;
 				case "link":
 					if (root.GetProperty("href").GetString() is { } href && _policy.IsAllowed(href))
-						LinkClicked?.Invoke(this, href);
+					{
+						// FR.26.9: the page marks a forced open (Ctrl+Shift+click, or its menu entry); the host validates the flag like every page message.
+						if (root.TryGetProperty(Constants.SystemBrowser.PageMessageFlag, out var forced) && forced.ValueKind == JsonValueKind.True)
+							SystemLinkClicked?.Invoke(this, href);
+						else
+							LinkClicked?.Invoke(this, href);
+					}
 					break;
 				case "liveShown":
 					_logger.LogInformation("Live row shown by the page: {Status}, {Chars} chars, {Tools} tool(s), {Queued} queued",

@@ -75,6 +75,9 @@ public interface ITranscriptSurface
 	/// <summary>The user clicked a link (argument: the raw href; validated by the receiver).</summary>
 	event EventHandler<string>? LinkClicked;
 
+	/// <summary>The user sent a link straight to the system browser (Ctrl+Shift+click or the page's "Open in system browser", FR.26.9); never routed to a preview.</summary>
+	event EventHandler<string>? SystemLinkClicked;
+
 	/// <summary>Ctrl+F was pressed inside the page.</summary>
 	event EventHandler? FindRequested;
 

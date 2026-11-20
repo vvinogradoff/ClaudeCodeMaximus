@@ -28,6 +28,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 	private readonly ITranscriptSurface _surface;
 	private readonly IEntryRenderer _renderer;
 	private readonly IUrlLauncher _launcher;
+	private readonly ISystemUrlLauncher _systemLauncher;
 	private readonly IUiDispatcher _ui;
 	private readonly SwitchLatencyTracker _switchTracker;
 	private readonly ILogger<SessionPaneViewModel> _logger;
@@ -113,12 +114,14 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		FocusViewModel? focus = null,
 		FilePreviewViewModel? preview = null,
 		MediaPreviewPolicy? media = null,
-		IClientStateStore? stateStore = null)
+		IClientStateStore? stateStore = null,
+		ISystemUrlLauncher? systemLauncher = null)
 	{
 		_client = client;
 		_surface = surface;
 		_renderer = renderer;
 		_launcher = launcher;
+		_systemLauncher = systemLauncher ?? new SystemUrlLauncher(new UrlPolicy(), NullLogger<SystemUrlLauncher>.Instance, logOnly: true);   // a pane built without one (tests) never starts a browser
 		_ui = ui;
 		_switchTracker = switchTracker;
 		_logger = logger;
@@ -146,6 +149,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_surface.NewerRequested += OnNewerRequested;
 		_surface.ExpandRequested += OnExpandRequested;
 		_surface.LinkClicked += OnLinkClicked;
+		_surface.SystemLinkClicked += OnSystemLinkClicked;
+		Focus.RefSystemActivated += OnRefSystemActivated;
 		_surface.FindRequested += OnFindRequested;
 		_surface.FindStepRequested += OnFindStepRequested;
 		_surface.FindStatusChanged += OnFindStatusChanged;
@@ -404,7 +409,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			SetDaemonRunning(detail.State.Running);
 		Tags.Clear();
 		foreach (var tag in detail.Tags)
-			Tags.Add(new SessionTagViewModel(tag, _launcher));
+			Tags.Add(new SessionTagViewModel(tag, _launcher, _systemLauncher));
 	}
 
 	// ---- push events ----
@@ -790,6 +795,9 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 	private void OnLinkClicked(object? sender, string url) => _ui.Post(() => _launcher.TryOpen(url));
 
+	/// <summary>FR.26.9: Ctrl+Shift+click or the page menu on a transcript link; straight to the system browser, never routed.</summary>
+	private void OnSystemLinkClicked(object? sender, string url) => _ui.Post(() => _systemLauncher.TryOpen(url));
+
 	private void OnPainted(object? sender, TranscriptPaintedEventArgs e) => _ui.Post(() => _switchTracker.Painted(e.Key, e.JsMilliseconds));
 
 	private async Task<TranscriptModel> BuildModelAsync(string nodeId, SessionEntriesResult page)
@@ -815,6 +823,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		_surface.NewerRequested -= OnNewerRequested;
 		_surface.ExpandRequested -= OnExpandRequested;
 		_surface.LinkClicked -= OnLinkClicked;
+		_surface.SystemLinkClicked -= OnSystemLinkClicked;
+		Focus.RefSystemActivated -= OnRefSystemActivated;
 		_surface.FindRequested -= OnFindRequested;
 		_surface.FindStepRequested -= OnFindStepRequested;
 		_surface.FindStatusChanged -= OnFindStatusChanged;

@@ -8,10 +8,16 @@ const COPY_SLOP_PX = 4;      // a right-click this close to the selection's boxe
 const CM_MARGIN_PX = 4;      // the menu keeps this distance from the edges of the page
 const cm = document.createElement('div');
 cm.className = 'cm'; cm.hidden = true; cm.setAttribute('role', 'menu');
-cm.innerHTML = '<button type="button" role="menuitem" data-act="text">Copy<span class="k">Ctrl+C</span></button><button type="button" role="menuitem" data-act="markdown">Copy as Markdown<span class="k">Ctrl+Shift+C</span></button>';
+cm.innerHTML = '<button type="button" role="menuitem" data-act="system" hidden>Open in system browser<span class="k">Ctrl+Shift+click</span></button><button type="button" role="menuitem" data-act="text">Copy<span class="k">Ctrl+C</span></button><button type="button" role="menuitem" data-act="markdown">Copy as Markdown<span class="k">Ctrl+Shift+C</span></button>';
 document.body.appendChild(cm);
 
 function menuOpen() { return !cm.hidden; }
+let menuHref = null;   // the link the menu was opened on (FR.26.9), or null
+function showEntries(link, copy) {
+  menuHref = link;
+  cm.querySelector('[data-act=system]').hidden = !link;
+  cm.querySelectorAll('[data-act=text],[data-act=markdown]').forEach(b => { b.hidden = !copy; });
+}
 function hideMenu() { cm.hidden = true; cm.querySelectorAll('.on').forEach(b => b.classList.remove('on')); }
 
 // The selection as the page shows it, or null: collapsed, outside the transcript, or no transcript.
@@ -34,12 +40,17 @@ function showMenu(x, y) {
 document.addEventListener('contextmenu', e => {
   e.preventDefault();   // the browser's own menu is off in the host; the page shows only this one
   hideMenu();
-  if (!S || !vp.contains(e.target) || (e.target.closest && e.target.closest('a, .pth, img.pimg'))) return;   // a link or a path keeps its own behaviour
-  const sel = transcriptSelection();
-  if (sel && onSelection(sel, e.clientX, e.clientY)) showMenu(e.clientX, e.clientY);
+  if (!S || !vp.contains(e.target) || !e.target.closest || e.target.closest('.pth, img.pimg')) return;   // a path keeps its own behaviour
+  const a = e.target.closest('a'), href = a && !a.classList.contains('blocked') ? (a.getAttribute('href') || '') : '';
+  if (a && !/^https?:\/\//i.test(href)) return;   // a blocked or non-http(s) link has no menu
+  const sel = transcriptSelection(), copy = !!(sel && onSelection(sel, e.clientX, e.clientY));
+  if (!a && !copy) return;
+  showEntries(a ? href : null, copy);   // FR.26.9: a link offers "Open in system browser", with the Copy entries when the click is on a selection too
+  showMenu(e.clientX, e.clientY);
 }, true);
 cm.addEventListener('mousedown', e => e.preventDefault());   // pressing a menu item keeps the selection and the focus where they are
-cm.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button[data-act]'); if (b) { hideMenu(); copySelection(b.getAttribute('data-act')); } });
+function chooseEntry(act) { const href = menuHref; hideMenu(); if (act === 'system') { if (href) post({ ev: 'link', href: href, sys: true }); } else copySelection(act); }
+cm.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button[data-act]'); if (b) chooseEntry(b.getAttribute('data-act')); });
 document.addEventListener('mousedown', e => { if (menuOpen() && !cm.contains(e.target)) hideMenu(); }, true);
 vp.addEventListener('wheel', hideMenu, { passive: true });
 vp.addEventListener('scroll', hideMenu, { passive: true });
@@ -50,10 +61,10 @@ window.addEventListener('resize', hideMenu);
 // Esc closes (the focus stays in the transcript, so the menu cannot have it).
 document.addEventListener('keydown', e => {
   if (menuOpen()) {
-    const btns = Array.from(cm.querySelectorAll('button')), at = btns.findIndex(b => b.classList.contains('on'));
+    const btns = Array.from(cm.querySelectorAll('button:not([hidden])')), at = btns.findIndex(b => b.classList.contains('on'));
     if (e.key === 'Escape') hideMenu();
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { const n = (at + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length; btns.forEach((b, k) => b.classList.toggle('on', k === n)); }
-    else if (e.key === 'Enter' && at >= 0) { const act = btns[at].getAttribute('data-act'); hideMenu(); copySelection(act); }
+    else if (e.key === 'Enter' && at >= 0) chooseEntry(btns[at].getAttribute('data-act'));
     else return;
     e.preventDefault(); e.stopImmediatePropagation();
     return;

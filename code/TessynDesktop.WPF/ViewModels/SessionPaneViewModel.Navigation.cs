@@ -184,6 +184,14 @@ public sealed partial class SessionPaneViewModel
 		}
 	}
 
+	/// <summary>FR.26.9: a Focus url reference with Ctrl+click or its menu entry opens the system browser, never a preview.</summary>
+	private void OnRefSystemActivated(object? sender, AttentionRefDto reference) =>
+		_ui.Post(() =>
+		{
+			if (reference.Kind == FocusRefViewModel.UrlKind && !_systemLauncher.TryOpen(reference.Url))
+				Notice = "Only http and https links can be opened.";
+		});
+
 	private void OnRefActivated(object? sender, AttentionRefDto reference) => _ui.Post(() => _ = ActivateRefAsync(reference));
 
 	/// <summary>Acts on a reference of a Focus item: entry → jump, file → preview, url → system browser (http/https only).</summary>

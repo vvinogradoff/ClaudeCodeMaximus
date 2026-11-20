@@ -56,7 +56,13 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:FocusRefViewModel}">
-                            <Button Command="{Binding OpenCommand}" ToolTip="{Binding ToolTip}" Margin="0,0,6,6" Padding="8,3" AutomationProperties.Name="{Binding Label}">
+                            <Button Command="{Binding OpenCommand}" ToolTip="{Binding ToolTip}" Margin="0,0,6,6" Padding="8,3" AutomationProperties.Name="{Binding Label}"
+                                    PreviewMouseLeftButtonDown="OnRefDown" ContextMenuService.IsEnabled="{Binding IsUrl}">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Open in system browser" InputGestureText="Ctrl+click" Command="{Binding OpenInSystemBrowserCommand}" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource RefGlyph}" />
 

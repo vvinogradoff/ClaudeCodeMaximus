@@ -56,7 +56,7 @@ public sealed class SessionTagAreaViewTests
 	}
 
 	private static SessionTagViewModel Chip(int index, FakeUrlLauncher? launcher = null) =>
-		new(new SessionTagDto { Kind = SessionTagKind.GitHubPullRequest, Label = "repo#" + (1000 + index), Url = "https://github.com/o/r/pull/" + index }, launcher ?? new FakeUrlLauncher());
+		new(new SessionTagDto { Kind = SessionTagKind.GitHubPullRequest, Label = "repo#" + (1000 + index), Url = "https://github.com/o/r/pull/" + index }, launcher ?? new FakeUrlLauncher(), new FakeSystemUrlLauncher());
 
 	private static Fixture Create(int tags, bool expanded = false)
 	{
