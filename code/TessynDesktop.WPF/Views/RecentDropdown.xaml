@@ -1,6 +1,7 @@
 ﻿<UserControl x:Class="TessynDesktop.WPF.Views.RecentDropdown"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:TessynDesktop.WPF.Views">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -44,29 +45,23 @@
         <!-- Fills the width it is given (the title bar's middle); the label is the open session's name, "Recent" with none. -->
         <ToggleButton x:Name="Toggle" Style="{StaticResource RecentToggle}" Margin="0,2" Padding="10,3" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Recent dropdown" ToolTip="Recent sessions"
                       IsChecked="{Binding IsOpen, ElementName=Menu, Mode=TwoWay}">
-            <!-- From the left (FR.1.33): the name (the only star column, so it trims first), the profile (up to 150 px), the cautionary "→ target" while a switch waits,
-                 the workers badge (FR.1.28), the chevron. Profile, target, badge and chevron are auto columns: they keep their places. -->
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="Label" Grid.Column="0" Text="{Binding ButtonText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" HorizontalAlignment="Left" />
-                <TextBlock x:Name="ProfileLabel" Grid.Column="1" Text="{Binding CurrentProfileName}" FontSize="10" Opacity="0.7" Margin="8,0,0,0" VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis" MaxWidth="150" ToolTip="{Binding CurrentProfileName}"
+            <!-- From the left (FR.1.33): the name, the profile (up to 150 px), the cautionary "→ target" while a switch waits, the workers badge (FR.1.28), the chevron.
+                 RecentButtonPanel keeps the badge and the chevron at the right edge at every width and gives the rest to the profile, the target and the name in that
+                 order, so the name trims first, then the target, then the profile. -->
+            <v:RecentButtonPanel>
+                <v:RecentButtonText x:Name="Label" Text="{Binding ButtonText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" HorizontalAlignment="Left" />
+                <v:RecentButtonText x:Name="ProfileLabel" Text="{Binding CurrentProfileName}" FontSize="10" Opacity="0.7" Margin="8,0,0,0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" MaxWidth="150" ToolTip="{Binding CurrentProfileName}" AutomationProperties.Name="{Binding CurrentProfileName}"
                            Visibility="{Binding HasProfile, Converter={StaticResource SessionListBoolToVis}}" />
-                <TextBlock x:Name="SwitchingLabel" Grid.Column="2" Text="{Binding SwitchingText}" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"
+                <v:RecentButtonText x:Name="SwitchingLabel" Text="{Binding SwitchingText}" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" MaxWidth="110" Foreground="{DynamicResource SystemFillColorCautionBrush}"
                            Visibility="{Binding HasSwitching, Converter={StaticResource SessionListBoolToVis}}" />
                 <!-- The open session's active workers badge (FR.1.28), left of the chevron. -->
-                <Border x:Name="WorkersBadge" Grid.Column="3" Style="{StaticResource ActiveWorkersBadge}" Margin="6,0,0,0" AutomationProperties.Name="Active workers">
+                <Border x:Name="WorkersBadge" Style="{StaticResource ActiveWorkersBadge}" Margin="6,0,0,0" AutomationProperties.Name="Active workers">
                     <TextBlock Style="{StaticResource ActiveWorkersBadgeText}" />
                 </Border>
-                <TextBlock Grid.Column="4" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" VerticalAlignment="Center" Text="{StaticResource GlyphChevronDown}" />
-            </Grid>
+                <TextBlock x:Name="Chevron" Style="{StaticResource IconText}" FontSize="10" Margin="6,0,0,0" VerticalAlignment="Center" Text="{StaticResource GlyphChevronDown}" />
+            </v:RecentButtonPanel>
         </ToggleButton>
         <Popup x:Name="Menu" PlacementTarget="{Binding ElementName=Toggle}" Placement="Bottom" StaysOpen="False" ButtonBase.Click="OnRowClick" Opened="OnOpened">
             <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="1"

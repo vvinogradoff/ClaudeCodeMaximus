@@ -373,6 +373,71 @@ public sealed class RecentDropdownRecencyTests : IDisposable
 		});
 	}
 
+	/// <summary>FR.1.33 item 5 at every width: the badge and the chevron keep their size and their distance from the right edge; the name trims first, then the target, then the profile.</summary>
+	[Theory]
+	[InlineData(600)]
+	[InlineData(330)]
+	[InlineData(250)]
+	[InlineData(180)]
+	[InlineData(120)]
+	public void AtNarrowWidths_BadgeAndChevronStay_AndTheNameTrimsBeforeTheTargetBeforeTheProfile(double width)   // TC.RD.10
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			var now = DateTimeOffset.UtcNow;
+			var profileText = new string('P', 80);
+			_client.RaiseNotification("session.changed", new SessionChangedPayload(new SessionStateDto("fresh", false, false, null, false, now, now, false, profileText, SwitchingToProfileName: new string('Q', 12), RunningWorkerCount: 4)));
+			var badge = (Border)dropdown.FindName("WorkersBadge")!;
+			var chevron = (TextBlock)dropdown.FindName("Chevron")!;
+			var profile = ProfileOf(dropdown);
+			var target = SwitchingOf(dropdown);
+			var name = NameOf(dropdown);
+
+			LayoutAt(dropdown, 700);   // the reference: nothing is trimmed
+			var badgeWidth = badge.ActualWidth;
+			var chevronWidth = chevron.ActualWidth;
+			var fullName = name.ActualWidth;
+			var fullProfileSlot = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(profile).Width;
+			var fullTargetSlot = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(target).Width;
+			var badgeFromRight = 700 - (badge.TranslatePoint(default, dropdown).X + badge.ActualWidth);
+			var chevronFromRight = 700 - (chevron.TranslatePoint(default, dropdown).X + chevron.ActualWidth);
+			Assert.True(badgeWidth > 0 && chevronWidth > 0);
+
+			LayoutAt(dropdown, width);
+			Assert.Equal(badgeWidth, badge.ActualWidth, 0.5);
+			Assert.Equal(chevronWidth, chevron.ActualWidth, 0.5);
+			Assert.Equal(badgeFromRight, width - (badge.TranslatePoint(default, dropdown).X + badge.ActualWidth), 0.5);
+			Assert.Equal(chevronFromRight, width - (chevron.TranslatePoint(default, dropdown).X + chevron.ActualWidth), 0.5);
+			Assert.True(badge.TranslatePoint(default, dropdown).X >= 0);
+
+			// A trimmed text still reports the width of its ellipsis but is clipped to its layout slot, so the slots tell what each one was given.
+			double Slot(FrameworkElement e) => System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(e).Width;
+			if (Slot(profile) < fullProfileSlot - 0.5)
+				Assert.True(Slot(target) <= target.Margin.Left + 0.5 && Slot(name) <= 0.5, $"the profile trims only after the target and the name are gone: name={Slot(name)} target={Slot(target)} profile={Slot(profile)}/{fullProfileSlot}");
+			if (Slot(target) < fullTargetSlot - 0.5)
+				Assert.True(Slot(name) <= 0.5, $"the target trims only after the name is gone: name={Slot(name)} target={Slot(target)}/{fullTargetSlot}");
+			if (width >= 330)
+				Assert.True(Slot(profile) >= fullProfileSlot - 0.5, "the profile is whole down to 330 px");   // the name and the target go first
+			if (width >= 600)
+				Assert.True(name.ActualWidth >= fullName - 0.5 && Slot(target) >= fullTargetSlot - 0.5, "nothing is trimmed at 600 px");
+		});
+	}
+
+	[Fact]
+	public void TheProfileText_HasAnAutomationName()   // FR.1.33 item 2
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			Changed("fresh", "Work profile");
+			LayoutAt(dropdown, 600);
+			Assert.Equal("Work profile", System.Windows.Automation.AutomationProperties.GetName(ProfileOf(dropdown)));
+		});
+	}
+
 	[Fact]
 	public void TheBadgeAndTheChevron_KeepTheirPlaces_WhateverTheProfile()   // TC.RD.10
 	{
