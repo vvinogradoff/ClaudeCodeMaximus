@@ -144,3 +144,22 @@ The draft was approved with these answers:
 | Existing | Amended by | Change |
 |---|---|---|
 | FR.6.18 "`shellLayout` holds the arrangement of the five shell panels and the places of preview panels that are tabbed or docked next to them, resolved by panel id" | FR.6.18 (A32, Architect, 2026-11-20) | Wording only, no behaviour change, as built in stages 1 and 3: a preview panel's place, also when it is tabbed or docked next to a shell panel, is kept only in its `previewDock` entry, which names its neighbours by panel id (a preview tabbed beside Focus reopens beside Focus); `shellLayout` holds the five shell panels. One place per preview, so two copies cannot disagree. |
+
+## Amendments (2026-11-20, Focus panel header)
+
+Status: **Draft, awaiting the Architect.** Source: the Architect's request of 2026-11-20 after using the docked shell: add Delete, the editable session name, the idle/running indicator and the star (favourites) to the Focus panel too, taking exactly the space they take in the Session view, with a thin bottom padding under the row that hosts them (the row that now hosts Send answers). Use case UC.DS.13, test cases TC.DS.27 onwards. WPF only.
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.6.16 "Everything inside Focus is unchanged: cards, replies, Send answers (n) (now at the top of the panel, FR.23.21) ..." | FR.6.23 | Not everything: the top row of the panel is now a header with the session's Delete, name, Running / Idle and star, and Send answers (n) at its right end. Cards, replies and Send answers' rules are unchanged. |
+| FR.23.21 Send answers (n) always visible at the top of the panel, right-aligned | FR.6.23 | Send answers stays at the top and at the right end, now inside the header row; enabling and Ctrl+Enter (FR.23.22) unchanged. |
+| FR.1.25 the session header has a Delete icon left of the title and a double-click rename | FR.6.23 | The same two controls also appear in the Focus panel's header; one rename, one delete, one session. |
+| FR.9.7 favourite flag (the star of the Session view header) | FR.6.23 | The same star also appears in the Focus panel's header, bound to the same flag. |
+
+**FR.6.23 — The Focus panel's header.** *Status: Draft, awaiting the Architect.*
+1. **Controls.** The top row of the Focus panel (today holding only **Send answers (n)**, `FocusPanel.xaml` row 0) becomes a header row. From the left it holds the same controls as the first row of the Session view header (`SessionPane.xaml`, `SessionTitle.xaml`, `FavoriteButton.xaml`), for the session Focus shows, which is the session of the Session view (FR.23.16): **Delete** (the same icon and the same confirmation as FR.1.25); the **name** (20 px semibold; a double-click turns it into a text box: Enter accepts, Esc or leaving the box cancels, an empty or unchanged name does nothing, a refusal shows as a notice, FR.1.25); the **Running / Idle** text (same wording and colour as the Session view); the **star** (favourite toggle, the same flag as the Session view's star and the tree's, FR.9.7). **Send answers (n)** stays in the row, at its **right end**, with its rules unchanged (FR.23.21, FR.23.22). Not in the Focus header: Back, the tag chips, the profile switch, Send later, the Focus button, MD/JSONL, the output search.
+2. **One session, two headers.** Rename, delete and star act on the one session. A new name or favourite state shows in both headers and the tree at once. Renaming in one header does not open a text box in the other.
+3. **Same space as in the Session view.** The row has the same height, margins (`16,10,16,8`, the Session view header's first row), font sizes and control sizes (icon sizes, paddings) as that row, so that the two rows line up when Focus is docked beside the Session view. The name trims with an ellipsis when the panel is narrow; the name stretches and the buttons keep their places (NR.7).
+4. **Thin bottom padding.** The row has a bottom padding of **8 px** (the Session view header's own bottom margin) between it and the first card or the error line.
+5. **No session shown.** The four session controls (Delete, name, Running / Idle, star) are hidden, as in the Session view header; Send answers is unchanged.
+6. **Any place.** The header works the same when Focus is floating (another monitor), tabbed beside or over the Session view (the old full-size Focus) or auto-hidden in a slide-out. It never takes the keyboard focus except by a click (FR.6.20); the rename text box takes it only when the user double-clicks the name.
