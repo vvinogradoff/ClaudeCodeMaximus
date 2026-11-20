@@ -191,3 +191,22 @@ New IDs start at **FR.1.18** (FR.1.17 is taken by the draft, stable ids for Dire
 |---|---|---|
 | FR.1.15 Left panel tabs (Tree, Recent, Tags) | FR.6.11, FR.6.12 | Sessions (the Tree), Recent and Tags are panels of the docked shell, tabs of the left pane by default; their content is unchanged. |
 | FR.1.19 Equal tabs | FR.6.13 | Replaced by the docking tabs of the pane (compact chrome). |
+
+---
+
+## Amendments (2026-11-20, profile in the closed Recent dropdown)
+
+Status: **Draft, awaiting the Architect.** Source: the Architect's request of 2026-11-20: "print the profile name in the Recent session dropdown when it is not expanded; at the moment we show the session name and the number of active workers; show the profile name left of the active workers count rectangle". Use case UC.RD.03, test cases TC.RD.07 onwards. WPF only.
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.1.28 "In the closed Recent dropdown the badge is on the button, left of the chevron" | FR.1.33 | The profile name is placed left of the badge; the badge and the chevron keep their places. |
+| FR.1.20 the dropdown row shows the profile (FR.11.14) on its second line | FR.1.33 | The same profile text also shows on the closed button. |
+
+**FR.1.33 — Profile name in the closed Recent dropdown.** *Status: Draft, awaiting the Architect.*
+1. **Place.** On the closed button of the Recent dropdown (title bar, `RecentDropdown.xaml`), from the left: the open session's **name**, the **profile name**, the **active workers badge** (FR.1.28), the **chevron**. The profile name is **right of the name and left of the badge**.
+2. **Text.** The same text as the profile on the session's row in the open list (`TreeNodeViewModel.ProfileName`): the **pinned profile's name**, else the session's profile name (FR.11.14). Font size 10, **secondary text colour** (the row's profile style: `SessionRowFace.xaml`, opacity 0.7), tooltip with the full name.
+3. **Hidden** when no session is open, or the open session has no profile; it then takes no room, and the button looks as it did.
+4. **Switching.** While a profile switch is waiting (`SwitchingToProfileName`, FR.11.14), the button matches the row: the current profile name, then a cautionary-colour `→ <target profile>` right of it (same colour and font size as the row's). Both disappear or update when the switch completes.
+5. **Short of space (NR.7).** The button's width is the title bar's middle. The **session name trims first** (ellipsis, as today). The profile name keeps its text down to a width of **150 px** (the row's maximum for it), and trims with an ellipsis only when the name is already reduced to nothing and the button is still too narrow; the `→ target` text trims before the profile name does. The badge and the chevron always keep their places and sizes.
+6. **Live.** It follows the open session: opening another session, a profile pick or a finished switch updates it at once, as the badge does. It is part of the click target of the button (a click anywhere opens the list).
