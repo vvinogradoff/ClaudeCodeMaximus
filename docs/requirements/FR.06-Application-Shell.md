@@ -185,3 +185,19 @@ Status: **Approved by the Architect 2026-11-20 (A36; visibility shared, option b
 5. **No session shown.** The bar behaves as the Session view's bar does with no session: its visibility does not depend on a session (`SessionPane.xaml` shows the slot by the visibility flag alone), so it stays shown and its controls are the same ones. The Settings toggle is shown too.
 6. **Any place.** Works the same with Focus floating (another monitor), tabbed beside or over the Session view, and in the auto-hide slide-out. It never takes the keyboard focus except by a click (FR.6.20); opening a drop-down is a click.
 7. **Space.** The bar takes its natural height at the bottom; the cards area above it stretches and keeps scrolling (NR.7). A narrow panel wraps the controls onto more lines; the Settings toggle and the header buttons keep their places.
+
+## Amendments (2026-11-20, Focus with nothing open)
+
+Status: **Approved by the Architect 2026-11-21 (A39, as written).** Source: the Architect's request of 2026-11-20: "Whenever I switch sessions and land on a focus tab check please if there are open focus items, if there are none then switch me to session tab automatically." Use case UC.DS.15, test cases TC.DS.48 onwards. WPF only.
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.6.16 "Focus follows the session shown in the Session view" (Focus shows the items of the session the Session view shows; a switch of session re-targets Focus) | FR.6.25 | When Focus is tabbed with the Session view and selected, a switch to a session with **no open Focus items** also selects the Session view's tab, instead of leaving an empty Focus in front. |
+| FR.23.16 Live updates (Focus and the badge refresh for the session shown) | FR.6.25 | Items are read for the new session as before; this rule only reads the result **once, after the load**, and never reacts to later changes. |
+
+**FR.6.25 — Back to the Session view when the shown session has no open Focus items.** *Status: Approved by the Architect 2026-11-21 (A39). Built 2026-11-21 on branch `docs/focus-autoswitch` (unit tests); its WPF E2E `WpfFocusAutoSwitchE2ETests` is not run yet (the daemon runs normally; merged first by the Architect's choice, A41).*
+1. **When.** Only right after the user **switches sessions**: the Session view shows another session, by any route (tree, Recent, Tags, the Recent drop-down, a session reference, ...). The check runs once the new session's Focus items have **loaded**. While they are still loading nothing happens; if the load **fails**, nothing happens. It does **not** run when the user answers, dismisses or closes the last open item while reading Focus, nor when items change later (FR.23.16): the user stays where they are.
+2. **Where.** Only when Focus is **tabbed with the Session view in the session area** (the document pane: the old full-size Focus, FR.29.19, FR.6.16) and Focus is the **selected** tab there. Focus as a side panel, floating or auto-hidden: nothing happens (the Session view is visible beside it).
+3. **No open items.** The Focus badge count (FR.23.13) is **0**: the number of open items whose kind is not `Decided`. A session whose only open items are `Decided` therefore counts as having none and triggers the switch, although Focus would list them under Decisions. Closed items do not count.
+4. **What happens.** The Session view's tab is selected, exactly as the Session button and Ctrl+1 do (FR.6.23 items 7 and 8). The keyboard focus does not move (FR.6.20). One log line says why (the session, "no open Focus items, back to the Session view").
+5. **Not the other way.** Switching to a session that has open items while the Session view's tab is selected does **not** switch to Focus; the badge shows them (FR.23.13). Switching back to a session without items later re-checks it as in item 1, and switching to one with items leaves Focus selected; nothing re-selects Focus on its own.

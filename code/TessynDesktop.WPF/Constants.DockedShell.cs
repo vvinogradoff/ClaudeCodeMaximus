@@ -12,6 +12,9 @@ public static partial class Constants
 		public const string SessionPanelId = "session";
 		public const string FocusPanelId = "focus";
 
+		/// <summary>The log line written when Focus gives way to the Session view because the shown session has no open items (FR.6.25.4); the argument is the node id.</summary>
+		public const string FocusAutoSwitchLog = "Session {NodeId}: no open Focus items, back to the Session view";
+
 		/// <summary>Default width of the left pane in device-independent pixels (FR.6.12).</summary>
 		public const double DefaultLeftPaneWidth = 320;
 

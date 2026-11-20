@@ -26,6 +26,12 @@ public interface IShellLayout
 	/// <summary>Toggles auto-hide of the pane that holds the panel; does nothing when <see cref="CanToggleAutoHide"/> is false.</summary>
 	void ToggleAutoHide(string panelId);
 
+	/// <summary>
+	/// True only when the panel is tabbed with the Session view in the session area (the document pane) and is the selected tab there (FR.6.25.2); false for a side pane,
+	/// floating, auto-hidden or closed.
+	/// </summary>
+	bool IsSelectedWithSessionView(string panelId);
+
 	/// <summary>Restores the default layout (FR.6.12, FR.6.19). The caller asks the user first.</summary>
 	void ResetLayout();
 
