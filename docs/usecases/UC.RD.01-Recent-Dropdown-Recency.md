@@ -15,7 +15,7 @@ Related requirements: FR.9.13, FR.9.15. Test cases: [TC.RD.01](/docs/testcases/T
 **Covers:** FR.9.15, FR.9.11.
 
 ## UC.RD.03 — See the open session's profile from the closed dropdown
-**Actor:** the User. **Precondition:** a session with a profile is open. *Status: draft, awaiting the Architect (FR.1.33).*
+**Actor:** the User. **Precondition:** a session with a profile is open. *Status: approved (A36, FR.1.33).*
 **Main flow:** 1. The User looks at the Recent dropdown button in the title bar. 2. The button shows the session's name, then its profile name in the secondary colour, then the active workers badge (when workers run), then the chevron. 3. The User opens the list; the open session's row shows the same profile name. 4. The User opens another session; the button's profile name changes with it.
 **Alternative flows:** **A1** — No session is open, or the session has no profile: no profile text, no gap. **A2** — A profile switch is waiting: the profile name is followed by `→ target` in the caution colour, and both update when the switch completes. **A3** — The title bar is narrow: the session name trims first; the badge and the chevron keep their places.
 **Covers:** FR.1.33, FR.1.28, FR.1.20.
