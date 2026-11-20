@@ -16,6 +16,18 @@ public partial class FocusPanel : UserControl, IPanelSelectionAware
 		IsVisibleChanged += OnIsVisibleChanged;
 	}
 
+	/// <summary>The session pane of the session the Session view shows: the header's Delete, name, Running / Idle and star, and the Session button act on it (FR.6.23). The rest of the panel is bound to the Focus view model.</summary>
+	public static readonly DependencyProperty SessionProperty = DependencyProperty.Register(nameof(Session), typeof(SessionPaneViewModel), typeof(FocusPanel), new PropertyMetadata(null));
+
+	public SessionPaneViewModel? Session
+	{
+		get => (SessionPaneViewModel?)GetValue(SessionProperty);
+		set => SetValue(SessionProperty, value);
+	}
+
+	/// <summary>The header's identity view (Delete, name, Running / Idle), for tests.</summary>
+	public SessionIdentity HeaderIdentityView => HeaderIdentity;
+
 	private Point _headerDown;
 	private bool _headerClickArmed;
 

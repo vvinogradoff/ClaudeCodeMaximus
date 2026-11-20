@@ -108,6 +108,7 @@ public sealed class ServiceRegistration
 			TestDropPaths = options.TestDropPaths,
 			PreviewRouter = sp.GetRequiredService<IPreviewRouter>(),
 			ShellLayout = sp.GetRequiredService<IShellLayout>(),   // FR.6.16: the Focus button brings the Focus panel forward
+			Hints = sp.GetRequiredService<ShellButtonHints>(),   // FR.6.23.8: the buttons' tooltips name the keys in effect
 			Dialogs = sp.GetRequiredService<IDialogService>(),
 		});
 		services.AddSingleton<IClientStateStore, JsonClientStateStore>();
@@ -116,6 +117,7 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IClientSettingsStore, ClientSettingsStore>();
 		services.AddSingleton<IShellSlots, ShellSlots>();
 		services.AddSingleton<IShellCommands, ShellCommands>();
+		services.AddSingleton(sp => new ShellButtonHints(sp.GetRequiredService<IShellCommands>(), sp.GetRequiredService<IClientSettingsStore>()));
 		services.AddSingleton<ShellModuleLoader>();
 		// A test window never opens a modal dialog: nobody could click it.
 		if (options.TestWindow)

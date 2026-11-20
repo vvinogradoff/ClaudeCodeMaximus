@@ -1,6 +1,6 @@
 # UC.DS.01 — Docked Shell
 
-Related requirements: FR.6.11–FR.6.22, FR.29.17–FR.29.26, FR.23.12, FR.23.13 (see `docs/requirements/`). Test cases: [TC.DS.01](/docs/testcases/TC.DS.01-Docked-Shell.md). Status: draft, not built.
+Related requirements: FR.6.11–FR.6.23, FR.29.17–FR.29.26, FR.23.12, FR.23.13 (see `docs/requirements/`). Test cases: [TC.DS.01](/docs/testcases/TC.DS.01-Docked-Shell.md). Status: draft, not built.
 
 ## Actors
 - **User**. **Tessyn** (WPF client, the docked shell). **Windows** (monitors, display changes).
@@ -63,3 +63,9 @@ Related requirements: FR.6.11–FR.6.22, FR.29.17–FR.29.26, FR.23.12, FR.23.13
 ## UC.DS.12 — Test seam
 **Main flow:** 1. An end-to-end test starts Tessyn with `--test-window`: the default layout shows and nothing is read from or saved to the user's data. 2. The test hook docks, tabs, floats, auto-hides, closes and shows panels and reads each panel's state. 3. With a `shellLayout` in the test data root, a restart restores it.
 **Covers:** FR.6.22, FR.29.13, FR.29.26.
+
+## UC.DS.13 — Rename, delete and star from the Focus panel
+**Preconditions:** a session is shown in the Session view and has Focus items; Focus floats on the second monitor, or is tabbed over the session area.
+**Main flow:** 1. The Focus panel's top row shows Delete, the session's name, Running / Idle and the star, with Send answers (n) at the right end, in the same size and place as the Session view header's first row. 2. The User double-clicks the name in Focus, types a new name and presses Enter; the Session view header and the tree show it too. 3. The User clicks the star in Focus; the star in the Session view and in the tree change with it. 4. A turn starts: the text reads Running in both headers, then Idle. 5. The User clicks Delete in Focus; the confirmation appears; confirming removes the session.
+**Alternative flows:** **A1** — Esc in the rename box keeps the old name. **A2** — Cancelling the delete confirmation keeps the session. **A3** — No session is shown: only Send answers and Session are in the row. **A4** — The panel is narrow: the name is trimmed with an ellipsis, the buttons keep their places. **A5** — Focus is tabbed over the session area: the User clicks **Session** (or presses Ctrl+1) and the Session view's tab is selected; Ctrl+2 (or the Focus button) goes back to Focus.
+**Covers:** FR.6.23, FR.1.25, FR.9.7, FR.23.21.

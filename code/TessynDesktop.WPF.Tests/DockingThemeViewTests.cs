@@ -192,7 +192,7 @@ public sealed class DockingThemeViewTests
 	{
 		StaTestRunner.Run(() =>
 		{
-			var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+			var app = StaTestRunner.EnsureApplication();
 			var colours = new ResourceDictionary { Source = new Uri(dark ? Constants.Appearance.DarkThemeUri : Constants.Appearance.LightThemeUri, UriKind.Absolute) };
 			app.Resources.MergedDictionaries.Add(colours);
 			try

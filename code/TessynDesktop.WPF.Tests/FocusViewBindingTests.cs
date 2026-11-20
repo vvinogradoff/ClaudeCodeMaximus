@@ -174,7 +174,7 @@ public sealed class FocusViewBindingTests
 			insideFocusPanel = Descendants<Button>(panel).Contains(button);
 			visible = button.Visibility;
 
-			var reply = Descendants<TextBox>(panel).First();
+			var reply = Descendants<TextBox>(panel).First(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Your answer");   // not the header's rename box (FR.6.23)
 			plainEnterHandled = panel.HandleReplyKey(reply, System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.None);
 			Assert.False(button.Command.CanExecute(null));   // nothing typed: disabled like the button
 			ctrlEnterHandled = panel.HandleReplyKey(reply, System.Windows.Input.Key.Enter, System.Windows.Input.ModifierKeys.Control);
