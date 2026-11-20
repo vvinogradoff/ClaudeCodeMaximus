@@ -44,6 +44,8 @@ Related requirements: FR.6.11–FR.6.23, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | TC.DS.36 | Send answers (n) in the header: enabling rule and Ctrl+Enter unchanged | E2E | UC.DS.13 | FR.6.23.1, FR.23.21, FR.23.22 |
 | TC.DS.37 | The header works with Focus floating, tabbed beside or over the Session view, and in the auto-hide slide-out; it takes the keyboard focus only by a click | E2E | UC.DS.13 | FR.6.23.6, FR.6.20 |
 | TC.DS.38 | A narrow panel trims the name with an ellipsis and keeps the buttons in place; the two rows line up when Focus is docked beside the Session view (look) | MANUAL | UC.DS.13 | FR.6.23.3 |
+| TC.DS.39 | The Session button sits right of Send answers (n); with Focus tabbed over the session area a click selects the Session view's tab; with Focus floating it leaves the Session view shown; it never takes the keyboard focus | E2E | UC.DS.13 | FR.6.23.7 |
+| TC.DS.40 | Ctrl+1 brings the Session view forward and Ctrl+2 the Focus panel, from the composer, the Sessions panel and a floating Focus; Settings → Keyboard shortcuts lists Session and Focus with these defaults, and a changed key works and shows in the buttons' tooltips | AUTOMATED (commands, defaults, tooltips) + MANUAL (real key presses) | UC.DS.13 | FR.6.23.8 |
 
 ## FR → TC coverage
 | FR | Test cases |
@@ -60,4 +62,4 @@ Related requirements: FR.6.11–FR.6.23, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | FR.6.20 | TC.DS.21, 22 |
 | FR.6.21 | TC.DS.23, 24 |
 | FR.6.22 | TC.DS.07, 25 |
-| FR.6.23 | TC.DS.27–38 |
+| FR.6.23 | TC.DS.27–40 |
