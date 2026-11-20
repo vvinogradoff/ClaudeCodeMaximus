@@ -112,7 +112,7 @@ Status: **Approved by the Architect 2026-11-19** (with the decisions at the end 
 
 **FR.6.18 — Layout memory.**
 - The **whole layout** is remembered: the panes, their sides and sizes, the tabs and their order and the selected tab, auto-hide (and its edge), floating windows (position, size, monitor device name and scale, with the rules of FR.29.16) and closed panels. It is saved **500 ms after the last change** in the WPF client settings (`wpf.json`, a new section **`shellLayout`**) and restored at the next start. Panels are identified by the stable ids of FR.6.11 (preview panels as FR.29.21).
-- The preview panels' own per-group layout (`previewDock`, FR.29.21) stays its own section; `shellLayout` holds the arrangement of the five shell panels and the places of preview panels that are tabbed or docked next to them, resolved by panel id.
+- The preview panels' own per-group layout (`previewDock`, FR.29.21) stays its own section. *(Amended 2026-11-20, A32, wording only:)* `shellLayout` holds the arrangement of the five shell panels; a preview panel's place, also when it is tabbed or docked next to a shell panel, is kept in its `previewDock` entry, which names its neighbours by panel id.
 - **First start after the update:** with no `shellLayout`, the old settings are taken over once: the saved **tree width** becomes the left pane's width, and a **collapsed tree** (FR.6.3) becomes an **auto-hidden left pane**. The old values are not deleted.
 - A saved layout that **cannot be read** (damaged, or written by a newer version: an unknown version number) is **ignored**, the default layout is used, and the log says why. A floating panel whose monitor is gone is clamped to a visible place (FR.29.16); a saved panel id that is unknown is skipped.
 - A move that Windows forces (a monitor unplugged, a resolution change) is never saved for a floating panel (FR.29.21).
@@ -138,3 +138,9 @@ The draft was approved with these answers:
 5. **Stages:** **1** the docked shell with the left panels, Focus as a panel, layout memory, Reset layout, the Panels menu, keyboard (FR.6.11 to FR.6.20, FR.6.22); **2** the Tessyn theme for the chrome (FR.6.21; until then the VS2013 default shows); **3** the remaining docked-preview items (restart of panels, auto-hide behaviours, floating panels across scales: FR.29.19, FR.29.22, FR.29.23).
 6. **Focus closed while it holds the badge:** the Focus button in the session header keeps the badge; a click shows the panel again.
 7. **Left pane in a narrow window:** no automatic collapse; the user collapses it with the chevron.
+
+## Amendments (2026-11-20, docked shell wording)
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.6.18 "`shellLayout` holds the arrangement of the five shell panels and the places of preview panels that are tabbed or docked next to them, resolved by panel id" | FR.6.18 (A32, Architect, 2026-11-20) | Wording only, no behaviour change, as built in stages 1 and 3: a preview panel's place, also when it is tabbed or docked next to a shell panel, is kept only in its `previewDock` entry, which names its neighbours by panel id (a preview tabbed beside Focus reopens beside Focus); `shellLayout` holds the five shell panels. One place per preview, so two copies cannot disagree. |
