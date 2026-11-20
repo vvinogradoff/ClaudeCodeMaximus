@@ -77,7 +77,7 @@ Related requirements: FR.6.11–FR.6.23, FR.29.17–FR.29.26, FR.23.12, FR.23.13
 **Covers:** FR.6.24, FR.6.16, FR.12.11, FR.12.35, FR.12.29.
 
 ## UC.DS.15 — Back to the Session view when the next session has nothing open in Focus
-**Preconditions:** Focus is tabbed with the Session view in the session area and its tab is selected. *Status: draft, awaiting the Architect (A39, FR.6.25).*
+**Preconditions:** Focus is tabbed with the Session view in the session area and its tab is selected. *Status: approved (A39, FR.6.25).*
 **Main flow:** 1. The User, reading Focus, picks another session in the tree (or Recent, Tags, the Recent drop-down, a session reference). 2. The Session view shows the new session and its Focus items load. 3. The session has no open items (badge count 0). 4. The Session view's tab is selected, as if the User had clicked Session or pressed Ctrl+1; the keyboard focus stays where it was; one log line says why.
 **Alternative flows:** **A1** — The new session has open items: Focus stays selected and shows them. **A2** — Focus is a side panel, floating or auto-hidden: nothing changes. **A3** — The User answers or dismisses the last open item while reading Focus: Focus stays (empty state). **A4** — The items are still loading, or the load fails: nothing changes. **A5** — The Session view's tab is selected and the User picks a session that has open items: it stays on the Session view, the badge shows the items. **A6** — The only open items are Decided: the badge is 0, so the switch happens.
 **Covers:** FR.6.25, FR.6.16, FR.6.23, FR.23.13, FR.23.16, FR.6.20.

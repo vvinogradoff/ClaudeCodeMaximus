@@ -188,14 +188,14 @@ Status: **Approved by the Architect 2026-11-20 (A36; visibility shared, option b
 
 ## Amendments (2026-11-20, Focus with nothing open)
 
-Status: **Draft, awaiting the Architect (A39).** Source: the Architect's request of 2026-11-20: "Whenever I switch sessions and land on a focus tab check please if there are open focus items, if there are none then switch me to session tab automatically." Use case UC.DS.15, test cases TC.DS.48 onwards. WPF only.
+Status: **Approved by the Architect 2026-11-21 (A39, as written).** Source: the Architect's request of 2026-11-20: "Whenever I switch sessions and land on a focus tab check please if there are open focus items, if there are none then switch me to session tab automatically." Use case UC.DS.15, test cases TC.DS.48 onwards. WPF only.
 
 | Existing | Amended by | Change |
 |---|---|---|
 | FR.6.16 "Focus follows the session shown in the Session view" (Focus shows the items of the session the Session view shows; a switch of session re-targets Focus) | FR.6.25 | When Focus is tabbed with the Session view and selected, a switch to a session with **no open Focus items** also selects the Session view's tab, instead of leaving an empty Focus in front. |
 | FR.23.16 Live updates (Focus and the badge refresh for the session shown) | FR.6.25 | Items are read for the new session as before; this rule only reads the result **once, after the load**, and never reacts to later changes. |
 
-**FR.6.25 — Back to the Session view when the shown session has no open Focus items.** *Status: Draft, awaiting the Architect (A39).*
+**FR.6.25 — Back to the Session view when the shown session has no open Focus items.** *Status: Approved by the Architect 2026-11-21 (A39).*
 1. **When.** Only right after the user **switches sessions**: the Session view shows another session, by any route (tree, Recent, Tags, the Recent drop-down, a session reference, ...). The check runs once the new session's Focus items have **loaded**. While they are still loading nothing happens; if the load **fails**, nothing happens. It does **not** run when the user answers, dismisses or closes the last open item while reading Focus, nor when items change later (FR.23.16): the user stays where they are.
 2. **Where.** Only when Focus is **tabbed with the Session view in the session area** (the document pane: the old full-size Focus, FR.29.19, FR.6.16) and Focus is the **selected** tab there. Focus as a side panel, floating or auto-hidden: nothing happens (the Session view is visible beside it).
 3. **No open items.** The Focus badge count (FR.23.13) is **0**: the number of open items whose kind is not `Decided`. A session whose only open items are `Decided` therefore counts as having none and triggers the switch, although Focus would list them under Decisions. Closed items do not count.
