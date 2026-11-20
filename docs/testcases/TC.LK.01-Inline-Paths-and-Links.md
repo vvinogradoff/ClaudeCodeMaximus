@@ -60,18 +60,18 @@ Related requirements: FR.26.5, FR.26.6. Use cases: [UC.LK.01](/docs/usecases/UC.
 | TC.LK.52 | Text selection and copy work on the rendered page; the pane has no Ctrl+wheel zoom | MANUAL | UC.LK.08 | FR.26.8 |
 | TC.LK.53 | The page is isolated from the preview page itself: the HTML cannot reach the pane's own script or host messages | AUTOMATED (policy/markup), E2E | UC.LK.08 | FR.26.8 |
 | TC.LK.54 | Open in default app is offered for .html and .htm but still refused for scripts and executables (.js, .ps1, .bat, .exe) and svg | AUTOMATED | UC.LK.08 | FR.26.8 |
-| TC.LK.55 | Transcript link with Ctrl+Shift+click: the page posts `link` with the modifier; the host calls the system launcher and not the router, with the Monitor toggle on and a group that matches the URL | AUTOMATED (page script), E2E (launcher seam) | UC.LK.09 | FR.26.9, FR.26.6, FR.29.4 |
+| TC.LK.55 | Transcript link with Ctrl+Shift+click (Ctrl+click alone stays the routed open): the page posts `link` with the modifier; the host calls the system launcher and not the router, with the Monitor toggle on and a group that matches the URL | AUTOMATED (page script), E2E (launcher seam) | UC.LK.09 | FR.26.9, FR.26.6, FR.29.4 |
 | TC.LK.56 | Same as TC.LK.55 in docked mode (group panel exists): the link still goes to the system launcher, no panel content changes | E2E | UC.LK.09 | FR.26.9, FR.29.17 |
-| TC.LK.57 | Link in a Focus card with Ctrl+Shift+click: system launcher, not the router; an open preview window keeps its content | E2E | UC.LK.09 | FR.26.9, FR.23.25 |
-| TC.LK.58 | Focus url reference with Ctrl+Shift+click: system launcher, not the router; no preview opens | E2E | UC.LK.09 | FR.26.9, FR.23.18 |
-| TC.LK.59 | Session tag chip with Ctrl+Shift+click: system launcher, not the router; `SessionTagUrlPolicy` still checked first (a non-Linear, non-GitHub URL does not open) | AUTOMATED, E2E | UC.LK.09 | FR.26.9, FR.24.7 |
-| TC.LK.60 | Plain behaviour unchanged: transcript plain click posts nothing and Ctrl+click is routed; Focus card link, url reference and chip plain click are routed (matching group) | AUTOMATED, E2E | UC.LK.09 | FR.26.9, FR.26.6, FR.29.4 |
+| TC.LK.57 | Link in a Focus card with Ctrl+click: system launcher, not the router; an open preview window keeps its content | E2E | UC.LK.09 | FR.26.9, FR.23.25 |
+| TC.LK.58 | Focus url reference with Ctrl+click: system launcher, not the router; no preview opens | E2E | UC.LK.09 | FR.26.9, FR.23.18 |
+| TC.LK.59 | Session tag chip with Ctrl+click: system launcher, not the router; `SessionTagUrlPolicy` still checked first (a non-Linear, non-GitHub URL does not open) | AUTOMATED, E2E | UC.LK.09 | FR.26.9, FR.24.7 |
+| TC.LK.60 | Normal behaviour unchanged: transcript plain click posts nothing and Ctrl+click is routed; Focus card link, url reference and chip plain click are routed (matching group); Ctrl+Shift+click in Focus or on a chip is not the forced gesture (no system launch beyond the routed fallback) | AUTOMATED, E2E | UC.LK.09 | FR.26.9, FR.26.6, FR.29.4 |
 | TC.LK.61 | Right-click on a transcript link shows **Open in system browser** (not for a non-link, not for a blocked link); choosing it uses the system launcher; the Copy entries on selected text are unchanged | AUTOMATED (page script), E2E | UC.LK.09 | FR.26.9 |
 | TC.LK.62 | Right-click on a Focus card link and on a Focus url reference shows **Open in system browser** and it uses the system launcher | E2E | UC.LK.09 | FR.26.9 |
 | TC.LK.63 | The chip menu entry **Open in browser** is not routed: with a matching group and the mode on it opens the system browser, no preview window | AUTOMATED, E2E | UC.LK.09 | FR.26.9, FR.24.7, FR.29.4 |
 | TC.LK.64 | A refused scheme (`javascript:`, `file:`, `mailto:`) with the gesture or the menu entry is refused and logged; nothing launches | AUTOMATED | UC.LK.09 | FR.26.9, FR.27 |
-| TC.LK.65 | A local file path with Ctrl+Shift+click does nothing, as before; Ctrl+click still previews it; the system launcher is never called for a path | AUTOMATED, E2E | UC.LK.09 | FR.26.9, FR.26.6 |
-| TC.LK.66 | Tooltips of Focus card links, Focus url references and chips mention "Ctrl+Shift+click: open in the system browser" | AUTOMATED | UC.LK.09 | FR.26.9 |
+| TC.LK.65 | A local file path: in the transcript Ctrl+Shift+click does nothing, as before; in Focus card text Ctrl+click still previews it (FR.23.30), never forcing the system; Ctrl+click in the transcript still previews it; the system launcher is never called for a path | AUTOMATED, E2E | UC.LK.09 | FR.26.9, FR.26.6 |
+| TC.LK.66 | Tooltips of Focus card links, Focus url references and chips mention "Ctrl+click: open in the system browser"; the transcript's context menu entry shows the Ctrl+Shift+click hint | AUTOMATED | UC.LK.09 | FR.26.9 |
 | TC.LK.67 | Real system browser opens for a Slack, a Linear and a GitHub URL with the Monitor toggle on and the preview window failing to show | MANUAL | UC.LK.09 | FR.26.9 |
 
 ## FR → TC coverage
