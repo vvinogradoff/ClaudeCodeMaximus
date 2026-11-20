@@ -56,9 +56,10 @@ Related requirements: FR.26.5, FR.26.6. Use cases: [UC.LK.01](/docs/usecases/UC.
 | TC.LK.48 | The default Preview panel, a docked group panel and a preview window each render the page and show the Source button (title-bar icon in the window) | E2E | UC.LK.08 | FR.26.8, FR.29.14, FR.29.18 |
 | TC.LK.49 | Switching Tessyn's light/dark theme does not recolour the page (a page without a background stays white); the pane around it follows the theme | MANUAL (look; E2E not built) | UC.LK.08 | FR.26.8 |
 | TC.LK.50 | Access checks as for other files: `file.preview` refuses a path not in the entry and a FileAccess-denied path; a refusal shows the dismissible message | AUTOMATED | UC.LK.08 | FR.26.8, FR.26.5 |
-| TC.LK.51 | Relative css or images next to the file are not loaded; **Open in default app** is offered for the page | E2E (not built, see report) | UC.LK.08 | FR.26.8 |
-| TC.LK.52 | Text selection and copy work on the rendered page; Ctrl+wheel zooms it as the pane does today | MANUAL (the page has no Ctrl+wheel zoom today) | UC.LK.08 | FR.26.8 |
+| TC.LK.51 | Relative css or images next to the file are not loaded; **Open in default app** is offered for the page and opens the cache copy in the default app | E2E (launcher seam, no real browser) | UC.LK.08 | FR.26.8 |
+| TC.LK.52 | Text selection and copy work on the rendered page; the pane has no Ctrl+wheel zoom | MANUAL | UC.LK.08 | FR.26.8 |
 | TC.LK.53 | The page is isolated from the preview page itself: the HTML cannot reach the pane's own script or host messages | AUTOMATED (policy/markup), E2E | UC.LK.08 | FR.26.8 |
+| TC.LK.54 | Open in default app is offered for .html and .htm but still refused for scripts and executables (.js, .ps1, .bat, .exe) and svg | AUTOMATED | UC.LK.08 | FR.26.8 |
 
 ## FR → TC coverage
 | FR | Test cases |
@@ -66,4 +67,4 @@ Related requirements: FR.26.5, FR.26.6. Use cases: [UC.LK.01](/docs/usecases/UC.
 | FR.26.5 | TC.LK.01–02, 03, 07–15, 17 |
 | FR.26.6 | TC.LK.03–07, 11, 16, 18–25, 30 |
 | FR.26.7 | TC.LK.26–35 |
-| FR.26.8 | TC.LK.36–53 |
+| FR.26.8 | TC.LK.36–54 |

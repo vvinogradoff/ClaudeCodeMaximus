@@ -132,10 +132,13 @@ public static partial class Constants
 			".diff", ".patch",
 		};
 
-		/// <summary>The only types that may be opened in the default app: documents and media. Executables and scripts never leave the preview.</summary>
+		/// <summary>
+		/// The only types that may be opened in the default app: documents, media and html pages (decision A33: the page's scripts run in the
+		/// default browser). Executables and scripts never leave the preview.
+		/// </summary>
 		public static readonly IReadOnlySet<string> ExternallyOpenable = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 		{
-			".md", ".markdown", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".mkv", ".avi", ".wmv", ".pdf",
+			".md", ".markdown", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".mp4", ".webm", ".mov", ".m4v", ".ogv", ".mkv", ".avi", ".wmv", ".pdf", ".html", ".htm",
 		};
 
 		/// <summary>Remote media links by extension (FR.26.4); svg is left out on purpose.</summary>
