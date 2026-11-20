@@ -60,7 +60,10 @@ public sealed class ServiceRegistration
 		services.AddSingleton<BrowserAddressInput>();
 		// The concrete system launcher stays resolvable: the browser bar's "Open in system browser" must never route back into a preview window.
 		// IUrlLauncher is the routing decorator (FR.29.4): one per app, over the one router; the router itself does not depend on IUrlLauncher, so there is no cycle.
-		services.AddSingleton<SystemUrlLauncher>();
+		// A test window never starts a browser: the launcher only logs the address.
+		services.AddSingleton(sp => new SystemUrlLauncher(sp.GetRequiredService<UrlPolicy>(), sp.GetRequiredService<ILogger<SystemUrlLauncher>>(), options.TestWindow));
+		// FR.26.9: the forced opens (Ctrl+click, "Open in system browser", the chips' "Open in browser") use this one, never the routing decorator.
+		services.AddSingleton<ISystemUrlLauncher>(sp => sp.GetRequiredService<SystemUrlLauncher>());
 		services.AddSingleton<IUrlLauncher>(sp => new PreviewRoutingUrlLauncher(sp.GetRequiredService<IPreviewRouter>(), sp.GetRequiredService<SystemUrlLauncher>(), sp.GetRequiredService<UrlPolicy>()));
 		RegisterPreviewWindows(services, options);
 		services.AddSingleton<IClipboardWriter, SystemClipboardWriter>();
@@ -103,7 +106,8 @@ public sealed class ServiceRegistration
 				sp.GetRequiredService<ExternalOpenPolicy>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<IUrlLauncher>(),
 				sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FilePreviewViewModel>>(), sp.GetRequiredService<IVideoThumbnailService>()),
 			sp.GetRequiredService<MediaPreviewPolicy>(),
-			sp.GetRequiredService<IClientStateStore>())
+			sp.GetRequiredService<IClientStateStore>(),
+			sp.GetRequiredService<ISystemUrlLauncher>())
 		{
 			TestDropPaths = options.TestDropPaths,
 			PreviewRouter = sp.GetRequiredService<IPreviewRouter>(),

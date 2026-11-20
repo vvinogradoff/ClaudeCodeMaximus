@@ -50,6 +50,16 @@ public partial class FocusPanel : UserControl, IPanelSelectionAware
 		box.Height = Math.Clamp(current + delta, MinReplyHeight, MaxReplyHeight);
 	}
 
+	/// <summary>FR.26.9: Ctrl+click on a url reference opens the system browser and takes the press, so the routed open does not run.</summary>
+	private void OnRefDown(object sender, MouseButtonEventArgs e)
+	{
+		if (sender is FrameworkElement { DataContext: FocusRefViewModel reference } && TryOpenRefInSystemBrowser(reference, Keyboard.Modifiers))
+			e.Handled = true;
+	}
+
+	/// <summary>The press on a reference with <paramref name="modifiers"/>: Ctrl opens a url reference in the system browser (true); anything else is the normal click (false).</summary>
+	public bool TryOpenRefInSystemBrowser(FocusRefViewModel reference, ModifierKeys modifiers) => new SystemBrowserGesture().TryRun(reference.OpenInSystemBrowserCommand, modifiers);
+
 	/// <summary>
 	/// A closed card's text is selectable (FR.23.25), which takes the mouse for selecting, so showing or hiding the body is a click detected here: a single
 	/// press and release over the card's header (the chip row, or the id-and-title paragraph) without dragging (a drag is a selection and must not toggle).

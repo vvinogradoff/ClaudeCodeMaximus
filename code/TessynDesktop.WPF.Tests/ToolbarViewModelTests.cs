@@ -419,7 +419,7 @@ public sealed class ToolbarViewModelTests
 	}
 
 	[Fact]
-	public async Task LocalTools_TickingAToolStoresTheSelectionAndKeepsThePopupOpen()
+	public async Task LocalTools_TickingAToolStoresTheSelectionAndDoesNotFlipTheMasterSwitch()
 	{
 		StatefulOptions();
 		_client.LocalToolsGetHandler = _ => Profile();
@@ -430,13 +430,10 @@ public sealed class ToolbarViewModelTests
 			return new LocalToolsDto(enabled, tools, cmx, servers, ["Read", "Write", "Bash"], []);
 		};
 		using var pane = await OpenedAsync();
-		pane.LocalTools.TogglePopupCommand.Execute(null);
-
 		pane.LocalTools.NativeTools.Single(t => t.Id == "Bash").IsChecked = true;
 		await pane.LocalTools.Idle;
 
 		Assert.Equal(["Read", "Bash"], sentTools);
-		Assert.True(pane.LocalTools.IsPopupOpen);
 		Assert.True(pane.LocalTools.IsEnabled);   // the checklist never flips the master switch
 	}
 
@@ -455,17 +452,18 @@ public sealed class ToolbarViewModelTests
 	}
 
 	[Fact]
-	public async Task LocalTools_PopupClosesWhenASessionOpens()
+	public async Task LocalTools_TellsTheViewsToCloseTheirPopupsWhenASessionOpens()
 	{
 		StatefulOptions();
 		_client.LocalToolsGetHandler = _ => Profile();
 		using var pane = await OpenedAsync();
-		pane.LocalTools.TogglePopupCommand.Execute(null);
+		var opened = 0;
+		pane.LocalTools.Opened += (_, _) => opened++;
 		_client.Sessions["b"] = FakeSession.WithEntries(2);
 
 		await pane.OpenAsync("b");
 
-		Assert.False(pane.LocalTools.IsPopupOpen);
+		Assert.Equal(1, opened);   // every view closes its own popup on this
 	}
 
 	// ---- review fixes (W4 review, findings 2 to 6) ----

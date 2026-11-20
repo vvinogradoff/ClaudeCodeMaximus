@@ -261,6 +261,16 @@ public partial class SessionTagArea : UserControl
 
 	// ---- mouse and keyboard ----
 
+	/// <summary>FR.26.9: Ctrl+click on a chip opens its link in the system browser and takes the press, so the routed open does not run.</summary>
+	private void OnChipDown(object sender, MouseButtonEventArgs e)
+	{
+		if (sender is FrameworkElement { DataContext: SessionTagViewModel tag } && TryOpenInSystemBrowser(tag, Keyboard.Modifiers))
+			e.Handled = true;
+	}
+
+	/// <summary>The press on a chip with <paramref name="modifiers"/>: Ctrl opens it in the system browser (true); anything else is the normal click (false).</summary>
+	public bool TryOpenInSystemBrowser(SessionTagViewModel tag, ModifierKeys modifiers) => new SystemBrowserGesture().TryRun(tag.OpenInSystemBrowserCommand, modifiers);
+
 	protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
 	{
 		base.OnPreviewMouseLeftButtonDown(e);

@@ -23,7 +23,7 @@
                 </Style>
             </Button.Style>
         </Button>
-        <Popup IsOpen="{Binding IsPopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=ToolsButton}" Placement="Top" StaysOpen="False" AllowsTransparency="True">
+        <Popup x:Name="Checklist" Closed="OnChecklistClosed" PlacementTarget="{Binding ElementName=ToolsButton}" Placement="Top" StaysOpen="False" AllowsTransparency="True">
             <Border Padding="10" CornerRadius="6" BorderThickness="1" MaxHeight="360"
                     Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">

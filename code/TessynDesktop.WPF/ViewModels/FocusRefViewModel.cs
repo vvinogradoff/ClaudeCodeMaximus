@@ -12,17 +12,19 @@ public sealed partial class FocusRefViewModel
 	public const string UrlKind = "url";
 
 	private readonly Action<FocusRefViewModel> _activate;
+	private readonly Action<FocusRefViewModel>? _activateSystem;
 
-	public FocusRefViewModel(AttentionRefDto reference, Action<FocusRefViewModel> activate)
+	public FocusRefViewModel(AttentionRefDto reference, Action<FocusRefViewModel> activate, Action<FocusRefViewModel>? activateSystem = null)
 	{
 		Reference = reference;
 		_activate = activate;
+		_activateSystem = activateSystem;
 		Label = LabelOf(reference);
 		ToolTip = reference.Kind switch
 		{
 			EntryKind => "Jump to this place in the output",
 			FileKind => reference.Path ?? reference.Name ?? string.Empty,
-			UrlKind => reference.Url ?? string.Empty,
+			UrlKind => (reference.Url ?? string.Empty) + "\n" + Constants.SystemBrowser.CtrlClickLine,
 			_ => string.Empty,
 		};
 	}
@@ -35,6 +37,9 @@ public sealed partial class FocusRefViewModel
 	public string Label { get; }
 
 	public string ToolTip { get; }
+
+	/// <summary>True for a url reference: only those have the system-browser gesture and menu entry (FR.26.9).</summary>
+	public bool IsUrl => Kind == UrlKind;
 
 	/// <summary>False for a kind this client does not know (it is listed but inert).</summary>
 	public bool IsKnown => Kind is EntryKind or FileKind or UrlKind;
@@ -55,4 +60,8 @@ public sealed partial class FocusRefViewModel
 
 	[RelayCommand(CanExecute = nameof(IsKnown))]
 	private void Open() => _activate(this);
+
+	/// <summary>FR.26.9: Ctrl+click and the "Open in system browser" entry; the system launcher, never the router.</summary>
+	[RelayCommand(CanExecute = nameof(IsUrl))]
+	private void OpenInSystemBrowser() => _activateSystem?.Invoke(this);
 }

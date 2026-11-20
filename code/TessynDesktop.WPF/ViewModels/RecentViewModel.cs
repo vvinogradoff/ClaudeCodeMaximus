@@ -52,6 +52,23 @@ public sealed partial class RecentViewModel : ObservableObject, IDisposable
 	[NotifyPropertyChangedFor(nameof(HasRunningWorkers), nameof(RunningWorkersToolTip))]
 	private int _runningWorkerCount;
 
+	/// <summary>The profile of the open session (the pinned one, else its profile), as its row shows it; empty without a session or a profile (FR.1.33).</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasProfile))]
+	private string _currentProfileName = string.Empty;
+
+	/// <summary>The profile the open session is switching to (FR.1.33); empty when no switch waits.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasSwitching), nameof(SwitchingText))]
+	private string _currentSwitchingToName = string.Empty;
+
+	public bool HasProfile => CurrentProfileName.Length > 0;
+
+	public bool HasSwitching => CurrentSwitchingToName.Length > 0;
+
+	/// <summary>The cautionary "→ target" a waiting profile switch shows, as the row does.</summary>
+	public string SwitchingText => string.Format(Constants.SessionLists.SwitchingText, CurrentSwitchingToName);
+
 	public bool HasRunningWorkers => RunningWorkerCount > 0;
 
 	public string RunningWorkersToolTip => string.Format(Constants.SessionLists.RunningWorkersTip, RunningWorkerCount);

@@ -52,9 +52,6 @@ public sealed partial class LocalToolsViewModel : ObservableObject
 	private bool _isEnabled;
 
 	[ObservableProperty]
-	private bool _isPopupOpen;
-
-	[ObservableProperty]
 	[NotifyCanExecuteChangedFor(nameof(ToggleEnabledCommand))]
 	private bool _isLoaded;
 
@@ -67,6 +64,9 @@ public sealed partial class LocalToolsViewModel : ObservableObject
 		_options = options;
 		_logger = logger;
 	}
+
+	/// <summary>Raised when a session opens and the checklist data is cleared: every view showing the checklist closes it (the open state belongs to each view, FR.6.24).</summary>
+	public event EventHandler? Opened;
 
 	public ObservableCollection<LocalToolItemViewModel> NativeTools { get; } = [];
 
@@ -86,7 +86,7 @@ public sealed partial class LocalToolsViewModel : ObservableObject
 		_directoryId = null;
 		_profile = null;
 		IsLoaded = false;
-		IsPopupOpen = false;
+		Opened?.Invoke(this, EventArgs.Empty);
 		Fill(NativeTools, []);
 		Fill(McpServers, []);
 		UpdateVisibility();
@@ -172,13 +172,6 @@ public sealed partial class LocalToolsViewModel : ObservableObject
 	/// <summary>A short click: the master switch (FR.12.23.2); stored at once.</summary>
 	[RelayCommand(CanExecute = nameof(IsLoaded))]
 	private Task ToggleEnabledAsync() => Idle = StoreAsync(!IsEnabled);
-
-	/// <summary>A held click: the checklist; clicking the button again while it is open only closes it.</summary>
-	[RelayCommand]
-	private void TogglePopup() => IsPopupOpen = !IsPopupOpen;
-
-	[RelayCommand]
-	private void ClosePopup() => IsPopupOpen = false;
 
 	private async Task StoreAsync(bool enabled)
 	{

@@ -155,7 +155,7 @@ public sealed partial class FocusItemViewModel : ObservableObject
 		{
 			Refs.Clear();
 			foreach (var reference in refs)
-				Refs.Add(new FocusRefViewModel(reference, _owner.ActivateRef));
+				Refs.Add(new FocusRefViewModel(reference, _owner.ActivateRef, _owner.ActivateRefInSystemBrowser));
 			OnPropertyChanged(nameof(HasRefs));
 		}
 	}

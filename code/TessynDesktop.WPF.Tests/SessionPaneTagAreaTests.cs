@@ -33,7 +33,7 @@ public sealed class SessionPaneTagAreaTests
 			Constants.Limits.MaxCachedTranscripts);
 		model.OpenAsync("a", "A").GetAwaiter().GetResult();
 		for (var i = 0; i < tags; i++)
-			model.Tags.Add(new SessionTagViewModel(new SessionTagDto { Kind = SessionTagKind.GitHubPullRequest, Label = "repo#" + (1000 + i), Url = "https://github.com/o/r/pull/" + i }, new FakeUrlLauncher()));
+			model.Tags.Add(new SessionTagViewModel(new SessionTagDto { Kind = SessionTagKind.GitHubPullRequest, Label = "repo#" + (1000 + i), Url = "https://github.com/o/r/pull/" + i }, new FakeUrlLauncher(), new FakeSystemUrlLauncher()));
 
 		var pane = new SessionPane { DataContext = model };
 		Settle(pane, width);

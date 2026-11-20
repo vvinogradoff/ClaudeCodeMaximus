@@ -7,6 +7,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/Icons.xaml" />
+                <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/PlainToggle.xaml" />
                 <ResourceDictionary Source="/TessynDesktop.WPF;component/Styles/KindPill.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -56,7 +57,13 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:FocusRefViewModel}">
-                            <Button Command="{Binding OpenCommand}" ToolTip="{Binding ToolTip}" Margin="0,0,6,6" Padding="8,3" AutomationProperties.Name="{Binding Label}">
+                            <Button Command="{Binding OpenCommand}" ToolTip="{Binding ToolTip}" Margin="0,0,6,6" Padding="8,3" AutomationProperties.Name="{Binding Label}"
+                                    PreviewMouseLeftButtonDown="OnRefDown" ContextMenuService.IsEnabled="{Binding IsUrl}">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Open in system browser" InputGestureText="Ctrl+click" Command="{Binding OpenInSystemBrowserCommand}" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource RefGlyph}" />
 
@@ -158,6 +165,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- The header row (FR.6.23): the session's identity (Delete, name, Running / Idle) and star on the left, "Send answers (n)" and Session at the right end. Margins and sizes are those of
@@ -168,6 +176,12 @@
             <Button DockPanel.Dock="Right" x:Name="SessionButton" Margin="8,0,0,0" Padding="10,6" VerticalAlignment="Center" Focusable="False"
                     Command="{Binding Session.BringSessionForwardCommand, ElementName=Panel}" AutomationProperties.Name="Session"
                     ToolTip="{Binding Session.Hints.SessionToolTip, ElementName=Panel}" Content="Session" />
+            <!-- The Settings toggle (FR.6.24): the gear of the Session view, the same remembered flag (CommandBarVisible); it shows and hides the settings bar of both views. Never takes the keyboard focus. -->
+            <ToggleButton DockPanel.Dock="Right" x:Name="SettingsToggle" Style="{StaticResource PlainToggle}" Margin="8,0,0,0" Padding="8,6" VerticalAlignment="Center" Focusable="False"
+                          IsChecked="{Binding Session.IsCommandBarVisible, ElementName=Panel, Mode=TwoWay}"
+                          ToolTip="Show or hide the settings bar (model, effort, profile)" AutomationProperties.Name="Settings">
+                <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphSettings}" />
+            </ToggleButton>
             <!-- "Send answers (n)" (FR.23.21 amended): same enabling rule, Ctrl+Enter in a reply box unchanged (FR.23.22). -->
             <Button DockPanel.Dock="Right" x:Name="SendAnswersButton" Command="{Binding SendAnswersCommand}" Margin="8,0,0,0" Padding="10,6" VerticalAlignment="Center"
                     Style="{DynamicResource AccentButtonStyle}" AutomationProperties.Name="Send answers"
@@ -236,5 +250,15 @@
                 </Expander>
             </StackPanel>
         </ScrollViewer>
+
+        <!-- The settings bar of the Session view (FR.6.24): the same slot, its contributions created again for this host and bound to the same session pane (one setting, two faces). -->
+        <v:SlotHost Grid.Row="3" x:Name="SettingsBar" SlotId="session.commandBar" Margin="12,0,12,8" DataContext="{Binding Session, ElementName=Panel}"
+                    Visibility="{Binding IsCommandBarVisible, Converter={StaticResource BoolToVis}}">
+            <v:SlotHost.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </v:SlotHost.ItemsPanel>
+        </v:SlotHost>
     </Grid>
 </UserControl>

@@ -41,7 +41,10 @@
   // Opening needs the plain left button with Ctrl (and no Shift/Alt); a plain click only selects, so text and images can be copied.
   function opens(ev) { return !!ev && ev.type === 'click' && ev.button === 0 && !!ev.ctrlKey && !ev.shiftKey && !ev.altKey; }
 
-  const api = { fill, slotHtml, opens, esc, leaf, isVideo };
+  // FR.26.9: Ctrl+Shift+left-click on a link sends it to the system browser (a path never uses it: opens() needs no Shift).
+  function forcesBrowser(ev) { return !!ev && ev.type === 'click' && ev.button === 0 && !!ev.ctrlKey && !!ev.shiftKey && !ev.altKey; }
+
+  const api = { fill, slotHtml, opens, forcesBrowser, esc, leaf, isVideo };
   root.PathSlots = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
