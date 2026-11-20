@@ -341,4 +341,5 @@ Why: a project rule such as CLAUDE.md's "ask in plain text" was written to avoid
 | FR.23.12 Session/Focus switch | FR.6.16 | Replaced by a Focus button in the session header that brings the Focus panel forward; Focus is a panel of the docked shell. |
 | FR.23.13 Focus badge | FR.6.16 | Shown on the Focus button and on the Focus panel's tab whenever the count is above 0. |
 | FR.23.21 Send answers (n) in the session header | FR.6.16 | Moves to the top of the Focus panel; enabling rule and Ctrl+Enter (FR.23.22) unchanged. |
+| FR.23.18 detail: Open in default app only for md, markdown, txt, images, video and pdf | FR.26.8 (A33) | html and htm are added to the allow-list (2026-11-20): the preview-cache copy opens in the default browser; executables and other scripts stay blocked. |
 | FR.23.18 preview pane: "Text, code, svg, html and scripts are shown only as text"; Source "for markdown" | FR.26.8 | html is shown rendered (static policy) with a Source toggle; svg, code and scripts stay text. Approved 2026-11-19 (A31). |
