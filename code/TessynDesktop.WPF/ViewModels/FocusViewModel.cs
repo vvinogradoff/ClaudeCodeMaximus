@@ -34,6 +34,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	private Task _refreshTask = Task.CompletedTask;
 	private bool _refreshRunning;
 	private bool _refreshPending;
+	private bool _firstLoadDue;
 
 	[ObservableProperty]
 	private string? _nodeId;
@@ -114,6 +115,12 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	/// <summary>A path written in a card's title or body was activated (FR.23.30); the owner asks the daemon to preview it.</summary>
 	public event EventHandler<FocusPathRequest>? PathActivated;
 
+	/// <summary>
+	/// Raised once after the items of a newly shown session loaded successfully (argument: its node id), with <see cref="OpenCount"/> already set (FR.6.25.1). Not raised
+	/// when that first load failed, nor for later refreshes (FR.23.16 live updates), nor when the session changed again before the load finished.
+	/// </summary>
+	public event EventHandler<string>? SessionLoaded;
+
 	public bool HasItems => Items.Count > 0;
 
 	/// <summary>A session is shown: the Focus panel shows its items; without one it shows <see cref="Constants.Texts.NoFocusSession"/>.</summary>
@@ -143,6 +150,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		SaveDrafts();
 		_token++;
 		NodeId = nodeId;
+		_firstLoadDue = true;
 		Error = null;
 		IsClosedExpanded = false;
 		IsDecisionsExpanded = false;
@@ -156,6 +164,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		SaveDrafts();
 		_token++;
 		NodeId = null;
+		_firstLoadDue = false;
 		Error = null;
 		ClearItems();
 	}
@@ -203,12 +212,20 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 				return;
 
 			Apply(id, result.Items);
+			if (_firstLoadDue)
+			{
+				_firstLoadDue = false;
+				SessionLoaded?.Invoke(this, id);
+			}
 		}
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "Loading the Focus items of {NodeId} failed", id);
 			if (token == _token)
+			{
 				Error = "Could not load the Focus items: " + ex.Message;
+				_firstLoadDue = false;   // a failed first load never switches views, and a later refresh is not a first load (FR.6.25.1)
+			}
 		}
 	}
 

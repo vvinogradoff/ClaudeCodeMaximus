@@ -56,7 +56,7 @@ Related requirements: FR.6.11–FR.6.25, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | TC.DS.48 | Focus tabbed with the Session view and selected; switching to a session with 0 open items (loaded) selects the Session view's tab | E2E | UC.DS.15 | FR.6.25.1, FR.6.25.2, FR.6.25.4 |
 | TC.DS.49 | Same setup; the new session has open items: Focus stays selected and shows them | E2E | UC.DS.15 | FR.6.25.1, FR.6.25.5 |
 | TC.DS.50 | Focus as a side panel, floating or auto-hidden: switching to a session with 0 open items changes nothing | E2E | UC.DS.15 | FR.6.25.2 |
-| TC.DS.51 | The last open item is answered, dismissed or closed while reading Focus: no switch; later item changes do not switch | E2E | UC.DS.15 | FR.6.25.1 |
+| TC.DS.51 | The last open item is answered, dismissed or closed while reading Focus: no switch; later item changes do not switch | AUTOMATED | UC.DS.15 | FR.6.25.1 |
 | TC.DS.52 | Items of the new session are still loading: no switch until loaded, then the switch happens; a failed load never switches | AUTOMATED | UC.DS.15 | FR.6.25.1 |
 | TC.DS.53 | The keyboard focus is the same control before and after the automatic switch; exactly one log line with the reason is written | E2E | UC.DS.15 | FR.6.25.4, FR.6.20 |
 | TC.DS.54 | Session view's tab selected: switching to a session with open items does not select Focus; switching back to a session without items does not re-select Focus | E2E | UC.DS.15 | FR.6.25.5 |

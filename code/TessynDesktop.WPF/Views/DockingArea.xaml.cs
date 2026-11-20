@@ -321,6 +321,15 @@ public partial class DockingArea : UserControl, IDockingSurface, IShellLayout
 		Evaluate();
 	}
 
+	public bool IsSelectedWithSessionView(string panelId)
+	{
+		if (!_panels.TryGetValue(panelId, out var panel) || !IsInLayout(panel) || panel.IsFloating || panel.IsAutoHidden || !panel.IsSelected)
+			return false;
+
+		var session = SessionDocument();
+		return session != null && panel.Parent != null && ReferenceEquals(panel.Parent, session.Parent);
+	}
+
 	public void ResetLayout()
 	{
 		if (_definitions.Count == 0)

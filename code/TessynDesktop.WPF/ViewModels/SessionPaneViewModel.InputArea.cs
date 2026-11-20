@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using TessynDesktop.WPF.Services;
 using TessynDesktop.WPF.State;
 
@@ -111,6 +112,19 @@ public sealed partial class SessionPaneViewModel
 	/// <summary>The Session button of the Focus header was pressed (FR.6.23.7): brings the Session view forward; it never moves the keyboard focus (FR.6.20).</summary>
 	[RelayCommand]
 	private void BringSessionForward() => _shellLayout?.BringForward(Constants.DockedShell.SessionPanelId);
+
+	/// <summary>
+	/// The Focus items of a newly shown session loaded (FR.6.25): when the badge count is 0 and Focus is the selected tab beside the Session view in the session area, the Session
+	/// view comes forward as the Session button does, one log line says why. The keyboard focus does not move (FR.6.20).
+	/// </summary>
+	private void OnFocusSessionLoaded(object? sender, string nodeId)
+	{
+		if (nodeId != NodeId || FocusBadge != 0 || _shellLayout is not { } layout || !layout.IsSelectedWithSessionView(Constants.DockedShell.FocusPanelId))
+			return;
+
+		_logger.LogInformation(Constants.DockedShell.FocusAutoSwitchLog, nodeId);
+		layout.BringForward(Constants.DockedShell.SessionPanelId);
+	}
 
 	/// <summary>Collapses an expanded input area and expands a collapsed one (a double click on the splitter above it, FR.12.29).</summary>
 	[RelayCommand]

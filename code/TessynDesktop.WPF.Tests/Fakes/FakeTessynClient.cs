@@ -300,13 +300,19 @@ public sealed partial class FakeTessynClient : ITessynClient
 	/// <summary>When set, <see cref="AttentionListAsync"/> throws it.</summary>
 	public Exception? AttentionListException { get; set; }
 
-	public Task<AttentionListResult> AttentionListAsync(string nodeId, CancellationToken cancellationToken = default)
+	/// <summary>Per session: <see cref="AttentionListAsync"/> waits for this source before it answers (a slow load); complete it to let the load finish.</summary>
+	public Dictionary<string, TaskCompletionSource> AttentionListGates { get; } = [];
+
+	public async Task<AttentionListResult> AttentionListAsync(string nodeId, CancellationToken cancellationToken = default)
 	{
 		Record($"attention.list:{nodeId}");
+		if (AttentionListGates.TryGetValue(nodeId, out var gate))
+			await gate.Task;
+
 		if (AttentionListException != null)
 			throw AttentionListException;
 		Attention.TryGetValue(nodeId, out var items);
-		return Task.FromResult(new AttentionListResult(nodeId, new AttentionSummaryDto(), [.. items ?? []]));
+		return new AttentionListResult(nodeId, new AttentionSummaryDto(), [.. items ?? []]);
 	}
 
 	public Task<AttentionReplyResult> AttentionReplyAsync(string nodeId, IReadOnlyList<AttentionAnswerParams> answers, string? modelId = null, string? effort = null, string? profileId = null, CancellationToken cancellationToken = default)
