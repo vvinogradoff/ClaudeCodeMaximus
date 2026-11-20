@@ -14,7 +14,7 @@ public sealed class DockingColourKeysTests
 {
 	private static ResourceDictionary Load(string mode)
 	{
-		_ = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };   // the pack: scheme the dictionary's address needs
+		_ = StaTestRunner.EnsureApplication();   // the pack: scheme the dictionary's address needs
 		return new ResourceDictionary { Source = new Uri($"/TessynDesktop.WPF;component/Styles/DockingColours.{mode}.xaml", UriKind.Relative) };
 	}
 

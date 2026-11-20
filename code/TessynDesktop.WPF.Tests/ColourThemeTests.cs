@@ -352,7 +352,7 @@ public sealed class ColourThemeTests
 
 		StaTestRunner.Run(() =>
 		{
-			var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+			var app = StaTestRunner.EnsureApplication();
 			var block = new TextBlock();
 			block.SetResourceReference(TextBlock.ForegroundProperty, "TitleBarBackgroundBrush");
 			var window = new Window { Content = block };

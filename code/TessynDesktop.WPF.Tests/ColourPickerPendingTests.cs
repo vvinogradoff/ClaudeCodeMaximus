@@ -453,7 +453,7 @@ public sealed class ColourPickerPendingTests
 
 		StaTestRunner.Run(() =>
 		{
-			var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+			var app = StaTestRunner.EnsureApplication();
 			Window? window = null;
 			try
 			{
