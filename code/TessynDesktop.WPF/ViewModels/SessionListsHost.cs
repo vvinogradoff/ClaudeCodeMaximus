@@ -25,7 +25,7 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 	private TreeNodeViewModel? _observedNode;
 	private readonly ListDisplayService? _display;
 
-	public SessionListsHost(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILoggerFactory loggers, IUrlLauncher? launcher = null, ListDisplayService? display = null)
+	public SessionListsHost(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILoggerFactory loggers, ISystemUrlLauncher? launcher = null, ListDisplayService? display = null)
 	{
 		_main = main;
 		_ui = ui;

@@ -26,6 +26,8 @@ public sealed class FakeTranscriptSurface : ITranscriptSurface
 
 	public event EventHandler<string>? LinkClicked;
 
+	public event EventHandler<string>? SystemLinkClicked;
+
 	public event EventHandler? FindRequested;
 
 	public event EventHandler<int>? FindStepRequested;
@@ -113,6 +115,8 @@ public sealed class FakeTranscriptSurface : ITranscriptSurface
 	public void RaiseExpandRequested(int index) => ExpandRequested?.Invoke(this, index);
 
 	public void RaiseLinkClicked(string url) => LinkClicked?.Invoke(this, url);
+
+	public void RaiseSystemLinkClicked(string url) => SystemLinkClicked?.Invoke(this, url);
 
 	public void RaiseFindRequested() => FindRequested?.Invoke(this, EventArgs.Empty);
 

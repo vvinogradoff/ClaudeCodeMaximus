@@ -23,6 +23,8 @@ public static partial class Constants
 		public const double CleanerWindowSize = 100;
 
 		public const string BlankUri = "about:blank";
+		/// <summary>What a test window logs instead of starting the system browser (FR.26.9, E2E).</summary>
+		public const string TestWindowOpenLog = "System browser (test window): {Url}";
 		public const string NotAllowedMessage = "Only http and https addresses can be opened here.";
 		/// <summary>Typed text that starts with one of these schemes and a colon is refused, even when it looks like a host and a port (FR.27.10).</summary>
 		public static readonly IReadOnlyList<string> RefusedSchemes =

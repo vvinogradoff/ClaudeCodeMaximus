@@ -165,9 +165,10 @@ function onLinkClick(e) {
   const a = e.target.closest && e.target.closest('a');
   if (!a) return;
   e.preventDefault();
-  if (a.classList.contains('blocked') || !PathSlots.opens(e)) return;
+  const forced = PathSlots.forcesBrowser(e);   // FR.26.9: Ctrl+Shift+click = the system browser, not the routed open
+  if (a.classList.contains('blocked') || !(PathSlots.opens(e) || forced)) return;
   const href = a.getAttribute('href') || '';
-  if (/^https?:\/\//i.test(href)) post({ ev: 'link', href: href });
+  if (/^https?:\/\//i.test(href)) post(forced ? { ev: 'link', href: href, sys: true } : { ev: 'link', href: href });
 }
 vp.addEventListener('click', onLinkClick);
 // Ctrl held: paths, images and links show the pointer cursor (they are only clickable then).

@@ -146,4 +146,13 @@ public sealed class PathSlotsScriptTests
 	[InlineData("{ type: 'click', button: 2, ctrlKey: true }", false)]
 	[InlineData("{ type: 'mousedown', button: 0, ctrlKey: true }", false)]
 	public void OnlyACtrlLeftClick_Opens(string ev, bool expected) => Assert.Equal(expected, Eval($"g.opens({ev})").GetBoolean());
+
+	[Theory]
+	[InlineData("{ type: 'click', button: 0, ctrlKey: true, shiftKey: true }", true)]     // FR.26.9: the forced system-browser gesture
+	[InlineData("{ type: 'click', button: 0, ctrlKey: true }", false)]                    // Ctrl+click alone is the routed open
+	[InlineData("{ type: 'click', button: 0, shiftKey: true }", false)]
+	[InlineData("{ type: 'click', button: 0, ctrlKey: true, shiftKey: true, altKey: true }", false)]
+	[InlineData("{ type: 'click', button: 2, ctrlKey: true, shiftKey: true }", false)]
+	[InlineData("{ type: 'auxclick', button: 1, ctrlKey: true, shiftKey: true }", false)]
+	public void OnlyACtrlShiftLeftClick_ForcesTheSystemBrowser(string ev, bool expected) => Assert.Equal(expected, Eval($"g.forcesBrowser({ev})").GetBoolean());
 }

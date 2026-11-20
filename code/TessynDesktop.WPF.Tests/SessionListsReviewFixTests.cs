@@ -599,7 +599,7 @@ public sealed class SessionListsReviewFixTests
 	[Fact]
 	public async Task Tags_OpenInBrowserOpensTheChipsLinkThroughTheLauncher()
 	{
-		var launcher = new FakeUrlLauncher();
+		var launcher = new FakeSystemUrlLauncher();
 		_client.TagsSearchHandler = (_, _) => OneChip();
 		using var tags = new TagSearchViewModel(_actions, _ui, NullLogger<TagSearchViewModel>.Instance, TimeSpan.Zero, launcher);
 		await tags.AttachAsync(_client);

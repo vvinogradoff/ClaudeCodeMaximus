@@ -25,7 +25,7 @@ public sealed partial class TagSearchViewModel : ObservableObject, IDisposable
 	private readonly ISessionListActions _actions;
 	private readonly ILogger<TagSearchViewModel> _logger;
 	private readonly TimeSpan _debounce;
-	private readonly IUrlLauncher? _launcher;
+	private readonly ISystemUrlLauncher? _launcher;
 	private readonly List<TagRefDto> _selected = [];
 	private readonly Dictionary<string, TagChipViewModel> _chipsByKey = new(StringComparer.Ordinal);
 	private readonly ListDiff _diff = new();
@@ -59,7 +59,7 @@ public sealed partial class TagSearchViewModel : ObservableObject, IDisposable
 	{
 	}
 
-	public TagSearchViewModel(ISessionListActions actions, IUiDispatcher ui, ILogger<TagSearchViewModel> logger, TimeSpan debounce, IUrlLauncher? launcher = null)
+	public TagSearchViewModel(ISessionListActions actions, IUiDispatcher ui, ILogger<TagSearchViewModel> logger, TimeSpan debounce, ISystemUrlLauncher? launcher = null)
 	{
 		_actions = actions;
 		_ui = ui;
@@ -191,7 +191,7 @@ public sealed partial class TagSearchViewModel : ObservableObject, IDisposable
 		return StartSearch(TimeSpan.Zero);
 	}
 
-	/// <summary>Opens the chip's link in the system browser (FR.24.12); nothing when the tag has no link.</summary>
+	/// <summary>Opens the chip's link in the system browser (FR.24.12), never routed to a preview (FR.26.9); nothing when the tag has no link.</summary>
 	[RelayCommand]
 	private void OpenChip(TagChipViewModel? chip)
 	{

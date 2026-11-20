@@ -14,7 +14,7 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:SessionTagViewModel}">
-                        <Button Command="{Binding OpenCommand}" Margin="0,0,6,4" Padding="8,3" ToolTip="{Binding Url}"
+                        <Button Command="{Binding OpenCommand}" Margin="0,0,6,4" Padding="8,3" ToolTip="{Binding ToolTipText}" PreviewMouseLeftButtonDown="OnChipDown"
                                 FontSize="{Binding TagFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding KindText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,6,0" />

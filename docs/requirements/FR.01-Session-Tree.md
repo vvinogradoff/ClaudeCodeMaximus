@@ -203,7 +203,7 @@ Status: **Approved by the Architect 2026-11-20 (A36).** Source: the Architect's 
 | FR.1.28 "In the closed Recent dropdown the badge is on the button, left of the chevron" | FR.1.33 | The profile name is placed left of the badge; the badge and the chevron keep their places. |
 | FR.1.20 the dropdown row shows the profile (FR.11.14) on its second line | FR.1.33 | The same profile text also shows on the closed button. |
 
-**FR.1.33 — Profile name in the closed Recent dropdown.** *Status: Approved by the Architect 2026-11-20 (A36).*
+**FR.1.33 — Profile name in the closed Recent dropdown.** *Status: Approved by the Architect 2026-11-20 (A36). Built 2026-11-20 on branch `docs/focus-settingsbar` (unit and view tests, WPF E2E `WpfFocusSettingsBarE2ETests` for TC.RD.07).*
 1. **Place.** On the closed button of the Recent dropdown (title bar, `RecentDropdown.xaml`), from the left: the open session's **name**, the **profile name**, the **active workers badge** (FR.1.28), the **chevron**. The profile name is **right of the name and left of the badge**.
 2. **Text.** The same text as the profile on the session's row in the open list (`TreeNodeViewModel.ProfileName`): the **pinned profile's name**, else the session's profile name (FR.11.14). Font size 10, **secondary text colour** (the row's profile style: `SessionRowFace.xaml`, opacity 0.7), tooltip with the full name.
 3. **Hidden** when no session is open, or the open session has no profile; it then takes no room, and the button looks as it did.

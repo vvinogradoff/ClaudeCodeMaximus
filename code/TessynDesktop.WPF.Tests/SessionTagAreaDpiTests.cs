@@ -21,7 +21,7 @@ public sealed class SessionTagAreaDpiTests
 {
 	private static SessionTagViewModel Chip(int index) =>
 		new(new SessionTagDto { Kind = index % 9 == 0 ? SessionTagKind.GitHubRepository : SessionTagKind.GitHubPullRequest, Label = (index % 9 == 0 ? "backend-v" : "backend-v1 PR #") + (100 + index), Url = "https://github.com/o/r/pull/" + index },
-			new FakeUrlLauncher());
+			new FakeUrlLauncher(), new FakeSystemUrlLauncher());
 
 	private static readonly (SessionTagKind Kind, string Label)[] RealTags =
 	[
@@ -31,7 +31,7 @@ public sealed class SessionTagAreaDpiTests
 
 	private static (SessionTagArea Area, HwndSource Source, TagAreaViewModel Model) Create(double dpi, double width, double fontSize, int tags, double lineSpacing)
 	{
-		var collection = new ObservableCollection<SessionTagViewModel>(tags == 8 ? RealTags.Select(t => new SessionTagViewModel(new SessionTagDto { Kind = t.Kind, Label = t.Label, Url = "https://example.com/" + t.Label }, new FakeUrlLauncher())) : Enumerable.Range(0, tags).Select(Chip));
+		var collection = new ObservableCollection<SessionTagViewModel>(tags == 8 ? RealTags.Select(t => new SessionTagViewModel(new SessionTagDto { Kind = t.Kind, Label = t.Label, Url = "https://example.com/" + t.Label }, new FakeUrlLauncher(), new FakeSystemUrlLauncher())) : Enumerable.Range(0, tags).Select(Chip));
 		var model = new TagAreaViewModel(collection);
 		var area = new SessionTagArea { DataContext = model, TagFontSize = fontSize };
 		LineSpacing.SetFactor(area, lineSpacing);
@@ -109,7 +109,7 @@ public sealed class SessionTagAreaDpiTests
 						Settle((FrameworkElement)VisualTreeHelper.GetParent(area));
 
 					foreach (var t in RealTags)
-						tags.Add(new SessionTagViewModel(new SessionTagDto { Kind = t.Kind, Label = t.Label, Url = "https://example.com/" + t.Label }, new FakeUrlLauncher()));
+						tags.Add(new SessionTagViewModel(new SessionTagDto { Kind = t.Kind, Label = t.Label, Url = "https://example.com/" + t.Label }, new FakeUrlLauncher(), new FakeSystemUrlLauncher()));
 
 					Settle((FrameworkElement)VisualTreeHelper.GetParent(area));
 					var panel = FindPanel(area)!;

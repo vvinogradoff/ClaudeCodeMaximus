@@ -29,6 +29,9 @@ public sealed class WpfDockingThemeE2ETests
 
 			await PreviewWindowsHarness.CtrlClickAsync(transcript, ".pth", 0);
 			await h.WaitForLogAsync(process, "the docked panel to open", "Preview panel opened: group text-code");
+			// The page must have committed and rendered before the marker is set: on a cold start (the first run after a build) the DevTools target already
+			// reports preview.html while the placeholder document is still the live one, and the marker would be set on a document the page then replaces.
+			await h.WaitForLogAsync(process, "the preview page to render", "Preview page rendered");
 			preview = await CdpPage.ConnectAsync(port, "preview.html", PreviewWindowsHarness.StartTimeout);
 			var main = h.MainWindow(process);
 			Assert.Empty(h.PreviewWindows(process));   // docked: the page is inside the main window
