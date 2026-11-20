@@ -31,6 +31,11 @@ public static partial class Constants
 		public const string WorkersNoun = "workers";
 		/// <summary>The tooltip of the active workers badge: <c>{0}</c> is the number of workers running now.</summary>
 		public const string RunningWorkersTip = "Workers running now: {0}";
+		/// <summary>The cautionary text of a waiting profile switch on the closed Recent button (FR.1.33): <c>{0}</c> is the target profile.</summary>
+		public const string SwitchingText = "→ {0}";
+		/// <summary>The profile text keeps up to this width on the closed Recent button; the session name trims first (FR.1.33).</summary>
+		public const double RecentProfileMaxWidth = 150;
+		public const double RecentSwitchingMaxWidth = 110;
 		public const string TagChipPrefix = "Tag ";
 		public const string RecentDropdownName = "Recent dropdown";
 

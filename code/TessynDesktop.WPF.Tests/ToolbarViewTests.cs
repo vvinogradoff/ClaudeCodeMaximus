@@ -130,10 +130,8 @@ public sealed class ToolbarViewTests
 			Assert.Equal(0.45, button.Opacity, 2);   // dimmed when off
 
 			// The checklist lists the tools and shows its boxes.
-			pane.LocalTools.TogglePopupCommand.Execute(null);
 			Layout(toggles);
-			Assert.Single(FindAll<Popup>(tools));   // the popup itself cannot open without a window
-			Assert.True(pane.LocalTools.IsPopupOpen);
+			Assert.Single(FindAll<Popup>(tools));   // the popup itself cannot open without a window (see the two-bar test)
 		});
 
 		Assert.Empty(listener.Messages);
@@ -174,6 +172,62 @@ public sealed class ToolbarViewTests
 				Thread.Sleep(10);
 			}
 			Assert.Equal(3, Stores());
+		});
+	}
+
+	private static void Press(Button button, bool down)
+	{
+		button.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, System.Windows.Input.MouseButton.Left)
+		{
+			RoutedEvent = down ? UIElement.PreviewMouseLeftButtonDownEvent : UIElement.PreviewMouseLeftButtonUpEvent,
+			Source = button,
+		});
+	}
+
+	/// <summary>FR.6.24: the open state of the checklist belongs to each view; the Focus bar's and the Session view's checklists open and close independently, the settings stay shared.</summary>
+	[Fact]
+	public void TheChecklistPopup_IsPerView_OpeningOneBarsDoesNotOpenTheOthers()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var client = new FakeTessynClient();
+			using var pane = Pane(client);
+			pane.SelectedModel = pane.Models.Single(m => m.Id == "llama");
+			var first = new CommandToggles { DataContext = pane };
+			var second = new CommandToggles { DataContext = pane };
+			var host = new StackPanel();
+			host.Children.Add(first);
+			host.Children.Add(second);
+			var window = new Window { Content = host, Width = 900, Height = 200, Left = -3000, Top = -3000, ShowActivated = false, ShowInTaskbar = false };
+			window.Show();
+			try
+			{
+				Layout(host);
+				var a = FindAll<LocalToolsButton>(first).Single();
+				var b = FindAll<LocalToolsButton>(second).Single();
+				var popupA = (Popup)a.FindName("Checklist");
+				var popupB = (Popup)b.FindName("Checklist");
+				var buttonA = FindAll<Button>(a).Single(t => (string?)t.Content == "Tools");
+
+				RaiseKey(buttonA, PresentationSource.FromVisual(buttonA)!, System.Windows.Input.Key.Down, down: true);   // without Alt nothing opens
+				Assert.False(popupA.IsOpen);
+
+				popupA.StaysOpen = popupB.StaysOpen = true;   // no active window in a test: a light-dismiss popup would close at once
+				popupA.IsOpen = true;
+				Assert.True(popupA.IsOpen);
+				Assert.False(popupB.IsOpen);   // the other bar's checklist stays shut
+
+				popupB.IsOpen = true;
+				Press(buttonA, down: true);   // a press on the Tools button while its checklist is open only closes that one
+				Press(buttonA, down: false);
+				Assert.False(popupA.IsOpen);
+				Assert.True(popupB.IsOpen);
+				Assert.Equal(0, client.Calls.Count(c => c.StartsWith("localTools.set:", StringComparison.Ordinal)));   // and it did not flip the switch
+			}
+			finally
+			{
+				window.Close();
+			}
 		});
 	}
 

@@ -24,18 +24,19 @@ public partial class LocalToolsButton : UserControl
 		DataContextChanged += (_, e) =>
 		{
 			if (e.OldValue is LocalToolsViewModel old)
-				old.PropertyChanged -= OnModelChanged;
+				old.Opened -= OnModelOpened;
 			if (e.NewValue is LocalToolsViewModel model)
-				model.PropertyChanged += OnModelChanged;
+				model.Opened += OnModelOpened;
 		};
 	}
 
+	/// <summary>A session opened and the checklist data is gone: this view's popup closes (the open state belongs to each view, so the other bar is untouched).</summary>
+	private void OnModelOpened(object? sender, EventArgs e) => Checklist.IsOpen = false;
+
 	/// <summary>Clicking away closes the popup on the mouse-down; when that click lands on this button it must not also flip the switch.</summary>
-	private void OnModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-	{
-		if (e.PropertyName == nameof(LocalToolsViewModel.IsPopupOpen) && Model is { IsPopupOpen: false })
-			_closedAt = DateTime.UtcNow;
-	}
+	private void OnChecklistClosed(object? sender, EventArgs e) => _closedAt = DateTime.UtcNow;
+
+	private void ToggleChecklist() => Checklist.IsOpen = !Checklist.IsOpen;
 
 	private LocalToolsViewModel? Model => DataContext as LocalToolsViewModel;
 
@@ -46,9 +47,9 @@ public partial class LocalToolsButton : UserControl
 			return;
 
 		e.Handled = true;   // the ToggleButton must not flip by itself: the view model decides
-		_swallow = model.IsPopupOpen || DateTime.UtcNow - _closedAt < TimeSpan.FromMilliseconds(250);
-		if (model.IsPopupOpen)
-			model.ClosePopupCommand.Execute(null);
+		_swallow = Checklist.IsOpen || DateTime.UtcNow - _closedAt < TimeSpan.FromMilliseconds(250);
+		if (Checklist.IsOpen)
+			Checklist.IsOpen = false;
 
 		_pressed = true;
 		ToolsButton.CaptureMouse();
@@ -59,7 +60,8 @@ public partial class LocalToolsButton : UserControl
 	private void OnHoldElapsed(object? sender, EventArgs e)
 	{
 		_hold.Stop();
-		Model?.TogglePopupCommand.Execute(null);
+		if (Model != null)
+			ToggleChecklist();
 		_swallow = true;   // the release that follows a hold is not a click
 	}
 
@@ -88,7 +90,8 @@ public partial class LocalToolsButton : UserControl
 	{
 		if (e.Key == Key.Down && Keyboard.Modifiers == ModifierKeys.Alt)
 		{
-			Model?.TogglePopupCommand.Execute(null);
+			if (Model != null)
+				ToggleChecklist();
 			e.Handled = true;
 		}
 	}

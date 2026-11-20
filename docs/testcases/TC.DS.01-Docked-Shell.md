@@ -1,6 +1,6 @@
 # TC.DS.01 — Docked Shell
 
-Related requirements: FR.6.11–FR.6.23, FR.29.19, FR.23.12, FR.23.13, FR.12.29. Use cases: [UC.DS.01](/docs/usecases/UC.DS.01-Docked-Shell.md). Status: draft, not built.
+Related requirements: FR.6.11–FR.6.24, FR.29.19, FR.23.12, FR.23.13, FR.12.29. Use cases: [UC.DS.01](/docs/usecases/UC.DS.01-Docked-Shell.md). Status: draft, not built.
 
 **Legend.** AUTOMATED = unit / STA view test; E2E = WPF end-to-end through the test hook (NR.6, FR.6.22); MANUAL = done by hand (mouse drags of tabs, the look).
 
@@ -46,6 +46,13 @@ Related requirements: FR.6.11–FR.6.23, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | TC.DS.38 | A narrow panel trims the name with an ellipsis and keeps the buttons in place; the two rows line up when Focus is docked beside the Session view (look) | MANUAL | UC.DS.13 | FR.6.23.3 |
 | TC.DS.39 | The Session button sits right of Send answers (n); with Focus tabbed over the session area a click selects the Session view's tab; with Focus floating it leaves the Session view shown; it never takes the keyboard focus | E2E | UC.DS.13 | FR.6.23.7 |
 | TC.DS.40 | Ctrl+1 brings the Session view forward and Ctrl+2 the Focus panel, from the composer, the Sessions panel and a floating Focus; Settings → Keyboard shortcuts lists Session and Focus with these defaults, and a changed key works and shows in the buttons' tooltips | AUTOMATED (commands, defaults, tooltips) + MANUAL (real key presses) | UC.DS.13 | FR.6.23.8 |
+| TC.DS.41 | The Focus panel shows the settings bar at its bottom: the same controls as the Session view's bar (model, effort, profile, streaming, sound), in the same order; a control contributed to `session.commandBar` appears in both | AUTOMATED (slot contents) + E2E | UC.DS.14 | FR.6.24.1 |
+| TC.DS.42 | A pick in one bar (model, effort, profile, a toggle) shows in the other bar at once, and Send answers / a Focus reply then use it | E2E | UC.DS.14 | FR.6.24.2, FR.6.16 |
+| TC.DS.43 | The Settings toggle sits between Send answers (n) and Session, has the composer's gear, tooltip and automation name "Settings", and shows or hides both bars (shared flag); it is shown also with no session | E2E | UC.DS.14 | FR.6.24.3, FR.6.24.5 |
+| TC.DS.44 | One shared flag (`CommandBarVisible`): toggling in Focus hides or shows both bars, and toggling the composer's gear does the same; both toggles always show the same checked state; the state survives a restart; no new setting is written | E2E | UC.DS.14 | FR.6.24.4 |
+| TC.DS.45 | No session shown: the bar is shown as the Session view's bar is without a session | E2E | UC.DS.14 | FR.6.24.5 |
+| TC.DS.46 | The bar works with Focus floating, tabbed beside or over the Session view and in the slide-out; neither the toggle nor the panel takes the keyboard focus except by a click | E2E | UC.DS.14 | FR.6.24.6, FR.6.20 |
+| TC.DS.47 | A narrow panel wraps the bar's controls; the cards area stretches and scrolls above it; the header buttons keep their places (look) | MANUAL | UC.DS.14 | FR.6.24.7 |
 
 ## FR → TC coverage
 | FR | Test cases |
@@ -63,3 +70,4 @@ Related requirements: FR.6.11–FR.6.23, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | FR.6.21 | TC.DS.23, 24 |
 | FR.6.22 | TC.DS.07, 25 |
 | FR.6.23 | TC.DS.27–40 |
+| FR.6.24 | TC.DS.41–47 |

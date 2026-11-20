@@ -149,7 +149,11 @@ public sealed class ShellSlotViewTests
 		var catalog = File.ReadAllText(Path.Combine(FindViews(), "ShellPanelCatalog.cs"));
 		Assert.Contains(nameof(Constants.Slots.LeftPanelTabs), catalog);   // FR.6.11: the left-panel slot is hosted by the docking area's panel catalog (Recent and Tags are panels), no longer by XAML
 		foreach (var id in ids.Where(i => i != Constants.Slots.LeftPanelTabs))
-			Assert.True(xaml.Split($"SlotId=\"{id}\"").Length == 2, $"The slot '{id}' must be hosted exactly once in the XAML");
+		{
+			// FR.6.24: the settings bar slot is hosted twice, in the Session view and at the bottom of the Focus panel; every other slot once.
+			var hosts = id == Constants.Slots.CommandBar ? 2 : 1;
+			Assert.True(xaml.Split($"SlotId=\"{id}\"").Length == hosts + 1, $"The slot '{id}' must be hosted exactly {hosts} time(s) in the XAML");
+		}
 
 		Assert.Contains($"CommandMenu.Menu=\"{Constants.Menus.TreeNode}\"", xaml);
 	}

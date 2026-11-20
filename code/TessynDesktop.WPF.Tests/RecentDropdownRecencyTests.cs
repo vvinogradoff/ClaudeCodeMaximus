@@ -258,6 +258,236 @@ public sealed class RecentDropdownRecencyTests : IDisposable
 		});
 	}
 
+	// ---- FR.1.33 / UC.RD.03 / TC.RD.07 to TC.RD.11: the profile name on the closed button ----
+
+	private void Changed(string id, string? profile, string? pinned = null, string? switching = null)
+	{
+		var now = DateTimeOffset.UtcNow;
+		_client.RaiseNotification("session.changed", new SessionChangedPayload(new SessionStateDto(id, false, false, null, false, now, now, false, profile, PinnedProfileName: pinned, SwitchingToProfileName: switching)));
+	}
+
+	private static TextBlock ProfileOf(RecentDropdown dropdown) => (TextBlock)dropdown.FindName("ProfileLabel")!;
+
+	private static TextBlock SwitchingOf(RecentDropdown dropdown) => (TextBlock)dropdown.FindName("SwitchingLabel")!;
+
+	private static TextBlock NameOf(RecentDropdown dropdown) => (TextBlock)dropdown.FindName("Label")!;
+
+	private static void LayoutAt(RecentDropdown dropdown, double width)
+	{
+		dropdown.Measure(new Size(width, 40));
+		dropdown.Arrange(new Rect(0, 0, width, 40));
+		dropdown.UpdateLayout();
+	}
+
+	[Fact]
+	public void TheClosedButton_ShowsTheProfileBetweenTheNameAndTheBadge_PinnedElseProfile_HiddenWithoutOne()   // TC.RD.07, TC.RD.08
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			Layout(dropdown);
+			var badge = (Border)dropdown.FindName("WorkersBadge")!;
+			Assert.Equal(Visibility.Collapsed, ProfileOf(dropdown).Visibility);   // no profile on the open session
+
+			Changed("fresh", "Work");
+			dropdown.UpdateLayout();
+			var profile = ProfileOf(dropdown);
+			Assert.Equal(Visibility.Visible, profile.Visibility);
+			Assert.Equal("Work", profile.Text);
+			Assert.Equal("Work", profile.ToolTip);
+			Assert.Equal(10, profile.FontSize);   // the row's secondary style (SessionRowFace)
+			Assert.True(profile.Opacity < 1);
+
+			Changed("fresh", "Work", pinned: "Personal");   // the pinned profile wins, as in the row
+			dropdown.UpdateLayout();
+			Assert.Equal("Personal", profile.Text);
+
+			// from the left: the name, the profile, the badge
+			var now = DateTimeOffset.UtcNow;
+			_client.RaiseNotification("session.changed", new SessionChangedPayload(new SessionStateDto("fresh", false, false, null, false, now, now, false, "Work", PinnedProfileName: "Personal", RunningWorkerCount: 2)));
+			dropdown.UpdateLayout();
+			Assert.Equal(Visibility.Visible, badge.Visibility);
+			Assert.True(profile.TranslatePoint(default, dropdown).X > NameOf(dropdown).TranslatePoint(default, dropdown).X);
+			Assert.True(badge.TranslatePoint(default, dropdown).X > profile.TranslatePoint(default, dropdown).X);
+
+			_main.Session!.Close();   // no session: no profile
+			dropdown.UpdateLayout();
+			Assert.Equal(Visibility.Collapsed, profile.Visibility);
+			Assert.Equal(string.Empty, _host.Recent.CurrentProfileName);
+		});
+	}
+
+	[Fact]
+	public void AWaitingSwitch_ShowsTheCautionaryArrowAndTarget_AndLeavesWhenTheSwitchIsDone()   // TC.RD.09
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			Layout(dropdown);
+			Changed("fresh", "Work");
+			dropdown.UpdateLayout();
+			Assert.Equal(Visibility.Collapsed, SwitchingOf(dropdown).Visibility);
+
+			Changed("fresh", "Work", switching: "Personal");
+			dropdown.UpdateLayout();
+			var target = SwitchingOf(dropdown);
+			Assert.Equal(Visibility.Visible, target.Visibility);
+			Assert.Equal("→ Personal", target.Text);
+			Assert.Equal("Work", ProfileOf(dropdown).Text);   // the current profile stays
+			Assert.True(target.TranslatePoint(default, dropdown).X > ProfileOf(dropdown).TranslatePoint(default, dropdown).X);
+
+			Changed("fresh", "Personal");
+			dropdown.UpdateLayout();
+			Assert.Equal(Visibility.Collapsed, SwitchingOf(dropdown).Visibility);
+			Assert.Equal("Personal", ProfileOf(dropdown).Text);
+		});
+	}
+
+	[Fact]
+	public void InANarrowTitleBar_TheNameTrimsFirst_AndTheProfileKeepsItsWidthUpTo150()   // TC.RD.10
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			Changed("fresh", "Work profile");
+			LayoutAt(dropdown, 700);
+			var profile = ProfileOf(dropdown);
+			var name = NameOf(dropdown);
+			var wideProfile = profile.ActualWidth;
+			var wideName = name.ActualWidth;
+			Assert.True(wideProfile > 0);
+
+			LayoutAt(dropdown, wideProfile + 110);
+			Assert.Equal(wideProfile, profile.ActualWidth, 0.5);   // the profile keeps its width
+			Assert.True(name.ActualWidth < wideName, "the name trims");
+
+			Changed("fresh", new string('P', 80));   // a very long profile: 150 px at most
+			LayoutAt(dropdown, 700);
+			Assert.InRange(profile.ActualWidth, 1, 150.5);
+			LayoutAt(dropdown, 260);
+			Assert.InRange(profile.ActualWidth, 1, 150.5);
+			Assert.Equal(new string('P', 80), profile.ToolTip);   // the full name is the tooltip
+		});
+	}
+
+	/// <summary>FR.1.33 item 5 at every width: the badge and the chevron keep their size and their distance from the right edge; the name trims first, then the target, then the profile.</summary>
+	[Theory]
+	[InlineData(600)]
+	[InlineData(330)]
+	[InlineData(250)]
+	[InlineData(180)]
+	[InlineData(120)]
+	public void AtNarrowWidths_BadgeAndChevronStay_AndTheNameTrimsBeforeTheTargetBeforeTheProfile(double width)   // TC.RD.10
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			var now = DateTimeOffset.UtcNow;
+			var profileText = new string('P', 80);
+			_client.RaiseNotification("session.changed", new SessionChangedPayload(new SessionStateDto("fresh", false, false, null, false, now, now, false, profileText, SwitchingToProfileName: new string('Q', 12), RunningWorkerCount: 4)));
+			var badge = (Border)dropdown.FindName("WorkersBadge")!;
+			var chevron = (TextBlock)dropdown.FindName("Chevron")!;
+			var profile = ProfileOf(dropdown);
+			var target = SwitchingOf(dropdown);
+			var name = NameOf(dropdown);
+
+			LayoutAt(dropdown, 700);   // the reference: nothing is trimmed
+			var badgeWidth = badge.ActualWidth;
+			var chevronWidth = chevron.ActualWidth;
+			var fullName = name.ActualWidth;
+			var fullProfileSlot = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(profile).Width;
+			var fullTargetSlot = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(target).Width;
+			var badgeFromRight = 700 - (badge.TranslatePoint(default, dropdown).X + badge.ActualWidth);
+			var chevronFromRight = 700 - (chevron.TranslatePoint(default, dropdown).X + chevron.ActualWidth);
+			Assert.True(badgeWidth > 0 && chevronWidth > 0);
+
+			LayoutAt(dropdown, width);
+			Assert.Equal(badgeWidth, badge.ActualWidth, 0.5);
+			Assert.Equal(chevronWidth, chevron.ActualWidth, 0.5);
+			Assert.Equal(badgeFromRight, width - (badge.TranslatePoint(default, dropdown).X + badge.ActualWidth), 0.5);
+			Assert.Equal(chevronFromRight, width - (chevron.TranslatePoint(default, dropdown).X + chevron.ActualWidth), 0.5);
+			Assert.True(badge.TranslatePoint(default, dropdown).X >= 0);
+
+			// A trimmed text still reports the width of its ellipsis but is clipped to its layout slot, so the slots tell what each one was given.
+			double Slot(FrameworkElement e) => System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(e).Width;
+			if (Slot(profile) < fullProfileSlot - 0.5)
+				Assert.True(Slot(target) <= target.Margin.Left + 0.5 && Slot(name) <= 0.5, $"the profile trims only after the target and the name are gone: name={Slot(name)} target={Slot(target)} profile={Slot(profile)}/{fullProfileSlot}");
+			if (Slot(target) < fullTargetSlot - 0.5)
+				Assert.True(Slot(name) <= 0.5, $"the target trims only after the name is gone: name={Slot(name)} target={Slot(target)}/{fullTargetSlot}");
+			if (width >= 330)
+				Assert.True(Slot(profile) >= fullProfileSlot - 0.5, "the profile is whole down to 330 px");   // the name and the target go first
+			if (width >= 600)
+				Assert.True(name.ActualWidth >= fullName - 0.5 && Slot(target) >= fullTargetSlot - 0.5, "nothing is trimmed at 600 px");
+		});
+	}
+
+	[Fact]
+	public void TheProfileText_HasAnAutomationName()   // FR.1.33 item 2
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			Changed("fresh", "Work profile");
+			LayoutAt(dropdown, 600);
+			Assert.Equal("Work profile", System.Windows.Automation.AutomationProperties.GetName(ProfileOf(dropdown)));
+		});
+	}
+
+	[Fact]
+	public void TheBadgeAndTheChevron_KeepTheirPlaces_WhateverTheProfile()   // TC.RD.10
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			var now = DateTimeOffset.UtcNow;
+			_client.RaiseNotification("session.changed", new SessionChangedPayload(new SessionStateDto("fresh", false, false, null, false, now, now, false, null, RunningWorkerCount: 4)));
+			LayoutAt(dropdown, 440);
+			var badge = (Border)dropdown.FindName("WorkersBadge")!;
+			var before = badge.TranslatePoint(default, dropdown).X + badge.ActualWidth;
+
+			_client.RaiseNotification("session.changed", new SessionChangedPayload(new SessionStateDto("fresh", false, false, null, false, now, now, false, new string('P', 80), SwitchingToProfileName: new string('Q', 40), RunningWorkerCount: 4)));
+			LayoutAt(dropdown, 440);
+			var after = badge.TranslatePoint(default, dropdown).X + badge.ActualWidth;
+
+			Assert.Equal(Visibility.Visible, badge.Visibility);
+			Assert.Equal(before, after, 0.5);   // the chevron's left edge stays: the badge sits right before it
+			Assert.True(badge.TranslatePoint(default, dropdown).X + badge.ActualWidth <= dropdown.ActualWidth);
+		});
+	}
+
+	[Fact]
+	public void TheProfile_FollowsTheOpenSession_AndItsLiveChanges()   // TC.RD.11
+	{
+		_main.Tree!.SelectNodeById("fresh");
+		StaTestRunner.Run(() =>
+		{
+			var dropdown = new RecentDropdown { DataContext = _host.Recent };
+			Layout(dropdown);
+			Changed("fresh", "Work");
+			Changed("quiet", "Home");
+			dropdown.UpdateLayout();
+			Assert.Equal("Work", ProfileOf(dropdown).Text);
+
+			_main.Tree.SelectNodeById("quiet");   // another session opens: its profile
+			dropdown.UpdateLayout();
+			Assert.Equal("Home", ProfileOf(dropdown).Text);
+
+			Changed("quiet", "Home", pinned: "Work");   // a live change of the open session
+			dropdown.UpdateLayout();
+			Assert.Equal("Work", ProfileOf(dropdown).Text);
+
+			Changed("fresh", "Elsewhere");   // another session changing does not touch the button
+			dropdown.UpdateLayout();
+			Assert.Equal("Work", ProfileOf(dropdown).Text);
+		});
+	}
+
 	private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
 	{
 		for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)

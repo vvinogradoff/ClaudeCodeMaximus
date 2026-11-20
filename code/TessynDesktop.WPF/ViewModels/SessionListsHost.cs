@@ -107,6 +107,8 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 		var node = _observed is { NodeId: { } id } ? _tree?.FindNode(id) : null;
 		Recent.CurrentRecencyLevel = node?.RecencyLevel ?? 0;
 		Recent.RunningWorkerCount = node?.RunningWorkerCount ?? 0;
+		Recent.CurrentProfileName = node?.ProfileName ?? string.Empty;
+		Recent.CurrentSwitchingToName = node?.SwitchingToProfileName ?? string.Empty;
 
 		// The badge of the closed button is live: the open session's own node tells when its state (the running workers, the tier) changes.
 		if (!ReferenceEquals(node, _observedNode))
@@ -122,10 +124,12 @@ public sealed class SessionListsHost : ISessionListActions, IDisposable
 
 	private void OnObservedNodeChanged(object? sender, PropertyChangedEventArgs e)
 	{
-		if (e.PropertyName is nameof(TreeNodeViewModel.RunningWorkerCount) or nameof(TreeNodeViewModel.RecencyLevel) && sender is TreeNodeViewModel node)
+		if (e.PropertyName is nameof(TreeNodeViewModel.RunningWorkerCount) or nameof(TreeNodeViewModel.RecencyLevel) or nameof(TreeNodeViewModel.ProfileName) or nameof(TreeNodeViewModel.SwitchingToProfileName) && sender is TreeNodeViewModel node)
 		{
 			Recent.CurrentRecencyLevel = node.RecencyLevel;
 			Recent.RunningWorkerCount = node.RunningWorkerCount;
+			Recent.CurrentProfileName = node.ProfileName;
+			Recent.CurrentSwitchingToName = node.SwitchingToProfileName;
 		}
 	}
 
