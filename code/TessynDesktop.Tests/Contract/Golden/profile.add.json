@@ -3,5 +3,6 @@
   "displayName": "Work",
   "isSystem": false,
   "authState": "loggedOut",
-  "isDefault": false
+  "isDefault": false,
+  "engine": "claude"
 }

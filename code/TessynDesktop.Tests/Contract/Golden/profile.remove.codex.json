@@ -1,0 +1,13 @@
+{
+  "profile": {
+    "id": "codex_2",
+    "displayName": "ChatGPT · b@example.com",
+    "isSystem": false,
+    "email": "b@example.com",
+    "authState": "unknown",
+    "isDefault": false,
+    "engine": "codex",
+    "plan": "plus"
+  },
+  "pinnedSessionCount": 1
+}

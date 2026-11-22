@@ -1,0 +1,56 @@
+{
+  "section": "general",
+  "version": 2,
+  "values": {
+    "sessionFilesRoot": "<root>/sessions",
+    "claudePath": "claude-test",
+    "sourceCodesLocation": "",
+    "httpsProxy": "",
+    "ollamaBaseUrl": "http://localhost:11434",
+    "agentToolsEnabled": true,
+    "fileAccess": {
+      "mode": "workingDirectory",
+      "maxRelayChunkBytes": 524288,
+      "maxTextFileBytes": 5242880,
+      "maxImageFileBytes": 31457280,
+      "maxPdfFileBytes": 52428800,
+      "maxVideoFileBytes": 524288000
+    },
+    "mediaPreviewHosts": [
+      "annielartens.online",
+      "*.githubusercontent.com"
+    ],
+    "codexPath": "C:\\Tools\\Codex\\codex.exe",
+    "codexStatus": {
+      "found": true,
+      "path": "C:\\Tools\\Codex\\codex.exe",
+      "version": "0.171.0",
+      "testedVersion": "0.171",
+      "statusLine": "Codex 0.171.0 found at C:\\Tools\\Codex\\codex.exe"
+    },
+    "codexCatalogProfileId": "codex_1",
+    "codexModelTiers": [
+      {
+        "match": "astra",
+        "tier": 3
+      },
+      {
+        "match": "sol",
+        "tier": 2
+      },
+      {
+        "match": "terra",
+        "tier": 2
+      },
+      {
+        "match": "luna",
+        "tier": 1
+      },
+      {
+        "match": "gpt",
+        "tier": 2
+      }
+    ],
+    "codexModelTiersAreDefaults": true
+  }
+}

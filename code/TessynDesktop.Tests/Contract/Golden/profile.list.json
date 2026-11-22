@@ -6,21 +6,24 @@
       "isSystem": true,
       "email": "system.account@example.com",
       "authState": "unknown",
-      "isDefault": true
+      "isDefault": true,
+      "engine": "claude"
     },
     {
       "id": "p1",
       "displayName": "first@example.com",
       "isSystem": false,
       "authState": "loggedIn",
-      "isDefault": false
+      "isDefault": false,
+      "engine": "claude"
     },
     {
       "id": "p2",
       "displayName": "second@example.com",
       "isSystem": false,
       "authState": "loggedOut",
-      "isDefault": false
+      "isDefault": false,
+      "engine": "claude"
     }
   ]
 }

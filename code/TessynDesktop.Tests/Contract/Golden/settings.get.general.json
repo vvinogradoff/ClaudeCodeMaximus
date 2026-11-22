@@ -19,6 +19,30 @@
     "mediaPreviewHosts": [
       "annielartens.online",
       "*.githubusercontent.com"
-    ]
+    ],
+    "codexPath": "",
+    "codexModelTiers": [
+      {
+        "match": "astra",
+        "tier": 3
+      },
+      {
+        "match": "sol",
+        "tier": 2
+      },
+      {
+        "match": "terra",
+        "tier": 2
+      },
+      {
+        "match": "luna",
+        "tier": 1
+      },
+      {
+        "match": "gpt",
+        "tier": 2
+      }
+    ],
+    "codexModelTiersAreDefaults": true
   }
 }

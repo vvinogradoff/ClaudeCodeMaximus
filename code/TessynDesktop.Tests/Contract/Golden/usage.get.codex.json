@@ -1,0 +1,21 @@
+{
+  "profileId": "codex_1",
+  "profileName": "ChatGPT · u@example.com",
+  "state": "ok",
+  "fiveHour": {
+    "utilization": 0,
+    "resetsAtUtc": "2026-11-22T12:26:11+00:00",
+    "isStale": false,
+    "label": "5h",
+    "durationMinutes": 300
+  },
+  "sevenDay": {
+    "utilization": 19,
+    "resetsAtUtc": "2026-11-25T12:29:46+00:00",
+    "isStale": false,
+    "label": "7d",
+    "durationMinutes": 10080
+  },
+  "fetchedAtUtc": "2026-11-22T12:00:00+00:00",
+  "engine": "codex"
+}

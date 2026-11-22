@@ -43,6 +43,8 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool            _hasModelsAdmin;
 	private readonly string          _daemonVersion;
 	private readonly bool            _elevated;
+	private readonly ISessionEngineAvailability? _engines;
+	private readonly bool            _hasCodexProfiles;
 
 	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
 		ISettingsSectionService? settingsSections = null, IProfileAdminService? profileAdmin = null, ISessionSoundService? sounds = null,
@@ -52,8 +54,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		IImportService? import = null, IGlobalSearchService? search = null, IScheduleApiService? schedules = null,
 		IAttentionOverviewService? attentionOverview = null, IDaemonHealthService? health = null,
 		IMcpRegistryService? mcpRegistry = null, ITelegramTokenStore? telegramTokens = null, IRelayConfigStore? relayConfig = null, IClaudeModelService? models = null,
-		bool? elevated = null)
+		bool? elevated = null, ISessionEngineAvailability? engines = null, TessynDesktop.Codex.ICodexProfileService? codexProfiles = null)
 	{
+		_engines          = engines;           // FR.33 (tdcp-spec 10.A14): the engines whose CLI was found, on both transports
+		_hasCodexProfiles = codexProfiles != null;
 		_elevated      = elevated ?? Environment.IsPrivilegedProcess;   // FR.32.12: read once; a process cannot change its elevation
 		_presence      = presence;
 		_acks          = acks;
@@ -195,7 +199,8 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 			Capabilities(),
 			Constants.Remote.MinProtocolVersion,
 			_eventLog?.HeadSeq ?? 0,
-			_elevated);
+			_elevated,
+			_engines?.GetAvailableEngines());
 	}
 
 	/// <summary>Only what is really wired: the event capabilities need the event log.</summary>
@@ -228,6 +233,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		if (_hasContentStore)
 			capabilities.Add(Constants.Remote.Capabilities.EntriesIds);
 
+		// FR.33: the result carries the engines (read-only, so the relay gets it too).
+		if (_engines != null)
+			capabilities.Add(RemoteProtocol.Engines.Capability);
+
 		// The flags of J3, J1 and J4 name loopback-only methods (the relay answers -32601 for every one), so a relay client must not be told about them:
 		// a web client that detects features by capability would show UI that cannot work.
 		if (TdcpCallContext.Transport != TdcpTransport.Loopback)
@@ -238,6 +247,8 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 			capabilities.Add(RemoteProtocol.SettingsApi.Capability);
 		if (_hasProfileAdmin)
 			capabilities.Add(RemoteProtocol.ProfilesAdmin.Capability);
+		if (_hasProfileAdmin && _hasCodexProfiles)
+			capabilities.Add(RemoteProtocol.CodexProfilesAdmin.Capability);
 		if (_hasSound)
 			capabilities.Add(RemoteProtocol.SoundApi.Capability);
 

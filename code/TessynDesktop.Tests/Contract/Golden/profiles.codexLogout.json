@@ -1,0 +1,9 @@
+{
+  "id": "codex_1",
+  "displayName": "ChatGPT · u@example.com",
+  "email": "u@example.com",
+  "plan": "plus",
+  "isCodexDefault": false,
+  "signedIn": false,
+  "isCatalogProfile": false
+}

@@ -1,0 +1,33 @@
+{
+  "profiles": [
+    {
+      "id": "default",
+      "displayName": "[Sys] system.account@example.com",
+      "isSystem": true,
+      "email": "system.account@example.com",
+      "authState": "unknown",
+      "isDefault": true,
+      "engine": "claude"
+    }
+  ],
+  "codexProfiles": [
+    {
+      "id": "codex-default",
+      "displayName": "ChatGPT · Codex Default",
+      "isCodexDefault": true,
+      "signedIn": false,
+      "authError": false,
+      "isCatalogProfile": false
+    },
+    {
+      "id": "codex_1",
+      "displayName": "ChatGPT · u@example.com",
+      "email": "u@example.com",
+      "plan": "plus",
+      "isCodexDefault": false,
+      "signedIn": true,
+      "authError": false,
+      "isCatalogProfile": true
+    }
+  ]
+}

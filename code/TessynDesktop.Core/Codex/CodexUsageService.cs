@@ -88,10 +88,12 @@ public sealed partial class CodexUsageService : IEngineUsageSource
 		if (reading is null)
 		{
 			var state = _entries.TryGetValue(profileId, out var entry) ? entry.LastState : UsageState.Unavailable;
-			return new UsageResult(profileId, name, state, null, null, null);
+			return new UsageResult(profileId, name, state, null, null, null, Constants.SessionEngines.Codex);
 		}
 
-		return new UsageResult(profileId, name, UsageState.Ok, Window(reading.Primary), Window(reading.Secondary), reading.FetchedAtUtc);
+		// tdcp-spec 10.A14: the 5-hour/7-day members hold primary and secondary; engine and exhausted tell the client it is a Codex reading.
+		return new UsageResult(profileId, name, UsageState.Ok, Window(reading.Primary), Window(reading.Secondary), reading.FetchedAtUtc,
+			Constants.SessionEngines.Codex, string.IsNullOrEmpty(reading.RateLimitReachedType) ? null : reading.RateLimitReachedType);
 	}
 
 	/// <summary>
@@ -235,5 +237,8 @@ public sealed partial class CodexUsageService : IEngineUsageSource
 	}
 
 	private UsageWindowDto? Window(CodexUsageWindowModel? window) =>
-		window?.ResetsAtUtc is { } resets ? new UsageWindowDto(window.UsedPercent, resets, window.IsStale) : null;
+		window?.ResetsAtUtc is { } resets
+			? new UsageWindowDto(window.UsedPercent, resets, window.IsStale, string.IsNullOrEmpty(window.Label) ? null : window.Label, window.WindowDurationMins,
+				window.IsExhausted ? true : null)
+			: null;
 }

@@ -1,0 +1,7 @@
+{
+  "profileId": "codex_1",
+  "loginId": "login-2",
+  "mode": "deviceCode",
+  "verificationUrl": "https://auth.openai.com/codex/device",
+  "userCode": "ABCD-1234"
+}

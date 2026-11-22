@@ -34,6 +34,17 @@ public static partial class Constants
 		public const string MentionHandlePrefix = "@";
 		public const int MaxMentionHandleLength = 65;
 
+		/// <summary>FR.33.17: the Codex path must name a native executable (never the <c>codex.cmd</c> or Node shim).</summary>
+		public const string ExeExtension = ".exe";
+
+		/// <summary>FR.33.14: the longest match text of a GPT tier row, and the tier range (0 local, 1 Haiku, 2 Sonnet, 3 Opus, 4 Fable).</summary>
+		public const int MaxTierMatchLength = 64;
+		public const int MinModelTier = 0;
+		public const int MaxModelTier = 4;
+
+		/// <summary>How long <c>settings.get</c> waits for <c>codex --version</c> before it answers the status without a version.</summary>
+		public static readonly TimeSpan CodexStatusTimeout = TimeSpan.FromSeconds(10);
+
 	}
 
 	/// <summary>Profile administration (package J3).</summary>

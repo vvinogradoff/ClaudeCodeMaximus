@@ -13,7 +13,8 @@
     "favorite": false,
     "hasDraft": false,
     "authError": false,
-    "hasSchedules": false
+    "hasSchedules": false,
+    "engine": "claude"
   },
   "tags": [],
   "attention": {

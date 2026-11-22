@@ -4,7 +4,8 @@
     "displayName": "second@example.com",
     "isSystem": false,
     "authState": "unknown",
-    "isDefault": false
+    "isDefault": false,
+    "engine": "claude"
   },
   "pinnedSessionCount": 0
 }

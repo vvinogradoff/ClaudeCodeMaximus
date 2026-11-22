@@ -1,0 +1,12 @@
+{
+  "id": "<nodeId>",
+  "running": false,
+  "streamingAlive": false,
+  "favorite": false,
+  "hasDraft": false,
+  "authError": false,
+  "hasSchedules": false,
+  "pinnedProfileId": "codex_1",
+  "pinnedProfileName": "ChatGPT · u@example.com",
+  "engine": "codex"
+}

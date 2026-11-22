@@ -20,6 +20,7 @@ namespace TessynDesktop.Models.Remote;
 /// <param name="Resumable">Claude Code still has the session available for <c>--resume</c> (the blue square of the Avalonia tree); omitted (null) until the daemon's first sweep of the tree has run. Comes from a cached batch sweep (<c>ISessionResumabilityCache</c>), never from a file probe per session.</param>
 /// <param name="RunningWorkerCount">How many of the session's workers are running right now, direct and nested (P13, additive; the tree's <c>workerCount</c> is the total ever spawned). Omitted (null) when none is running.</param>
 /// <param name="LimitError">The shortened text of the usage or limits error that ended the session's last turn ("You've hit your session limit · resets 5:20pm"); omitted (null) when the last turn did not end with one. Cleared when a later turn succeeds (FR.1.29, TDCP 10.A7).</param>
+/// <param name="Engine">The session engine (FR.33.1, tdcp-spec 10.A14): <c>claude</c> or <c>codex</c>, the one stored when its last turn started; <c>claude</c> when none is stored. Absent from an older daemon: <c>claude</c>.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record SessionStateDto(
 	string Id,
@@ -38,4 +39,5 @@ public sealed record SessionStateDto(
 	string? SwitchingToProfileName = null,
 	bool? Resumable = null,
 	int? RunningWorkerCount = null,
-	string? LimitError = null);
+	string? LimitError = null,
+	string Engine = RemoteProtocol.Engines.Claude);

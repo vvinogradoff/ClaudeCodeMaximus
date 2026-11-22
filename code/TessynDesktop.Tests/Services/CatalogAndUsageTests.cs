@@ -85,7 +85,8 @@ public sealed class CatalogRpcModuleTests : IDisposable
 		var profiles = json["profiles"]!.AsArray();
 		Assert.Equal(["default", "p1", "p2"], profiles.Select(p => (string)p!["id"]!));
 		Assert.Equal(["[Sys] me@example.com", "Work", "Home"], profiles.Select(p => (string)p!["displayName"]!));
-		Assert.All(profiles, p => Assert.Equal(2, p!.AsObject().Count));
+		Assert.All(profiles, p => Assert.Equal(3, p!.AsObject().Count)); // id, displayName and (tdcp-spec 10.A14) engine
+		Assert.All(profiles, p => Assert.Equal("claude", (string?)p!["engine"]));
 		Assert.DoesNotContain("profiles\\", json.ToJsonString());
 	}
 

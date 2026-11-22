@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
 using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.Services;
@@ -17,6 +19,13 @@ public interface ISettingsSectionService
 	/// <summary>The values and version of <paramref name="section"/>.</summary>
 	/// <exception cref="TdcpInvalidParamsException">There is no such section.</exception>
 	SettingsGetResult<object> Get(string section);
+
+	/// <summary>
+	/// <see cref="Get"/> plus the section's live, read-only values (<see cref="ISettingsSection.AddLiveValuesAsync"/>, for example the Codex status of
+	/// <c>general</c>, FR.33.17). Live values are read after the settings lock is released and never change the version. <c>settings.get</c> uses it.
+	/// </summary>
+	/// <exception cref="TdcpInvalidParamsException">There is no such section.</exception>
+	Task<SettingsGetResult<object>> GetAsync(string section, CancellationToken cancellationToken = default) => Task.FromResult(Get(section));
 
 	/// <summary>
 	/// Applies <paramref name="patch"/> to <paramref name="section"/> when <paramref name="baseVersion"/> is the current version, saves, and returns the

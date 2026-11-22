@@ -68,6 +68,6 @@ public static partial class RemoteProtocol
 		public const string TestMethod = "sound.test";
 	}
 
-	/// <summary>Package J3 notifications that the relay must not carry (part 2 adds <c>mcp.changed</c> and <c>catalog.changed</c>).</summary>
-	public static readonly IReadOnlyList<string> AdminLocalOnlyEvents = [SettingsApi.ChangedEvent, ProfilesAdmin.ChangedEvent, McpApi.ChangedEvent, ModelsApi.CatalogChangedEvent];
+	/// <summary>Package J3 notifications that the relay must not carry (part 2 adds <c>mcp.changed</c> and <c>catalog.changed</c>; FR.33 adds <c>profiles.codexLoginCompleted</c>).</summary>
+	public static readonly IReadOnlyList<string> AdminLocalOnlyEvents = [SettingsApi.ChangedEvent, ProfilesAdmin.ChangedEvent, McpApi.ChangedEvent, ModelsApi.CatalogChangedEvent, CodexProfilesAdmin.LoginCompletedEvent];
 }

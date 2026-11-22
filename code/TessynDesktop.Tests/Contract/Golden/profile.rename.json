@@ -3,5 +3,6 @@
   "displayName": "Renamed",
   "isSystem": false,
   "authState": "loggedIn",
-  "isDefault": false
+  "isDefault": false,
+  "engine": "claude"
 }

@@ -1,0 +1,6 @@
+{
+  "profileId": "codex_1",
+  "loginId": "login-1",
+  "mode": "browser",
+  "authUrl": "https://auth.openai.com/oauth/authorize?fake=1"
+}

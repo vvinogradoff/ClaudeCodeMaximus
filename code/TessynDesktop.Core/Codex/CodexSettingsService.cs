@@ -24,13 +24,27 @@ public sealed class CodexSettingsService
 		_locator     = locator ?? new CodexExecutableLocator();
 	}
 
-	/// <summary>Where Codex is found with the configured path (empty = find it), its version and the status line (FR.33.17).</summary>
+	/// <summary>
+	/// Where Codex is found with the configured path (empty = find it), its version and the status line (FR.33.17). A <c>codex --version</c> that
+	/// takes longer than <see cref="Constants.SettingsApi.CodexStatusTimeout"/> gives the status without a version.
+	/// </summary>
 	public async Task<CodexStatusModel> GetStatusAsync(CancellationToken cancellationToken = default)
 	{
 		var located = _locator.Locate(ConfiguredPath());
 		Version? version = null;
 		if (located.Found)
-			version = await _locator.ReadVersionAsync(located.ExecutablePath!, cancellationToken).ConfigureAwait(false);
+		{
+			using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+			timeout.CancelAfter(Constants.SettingsApi.CodexStatusTimeout);
+			try
+			{
+				version = await _locator.ReadVersionAsync(located.ExecutablePath!, timeout.Token).ConfigureAwait(false);
+			}
+			catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+			{
+				// Too slow: the status line says "(version unknown)".
+			}
+		}
 
 		return new CodexStatusModel(
 			located.Found,

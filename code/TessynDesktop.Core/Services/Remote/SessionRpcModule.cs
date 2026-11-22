@@ -31,6 +31,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 	private readonly ISessionEngineRouter _engines;
 	private readonly ITurnEngine? _engine;
 	private readonly ISessionModelSettings _modelSettings;
+	private readonly TessynDesktop.Codex.ICodexProfileService? _codexProfiles;
 
 	public SessionRpcModule(
 		ISessionRegistry registry,
@@ -47,8 +48,10 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		ISessionTurnService turns,
 		ISessionEngineRouter engines,
 		ITurnEngine? engine = null,
-		ISessionModelSettings? modelSettings = null)
+		ISessionModelSettings? modelSettings = null,
+		TessynDesktop.Codex.ICodexProfileService? codexProfiles = null)
 	{
+		_codexProfiles = codexProfiles;
 		_registry     = registry;
 		_appSettings  = appSettings;
 		_stateBuilder = stateBuilder;
@@ -117,7 +120,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 			_stateBuilder.Build(node),
 			_tags.GetTags(node.NodeId, name).Select(tag => tag.ToDto()).ToList(),
 			_attention.GetSummary(node.NodeId).ToDto(),
-			ApplySessionModelSettings(ApplyPin(content.LastUsed, node, profiles), node),
+			ApplySessionModelSettings(ApplyPin(content.LastUsed, node, profiles, _codexProfiles), node),
 			isStreamingMode,
 			content.EntryCount,
 			epoch,
@@ -221,7 +224,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 				content.Seq ?? content.EntryCount,
 				content.FirstTimestamp,
 				content.LastTimestamp,
-				ApplySessionModelSettings(ApplyPin(content.LastUsed, node, profiles), node),
+				ApplySessionModelSettings(ApplyPin(content.LastUsed, node, profiles, _codexProfiles), node),
 				content.ContentVersion,
 				content.FileLength));
 		}
@@ -248,12 +251,21 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 	/// ISSUE.013 P6: the profile a client restores as its choice for a session is the session's <c>ProfileId</c> pin, not the name the last user
 	/// entry recorded: after a <c>profile.switch</c> the history still names the old profile until a turn is appended, and a client that
 	/// sent it back as a per-turn choice would silently undo the switch. A queued switch is shown as its target. Unresolvable pins leave the history value.
+	/// FR.33.5: a ChatGPT pin (<c>codex-default</c>, <c>codex_N</c>) is shown as its id and <c>ChatGPT · &lt;email&gt;</c> when <paramref name="codexProfiles"/> knows it.
 	/// </summary>
-	internal static LastUsedSettingsDto ApplyPin(LastUsedSettingsDto lastUsed, SessionNodeModel node, IReadOnlyList<ClaudeProfileModel> profiles)
+	internal static LastUsedSettingsDto ApplyPin(LastUsedSettingsDto lastUsed, SessionNodeModel node, IReadOnlyList<ClaudeProfileModel> profiles,
+		TessynDesktop.Codex.ICodexProfileService? codexProfiles = null)
 	{
 		var pin = string.IsNullOrEmpty(node.PendingProfileId) ? node.ProfileId : node.PendingProfileId;
 		if (string.IsNullOrEmpty(pin))
 			return lastUsed;
+
+		if (codexProfiles != null && new TessynDesktop.Codex.CodexProfileNaming().IsCodexProfileId(pin))
+		{
+			var chatGpt = codexProfiles.Find(pin);
+			var name    = chatGpt == null ? null : codexProfiles.DisplayNameOf(chatGpt.ProfileId);
+			return chatGpt == null || name == null ? lastUsed : lastUsed with { ProfileId = chatGpt.ProfileId, ProfileName = name };
+		}
 
 		if (string.Equals(pin, Constants.ProfileSwitch.DefaultProfileId, StringComparison.OrdinalIgnoreCase))
 			return lastUsed with { ProfileId = Constants.Remote.DefaultOptionId, ProfileName = lastUsed.ProfileId == Constants.Remote.DefaultOptionId ? lastUsed.ProfileName : Constants.Remote.Profiles.SystemPrefix + Constants.Remote.Profiles.FallbackName };

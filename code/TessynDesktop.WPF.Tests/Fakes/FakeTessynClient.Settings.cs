@@ -91,7 +91,7 @@ public sealed partial class FakeTessynClient
 	{
 		Record("profile.list");
 		ThrowIfProfileFails();
-		var answer = new ProfileListResult([.. Profiles]);
+		var answer = new ProfileListResult([.. Profiles], CodexProfiles == null ? null : [.. CodexProfiles]);
 		var call = Interlocked.Increment(ref _profileListCalls);
 		if (ProfileListDelay != null)
 			await ProfileListDelay(call);
@@ -122,6 +122,14 @@ public sealed partial class FakeTessynClient
 	{
 		Record($"profile.remove:{profileId}");
 		ThrowIfProfileFails();
+		if (CodexProfiles?.FirstOrDefault(p => p.Id == profileId) is { } chatGpt)
+		{
+			CodexProfiles.Remove(chatGpt);
+			return Task.FromResult(new ProfileRemoveResult(
+				new ProfileDto(chatGpt.Id, chatGpt.DisplayName, false, chatGpt.Email, ProfileAuthState.Unknown, false, RemoteProtocol.Engines.Codex, chatGpt.Plan),
+				RemovedProfilePinnedSessions));
+		}
+
 		var removed = Profiles.Single(p => p.Id == profileId);
 		Profiles.Remove(removed);
 		return Task.FromResult(new ProfileRemoveResult(removed, RemovedProfilePinnedSessions));

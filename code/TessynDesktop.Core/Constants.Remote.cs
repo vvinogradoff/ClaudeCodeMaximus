@@ -222,6 +222,12 @@ public static partial class Constants
 
 			/// <summary>Window in which usage.changed notifications of one profile are merged.</summary>
 			public static readonly TimeSpan ChangedWindow = TimeSpan.FromMilliseconds(250);
+
+			/// <summary>The labels and lengths of a Claude profile's two windows on the wire (tdcp-spec 10.A14).</summary>
+			public const string FiveHourLabel = "5h";
+			public const string SevenDayLabel = "7d";
+			public const int FiveHourMinutes = 5 * 60;
+			public const int SevenDayMinutes = 7 * 24 * 60;
 		}
 
 		/// <summary>Profile labels (contract sections 3.12 and 3.20).</summary>

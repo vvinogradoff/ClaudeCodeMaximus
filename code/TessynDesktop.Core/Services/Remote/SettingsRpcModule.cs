@@ -1,4 +1,6 @@
 using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
 using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.Services;
@@ -21,11 +23,13 @@ public sealed class SettingsRpcModule : IRemoteRpcModule
 	public void Register(TdcpMethodRegistry registry)
 	{
 		registry.AddSync(RemoteProtocol.SettingsApi.SectionsMethod, _ => new SettingsSectionsResult(_sections.GetSections()), remoteCallable: false);
-		registry.AddSync(RemoteProtocol.SettingsApi.GetMethod, Get, remoteCallable: false);
+		registry.Add(RemoteProtocol.SettingsApi.GetMethod, async (p, ct) => await GetAsync(p, ct), remoteCallable: false);
 		registry.AddSync(RemoteProtocol.SettingsApi.UpdateMethod, Update, remoteCallable: false);
 	}
 
-	private object? Get(JsonNode? @params) => _sections.Get(TdcpParams.RequireString(@params, "section"));
+	/// <summary>The section with its live values (the Codex status of <c>general</c>, FR.33.17).</summary>
+	private async Task<object?> GetAsync(JsonNode? @params, CancellationToken cancellationToken) =>
+		await _sections.GetAsync(TdcpParams.RequireString(@params, "section"), cancellationToken);
 
 	private object? Update(JsonNode? @params)
 	{

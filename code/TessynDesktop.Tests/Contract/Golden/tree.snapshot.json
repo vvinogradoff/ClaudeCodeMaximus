@@ -26,7 +26,8 @@
                 "hasDraft": true,
                 "authError": false,
                 "hasSchedules": false,
-                "resumable": true
+                "resumable": true,
+                "engine": "claude"
               }
             }
           ],
@@ -49,7 +50,8 @@
             "authError": false,
             "hasSchedules": false,
             "resumable": false,
-            "runningWorkerCount": 1
+            "runningWorkerCount": 1,
+            "engine": "claude"
           }
         }
       ]

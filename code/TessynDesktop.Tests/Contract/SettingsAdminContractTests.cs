@@ -116,7 +116,7 @@ public sealed partial class SettingsAdminContractTests : IDisposable
 	[Fact]
 	public void TheAdminNotifications_AreLocalOnly()
 	{
-		Assert.Equal(["settings.changed", "profiles.changed", "mcp.changed", "catalog.changed"], RemoteProtocol.AdminLocalOnlyEvents);
+		Assert.Equal(["settings.changed", "profiles.changed", "mcp.changed", "catalog.changed", "profiles.codexLoginCompleted"], RemoteProtocol.AdminLocalOnlyEvents);
 	}
 
 	// ── Result shapes ────────────────────────────────────────────────────────────────────────

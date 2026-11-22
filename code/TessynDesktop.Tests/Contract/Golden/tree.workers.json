@@ -14,7 +14,8 @@
         "hasDraft": false,
         "authError": false,
         "hasSchedules": false,
-        "resumable": false
+        "resumable": false,
+        "engine": "claude"
       }
     }
   ]

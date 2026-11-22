@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
 using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.Services;
@@ -65,6 +67,14 @@ public sealed class SettingsSectionService : ISettingsSectionService, IDisposabl
 			lock (_gate)
 				return new SettingsGetResult<object>(state.Section.Name, state.Version, state.Section.Read(_settings.Settings));
 		}
+	}
+
+	/// <inheritdoc />
+	public async Task<SettingsGetResult<object>> GetAsync(string section, CancellationToken cancellationToken = default)
+	{
+		var result = Get(section);
+		var state  = Find(section);
+		return result with { Values = await state.Section.AddLiveValuesAsync(result.Values, cancellationToken).ConfigureAwait(false) };
 	}
 
 	/// <inheritdoc />

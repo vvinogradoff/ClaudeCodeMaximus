@@ -96,7 +96,9 @@ public sealed class CodexProfileTests : IAsyncLifetime
 		await CompleteLoginAsync("codex_1", started.LoginId, success: true);
 		await _f.Profiles.WaitForSignInAsync(started.LoginId).WaitAsync(TimeSpan.FromSeconds(10));
 
-		Assert.Equal("u@example.com", _f.Settings.Settings.CodexProfiles.Single().Email);
+		// The catalog refresh that a sign-in starts may record Codex Default as well, so look at codex_1 only.
+		lock (_f.Settings.SyncRoot)
+			Assert.Equal("u@example.com", _f.Settings.Settings.CodexProfiles.Single(p => p.ProfileId == "codex_1").Email);
 	}
 
 	[Fact]

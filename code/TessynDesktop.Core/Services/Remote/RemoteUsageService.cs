@@ -94,8 +94,10 @@ public sealed class RemoteUsageService : IRemoteUsageService
 				var current = ClaudeUsageStalenessService.ZeroStaleWindows(data, now);
 				return new UsageResult(
 					profileId, profileName, UsageState.Ok,
-					new UsageWindowDto(current.FiveHourUtilization, data.FiveHourResetsAt, ClaudeUsageStalenessService.IsFiveHourStale(data, now)),
-					new UsageWindowDto(current.SevenDayUtilization, data.SevenDayResetsAt, ClaudeUsageStalenessService.IsSevenDayStale(data, now)),
+					new UsageWindowDto(current.FiveHourUtilization, data.FiveHourResetsAt, ClaudeUsageStalenessService.IsFiveHourStale(data, now),
+						Constants.Remote.Usage.FiveHourLabel, Constants.Remote.Usage.FiveHourMinutes),
+					new UsageWindowDto(current.SevenDayUtilization, data.SevenDayResetsAt, ClaudeUsageStalenessService.IsSevenDayStale(data, now),
+						Constants.Remote.Usage.SevenDayLabel, Constants.Remote.Usage.SevenDayMinutes),
 					entry.FetchedAt);
 			}
 

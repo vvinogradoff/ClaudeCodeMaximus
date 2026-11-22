@@ -1,5 +1,7 @@
 using System;
 using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
 using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
@@ -22,6 +24,12 @@ public interface ISettingsSection
 
 	/// <summary>The section's values as its wire DTO. The caller holds the settings lock.</summary>
 	object Read(AppSettingsModel settings);
+
+	/// <summary>
+	/// Adds the section's live, read-only values (that cost I/O, such as running <c>codex --version</c>) to <paramref name="values"/>, the result of
+	/// <see cref="Read"/>. Called by <c>settings.get</c> without the settings lock; never part of change detection. The default adds nothing.
+	/// </summary>
+	Task<object> AddLiveValuesAsync(object values, CancellationToken cancellationToken) => Task.FromResult(values);
 
 	/// <summary>Captures the values <see cref="Apply"/> may write; the returned action puts them back (used when the save that follows fails).</summary>
 	Action CaptureRestore(AppSettingsModel settings);

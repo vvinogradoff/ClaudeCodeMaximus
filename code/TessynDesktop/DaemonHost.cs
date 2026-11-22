@@ -312,6 +312,11 @@ public sealed class DaemonHost
 		// FR.33.14, FR.33.17: stateless.
 		services.AddTransient<IModelTierResolver, ModelTierResolver>();
 		services.AddTransient<TessynDesktop.Codex.CodexSettingsService>();
+		// FR.33 phase 5a (tdcp-spec 10.A14): client.hello's engines is stateless. The ChatGPT profile administration is a Singleton: it subscribes to
+		// the profile service's auth-error event for the daemon's life (each change is a profiles.changed) and owns the background waits that turn a
+		// finished sign-in into profiles.codexLoginCompleted.
+		services.AddTransient<ISessionEngineAvailability, SessionEngineAvailability>();
+		services.AddSingleton<TessynDesktop.Codex.ICodexProfileAdminService, TessynDesktop.Codex.CodexProfileAdminService>();
 		services.AddSingleton<ISessionEngine, CodexSessionEngine>();
 		services.AddSingleton<ISessionEngineRouter, SessionEngineRegistry>();
 		services.AddSingleton<ISelfUpdateService, SelfUpdateService>();

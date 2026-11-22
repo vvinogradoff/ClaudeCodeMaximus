@@ -1,3 +1,4 @@
+using TessynDesktop.Codex;
 using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
 
@@ -15,6 +16,8 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 	private readonly ISchedulerService? _scheduler;
 	private readonly IProfileResolver? _profiles;
 	private readonly ISessionResumabilityCache? _resumable;
+	private readonly ICodexProfileService? _codexProfiles;
+	private readonly CodexProfileNaming _codexNaming = new();
 
 	public SessionStateBuilder(
 		ISessionRegistry registry,
@@ -24,8 +27,10 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 		ISessionAuthErrorTracker? authErrors = null,
 		ISchedulerService? scheduler = null,
 		IProfileResolver? profiles = null,
-		ISessionResumabilityCache? resumable = null)
+		ISessionResumabilityCache? resumable = null,
+		ICodexProfileService? codexProfiles = null)
 	{
+		_codexProfiles = codexProfiles;
 		_resumable = resumable;
 		_profiles  = profiles;
 		_scheduler = scheduler;
@@ -68,22 +73,44 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 			SwitchingToProfileName: switchingTo,
 			Resumable:             _resumable?.TryGet(nodeId),
 			RunningWorkerCount:    runningWorkers > 0 ? runningWorkers : null,
-			LimitError:            _authErrors?.GetLimitError(nodeId));
+			LimitError:            _authErrors?.GetLimitError(nodeId),
+			Engine:                string.IsNullOrEmpty(node.EngineId) ? RemoteProtocol.Engines.Claude : node.EngineId);
 	}
 
 	/// <summary>The pin and the queued switch of a session, labelled as <c>list_sessions</c> labels them (ISSUE.013 R5). All null without a resolver or a pin.</summary>
 	private (string? PinnedId, string? PinnedName, string? SwitchingTo) DescribeProfile(SessionNodeModel node)
 	{
+		if (_codexProfiles != null && _codexNaming.IsCodexProfileId(node.ProfileId))
+			return DescribeCodexProfile(node);
+
 		if (_profiles == null)
 			return (null, null, null);
 
 		var pin = _profiles.DescribePin(node);
 		var pinnedName = pin == null ? null : pin.IsResolved ? pin.DisplayName : pin.DisplayName + Constants.ProfileSwitch.MissingProfileSuffix;
 
-		string? switchingTo = null;
-		if (!string.IsNullOrEmpty(node.PendingProfileId))
-			switchingTo = _profiles.FindById(node.PendingProfileId)?.DisplayName ?? node.PendingProfileId + Constants.ProfileSwitch.MissingProfileSuffix;
+		return (pin?.ProfileId, pinnedName, SwitchingTo(node));
+	}
 
-		return (pin?.ProfileId, pinnedName, switchingTo);
+	/// <summary>
+	/// A ChatGPT pin (FR.33.5): the profile id and <c>ChatGPT · &lt;email&gt;</c>, with the missing suffix when the profile was deleted; a queued
+	/// switch to another ChatGPT profile is named the same way. The Claude resolver ignores ChatGPT pins, so they are described here.
+	/// </summary>
+	private (string? PinnedId, string? PinnedName, string? SwitchingTo) DescribeCodexProfile(SessionNodeModel node)
+	{
+		var pinnedId = node.ProfileId!;
+		var pinnedName = _codexProfiles!.DisplayNameOf(pinnedId) ?? pinnedId + Constants.ProfileSwitch.MissingProfileSuffix;
+		return (pinnedId, pinnedName, SwitchingTo(node));
+	}
+
+	/// <summary>The display name of the queued switch's target, a Claude or a ChatGPT profile; null when none is queued.</summary>
+	private string? SwitchingTo(SessionNodeModel node)
+	{
+		var target = node.PendingProfileId;
+		if (string.IsNullOrEmpty(target))
+			return null;
+
+		var name = _codexProfiles != null && _codexNaming.IsCodexProfileId(target) ? _codexProfiles.DisplayNameOf(target) : _profiles?.FindById(target)?.DisplayName;
+		return name ?? target + Constants.ProfileSwitch.MissingProfileSuffix;
 	}
 }

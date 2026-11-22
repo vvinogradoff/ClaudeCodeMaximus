@@ -289,14 +289,17 @@ public sealed class SettingsSectionServiceTests : IDisposable
 		foreach (var (dto, patch) in pairs)
 		{
 			var dtoNames = dto.GetProperties().Select(p => p.Name).Order().ToArray();
-			string[] readOnly = dto == typeof(GeneralSettingsDto) ? ["ClaudePath", "SessionFilesRoot", "SourceCodesLocation"] : [];
-			Assert.Equal(dtoNames.Except(readOnly), patch.GetProperties().Select(p => p.Name).Order());
+			// FR.33.17 (tdcp-spec 10.A14): codexStatus and codexModelTiersAreDefaults are read-only; resetCodexModelTiers is the Reset to defaults action.
+			string[] readOnly = dto == typeof(GeneralSettingsDto) ? ["ClaudePath", "CodexModelTiersAreDefaults", "CodexStatus", "SessionFilesRoot", "SourceCodesLocation"] : [];
+			string[] actions = dto == typeof(GeneralSettingsDto) ? ["ResetCodexModelTiers"] : [];
+			Assert.Equal(dtoNames.Except(readOnly).Concat(actions).Order(), patch.GetProperties().Select(p => p.Name).Order());
 			Assert.DoesNotContain(dtoNames, n => n.Contains("token", StringComparison.OrdinalIgnoreCase) || n.Contains("secret", StringComparison.OrdinalIgnoreCase)
 				|| n.Contains("password", StringComparison.OrdinalIgnoreCase) || n.Contains("topic", StringComparison.OrdinalIgnoreCase));
 		}
 
 		Assert.Equal(
-			["AgentToolsEnabled", "ClaudePath", "FileAccess", "HttpsProxy", "MediaPreviewHosts", "OllamaBaseUrl", "SessionFilesRoot", "SourceCodesLocation"],
+			["AgentToolsEnabled", "ClaudePath", "CodexCatalogProfileId", "CodexModelTiers", "CodexModelTiersAreDefaults", "CodexPath", "CodexStatus",
+				"FileAccess", "HttpsProxy", "MediaPreviewHosts", "OllamaBaseUrl", "SessionFilesRoot", "SourceCodesLocation"],
 			typeof(GeneralSettingsDto).GetProperties().Select(p => p.Name).Order());
 		Assert.Equal(
 			["NotificationsEnabled", "SessionCompletionSoundFile", "SessionCompletionSoundThrottleSeconds"],

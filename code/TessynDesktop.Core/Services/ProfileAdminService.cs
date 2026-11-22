@@ -363,14 +363,7 @@ public sealed class ProfileAdminService : IProfileAdminService
 	}
 
 	/// <summary>Sessions pinned by id to the profile (ISSUE.013 rule A18: after the removal their turns fail with a "profile missing" error, never fall back to Default).</summary>
-	private int CountPinnedSessions(string profileId)
-	{
-		static int Count(IEnumerable<SessionNodeModel> sessions, IEnumerable<GroupNodeModel> groups, string id) =>
-			sessions.Count(s => string.Equals(s.ProfileId, id, StringComparison.OrdinalIgnoreCase))
-			+ groups.Sum(g => Count(g.Sessions, g.Groups, id));
-
-		return _appSettings.Settings.Tree.Sum(d => Count(d.Sessions, d.Groups, profileId));
-	}
+	private int CountPinnedSessions(string profileId) => new PinnedSessionCounter().Count(_appSettings.Settings, profileId);
 
 	private int IndexOf(string profileId) => _appSettings.Settings.Profiles.FindIndex(p => p.ProfileId == profileId);
 

@@ -15,7 +15,8 @@
         "hasDraft": true,
         "authError": false,
         "hasSchedules": false,
-        "resumable": true
+        "resumable": true,
+        "engine": "claude"
       },
       "hasSchedules": false,
       "pinned": true,
