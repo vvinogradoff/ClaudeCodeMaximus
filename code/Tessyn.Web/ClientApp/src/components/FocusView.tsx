@@ -30,6 +30,12 @@ interface CardProps {
 	onDismiss: () => void;
 }
 
+/** Button answers never overwrite typed text: they are appended on a new line. */
+export function appendAnswer(current: string, addition: string): string {
+	if (!current.trim()) return addition;
+	return `${current.replace(/\s+$/, '')}\n${addition}`;
+}
+
 function OpenCard({ item, text, now, onText, onReply, onDismiss }: CardProps) {
 	return (
 		<article className={`card kind-border-${item.kind}`} data-testid="focus-card" data-item-id={item.id}>
@@ -43,11 +49,11 @@ function OpenCard({ item, text, now, onText, onReply, onDismiss }: CardProps) {
 			{item.refs && item.refs.length > 0 && <RefList refs={item.refs} />}
 			{item.options.length > 0 && (
 				<div className="options">
-					{item.options.map((o) => <button key={o} type="button" className="btn small" onClick={() => onText(o)}>{o}</button>)}
+					{item.options.map((o) => <button key={o} type="button" className="btn small" onClick={() => onText(appendAnswer(text, o))}>{o}</button>)}
 				</div>
 			)}
 			{item.recommendation && (
-				<button type="button" className="btn small reco" onClick={() => onText(`Accepted your recommendation: ${item.recommendation}`)}>
+				<button type="button" className="btn small reco" onClick={() => onText(appendAnswer(text, `Accepted your recommendation: ${item.recommendation}`))}>
 					Use recommendation: {item.recommendation}
 				</button>
 			)}
