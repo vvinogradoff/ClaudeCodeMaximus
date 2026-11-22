@@ -1,5 +1,5 @@
 import type {
-	AttentionListResult, AttentionSummaryDto, CatalogResult, SessionDetailDto, SessionEntriesResult, SessionEntryDto,
+	AttentionListResult, AttentionSummaryDto, CatalogResult, CodexHelloStatusDto, HelloResult, SessionDetailDto, SessionEntriesResult, SessionEntryDto,
 	SessionStateDto, TreeDirectoryDto, TreeSessionDto,
 } from '../api/types';
 import { reconcilePending } from '../lib/pending';
@@ -49,6 +49,8 @@ export interface AppState {
 	/** Latest known per-session state from events (overrides the DTO state in tree rows). */
 	states: Record<string, SessionStateDto>;
 	catalog: CatalogResult | null;
+	/** The read-only Codex status of the last `client.hello` (FR.33.17); null from an older daemon or one without Codex. */
+	codex: CodexHelloStatusDto | null;
 	panelOpen: boolean;
 	panelTab: PanelTab;
 	selected: Selection | null;
@@ -67,7 +69,7 @@ export interface AppState {
 export function initialState(panelTab: PanelTab): AppState {
 	return {
 		auth: 'unknown', email: null, online: true, serverOffsetMs: 0,
-		tree: [], treeLoaded: false, workers: {}, states: {}, catalog: null,
+		tree: [], treeLoaded: false, workers: {}, states: {}, catalog: null, codex: null,
 		panelOpen: false, panelTab, selected: null, session: null, navStack: [], preview: null, toasts: [], listRevision: 0, scopeProject: false, scopeTags: false,
 	};
 }
@@ -76,6 +78,7 @@ export type Action =
 	| { type: 'auth'; auth: AuthState; email?: string | null }
 	| { type: 'online'; online: boolean }
 	| { type: 'serverTime'; serverTimeUtc: string }
+	| { type: 'hello'; hello: HelloResult }
 	| { type: 'tree'; directories: TreeDirectoryDto[] }
 	| { type: 'workers'; supervisorId: string; workers: TreeSessionDto[] }
 	| { type: 'catalog'; catalog: CatalogResult }
@@ -149,6 +152,10 @@ export function reduce(s: AppState, a: Action): AppState {
 		case 'serverTime': {
 			const t = Date.parse(a.serverTimeUtc);
 			return Number.isNaN(t) ? s : { ...s, serverOffsetMs: t - Date.now() };
+		}
+		case 'hello': {
+			const t = Date.parse(a.hello.serverTimeUtc);
+			return { ...s, codex: a.hello.codex ?? null, serverOffsetMs: Number.isNaN(t) ? s.serverOffsetMs : t - Date.now() };
 		}
 		case 'tree': return { ...s, tree: a.directories, treeLoaded: true, states: {} };
 		case 'workers': return { ...s, workers: { ...s.workers, [a.supervisorId]: a.workers } };

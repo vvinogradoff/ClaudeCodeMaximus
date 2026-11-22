@@ -11,6 +11,8 @@ import { ago, LONG_ENTRY_FULL, LONG_ENTRY_PREVIEW, LONG_MARKDOWN, makeAssistantE
 
 const WORK_PROFILE = 'Work (vitaly@datalabs.example)';
 const SYS_PROFILE = '[Sys] vitaly@example.com';
+const CHATGPT_PROFILE = 'ChatGPT · vitaly@example.com';
+const CLAUDE_EFFORTS = [{ id: 'max' }, { id: 'high' }, { id: 'medium' }, { id: 'low' }];
 const LATENCY_MS = 60;
 const FETCH_DEFAULT = 50;
 const FETCH_MAX = 200;
@@ -33,8 +35,10 @@ interface MockSession {
 	epoch: number;
 	attention: AttentionItemDto[];
 	tags: SessionTagDto[];
-	lastUsed: { modelId: string; effort: EffortId; profileId: string; profileName: string };
+	lastUsed: { modelId: string; effort: EffortId | string; profileId: string; profileName: string };
 	fullEntries: Record<number, string>;
+	/** FR.33: `codex` for a GPT session. */
+	engine?: 'claude' | 'codex';
 }
 
 interface MockGroup { id: string; name: string; groups: MockGroup[]; expanded: boolean; sessionIds: string[] }
@@ -118,6 +122,12 @@ export class MockDaemon {
 			],
 		}, 'spa', 0);
 		this.buildLongTranscript(long);
+
+		// --- a GPT session on the ChatGPT profile (FR.33)
+		put(tessyn, tessyn, undefined, {
+			name: 'GPT session: tidy the changelog', lastActivityMin: 8, profileName: CHATGPT_PROFILE, engine: 'codex',
+			lastUsed: { modelId: 'gpt-6.2-sol', effort: 'xhigh', profileId: 'codex_1', profileName: CHATGPT_PROFILE },
+		}, 'gpt', 1);
 
 		// --- a running session that appends entries every few seconds
 		const live = put(tessyn, tessyn, undefined, { name: 'Live: nightly import monitor', lastActivityMin: 1, running: true, streaming: true }, 'monitor', 2);
@@ -325,6 +335,7 @@ ${'const veryLongLine = 1; '.repeat(12)}
 			id: s.id, running: s.running, streamingAlive: s.streaming && s.running, favorite: s.favorite, hasDraft: s.hasDraft,
 			profileName: s.profileName,
 		};
+		if (s.engine) state.engine = s.engine;
 		if (sum.allOpenCount > 0 && sum.allOpenTopKind) state.attention = { count: sum.allOpenCount, topKind: sum.allOpenTopKind };
 		if (s.lastActivityMin !== null) state.lastActivityUtc = ago(s.lastActivityMin);
 		if (lp !== null) state.lastPromptUtc = ago(lp);
@@ -456,7 +467,11 @@ ${'const veryLongLine = 1; '.repeat(12)}
 	handle(method: string, params: Record<string, unknown>): unknown {
 		if (!this.online && method !== 'client.hello') throw new RpcError(-32001, 'Desktop offline');
 		switch (method) {
-			case 'client.hello': return { protocolVersion: 1, daemonVersion: 'mock-1.0', machineName: 'MOCK-PC', runId: 'mock-run', serverTimeUtc: new Date().toISOString() };
+			case 'client.hello': return {
+				protocolVersion: 1, daemonVersion: 'mock-1.0', machineName: 'MOCK-PC', runId: 'mock-run', serverTimeUtc: new Date().toISOString(),
+				capabilities: ['engines'], engines: ['claude', 'codex'],
+				codex: { found: true, version: '0.172.0', testedVersion: '0.171', note: 'Codex 0.172.0 is newer than the tested 0.171.x. It should work; report anything odd.' },
+			};
 			case 'tree.snapshot': return { version: this.treeVersion, directories: this.dirs.map((d) => this.dirDto(d)) };
 			case 'tree.workers': return { supervisorId: params.supervisorId, workers: this.workersOf(String(params.supervisorId)).map((w) => this.treeSession(w)) };
 			case 'tree.search': return this.search(params);
@@ -467,7 +482,11 @@ ${'const veryLongLine = 1; '.repeat(12)}
 			case 'session.get': return this.sessionGet(params);
 			case 'session.entries': return this.sessionEntries(params);
 			case 'session.entry': return this.sessionEntry(params);
-			case 'session.send': return { accepted: true, queued: this.runTurn(this.get(params.nodeId), String(params.text ?? '')) };
+			case 'session.send': {
+				const s = this.get(params.nodeId);
+				this.applyPick(s, params);
+				return { accepted: true, queued: this.runTurn(s, String(params.text ?? '')) };
+			}
 			case 'session.stop': {
 				const s = this.get(params.nodeId);
 				const was = s.running;
@@ -517,19 +536,37 @@ ${'const veryLongLine = 1; '.repeat(12)}
 			}
 			case 'catalog.get': return {
 				models: [
-					{ id: 'default', displayName: 'Default', provider: 'anthropic' },
-					{ id: 'claude-opus-5-5', displayName: 'Opus 5.5', provider: 'anthropic' },
-					{ id: 'claude-sonnet-5-5', displayName: 'Sonnet 5.5', provider: 'anthropic' },
-					{ id: 'claude-haiku-5-5', displayName: 'Haiku 5.5', provider: 'anthropic' },
-					{ id: 'claude-opus-5-5-1m', displayName: 'Opus 5.5 with the one million token extended context window (long context)', provider: 'anthropic' },
+					{ id: 'default', displayName: 'Default', engine: 'claude', efforts: CLAUDE_EFFORTS },
+					{ id: 'claude-opus-5-5', displayName: 'Opus 5.5', provider: 'anthropic', engine: 'claude', efforts: CLAUDE_EFFORTS },
+					{ id: 'claude-sonnet-5-5', displayName: 'Sonnet 5.5', provider: 'anthropic', engine: 'claude', efforts: CLAUDE_EFFORTS },
+					{ id: 'claude-haiku-5-5', displayName: 'Haiku 5.5', provider: 'anthropic', engine: 'claude', efforts: CLAUDE_EFFORTS },
+					{ id: 'claude-opus-5-5-1m', displayName: 'Opus 5.5 with the one million token extended context window (long context)', provider: 'anthropic', engine: 'claude', efforts: CLAUDE_EFFORTS },
+					{ id: 'gpt-6.2-luna', displayName: 'GPT-6.2-Luna', provider: 'openAI', engine: 'codex', efforts: [{ id: 'low', description: 'Fast responses' }, { id: 'medium', description: 'Balanced' }] },
+					{ id: 'gpt-6.2-sol', displayName: 'GPT-6.2-Sol', provider: 'openAI', engine: 'codex', isDefault: true, upgrade: 'gpt-6.3-sol',
+						efforts: [{ id: 'low', description: 'Fast responses' }, { id: 'medium', description: 'Balanced' }, { id: 'high', description: 'Deeper reasoning' }, { id: 'xhigh', description: 'Extra high reasoning' }] },
+					{ id: 'qwen3:8b', displayName: 'qwen3:8b', provider: 'ollama', engine: 'claude', efforts: CLAUDE_EFFORTS },
 				],
 				efforts: ['default', 'max', 'high', 'medium', 'low'],
 				mediaPreviewHosts: ['annielartens.online', '*.githubusercontent.com'],
-				profiles: [{ id: 'default', displayName: SYS_PROFILE }, { id: 'work', displayName: WORK_PROFILE }, { id: 'personal', displayName: 'Personal' }, { id: 'sys2', displayName: '[Sys] vvinogradoff@gmail.com' }, { id: 'long', displayName: 'another.long.name@example-domain.com' }],
+				profiles: [
+					{ id: 'default', displayName: SYS_PROFILE, engine: 'claude' }, { id: 'work', displayName: WORK_PROFILE, engine: 'claude' }, { id: 'personal', displayName: 'Personal', engine: 'claude' },
+					{ id: 'sys2', displayName: '[Sys] vvinogradoff@gmail.com', engine: 'claude' }, { id: 'long', displayName: 'another.long.name@example-domain.com', engine: 'claude' },
+					{ id: 'codex_1', displayName: CHATGPT_PROFILE, engine: 'codex', plan: 'plus' },
+				],
 			};
 			case 'usage.get': return this.usage(String(params.profileId ?? 'default'));
 			default: throw new RpcError(-32601, `Method not found: ${method}`);
 		}
+	}
+
+	/** FR.25.24: a choice sent with a turn is stored on the session (a sticky pick); a GPT model makes it a GPT session (FR.33.4). */
+	private applyPick(s: MockSession, params: Record<string, unknown>) {
+		const modelId = typeof params.modelId === 'string' ? params.modelId : s.lastUsed.modelId;
+		const effort = typeof params.effort === 'string' ? params.effort : s.lastUsed.effort;
+		const profileId = typeof params.profileId === 'string' ? params.profileId : s.lastUsed.profileId;
+		const profileName = profileId === 'codex_1' ? CHATGPT_PROFILE : profileId === 'work' ? WORK_PROFILE : s.lastUsed.profileName;
+		s.lastUsed = { modelId, effort, profileId, profileName };
+		s.engine = modelId.startsWith('gpt-') ? 'codex' : undefined;
 	}
 
 	private orderedAttention(s: MockSession): AttentionItemDto[] {
@@ -755,6 +792,14 @@ ${'const veryLongLine = 1; '.repeat(12)}
 	}
 
 	private usage(profileId: string): UsageResult {
+		if (profileId === 'codex_1') {
+			// FR.33.10: Codex's own windows with their labels; the short one ran out of credits.
+			return {
+				profileId, profileName: CHATGPT_PROFILE, state: 'ok', fetchedAtUtc: new Date().toISOString(), engine: 'codex', exhausted: 'rate_limit_reached',
+				fiveHour: { utilization: 100, resetsAtUtc: new Date(Date.now() + 1.2 * 3600_000).toISOString(), isStale: false, label: '5h', durationMinutes: 300, isExhausted: true },
+				sevenDay: { utilization: 41, resetsAtUtc: new Date(Date.now() + 3 * 24 * 3600_000).toISOString(), isStale: false, label: '7d', durationMinutes: 10080 },
+			};
+		}
 		const h = profileId === 'personal' ? 12 : profileId === 'work' ? 58 : 37;
 		return {
 			profileId, profileName: profileId, state: 'ok', fetchedAtUtc: new Date().toISOString(),
