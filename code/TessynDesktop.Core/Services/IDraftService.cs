@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.Services;
 
@@ -70,6 +71,33 @@ public interface IDraftService
 			DeleteItemDraft(sessionFileName, itemId);
 		else
 			SaveItemDraft(sessionFileName, itemId, text);
+		return true;
+	}
+
+	/// <summary>
+	/// The reply draft of a Focus item with its question values (FR.23.37), or null if none exists. <see cref="LoadItemDraft"/> returns the note only. The
+	/// default is for fakes that keep no question values.
+	/// </summary>
+	ItemDraftModel? LoadItemDraftFull(string sessionFileName, string itemId)
+	{
+		var text = LoadItemDraft(sessionFileName, itemId);
+		return text == null ? null : new ItemDraftModel(text, null);
+	}
+
+	/// <summary>Saves the note and the question values of a Focus item's reply draft. Overwrites any existing one.</summary>
+	void SaveItemDraftFull(string sessionFileName, string itemId, string text, IReadOnlyList<AttentionQuestionAnswerParams>? questions) =>
+		SaveItemDraft(sessionFileName, itemId, text);
+
+	/// <summary>Compare-and-write like <see cref="TryWriteItemDraft"/>, with the question values; an empty note without question values deletes the draft.</summary>
+	bool TryWriteItemDraftFull(string sessionFileName, string itemId, string text, IReadOnlyList<AttentionQuestionAnswerParams>? questions, Func<ItemDraftModel?, bool> isExpected)
+	{
+		if (!isExpected(LoadItemDraftFull(sessionFileName, itemId)))
+			return false;
+
+		if (text.Length == 0 && questions is not { Count: > 0 })
+			DeleteItemDraft(sessionFileName, itemId);
+		else
+			SaveItemDraftFull(sessionFileName, itemId, text, questions);
 		return true;
 	}
 

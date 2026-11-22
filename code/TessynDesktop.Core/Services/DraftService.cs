@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.Services;
 
@@ -37,14 +38,29 @@ public sealed class DraftService : IDraftService
 	public bool TryWriteDraft(string sessionFileName, string text, Func<string?, bool> isExpected)
 		=> TryWriteCore(sessionFileName, null, text, isExpected);
 
-	public string? LoadItemDraft(string sessionFileName, string itemId) => Read(GetItemDraftPath(sessionFileName, itemId));
+	public string? LoadItemDraft(string sessionFileName, string itemId) => NoteOf(LoadItemDraftFull(sessionFileName, itemId));
 
-	public void SaveItemDraft(string sessionFileName, string itemId, string text) => SaveCore(sessionFileName, itemId, text);
+	public ItemDraftModel? LoadItemDraftFull(string sessionFileName, string itemId)
+	{
+		var raw = Read(GetItemDraftPath(sessionFileName, itemId));
+		return raw == null ? null : ItemDraftCodec.Decode(raw);
+	}
+
+	public void SaveItemDraft(string sessionFileName, string itemId, string text) => SaveCore(sessionFileName, itemId, ItemDraftCodec.Encode(text, null));
+
+	public void SaveItemDraftFull(string sessionFileName, string itemId, string text, IReadOnlyList<AttentionQuestionAnswerParams>? questions)
+		=> SaveCore(sessionFileName, itemId, ItemDraftCodec.Encode(text, questions));
 
 	public void DeleteItemDraft(string sessionFileName, string itemId) => DeleteCore(sessionFileName, itemId);
 
 	public bool TryWriteItemDraft(string sessionFileName, string itemId, string text, Func<string?, bool> isExpected)
-		=> TryWriteCore(sessionFileName, itemId, text, isExpected);
+		=> TryWriteCore(sessionFileName, itemId, ItemDraftCodec.Encode(text, null), raw => isExpected(NoteOf(raw == null ? null : ItemDraftCodec.Decode(raw))));
+
+	public bool TryWriteItemDraftFull(string sessionFileName, string itemId, string text, IReadOnlyList<AttentionQuestionAnswerParams>? questions, Func<ItemDraftModel?, bool> isExpected)
+		=> TryWriteCore(sessionFileName, itemId, ItemDraftCodec.Encode(text, questions), raw => isExpected(raw == null ? null : ItemDraftCodec.Decode(raw)));
+
+	// The note of a draft; null when it is empty (a draft that holds question values only has no note).
+	private static string? NoteOf(ItemDraftModel? draft) => string.IsNullOrEmpty(draft?.Text) ? null : draft.Text;
 
 	public IReadOnlyList<string> ListItemDraftIds(string sessionFileName)
 	{

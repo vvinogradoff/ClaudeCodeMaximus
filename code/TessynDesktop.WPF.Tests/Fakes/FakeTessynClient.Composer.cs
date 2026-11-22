@@ -72,7 +72,7 @@ public sealed partial class FakeTessynClient
 		return Task.FromResult(new DraftGetResult(text ?? string.Empty, RevisionOf(text)));
 	}
 
-	public Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, CancellationToken cancellationToken = default)
+	public Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, IReadOnlyList<AttentionQuestionAnswerParams>? questions = null, CancellationToken cancellationToken = default)
 	{
 		Record($"draft.set:{nodeId}:{itemId}:{baseRevision ?? "-"}");
 		if (ReplyDraftSetException != null)
