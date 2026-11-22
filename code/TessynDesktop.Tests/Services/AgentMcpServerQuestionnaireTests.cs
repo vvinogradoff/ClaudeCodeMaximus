@@ -138,7 +138,7 @@ public sealed class AgentMcpServerQuestionnaireTests : IDisposable
 	{
 		var text = TextOf(await Post(Item("critical", "Decide now", [Question("yes_no", "Roll back?")])));
 
-		Assert.StartsWith("A1 posted (critical) with 1 questions.", text);
+		Assert.StartsWith("A1 posted (critical) with 1 question.", text);
 	}
 
 	[Fact]

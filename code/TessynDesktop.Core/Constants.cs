@@ -527,16 +527,19 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string AnswerNo = "no";
 
 		/// <summary>Result line suffix of an item with a questionnaire (FR.23.34): <c>A12 posted (ask) with 7 questions.</c></summary>
-		public const string PostedWithQuestionsFormat = " with {0} questions";
+		/// <summary>Singular and plural noun for the question counts above (FR.23.34, FR.23.38).</summary>
+		public const string QuestionNoun = "question";
+		public const string QuestionsNoun = "questions";
+		public const string PostedWithQuestionsFormat = " with {0} {1}";
 
 		/// <summary>Pinned list suffix (FR.23.38).</summary>
-		public const string PinnedQuestionnaireSuffixFormat = " (questionnaire, {0} questions)";
+		public const string PinnedQuestionnaireSuffixFormat = " (questionnaire, {0} {1})";
 
 		/// <summary><c>list_attention</c> suffix of an open questionnaire item (FR.23.38).</summary>
-		public const string ListQuestionsSuffixFormat = " - {0} questions";
+		public const string ListQuestionsSuffixFormat = " - {0} {1}";
 
 		/// <summary>Notification addition for a single created questionnaire item (FR.23.38): count, first texts, then the ellipsis.</summary>
-		public const string NotifyQuestionsFormat = "{0} questions: {1}...";
+		public const string NotifyQuestionsFormat = "{0} {1}: {2}...";
 		public const int NotifyQuestionTexts = 3;
 		public const string NotifyQuestionsSeparator = "; ";
 

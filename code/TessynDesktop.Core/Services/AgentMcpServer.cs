@@ -1378,7 +1378,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		var lines = outcomes.Select(o => string.Format(
 			o.IsCreated ? Constants.Attention.PostedLineFormat : Constants.Attention.AlreadyPinnedLineFormat,
 			o.Item.Id, AttentionFormat.KindName(o.Item.Kind),
-			o.Item.Questions.Count == 0 ? string.Empty : string.Format(Constants.Attention.PostedWithQuestionsFormat, o.Item.Questions.Count))).ToList();
+			o.Item.Questions.Count == 0 ? string.Empty : string.Format(Constants.Attention.PostedWithQuestionsFormat, o.Item.Questions.Count, o.Item.Questions.Count == 1 ? Constants.Attention.QuestionNoun : Constants.Attention.QuestionsNoun))).ToList();
 
 		// FR.23.4: at most one notification per call; only created items count, updates never notify.
 		var created = outcomes.Where(o => o.IsCreated).Select(o => o.Item).ToList();
@@ -1408,7 +1408,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			// FR.23.38: the first three question texts, so the phone shows what is being asked.
 			var texts = string.Join(Constants.Attention.NotifyQuestionsSeparator,
 				item.Questions.Take(Constants.Attention.NotifyQuestionTexts).Select(q => AttentionQuestionFormat.OneLine(q.Text)));
-			return message + "\n\n" + string.Format(Constants.Attention.NotifyQuestionsFormat, item.Questions.Count, texts);
+			return message + "\n\n" + string.Format(Constants.Attention.NotifyQuestionsFormat, item.Questions.Count, item.Questions.Count == 1 ? Constants.Attention.QuestionNoun : Constants.Attention.QuestionsNoun, texts);
 		}
 
 		var sb = new StringBuilder(string.Format(Constants.Attention.NotifyManyHeaderFormat, created.Count));
@@ -1618,7 +1618,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		var line = $"{item.Id} [{AttentionFormat.KindName(item.Kind)}, {AttentionFormat.StatusName(item.Status)}] {item.Title}";
 		return item.Status switch
 		{
-			AttentionStatus.Open when item.Questions.Count > 0                       => line + string.Format(Constants.Attention.ListQuestionsSuffixFormat, item.Questions.Count),
+			AttentionStatus.Open when item.Questions.Count > 0                       => line + string.Format(Constants.Attention.ListQuestionsSuffixFormat, item.Questions.Count, item.Questions.Count == 1 ? Constants.Attention.QuestionNoun : Constants.Attention.QuestionsNoun),
 			AttentionStatus.Answered when !string.IsNullOrEmpty(item.Answer)         => $"{line} - answer: {item.Answer}",
 			AttentionStatus.Resolved when !string.IsNullOrEmpty(item.ResolutionNote) => $"{line} - {item.ResolutionNote}",
 			_ => line,

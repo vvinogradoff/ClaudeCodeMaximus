@@ -110,7 +110,8 @@ test.describe('mobile flows', () => {
 		await askCard.getByRole('button', { name: 'Linear backoff' }).click();
 		await expect(askCard.getByPlaceholder('Reply...')).toHaveValue('Linear backoff');
 		await askCard.getByRole('button', { name: /Use recommendation/ }).click();
-		await expect(askCard.getByPlaceholder('Reply...')).toHaveValue('Accepted your recommendation: Exponential backoff');
+		await expect(askCard.getByPlaceholder('Reply...')).toHaveValue('Linear backoff
+Accepted your recommendation: Exponential backoff');
 		await shot(page, '17-focus-reply-filled');
 		await askCard.getByRole('button', { name: 'Reply', exact: true }).click();
 		await expect(page.getByTestId('focus-card').filter({ hasText: 'Which retry policy' })).toHaveCount(0);
