@@ -91,6 +91,10 @@ public sealed class TurnEngine : ITurnEngine
 		if (request.AutoCompact && string.IsNullOrEmpty(request.Message))
 			return await RunCompactionOnlyAsync(request, observer ?? new NullTurnObserver(), cancellationToken);
 
+		// FR.33.1: the session's engine, resolved before anything is written to the transcript (today always Claude; the model->engine rule
+		// comes with FR.33.4).
+		var engine   = _engines.For(node);
+
 		var context  = _nodes.GetOrAdd(nodeId, _ => new TurnNodeContext());
 		var turnId   = request.TurnId ?? Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
 		observer   ??= new NullTurnObserver();
@@ -124,8 +128,6 @@ public sealed class TurnEngine : ITurnEngine
 			_files.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, request.Message, profileName: settings.ProfileDisplayName);
 			observer.UserEntryAppended(DateTimeOffset.UtcNow, settings.ProfileDisplayName);
 
-			// FR.33.1: the session's engine (today always Claude; the model->engine rule comes with FR.33.4).
-			var engine    = _engines.For(node);
 			var sessionId = engine.GetConversationId(node);
 
 			// The cross-profile adoption (FR.11.13) moves the transcript and session folder, so it runs below, under the turn lock:

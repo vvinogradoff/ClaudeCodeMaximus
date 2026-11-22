@@ -120,7 +120,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		TurnOptionsModel? turnOptions,
 		CancellationToken cancellationToken = default)
 	{
-		// FR.33.1: the session's engine (today always Claude; the model->engine rule comes with FR.33.4).
+		// FR.33.1: the session's engine, resolved before anything is written to the transcript (today always Claude; the model->engine rule
+		// comes with FR.33.4).
 		var engine = _engines.For(node);
 
 		// P1.I: the same progress notifications as an engine turn (the sinks decide who sees them).

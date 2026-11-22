@@ -41,6 +41,9 @@ internal sealed class TurnRun : IEngineEventSink
 
 	public string TurnId { get; }
 
+	/// <inheritdoc />
+	public object? EngineTurnState { get; set; }
+
 	/// <summary>FR.21.22: text of the error result of this turn, reported with <c>TurnCompleted</c>; reset on every retry.</summary>
 	public string? SendErrorText { get; set; }
 

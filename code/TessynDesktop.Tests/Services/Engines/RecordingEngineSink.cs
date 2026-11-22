@@ -18,6 +18,8 @@ internal sealed class RecordingEngineSink : IEngineEventSink
 
 	public List<EngineTurnEnd> Ends { get; } = [];
 
+	public object? EngineTurnState { get; set; }
+
 	public void AssistantText(EngineAssistantText message) => Add($"AssistantText({message.Text}, limit={message.IsLimitError})");
 	public void Thinking(string text) => Add($"Thinking({text})");
 	public void ToolStarted(string toolId, string? name, string? summary) => Add($"ToolStarted({toolId}, {name}, {summary})");

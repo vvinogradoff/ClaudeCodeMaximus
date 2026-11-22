@@ -8,20 +8,28 @@ using TessynDesktop.Services;
 namespace TessynDesktop.Tests.Services.Engines;
 
 /// <summary>
-/// A streaming manager whose process is already alive (started by an interactive turn). A turn sent into it delivers its scripted events to the
-/// primary callback and to the turn's additive observer, as the real read loop does.
+/// A streaming manager whose process is alive. Like the real read loop, a turn sent into it delivers each scripted event first to the primary
+/// callback (bound by the interactive turn that started the process, when there was one) and then to the turn's additive observer.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 internal sealed class LiveProcessStreamingManager : IClaudeStreamingSessionManager
 {
 	private readonly Queue<ClaudeStreamEvent[]> _turns = new();
+	private Action<ClaudeStreamEvent>? _primary;
 
 	public List<ClaudeStreamEvent> PrimaryEvents { get; } = [];
 	public List<string> Sends { get; } = [];
+	public int EnsureCalls { get; private set; }
 
 	public void ScriptTurn(params ClaudeStreamEvent[] events) => _turns.Enqueue(events);
 
-	public bool EnsureStarted(string nodeId, StreamingSpawnParams spawnParams, Action<ClaudeStreamEvent> onEvent) => false;
+	public bool EnsureStarted(string nodeId, StreamingSpawnParams spawnParams, Action<ClaudeStreamEvent> onEvent)
+	{
+		var first = _primary == null;
+		EnsureCalls++;
+		_primary = onEvent;
+		return first;
+	}
 
 	public Task SendTurnAsync(string nodeId, string userMessage, CancellationToken cancellationToken, Action<ClaudeStreamEvent>? onTurnEvent = null)
 	{
@@ -32,6 +40,7 @@ internal sealed class LiveProcessStreamingManager : IClaudeStreamingSessionManag
 		foreach (var evt in _turns.Dequeue())
 		{
 			PrimaryEvents.Add(evt);
+			_primary?.Invoke(evt);
 			onTurnEvent?.Invoke(evt);
 		}
 		return Task.CompletedTask;

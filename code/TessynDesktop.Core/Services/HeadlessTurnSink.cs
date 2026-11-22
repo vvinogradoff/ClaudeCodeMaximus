@@ -53,6 +53,9 @@ internal sealed class HeadlessTurnSink : IEngineEventSink
 	public double CostUsd { get; private set; }
 
 	/// <inheritdoc />
+	public object? EngineTurnState { get; set; }
+
+	/// <inheritdoc />
 	public void AssistantText(EngineAssistantText message)
 	{
 		if (_persists)

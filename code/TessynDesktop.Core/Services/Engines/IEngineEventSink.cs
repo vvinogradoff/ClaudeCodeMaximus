@@ -11,6 +11,12 @@ namespace TessynDesktop.Services;
 /// <remarks>Created by Claude</remarks>
 public interface IEngineEventSink
 {
+	/// <summary>
+	/// The engine's own state for the turn this sink stands for (for Claude: its retry flags). The sink only keeps it, so it lives exactly as long
+	/// as the turn: a persistent process's sink hands out the state of the turn now holding the lock, and a background sink has none.
+	/// </summary>
+	object? EngineTurnState { get; set; }
+
 	/// <summary>An assistant message: one ASSISTANT entry, and a <c>turn.delta</c> text.</summary>
 	void AssistantText(EngineAssistantText message);
 

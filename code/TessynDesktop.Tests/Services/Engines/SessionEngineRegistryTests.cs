@@ -1,4 +1,5 @@
 using System;
+using Serilog.Events;
 using TessynDesktop.Models;
 using TessynDesktop.Services;
 
@@ -43,6 +44,25 @@ public sealed class SessionEngineRegistryTests
 	[Fact]
 	public void For_ASessionOnAnotherEngine_RunsOnIt() =>
 		Assert.Same(_other, Router().For(Node("other")));
+
+	[Fact]
+	public void For_ASessionWithAnUnknownEngine_RunsOnClaude_AndWarnsOncePerNode()
+	{
+		var log    = new CapturingSink();
+		var router = new SessionEngineRegistry([_claude, _other], log.CreateLogger());
+		var first  = Node("codex");
+		var second = new SessionNodeModel { Name = "M", FileName = "m.txt", NodeId = "n2", EngineId = "future" };
+
+		Assert.Same(_claude, router.For(first));
+		Assert.Same(_claude, router.For(first));
+		Assert.Same(_claude, router.For(second));
+
+		Assert.Equal(
+		[
+			"Unknown engine 'codex' on session n1; using Claude.",
+			"Unknown engine 'future' on session n2; using Claude.",
+		], log.Messages(LogEventLevel.Warning));
+	}
 
 	[Fact]
 	public void Engines_AreListedInRegistrationOrder() =>

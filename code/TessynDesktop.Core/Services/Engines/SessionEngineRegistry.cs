@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using Serilog;
 using TessynDesktop.Models;
 
 namespace TessynDesktop.Services;
@@ -11,9 +13,14 @@ public sealed class SessionEngineRegistry : ISessionEngineRouter
 {
 	private readonly IReadOnlyList<ISessionEngine> _engines;
 	private readonly Dictionary<string, ISessionEngine> _byId;
+	private readonly ILogger _log;
 
-	public SessionEngineRegistry(IEnumerable<ISessionEngine> engines)
+	// Nodes whose unknown engine id was already reported: one Warning per node, not one per turn.
+	private readonly ConcurrentDictionary<string, byte> _warnedNodes = new(StringComparer.Ordinal);
+
+	public SessionEngineRegistry(IEnumerable<ISessionEngine> engines, ILogger? log = null)
 	{
+		_log     = log ?? Log.ForContext<SessionEngineRegistry>();
 		_engines = engines.ToArray();
 		_byId    = new Dictionary<string, ISessionEngine>(StringComparer.OrdinalIgnoreCase);
 
@@ -39,8 +46,22 @@ public sealed class SessionEngineRegistry : ISessionEngineRouter
 			: throw new InvalidOperationException($"Unknown session engine '{engineId}'");
 	}
 
-	/// <inheritdoc />
-	public ISessionEngine For(SessionNodeModel node) => Get(node.EngineId);
+	/// <summary>
+	/// The engine the session runs on. <see cref="SessionNodeModel.EngineId"/> is only a stored cache of the engine of the resolved model
+	/// (FR.33.4), so an id this build does not know (written by a newer build, or edited by hand) never fails a turn: the session runs on
+	/// Claude, and the router logs one Warning per node.
+	/// </summary>
+	public ISessionEngine For(SessionNodeModel node)
+	{
+		var id = string.IsNullOrEmpty(node.EngineId) ? Constants.SessionEngines.Claude : node.EngineId;
+		if (_byId.TryGetValue(id, out var engine))
+			return engine;
+
+		if (_warnedNodes.TryAdd(node.NodeId, 0))
+			_log.Warning("Unknown engine '{EngineId:l}' on session {NodeId:l}; using Claude.", node.EngineId, node.NodeId);
+
+		return _byId[Constants.SessionEngines.Claude];
+	}
 
 	/// <inheritdoc />
 	public bool IsAlive(string nodeId) => _engines.Any(e => e.IsAlive(nodeId));

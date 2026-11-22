@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
@@ -37,10 +36,6 @@ public sealed class ClaudeSessionEngine : ISessionEngine
 	private readonly IAppSettingsService _appSettings;
 	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly Lazy<IAgentMcpServer> _mcpServer;
-
-	// The retry state of the interactive turn now running in a node's persistent process; the process's sink translates with it (as the former
-	// TurnRun did for context.Active). Events outside such a turn get fresh state, as the former per-event background TurnRun had.
-	private readonly ConcurrentDictionary<string, ClaudeTurnState> _persistentTurns = new();
 
 	public ClaudeSessionEngine(
 		IClaudeProcessManager processManager,
@@ -202,6 +197,7 @@ public sealed class ClaudeSessionEngine : ISessionEngine
 	{
 		var node       = request.Node;
 		var state      = new ClaudeTurnState();
+		sink.EngineTurnState = state;
 		var translator = new ClaudeEventTranslator(node, _appSettings, sink, EngineTurnMode.Interactive, ownsConversation: true, state);
 
 		await LaunchOneShotAsync(translator, node, request.Settings, request.ConversationId, request.Prompt, preparation, chrome: request.Settings.Chrome, ct);
@@ -298,42 +294,39 @@ public sealed class ClaudeSessionEngine : ISessionEngine
 			LocalToolSpec:    preparation.LocalToolSpec,
 			StrictMcpConfig:  preparation.StrictMcpConfig);
 
+		// The turn's retry state is kept by its sink (the run holding the turn lock), so it lives until the turn really ends - also through
+		// what the caller does after the reply while it still holds the lock (Auto-Compact) - exactly as the flags on the former TurnRun did.
 		var state = new ClaudeTurnState();
-		_persistentTurns[nodeId] = state;
-		try
-		{
-			var justStarted = _streamingManager.EnsureStarted(nodeId, spawnParams, PersistentHandlerFor(node, processSink));
-			if (justStarted)
-				sink.PersistentProcessStarted();
+		sink.EngineTurnState = state;
 
+		var justStarted = _streamingManager.EnsureStarted(nodeId, spawnParams, PersistentHandlerFor(node, processSink));
+		if (justStarted)
+			sink.PersistentProcessStarted();
+
+		await _streamingManager.SendTurnAsync(nodeId, request.Prompt, ct);
+
+		if (state.NeedsAuthRaceRetry)
+		{
+			// ISSUE.010 - same transient cross-process OAuth refresh race as the one-shot path; the streaming process is still
+			// alive, so retrying just writes the turn again.
+			state.NeedsAuthRaceRetry = false;
+			_log.Information("Retrying streaming turn after transient OAuth refresh race for session {FileName}", node.FileName);
+			sink.Retrying(EngineRetryKind.TransientAuth);
+			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
+			sink.RetryRunning();
 			await _streamingManager.SendTurnAsync(nodeId, request.Prompt, ct);
-
-			if (state.NeedsAuthRaceRetry)
-			{
-				// ISSUE.010 - same transient cross-process OAuth refresh race as the one-shot path; the streaming process is still
-				// alive, so retrying just writes the turn again.
-				state.NeedsAuthRaceRetry = false;
-				_log.Information("Retrying streaming turn after transient OAuth refresh race for session {FileName}", node.FileName);
-				sink.Retrying(EngineRetryKind.TransientAuth);
-				await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
-				sink.RetryRunning();
-				await _streamingManager.SendTurnAsync(nodeId, request.Prompt, ct);
-			}
-		}
-		finally
-		{
-			_persistentTurns.TryRemove(new(nodeId, state));
 		}
 	}
 
 	/// <summary>
-	/// The callback bound to a node's streaming process (bound again on every turn). It translates each event with the retry state of the
-	/// interactive turn now running in the process, or with fresh state outside one (background-task output, native schedules, FR.19.4).
+	/// The callback bound to a node's streaming process (bound again on every turn). It translates each event with the retry state the process
+	/// sink hands out: that of the turn now holding the lock, or fresh state outside one (background-task output, native schedules, FR.19.4),
+	/// as the former per-event background TurnRun had.
 	/// </summary>
 	private Action<ClaudeStreamEvent> PersistentHandlerFor(SessionNodeModel node, IEngineEventSink processSink) =>
 		evt =>
 		{
-			var state = _persistentTurns.TryGetValue(node.NodeId, out var active) ? active : new ClaudeTurnState();
+			var state = processSink.EngineTurnState as ClaudeTurnState ?? new ClaudeTurnState();
 			new ClaudeEventTranslator(node, _appSettings, processSink, EngineTurnMode.Interactive, ownsConversation: true, state).Handle(evt);
 		};
 }

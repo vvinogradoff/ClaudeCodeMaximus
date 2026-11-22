@@ -16,7 +16,7 @@ public interface ISessionEngineRouter
 	/// <summary>The engine with this id; null and <see cref="Constants.SessionEngines.Claude"/> both mean Claude. Throws for an unknown id.</summary>
 	ISessionEngine Get(string? engineId);
 
-	/// <summary>The engine the session runs on (<see cref="SessionNodeModel.EngineId"/>).</summary>
+	/// <summary>The engine the session runs on (<see cref="SessionNodeModel.EngineId"/>). An unknown id falls back to Claude with a Warning, never an error.</summary>
 	ISessionEngine For(SessionNodeModel node);
 
 	/// <summary>The session has a live persistent process on any engine.</summary>

@@ -23,6 +23,12 @@ internal sealed class TurnNodeStreamSink : IEngineEventSink
 
 	private IEngineEventSink Target => _context.Active ?? _backgroundRun();
 
+	public object? EngineTurnState
+	{
+		get => Target.EngineTurnState;
+		set => Target.EngineTurnState = value;
+	}
+
 	public void AssistantText(EngineAssistantText message) => Target.AssistantText(message);
 	public void Thinking(string text) => Target.Thinking(text);
 	public void ToolStarted(string toolId, string? name, string? summary) => Target.ToolStarted(toolId, name, summary);
