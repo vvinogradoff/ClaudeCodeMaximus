@@ -4,7 +4,7 @@
              xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels">
     <UserControl.Resources>
         <DataTemplate x:Key="OptionTemplate" DataType="{x:Type vm:SelectorOptionViewModel}">
-            <TextBlock Text="{Binding ShortLabel}" ToolTip="{Binding Label}" TextTrimming="CharacterEllipsis">
+            <TextBlock Text="{Binding ShortLabel}" ToolTip="{Binding ToolTip}" TextTrimming="CharacterEllipsis">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Style.Triggers>
@@ -12,19 +12,38 @@
                                 <Setter Property="FontStyle" Value="Italic" />
                                 <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
                             </DataTrigger>
+                            <!-- FR.33.2: the group headers of the model picker (Claude, GPT (ChatGPT plan), Local) -->
+                            <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="FontSize" Value="11" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </DataTrigger>
+                            <!-- The disabled sign-in hint line while no ChatGPT profile is signed in -->
+                            <DataTrigger Binding="{Binding IsHint}" Value="True">
+                                <Setter Property="FontStyle" Value="Italic" />
+                                <Setter Property="TextWrapping" Value="Wrap" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
         </DataTemplate>
+        <!-- Headers and hints are lines of the list, never choices: disabled, so neither the mouse nor the keyboard selects them. -->
+        <Style x:Key="OptionContainer" TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+            <Setter Property="IsEnabled" Value="{Binding IsSelectable}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
+            <Setter Property="AutomationProperties.ItemType" Value="{Binding Kind}" />
+        </Style>
     </UserControl.Resources>
-    <!-- Selectors of the session pane (W1a): model, effort, profile. The DataContext is the SessionPaneViewModel of the slot's host. -->
+    <!-- Selectors of the session pane (W1a): model, effort, profile. The DataContext is the SessionPaneViewModel of the slot's host.
+         They stay enabled while a turn runs: a pick applies from the next send (FR.12.15; for a Codex session FR.33.8). -->
     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
         <ComboBox Width="220" Margin="0,0,8,0" ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel, Mode=TwoWay}"
-                  ItemTemplate="{StaticResource OptionTemplate}" ToolTip="Model" AutomationProperties.Name="Model" />
+                  ItemTemplate="{StaticResource OptionTemplate}" ItemContainerStyle="{StaticResource OptionContainer}" ToolTip="Model" AutomationProperties.Name="Model" />
         <ComboBox Width="110" Margin="0,0,8,0" ItemsSource="{Binding Efforts}" SelectedItem="{Binding SelectedEffort, Mode=TwoWay}"
-                  ItemTemplate="{StaticResource OptionTemplate}" ToolTip="Effort" AutomationProperties.Name="Effort" />
+                  ItemTemplate="{StaticResource OptionTemplate}" ItemContainerStyle="{StaticResource OptionContainer}" ToolTip="Effort" AutomationProperties.Name="Effort" />
         <ComboBox Width="170" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}"
-                  ItemTemplate="{StaticResource OptionTemplate}" ToolTip="Profile" AutomationProperties.Name="Profile" />
+                  ItemTemplate="{StaticResource OptionTemplate}" ItemContainerStyle="{StaticResource OptionContainer}" ToolTip="Profile" AutomationProperties.Name="Profile" />
     </StackPanel>
 </UserControl>

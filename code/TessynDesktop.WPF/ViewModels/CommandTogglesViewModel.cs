@@ -30,6 +30,10 @@ public sealed partial class CommandTogglesViewModel : ObservableObject
 	[NotifyCanExecuteChangedFor(nameof(ToggleStreamingCommand))]
 	private bool _isStreamingKnown;
 
+	/// <summary>False for a Codex session: Streaming Session Mode does not apply to it, so the toggle is hidden, not faked (FR.33.1, FR.33.6).</summary>
+	[ObservableProperty]
+	private bool _isStreamingApplicable = true;
+
 	public CommandTogglesViewModel(ITessynClient client, SessionOptionsViewModel options, ILogger logger)
 	{
 		_client = client;

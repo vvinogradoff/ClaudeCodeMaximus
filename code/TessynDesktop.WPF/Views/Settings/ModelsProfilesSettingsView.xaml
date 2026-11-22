@@ -25,6 +25,8 @@
             <TextBlock Style="{StaticResource SettingsHint}" Visibility="{Binding Profiles.IsAvailable, Converter={StaticResource InvertedBoolToVis}}"
                        Text="Profile administration is not available on this daemon." />
             <StackPanel Visibility="{Binding Profiles.IsAvailable, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource SettingsLabel}" Text="Claude" Visibility="{Binding Profiles.IsChatGptAvailable, Converter={StaticResource BoolToVis}}"
+                           AutomationProperties.Name="Claude profiles" />
                 <ItemsControl ItemsSource="{Binding Profiles.Profiles}" Margin="0,8,0,0" AutomationProperties.Name="Profiles in settings">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -47,6 +49,80 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Add profile…" Command="{Binding Profiles.AddCommand}" AutomationProperties.Name="Add profile in settings" />
+
+                <!-- FR.33.5: the ChatGPT profiles (Codex), in their own group -->
+                <StackPanel x:Name="ChatGptGroup" Visibility="{Binding Profiles.IsChatGptAvailable, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="ChatGPT profiles">
+                    <TextBlock Style="{StaticResource SettingsLabel}" Margin="0,16,0,3" Text="ChatGPT" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="GPT sessions run through the Codex CLI on these ChatGPT sign-ins." />
+                    <ItemsControl ItemsSource="{Binding Profiles.ChatGptProfiles}" Margin="0,8,0,0" AutomationProperties.Name="ChatGPT profiles in settings">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,3" AutomationProperties.Name="{Binding AutomationName}">
+                                    <DockPanel>
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <Button Padding="8,2" Margin="4,0,0,0" Content="Sign in again" AutomationProperties.Name="{Binding SignInAgainName}"
+                                                    Command="{Binding DataContext.Profiles.SignInAgainCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                            <Button Padding="8,2" Margin="4,0,0,0" Content="Sign out" AutomationProperties.Name="{Binding SignOutName}" IsEnabled="{Binding CanSignOut}"
+                                                    Command="{Binding DataContext.Profiles.SignOutCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                            <Button Padding="8,2" Margin="4,0,0,0" Content="Delete" AutomationProperties.Name="{Binding DeleteName}" Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}"
+                                                    Command="{Binding DataContext.Profiles.DeleteChatGptCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock TextTrimming="CharacterEllipsis">
+                                                <Run Text="{Binding DisplayName, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding PlanText, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                            </TextBlock>
+                                            <TextBlock FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{Binding StateText}" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                    <!-- FR.33.6: Codex Default shares the User's own Codex CLI home -->
+                                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding DataContext.Profiles.CodexDefaultWarning, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                               Visibility="{Binding IsCodexDefault, Converter={StaticResource BoolToVis}}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="New ChatGPT profile…" Command="{Binding Profiles.NewChatGptProfileCommand}"
+                            AutomationProperties.Name="New ChatGPT profile" />
+
+                    <!-- The sign-in in progress: the browser way, or the code and the address with copy buttons; Cancel ends it -->
+                    <Border x:Name="ChatGptSignIn" Margin="0,8,0,0" Padding="10,8" CornerRadius="4" Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                            DataContext="{Binding Profiles.SignIn}" AutomationProperties.Name="ChatGPT sign-in">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Text="{Binding Instruction}" />
+                            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding BrowserOpenFailedText}" Visibility="{Binding BrowserOpenFailed, Converter={StaticResource BoolToVis}}" />
+                            <StackPanel Visibility="{Binding IsDeviceCode, Converter={StaticResource BoolToVis}}" Margin="0,6,0,0">
+                                <TextBlock Style="{StaticResource SettingsHint}" Text="Code" />
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Copy code" Command="{Binding CopyCodeCommand}" AutomationProperties.Name="Copy code" />
+                                    <TextBox Text="{Binding UserCode, Mode=OneWay}" IsReadOnly="True" FontSize="16" FontFamily="Consolas" AutomationProperties.Name="Sign-in code" />
+                                </DockPanel>
+                            </StackPanel>
+                            <StackPanel Visibility="{Binding ShowsAddress, Converter={StaticResource BoolToVis}}" Margin="0,6,0,0">
+                                <TextBlock Style="{StaticResource SettingsHint}" Text="Address" />
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Open" Command="{Binding OpenAddressCommand}" AutomationProperties.Name="Open sign-in address" />
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Copy address" Command="{Binding CopyAddressCommand}" AutomationProperties.Name="Copy address" />
+                                    <TextBox Text="{Binding Address, Mode=OneWay}" IsReadOnly="True" AutomationProperties.Name="Sign-in address" />
+                                </DockPanel>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding DeviceCodeNote}" Visibility="{Binding IsDeviceCode, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding CopyStatus}" />
+                            <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Cancel" AutomationProperties.Name="Cancel sign-in"
+                                    Command="{Binding DataContext.Profiles.CancelSignInCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
                 <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding Profiles.StatusText}" Visibility="{Binding Profiles.HasStatus, Converter={StaticResource BoolToVis}}" />
             </StackPanel>
         </StackPanel>

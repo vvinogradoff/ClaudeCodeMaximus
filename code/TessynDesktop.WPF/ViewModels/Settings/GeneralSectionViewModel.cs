@@ -6,7 +6,7 @@ using TessynDesktop.Models.Remote;
 namespace TessynDesktop.WPF.ViewModels.Settings;
 
 /// <summary>
-/// The General tab (FR.4.4, FR.12.13, FR.31): proxy, Ollama address, agent tools, remote file access and the media preview hosts. The session files
+/// The General tab (FR.4.4, FR.12.13, FR.31, FR.33.17): proxy, Ollama address, agent tools, remote file access, the media preview hosts and Codex. The session files
 /// root, the Claude path and the source codes location are shown but cannot be edited: the daemon does not accept them from a client.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -37,8 +37,11 @@ public sealed partial class GeneralSectionViewModel : DaemonSectionViewModel<Gen
 	[ObservableProperty]
 	private string _mediaHostsText = string.Empty;
 
-	public GeneralSectionViewModel(ITessynClient client, ILogger<GeneralSectionViewModel> logger) : base(client, logger)
+	/// <param name="filePicker">The open-file dialog of the Codex path's Browse button; without one Browse is disabled.</param>
+	public GeneralSectionViewModel(ITessynClient client, ILogger<GeneralSectionViewModel> logger, Services.IFilePicker? filePicker = null) : base(client, logger)
 	{
+		_filePicker = filePicker;
+		_codexLogger = logger;
 	}
 
 	public override string Title => "General";
@@ -61,20 +64,28 @@ public sealed partial class GeneralSectionViewModel : DaemonSectionViewModel<Gen
 		AgentToolsEnabled = values.AgentToolsEnabled;
 		FileAccessMode = values.FileAccess.Mode;
 		MediaHostsText = string.Join(Environment.NewLine, values.MediaPreviewHosts);
+		ReadCodexFrom(values);
 	}
+
+	protected override Task AfterLoadAsync() => LoadCatalogProfilesAsync();
 
 	protected override GeneralSettingsPatch? BuildPatch(GeneralSettingsDto snapshot)
 	{
 		var proxy = HttpsProxy.Trim();
 		var ollama = OllamaBaseUrl.Trim();
 		var hosts = ParseHosts();
+		var codex = BuildCodexPatch(snapshot);
 
 		var patch = new GeneralSettingsPatch(
 			HttpsProxy: proxy != snapshot.HttpsProxy ? proxy : null,
 			OllamaBaseUrl: ollama != snapshot.OllamaBaseUrl ? ollama : null,
 			AgentToolsEnabled: AgentToolsEnabled != snapshot.AgentToolsEnabled ? AgentToolsEnabled : null,
 			FileAccess: FileAccessMode != snapshot.FileAccess.Mode ? new FileAccessSettingsPatch(Mode: FileAccessMode) : null,
-			MediaPreviewHosts: hosts.SequenceEqual(snapshot.MediaPreviewHosts, StringComparer.OrdinalIgnoreCase) ? null : hosts);
+			MediaPreviewHosts: hosts.SequenceEqual(snapshot.MediaPreviewHosts, StringComparer.OrdinalIgnoreCase) ? null : hosts,
+			CodexPath: codex.Path,
+			CodexCatalogProfileId: codex.CatalogProfile,
+			CodexModelTiers: codex.Tiers,
+			ResetCodexModelTiers: codex.Reset);
 
 		return patch == new GeneralSettingsPatch() ? null : patch;
 	}
@@ -91,6 +102,7 @@ public sealed partial class GeneralSectionViewModel : DaemonSectionViewModel<Gen
 			FileAccessMode = edits.FileAccess.Mode.Value;
 		if (edits.MediaPreviewHosts != null)
 			MediaHostsText = string.Join(Environment.NewLine, edits.MediaPreviewHosts);
+		ApplyCodexEdits(edits);
 	}
 
 	private List<string> ParseHosts()

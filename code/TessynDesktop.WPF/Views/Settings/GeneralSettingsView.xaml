@@ -40,6 +40,63 @@
                          AutomationProperties.Name="Media preview hosts" />
                 <TextBlock Style="{StaticResource SettingsHint}" Text="One host per line (*.example.com allows subdomains). Images and videos from these hosts may be previewed inline." />
 
+                <!-- FR.33.17: Codex (GPT sessions on the ChatGPT plan). Text boxes stretch, buttons keep their place (NR.7). -->
+                <TextBlock Style="{StaticResource SettingsLabel}" Margin="0,20,0,3" FontSize="14" Text="Codex" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="This daemon has no Codex engine." Visibility="{Binding HasCodexEngine, Converter={StaticResource InvertedBoolToVis}}" />
+                <StackPanel x:Name="CodexSection" Visibility="{Binding HasCodexEngine, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Codex settings">
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Codex path" />
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource SettingsButton}" Margin="6,0,0,0" Content="Browse…" Command="{Binding BrowseCodexPathCommand}"
+                                AutomationProperties.Name="Browse for Codex" />
+                        <TextBox Text="{Binding CodexPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Codex path" />
+                    </DockPanel>
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="Empty finds codex.exe (the official installer, winget, npm, then the PATH). Applies to Codex processes started after saving." />
+                    <TextBlock x:Name="CodexStatusLine" Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding CodexStatusLine}" AutomationProperties.Name="{Binding CodexStatusLine}" AutomationProperties.AutomationId="CodexStatus">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCodexFound}" Value="False">
+                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding CodexNote}" Visibility="{Binding HasCodexNote, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding CodexTestedText}" />
+
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="Profile for the GPT model list" />
+                    <ComboBox ItemsSource="{Binding CatalogProfiles}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding CodexCatalogProfileId}"
+                              AutomationProperties.Name="Catalog profile" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="The signed-in ChatGPT profile whose Codex lists the GPT models." />
+
+                    <TextBlock Style="{StaticResource SettingsLabel}" Text="GPT model tiers" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Margin="0,0,0,4"
+                               Text="A GPT model's tier is that of the first row whose text is in its id (any case), top row first. Orchestration tools compare it with the caller's tier." />
+                    <ItemsControl x:Name="CodexTiers" ItemsSource="{Binding Tiers}" IsEnabled="{Binding AreTiersEditable}" AutomationProperties.Name="GPT model tiers">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,2" AutomationProperties.Name="{Binding Match}">
+                                    <Button DockPanel.Dock="Right" Padding="8,2" Margin="4,0,0,0" Content="Remove" AutomationProperties.Name="Remove tier row"
+                                            Command="{Binding DataContext.RemoveTierCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                    <Button DockPanel.Dock="Right" Padding="8,2" Margin="4,0,0,0" Content="Down" AutomationProperties.Name="Move tier row down"
+                                            Command="{Binding DataContext.MoveTierDownCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                    <Button DockPanel.Dock="Right" Padding="8,2" Margin="4,0,0,0" Content="Up" AutomationProperties.Name="Move tier row up"
+                                            Command="{Binding DataContext.MoveTierUpCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                    <ComboBox DockPanel.Dock="Right" Width="150" Margin="6,0,0,0" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Tier}"
+                                              ItemsSource="{Binding DataContext.TierChoices, RelativeSource={RelativeSource AncestorType=ItemsControl}}" AutomationProperties.Name="Tier" />
+                                    <TextBox Text="{Binding Match, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tier match" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Style="{StaticResource SettingsButton}" Content="Add row" Command="{Binding AddTierCommand}" AutomationProperties.Name="Add tier row" />
+                        <Button Style="{StaticResource SettingsButton}" Content="Reset to defaults" Command="{Binding ResetTiersCommand}" AutomationProperties.Name="Reset tiers to defaults" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding TierTableNote}" />
+                </StackPanel>
+
                 <s:SectionMessages Margin="0,8,0,0" />
                 <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Reload" Command="{Binding ReloadCommand}" AutomationProperties.Name="Reload General" />
             </StackPanel>

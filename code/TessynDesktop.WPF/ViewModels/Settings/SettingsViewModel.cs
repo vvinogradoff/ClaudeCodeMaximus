@@ -48,14 +48,15 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 		IPreviewSettingsService? previewSettings = null,
 		PreviewGroupMatcher? previewMatcher = null,
 		IBrowserDataCleaner? browserDataCleaner = null,
-		IDaemonModeControl? daemonMode = null)
+		IDaemonModeControl? daemonMode = null,
+		IFilePicker? filePicker = null)
 	{
 		_client = client;
 		_dialogs = dialogs;
 		_ui = ui;
 		_logger = loggers.CreateLogger<SettingsViewModel>();
 
-		General = new GeneralSectionViewModel(client, loggers.CreateLogger<GeneralSectionViewModel>());
+		General = new GeneralSectionViewModel(client, loggers.CreateLogger<GeneralSectionViewModel>(), filePicker);
 		Notifications = new NotificationsSectionViewModel(client, loggers.CreateLogger<NotificationsSectionViewModel>());
 		Telegram = new TelegramSectionViewModel(client, dialogs, loggers.CreateLogger<TelegramSectionViewModel>());
 		WebAccess = new WebAccessSectionViewModel(client, loggers.CreateLogger<WebAccessSectionViewModel>());

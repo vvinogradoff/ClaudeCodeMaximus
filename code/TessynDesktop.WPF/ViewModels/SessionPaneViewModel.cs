@@ -522,6 +522,8 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 
 		ApplyFavorite(state);
 		Toggles.ApplyAlive(state.Id, state.StreamingAlive);
+		if (state.Engine != _sessionEngine)
+			ApplySessionEngine(state.Engine);
 		ApplyAuthError(state);
 		_stateEvents++;
 		SetDaemonRunning(state.Running);
