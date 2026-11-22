@@ -10,10 +10,12 @@ mkdirSync(SHOTS, { recursive: true });
 
 async function openQuestionnaire(page: Page) {
 	await page.goto('/');
-	await page.getByLabel('Email').fill('vitaly@example.com');
-	await page.getByLabel('Password').fill('secret');
-	await page.getByRole('button', { name: 'Sign in' }).click();
-	await expect(page.getByText('No session open')).toBeVisible();
+	if (await page.getByLabel('Email').waitFor({ timeout: 5000 }).then(() => true, () => false)) {
+		await page.getByLabel('Email').fill('vitaly@example.com');
+		await page.getByLabel('Password').fill('secret');
+		await page.getByRole('button', { name: 'Sign in' }).click();
+	}
+	await expect(page.getByRole('button', { name: 'Sessions', exact: true })).toBeVisible();
 	if ((await page.getByRole('button', { name: 'Sessions', exact: true }).getAttribute('aria-pressed')) !== 'true') await page.getByRole('button', { name: 'Sessions', exact: true }).click();
 	await page.getByRole('tab', { name: 'Recent' }).click();
 	await page.locator('.tab.active .srow', { hasText: 'Importer: schema drift' }).first().click();
@@ -56,7 +58,7 @@ test.describe('focus questionnaire', () => {
 		// draft survives a reload (local storage, debounced)
 		await page.waitForTimeout(600);
 		await page.reload();
-		const again = page.getByTestId('focus-card').filter({ hasText: 'Approve the schema migration plan' });
+		const again = await openQuestionnaire(page);
 		await expect(again.getByTestId('question-4').getByRole('textbox')).toHaveValue('Something else');
 
 		// Reply is enabled with an empty note; the item closes with the answers as its outcome

@@ -20,7 +20,7 @@ public sealed class StackQuestionnaireFlowTests
 		new() { Number = 4, Type = AttentionQuestionType.Text, Text = "Rollback notes?", Recommended = "Keep the snapshot." },
 	];
 
-	[FullStackFact]
+	[Fact]
 	public async Task F12_Questionnaire_Wire_Shape_And_Answers()
 	{
 		await using var stack = await WebStack.StartAsync();
@@ -63,7 +63,7 @@ public sealed class StackQuestionnaireFlowTests
 		Assert.Contains("Q2 Which order?: B Production first", answered["answer"]!.GetValue<string>());
 	}
 
-	[FullStackFact]
+	[Fact]
 	public async Task F12_Questionnaire_Rejects_An_Answer_That_Does_Not_Fit()
 	{
 		await using var stack = await WebStack.StartAsync();
