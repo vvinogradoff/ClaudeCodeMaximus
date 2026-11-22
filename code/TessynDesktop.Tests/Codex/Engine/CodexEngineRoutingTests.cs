@@ -21,12 +21,6 @@ public sealed class CodexEngineRoutingTests : IAsyncLifetime
 
 	public async Task DisposeAsync() => await _p.DisposeAsync();
 
-	/// <summary>The phase 3 hook, here a fixed answer.</summary>
-	private sealed class FixedSelector(string? engineId) : ISessionEngineSelector
-	{
-		public string? SelectEngineId(SessionNodeModel node, string? modelId) => engineId;
-	}
-
 	[Fact]
 	public void A_session_whose_engine_id_is_codex_runs_on_the_Codex_engine_and_null_or_claude_on_Claude()
 	{
@@ -41,20 +35,31 @@ public sealed class CodexEngineRoutingTests : IAsyncLifetime
 	}
 
 	[Fact]
-	public void At_a_turn_the_model_to_engine_hook_wins_over_the_stored_id_stores_its_answer_and_null_keeps_it()
+	public async Task At_a_turn_the_catalog_backed_selector_decides_and_stores_the_engine_and_keeps_a_GPT_session_while_the_catalog_is_unknown()
 	{
+		await using var s = new CodexServicesFixture();
+		var router = new SessionEngineRegistry([_p.Claude, _p.Codex], selector: s.Selector);
 		var node = TurnEngineHarness.Node();
 		node.EngineId = "codex";
 
-		Assert.Same(_p.Codex, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector(null)).ForTurn(node, "x"));
+		// Never loaded: a GPT-looking model keeps the stored engine (FR.33.4 exception); a Claude model is Claude.
+		Assert.Same(_p.Codex, router.ForTurn(node, "gpt-x-sol"));
 		Assert.Equal("codex", node.EngineId);
-		Assert.Same(_p.Claude, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("claude")).Peek(node, "x"));
+		Assert.Same(_p.Claude, router.Peek(node, FixedClaudeModels.Opus));
 		Assert.Equal("codex", node.EngineId); // Peek stores nothing
-		Assert.Same(_p.Claude, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("claude")).ForTurn(node, "x"));
-		Assert.Null(node.EngineId); // Claude is stored as null, so a Claude session's settings stay as they were
-		Assert.Same(_p.Codex, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("codex")).ForTurn(node, "x"));
+
+		// Loaded but empty: still unknown.
+		s.WriteCache(s.Clock.GetUtcNow());
+		await s.Catalog.StartAsync();
+		Assert.Same(_p.Codex, router.ForTurn(node, "gpt-x-sol"));
+
+		// Loaded: the catalog decides. Claude is stored as null, so a Claude session's settings stay as they were.
+		await s.LoadCatalogAsync();
+		Assert.Same(_p.Claude, router.ForTurn(node, "gpt-old-1"));
+		Assert.Null(node.EngineId);
+		Assert.Same(_p.Codex, router.ForTurn(node, "gpt-x-sol"));
 		Assert.Equal("codex", node.EngineId);
-		Assert.Same(_p.Codex, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("claude")).For(node)); // For reads the stored id
+		Assert.Same(_p.Codex, router.For(node)); // For reads the stored id
 	}
 
 	[Fact]

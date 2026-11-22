@@ -33,6 +33,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly ISessionModelSettings           _modelSettings;
 	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
 	private readonly TessynDesktop.Codex.ICodexProfileResolver? _codexProfiles;
+	private readonly UserEntryIdLocator _userEntries;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
 	private readonly ConcurrentDictionary<string, SemaphoreSlim> _turnLocks = new();
@@ -55,9 +56,11 @@ public sealed class SessionTurnService : ISessionTurnService
 		IProfileResolver? profileResolver = null,
 		IProfileSwitchService? profileSwitch = null,
 		ISessionModelSettings? modelSettings = null,
-		TessynDesktop.Codex.ICodexProfileResolver? codexProfiles = null)
+		TessynDesktop.Codex.ICodexProfileResolver? codexProfiles = null,
+		ISessionEntryReader? entries = null)
 	{
 		_codexProfiles    = codexProfiles;
+		_userEntries      = new UserEntryIdLocator(entries);
 		_engines          = engines;
 		_fileService      = fileService;
 		_appSettings      = appSettings;
@@ -126,8 +129,8 @@ public sealed class SessionTurnService : ISessionTurnService
 		// FR.33.1, FR.33.4: the turn's model and effort (FR.16.5, FR.12.35: the per-turn choice, else the session's own setting, else (model only) the
 		// directory's and the app's setting), then the engine of that model, resolved (and stored) before anything is written to the transcript.
 		var turnModel = _modelSettings.ResolveTurn(node, turnOptions);
-		var engine    = _engines.ForTurn(node, turnModel.ModelId);
-		var isCodex   = string.Equals(engine.EngineId, Constants.SessionEngines.Codex, StringComparison.OrdinalIgnoreCase);
+		// Looked at only: the engine is stored and an engine change applied under the turn lock below, never while another turn runs.
+		var engine    = _engines.Peek(node, turnModel.ModelId);
 
 		// P1.I: the same progress notifications as an engine turn (the sinks decide who sees them).
 		var turnId   = Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
@@ -174,6 +177,10 @@ public sealed class SessionTurnService : ISessionTurnService
 			// ISSUE.013: a switch queued while this session was running is applied now (nothing else uses its files).
 			_profileSwitch?.ApplyPending(node);
 
+			// FR.33.4: the turn's engine, stored on the session now that no other turn of it runs.
+			engine      = _engines.ForTurn(node, turnModel.ModelId);
+			var isCodex = string.Equals(engine.EngineId, Constants.SessionEngines.Codex, StringComparison.OrdinalIgnoreCase);
+
 			// The profile this turn uses: the per-turn choice, else the pinned (ProfileId) / last-recorded one, else Default.
 			// A pinned profile that no longer resolves is an error, never a silent fallback to Default.
 			// A live streaming process ignores the per-turn options (below), so a per-turn profile is not resolved for it.
@@ -215,6 +222,7 @@ public sealed class SessionTurnService : ISessionTurnService
 
 			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt, profileName: stampedProfileName,
 				source: EntrySources.FromTurnSource(source));
+			var userEntryId = _userEntries.Locate(node.FileName, prompt);
 
 			// FR.19.13 — if a Streaming Session Mode process is already alive for this node (started
 			// by the interactive desktop path), route this headless turn into it instead of spawning
@@ -308,7 +316,7 @@ public sealed class SessionTurnService : ISessionTurnService
 
 			// The one-shot --resume process with its single silent OAuth-race retry (ISSUE.010) runs in the engine.
 			await engine.RunTurnAsync(
-				new EngineTurnRequest(node, messageToSend, augmentedPrompt, sessionId, settings, preparation, EngineTurnMode.Headless),
+				new EngineTurnRequest(node, messageToSend, augmentedPrompt, sessionId, settings, preparation, EngineTurnMode.Headless, UserEntryId: userEntryId),
 				sink, ct);
 
 			// Errors the retry above recovered from never reach errorMessage (the race result is not

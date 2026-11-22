@@ -148,7 +148,8 @@ public sealed partial class CodexUsageService : IEngineUsageSource
 			entry.LastState = state;
 			if (snapshot is not null)
 			{
-				entry.Snapshot  = Merge(entry.Snapshot, snapshot);
+				// A read is a full reading: it replaces the last one, so a window it no longer has (a plan change) is hidden (FR.33.10).
+				entry.Snapshot  = snapshot;
 				entry.FetchedAt = now;
 				changed         = true;
 			}
@@ -196,7 +197,11 @@ public sealed partial class CodexUsageService : IEngineUsageSource
 		Changed?.Invoke(host.ProfileId);
 	}
 
-	/// <summary>A sparse update over the last reading: a null window or field keeps the known value. The out-of-credits type is the update's state.</summary>
+	/// <summary>
+	/// A sparse <c>account/rateLimits/updated</c> over the last reading: a null window or field keeps the known value. The out-of-credits type
+	/// follows the same rule, except that an update that carries a window is a reading of the plan's state, so its null clears a known type
+	/// (otherwise an exhausted plan would look exhausted for ever).
+	/// </summary>
 	private CodexRateLimitSnapshot Merge(CodexRateLimitSnapshot? known, CodexRateLimitSnapshot update) =>
 		known is null
 			? update
@@ -208,7 +213,8 @@ public sealed partial class CodexUsageService : IEngineUsageSource
 				Secondary            = MergeWindow(known.Secondary, update.Secondary),
 				Credits              = update.Credits ?? known.Credits,
 				PlanType             = update.PlanType ?? known.PlanType,
-				RateLimitReachedType = update.RateLimitReachedType,
+				RateLimitReachedType = update.RateLimitReachedType
+				                       ?? (update.Primary is not null || update.Secondary is not null ? null : known.RateLimitReachedType),
 				SpendControlReached  = update.SpendControlReached ?? known.SpendControlReached,
 			};
 

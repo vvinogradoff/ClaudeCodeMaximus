@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -28,10 +29,16 @@ public sealed partial class CodexSessionEngine
 
 		using var turnCancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		var profile = _profiles.Select(node, settings);
-		var running = new RunningTurn(turnCancel, profile.ProfileId);
+
+		// The thread is known to the idle unload before it is opened, so an unload that is already due skips it (FR.33.6).
+		var running = new RunningTurn(turnCancel, profile.ProfileId) { ThreadId = node.CodexThreadId };
 		_running[node.NodeId] = running;
+		if (node.CodexThreadId is { } current)
+			CancelIdleUnload(current);
+
 		var ct = turnCancel.Token;
 		CodexAppServerHost? usedHost = null;
+		JsonObject? config = null;
 
 		try
 		{
@@ -40,7 +47,7 @@ public sealed partial class CodexSessionEngine
 			{
 				host = _pool.GetHost(profile);
 			}
-			catch (CodexNotFoundException ex)
+			catch (Exception ex) when (ex is CodexNotFoundException or InvalidOperationException)
 			{
 				_log.Warning("Codex session {NodeId} can't run: {Problem}", node.NodeId, ex.Message);
 				EndWithError(sink, string.Format(Constants.Codex.Texts.StartFailedFormat, ex.Message));
@@ -48,30 +55,46 @@ public sealed partial class CodexSessionEngine
 			}
 
 			usedHost = host;
-			var config      = request.Preparation is CodexTurnPreparation prepared ? prepared.Config : await _config.BuildAsync(node, ct).ConfigureAwait(false);
-			var corrections = TakeCorrections(node.NodeId);
+			config   = request.Preparation is CodexTurnPreparation prepared ? prepared.Config : await _config.BuildAsync(node, ct).ConfigureAwait(false);
 
-			// FR.33.5: the turn's ChatGPT profile becomes the session's pin. A switch from another ChatGPT profile detaches the thread (threads are
-			// not moved between Codex homes), so the new thread is seeded from the transcript.
-			var prompt = request.Prompt + corrections;
-			if (RecordPin(node, profile, settings))
-				prompt = InstructionBlockBuilder.BuildContextPreamble(_files.ReadEntries(node.FileName), request.AugmentedPrompt + corrections);
+			// FR.33.12: queued corrections go with this turn; they leave the queue only once turn/start was accepted.
+			var corrections = PeekCorrections(node.NodeId);
+			var seedText    = request.AugmentedPrompt + corrections.Text;
 
-			if (node.CodexThreadId is { } current)
-				CancelIdleUnload(current);
+			// FR.33.5: the turn's ChatGPT profile becomes the session's pin. A move from another ChatGPT profile detaches the thread (threads are
+			// not moved between Codex homes), and so does a switch applied under the lock after the caller read the conversation: either way the
+			// new thread is seeded from the transcript.
+			var prompt = request.Prompt + corrections.Text;
+			var moved  = RecordPin(node, profile, settings);
+			if (moved || (request.ConversationId is not null && node.CodexThreadId is null))
+				prompt = InstructionBlockBuilder.BuildContextPreamble(_files.ReadEntries(node.FileName), seedText);
 
-			var opened = await OpenThreadAsync(host, node, settings, config, prompt, request.AugmentedPrompt + corrections, sink, ct)
-				.ConfigureAwait(false);
-			if (opened is not { } thread)
-				return;
+			for (var attempt = 0; ; attempt++)
+			{
+				var opened = await OpenThreadAsync(host, node, settings, config, prompt, seedText, sink, ct).ConfigureAwait(false);
+				if (opened is not { } thread)
+					return;
 
-			running.ThreadId = thread.ThreadId;
-			await RunOnThreadAsync(host, profile, node, thread.ThreadId, thread.Text, settings, config, sink, ct).ConfigureAwait(false);
+				running.ThreadId = thread.ThreadId;
+				try
+				{
+					await RunOnThreadAsync(host, profile, node, thread.ThreadId, thread.Text, settings, request, sink, ct,
+						() => CommitCorrections(node.NodeId, corrections.Count)).ConfigureAwait(false);
+					return;
+				}
+				catch (CodexThreadException ex) when (ex.Kind == CodexThreadErrorKind.NotLoaded && attempt == 0)
+				{
+					// FR.33.7: the host no longer has the thread loaded. It is opened again (a resume, with the gone and active-writer rules) and the
+					// turn is sent once more.
+					_log.Information("Codex thread {ThreadId} of session {NodeId} was no longer loaded; resuming it and sending the turn again", thread.ThreadId, node.NodeId);
+					prompt = thread.Text;
+				}
+			}
 		}
 		catch (Exception ex) when (ct.IsCancellationRequested && ex is not OperationCanceledException)
 		{
 			// A call that failed because the turn was stopped while it ran: the turn ends as cancelled.
-			_log.Debug(ex, "A Codex call of session {NodeId} failed after Stop", node.NodeId);
+			_log.Debug("A Codex call of session {NodeId} failed after Stop: {Error}", node.NodeId, _config.RedactText(ex.Message, config, node.AgentToken));
 			throw new OperationCanceledException(ct);
 		}
 		catch (CodexHostCrashedException crash)
@@ -80,14 +103,21 @@ public sealed partial class CodexSessionEngine
 		}
 		catch (Exception ex) when (ex is CodexRpcException or TimeoutException or CodexConnectionLostException)
 		{
-			_log.Warning(ex, "A Codex turn of session {NodeId} could not run", node.NodeId);
-			EndWithError(sink, string.Format(Constants.Codex.Texts.StartFailedFormat, ex.Message));
+			// Codex may quote a config value in its error ("failed to load configuration: …"): no token reaches the log or the transcript.
+			var reason = _config.RedactText(ex.Message, config, node.AgentToken);
+			_log.Warning("A Codex turn of session {NodeId} could not run ({Type}): {Error}", node.NodeId, ex.GetType().Name, reason);
+			EndWithError(sink, string.Format(Constants.Codex.Texts.StartFailedFormat, reason));
 		}
 		finally
 		{
 			_running.TryRemove(new KeyValuePair<string, RunningTurn>(node.NodeId, running));
 			if (usedHost is not null && running.ThreadId is { } threadId)
-				ScheduleIdleUnload(usedHost, threadId);
+			{
+				if (_unloadAfterTurn.TryRemove(threadId, out _))
+					_ = UnsubscribeQuietlyAsync(node, threadId);
+				else
+					ScheduleIdleUnload(usedHost, threadId);
+			}
 		}
 	}
 
@@ -123,10 +153,12 @@ public sealed partial class CodexSessionEngine
 	/// <summary>FR.33.6: a thread with no turn for 15 minutes is unloaded, so its host can idle out; its next turn resumes it.</summary>
 	private void ScheduleIdleUnload(CodexAppServerHost host, string threadId)
 	{
-		var timer = _time.CreateTimer(_ => _ = UnloadIdleThreadAsync(host, threadId), null, Constants.Codex.ThreadIdleUnload, Timeout.InfiniteTimeSpan);
-		var old   = _idleUnloads.GetValueOrDefault(threadId);
+		ITimer? timer = null;
+		timer = _time.CreateTimer(_ => _ = UnloadIdleThreadAsync(host, threadId, timer!), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+		var old = _idleUnloads.GetValueOrDefault(threadId);
 		_idleUnloads[threadId] = timer;
 		old?.Dispose();
+		timer.Change(Constants.Codex.ThreadIdleUnload, Timeout.InfiniteTimeSpan);
 	}
 
 	private void CancelIdleUnload(string threadId)
@@ -135,9 +167,12 @@ public sealed partial class CodexSessionEngine
 			timer.Dispose();
 	}
 
-	private async Task UnloadIdleThreadAsync(CodexAppServerHost host, string threadId)
+	private async Task UnloadIdleThreadAsync(CodexAppServerHost host, string threadId, ITimer timer)
 	{
-		_idleUnloads.TryRemove(threadId, out _);
+		// Only the timer still registered for the thread may unload it: a turn that started meanwhile cancelled (removed) it, and a newer turn
+		// replaced it. A turn that is opening the thread is in _running already, with its thread id.
+		if (!_idleUnloads.TryRemove(new KeyValuePair<string, ITimer>(threadId, timer)))
+			return;
 		if (_running.Values.Any(r => r.ThreadId == threadId) || !host.IsThreadLoaded(threadId))
 			return;
 
@@ -227,33 +262,25 @@ public sealed partial class CodexSessionEngine
 	/// and the turn sent again. <c>turn/start</c> itself is never cancelled half-way, so a Stop always knows the turn id it interrupts.
 	/// </summary>
 	private async Task RunOnThreadAsync(CodexAppServerHost host, CodexProfileRef profile, SessionNodeModel node, string threadId, string text,
-		TurnSettings settings, JsonObject config, IEngineEventSink sink, CancellationToken ct)
+		TurnSettings settings, EngineTurnRequest request, IEngineEventSink sink, CancellationToken ct, Action onAccepted)
 	{
 		var turnParams = new CodexTurnStartParams
 		{
 			ThreadId            = threadId,
-			Input               = [CodexUserInput.FromText(text)],
+			Input               = BuildInput(node, text, settings),
 			Model               = ModelOf(settings),
 			Effort              = EffortOf(settings),
 			Summary             = Constants.Codex.Values.SummaryConcise,
-			ClientUserMessageId = Guid.NewGuid().ToString(),
+			ClientUserMessageId = request.UserEntryId ?? Guid.NewGuid().ToString(),
 		};
 
 		long inputTokens = 0, outputTokens = 0;
 		using var listener = new TurnListener(host, threadId, e => Dispatch(e, sink, ref inputTokens, ref outputTokens));
 		ct.ThrowIfCancellationRequested();
 
-		CodexTurnStartResult started;
-		try
-		{
-			started = await host.StartTurnAsync(turnParams).ConfigureAwait(false);
-		}
-		catch (CodexThreadException ex) when (ex.Kind == CodexThreadErrorKind.NotLoaded)
-		{
-			_log.Information("Codex thread {ThreadId} of session {NodeId} was no longer loaded; resuming it and sending the turn again", threadId, node.NodeId);
-			await ResumeAsync(host, threadId, config, CancellationToken.None).ConfigureAwait(false);
-			started = await host.StartTurnAsync(turnParams).ConfigureAwait(false);
-		}
+		// A NotLoaded refusal goes to the caller, which opens the thread again (FR.33.7) and sends the turn once more.
+		var started = await host.StartTurnAsync(turnParams).ConfigureAwait(false);
+		onAccepted();
 
 		var turnId = started.Turn.Id;
 		listener.SetTurnId(turnId);
@@ -272,6 +299,12 @@ public sealed partial class CodexSessionEngine
 		if (finish.Crash is { } crash)
 		{
 			EndWithError(sink, HostStoppedText(crash));
+			return;
+		}
+
+		if (finish.Stopped is { } reason)
+		{
+			EndWithError(sink, StoppedText(reason));
 			return;
 		}
 
@@ -429,6 +462,41 @@ public sealed partial class CodexSessionEngine
 
 	private void EndWithError(IEngineEventSink sink, string text) =>
 		sink.TurnEnded(new EngineTurnEnd(false, text, false, false, null, 0, 0, 0, _time.GetUtcNow()));
+
+	/// <summary>The SYSTEM text of a turn whose host was stopped on purpose (FR.33.5 profile delete, Terminate all).</summary>
+	private string StoppedText(CodexHostStopReason reason) =>
+		reason == CodexHostStopReason.ProfileRemoved ? Constants.Codex.Texts.ProfileRemovedStop : Constants.Codex.Texts.HostStoppedOnPurpose;
+
+	/// <summary>
+	/// The input of <c>turn/start</c> (FR.33.8): the text, and a <c>localImage</c> item for each image attachment of the session (FR.31) whose path is
+	/// in the text, when the model takes images. The path stays in the text.
+	/// </summary>
+	private List<CodexUserInput> BuildInput(SessionNodeModel node, string text, TurnSettings settings)
+	{
+		var input = new List<CodexUserInput> { CodexUserInput.FromText(text) };
+		if (_attachments is null || string.IsNullOrEmpty(node.NodeId))
+			return input;
+
+		var modalities = _models?.Find(ModelOf(settings))?.InputModalities ?? Constants.Codex.Catalog.DefaultInputModalities;
+		if (!modalities.Contains(Constants.Codex.Values.ImageModality, StringComparer.OrdinalIgnoreCase))
+			return input;
+
+		try
+		{
+			foreach (var attachment in _attachments.List(node.NodeId).Attachments)
+			{
+				if (attachment.Mime.StartsWith(Constants.Codex.Values.ImageMimePrefix, StringComparison.OrdinalIgnoreCase)
+				    && text.Contains(attachment.Path, StringComparison.OrdinalIgnoreCase))
+					input.Add(CodexUserInput.FromLocalImage(attachment.Path));
+			}
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TdcpException or TdcpInvalidParamsException)
+		{
+			_log.Warning(ex, "The attachments of Codex session {NodeId} could not be listed; the turn is sent without images", node.NodeId);
+		}
+
+		return input;
+	}
 
 	private string HostStoppedText(CodexHostCrashInfo crash) =>
 		string.Format(Constants.Codex.Texts.HostStoppedFormat, crash.ExitCode?.ToString() ?? Constants.Codex.Texts.UnknownExitCode);

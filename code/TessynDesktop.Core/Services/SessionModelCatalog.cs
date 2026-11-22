@@ -24,7 +24,7 @@ public sealed partial class SessionModelCatalog : ISessionModelCatalog
 	}
 
 	/// <inheritdoc />
-	public bool IsGptCatalogLoaded => _codex?.IsLoaded ?? false;
+	public bool IsGptCatalogLoaded => _codex is { IsLoaded: true, Models.Count: > 0 };
 
 	/// <inheritdoc />
 	public string? GptHintLine => (_codex?.Models.Count ?? 0) == 0 ? Constants.Codex.Catalog.SignInHint : null;
@@ -64,7 +64,15 @@ public sealed partial class SessionModelCatalog : ISessionModelCatalog
 	/// <inheritdoc />
 	public bool LooksLikeGpt(string? modelId) =>
 		!string.IsNullOrWhiteSpace(modelId)
-		&& (modelId.StartsWith(Constants.Codex.Catalog.GptPrefix, StringComparison.OrdinalIgnoreCase) || OSeriesPattern().IsMatch(modelId));
+		&& (modelId.StartsWith(Constants.Codex.Catalog.GptPrefix, StringComparison.OrdinalIgnoreCase) || OSeriesPattern().IsMatch(modelId))
+		&& !IsClaudeCatalogModel(modelId);
+
+	/// <summary>
+	/// FR.33.15: catalog membership comes first. An id of the Anthropic or Ollama list (for example the local <c>gpt-oss:20b</c>) is a model of
+	/// the Claude engine, never a GPT one, whatever it looks like.
+	/// </summary>
+	private bool IsClaudeCatalogModel(string modelId) =>
+		_claude.GetCachedModels().Any(m => string.Equals(m.Id, modelId, StringComparison.OrdinalIgnoreCase));
 
 	/// <inheritdoc />
 	public IReadOnlyList<ModelEffortOptionModel> EffortsFor(string? modelId) =>

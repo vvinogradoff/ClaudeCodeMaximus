@@ -16,6 +16,10 @@ namespace TessynDesktop.Models.Engines;
 /// With <paramref name="Persistent"/>: where the persistent process reports everything for as long as it lives. The engine also reports the
 /// current turn there; the caller routes it to the running turn or, outside any turn, to the background (FR.19.4).
 /// </param>
+/// <param name="UserEntryId">
+/// The id of the turn's USER entry in the transcript (FR.25 entry ids), when the caller knows it; Codex gets it as <c>clientUserMessageId</c>
+/// (FR.33.8).
+/// </param>
 /// <remarks>Created by Claude</remarks>
 public sealed record EngineTurnRequest(
 	SessionNodeModel Node,
@@ -26,4 +30,5 @@ public sealed record EngineTurnRequest(
 	EngineTurnPreparation? Preparation,
 	EngineTurnMode Mode,
 	bool Persistent = false,
-	IEngineEventSink? PersistentSink = null);
+	IEngineEventSink? PersistentSink = null,
+	string? UserEntryId = null);

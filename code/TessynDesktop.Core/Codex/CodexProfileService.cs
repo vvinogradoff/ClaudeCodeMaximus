@@ -36,6 +36,10 @@ public sealed class CodexProfileService : ICodexProfileService
 	private readonly ConcurrentDictionary<string, CodexSignInOutcomeModel> _outcomes = new(StringComparer.Ordinal);
 	private readonly ConcurrentDictionary<CodexAppServerHost, byte> _watched = new();
 
+	// FR.33.5: new stored ids are allocated under this lock and reserved until their sign-in ends, so two sign-ins never share an id.
+	private readonly object _idLock = new();
+	private readonly HashSet<string> _reservedIds = new(StringComparer.OrdinalIgnoreCase);
+
 	/// <param name="storedRoot">Where the stored profiles' folders are; the data root's <c>codex-profiles</c> when null.</param>
 	/// <param name="defaultHome">Codex Default's home; <c>%USERPROFILE%\.codex</c> when null.</param>
 	public CodexProfileService(CodexHostPool pool, IAppSettingsService appSettings, string? storedRoot = null, string? defaultHome = null)
@@ -159,16 +163,27 @@ public sealed class CodexProfileService : ICodexProfileService
 			profile = Find(profileId) ?? throw new InvalidOperationException(string.Format(Constants.Codex.Profiles.UnknownProfileFormat, profileId));
 		else
 		{
-			var id = NextStoredId();
+			var id = ReserveStoredId();
 			profile = new CodexProfileRef(id, StoredHome(id));
 		}
 
-		// Codex requires an existing CODEX_HOME (FR.33.5).
-		if (profile.CodexHome is not null)
-			Directory.CreateDirectory(profile.CodexHome);
+		CodexAppServerHost host;
+		CodexLoginStartResult started;
+		try
+		{
+			// Codex requires an existing CODEX_HOME (FR.33.5).
+			if (profile.CodexHome is not null)
+				Directory.CreateDirectory(profile.CodexHome);
 
-		var host    = _pool.GetHost(profile);
-		var started = await host.LoginStartAsync(deviceCode, cancellationToken).ConfigureAwait(false);
+			host    = _pool.GetHost(profile);
+			started = await host.LoginStartAsync(deviceCode, cancellationToken).ConfigureAwait(false);
+		}
+		catch
+		{
+			ReleaseReservation(profile.ProfileId);
+			throw;
+		}
+
 		var loginId = started.LoginId ?? Guid.NewGuid().ToString();
 
 		var pending = new PendingSignIn(profile, host);
@@ -342,7 +357,10 @@ public sealed class CodexProfileService : ICodexProfileService
 	{
 		_outcomes[loginId] = outcome;
 		if (_signIns.TryRemove(loginId, out var pending))
+		{
+			ReleaseReservation(pending.Profile.ProfileId);
 			pending.Outcome.TrySetResult(outcome);
+		}
 	}
 
 	private void Record(string profileId, CodexAccount account)
@@ -356,7 +374,10 @@ public sealed class CodexProfileService : ICodexProfileService
 				return;
 
 			if (record is null)
+			{
 				list.Add(record = new CodexProfileModel { ProfileId = IsDefault(profileId) ? Constants.Codex.Profiles.DefaultProfileId : profileId });
+				_appSettings.Settings.CodexLastProfileNumber = Math.Max(_appSettings.Settings.CodexLastProfileNumber, StoredNumber(record.ProfileId));
+			}
 			record.Email    = email;
 			record.PlanType = account.PlanType;
 			_appSettings.Save();
@@ -374,13 +395,48 @@ public sealed class CodexProfileService : ICodexProfileService
 	}
 
 	/// <summary>The next free <c>codex_N</c>: above every stored id. A folder left by a failed sign-in is reused.</summary>
-	private string NextStoredId()
+	/// <summary>
+	/// The next free <c>codex_N</c>, reserved for the caller: above every stored id, every reserved one, every deleted one (a <c>codex_N_rem…</c>
+	/// folder) and the highest number ever added (<c>CodexLastProfileNumber</c>), so a deleted profile's id is never given to another account and
+	/// its pinned sessions keep failing with the missing-pin error (FR.12.27). A folder left by a failed sign-in, never added, is reused.
+	/// </summary>
+	private string ReserveStoredId()
 	{
-		int max;
-		lock (_appSettings.SyncRoot)
-			max = _appSettings.Settings.CodexProfiles.Select(p => StoredNumber(p.ProfileId)).DefaultIfEmpty(0).Max();
-		var pendingMax = _signIns.Values.Select(p => StoredNumber(p.Profile.ProfileId)).DefaultIfEmpty(0).Max();
-		return Constants.Codex.Profiles.StoredIdPrefix + (Math.Max(max, pendingMax) + 1);
+		lock (_idLock)
+		{
+			int max;
+			lock (_appSettings.SyncRoot)
+				max = Math.Max(_appSettings.Settings.CodexLastProfileNumber,
+					_appSettings.Settings.CodexProfiles.Select(p => StoredNumber(p.ProfileId)).DefaultIfEmpty(0).Max());
+
+			max = Math.Max(max, _reservedIds.Select(StoredNumber).DefaultIfEmpty(0).Max());
+			max = Math.Max(max, RemovedNumbers().DefaultIfEmpty(0).Max());
+
+			var id = Constants.Codex.Profiles.StoredIdPrefix + (max + 1);
+			_reservedIds.Add(id);
+			return id;
+		}
+	}
+
+	private void ReleaseReservation(string profileId)
+	{
+		lock (_idLock)
+			_reservedIds.Remove(profileId);
+	}
+
+	/// <summary>The numbers of the deleted profiles' folders (<c>codex_N_rem</c>, <c>codex_N_rem2</c> …).</summary>
+	private IEnumerable<int> RemovedNumbers()
+	{
+		if (!Directory.Exists(_storedRoot))
+			yield break;
+
+		foreach (var folder in Directory.EnumerateDirectories(_storedRoot, Constants.Codex.Profiles.StoredIdPrefix + "*" + Constants.Auth.RemovedDirectorySuffix + "*"))
+		{
+			var name = Path.GetFileName(folder);
+			var cut  = name.IndexOf(Constants.Auth.RemovedDirectorySuffix, StringComparison.OrdinalIgnoreCase);
+			if (cut > 0 && StoredNumber(name[..cut]) is > 0 and var n)
+				yield return n;
+		}
 	}
 
 	private int StoredNumber(string profileId) =>

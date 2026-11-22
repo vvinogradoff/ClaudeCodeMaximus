@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using TessynDesktop.Codex;
@@ -20,16 +22,26 @@ public sealed partial class CodexSessionEngine
 		if (string.IsNullOrEmpty(threadId))
 			return new SessionCompactionResultModel(SessionCompactionOutcome.NothingToCompact, null, Constants.Compaction.NothingToCompactMessage, false);
 
+		// The compaction is the node's running work while it lasts, so Stop and InterruptAsync reach it as they reach a turn.
+		using var compactCancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+		var profile = _profiles.Select(node, settings: null);
+		var running = new RunningTurn(compactCancel, profile.ProfileId) { ThreadId = threadId };
+		_running[node.NodeId] = running;
+		var ct = compactCancel.Token;
+		JsonObject? config = null;
+		CodexAppServerHost? usedHost = null;
+
 		try
 		{
-			var host = _pool.GetHost(_profiles.Select(node, settings: null));
+			var host = _pool.GetHost(profile);
+			usedHost = host;
 			CancelIdleUnload(threadId);
 			if (!host.IsThreadLoaded(threadId))
 			{
-				var config = await _config.BuildAsync(node, cancellationToken).ConfigureAwait(false);
+				config = await _config.BuildAsync(node, ct).ConfigureAwait(false);
 				try
 				{
-					await ResumeAsync(host, threadId, config, cancellationToken).ConfigureAwait(false);
+					await ResumeAsync(host, threadId, config, ct).ConfigureAwait(false);
 				}
 				catch (CodexThreadException ex) when (ex.Kind == CodexThreadErrorKind.ThreadGone)
 				{
@@ -48,23 +60,24 @@ public sealed partial class CodexSessionEngine
 					_files.AppendCompactionSeparator(node.FileName);
 			});
 
-			await host.CompactThreadAsync(threadId, cancellationToken).ConfigureAwait(false);
+			// Not cancelled half-way, like turn/start: once Codex accepted it, a Stop knows there is a compaction turn to interrupt.
+			await host.CompactThreadAsync(threadId).ConfigureAwait(false);
 
 			TurnFinish finish;
 			try
 			{
-				finish = await listener.Finished.WaitAsync(cancellationToken).ConfigureAwait(false);
+				finish = await listener.Finished.WaitAsync(ct).ConfigureAwait(false);
 			}
-			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+			catch (OperationCanceledException) when (ct.IsCancellationRequested)
 			{
-				if (listener.TurnId is { } turnId)
-					_ = InterruptQuietlyAsync(host, threadId, turnId);
+				await InterruptCompactionAsync(host, node, threadId, listener).ConfigureAwait(false);
 				throw;
 			}
 
-			ScheduleIdleUnload(host, threadId);
 			if (finish.Crash is { } crash)
 				return CompactionFailed(HostStoppedText(crash));
+			if (finish.Stopped is { } reason)
+				return CompactionFailed(StoppedText(reason));
 
 			var completion = finish.Completion!;
 			if (completion.Outcome == CodexTurnOutcome.Completed)
@@ -75,7 +88,7 @@ public sealed partial class CodexSessionEngine
 
 			return CompactionFailed(completion.Error?.SystemText ?? Constants.Codex.Texts.InterruptedElsewhere);
 		}
-		catch (CodexNotFoundException ex)
+		catch (Exception ex) when (ex is CodexNotFoundException or InvalidOperationException)
 		{
 			return CompactionFailed(ex.Message);
 		}
@@ -83,11 +96,42 @@ public sealed partial class CodexSessionEngine
 		{
 			return CompactionFailed(HostStoppedText(ex.Crash));
 		}
-		catch (Exception ex) when (ex is CodexRpcException or TimeoutException or CodexConnectionLostException && !cancellationToken.IsCancellationRequested)
+		catch (Exception ex) when (ex is CodexRpcException or TimeoutException or CodexConnectionLostException && !ct.IsCancellationRequested)
 		{
-			_log.Warning(ex, "Codex compaction of session {NodeId} failed", node.NodeId);
-			return CompactionFailed(ex.Message);
+			var reason = _config.RedactText(ex.Message, config, node.AgentToken);
+			_log.Warning("Codex compaction of session {NodeId} failed ({Type}): {Error}", node.NodeId, ex.GetType().Name, reason);
+			return CompactionFailed(reason);
 		}
+		catch (Exception ex) when (ct.IsCancellationRequested && ex is not OperationCanceledException)
+		{
+			throw new OperationCanceledException(ct);
+		}
+		finally
+		{
+			_running.TryRemove(new KeyValuePair<string, RunningTurn>(node.NodeId, running));
+			if (usedHost is not null)
+				ScheduleIdleUnload(usedHost, threadId);
+		}
+	}
+
+	/// <summary>Stop during a compaction: <c>turn/interrupt</c> on its turn, and up to 15 s for Codex to confirm it (FR.33.8); a Warning without it.</summary>
+	private async Task InterruptCompactionAsync(CodexAppServerHost host, SessionNodeModel node, string threadId, TurnListener listener)
+	{
+		var confirm = Task.Delay(Constants.Codex.StopConfirmTimeout, _time);
+		var turnId  = listener.TurnId;
+		if (turnId is null)
+		{
+			// The compaction turn has not reported its id yet: wait for turn/started (or the end) within the same 15 s.
+			while (listener.TurnId is null && !listener.Finished.IsCompleted && !confirm.IsCompleted)
+				await Task.WhenAny(listener.Finished, confirm, Task.Delay(TimeSpan.FromMilliseconds(20))).ConfigureAwait(false);
+			turnId = listener.TurnId;
+		}
+
+		if (turnId is not null && !listener.Finished.IsCompleted)
+			_ = InterruptQuietlyAsync(host, threadId, turnId);
+
+		if (await Task.WhenAny(listener.Finished, confirm).ConfigureAwait(false) != listener.Finished)
+			_log.Warning("Codex did not confirm the interrupt of the compaction of session {NodeId} within {Timeout}", node.NodeId, Constants.Codex.StopConfirmTimeout);
 	}
 
 	private SessionCompactionResultModel CompactionFailed(string error)

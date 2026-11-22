@@ -60,6 +60,11 @@ public sealed partial class CodexSessionEngine : ISessionEngine, INativeCompacti
 	// FR.33.6: the timer that unloads each thread after 15 minutes without a turn.
 	private readonly ConcurrentDictionary<string, ITimer> _idleUnloads = new(StringComparer.Ordinal);
 
+	// Threads detached while a turn still ran on them: they are unsubscribed when that turn ends, never in the middle of it.
+	private readonly ConcurrentDictionary<string, byte> _unloadAfterTurn = new(StringComparer.Ordinal);
+
+	private readonly IAttachmentService? _attachments;
+
 	// The node's turn now running (Stop, InterruptAsync); one per node, because the caller's turn lock serialises a node's turns.
 	private readonly ConcurrentDictionary<string, RunningTurn> _running = new(StringComparer.Ordinal);
 
@@ -81,8 +86,10 @@ public sealed partial class CodexSessionEngine : ISessionEngine, INativeCompacti
 		ISessionModelCatalog? models = null,
 		CodexUsageService? usage = null,
 		ICodexProfileService? profileService = null,
-		ISessionAuthErrorTracker? authErrors = null)
+		ISessionAuthErrorTracker? authErrors = null,
+		IAttachmentService? attachments = null)
 	{
+		_attachments    = attachments;
 		_models         = models;
 		_usage          = usage;
 		_profileService = profileService;
@@ -137,7 +144,10 @@ public sealed partial class CodexSessionEngine : ISessionEngine, INativeCompacti
 
 		_log.Information("Detached Codex thread {ThreadId} of session {NodeId}", detached, node.NodeId);
 		_threadNames.TryRemove(detached, out _);
-		_ = UnsubscribeQuietlyAsync(node, detached);
+		if (_running.Values.Any(r => r.ThreadId == detached))
+			_unloadAfterTurn[detached] = 0; // a turn still runs on it: unsubscribe when it ends (FR.33.8 says nothing of a thread pulled away mid-turn)
+		else
+			_ = UnsubscribeQuietlyAsync(node, detached);
 		return true;
 	}
 
@@ -195,20 +205,27 @@ public sealed partial class CodexSessionEngine : ISessionEngine, INativeCompacti
 		return true;
 	}
 
-	/// <summary>The queued corrections (FR.33.12) as extra instruction lines of the next turn; empty when there are none. Taking them clears them.</summary>
-	private string TakeCorrections(string nodeId)
+	/// <summary>The queued corrections (FR.33.12) as extra instruction lines of the next turn, and how many there are; nothing is removed yet.</summary>
+	private (string Text, int Count) PeekCorrections(string nodeId)
 	{
 		if (!_corrections.TryGetValue(nodeId, out var queue))
-			return string.Empty;
+			return (string.Empty, 0);
 
-		List<string> taken;
+		List<string> queued;
 		lock (queue)
-		{
-			taken = queue.ToList();
-			queue.Clear();
-		}
+			queued = queue.ToList();
 
-		return taken.Count == 0 ? string.Empty : "\n" + string.Join("\n", taken.Select(c => "- " + c));
+		return queued.Count == 0 ? (string.Empty, 0) : ("\n" + string.Join("\n", queued.Select(c => "- " + c)), queued.Count);
+	}
+
+	/// <summary>Drops the corrections a turn carried, once Codex accepted it; a turn that failed earlier leaves them for the next one.</summary>
+	private void CommitCorrections(string nodeId, int count)
+	{
+		if (count == 0 || !_corrections.TryGetValue(nodeId, out var queue))
+			return;
+
+		lock (queue)
+			queue.RemoveRange(0, Math.Min(count, queue.Count));
 	}
 
 	/// <summary>Lets the host forget a detached thread, so it can idle out and the User's CLI can open it (FR.33.6). Failures are only logged.</summary>
