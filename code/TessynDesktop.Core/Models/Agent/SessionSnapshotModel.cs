@@ -36,4 +36,10 @@ public sealed record SessionSnapshotModel
 
 	/// <summary>Group names from the Directory Node down, outermost first; empty if directly under the directory.</summary>
 	public required IReadOnlyList<string> GroupPath { get; init; }
+
+	/// <summary>NodeId of the innermost Group Node holding the session; null when it is directly under the Directory Node (FR.7.14 same-group tier).</summary>
+	public string? GroupNodeId { get; init; }
+
+	/// <summary>Position of the session in the tree as shown (a node's groups first, then its own sessions), across all Directory Nodes; the tie-break of session suggestions (FR.7.14).</summary>
+	public int TreeOrder { get; init; }
 }

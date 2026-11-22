@@ -175,12 +175,21 @@ public sealed class ComposerCompletionViewTests
 	{
 		StaTestRunner.Run(() =>
 		{
-			var (_, input, _, model, _) = Create();
+			var (_, input, _, model, client) = Create();
 			Type(input, "see #Fo and more");
 			input.CaretIndex = 7;
 			Assert.True(model.Autocomplete.IsOpen);
 
+			// The client lets a '#' earlier on the line through (FR.7.14); the daemon's parser decides and answers none for a caret outside the trigger.
+			client.AutocompleteAnswer = new(RemoteProtocol.Composer.AutocompleteModes.None, 0, 0, true, []);
 			input.CaretIndex = 12;   // inside the next word
+
+			var deadline = DateTime.UtcNow.AddSeconds(5);
+			while (model.Autocomplete.IsOpen && DateTime.UtcNow < deadline)
+			{
+				Pump();
+				System.Threading.Thread.Sleep(10);
+			}
 
 			Assert.False(model.Autocomplete.IsOpen);
 		});

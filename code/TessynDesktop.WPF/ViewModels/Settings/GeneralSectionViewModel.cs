@@ -6,7 +6,7 @@ using TessynDesktop.Models.Remote;
 namespace TessynDesktop.WPF.ViewModels.Settings;
 
 /// <summary>
-/// The General tab (FR.4.4, FR.12.13, FR.31): proxy, Ollama address, agent tools, remote file access and the media preview hosts. The session files
+/// The General tab (FR.4.4, FR.12.13, FR.31): proxy, Ollama address, agent tools, code references (FR.4.8), remote file access and the media preview hosts. The session files
 /// root, the Claude path and the source codes location are shown but cannot be edited: the daemon does not accept them from a client.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
@@ -29,6 +29,9 @@ public sealed partial class GeneralSectionViewModel : DaemonSectionViewModel<Gen
 
 	[ObservableProperty]
 	private bool _agentToolsEnabled;
+
+	[ObservableProperty]
+	private bool _codeReferencesEnabled;
 
 	[ObservableProperty]
 	private FileAccessModeDto _fileAccessMode;
@@ -59,6 +62,7 @@ public sealed partial class GeneralSectionViewModel : DaemonSectionViewModel<Gen
 		HttpsProxy = values.HttpsProxy;
 		OllamaBaseUrl = values.OllamaBaseUrl;
 		AgentToolsEnabled = values.AgentToolsEnabled;
+		CodeReferencesEnabled = values.CodeReferencesEnabled;
 		FileAccessMode = values.FileAccess.Mode;
 		MediaHostsText = string.Join(Environment.NewLine, values.MediaPreviewHosts);
 	}
@@ -73,6 +77,7 @@ public sealed partial class GeneralSectionViewModel : DaemonSectionViewModel<Gen
 			HttpsProxy: proxy != snapshot.HttpsProxy ? proxy : null,
 			OllamaBaseUrl: ollama != snapshot.OllamaBaseUrl ? ollama : null,
 			AgentToolsEnabled: AgentToolsEnabled != snapshot.AgentToolsEnabled ? AgentToolsEnabled : null,
+			CodeReferencesEnabled: CodeReferencesEnabled != snapshot.CodeReferencesEnabled ? CodeReferencesEnabled : null,
 			FileAccess: FileAccessMode != snapshot.FileAccess.Mode ? new FileAccessSettingsPatch(Mode: FileAccessMode) : null,
 			MediaPreviewHosts: hosts.SequenceEqual(snapshot.MediaPreviewHosts, StringComparer.OrdinalIgnoreCase) ? null : hosts);
 
@@ -87,6 +92,8 @@ public sealed partial class GeneralSectionViewModel : DaemonSectionViewModel<Gen
 			OllamaBaseUrl = edits.OllamaBaseUrl;
 		if (edits.AgentToolsEnabled != null)
 			AgentToolsEnabled = edits.AgentToolsEnabled.Value;
+		if (edits.CodeReferencesEnabled != null)
+			CodeReferencesEnabled = edits.CodeReferencesEnabled.Value;
 		if (edits.FileAccess?.Mode != null)
 			FileAccessMode = edits.FileAccess.Mode.Value;
 		if (edits.MediaPreviewHosts != null)

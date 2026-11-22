@@ -1,7 +1,7 @@
 namespace TessynDesktop.WPF.ViewModels;
 
 /// <summary>
-/// A cheap check on the client before the daemon is asked: only text that could contain a trigger (<c>#</c>, <c>##</c>, or a drive path such as
+/// A cheap check on the client before the daemon is asked: only text that could contain a trigger (<c>#</c> earlier on the line, <c>##</c>, or a drive path such as
 /// <c>C:\</c> before the caret) is worth a round trip. The daemon's parser has the final say; this only spares it the keystrokes that never
 /// could trigger.
 /// </summary>
@@ -13,11 +13,11 @@ public static class AutocompleteTrigger
 		if (string.IsNullOrEmpty(text) || caret <= 0 || caret > text.Length)
 			return false;
 
-		// A '#' in the word before the caret.
+		// A '#' anywhere before the caret on the current line: a session query may contain spaces (FR.7.14), so the word is not the limit.
 		for (var i = caret - 1; i >= 0; i--)
 		{
 			var ch = text[i];
-			if (ch is ' ' or '\t' or '\n' or '\r')
+			if (ch is '\n' or '\r')
 				break;
 
 			if (ch == '#')

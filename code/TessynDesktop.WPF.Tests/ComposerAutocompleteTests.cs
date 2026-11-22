@@ -56,7 +56,10 @@ public sealed class ComposerAutocompleteTests : IDisposable
 	[InlineData("plain words", 11, false)]
 	[InlineData("see #Fo", 7, true)]
 	[InlineData("see ##read", 10, true)]
-	[InlineData("see #Foo and more", 17, false)]       // the '#' is in an earlier word
+	[InlineData("see #Foo and more", 17, true)]        // a '#' earlier on the line: a session query may contain spaces (FR.7.14)
+	[InlineData("see #alpha te", 13, true)]
+	[InlineData("#alpha\nte", 9, false)]               // the '#' is on an earlier line
+	[InlineData("a#b and more", 12, true)]             // the daemon decides: a '#' inside a word is not a trigger there
 	[InlineData("open C:\\Users\\", 14, true)]
 	[InlineData("open C:", 7, false)]
 	[InlineData("a/b", 3, false)]
@@ -242,6 +245,72 @@ public sealed class ComposerAutocompleteTests : IDisposable
 
 		Assert.Equal("open C:\\Users\\", insertion!.Text);
 		Assert.True(insertion.ContinuesPath);
+	}
+
+	// ---- session suggestions (FR.7.14, TC.CR.06, TC.CR.22) ----
+
+	private static AutocompleteSuggestResult Sessions(int triggerStart, int triggerLength, params string[] names) => new(
+		RemoteProtocol.Composer.AutocompleteModes.Session, triggerStart, triggerLength, true,
+		[.. names.Select(n => new AutocompleteItemDto(n, $"session \"{n}\" (3f9a12bc)", "session", "Tessyn / Perf", 0, 5))]);
+
+	[Fact]
+	public async Task TCCR22_AHashEarlierOnTheLine_ReachesTheDaemon_AndSessionRowsShowTheKindText()
+	{
+		_client.AutocompleteAnswer = Sessions(4, 9, "Alpha tests", "Alpha docs");
+		var vm = CreateViewModel();
+
+		vm.Update("see #alpha te", 13);
+
+		await WaitForAsync(() => vm.IsOpen, "popup");
+		Assert.Equal(1, Asked);
+		Assert.Equal(["Alpha tests", "Alpha docs"], vm.Items.Select(i => i.Label));
+		Assert.All(vm.Items, i => Assert.Equal(("session", "Tessyn / Perf", false), (i.Kind, i.Detail, i.IsDirectory)));
+		Assert.False(vm.IsIndexBuilding);
+	}
+
+	[Fact]
+	public async Task TCCR22_ASessionAnswer_NeverShowsTheIndexBuildingState()
+	{
+		_client.AutocompleteAnswer = Sessions(0, 6, "Alpha tests");
+		var vm = CreateViewModel();
+
+		vm.Update("#alpha", 6);
+		await WaitForAsync(() => vm.IsOpen, "popup");
+		await Task.Delay(100);
+
+		Assert.False(vm.IsIndexBuilding);
+		Assert.Equal(1, Asked);   // no retries for the index
+	}
+
+	[Fact]
+	public async Task TCCR22_AcceptingASession_ReplacesTheHashAndTheQuery_AndPutsTheCaretBehindTheInsertedText()
+	{
+		_client.AutocompleteAnswer = Sessions(4, 9, "Alpha tests");
+		var vm = CreateViewModel();
+		vm.Update("see #alpha te", 13);
+		await WaitForAsync(() => vm.IsOpen, "popup");
+
+		var insertion = vm.Accept("see #alpha te");
+
+		const string inserted = "session \"Alpha tests\" (3f9a12bc)";
+		Assert.Equal("see " + inserted, insertion!.Text);
+		Assert.Equal(("see " + inserted).Length, insertion.Caret);
+		Assert.False(insertion.ContinuesPath);
+		Assert.False(vm.IsOpen);
+	}
+
+	[Fact]
+	public async Task TCCR06_WhenNoSessionMatchesAnyMore_ThePopupCloses()
+	{
+		_client.AutocompleteAnswer = Sessions(0, 6, "Alpha tests");
+		var vm = CreateViewModel();
+		vm.Update("#alpha", 6);
+		await WaitForAsync(() => vm.IsOpen, "popup");
+
+		_client.AutocompleteAnswer = new(RemoteProtocol.Composer.AutocompleteModes.None, 0, 0, true, []);
+		vm.Update("#alpha zz", 9);
+
+		await WaitForAsync(() => !vm.IsOpen, "closed");
 	}
 
 	// ---- in the pane ----

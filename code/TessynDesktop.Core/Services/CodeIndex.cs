@@ -38,6 +38,7 @@ public sealed class CodeIndex : IDisposable
 
 	private readonly string _workingDirectory;
 	private readonly bool _enableWatcher;
+	private readonly bool _parseSymbols;
 	private readonly CancellationTokenSource _cts = new();
 	private FileSystemWatcher? _watcher;
 	private Timer? _debounceTimer;
@@ -75,10 +76,12 @@ public sealed class CodeIndex : IDisposable
 		get { lock (_dataLock) return _symbolArray ??= _symbolsByFile.Values.SelectMany(static x => x).ToArray(); }
 	}
 
-	public CodeIndex(string workingDirectory, bool enableWatcher = true)
+	/// <param name="parseSymbols">False while Code references is off (FR.7.13): files are indexed, C# symbols are not parsed.</param>
+	public CodeIndex(string workingDirectory, bool enableWatcher = true, bool parseSymbols = true)
 	{
 		_workingDirectory = workingDirectory;
 		_enableWatcher = enableWatcher;
+		_parseSymbols = parseSymbols;
 	}
 
 	public async Task BuildAsync()
@@ -164,7 +167,7 @@ public sealed class CodeIndex : IDisposable
 			Root = _workingDirectory,
 		};
 
-		if (_symbolParsedExtensions.Contains(Path.GetExtension(filePath)))
+		if (_parseSymbols && _symbolParsedExtensions.Contains(Path.GetExtension(filePath)))
 		{
 			var list = new List<CodeSymbolModel>();
 			ExtractSymbols(filePath, list);
@@ -488,7 +491,7 @@ public sealed class CodeIndex : IDisposable
 	{
 		// A content change to a file that is already indexed matters only for symbol-parsed files; log files and the like
 		// can change thousands of times without the index needing to know.
-		if (e.ChangeType == WatcherChangeTypes.Changed && !_symbolParsedExtensions.Contains(Path.GetExtension(e.FullPath)))
+		if (e.ChangeType == WatcherChangeTypes.Changed && !(_parseSymbols && _symbolParsedExtensions.Contains(Path.GetExtension(e.FullPath))))
 			return;
 
 		ScheduleReindex(e.FullPath);

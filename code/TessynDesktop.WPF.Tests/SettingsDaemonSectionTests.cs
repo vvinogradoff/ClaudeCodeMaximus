@@ -68,6 +68,36 @@ public sealed class SettingsDaemonSectionTests
 		Assert.False(general.HasChanges);   // reloaded: the saved values are the new baseline
 	}
 
+	// ---- TC.CR.21: Code references (FR.4.8) ----
+
+	[Fact]
+	public async Task General_CodeReferences_TickingItMakesTheTabDirty_AndTheSavePatchCarriesOnlyIt()
+	{
+		var general = await LoadedGeneralAsync();
+		Assert.False(general.CodeReferencesEnabled);
+		Assert.False(general.HasChanges);
+
+		general.CodeReferencesEnabled = true;
+
+		Assert.True(general.HasChanges);
+		Assert.True(await general.SaveAsync());
+		var sent = Assert.IsType<GeneralSettingsPatch>(Assert.Single(_client.SettingsUpdates).Patch);
+		Assert.Equal(new GeneralSettingsPatch(CodeReferencesEnabled: true), sent);
+		Assert.True(general.CodeReferencesEnabled);
+		Assert.False(general.HasChanges);   // reloaded: the saved value is the new baseline
+	}
+
+	[Fact]
+	public async Task General_CodeReferences_UntickingItAgain_IsNoChange()
+	{
+		var general = await LoadedGeneralAsync();
+
+		general.CodeReferencesEnabled = true;
+		general.CodeReferencesEnabled = false;
+
+		Assert.False(general.HasChanges);
+	}
+
 	[Fact]
 	public async Task General_NothingChanged_SendsNothing()
 	{

@@ -56,7 +56,7 @@ public static class SettingsTestSupport
 	public static FakeTessynClient WithSettingsValues(this FakeTessynClient client)
 	{
 		client.SettingsValues[RemoteProtocol.SettingsApi.GeneralSection] = new GeneralSettingsDto(
-			@"C:\Sessions", "claude", @"C:\Src", string.Empty, "http://localhost:11434", false,
+			@"C:\Sessions", "claude", @"C:\Src", string.Empty, "http://localhost:11434", false, false,
 			new FileAccessSettingsDto(FileAccessModeDto.ReferencedOnly, 65536, 1000, 2000, 3000, 4000), ["a.example.com"]);
 		client.SettingsValues[RemoteProtocol.SettingsApi.NotificationsSection] = new NotificationsSettingsDto(true, @"C:\Windows\Media\ding.wav", 180);
 		client.SettingsValues[RemoteProtocol.SettingsApi.TelegramSection] = new TelegramSettingsDto(false, -100123, [11, 22], "@me", TelegramMirrorModeDto.Full);
@@ -76,6 +76,7 @@ public static class SettingsTestSupport
 					HttpsProxy = g.HttpsProxy ?? general.HttpsProxy,
 					OllamaBaseUrl = g.OllamaBaseUrl ?? general.OllamaBaseUrl,
 					AgentToolsEnabled = g.AgentToolsEnabled ?? general.AgentToolsEnabled,
+					CodeReferencesEnabled = g.CodeReferencesEnabled ?? general.CodeReferencesEnabled,
 					FileAccess = g.FileAccess?.Mode != null ? general.FileAccess with { Mode = g.FileAccess.Mode.Value } : general.FileAccess,
 					MediaPreviewHosts = g.MediaPreviewHosts ?? general.MediaPreviewHosts,
 				};

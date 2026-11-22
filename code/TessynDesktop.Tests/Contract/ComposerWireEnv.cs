@@ -69,7 +69,7 @@ internal sealed class ComposerWireEnv : IDisposable
 		var resolver = new TurnSettingsResolver(Settings, Turns, profiles, models, labels);
 		var turnModule = new TurnRpcModule(Registry, options, resolver, new TurnSendService(Engine, Registry), Engine, Turns, Streaming, new SessionModelSettings(Settings));
 
-		Autocomplete = new AutocompleteRpcModule(Registry, CodeIndex);
+		Autocomplete = new AutocompleteRpcModule(Registry, CodeIndex, Settings);
 
 		var runInfo  = new DaemonRunInfo();
 		var bus      = Bus;

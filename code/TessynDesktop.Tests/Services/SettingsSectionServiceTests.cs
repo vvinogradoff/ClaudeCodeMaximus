@@ -22,7 +22,7 @@ public sealed class SettingsSectionServiceTests : IDisposable
 	/// <summary>Every top-level member of <see cref="AppSettingsModel"/> a section may write; the rest of the model must never change.</summary>
 	private static readonly string[] WhitelistedModelMembers =
 	[
-		nameof(AppSettingsModel.HttpsProxy), nameof(AppSettingsModel.OllamaBaseUrl), nameof(AppSettingsModel.AgentToolsEnabled), nameof(AppSettingsModel.FileAccess), nameof(AppSettingsModel.MediaPreviewHosts),
+		nameof(AppSettingsModel.HttpsProxy), nameof(AppSettingsModel.OllamaBaseUrl), nameof(AppSettingsModel.AgentToolsEnabled), nameof(AppSettingsModel.CodeReferencesEnabled), nameof(AppSettingsModel.FileAccess), nameof(AppSettingsModel.MediaPreviewHosts),
 		nameof(AppSettingsModel.NotificationsEnabled), nameof(AppSettingsModel.SessionCompletionSoundFile), nameof(AppSettingsModel.SessionCompletionSoundThrottleSeconds),
 		nameof(AppSettingsModel.TelegramEnabled), nameof(AppSettingsModel.TelegramChatId), nameof(AppSettingsModel.TelegramAllowedUserIds),
 		nameof(AppSettingsModel.TelegramMentionHandle), nameof(AppSettingsModel.TelegramMirrorMode),
@@ -255,7 +255,7 @@ public sealed class SettingsSectionServiceTests : IDisposable
 
 		_service.Update("general", Patch($$$"""
 			{"httpsProxy":"http://p:1",
-			 "ollamaBaseUrl":"http://o:2","agentToolsEnabled":false,"mediaPreviewHosts":["*.x.com","y.org"],
+			 "ollamaBaseUrl":"http://o:2","agentToolsEnabled":false,"codeReferencesEnabled":true,"mediaPreviewHosts":["*.x.com","y.org"],
 			 "fileAccess":{"mode":"referencedOnly","maxRelayChunkBytes":1000,"maxTextFileBytes":2000,"maxImageFileBytes":3000,"maxPdfFileBytes":4000,"maxVideoFileBytes":5000}}
 			"""), 1);
 		_service.Update("notifications", Patch($$"""{"notificationsEnabled":false,"sessionCompletionSoundFile":{{Json(Path.Combine(_dir, "s.wav"))}},"sessionCompletionSoundThrottleSeconds":5}"""), 1);
@@ -296,7 +296,7 @@ public sealed class SettingsSectionServiceTests : IDisposable
 		}
 
 		Assert.Equal(
-			["AgentToolsEnabled", "ClaudePath", "FileAccess", "HttpsProxy", "MediaPreviewHosts", "OllamaBaseUrl", "SessionFilesRoot", "SourceCodesLocation"],
+			["AgentToolsEnabled", "ClaudePath", "CodeReferencesEnabled", "FileAccess", "HttpsProxy", "MediaPreviewHosts", "OllamaBaseUrl", "SessionFilesRoot", "SourceCodesLocation"],
 			typeof(GeneralSettingsDto).GetProperties().Select(p => p.Name).Order());
 		Assert.Equal(
 			["NotificationsEnabled", "SessionCompletionSoundFile", "SessionCompletionSoundThrottleSeconds"],
@@ -424,6 +424,46 @@ public sealed class SettingsSectionServiceTests : IDisposable
 		Assert.Empty(_settings.Settings.MediaPreviewHosts);
 		Assert.Equal(string.Empty, _settings.Settings.HttpsProxy);
 		Assert.Equal(string.Empty, _settings.Settings.TelegramMentionHandle);
+	}
+
+	// ── TC.CR.20: Code references (FR.7.13, FR.4.8) ──────────────────────────────────────────
+
+	[Fact]
+	public void CodeReferences_IsOffForASettingsFileWithoutTheMember_AndShownOffByGet()
+	{
+		File.WriteAllText(Path.Combine(_dir, "appsettings.json"), "{}");
+
+		Assert.False(ReloadedSettings().CodeReferencesEnabled);
+		Assert.False(Assert.IsType<GeneralSettingsDto>(_service.Get("general").Values).CodeReferencesEnabled);
+	}
+
+	[Fact]
+	public void CodeReferences_Update_Persists_AndShowsInGet()
+	{
+		_service.Update("general", Patch("""{"codeReferencesEnabled":true}"""), 1);
+
+		Assert.True(ReloadedSettings().CodeReferencesEnabled);
+		Assert.True(Assert.IsType<GeneralSettingsDto>(_service.Get("general").Values).CodeReferencesEnabled);
+
+		_service.Update("general", Patch("""{"codeReferencesEnabled":false}"""), 2);
+		Assert.False(ReloadedSettings().CodeReferencesEnabled);
+	}
+
+	[Fact]
+	public void CodeReferences_APatchWithoutTheMember_LeavesItAlone()
+	{
+		_service.Update("general", Patch("""{"codeReferencesEnabled":true}"""), 1);
+		_service.Update("general", Patch("""{"httpsProxy":"http://p:1"}"""), 2);
+
+		Assert.True(_settings.Settings.CodeReferencesEnabled);
+	}
+
+	[Fact]
+	public void CodeReferences_ARejectedPatch_RestoresIt()
+	{
+		Assert.ThrowsAny<Exception>(() => _service.Update("general", Patch("""{"codeReferencesEnabled":true,"ollamaBaseUrl":"not a url"}"""), 1));
+
+		Assert.False(_settings.Settings.CodeReferencesEnabled);
 	}
 
 	// ── helpers ──────────────────────────────────────────────────────────────────────────────
