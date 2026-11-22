@@ -1377,7 +1377,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 
 		var lines = outcomes.Select(o => string.Format(
 			o.IsCreated ? Constants.Attention.PostedLineFormat : Constants.Attention.AlreadyPinnedLineFormat,
-			o.Item.Id, AttentionFormat.KindName(o.Item.Kind))).ToList();
+			o.Item.Id, AttentionFormat.KindName(o.Item.Kind),
+			o.Item.Questions.Count == 0 ? string.Empty : string.Format(Constants.Attention.PostedWithQuestionsFormat, o.Item.Questions.Count))).ToList();
 
 		// FR.23.4: at most one notification per call; only created items count, updates never notify.
 		var created = outcomes.Where(o => o.IsCreated).Select(o => o.Item).ToList();
@@ -1400,7 +1401,14 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		{
 			var item = created[0];
 			var head = string.Format(Constants.Attention.NotifySingleFormat, item.Id, AttentionFormat.KindName(item.Kind), item.Title);
-			return item.Body.Length == 0 ? head : head + "\n\n" + item.Body;
+			var message = item.Body.Length == 0 ? head : head + "\n\n" + item.Body;
+			if (item.Questions.Count == 0)
+				return message;
+
+			// FR.23.38: the first three question texts, so the phone shows what is being asked.
+			var texts = string.Join(Constants.Attention.NotifyQuestionsSeparator,
+				item.Questions.Take(Constants.Attention.NotifyQuestionTexts).Select(q => AttentionQuestionFormat.OneLine(q.Text)));
+			return message + "\n\n" + string.Format(Constants.Attention.NotifyQuestionsFormat, item.Questions.Count, texts);
 		}
 
 		var sb = new StringBuilder(string.Format(Constants.Attention.NotifyManyHeaderFormat, created.Count));
@@ -1453,6 +1461,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 				Key            = string.IsNullOrEmpty(key) ? null : Cut(key, Constants.Attention.MaxKeyLength),
 				Source         = AttentionSource.Tool,
 				Refs           = ResolveRefs(item, n, callerNode),
+				Questions      = AttentionQuestionParser.Parse(item, n, kind, options.Count > 0 || !string.IsNullOrEmpty(recommendation)),
 			});
 		}
 
@@ -1609,6 +1618,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		var line = $"{item.Id} [{AttentionFormat.KindName(item.Kind)}, {AttentionFormat.StatusName(item.Status)}] {item.Title}";
 		return item.Status switch
 		{
+			AttentionStatus.Open when item.Questions.Count > 0                       => line + string.Format(Constants.Attention.ListQuestionsSuffixFormat, item.Questions.Count),
 			AttentionStatus.Answered when !string.IsNullOrEmpty(item.Answer)         => $"{line} - answer: {item.Answer}",
 			AttentionStatus.Resolved when !string.IsNullOrEmpty(item.ResolutionNote) => $"{line} - {item.ResolutionNote}",
 			_ => line,
@@ -2059,6 +2069,23 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 							"options":        { "type": "array", "maxItems": 10, "items": { "type": "string" }, "description": "Answer options the user can pick (each up to 200 characters)." },
 							"recommendation": { "type": "string", "description": "Your recommended answer, up to 1,000 characters." },
 							"key":            { "type": "string", "description": "Stable dedupe key of your choosing, up to 100 characters." },
+							"questions": {
+								"type": "array",
+								"minItems": 1,
+								"maxItems": 20,
+								"description": "A questionnaire (ask or critical items only; not together with options or recommendation): 1-20 questions the user answers all at once, each pre-filled with your recommendation, which they keep or override. Put the context in body and the questions here.",
+								"items": {
+									"type": "object",
+									"properties": {
+										"type":                { "type": "string", "enum": ["yes_no", "single", "multi", "text"], "description": "yes_no: yes or no. single: pick one of the choices. multi: pick any of the choices, including none. text: free text." },
+										"question":            { "type": "string", "maxLength": 500, "description": "The question, up to 500 characters." },
+										"choices":             { "type": "array", "minItems": 2, "maxItems": 4, "items": { "type": "string", "maxLength": 100 }, "description": "single and multi only, 2-4 unique labels." },
+										"recommended":         { "type": "string", "maxLength": 1000, "description": "Your recommended answer: \"yes\" or \"no\" for yes_no, one of the choices for single, the text for text. Not allowed for multi." },
+										"recommended_choices": { "type": "array", "items": { "type": "string" }, "description": "multi only: the recommended choices, a subset of choices." }
+									},
+									"required": ["type", "question"]
+								}
+							},
 							"refs": {
 								"type": "array",
 								"maxItems": 10,

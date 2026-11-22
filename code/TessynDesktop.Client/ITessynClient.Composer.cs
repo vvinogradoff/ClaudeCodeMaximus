@@ -22,7 +22,11 @@ public partial interface ITessynClient
 	Task<DraftGetResult> ReplyDraftGetAsync(string nodeId, string itemId, CancellationToken cancellationToken = default);
 
 	/// <summary><c>draft.set</c> with <c>itemId</c> (FR.23.19): like <see cref="DraftSetAsync"/>, for the reply draft of one Focus item.</summary>
-	Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, CancellationToken cancellationToken = default);
+	/// <remarks>
+	/// <paramref name="questions"/> (FR.23.37) are the current values of a questionnaire item, stored with the note in the same draft; null or empty stores none.
+	/// A draft with question values is not empty even when <paramref name="text"/> is. <see cref="DraftGetResult.Questions"/> returns them from <see cref="ReplyDraftGetAsync"/>.
+	/// </remarks>
+	Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, IReadOnlyList<AttentionQuestionAnswerParams>? questions = null, CancellationToken cancellationToken = default);
 
 	/// <summary><c>draft.delete</c>: removes the draft; <see cref="DraftDeleteResult.Deleted"/> says whether there was one.</summary>
 	Task<DraftDeleteResult> DraftDeleteAsync(string nodeId, CancellationToken cancellationToken = default);

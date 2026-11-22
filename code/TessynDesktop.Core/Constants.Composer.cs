@@ -14,6 +14,9 @@ public static partial class Constants
 		/// <summary>Message of the <c>draft.set</c> error for a stale <c>baseRevision</c>; the client re-reads the draft and merges.</summary>
 		public const string DraftChangedMessage = "Draft changed";
 
+		/// <summary>First line of an item draft file that also holds question values (FR.23.37); see <see cref="TessynDesktop.Services.ItemDraftCodec"/>.</summary>
+		public const string ItemDraftEnvelopePrefix = "#tessyn-questionnaire-draft-v1";
+
 		/// <summary>How long the daemon keeps a code index it had to build for <c>autocomplete.suggest</c> after the last request for its directory (ISSUE.016).</summary>
 		public static readonly TimeSpan AutocompleteIndexIdle = TimeSpan.FromMinutes(5);
 

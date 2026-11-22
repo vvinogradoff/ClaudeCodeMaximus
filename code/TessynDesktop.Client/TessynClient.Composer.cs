@@ -1,3 +1,5 @@
+using System.Text.Json;
+using TessynDesktop.Services;
 using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.Client;
@@ -20,10 +22,12 @@ public sealed partial class TessynClient
 		CallAsync<DraftGetResult>(RemoteProtocol.Composer.DraftGetMethod, Params(("nodeId", Node(nodeId)), ("itemId", Node(itemId))), cancellationToken);
 
 	/// <inheritdoc />
-	public Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, CancellationToken cancellationToken = default) =>
+	public Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, IReadOnlyList<AttentionQuestionAnswerParams>? questions = null, CancellationToken cancellationToken = default) =>
 		CallAsync<DraftSetResult>(
 			RemoteProtocol.Composer.DraftSetMethod,
-			Params(("nodeId", Node(nodeId)), ("itemId", Node(itemId)), ("text", Node(text)), ("baseRevision", Node(baseRevision))),
+			Params(
+				("nodeId", Node(nodeId)), ("itemId", Node(itemId)), ("text", Node(text)), ("baseRevision", Node(baseRevision)),
+				("questions", questions is { Count: > 0 } ? JsonSerializer.SerializeToNode(questions, TdcpJsonOptions.Default) : null)),
 			cancellationToken);
 
 	/// <inheritdoc />
