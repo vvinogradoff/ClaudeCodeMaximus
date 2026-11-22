@@ -41,4 +41,7 @@ public sealed class SeedModel
 	public string AgentToken { get; init; } = string.Empty;
 	public string ClaudeSessionId { get; init; } = string.Empty;
 	public string AlphaPath { get; init; } = string.Empty;
+
+	/// <summary>The GPT session of the Codex seed (TC.CX.42); empty without it.</summary>
+	public string GptSessionId { get; set; } = string.Empty;
 }

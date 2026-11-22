@@ -25,10 +25,11 @@ public sealed class WebStack : IAsyncDisposable
 
 	/// <param name="dispatcher">Replaces the daemon's dispatcher (the not-remote-callable test); null uses the real one.</param>
 	/// <param name="token">The bearer token the connector presents; default is the configured one.</param>
-	public static async Task<WebStack> StartAsync(TdcpDispatcher? dispatcher = null, string? token = null, bool waitOnline = true)
+	/// <param name="codex">The daemon gets the Codex engine over the in-process fake app-server (TC.CX.42).</param>
+	public static async Task<WebStack> StartAsync(TdcpDispatcher? dispatcher = null, string? token = null, bool waitOnline = true, bool codex = false)
 	{
 		var web = new E2EWebFactory();
-		var daemon = await DaemonHarness.CreateAsync();
+		var daemon = await DaemonHarness.CreateAsync(codex);
 		web.CreateClient().Dispose();
 
 		var link = new RelayLink(
