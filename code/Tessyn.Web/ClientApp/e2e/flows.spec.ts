@@ -139,6 +139,59 @@ test.describe('mobile flows', () => {
 		await shot(page, '21-tags-selected');
 	});
 
+	// TC.CX.42 (FR.33.2, FR.33.3, FR.33.17, FR.25.24): the pickers follow the model's engine; Codex settings are read-only on the web.
+	test('GPT session: engine-aware pickers, read-only Codex status, labelled usage, send', async ({ page }) => {
+		await login(page);
+		await openPanel(page);
+		await row(page, 'GPT session: tidy the changelog').click();
+		await expect(page.locator('.topbar .title-btn')).toHaveText('GPT session: tidy the changelog');
+
+		// usage: the ChatGPT profile's windows, the exhausted one marked
+		await expect(page.getByTestId('usage-strip')).toBeVisible();
+		await expect(page.locator('.usage-bar.exhausted')).toHaveCount(1);
+		await expect(page.locator('.usage-bar.exhausted')).toContainText('5h: 100%');
+		await expect(page.locator('.usage-bar.exhausted')).toHaveAttribute('title', /out of credits/);
+
+		await page.getByRole('button', { name: 'Session settings' }).click();
+		const sheet = page.getByTestId('settings-sheet');
+		await expect(sheet).toBeVisible();
+		const model = page.getByTestId('model-select');
+		const effort = page.getByTestId('effort-select');
+		const profile = page.getByTestId('profile-select');
+		await expect(model).toHaveValue('gpt-6.2-sol');
+		await expect(model.locator('optgroup')).toHaveCount(3);
+		await expect(model.locator('optgroup[label="GPT (ChatGPT plan)"] option').first()).toHaveText('GPT-6.2-Sol'); // Codex's default first
+		await expect(effort).toHaveValue('xhigh');
+		await expect(effort.locator('option')).toHaveText(['Default', 'Low', 'Medium', 'High', 'Xhigh']);
+		await expect(profile).toHaveValue('codex_1');
+		await expect(profile.locator('option')).toHaveCount(1);
+		await expect(sheet.getByText('Streaming', { exact: true })).toHaveCount(0);
+		await expect(page.getByTestId('codex-status')).toContainText('Codex 0.172.0 found');
+		await expect(page.getByTestId('codex-status')).toContainText('newer than the tested');
+		await expect(page.getByTestId('codex-desktop-note')).toHaveText(/Sign in to ChatGPT in the desktop app/);
+		await shot(page, '24-settings-gpt');
+
+		// a Claude model: the Claude efforts and profiles, Streaming back; the GPT-only effort shows as Default
+		await model.selectOption('claude-opus-5-5');
+		await expect(effort.locator('option')).toHaveText(['Default', 'Max', 'High', 'Medium', 'Low']);
+		await expect(effort).toHaveValue('default');
+		await expect(profile).toHaveValue('default');
+		await expect(profile.locator('option')).toHaveCount(5);
+		await expect(sheet.getByText('Streaming', { exact: true })).toBeVisible();
+
+		// back to GPT: the stored effort and profile return
+		await model.selectOption('gpt-6.2-sol');
+		await expect(effort).toHaveValue('xhigh');
+		await expect(profile).toHaveValue('codex_1');
+		await effort.selectOption('high');
+		await page.getByRole('button', { name: 'Done' }).click();
+
+		// a send from the GPT session carries the choice; the reply is stamped with it
+		await page.getByPlaceholder('Message…').fill('Hello GPT');
+		await page.getByRole('button', { name: 'Send', exact: true }).click();
+		await expect(page.locator('.msg.assistant', { hasText: 'Got it - working on: Hello GPT' })).toBeVisible({ timeout: 10_000 });
+	});
+
 	test('offline banner, compact, and logout', async ({ page }) => {
 		await login(page);
 		await openPanel(page);

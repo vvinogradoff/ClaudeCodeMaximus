@@ -8,6 +8,7 @@ import type {
 	AttentionEntryRefDto, AttentionFileRefDto, FilePreviewResult,
 	SessionEntriesResult, SessionEntryDto, SessionSendResult, TreeSnapshotResult, TreeWorkersResult, TurnCompletedParams, TurnOptions,
 } from '../api/types';
+import { effectiveChoice } from '../lib/engines';
 import { anchorEntryId, emptyTranscript, indexOfEntryId, planAppended, staleAnchor } from '../lib/transcript';
 import { keepNavTarget, takeNavTarget, topFrame } from '../lib/navStack';
 import type { NavFrame } from '../lib/navStack';
@@ -225,8 +226,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 	const resync = useCallback(async () => {
 		try {
 			const hello = await rpc<HelloResult>('client.hello', {});
-			dispatch({ type: 'serverTime', serverTimeUtc: hello.serverTimeUtc });
+			dispatch({ type: 'hello', hello });
 		} catch { /* ignore, offline */ }
+		// FR.33.2: the GPT models appear once ChatGPT is signed in on the desktop, so the pickers' catalog is refetched too.
+		void rpc<CatalogResult>('catalog.get', {}).then((c) => dispatch({ type: 'catalog', catalog: c })).catch(() => {});
 		await refreshTree();
 		const id = openId();
 		if (id) {
@@ -323,7 +326,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 	const startSession = useCallback(async () => {
 		try {
 			const hello = await rpc<HelloResult>('client.hello', {});
-			dispatch({ type: 'serverTime', serverTimeUtc: hello.serverTimeUtc });
+			dispatch({ type: 'hello', hello });
 		} catch { /* ignore */ }
 		void rpc<CatalogResult>('catalog.get', {}).then((c) => dispatch({ type: 'catalog', catalog: c })).catch(() => {});
 		void refreshTree();
@@ -361,9 +364,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 	useEffect(() => { writeJson('panelTab', state.panelTab); }, [state.panelTab]);
 
 	// ---- actions ---------------------------------------------------------------------------------------------
+	/** FR.25.24: every send carries the choice, adjusted to the model's engine (FR.33.3, FR.33.5). */
 	const turnOpts = (): TurnOptions => {
-		const t = stateRef.current.session?.settings;
-		return t ? { modelId: t.modelId, effort: t.effort, profileId: t.profileId } : {};
+		const cur = stateRef.current;
+		const t = cur.session?.settings;
+		if (!t) return {};
+		const c = effectiveChoice(cur.catalog, t, cur.session?.detail?.state.engine);
+		return c.profileId === undefined ? { modelId: c.modelId, effort: c.effort } : { modelId: c.modelId, effort: c.effort, profileId: c.profileId };
 	};
 
 	/** The place the user is leaving, for the Back stack. */

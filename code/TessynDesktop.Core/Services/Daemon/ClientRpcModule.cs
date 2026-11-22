@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
 using Serilog;
+using TessynDesktop.Codex;
 using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.Services;
@@ -45,6 +48,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool            _elevated;
 	private readonly ISessionEngineAvailability? _engines;
 	private readonly bool            _hasCodexProfiles;
+	private readonly CodexSettingsService? _codexSettings;
+	private readonly Lock            _codexLock = new();
+	private Task<CodexHelloStatusDto?>? _codexStatus;
+	private DateTimeOffset           _codexStatusRead;
 
 	public ClientRpcModule(TimeProvider? time = null, IDaemonRunInfo? runInfo = null, IEventLog? eventLog = null, ISessionContentStore? contentStore = null, ITurnEngine? turnEngine = null,
 		ISettingsSectionService? settingsSections = null, IProfileAdminService? profileAdmin = null, ISessionSoundService? sounds = null,
@@ -54,8 +61,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		IImportService? import = null, IGlobalSearchService? search = null, IScheduleApiService? schedules = null,
 		IAttentionOverviewService? attentionOverview = null, IDaemonHealthService? health = null,
 		IMcpRegistryService? mcpRegistry = null, ITelegramTokenStore? telegramTokens = null, IRelayConfigStore? relayConfig = null, IClaudeModelService? models = null,
-		bool? elevated = null, ISessionEngineAvailability? engines = null, TessynDesktop.Codex.ICodexProfileService? codexProfiles = null)
+		bool? elevated = null, ISessionEngineAvailability? engines = null, TessynDesktop.Codex.ICodexProfileService? codexProfiles = null,
+		CodexSettingsService? codexSettings = null)
 	{
+		_codexSettings    = codexSettings;     // FR.33.17: the read-only Codex status of client.hello, for every client
 		_engines          = engines;           // FR.33 (tdcp-spec 10.A14): the engines whose CLI was found, on both transports
 		_hasCodexProfiles = codexProfiles != null;
 		_elevated      = elevated ?? Environment.IsPrivilegedProcess;   // FR.32.12: read once; a process cannot change its elevation
@@ -90,7 +99,7 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	/// <inheritdoc />
 	public void Register(TdcpMethodRegistry registry)
 	{
-		registry.AddSync(Constants.Remote.Methods.ClientHello, Hello, remoteCallable: true);
+		registry.Add(Constants.Remote.Methods.ClientHello, async (@params, _) => Hello(@params, await CodexStatusAsync().ConfigureAwait(false)), remoteCallable: true);
 
 		// Package J2: only a local client can present notifications, so the relay cannot register (-32601).
 		if (_presence != null)
@@ -165,7 +174,45 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		return channels;
 	}
 
-	private HelloResult Hello(JsonNode? @params)
+	/// <summary>
+	/// The read-only Codex status (FR.33.17, tdcp-spec 10.A14): no path, no profile data. One reading is shared for
+	/// <see cref="Constants.Remote.HelloCodexStatusLifetime"/>; a failed reading omits the member and is retried on the next call.
+	/// </summary>
+	private Task<CodexHelloStatusDto?> CodexStatusAsync()
+	{
+		if (_codexSettings == null)
+			return Task.FromResult<CodexHelloStatusDto?>(null);
+
+		lock (_codexLock)
+		{
+			var now = _time.GetUtcNow();
+			var stale = _codexStatus == null
+				|| (_codexStatus.IsCompleted && (_codexStatus.Result == null || now - _codexStatusRead >= Constants.Remote.HelloCodexStatusLifetime));
+			if (stale)
+			{
+				_codexStatusRead = now;
+				_codexStatus = ReadCodexStatusAsync(_codexSettings);
+			}
+
+			return _codexStatus!;
+		}
+	}
+
+	private static async Task<CodexHelloStatusDto?> ReadCodexStatusAsync(CodexSettingsService settings)
+	{
+		try
+		{
+			var status = await settings.GetStatusAsync(CancellationToken.None).ConfigureAwait(false);
+			return new CodexHelloStatusDto(status.Found, status.Version, status.TestedVersion, status.Note);
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "client.hello could not read the Codex status");
+			return null;
+		}
+	}
+
+	private HelloResult Hello(JsonNode? @params, CodexHelloStatusDto? codex)
 	{
 		var clientName    = TdcpParams.OptionalString(@params, "clientName");
 		var clientVersion = TdcpParams.OptionalString(@params, "clientVersion");
@@ -200,7 +247,8 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 			Constants.Remote.MinProtocolVersion,
 			_eventLog?.HeadSeq ?? 0,
 			_elevated,
-			_engines?.GetAvailableEngines());
+			_engines?.GetAvailableEngines(),
+			codex);
 	}
 
 	/// <summary>Only what is really wired: the event capabilities need the event log.</summary>

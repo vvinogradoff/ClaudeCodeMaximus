@@ -39,7 +39,10 @@ public sealed class DaemonHarness : IDisposable
 	public ISessionFileService Files => Get<ISessionFileService>();
 	public IAttentionService Attention => Get<IAttentionService>();
 
-	public static async Task<DaemonHarness> CreateAsync()
+	private TessynDesktop.Codex.CodexHostPool? _codexPool;
+
+	/// <param name="codex">Adds the Codex engine over the in-process fake app-server, a signed-in ChatGPT profile and a GPT session (TC.CX.42).</param>
+	public static async Task<DaemonHarness> CreateAsync(bool codex = false)
 	{
 		var root = Path.Combine(Path.GetTempPath(), "tessyn-e2e-" + Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(root);
@@ -49,6 +52,7 @@ public sealed class DaemonHarness : IDisposable
 
 		var services = new ServiceCollection();
 		Register(services, root, projectsDir, process);
+		var pool = codex ? Codex.CodexDaemonWiring.Register(services, root) : null;
 		var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = false });
 
 		var settings = provider.GetRequiredService<IAppSettingsService>();
@@ -63,7 +67,13 @@ public sealed class DaemonHarness : IDisposable
 		settings.Save();
 
 		var seed = await SeedAsync(provider, root, projectsDir);
-		var harness = new DaemonHarness(root, provider, process, seed, projectsDir);
+		if (pool != null)
+		{
+			var beta = provider.GetRequiredService<ISessionRegistry>().FindDirectoryByNodeId(seed.BetaDirectoryId)!;
+			seed.GptSessionId = await Codex.CodexDaemonWiring.SeedAsync(provider, root, beta);
+		}
+
+		var harness = new DaemonHarness(root, provider, process, seed, projectsDir) { _codexPool = pool };
 
 		// The publisher is what turns domain events into remote notifications; the desktop starts it at boot.
 		provider.GetRequiredService<IRemoteNotificationPublisher>().Start();
@@ -72,6 +82,9 @@ public sealed class DaemonHarness : IDisposable
 
 	public void Dispose()
 	{
+		// The Codex pool stops the fake app-servers; the container does not own it (see CodexDaemonWiring.Register).
+		_codexPool?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+
 		try
 		{
 			_services.Dispose();
