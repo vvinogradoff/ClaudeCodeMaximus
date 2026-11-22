@@ -15,9 +15,12 @@ public sealed class ModelsRpcModule : IRemoteRpcModule
 	private readonly IClaudeModelService _models;
 	private readonly IRemoteEventBus? _bus;
 	private readonly TimeSpan _timeout;
+	private readonly TessynDesktop.Codex.ICodexModelCatalog? _codexModels;
 
-	public ModelsRpcModule(IClaudeModelService models, IRemoteEventBus? bus = null, TimeSpan? timeout = null)
+	/// <param name="codexModels">FR.33.2: <c>models.refresh</c> also fetches the GPT list again.</param>
+	public ModelsRpcModule(IClaudeModelService models, IRemoteEventBus? bus = null, TimeSpan? timeout = null, TessynDesktop.Codex.ICodexModelCatalog? codexModels = null)
 	{
+		_codexModels = codexModels;
 		_models  = models;
 		_bus     = bus;
 		_timeout = timeout ?? Constants.IntegrationsApi.ModelsRefreshTimeout;
@@ -31,7 +34,9 @@ public sealed class ModelsRpcModule : IRemoteRpcModule
 	{
 		using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		linked.CancelAfter(_timeout);
-		var refreshing = _models.RefreshAsync(linked.Token);
+		var refreshing = _codexModels == null
+			? _models.RefreshAsync(linked.Token)
+			: Task.WhenAll(_models.RefreshAsync(linked.Token), _codexModels.RefreshAsync(linked.Token));
 		try
 		{
 			await refreshing.WaitAsync(_timeout, cancellationToken);
@@ -44,6 +49,6 @@ public sealed class ModelsRpcModule : IRemoteRpcModule
 		}
 
 		_bus?.Publish(RemoteProtocol.ModelsApi.CatalogChangedEvent, new { });
-		return new ModelsRefreshResult(_models.GetCachedModels().Count);
+		return new ModelsRefreshResult(_models.GetCachedModels().Count + (_codexModels?.Models.Count ?? 0));
 	}
 }

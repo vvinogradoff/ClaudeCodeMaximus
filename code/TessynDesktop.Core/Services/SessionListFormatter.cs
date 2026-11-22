@@ -119,6 +119,10 @@ public sealed class SessionListFormatter
 
 		sb.Append(row.ShortId).Append(Separator).Append(_text.FormatName(row.Name)).Append(Separator).Append(FormatAge(row.LastActivityUtc, nowUtc));
 
+		// FR.33.15: a Codex session says its engine after the age; Claude rows are unchanged.
+		if (string.Equals(row.EngineId, Constants.SessionEngines.Codex, StringComparison.OrdinalIgnoreCase))
+			sb.Append(Separator).Append(Constants.Codex.Texts.EngineField).Append(Constants.SessionEngines.Codex);
+
 		// ISSUE.013 R5: the profile every session runs on, and a queued switch of a running one.
 		sb.Append(Separator).Append(ProfileField).Append(_text.FormatName(row.ProfileLabel)); // capped like a session name
 		if (row.SwitchingToLabel is not null)

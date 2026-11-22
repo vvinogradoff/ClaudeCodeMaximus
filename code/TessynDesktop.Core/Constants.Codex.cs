@@ -50,12 +50,98 @@ public static partial class Constants
 		/// <summary>How long Stop waits for <c>turn/completed</c> after <c>turn/interrupt</c> before it ends the turn as cancelled (FR.33.8).</summary>
 		public static readonly TimeSpan StopConfirmTimeout = TimeSpan.FromSeconds(15);
 
+		/// <summary>A thread with no turn for this long is unloaded (<c>thread/unsubscribe</c>) and resumed on its next turn (FR.33.6).</summary>
+		public static readonly TimeSpan ThreadIdleUnload = TimeSpan.FromMinutes(15);
+
 		/// <summary>Codex profiles (FR.33.5).</summary>
 		public static class Profiles
 		{
 			/// <summary>The User's own <c>%USERPROFILE%\.codex</c>, used without <c>CODEX_HOME</c>.</summary>
 			public const string DefaultProfileId = "codex-default";
+
+			/// <summary>Stored profiles: <c>codex_1</c>, <c>codex_2</c> … under the data root's <see cref="StoredFolderName"/>.</summary>
+			public const string StoredIdPrefix = "codex_";
+			public const string StoredFolderName = "codex-profiles";
+
+			/// <summary>How a ChatGPT profile is shown wherever a profile name is shown (FR.33.5). Arg 0 = the e-mail.</summary>
+			public const string DisplayNameFormat = "ChatGPT · {0}";
+
+			/// <summary>Codex Default before its account was read.</summary>
+			public const string DefaultUnknownEmail = "Codex Default";
+
+			public const string NoSignedInProfile = "No signed-in ChatGPT profile. Sign in under Settings > Profiles.";
+			public const string UnknownProfileFormat = "Unknown ChatGPT profile '{0}'.";
+			public const string PinnedMissingFormat = "Session '{0}' is pinned to ChatGPT profile '{1}', which no longer exists. It does not fall back to another profile.";
+			public const string PinnedSignedOutFormat = "Session '{0}' is pinned to ChatGPT profile '{1}', which is signed out. Sign in again under Settings > Profiles.";
+			public const string ClaudeProfileForGptFormat = "Profile '{0}' is a Claude profile; GPT models need a ChatGPT profile: {1}.";
+			public const string ChatGptProfileForClaudeFormat = "Profile '{0}' is a ChatGPT profile; Claude models need a Claude profile: {1}.";
+			public const string NoChatGptProfilesListed = "(none signed in)";
+			public const string SignInFailedFormat = "ChatGPT sign-in failed: {0}";
+			public const string SignInCancelled = "ChatGPT sign-in was cancelled.";
+			public const string UnknownLogin = "There is no ChatGPT sign-in in progress with that id.";
+			public const string DefaultCannotBeDeleted = "Codex Default is your own Codex CLI home; Tessyn does not delete it.";
 		}
+
+		/// <summary>The GPT model catalog (FR.33.2, FR.33.3).</summary>
+		public static class Catalog
+		{
+			/// <summary>The cache file under the data root.</summary>
+			public const string CacheFileName = "codex-models.json";
+
+			/// <summary>A cache older than this is refreshed at daemon start.</summary>
+			public static readonly TimeSpan CacheMaxAge = TimeSpan.FromHours(24);
+
+			/// <summary>Codex-native sub-agents: never offered (FR.33.3, decision D5).</summary>
+			public const string UltraEffort = "ultra";
+
+			/// <summary>The disabled picker line when there are no GPT entries (FR.33.2).</summary>
+			public const string SignInHint = "GPT models: sign in to ChatGPT in Settings > Profiles";
+
+			/// <summary>A missing <c>inputModalities</c> means text and image.</summary>
+			public static readonly string[] DefaultInputModalities = ["text", "image"];
+
+			/// <summary>GPT-looking ids (FR.33.15): a <c>gpt-</c> prefix, or <c>o</c> followed by a digit.</summary>
+			public const string GptPrefix = "gpt-";
+
+			/// <summary>At most this many GPT ids are listed in an error, then <see cref="MoreFormat"/>.</summary>
+			public const int MaxListed = 12;
+			public const string MoreFormat = " (+{0} more)";
+			public const string NotInCatalogFormat = "'{0}' looks like a GPT model but is not in the GPT catalog. GPT models: {1}.";
+			public const string NoGptModels = "(none: sign in to ChatGPT in Settings > Profiles)";
+			public const string UnknownEffortFormat = "Effort '{0}' is not offered by {1}. Its efforts: {2}.";
+		}
+
+		/// <summary>The GPT tier table (FR.33.14, decision D4).</summary>
+		public static class Tiers
+		{
+			/// <summary>The default rows, top first; matched case-insensitively as a substring of the model id.</summary>
+			public static readonly (string Match, int Tier)[] Defaults = [("astra", 3), ("sol", 2), ("terra", 2), ("luna", 1), ("gpt", 2)];
+
+			/// <summary>A GPT model no row matches.</summary>
+			public const int Unmatched = 2;
+		}
+
+		/// <summary>Plan usage of Codex profiles (FR.33.10).</summary>
+		public static class Usage
+		{
+			/// <summary>The bucket of <c>rateLimitsByLimitId</c> Tessyn shows.</summary>
+			public const string CodexLimitId = "codex";
+			public const string HoursLabelFormat = "{0}h";
+			public const string DaysLabelFormat = "{0}d";
+			public const string MinutesLabelFormat = "{0}m";
+			public const int MinutesPerHour = 60;
+			public const int MinutesPerDay = 1440;
+
+			/// <summary>The left status-bar section of a GPT session (FR.33.10). Arg 0 = the model's display name.</summary>
+			public const string ModelLabelFormat = "{0}  ·  ChatGPT plan";
+
+			/// <summary>Appended to a limits error with the reset time of the exhausted window (FR.33.13). Arg 0 = the local time.</summary>
+			public const string ResetsFormat = " (resets {0})";
+			public const string ResetTimeFormat = "ddd HH:mm";
+		}
+
+		/// <summary>The <c>account/updated</c> reason that comes at every turn start and is not an auth change (FR.33.13).</summary>
+		public const string WorkspaceRoutingReady = "workspaceRoutingReady";
 
 		/// <summary>The keys of the per-thread <c>config</c> of <c>thread/start</c> and <c>thread/resume</c> (FR.33.7, FR.33.9, FR.33.16).</summary>
 		public static class Config
@@ -266,6 +352,15 @@ public static partial class Constants
 		public static class Texts
 		{
 			public const string InterruptedMarker = "[interrupted]";
+
+			/// <summary>FR.33.15: the line added to the orchestration tool descriptions.</summary>
+			public const string GptToolDescription = " GPT models (ids from catalog.get / the model list, for example the ids Codex reports) run on the user's ChatGPT plan through Codex.";
+
+			/// <summary>FR.33.15: <c>create_session</c>'s streaming for a GPT model.</summary>
+			public const string StreamingNotApplicable = "n/a";
+
+			/// <summary>FR.33.15: the <c>list_sessions</c> field of a Codex session.</summary>
+			public const string EngineField = "engine=";
 
 			/// <summary>FR.33.8: Stop sent <c>turn/interrupt</c> but <c>turn/completed</c> did not come within 15 s.</summary>
 			public const string StopNotConfirmed = "Stop did not confirm within 15 s; the Codex turn may still be finishing.";

@@ -46,11 +46,21 @@ public sealed partial class AgentMcpServer
 		var containerDir = hasContainer ? (string.IsNullOrEmpty(workingDir) ? callerNode.WorkingDirectory : workingDir) : null;
 
 		var modelId = ValidateCreatedSessionModel(GetOptionalString(args, "model")?.Trim());
-		var effort  = ValidateCreatedSessionEffort(GetOptionalString(args, "effort")?.Trim());
+		var isGpt   = IsGptModel(modelId);
+		var effort  = isGpt
+			? ValidateGptEffort(modelId!, GetOptionalString(args, "effort")?.Trim())
+			: ValidateCreatedSessionEffort(GetOptionalString(args, "effort")?.Trim());
 		if (modelId != null && modelId != Constants.Remote.DefaultOptionId)
 			EnforceModelTier(callerNode, modelId, Constants.CreateSession.TierViolationFormat);
 
-		var pin = ResolveCreatedSessionProfile(GetOptionalString(args, "profile")?.Trim(), callerNode);
+		// FR.33.15: a GPT model makes a Codex session on a ChatGPT profile (same engine only); its streaming does not apply.
+		var targetDirectory = containerDir ?? anchor?.WorkingDirectory ?? callerNode.WorkingDirectory;
+		var profileArg      = GetOptionalString(args, "profile")?.Trim();
+		var pin = isGpt
+			? ResolveCreatedSessionCodexProfile(profileArg, callerNode, targetDirectory)
+			: ResolveCreatedSessionProfile(profileArg, callerNode);
+		if (isGpt)
+			streaming = false;
 
 		if (!TryReserveCreatedSession(out var stamp))
 			throw new McpToolException(string.Format(Constants.CreateSession.RateCapFormat, Constants.Agent.MaxCreatedSessionsPerHour));
@@ -81,8 +91,17 @@ public sealed partial class AgentMcpServer
 		_log.Information("create_session: {Caller} created {NodeId} '{Name}' (after {Anchor}, in {Directory})",
 			callerNode.NodeId, placed.Session.NodeId, name, anchor?.NodeId ?? "-", placed.Directory.Path);
 
+		if (isGpt)
+		{
+			lock (_appSettings.SyncRoot)
+			{
+				placed.Session.EngineId = Constants.SessionEngines.Codex;
+				_appSettings.Save();
+			}
+		}
+
 		var started = StartCreatedSessionTurn(placed.Session, prompt);
-		return Task.FromResult(BuildTextContent(BuildCreatedSessionText(placed, anchor != null, pin, started)));
+		return Task.FromResult(BuildTextContent(BuildCreatedSessionText(placed, anchor != null, pin, started, isGpt)));
 	}
 
 	/// <summary>The model to store: null when none was given (the session inherits), <c>"default"</c> as is, else the catalog's id.</summary>
@@ -92,6 +111,10 @@ public sealed partial class AgentMcpServer
 			return null;
 		if (string.Equals(model, Constants.Remote.DefaultOptionId, StringComparison.OrdinalIgnoreCase))
 			return Constants.Remote.DefaultOptionId;
+
+		ValidateGptModel(model);
+		if (_sessionModels?.Find(model) is { } entry)
+			return entry.Id;
 
 		var models = _modelService.GetCachedModels();
 		var match  = models.FirstOrDefault(m => string.Equals(m.Id, model, StringComparison.OrdinalIgnoreCase));
@@ -130,6 +153,10 @@ public sealed partial class AgentMcpServer
 				throw new McpToolException(string.Format(Constants.CreateSession.LoggedOutProfileFormat, signedOut.DisplayName));
 			return inherited;
 		}
+
+		// FR.33.15: a ChatGPT profile with a Claude model is the cross-engine error.
+		if (_codexProfiles?.Find(profile) is { } chatGpt)
+			throw new McpToolException(string.Format(Constants.Codex.Profiles.ChatGptProfileForClaudeFormat, chatGpt.DisplayName, ListProfileNames()));
 
 		if (_profiles == null)
 			throw new McpToolException(Constants.CreateSession.NoProfilesText);
@@ -200,7 +227,7 @@ public sealed partial class AgentMcpServer
 	}
 
 	/// <summary>The result: where the session went, the settings it runs with, and whether its first turn started (FR.15.15).</summary>
-	private string BuildCreatedSessionText(SessionPlacementModel placed, bool afterAnchor, ProfilePin pin, bool started)
+	private string BuildCreatedSessionText(SessionPlacementModel placed, bool afterAnchor, ProfilePin pin, bool started, bool isGpt)
 	{
 		var session  = placed.Session;
 		var location = _registry.GetSessionLocation(session);
@@ -223,7 +250,7 @@ public sealed partial class AgentMcpServer
 			       runsWith.ModelId ?? Constants.Remote.DefaultOptionId,
 			       runsWith.Effort ?? Constants.Remote.DefaultOptionId,
 			       profile,
-			       session.IsStreamingMode ? Constants.CreateSession.On : Constants.CreateSession.Off,
+			       isGpt ? Constants.Codex.Texts.StreamingNotApplicable : session.IsStreamingMode ? Constants.CreateSession.On : Constants.CreateSession.Off,
 			       session.PlayCompletionSound ? Constants.CreateSession.On : Constants.CreateSession.Off) + "\n"
 		       + (started ? Constants.CreateSession.FirstTurnStarted : Constants.CreateSession.NoPromptRun);
 	}

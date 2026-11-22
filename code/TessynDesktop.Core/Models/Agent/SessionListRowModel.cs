@@ -21,6 +21,9 @@ public sealed record SessionListRowModel
 	/// <summary>The profile the session runs on (<c>profile=</c> field, ISSUE.013 R5).</summary>
 	public string ProfileLabel { get; init; } = Constants.ProfileSwitch.DefaultProfileName;
 
+	/// <summary>The engine of the session (FR.33.15: a Codex row shows <c>engine=codex</c>); null for Claude.</summary>
+	public string? EngineId { get; init; }
+
 	/// <summary>The profile a queued switch will move the session to; null when none is queued.</summary>
 	public string? SwitchingToLabel { get; init; }
 

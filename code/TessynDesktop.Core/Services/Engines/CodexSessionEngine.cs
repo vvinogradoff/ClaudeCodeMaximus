@@ -51,6 +51,14 @@ public sealed partial class CodexSessionEngine : ISessionEngine, INativeCompacti
 	private readonly ISessionRegistry? _registry;
 	private readonly ICodexProfileSelector _profiles;
 	private readonly TimeProvider _time;
+	private readonly ISessionModelCatalog? _models;
+	private readonly CodexUsageService? _usage;
+	private readonly ICodexProfileService? _profileService;
+	private readonly ISessionAuthErrorTracker? _authErrors;
+	private readonly CodexProfileNaming _naming = new();
+
+	// FR.33.6: the timer that unloads each thread after 15 minutes without a turn.
+	private readonly ConcurrentDictionary<string, ITimer> _idleUnloads = new(StringComparer.Ordinal);
 
 	// The node's turn now running (Stop, InterruptAsync); one per node, because the caller's turn lock serialises a node's turns.
 	private readonly ConcurrentDictionary<string, RunningTurn> _running = new(StringComparer.Ordinal);
@@ -69,8 +77,18 @@ public sealed partial class CodexSessionEngine : ISessionEngine, INativeCompacti
 		IAppSettingsService appSettings,
 		ISessionRegistry? registry = null,
 		ICodexProfileSelector? profiles = null,
-		TimeProvider? time = null)
+		TimeProvider? time = null,
+		ISessionModelCatalog? models = null,
+		CodexUsageService? usage = null,
+		ICodexProfileService? profileService = null,
+		ISessionAuthErrorTracker? authErrors = null)
 	{
+		_models         = models;
+		_usage          = usage;
+		_profileService = profileService;
+		_authErrors     = authErrors;
+		if (_profileService is not null)
+			_profileService.AuthErrorChanged += OnProfileAuthErrorChanged;
 		_pool        = pool;
 		_config      = config;
 		_files       = files;
@@ -154,6 +172,19 @@ public sealed partial class CodexSessionEngine : ISessionEngine, INativeCompacti
 
 	/// <summary>Kills every Codex host ("Terminate all", FR.15.5, daemon exit).</summary>
 	public void TerminateAll() => _pool.TerminateAll();
+
+	/// <summary>FR.33.13: a profile that lost its sign-in (<c>account/updated</c> with <c>authMode: null</c>) sets the auth error of its running sessions.</summary>
+	private void OnProfileAuthErrorChanged(string profileId, bool hasAuthError)
+	{
+		if (!hasAuthError || _authErrors is null)
+			return;
+
+		foreach (var (nodeId, running) in _running)
+		{
+			if (string.Equals(running.ProfileId, profileId, StringComparison.OrdinalIgnoreCase))
+				_authErrors.Set(nodeId, true);
+		}
+	}
 
 	private bool CancelRunning(string nodeId)
 	{

@@ -24,7 +24,7 @@ public sealed class CodexEngineRoutingTests : IAsyncLifetime
 	/// <summary>The phase 3 hook, here a fixed answer.</summary>
 	private sealed class FixedSelector(string? engineId) : ISessionEngineSelector
 	{
-		public string? SelectEngineId(SessionNodeModel node) => engineId;
+		public string? SelectEngineId(SessionNodeModel node, string? modelId) => engineId;
 	}
 
 	[Fact]
@@ -41,15 +41,20 @@ public sealed class CodexEngineRoutingTests : IAsyncLifetime
 	}
 
 	[Fact]
-	public void The_model_to_engine_hook_wins_over_the_stored_id_and_null_keeps_it()
+	public void At_a_turn_the_model_to_engine_hook_wins_over_the_stored_id_stores_its_answer_and_null_keeps_it()
 	{
 		var node = TurnEngineHarness.Node();
 		node.EngineId = "codex";
 
-		Assert.Same(_p.Claude, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("claude")).For(node));
-		Assert.Same(_p.Codex, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector(null)).For(node));
-		node.EngineId = null;
-		Assert.Same(_p.Codex, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("codex")).For(node));
+		Assert.Same(_p.Codex, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector(null)).ForTurn(node, "x"));
+		Assert.Equal("codex", node.EngineId);
+		Assert.Same(_p.Claude, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("claude")).Peek(node, "x"));
+		Assert.Equal("codex", node.EngineId); // Peek stores nothing
+		Assert.Same(_p.Claude, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("claude")).ForTurn(node, "x"));
+		Assert.Null(node.EngineId); // Claude is stored as null, so a Claude session's settings stay as they were
+		Assert.Same(_p.Codex, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("codex")).ForTurn(node, "x"));
+		Assert.Equal("codex", node.EngineId);
+		Assert.Same(_p.Codex, new SessionEngineRegistry([_p.Claude, _p.Codex], selector: new FixedSelector("claude")).For(node)); // For reads the stored id
 	}
 
 	[Fact]

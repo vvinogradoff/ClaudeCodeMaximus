@@ -91,9 +91,8 @@ public sealed class TurnEngine : ITurnEngine
 		if (request.AutoCompact && string.IsNullOrEmpty(request.Message))
 			return await RunCompactionOnlyAsync(request, observer ?? new NullTurnObserver(), cancellationToken);
 
-		// FR.33.1: the session's engine, resolved before anything is written to the transcript (today always Claude; the model->engine rule
-		// comes with FR.33.4).
-		var engine   = _engines.For(node);
+		// FR.33.1, FR.33.4: the engine of the turn's resolved model, resolved (and stored on the session) before anything is written to the transcript.
+		var engine   = _engines.ForTurn(node, settings.ModelId);
 
 		var context  = _nodes.GetOrAdd(nodeId, _ => new TurnNodeContext());
 		var turnId   = request.TurnId ?? Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);

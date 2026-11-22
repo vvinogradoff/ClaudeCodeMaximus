@@ -13,10 +13,17 @@ public sealed partial class CodexSessionEngine
 	{
 		private readonly CancellationTokenSource _cancel;
 
-		public RunningTurn(CancellationTokenSource cancel)
+		public RunningTurn(CancellationTokenSource cancel, string profileId)
 		{
-			_cancel = cancel;
+			_cancel   = cancel;
+			ProfileId = profileId;
 		}
+
+		/// <summary>The ChatGPT profile the turn runs on (FR.33.13: its sessions get the profile's auth error).</summary>
+		public string ProfileId { get; }
+
+		/// <summary>The thread, once it is known (the idle unload skips a thread with a turn running).</summary>
+		public string? ThreadId { get; set; }
 
 		public void Cancel()
 		{

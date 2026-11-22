@@ -978,6 +978,96 @@ SESSION TRANSCRIPT TO COMPACT:
 			  session the user is actually talking to); put anything the user needs to see in your
 			  final response to your supervisor instead.
 			""";
+
+		/// <summary>FR.33.16: the <c>cmx-orchestration</c> skill with the Codex wording, written into every stored Codex profile's skills folder.</summary>
+		public const string CodexOrchestrationSkillMarkdown = """
+			---
+			name: cmx-orchestration
+			description: How to orchestrate multi-session workflows in TessynDesktop (fan-out, pipelines, budgets, progress markers) and how to behave when you were spawned as a worker by another session. Use when spinning off sub-sessions / complex workflows, or when you were spawned by another session and need to know how to respond.
+			---
+
+			# TessynDesktop session orchestration
+
+			TessynDesktop hosts every session (Claude Code and Codex) as a tree node with its own persistent
+			transcript. The `mcp__cmx__*` tools let one session (a supervisor) spin off other sessions
+			(workers) and collect their results. Do not use Codex sub-agents or Codex's own multi-agent
+			features for this — they are invisible to TessynDesktop and untracked in the session tree.
+			Use the tools below instead. Shell commands run in Windows PowerShell 5.1.
+
+			## As a supervisor
+
+			Choose the right primitive:
+			- `spawn_session` — create one new child session and optionally run its first turn.
+			- `send_to_session` — resume an existing session node. Use `mode=wait` for sequential work
+			  you need the result of before continuing; `mode=async` to fire-and-continue — the result
+			  posts back to you automatically when the worker finishes.
+			- `orchestrate_parallel` — barrier fan-out: give it a `tasks` array of `{name, prompt}`, it
+			  spawns one session per task, runs them all concurrently, and returns everything as a
+			  single markdown document (one `## name` section per task) once ALL tasks finish.
+			- `orchestrate_pipeline` — non-blocking item fan-out: give it an `items` array and a
+			  `stages` array of `{prompt}` (use `{{item}}` in stage prompts), each item runs through all
+			  stages sequentially in its own session, all items run concurrently. Returns one markdown
+			  document (one `## item` section) when all items finish.
+
+			Shaping worker output: pass `outputFormat` (a markdown/free-text description of the shape
+			you want, e.g. a section outline) — it's advisory guidance appended to the worker's prompt,
+			not a validated schema. Don't ask for JSON back-and-forth between sessions — markdown is
+			what an LLM reads and writes best. If a worker produces something genuinely large or
+			structured (data files, generated code, a big table), tell it to write a file in the working
+			directory and return the path instead of inlining the content.
+
+			Other tools: `list_sessions` to find your workers before deciding new-vs-resume — with no
+			arguments it lists your project's sessions newest first, with your own workers nested under
+			your row; narrow or page with `query`, `running`, `activeWithinHours`, `scope`
+			(`children`/`subtree` of a `nodeId`, or `all` projects) and `offset`, and pass the short ids
+			it prints to any tool that takes a session id; `read_session` to pull a worker's transcript
+			directly; `stop_session` to cancel a running turn; `set_session_model` to change a child's
+			model mid-orchestration (tier-enforced); `workflow_phase`/`workflow_log` to mark progress visible in the session tree UI;
+			`budgetTokens` on the fan-out tools plus `get_budget` to track token spend. Depth
+			(`MaxOrchestrationDepth`) and concurrency (`MaxConcurrentWorkers`) limits are enforced —
+			expect an error if you nest or fan out too aggressively.
+
+			Notifying the user: worker results (async `send_to_session`) and wake-ups arrive as
+			scheduled turns the user is not watching, and nothing tells the user that such a turn
+			finished.
+			- Post the ask once with `post_attention` (`notify: true` when the user must act soon), and
+			  only when the user must decide or act — never to narrate progress or each worker's
+			  arrival. It stays pinned in the user's Focus view, so don't restate it in later delivery
+			  turns. Keep delivery turns short.
+			- Don't arm polling or "fallback" self-wakes to collect async results: they arrive on
+			  their own, and several results that arrive while you're busy are delivered together in
+			  one turn. Use a self-wake only for a real deadline, or as a long-interval check on a
+			  worker that may be stuck.
+
+			## Creating a session for the user
+
+			`create_session` makes a new top-level session that belongs to the user, not a worker:
+			it has no supervisor, you get no result from it, and it shows in the tree, Recent and
+			Telegram like a session the user made. Use it only when the user asks for a new session.
+			Place it with `after=<session id>` (right after that session; find the id with
+			`list_sessions query=`) or with `workingDir`/`group` (last there); with neither it goes
+			right after you. Set `model` (tier-checked), `effort`, `profile` (default: yours),
+			`streaming` and `sound` as the user asked. An optional `prompt` starts its first turn in
+			the background. Only top-level sessions can call it, and the number of sessions created
+			per hour is capped.
+
+			## As a worker
+
+			If your prompt is a specific, scoped task sent by another session, you're a worker in
+			someone else's orchestration (the `You:` line of `list_sessions` confirms it — no need for
+			a wider listing):
+			- Return concise markdown as your final response. Honor any `outputFormat` guidance in the
+			  prompt. If your result is large or structured, write it to a file in your working
+			  directory and return the path rather than inlining it.
+			- Don't spawn further sub-sessions unless the task genuinely requires it — orchestration
+			  depth is limited and nesting adds latency for no benefit on simple tasks.
+			- You are headless. Never use Codex sub-agents or Codex's own scheduling. Use
+			  `mcp__cmx__schedule_wake` if you need to poll or resume later.
+			- Do not call `notify_user`, `post_attention` or `create_session` — a worker session's call
+			  is dropped or refused before it ever reaches the user (they are reserved for the top-level
+			  session the user is actually talking to); put anything the user needs to see in your
+			  final response to your supervisor instead.
+			""";
 	}
 
 	/// <summary>

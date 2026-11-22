@@ -28,6 +28,7 @@ public sealed class SessionRegistry : ISessionRegistry
     private readonly ISessionFileService          _fileService;
     private readonly IDirectoryLabelService       _labelService;
     private readonly IClaudeSessionStatusService  _sessionStatus;
+    private readonly TessynDesktop.Codex.CodexProfileNaming _codexNaming = new();
 
     // Running state: NodeId → number of open running activities (transient, never persisted). Guarded by _runningLock.
     private readonly Dictionary<string, int> _runningNodes = new();
@@ -1042,6 +1043,8 @@ public sealed class SessionRegistry : ISessionRegistry
                 FileName           = s.FileName,
                 WorkingDirectory   = s.WorkingDirectory,
                 ClaudeSessionId    = s.ClaudeSessionId,
+                EngineId           = s.EngineId,
+                CodexThreadId      = s.CodexThreadId,
                 IsFavorite         = s.IsFavorite,
                 OrchestrationDepth = s.OrchestrationDepth,
                 SupervisorNodeId   = s.SupervisorNodeId,
@@ -1079,13 +1082,25 @@ public sealed class SessionRegistry : ISessionRegistry
         if (string.Equals(profileId, Constants.ProfileSwitch.DefaultProfileId, StringComparison.OrdinalIgnoreCase))
             return Constants.ProfileSwitch.DefaultProfileName;
 
+        // FR.33.5: a ChatGPT profile is shown as ChatGPT · <email>.
+        if (_codexNaming.IsCodexProfileId(profileId))
+        {
+            var codex = _appSettings.Settings.CodexProfiles.FirstOrDefault(p => string.Equals(p.ProfileId, profileId, StringComparison.OrdinalIgnoreCase));
+            if (codex != null)
+                return _codexNaming.DisplayName(codex.Email);
+            if (string.Equals(profileId, Constants.Codex.Profiles.DefaultProfileId, StringComparison.OrdinalIgnoreCase))
+                return fallbackName ?? _codexNaming.DisplayName(Constants.Codex.Profiles.DefaultUnknownEmail);
+            return (fallbackName ?? profileId) + Constants.ProfileSwitch.MissingProfileSuffix;
+        }
+
         var stored = _appSettings.Settings.Profiles.FirstOrDefault(p => string.Equals(p.ProfileId, profileId, StringComparison.OrdinalIgnoreCase));
         return stored?.DisplayName ?? (fallbackName ?? profileId) + Constants.ProfileSwitch.MissingProfileSuffix;
     }
 
     private bool IsResumable(SessionSnapshotModel s, Lazy<IReadOnlyList<string>> projectsDirs) =>
-        s.ClaudeSessionId != null
-        && _sessionStatus.IsSessionResumable(s.WorkingDirectory, s.ClaudeSessionId, projectsDirs.Value);
+        string.Equals(s.EngineId, Constants.SessionEngines.Codex, StringComparison.OrdinalIgnoreCase)
+            ? s.CodexThreadId != null // FR.33.7: a Codex session resumes its thread; a gone one is reseeded on the next turn
+            : s.ClaudeSessionId != null && _sessionStatus.IsSessionResumable(s.WorkingDirectory, s.ClaudeSessionId, projectsDirs.Value);
 
     private static void CollectIds(
         List<SessionNodeModel> sessions, List<GroupNodeModel> groups, HashSet<string> ids)

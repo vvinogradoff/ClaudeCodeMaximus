@@ -204,4 +204,16 @@ public sealed class AppSettingsModel
 	/// Default 3: one Focus item sound per burst (FR.22.3); a stored 180, the old per-session default, reads as 3.
 	/// </summary>
 	public int SessionCompletionSoundThrottleSeconds { get; set; } = Constants.SessionSound.DefaultThrottleSeconds;
+
+	/// <summary>FR.33.17: the Codex executable; empty means "find it" (the official installer, the winget link, npm, the PATH).</summary>
+	public string CodexPath { get; set; } = string.Empty;
+
+	/// <summary>FR.33.2: the Codex profile whose <c>model/list</c> is the GPT catalog; null means Codex Default, else the first signed-in one.</summary>
+	public string? CodexCatalogProfileId { get; set; }
+
+	/// <summary>FR.33.14: the GPT tier table, top row first; null means the defaults (<c>Constants.Codex.Tiers.Defaults</c>).</summary>
+	public List<CodexModelTierModel>? CodexModelTiers { get; set; }
+
+	/// <summary>FR.33.5: the ChatGPT profiles (the stored ones, and Codex Default once its account was read).</summary>
+	public List<CodexProfileModel> CodexProfiles { get; set; } = [];
 }

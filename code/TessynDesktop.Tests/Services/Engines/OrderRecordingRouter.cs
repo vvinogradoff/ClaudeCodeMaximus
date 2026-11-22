@@ -28,6 +28,13 @@ internal sealed class OrderRecordingRouter : ISessionEngineRouter
 		return _inner.For(node);
 	}
 
+	public ISessionEngine ForTurn(SessionNodeModel node, string? modelId)
+	{
+		lock (_log) _log.Add(ResolvedMarker);
+		return _inner.ForTurn(node, modelId);
+	}
+
+	public ISessionEngine Peek(SessionNodeModel node, string? modelId) => _inner.Peek(node, modelId);
 	public string? ApplyEngineChange(SessionNodeModel node, ISessionEngine engine) => _inner.ApplyEngineChange(node, engine);
 	public bool IsAlive(string nodeId) => _inner.IsAlive(nodeId);
 	public void Stop(string nodeId) => _inner.Stop(nodeId);

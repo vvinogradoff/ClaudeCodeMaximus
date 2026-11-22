@@ -23,6 +23,7 @@ public sealed partial class CodexSessionEngine
 		try
 		{
 			var host = _pool.GetHost(_profiles.Select(node, settings: null));
+			CancelIdleUnload(threadId);
 			if (!host.IsThreadLoaded(threadId))
 			{
 				var config = await _config.BuildAsync(node, cancellationToken).ConfigureAwait(false);
@@ -61,6 +62,7 @@ public sealed partial class CodexSessionEngine
 				throw;
 			}
 
+			ScheduleIdleUnload(host, threadId);
 			if (finish.Crash is { } crash)
 				return CompactionFailed(HostStoppedText(crash));
 

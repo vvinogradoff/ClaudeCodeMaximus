@@ -15,14 +15,17 @@ public sealed class SessionEngineRegistry : ISessionEngineRouter
 	private readonly Dictionary<string, ISessionEngine> _byId;
 	private readonly ILogger _log;
 	private readonly ISessionEngineSelector? _selector;
+	private readonly IAppSettingsService? _appSettings;
 
 	// Nodes whose unknown engine id was already reported: one Warning per node, not one per turn.
 	private readonly ConcurrentDictionary<string, byte> _warnedNodes = new(StringComparer.Ordinal);
 
-	public SessionEngineRegistry(IEnumerable<ISessionEngine> engines, ILogger? log = null, ISessionEngineSelector? selector = null)
+	public SessionEngineRegistry(IEnumerable<ISessionEngine> engines, ILogger? log = null, ISessionEngineSelector? selector = null,
+		IAppSettingsService? appSettings = null)
 	{
-		_log      = log ?? Log.ForContext<SessionEngineRegistry>();
-		_selector = selector;
+		_log         = log ?? Log.ForContext<SessionEngineRegistry>();
+		_selector    = selector;
+		_appSettings = appSettings;
 		_engines = engines.ToArray();
 		_byId    = new Dictionary<string, ISessionEngine>(StringComparer.OrdinalIgnoreCase);
 
@@ -53,16 +56,48 @@ public sealed class SessionEngineRegistry : ISessionEngineRouter
 	/// (FR.33.4), so an id this build does not know (written by a newer build, or edited by hand) never fails a turn: the session runs on
 	/// Claude, and the router logs one Warning per node.
 	/// </summary>
-	public ISessionEngine For(SessionNodeModel node)
+	public ISessionEngine For(SessionNodeModel node) => Resolve(node, node.EngineId);
+
+	/// <inheritdoc />
+	public ISessionEngine Peek(SessionNodeModel node, string? modelId) =>
+		Resolve(node, _selector?.SelectEngineId(node, modelId) is { } selected && _byId.ContainsKey(selected) ? selected : node.EngineId);
+
+	/// <inheritdoc />
+	public ISessionEngine ForTurn(SessionNodeModel node, string? modelId)
 	{
-		var selected = _selector?.SelectEngineId(node);
-		var stored   = string.IsNullOrEmpty(selected) ? node.EngineId : selected;
-		var id       = string.IsNullOrEmpty(stored) ? Constants.SessionEngines.Claude : stored;
+		var selected = _selector?.SelectEngineId(node, modelId);
+		if (selected is null || !_byId.ContainsKey(selected))
+			return For(node);
+
+		var engine = _byId[selected];
+		var stored = string.Equals(engine.EngineId, Constants.SessionEngines.Claude, StringComparison.OrdinalIgnoreCase) ? null : engine.EngineId;
+		var known  = string.IsNullOrEmpty(node.EngineId) || _byId.ContainsKey(node.EngineId);
+		if (known && !string.Equals(node.EngineId ?? Constants.SessionEngines.Claude, stored ?? Constants.SessionEngines.Claude, StringComparison.OrdinalIgnoreCase))
+		{
+			// FR.33.1: the engine is stored when a turn starts, so lists and clients show it without a catalog lookup.
+			if (_appSettings is null)
+				node.EngineId = stored;
+			else
+			{
+				lock (_appSettings.SyncRoot)
+				{
+					node.EngineId = stored;
+					_appSettings.Save();
+				}
+			}
+		}
+
+		return engine;
+	}
+
+	private ISessionEngine Resolve(SessionNodeModel node, string? engineId)
+	{
+		var id = string.IsNullOrEmpty(engineId) ? Constants.SessionEngines.Claude : engineId;
 		if (_byId.TryGetValue(id, out var engine))
 			return engine;
 
 		if (_warnedNodes.TryAdd(node.NodeId, 0))
-			_log.Warning("Unknown engine '{EngineId:l}' on session {NodeId:l}; using Claude.", stored, node.NodeId);
+			_log.Warning("Unknown engine '{EngineId:l}' on session {NodeId:l}; using Claude.", engineId, node.NodeId);
 
 		return _byId[Constants.SessionEngines.Claude];
 	}

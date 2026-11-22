@@ -15,6 +15,7 @@ namespace TessynDesktop.Models.Turns;
 /// <param name="Chrome">The experimental <c>--chrome</c> toggle.</param>
 /// <param name="ModelInfo">The selected model's catalog entry (input of the Local Tool Profile, FR.12.21).</param>
 /// <param name="DirectoryModel">The session's directory (carries its Local Tool Profile).</param>
+/// <param name="CodexProfile">For a Codex turn: the ChatGPT profile it runs on (FR.33.5), resolved before the turn lock; null for a Claude turn.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record TurnSettings(
 	string? ModelId,
@@ -25,4 +26,5 @@ public sealed record TurnSettings(
 	bool DisableTools,
 	bool Chrome,
 	ClaudeModelInfo? ModelInfo,
-	DirectoryNodeModel? DirectoryModel);
+	DirectoryNodeModel? DirectoryModel,
+	TessynDesktop.Codex.CodexProfileRef? CodexProfile = null);

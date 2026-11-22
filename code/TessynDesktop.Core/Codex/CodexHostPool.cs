@@ -30,20 +30,25 @@ public sealed class CodexHostPool : IAsyncDisposable
 	private readonly string _clientVersion;
 	private readonly object _gate = new();
 	private readonly Dictionary<string, CodexAppServerHost> _hosts = new(StringComparer.OrdinalIgnoreCase);
+	private readonly string? _fixedPath;
+	private readonly TessynDesktop.Services.IAppSettingsService? _appSettings;
 	private string? _executablePath;
-	private bool _versionChecked;
+	private string? _locatedFor;
+	private string? _versionCheckedFor;
 
 	/// <param name="launcher">Starts the app-server processes; the real <see cref="CodexProcessLauncher"/> when null.</param>
 	/// <param name="locator">Finds <c>codex.exe</c>; the real locator when null.</param>
 	/// <param name="time">The clock of the idle shutdown and the request timeouts.</param>
 	/// <param name="executablePath">A fixed executable (tests): no discovery and no version check.</param>
-	public CodexHostPool(ICodexProcessLauncher? launcher = null, CodexExecutableLocator? locator = null, TimeProvider? time = null, string? executablePath = null)
+	/// <param name="appSettings">Supplies <c>CodexPath</c> (FR.33.17); a changed path applies to hosts created after the change.</param>
+	public CodexHostPool(ICodexProcessLauncher? launcher = null, CodexExecutableLocator? locator = null, TimeProvider? time = null, string? executablePath = null,
+		TessynDesktop.Services.IAppSettingsService? appSettings = null)
 	{
 		_launcher       = launcher ?? new CodexProcessLauncher();
 		_locator        = locator ?? new CodexExecutableLocator();
 		_time           = time ?? TimeProvider.System;
-		_executablePath = executablePath;
-		_versionChecked = executablePath is not null;
+		_fixedPath      = executablePath;
+		_appSettings    = appSettings;
 		_clientVersion  = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? typeof(CodexHostPool).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 	}
 
@@ -144,17 +149,28 @@ public sealed class CodexHostPool : IAsyncDisposable
 
 	private string ResolveExecutableLocked()
 	{
-		if (_executablePath is not null)
+		if (_fixedPath is not null)
+			return _fixedPath;
+
+		string? configured = null;
+		if (_appSettings is not null)
+		{
+			lock (_appSettings.SyncRoot)
+				configured = string.IsNullOrWhiteSpace(_appSettings.Settings.CodexPath) ? null : _appSettings.Settings.CodexPath.Trim();
+		}
+
+		if (_executablePath is not null && string.Equals(_locatedFor, configured ?? string.Empty, StringComparison.OrdinalIgnoreCase))
 			return _executablePath;
 
-		var located = _locator.Locate(configuredPath: null);
+		var located = _locator.Locate(configured);
 		if (!located.Found)
 			throw new CodexNotFoundException(located.Problem ?? Constants.Codex.Texts.NotFound);
 
 		_executablePath = located.ExecutablePath!;
-		if (!_versionChecked)
+		_locatedFor     = configured ?? string.Empty;
+		if (!string.Equals(_versionCheckedFor, _executablePath, StringComparison.OrdinalIgnoreCase))
 		{
-			_versionChecked = true;
+			_versionCheckedFor = _executablePath;
 			_ = LogVersionAsync(_executablePath);
 		}
 

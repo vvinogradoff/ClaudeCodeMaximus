@@ -20,6 +20,15 @@ public interface ISessionEngineRouter
 	ISessionEngine For(SessionNodeModel node);
 
 	/// <summary>
+	/// The engine a turn on <paramref name="modelId"/> runs on (FR.33.4, the selector's answer, else the stored id). When the selector answers, the
+	/// engine is stored in <see cref="SessionNodeModel.EngineId"/> (<c>codex</c>, or null for Claude) and saved.
+	/// </summary>
+	ISessionEngine ForTurn(SessionNodeModel node, string? modelId);
+
+	/// <summary>The engine a turn on <paramref name="modelId"/> would run on, without storing anything.</summary>
+	ISessionEngine Peek(SessionNodeModel node, string? modelId);
+
+	/// <summary>
 	/// The first turn on a new engine (FR.33.4): every other engine's conversation of the session is detached into its prior ids. Returns the
 	/// SYSTEM text to write (<c>Engine changed: Claude -&gt; Codex (GPT). …</c>), or null when no other engine had a conversation. The new
 	/// engine has none, so the turn seeds its conversation from the transcript (FR.11.11).

@@ -20,6 +20,8 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 	private readonly IProfileLabelService _labels;
 	private readonly IProfileResolver _resolver;
 	private readonly ISessionModelSettings _modelSettings;
+	private readonly ISessionEngineRouter? _engines;
+	private readonly TessynDesktop.Codex.ICodexProfileResolver? _codexProfiles;
 
 	public TurnSettingsResolver(
 		IAppSettingsService appSettings,
@@ -28,8 +30,12 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 		IClaudeModelService models,
 		IProfileLabelService labels,
 		IProfileResolver? resolver = null,
-		ISessionModelSettings? modelSettings = null)
+		ISessionModelSettings? modelSettings = null,
+		ISessionEngineRouter? engines = null,
+		TessynDesktop.Codex.ICodexProfileResolver? codexProfiles = null)
 	{
+		_engines       = engines;
+		_codexProfiles = codexProfiles;
 		_appSettings = appSettings;
 		_turns       = turns;
 		_profiles    = profiles;
@@ -42,6 +48,22 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 	/// <inheritdoc />
 	public async Task<TurnSettings> ResolveAsync(SessionNodeModel node, TurnOptionsModel? options)
 	{
+		// FR.33.4, FR.33.5: a turn on a GPT model runs on Codex, with a ChatGPT profile (its pin, exact, else the inherit rule).
+		if (_engines != null && _codexProfiles != null)
+		{
+			var gptTurn = _modelSettings.ResolveTurn(node, options);
+			if (string.Equals(_engines.Peek(node, gptTurn.ModelId).EngineId, Constants.SessionEngines.Codex, StringComparison.OrdinalIgnoreCase))
+			{
+				var choice = _codexProfiles.ResolveForTurn(node, options?.ProfileName);
+				if (!choice.IsResolved)
+					throw new TdcpException(choice.Error!);
+
+				var gptDirectory = _appSettings.Settings.Tree.FirstOrDefault(d =>
+					string.Equals(d.Path, node.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
+				return new TurnSettings(gptTurn.ModelId, gptTurn.Effort, null, choice.DisplayName, null, false, Chrome: false, null, gptDirectory, choice.Profile);
+			}
+		}
+
 		// ISSUE.013: read-only. A switch queued for this session is applied only under its turn lock (TurnEngine), never here: the
 		// session may still be running its previous turn. The settings already name the queued target so the turn launches on it.
 		// A pinned profile that does not resolve is an error, never Default.

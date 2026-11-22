@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +25,7 @@ public sealed class RemoteUsageService : IRemoteUsageService
 	private readonly TimeProvider _time;
 	private readonly TimeSpan _fetchWait;
 	private readonly ConcurrentDictionary<string, ProfileUsageEntry> _entries = new();
+	private readonly IEngineUsageSource[] _engineSources;
 
 	public RemoteUsageService(
 		IClaudeUsageFetcher fetcher,
@@ -33,8 +35,14 @@ public sealed class RemoteUsageService : IRemoteUsageService
 		IProfileLabelService labels,
 		IRemoteEventBus bus,
 		TimeProvider? time = null,
-		TimeSpan? fetchWait = null)
+		TimeSpan? fetchWait = null,
+		IEnumerable<IEngineUsageSource>? engineSources = null)
 	{
+		// FR.33.10: a ChatGPT profile's plan windows come from the Codex engine's usage source.
+		_engineSources  = engineSources?.ToArray() ?? [];
+		foreach (var source in _engineSources)
+			source.Changed += PublishChanged;
+
 		_fetcher        = fetcher;
 		_desktopUsage   = desktopUsage;
 		_profileService = profileService;
@@ -50,6 +58,9 @@ public sealed class RemoteUsageService : IRemoteUsageService
 	/// <inheritdoc />
 	public async Task<UsageResult> GetAsync(string profileId, CancellationToken cancellationToken)
 	{
+		if (_engineSources.FirstOrDefault(s => s.Handles(profileId)) is { } engineSource)
+			return await engineSource.GetAsync(profileId, cancellationToken);
+
 		var profile = ResolveProfile(profileId);
 		var entry   = _entries.GetOrAdd(profile.Id, _ => new ProfileUsageEntry());
 

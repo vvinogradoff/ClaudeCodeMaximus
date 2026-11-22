@@ -96,6 +96,8 @@ public sealed class DaemonHost
 				Services.GetRequiredService<DaemonDiscoveryFile>().Write(mcpServer.Port);
 			Services.GetRequiredService<ISchedulerService>().Start();
 			Services.GetRequiredService<ISkillProvisioningService>().ProvisionAll();
+			// FR.33.2: the GPT catalog from its cache, refreshed in the background when it is older than 24 hours.
+			_ = Services.GetRequiredService<TessynDesktop.Codex.ICodexModelCatalog>().StartAsync();
 		}
 
 		// Start the Telegram Bridge (FR.21) — independent toggle from AgentToolsEnabled.
@@ -289,11 +291,27 @@ public sealed class DaemonHost
 		// FR.33.1: the session engines behind one seam (today only Claude). Singletons: the engine holds the retry state of the turns running in
 		// persistent processes, and the router is the one list of engines every caller asks.
 		services.AddSingleton<ISessionEngine, ClaudeSessionEngine>();
-		// FR.33 phase 2b: the Codex engine. Singletons: the pool owns the one app-server process per Codex profile that every Codex session of
-		// that profile shares (FR.33.6); the engine holds each node's running turn (Stop), its queued corrections and the thread names it set;
-		// the config builder is stateless but is shared by the engine for every thread.
+		// FR.33: the Codex engine. Singletons: the pool owns the one app-server process per Codex profile that every Codex session of that
+		// profile shares (FR.33.6); the engine holds each node's running turn (Stop), its queued corrections, the thread names it set and the
+		// idle-unload timers. The config builder is stateless, so it is Transient.
 		services.AddSingleton<TessynDesktop.Codex.CodexHostPool>();
-		services.AddSingleton<TessynDesktop.Codex.CodexThreadConfigBuilder>();
+		services.AddTransient<TessynDesktop.Codex.CodexThreadConfigBuilder>();
+		// FR.33.5: Singleton, it owns the sign-ins in progress and each profile's sign-in and auth-error state, and watches every host for
+		// account/updated. The resolver (pins, inherit rule) is stateless.
+		services.AddSingleton<TessynDesktop.Codex.ICodexProfileService, TessynDesktop.Codex.CodexProfileService>();
+		services.AddTransient<TessynDesktop.Codex.ICodexProfileResolver, TessynDesktop.Codex.CodexProfileResolver>();
+		services.AddTransient<TessynDesktop.Codex.ICodexProfileSelector, TessynDesktop.Codex.CodexProfileResolver>();
+		// FR.33.2: Singleton, it holds the GPT list and its on-disk cache. The merged catalog and the model->engine selector are stateless.
+		services.AddSingleton<TessynDesktop.Codex.ICodexModelCatalog, TessynDesktop.Codex.CodexModelCatalog>();
+		services.AddTransient<ISessionModelCatalog, SessionModelCatalog>();
+		services.AddTransient<ISessionEngineSelector, ModelEngineSelector>();
+		// FR.33.10: Singleton, it keeps each ChatGPT profile's last plan reading (merged from the hosts' notifications); it is the Codex usage
+		// source of usage.get.
+		services.AddSingleton<TessynDesktop.Codex.CodexUsageService>();
+		services.AddSingleton<IEngineUsageSource>(sp => sp.GetRequiredService<TessynDesktop.Codex.CodexUsageService>());
+		// FR.33.14, FR.33.17: stateless.
+		services.AddTransient<IModelTierResolver, ModelTierResolver>();
+		services.AddTransient<TessynDesktop.Codex.CodexSettingsService>();
 		services.AddSingleton<ISessionEngine, CodexSessionEngine>();
 		services.AddSingleton<ISessionEngineRouter, SessionEngineRegistry>();
 		services.AddSingleton<ISelfUpdateService, SelfUpdateService>();

@@ -24,6 +24,8 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 	private readonly IClaudeSessionMigrator _migrator;
 	private readonly ISessionEngineRouter _engines;
 	private readonly Lazy<ISessionTurnService>? _turns;
+	private readonly TessynDesktop.Codex.ICodexProfileResolver? _codexProfiles;
+	private readonly TessynDesktop.Codex.CodexProfileNaming _codexNaming = new();
 
 	/// <param name="turns">Owner of the per-node turn locks; lazy because the turn service itself uses this service. Null = only the running flag is checked.</param>
 	public ProfileSwitchService(
@@ -33,8 +35,10 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 		IProfileResolver resolver,
 		IClaudeSessionMigrator migrator,
 		ISessionEngineRouter engines,
-		Lazy<ISessionTurnService>? turns = null)
+		Lazy<ISessionTurnService>? turns = null,
+		TessynDesktop.Codex.ICodexProfileResolver? codexProfiles = null)
 	{
+		_codexProfiles = codexProfiles;
 		_appSettings = appSettings;
 		_registry    = registry;
 		_files       = files;
@@ -54,6 +58,9 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 	public ProfileSwitchResultDto Switch(string nodeId, string profileId, bool includeDescendants)
 	{
 		var node   = _registry.FindModelByNodeId(nodeId) ?? throw new ProfileSwitchException("Session not found");
+		if (_codexNaming.IsCodexProfileId(profileId))
+			return SwitchCodex(node, profileId);
+
 		var target = _resolver.FindById(profileId) ?? throw new ProfileSwitchException($"Profile not found: {profileId}");
 
 		var paths     = new List<string>();
@@ -165,6 +172,16 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 		if (string.IsNullOrEmpty(node.PendingProfileId))
 			return false;
 
+		if (_codexNaming.IsCodexProfileId(node.PendingProfileId))
+		{
+			var choice = _codexProfiles?.Find(node.PendingProfileId);
+			node.PendingProfileId = null;
+			if (choice?.Profile is not null)
+				ApplyCodex(node, choice);
+			Persist([node]);
+			return choice?.Profile is not null;
+		}
+
 		var target = _resolver.FindById(node.PendingProfileId);
 		if (target == null)
 		{
@@ -263,6 +280,53 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 	{
 		session.ProfileId   = target.ProfileId;
 		session.ProfileName = target.IsDefault ? null : target.DisplayName;
+	}
+
+	/// <summary>
+	/// FR.33.5: a switch to a ChatGPT profile. Threads are not moved between Codex homes (version 1): the session's thread is detached, so the
+	/// next turn starts a new thread on the target profile seeded from the transcript; no file moves. A running session queues the switch.
+	/// </summary>
+	private ProfileSwitchResultDto SwitchCodex(SessionNodeModel node, string profileId)
+	{
+		var target = _codexProfiles?.Find(profileId) ?? throw new ProfileSwitchException($"Profile not found: {profileId}");
+		var dto    = new ProfileSwitchedSessionDto(node.NodeId, node.Name, node.ProfileId ?? Constants.ProfileSwitch.DefaultProfileId, node.ProfileName ?? node.ProfileId ?? Constants.ProfileSwitch.DefaultProfileName);
+
+		var turnLock = _turns?.Value.GetTurnLock(node.NodeId);
+		if (_registry.IsSessionRunning(node.NodeId) || (turnLock != null && !turnLock.Wait(0)))
+		{
+			node.PendingProfileId = target.Profile!.ProfileId;
+			Persist([node]);
+			return new ProfileSwitchResultDto(target.Profile.ProfileId, target.DisplayName, false, [], [dto], [], []);
+		}
+
+		try
+		{
+			ApplyCodex(node, target);
+			node.PendingProfileId = null;
+		}
+		finally
+		{
+			turnLock?.Release();
+		}
+
+		Persist([node]);
+		return new ProfileSwitchResultDto(target.Profile!.ProfileId, target.DisplayName, true, [], [], [], []);
+	}
+
+	private void ApplyCodex(SessionNodeModel node, TessynDesktop.Codex.CodexProfileChoice target)
+	{
+		if (string.Equals(node.ProfileId, target.Profile!.ProfileId, StringComparison.OrdinalIgnoreCase))
+			return;
+
+		var codex = _engines.Engines.FirstOrDefault(e => e.EngineId == Constants.SessionEngines.Codex);
+		if (codex?.DetachConversation(node) == true)
+			_log.Information("Profile switch of Codex session {NodeId} to {Profile}: its thread is detached and the next turn is seeded from the transcript", node.NodeId, target.DisplayName);
+
+		lock (_appSettings.SyncRoot)
+		{
+			node.ProfileId   = target.Profile.ProfileId;
+			node.ProfileName = target.DisplayName;
+		}
 	}
 
 	private void Persist(IEnumerable<SessionNodeModel> sessions)

@@ -46,6 +46,10 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 	private readonly IProfileSwitchService?    _profileSwitch;
 	private readonly ISessionModelSettings     _modelSettings;
 	private readonly TimeProvider              _clock;
+	private readonly ISessionModelCatalog?     _sessionModels;
+	private readonly TessynDesktop.Codex.ICodexProfileResolver? _codexProfiles;
+	private readonly IModelTierResolver?       _tiers;
+	private readonly TessynDesktop.Codex.CodexProfileNaming _codexNaming = new();
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
 	private readonly SessionTagSearchPageBuilder _tagSearchBuilder   = new();
@@ -84,8 +88,14 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		IProfileResolver? profiles = null,
 		IProfileSwitchService? profileSwitch = null,
 		ISessionModelSettings? modelSettings = null,
-		TimeProvider? clock = null)
+		TimeProvider? clock = null,
+		ISessionModelCatalog? sessionModels = null,
+		TessynDesktop.Codex.ICodexProfileResolver? codexProfiles = null,
+		IModelTierResolver? tiers = null)
 	{
+		_sessionModels = sessionModels;
+		_codexProfiles = codexProfiles;
+		_tiers         = tiers;
 		_appSettings  = appSettings;
 		_turnService  = turnService;
 		_scheduler    = scheduler;
@@ -230,6 +240,10 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 	/// </summary>
 	private ProfilePin InheritedProfilePin(SessionNodeModel creator)
 	{
+		// FR.33.5: a profile is never used across engines; a Claude child of a GPT creator starts without a pin.
+		if (HasChatGptProfile(creator))
+			return new ProfilePin(null, null);
+
 		var recordedName = _turnService.Value.ResolveProfileName(creator);
 		if (string.IsNullOrEmpty(recordedName) && string.IsNullOrEmpty(creator.ProfileId))
 			return new ProfilePin(null, null);
@@ -418,10 +432,10 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 				"Find sessions. With no arguments: your project's top-level sessions plus you and your own workers (nested under you), newest first, 30 rows per page. Each row: <id> <name> <age> [flags]; flags: running, fav, no-resume (next turn starts a fresh Claude session seeded from the transcript), N workers, worker of <id>, [other directory], (you); every row also states the profile it runs on as profile=<name> (and switching-to=<name> while a profile switch waits for a running turn). Narrow with query/running/activeWithinHours, filter by tags=[...] (see search_tags), widen with scope=all, see a session's workers with scope=children|subtree nodeId=<id>, page with offset. Short ids work wherever a session id is taken.",
 				ListSessionsSchema()),
 			BuildToolDef("spawn_session",
-				"Create a new persistent session node and optionally run the first turn. Model is tier-enforced (FR.16).",
+				"Create a new persistent session node and optionally run the first turn. Model is tier-enforced (FR.16)." + Constants.Codex.Texts.GptToolDescription,
 				SpawnSessionSchema()),
 			BuildToolDef(Constants.CreateSession.ToolName,
-				Constants.CreateSession.ToolDescription,
+				Constants.CreateSession.ToolDescription + Constants.Codex.Texts.GptToolDescription,
 				CreateSessionSchema()),
 			BuildToolDef("send_to_session",
 				"Resume an existing session and run a turn on the profile it is pinned to (the result states it as [profile=<name>]). A target whose pinned profile is removed or logged out returns an error naming the profile; migrate=true (only for your own descendants) first moves it to your profile. Use mode=async to not block. Supports an optional markdown outputFormat hint.",
@@ -433,13 +447,13 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 				"Cancel the currently running turn for a session.",
 				StopSessionSchema()),
 			BuildToolDef("set_session_model",
-				"Change the model for an existing session. Tier-enforced (FR.16.2). Takes effect on next turn.",
+				"Change the model for an existing session. Tier-enforced (FR.16.2). Takes effect on next turn." + Constants.Codex.Texts.GptToolDescription,
 				SetSessionModelSchema()),
 			BuildToolDef("orchestrate_parallel",
-				"Barrier fan-out: spawns one session per task, runs all concurrently, returns all results as one markdown document when done (FR.15.8).",
+				"Barrier fan-out: spawns one session per task, runs all concurrently, returns all results as one markdown document when done (FR.15.8)." + Constants.Codex.Texts.GptToolDescription,
 				OrchestrateParallelSchema()),
 			BuildToolDef("orchestrate_pipeline",
-				"Item pipeline: one session per item through sequential stages, all items run concurrently, returns all results as one markdown document (FR.15.8).",
+				"Item pipeline: one session per item through sequential stages, all items run concurrently, returns all results as one markdown document (FR.15.8)." + Constants.Codex.Texts.GptToolDescription,
 				OrchestratePipelineSchema()),
 			BuildToolDef("workflow_phase",
 				"Write a [Phase: title] progress marker to the supervisor session file (FR.15.9).",
@@ -860,18 +874,18 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		else
 			workingDir = callerNode.WorkingDirectory;
 
+		// FR.33.15: a GPT model makes a Codex worker on a ChatGPT profile; decided before the node exists, so a refusal leaves nothing behind.
+		var childEngine = ResolveChildEngine(callerNode, modelArg, workingDir);
+
 		// Create the node via the registry (thread-safe, raises TreeChanged so VM re-projects).
 		var newModel = _registry.CreateSessionForAgent(workingDir, name, group, childDepth, callerNode.NodeId);
 
 		if (newModel == null)
 			throw new McpToolException(BuildNotUnderProjectMessage(workingDir));
 
-		// Inherit the supervisor's profile so the child authenticates with the same account (ISSUE-002).
-		InheritSupervisorProfile(newModel, callerNode);
-
-		// Persist model on the new session (FR.16.3).
-		if (!string.IsNullOrEmpty(modelArg))
-			newModel.ModelId = modelArg;
+		// Inherit the supervisor's profile so the child authenticates with the same account (ISSUE-002), within the same engine (FR.33.5), and
+		// persist the model on the new session (FR.16.3).
+		ApplyChildEngine(newModel, callerNode, modelArg, childEngine);
 
 		_appSettings.Save();
 
@@ -1056,6 +1070,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		var model        = args?["model"]?.GetValue<string>()
 		                   ?? throw new McpToolException("'model' is required");
 
+		ValidateGptModel(model);
 		EnforceModelTier(callerNode, model);
 
 		var target = ResolveSession(targetNodeId, "Session not found");
@@ -1083,6 +1098,9 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			throw new McpToolException(
 				$"Orchestration depth limit exceeded (max {Constants.Agent.MaxOrchestrationDepth}).");
 
+		// FR.33.15: one engine and profile for every worker, decided before any is spawned.
+		var childEngine = ResolveChildEngine(callerNode, modelArg, callerNode.WorkingDirectory);
+
 		// Register budget if requested.
 		var orchestrationId = Guid.NewGuid().ToString("N")[..8];
 		if (budgetTokens > 0)
@@ -1101,7 +1119,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		// Spawn and run all tasks concurrently, bounded by MaxConcurrentWorkers.
 		var taskRuns = tasks.Select((task, idx) => RunWorkerAsync(
 			task.name, task.prompt, idx, callerNode, modelArg, group, childDepth,
-			outputFormat, budgetTokens > 0 ? $"{callerNode.NodeId}/{orchestrationId}" : null)).ToArray();
+			outputFormat, budgetTokens > 0 ? $"{callerNode.NodeId}/{orchestrationId}" : null, childEngine)).ToArray();
 
 		var results = await Task.WhenAll(taskRuns);
 
@@ -1130,6 +1148,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			throw new McpToolException(
 				$"Orchestration depth limit exceeded (max {Constants.Agent.MaxOrchestrationDepth}).");
 
+		var childEngine = ResolveChildEngine(callerNode, modelArg, callerNode.WorkingDirectory);
+
 		var stages = new List<string>();
 		for (var i = 0; i < stagesNode.Count; i++)
 		{
@@ -1147,7 +1167,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		{
 			var item = itemNode?.GetValue<string>() ?? $"item-{idx + 1}";
 			return RunPipelineItemAsync(item, idx, stages, callerNode, modelArg, group, childDepth,
-				outputFormat, budgetTokens > 0 ? $"{callerNode.NodeId}/{orchestrationId}" : null);
+				outputFormat, budgetTokens > 0 ? $"{callerNode.NodeId}/{orchestrationId}" : null, childEngine);
 		}).ToArray();
 
 		var results = await Task.WhenAll(itemRuns);
@@ -1159,7 +1179,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 	/// <summary>Runs a single parallel worker task: acquire slot → spawn session → run turn → release.</summary>
 	private async Task<WorkerResult> RunWorkerAsync(
 		string name, string prompt, int index, SessionNodeModel callerNode,
-		string? model, string group, int depth, string? outputFormat, string? budgetKey)
+		string? model, string group, int depth, string? outputFormat, string? budgetKey, ChildEngine childEngine)
 	{
 		await _workerSemaphore.WaitAsync();
 		try
@@ -1173,10 +1193,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			if (session == null)
 				return new WorkerResult(name, "[error: could not create session]", 0, 0);
 
-			// Inherit the supervisor's profile so the worker authenticates with the same account (ISSUE-002).
-			InheritSupervisorProfile(session, callerNode);
-			if (!string.IsNullOrEmpty(model))
-				session.ModelId = model;
+			// Inherit the supervisor's profile so the worker authenticates with the same account (ISSUE-002), within the same engine (FR.33.5).
+			ApplyChildEngine(session, callerNode, model, childEngine);
 
 			var result = await _turnService.Value.RunTurnAsync(
 				session, ApplyOutputFormat(prompt, outputFormat), TurnSource.Orchestrated);
@@ -1195,7 +1213,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 	/// <summary>Runs a single pipeline item through all stages sequentially in its own session.</summary>
 	private async Task<PipelineResult> RunPipelineItemAsync(
 		string item, int index, List<string> stages, SessionNodeModel callerNode,
-		string? model, string group, int depth, string? outputFormat, string? budgetKey)
+		string? model, string group, int depth, string? outputFormat, string? budgetKey, ChildEngine childEngine)
 	{
 		await _workerSemaphore.WaitAsync();
 		try
@@ -1209,10 +1227,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			if (session == null)
 				return new PipelineResult(item, "[error: could not create session]", 0, 0);
 
-			// Inherit the supervisor's profile so the item session authenticates with the same account (ISSUE-002).
-			InheritSupervisorProfile(session, callerNode);
-			if (!string.IsNullOrEmpty(model))
-				session.ModelId = model;
+			// Inherit the supervisor's profile so the item session authenticates with the same account (ISSUE-002), within the same engine (FR.33.5).
+			ApplyChildEngine(session, callerNode, model, childEngine);
 
 			int totalIn = 0, totalOut = 0;
 			TurnResultModel? lastResult = null;
@@ -1688,20 +1704,21 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 	/// </summary>
 	private void EnforceModelTier(SessionNodeModel callerNode, string requestedModel, string? violationFormat = null)
 	{
+		// FR.33.14: GPT models use the tier table, every other model the substring rule; the requested model decides (FR.33.4).
 		var callerModel = GetCallerEffectiveModel(callerNode);
-		var callerTier  = ModelTierService.GetTier(callerModel);
-		var targetTier  = ModelTierService.GetTier(requestedModel);
+		var callerTier  = TierOf(callerModel);
+		var targetTier  = TierOf(requestedModel);
 
 		if (callerTier >= targetTier)
 			return;
 
 		if (violationFormat != null)
 			throw new McpToolException(string.Format(violationFormat,
-				ModelTierService.TierName(callerTier), ModelTierService.TierName(targetTier), callerModel ?? Constants.Remote.DefaultOptionId, requestedModel));
+				TierName(callerTier), TierName(targetTier), callerModel ?? Constants.Remote.DefaultOptionId, requestedModel));
 
 		throw new McpToolException(
-			$"Tier violation: a {ModelTierService.TierName(callerTier)} session cannot spawn " +
-			$"a {ModelTierService.TierName(targetTier)} worker. " +
+			$"Tier violation: a {TierName(callerTier)} session cannot spawn " +
+			$"a {TierName(targetTier)} worker. " +
 			$"Caller model: '{callerModel ?? Constants.Remote.DefaultOptionId}', requested: '{requestedModel}'.");
 	}
 

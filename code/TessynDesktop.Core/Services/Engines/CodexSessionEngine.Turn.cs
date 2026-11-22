@@ -27,13 +27,14 @@ public sealed partial class CodexSessionEngine
 		WatchRenames();
 
 		using var turnCancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-		var running = new RunningTurn(turnCancel);
+		var profile = _profiles.Select(node, settings);
+		var running = new RunningTurn(turnCancel, profile.ProfileId);
 		_running[node.NodeId] = running;
 		var ct = turnCancel.Token;
+		CodexAppServerHost? usedHost = null;
 
 		try
 		{
-			var profile = _profiles.Select(node, settings);
 			CodexAppServerHost host;
 			try
 			{
@@ -46,14 +47,25 @@ public sealed partial class CodexSessionEngine
 				return;
 			}
 
+			usedHost = host;
 			var config      = request.Preparation is CodexTurnPreparation prepared ? prepared.Config : await _config.BuildAsync(node, ct).ConfigureAwait(false);
 			var corrections = TakeCorrections(node.NodeId);
 
-			var opened = await OpenThreadAsync(host, node, settings, config, request.Prompt + corrections, request.AugmentedPrompt + corrections, sink, ct)
+			// FR.33.5: the turn's ChatGPT profile becomes the session's pin. A switch from another ChatGPT profile detaches the thread (threads are
+			// not moved between Codex homes), so the new thread is seeded from the transcript.
+			var prompt = request.Prompt + corrections;
+			if (RecordPin(node, profile, settings))
+				prompt = InstructionBlockBuilder.BuildContextPreamble(_files.ReadEntries(node.FileName), request.AugmentedPrompt + corrections);
+
+			if (node.CodexThreadId is { } current)
+				CancelIdleUnload(current);
+
+			var opened = await OpenThreadAsync(host, node, settings, config, prompt, request.AugmentedPrompt + corrections, sink, ct)
 				.ConfigureAwait(false);
 			if (opened is not { } thread)
 				return;
 
+			running.ThreadId = thread.ThreadId;
 			await RunOnThreadAsync(host, profile, node, thread.ThreadId, thread.Text, settings, config, sink, ct).ConfigureAwait(false);
 		}
 		catch (Exception ex) when (ct.IsCancellationRequested && ex is not OperationCanceledException)
@@ -74,6 +86,69 @@ public sealed partial class CodexSessionEngine
 		finally
 		{
 			_running.TryRemove(new KeyValuePair<string, RunningTurn>(node.NodeId, running));
+			if (usedHost is not null && running.ThreadId is { } threadId)
+				ScheduleIdleUnload(usedHost, threadId);
+		}
+	}
+
+	/// <summary>Pins the session to the turn's ChatGPT profile (when the pipeline resolved one). True when it moved from another ChatGPT profile and its thread was detached.</summary>
+	private bool RecordPin(SessionNodeModel node, CodexProfileRef profile, TurnSettings settings)
+	{
+		if (settings.CodexProfile is null)
+			return false;
+
+		string? previous;
+		lock (_appSettings.SyncRoot)
+		{
+			previous = node.ProfileId;
+			if (string.Equals(previous, profile.ProfileId, StringComparison.OrdinalIgnoreCase))
+				return false;
+		}
+
+		var switched = _naming.IsCodexProfileId(previous) && !string.IsNullOrEmpty(node.CodexThreadId) && DetachConversation(node);
+		lock (_appSettings.SyncRoot)
+		{
+			node.ProfileId   = profile.ProfileId;
+			node.ProfileName = _naming.IsChatGptName(settings.ProfileDisplayName)
+				? settings.ProfileDisplayName
+				: _profileService?.DisplayNameOf(profile.ProfileId) ?? node.ProfileName;
+			_appSettings.Save();
+		}
+
+		if (switched)
+			_log.Information("Codex session {NodeId} moved from profile {Old} to {New}; its next thread is seeded from the transcript", node.NodeId, previous, profile.ProfileId);
+		return switched;
+	}
+
+	/// <summary>FR.33.6: a thread with no turn for 15 minutes is unloaded, so its host can idle out; its next turn resumes it.</summary>
+	private void ScheduleIdleUnload(CodexAppServerHost host, string threadId)
+	{
+		var timer = _time.CreateTimer(_ => _ = UnloadIdleThreadAsync(host, threadId), null, Constants.Codex.ThreadIdleUnload, Timeout.InfiniteTimeSpan);
+		var old   = _idleUnloads.GetValueOrDefault(threadId);
+		_idleUnloads[threadId] = timer;
+		old?.Dispose();
+	}
+
+	private void CancelIdleUnload(string threadId)
+	{
+		if (_idleUnloads.TryRemove(threadId, out var timer))
+			timer.Dispose();
+	}
+
+	private async Task UnloadIdleThreadAsync(CodexAppServerHost host, string threadId)
+	{
+		_idleUnloads.TryRemove(threadId, out _);
+		if (_running.Values.Any(r => r.ThreadId == threadId) || !host.IsThreadLoaded(threadId))
+			return;
+
+		try
+		{
+			await host.UnsubscribeThreadAsync(threadId).ConfigureAwait(false);
+			_log.Information("Codex thread {ThreadId} had no turn for {Idle}; it is unloaded until its next turn", threadId, Constants.Codex.ThreadIdleUnload);
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Unloading idle Codex thread {ThreadId} failed", threadId);
 		}
 	}
 
@@ -205,14 +280,21 @@ public sealed partial class CodexSessionEngine
 		switch (completion.Outcome)
 		{
 			case CodexTurnOutcome.Completed:
+				_profileService?.SetAuthError(profile.ProfileId, false);
 				sink.TurnEnded(new EngineTurnEnd(true, null, false, false, threadId, ToInt(completion.InputTokens), ToInt(completion.OutputTokens), 0, now,
 					completion.AssistantText));
 				break;
 
 			case CodexTurnOutcome.Failed:
+				// FR.33.13: structured only. Auth sets the session's and the profile's auth error; a limit adds the reset time of the exhausted window.
 				var error = completion.Error;
-				sink.TurnEnded(new EngineTurnEnd(false, error?.SystemText ?? string.Format(Constants.Codex.Texts.ErrorFormat, completion.Outcome), error?.Kind == CodexErrorKind.Auth,
-					error?.Kind == CodexErrorKind.Limit, threadId, ToInt(completion.InputTokens), ToInt(completion.OutputTokens), 0, now, completion.AssistantText));
+				var errorText = error?.SystemText ?? string.Format(Constants.Codex.Texts.ErrorFormat, completion.Outcome);
+				if (error?.Kind == CodexErrorKind.Auth)
+					_profileService?.SetAuthError(profile.ProfileId, true);
+				if (error?.Kind == CodexErrorKind.Limit && _usage is not null)
+					errorText += _usage.LimitResetSuffix(profile.ProfileId);
+				sink.TurnEnded(new EngineTurnEnd(false, errorText, error?.Kind == CodexErrorKind.Auth, error?.Kind == CodexErrorKind.Limit, threadId,
+					ToInt(completion.InputTokens), ToInt(completion.OutputTokens), 0, now, completion.AssistantText));
 				break;
 
 			default:
@@ -354,8 +436,16 @@ public sealed partial class CodexSessionEngine
 	/// <summary>The model sent on <c>thread/start</c> and every <c>turn/start</c> (FR.33.8); null for Default, which lets Codex choose.</summary>
 	private string? ModelOf(TurnSettings? settings) => IsDefault(settings?.ModelId) ? null : settings!.ModelId;
 
-	/// <summary>The effort of the turn; null for Default, which sends no effort (FR.33.3, FR.33.8).</summary>
-	private string? EffortOf(TurnSettings? settings) => IsDefault(settings?.Effort) ? null : settings!.Effort;
+	/// <summary>
+	/// The effort of the turn; null for Default, which sends no effort (FR.33.3, FR.33.8). An effort the GPT model does not offer is sent as none
+	/// (it stays stored, so it returns when the model changes back).
+	/// </summary>
+	private string? EffortOf(TurnSettings? settings)
+	{
+		var effort = IsDefault(settings?.Effort) ? null : settings!.Effort;
+		var model  = ModelOf(settings);
+		return effort is not null && _models?.IsGpt(model) == true ? _models.EffectiveEffort(model, effort) : effort;
+	}
 
 	private bool IsDefault(string? value) =>
 		string.IsNullOrWhiteSpace(value) || string.Equals(value, Constants.Turns.DefaultOptionText, StringComparison.OrdinalIgnoreCase);

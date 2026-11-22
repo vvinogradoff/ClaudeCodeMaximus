@@ -32,6 +32,7 @@ public sealed class SessionTurnService : ISessionTurnService
 	private readonly IProfileSwitchService?          _profileSwitch;
 	private readonly ISessionModelSettings           _modelSettings;
 	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
+	private readonly TessynDesktop.Codex.ICodexProfileResolver? _codexProfiles;
 
 	// Per-node SemaphoreSlim(1,1): prevents concurrent --resume on the same ClaudeSessionId.
 	private readonly ConcurrentDictionary<string, SemaphoreSlim> _turnLocks = new();
@@ -53,8 +54,10 @@ public sealed class SessionTurnService : ISessionTurnService
 		IEnumerable<ITurnProgressSink>? progressSinks = null,
 		IProfileResolver? profileResolver = null,
 		IProfileSwitchService? profileSwitch = null,
-		ISessionModelSettings? modelSettings = null)
+		ISessionModelSettings? modelSettings = null,
+		TessynDesktop.Codex.ICodexProfileResolver? codexProfiles = null)
 	{
+		_codexProfiles    = codexProfiles;
 		_engines          = engines;
 		_fileService      = fileService;
 		_appSettings      = appSettings;
@@ -120,9 +123,11 @@ public sealed class SessionTurnService : ISessionTurnService
 		TurnOptionsModel? turnOptions,
 		CancellationToken cancellationToken = default)
 	{
-		// FR.33.1: the session's engine, resolved before anything is written to the transcript (today always Claude; the model->engine rule
-		// comes with FR.33.4).
-		var engine = _engines.For(node);
+		// FR.33.1, FR.33.4: the turn's model and effort (FR.16.5, FR.12.35: the per-turn choice, else the session's own setting, else (model only) the
+		// directory's and the app's setting), then the engine of that model, resolved (and stored) before anything is written to the transcript.
+		var turnModel = _modelSettings.ResolveTurn(node, turnOptions);
+		var engine    = _engines.ForTurn(node, turnModel.ModelId);
+		var isCodex   = string.Equals(engine.EngineId, Constants.SessionEngines.Codex, StringComparison.OrdinalIgnoreCase);
 
 		// P1.I: the same progress notifications as an engine turn (the sinks decide who sees them).
 		var turnId   = Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
@@ -173,12 +178,27 @@ public sealed class SessionTurnService : ISessionTurnService
 			// A pinned profile that no longer resolves is an error, never a silent fallback to Default.
 			// A live streaming process ignores the per-turn options (below), so a per-turn profile is not resolved for it.
 			var perTurnProfile = engine.IsAlive(node.NodeId) ? null : turnOptions?.ProfileName;
-			var profile = _profileResolver.Resolve(node, ResolveProfileName(node), perTurnProfile);
-			if (!profile.IsResolved)
+
+			// FR.33.5: a Codex turn runs on a ChatGPT profile (its pin, exact, else the inherit rule); a Claude turn on a Claude profile.
+			TessynDesktop.Codex.CodexProfileChoice? codexProfile = null;
+			ProfileResolution? profile = null;
+			string? refusal;
+			if (isCodex && _codexProfiles != null)
 			{
-				_log.Warning("Turn for node {NodeId} refused: {Error}", node.NodeId, profile.Error);
-				turnErrorText = profile.Error;
-				return new TurnResultModel(string.Empty, engine.GetConversationId(node), IsError: true, ErrorMessage: profile.Error, Refused: true);
+				codexProfile = _codexProfiles.ResolveForTurn(node, perTurnProfile);
+				refusal      = codexProfile.IsResolved ? null : codexProfile.Error;
+			}
+			else
+			{
+				profile = _profileResolver.Resolve(node, ResolveProfileName(node), perTurnProfile);
+				refusal = profile.IsResolved ? null : profile.Error;
+			}
+
+			if (refusal != null)
+			{
+				_log.Warning("Turn for node {NodeId} refused: {Error}", node.NodeId, refusal);
+				turnErrorText = refusal;
+				return new TurnResultModel(string.Empty, engine.GetConversationId(node), IsError: true, ErrorMessage: refusal, Refused: true);
 			}
 
 			// Write clean prompt (without instruction block) to the session file. Common to both
@@ -186,7 +206,8 @@ public sealed class SessionTurnService : ISessionTurnService
 			// interactive desktop path) nothing else writes the user's own message for a headless turn.
 			// Stamped with the profile display name actually used, as the desktop does, so that
 			// "last used profile" restores correctly afterwards.
-			var stampedProfileName = profile.IsDefault ? await _profileLabels.GetDefaultLabelAsync() : profile.DisplayName;
+			var stampedProfileName = codexProfile?.DisplayName
+				?? (profile!.IsDefault ? await _profileLabels.GetDefaultLabelAsync() : profile.DisplayName);
 
 			// FR.33.4: the first turn on a new engine detaches the other engine's conversation (the new one is seeded from the transcript below).
 			if (_engines.ApplyEngineChange(node, engine) is { } engineChanged)
@@ -213,12 +234,10 @@ public sealed class SessionTurnService : ISessionTurnService
 			}
 
 			// ISSUE.013 R1/R3/R7: a per-turn profile change moves the session (no cascade) and records the ProfileId pin.
-			_profileSwitch?.RecordTurnProfile(node, stampedProfileName);
-			var profileConfigDir = profile.ConfigDir;
+			if (!isCodex)
+				_profileSwitch?.RecordTurnProfile(node, stampedProfileName);
+			var profileConfigDir = profile?.ConfigDir;
 
-			// The turn's model and effort (FR.16.5, FR.12.35): the per-turn choice, else the session's own setting, else (model only)
-			// the directory's and the app's setting.
-			var turnModel        = _modelSettings.ResolveTurn(node, turnOptions);
 			var effectiveModelId = turnModel.ModelId;
 			var effort           = turnModel.Effort;
 			var modelInfo        = string.IsNullOrEmpty(effectiveModelId)
@@ -236,7 +255,7 @@ public sealed class SessionTurnService : ISessionTurnService
 			var directoryModel = _appSettings.Settings.Tree.FirstOrDefault(d =>
 				string.Equals(d.Path, node.WorkingDirectory, StringComparison.OrdinalIgnoreCase));
 			var settings       = new TurnSettings(effectiveModelId, effort, profileConfigDir, stampedProfileName, ollamaBaseUrl, disableTools,
-				Chrome: false, modelInfo, directoryModel);
+				Chrome: false, modelInfo, directoryModel, codexProfile?.Profile);
 			var preparation    = await engine.PrepareTurnAsync(node, settings);
 
 			// Cross-profile session adoption (FR.11.13): before validating resumability, try to
@@ -296,7 +315,7 @@ public sealed class SessionTurnService : ISessionTurnService
 			// recorded as an error), so a successful retry reports no error text.
 			turnErrorText = sink.IsError ? sink.ErrorMessage : null;
 			return new TurnResultModel(sink.ResultText, engine.GetConversationId(node), sink.IsError, sink.ErrorMessage,
-			                           sink.InputTokens, sink.OutputTokens, sink.CostUsd, Note: profile.Note);
+			                           sink.InputTokens, sink.OutputTokens, sink.CostUsd, Note: profile?.Note);
 		}
 		catch (OperationCanceledException)
 		{

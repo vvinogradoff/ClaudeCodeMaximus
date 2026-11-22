@@ -16,6 +16,12 @@ public sealed record SessionSnapshotModel
 
 	public string? ClaudeSessionId { get; init; }
 
+	/// <summary>The engine the session runs on (FR.33.1); null for Claude.</summary>
+	public string? EngineId { get; init; }
+
+	/// <summary>The Codex thread of a Codex session (FR.33.7).</summary>
+	public string? CodexThreadId { get; init; }
+
 	public bool IsFavorite { get; init; }
 
 	public int OrchestrationDepth { get; init; }
