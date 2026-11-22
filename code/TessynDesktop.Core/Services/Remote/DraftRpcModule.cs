@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
 using TessynDesktop.Models;
@@ -39,7 +40,13 @@ public sealed class DraftRpcModule : IRemoteRpcModule
 	{
 		var node   = RemoteSessionLookup.Require(_registry, TdcpParams.RequireString(@params, "nodeId"));
 		var itemId = OptionalItemId(@params, node);
-		var text   = (itemId == null ? _drafts.LoadDraft(node.FileName) : _drafts.LoadItemDraft(node.FileName, itemId)) ?? string.Empty;
+		if (itemId != null)
+		{
+			var item = _drafts.LoadItemDraftFull(node.FileName, itemId);
+			return new DraftGetResult(item?.Text ?? string.Empty, _revisions.Of(item), item?.Questions);
+		}
+
+		var text = _drafts.LoadDraft(node.FileName) ?? string.Empty;
 		return new DraftGetResult(text, _revisions.Of(text));
 	}
 
@@ -49,17 +56,30 @@ public sealed class DraftRpcModule : IRemoteRpcModule
 		var text         = TdcpParams.RequireString(@params, "text");
 		var baseRevision = TdcpParams.OptionalString(@params, "baseRevision");
 		var itemId       = OptionalItemId(@params, node);
-		Func<string?, bool> isExpected = current => baseRevision == null || baseRevision == _revisions.Of(current);
+		var questions    = TdcpQuestionAnswerParams.Optional(@params);
+		if (questions != null && itemId == null)
+			throw new TdcpInvalidParamsException("'questions' needs an 'itemId'");
+		CheckQuestionShape(questions);
 
 		// The compare and the write are one step inside the draft service (V6), so a save of the desktop composer cannot slip in between.
-		// An empty draft is no draft (the Avalonia composer deletes it too): an empty text deletes.
-		var written = itemId == null
-			? _drafts.TryWriteDraft(node.FileName, text, isExpected)
-			: _drafts.TryWriteItemDraft(node.FileName, itemId, text, isExpected);
+		// An empty draft is no draft (the Avalonia composer deletes it too): an empty text deletes (a Focus draft with question values is not empty).
+		bool written;
+		string revision;
+		if (itemId == null)
+		{
+			written  = _drafts.TryWriteDraft(node.FileName, text, current => baseRevision == null || baseRevision == _revisions.Of(current));
+			revision = _revisions.Of(text);
+		}
+		else
+		{
+			written  = _drafts.TryWriteItemDraftFull(node.FileName, itemId, text, questions, current => baseRevision == null || baseRevision == _revisions.Of(current));
+			revision = _revisions.Of(new ItemDraftModel(text, questions));
+		}
+
 		if (!written)
 			throw new TdcpException(Constants.Composer.DraftChangedMessage);
 
-		return new DraftSetResult(_revisions.Of(text));
+		return new DraftSetResult(revision);
 	}
 
 	private object? Delete(JsonNode? @params)
@@ -76,8 +96,29 @@ public sealed class DraftRpcModule : IRemoteRpcModule
 		if (itemId == null)
 			_drafts.TryWriteDraft(node.FileName, string.Empty, note);
 		else
-			_drafts.TryWriteItemDraft(node.FileName, itemId, string.Empty, note);
+			_drafts.TryWriteItemDraftFull(node.FileName, itemId, string.Empty, null, current =>
+			{
+				existed = current != null;
+				return true;
+			});
 		return new DraftDeleteResult(existed);
+	}
+
+	// The values are not checked against the item's questionnaire here (a save in flight may meet a re-post, FR.23.37: the client drops what no longer fits);
+	// only their shape is, so a draft file never holds something the reply could not read back.
+	private static void CheckQuestionShape(IReadOnlyList<AttentionQuestionAnswerParams>? questions)
+	{
+		if (questions == null)
+			return;
+
+		var seen = new HashSet<int>();
+		foreach (var question in questions)
+		{
+			if (question.Number < 1 || question.Number > Constants.Attention.MaxQuestionsPerItem)
+				throw new TdcpInvalidParamsException($"question number {question.Number} is out of range (1 to {Constants.Attention.MaxQuestionsPerItem})");
+			if (!seen.Add(question.Number))
+				throw new TdcpInvalidParamsException($"question number {question.Number} appears more than once");
+		}
 	}
 
 	// The item id becomes part of a file name, so only the characters of an item id (A12) are accepted; and the item must be an open one of the session.

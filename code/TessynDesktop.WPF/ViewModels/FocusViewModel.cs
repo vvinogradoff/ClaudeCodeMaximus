@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -31,7 +32,8 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	private readonly IElevatedRunLauncher? _elevatedLauncher;
 	private readonly IClipboardWriter? _clipboard;
 	private readonly TimeProvider _time;
-	private readonly Dictionary<(string NodeId, string ItemId), string> _drafts = new();
+	private readonly Dictionary<(string NodeId, string ItemId), FocusReplyDraft> _drafts = new();
+	private readonly ConcurrentDictionary<string, IReadOnlyList<AttentionQuestionAnswerParams>?> _questionSnapshots = new();
 	private readonly Dictionary<string, FocusItemViewModel> _byId = new(StringComparer.OrdinalIgnoreCase);
 	private bool _applyingReply;
 
@@ -39,6 +41,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	private Task _refreshTask = Task.CompletedTask;
 	private bool _refreshRunning;
 	private bool _refreshPending;
+	private bool _firstLoadDue;
 
 	[ObservableProperty]
 	private string? _nodeId;
@@ -66,8 +69,8 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		_time = time ?? TimeProvider.System;
 		ReplySync = new DraftSynchronizer(
 			(key, ct) => _client.ReplyDraftGetAsync(NodeOf(key), ItemOf(key), ct),
-			(key, text, baseRevision) => _client.ReplyDraftSetAsync(NodeOf(key), ItemOf(key), text, baseRevision),
-			logger, Constants.ComposerLimits.DraftSaveDelay);
+			(key, text, baseRevision) => _client.ReplyDraftSetAsync(NodeOf(key), ItemOf(key), text, baseRevision, questions: _questionSnapshots.GetValueOrDefault(key)),
+			logger, Constants.ComposerLimits.DraftSaveDelay, hasPayload: key => _questionSnapshots.GetValueOrDefault(key) != null);
 		ReplySync.Merged += OnReplyMerged;
 		_client.NotificationReceived += OnNotification;
 		_client.Resynced += OnResynced;
@@ -126,6 +129,12 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	/// <summary>A path written in a card's title or body was activated (FR.23.30); the owner asks the daemon to preview it.</summary>
 	public event EventHandler<FocusPathRequest>? PathActivated;
 
+	/// <summary>
+	/// Raised once after the items of a newly shown session loaded successfully (argument: its node id), with <see cref="OpenCount"/> already set (FR.6.25.1). Not raised
+	/// when that first load failed, nor for later refreshes (FR.23.16 live updates), nor when the session changed again before the load finished.
+	/// </summary>
+	public event EventHandler<string>? SessionLoaded;
+
 	public bool HasItems => Items.Count > 0;
 
 	/// <summary>A session is shown: the Focus panel shows its items; without one it shows <see cref="Constants.Texts.NoFocusSession"/>.</summary>
@@ -155,6 +164,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		SaveDrafts();
 		_token++;
 		NodeId = nodeId;
+		_firstLoadDue = true;
 		Error = null;
 		IsClosedExpanded = false;
 		IsDecisionsExpanded = false;
@@ -168,6 +178,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		SaveDrafts();
 		_token++;
 		NodeId = null;
+		_firstLoadDue = false;
 		Error = null;
 		ClearItems();
 	}
@@ -215,12 +226,20 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 				return;
 
 			Apply(id, result.Items);
+			if (_firstLoadDue)
+			{
+				_firstLoadDue = false;
+				SessionLoaded?.Invoke(this, id);
+			}
 		}
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "Loading the Focus items of {NodeId} failed", id);
 			if (token == _token)
+			{
 				Error = "Could not load the Focus items: " + ex.Message;
+				_firstLoadDue = false;   // a failed first load never switches views, and a later refresh is not a first load (FR.6.25.1)
+			}
 		}
 	}
 
@@ -245,7 +264,12 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 			var item = new FocusItemViewModel(dto, this, nodeId);
 			if (_drafts.Remove((nodeId, dto.Id), out var draft))
-				SetReplyQuietly(item, draft);   // a quick return: what was typed before the pane left, until the daemon's text arrives
+			{
+				SetReplyQuietly(item, draft.Text);   // a quick return: what was typed before the pane left, until the daemon's text arrives
+				if (draft.Questions != null)
+					item.TryRestoreQuestions(draft.Questions);
+			}
+
 			_byId[dto.Id] = item;
 			wanted.Add(item);
 			if (!item.IsElevatedRun)
@@ -359,8 +383,8 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 		foreach (var item in Items)
 		{
-			if (!string.IsNullOrWhiteSpace(item.ReplyText))
-				_drafts[(NodeId, item.Id)] = item.ReplyText;
+			if (!string.IsNullOrWhiteSpace(item.ReplyText) || item.HasChangedQuestions)
+				_drafts[(NodeId, item.Id)] = new FocusReplyDraft(item.ReplyText, item.BuildDraftAnswers());
 
 			_ = ReplySync.FlushAsync(KeyOf(NodeId, item.Id));   // leaving the session: what is still waiting goes to the daemon now
 		}
@@ -374,13 +398,14 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	private void KeepOrDiscardGoneReply(string nodeId, FocusItemViewModel gone)
 	{
 		var key = KeyOf(nodeId, gone.Id);
-		if (string.IsNullOrWhiteSpace(gone.ReplyText))
+		if (string.IsNullOrWhiteSpace(gone.ReplyText) && !gone.HasChangedQuestions)
 		{
-			ReplySync.Discard(key);
+			DiscardDraft(key);
 			return;
 		}
 
-		_drafts[(nodeId, gone.Id)] = gone.ReplyText;
+		_drafts[(nodeId, gone.Id)] = new FocusReplyDraft(gone.ReplyText, gone.BuildDraftAnswers());
+		_questionSnapshots[key] = gone.BuildDraftAnswers();
 		ReplySync.Schedule(key, gone.ReplyText);
 		_ = ReplySync.FlushAsync(key);
 	}
@@ -427,6 +452,9 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	{
 		if (item.NodeId != NodeId || !_byId.TryGetValue(item.Id, out var current) || !ReferenceEquals(current, item))
 			return;
+
+		if (load.Questions is { Count: > 0 } kept && !item.HasChangedQuestions)
+			item.TryRestoreQuestions(kept);   // the other client's answers; a card the user already changed here keeps its own values
 
 		var local = item.ReplyText;
 		if (local == load.Text)
@@ -479,8 +507,27 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	{
 		AnswerCount = Items.Count(i => i.HasReply);
 		SendAnswersCommand.NotifyCanExecuteChanged();
-		if (!_applyingReply && item.NodeId == NodeId && _byId.ContainsKey(item.Id))
-			ReplySync.Schedule(KeyOf(item.NodeId, item.Id), item.ReplyText);
+		ScheduleDraft(item);
+	}
+
+	/// <summary>A question of a card changed (an answer, a Reset): the values are saved as the item's draft with its note (FR.23.37).</summary>
+	internal void OnQuestionChanged(FocusItemViewModel item) => ScheduleDraft(item);
+
+	private void ScheduleDraft(FocusItemViewModel item)
+	{
+		if (_applyingReply || item.NodeId != NodeId || !_byId.ContainsKey(item.Id))
+			return;
+
+		var key = KeyOf(item.NodeId, item.Id);
+		_questionSnapshots[key] = item.BuildDraftAnswers();
+		ReplySync.Schedule(key, item.ReplyText);
+	}
+
+	/// <summary>Forgets what waits to be written for a key, text and question values.</summary>
+	private void DiscardDraft(string key)
+	{
+		ReplySync.Discard(key);
+		_questionSnapshots.TryRemove(key, out _);
 	}
 
 	/// <summary>The card of an elevated run (FR.23.32) for an item of this view; when the run becomes final the item list is read again (the item closes).</summary>
@@ -511,7 +558,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		try
 		{
 			Error = null;
-			var answers = cards.Select(c => new AttentionAnswerParams(c.Id, c.ReplyText.Trim())).ToList();
+			var answers = cards.Select(c => new AttentionAnswerParams(c.Id, c.ReplyText.Trim(), c.BuildAnswers())).ToList();
 			var result = await _client.AttentionReplyAsync(id, answers);
 			if (id != NodeId)
 				return;
@@ -519,7 +566,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 			foreach (var card in cards.Where(c => result.AnsweredIds.Contains(c.Id, StringComparer.OrdinalIgnoreCase)))
 			{
 				SetReplyQuietly(card, string.Empty);
-				ReplySync.Discard(KeyOf(id, card.Id));   // sent: nothing to keep (the daemon deletes the stored draft when the item closes)
+				DiscardDraft(KeyOf(id, card.Id));   // sent: nothing to keep (the daemon deletes the stored draft when the item closes)
 			}
 
 			await RequestRefresh();
@@ -545,7 +592,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 			Error = null;
 			await _client.AttentionDismissAsync(id, item.Id);
 			SetReplyQuietly(item, string.Empty);   // closed: the unsent text goes with the item (the refresh that removes the card must not keep it)
-			ReplySync.Discard(KeyOf(id, item.Id));
+			DiscardDraft(KeyOf(id, item.Id));
 			if (id == NodeId)
 				await RequestRefresh();
 		}

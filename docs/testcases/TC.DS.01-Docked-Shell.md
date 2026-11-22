@@ -1,6 +1,6 @@
 # TC.DS.01 — Docked Shell
 
-Related requirements: FR.6.11–FR.6.24, FR.29.19, FR.23.12, FR.23.13, FR.12.29. Use cases: [UC.DS.01](/docs/usecases/UC.DS.01-Docked-Shell.md). Status: draft, not built.
+Related requirements: FR.6.11–FR.6.25, FR.29.19, FR.23.12, FR.23.13, FR.12.29. Use cases: [UC.DS.01](/docs/usecases/UC.DS.01-Docked-Shell.md). Status: draft, not built.
 
 **Legend.** AUTOMATED = unit / STA view test; E2E = WPF end-to-end through the test hook (NR.6, FR.6.22); MANUAL = done by hand (mouse drags of tabs, the look).
 
@@ -53,6 +53,15 @@ Related requirements: FR.6.11–FR.6.24, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | TC.DS.45 | No session shown: the bar is shown as the Session view's bar is without a session | E2E | UC.DS.14 | FR.6.24.5 |
 | TC.DS.46 | The bar works with Focus floating, tabbed beside or over the Session view and in the slide-out; neither the toggle nor the panel takes the keyboard focus except by a click | E2E | UC.DS.14 | FR.6.24.6, FR.6.20 |
 | TC.DS.47 | A narrow panel wraps the bar's controls; the cards area stretches and scrolls above it; the header buttons keep their places (look) | MANUAL | UC.DS.14 | FR.6.24.7 |
+| TC.DS.48 | Focus tabbed with the Session view and selected; switching to a session with 0 open items (loaded) selects the Session view's tab | E2E | UC.DS.15 | FR.6.25.1, FR.6.25.2, FR.6.25.4 |
+| TC.DS.49 | Same setup; the new session has open items: Focus stays selected and shows them | E2E | UC.DS.15 | FR.6.25.1, FR.6.25.5 |
+| TC.DS.50 | Focus as a side panel, floating or auto-hidden: switching to a session with 0 open items changes nothing | E2E | UC.DS.15 | FR.6.25.2 |
+| TC.DS.51 | The last open item is answered, dismissed or closed while reading Focus: no switch; later item changes do not switch | AUTOMATED | UC.DS.15 | FR.6.25.1 |
+| TC.DS.52 | Items of the new session are still loading: no switch until loaded, then the switch happens; a failed load never switches | AUTOMATED | UC.DS.15 | FR.6.25.1 |
+| TC.DS.53 | The keyboard focus is the same control before and after the automatic switch; exactly one log line with the reason is written | E2E | UC.DS.15 | FR.6.25.4, FR.6.20 |
+| TC.DS.54 | Session view's tab selected: switching to a session with open items does not select Focus; switching back to a session without items does not re-select Focus | E2E | UC.DS.15 | FR.6.25.5 |
+| TC.DS.55 | Badge rule: a session whose only open items are Decided (badge 0) switches; closed items only also switches; one open Ask does not | AUTOMATED | UC.DS.15 | FR.6.25.3, FR.23.13 |
+| TC.DS.56 | Every route of switching counts: tree, Recent, Tags, the Recent drop-down and a session reference each trigger the check | AUTOMATED | UC.DS.15 | FR.6.25.1 |
 
 ## FR → TC coverage
 | FR | Test cases |
@@ -71,3 +80,4 @@ Related requirements: FR.6.11–FR.6.24, FR.29.19, FR.23.12, FR.23.13, FR.12.29.
 | FR.6.22 | TC.DS.07, 25 |
 | FR.6.23 | TC.DS.27–40 |
 | FR.6.24 | TC.DS.41–47 |
+| FR.6.25 | TC.DS.48–56 |

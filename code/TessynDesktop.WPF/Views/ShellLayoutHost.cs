@@ -32,5 +32,7 @@ public sealed class ShellLayoutHost : IShellLayout
 
 	public void ToggleAutoHide(string panelId) => _layout?.ToggleAutoHide(panelId);
 
+	public bool IsSelectedWithSessionView(string panelId) => _layout?.IsSelectedWithSessionView(panelId) ?? false;
+
 	public void ResetLayout() => _layout?.ResetLayout();
 }

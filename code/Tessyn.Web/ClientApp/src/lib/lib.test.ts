@@ -197,3 +197,9 @@ describe('safeHttpsUrl', () => {
 		expect(safeHttpsUrl('')).toBeUndefined();
 	});
 });
+
+import { appendAnswer } from '../components/FocusView';
+describe('appendAnswer', () => {
+	it('fills an empty reply', () => expect(appendAnswer('  ', 'Yes')).toBe('Yes'));
+	it('appends to typed text on a new line, never overwriting', () => expect(appendAnswer('Go ahead, but\n', 'Option B')).toBe('Go ahead, but\nOption B'));
+});

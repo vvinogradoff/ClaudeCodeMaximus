@@ -300,25 +300,35 @@ public sealed partial class FakeTessynClient : ITessynClient
 	/// <summary>When set, <see cref="AttentionListAsync"/> throws it.</summary>
 	public Exception? AttentionListException { get; set; }
 
-	public Task<AttentionListResult> AttentionListAsync(string nodeId, CancellationToken cancellationToken = default)
+	/// <summary>Per session: <see cref="AttentionListAsync"/> waits for this source before it answers (a slow load); complete it to let the load finish.</summary>
+	public Dictionary<string, TaskCompletionSource> AttentionListGates { get; } = [];
+
+	public async Task<AttentionListResult> AttentionListAsync(string nodeId, CancellationToken cancellationToken = default)
 	{
 		Record($"attention.list:{nodeId}");
+		if (AttentionListGates.TryGetValue(nodeId, out var gate))
+			await gate.Task;
+
 		if (AttentionListException != null)
 			throw AttentionListException;
 		Attention.TryGetValue(nodeId, out var items);
-		return Task.FromResult(new AttentionListResult(nodeId, new AttentionSummaryDto(), [.. (items ?? []).Select(WithCurrentElevatedRun)]));
+		return new AttentionListResult(nodeId, new AttentionSummaryDto(), [.. (items ?? []).Select(WithCurrentElevatedRun)]);
 	}
+
+	/// <summary>Every answer <see cref="AttentionReplyAsync"/> received, in order (FR.23.36: the questions come with them).</summary>
+	public List<AttentionAnswerParams> ReplyAnswers { get; } = [];
 
 	public Task<AttentionReplyResult> AttentionReplyAsync(string nodeId, IReadOnlyList<AttentionAnswerParams> answers, string? modelId = null, string? effort = null, string? profileId = null, CancellationToken cancellationToken = default)
 	{
 		Record($"attention.reply:{nodeId}:{string.Join("|", answers.Select(a => a.ItemId + "=" + a.Text))}");
+		ReplyAnswers.AddRange(answers);
 		var answered = new List<string>();
 		var skipped = new List<string>();
 		var items = Attention.GetValueOrDefault(nodeId) ?? [];
 		foreach (var answer in answers)
 		{
 			var index = items.FindIndex(i => i.Id == answer.ItemId && i.Status == AttentionStatus.Open);
-			if (index < 0 || string.IsNullOrWhiteSpace(answer.Text))
+			if (index < 0 || (string.IsNullOrWhiteSpace(answer.Text) && answer.Questions == null))
 			{
 				skipped.Add(answer.ItemId);
 				continue;

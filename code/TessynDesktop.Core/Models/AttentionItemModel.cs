@@ -29,4 +29,6 @@ public sealed class AttentionItemModel
 
 	/// <summary>The id of the elevated run this item is the card of (FR.23.31); null for every other item. Ledger files without the field read as none.</summary>
 	public string? ElevatedRunId { get; set; }
+	/// <summary>The questionnaire of an ask or critical item (FR.23.33); empty for any other. Ledger files without the field read as none.</summary>
+	public List<AttentionQuestionModel> Questions { get; set; } = [];
 }

@@ -28,4 +28,6 @@ public sealed class AttentionPostRequestModel
 
 	/// <summary>The text of the SYSTEM entry in place of the title and body (FR.23.8); null = the usual entry.</summary>
 	public string? SystemText { get; init; }
+	/// <summary>The already validated questionnaire (FR.23.33). A re-post replaces the item's whole questionnaire, so an empty list clears it.</summary>
+	public IReadOnlyList<AttentionQuestionModel> Questions { get; init; } = [];
 }

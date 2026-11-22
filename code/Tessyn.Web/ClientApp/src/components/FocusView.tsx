@@ -1,12 +1,15 @@
-import { useState } from 'react';
-import type { AttentionItemDto, AttentionKind } from '../api/types';
+import { useEffect, useRef, useState } from 'react';
+import type { AttentionAnswer, AttentionItemDto, AttentionKind } from '../api/types';
 import { elevatedRunOf, outcomeLine } from '../lib/elevated';
 import { formatSmartTime } from '../lib/format';
-import { readText, writeText } from '../lib/storage';
+import { recommendedValues, restoreValues, toAnswers } from '../lib/questionnaire';
+import type { QuestionnaireDraft, QuestionValue, QuestionValues } from '../lib/questionnaire';
+import { readJson, readText, removeKey, writeJson, writeText } from '../lib/storage';
 import { nowMs } from '../state/appState';
 import { useApp } from '../state/AppContext';
 import { ElevatedFacts, ElevatedRunBody } from './ElevatedRunCard';
 import { Markdown } from './Markdown';
+import { QuestionnaireView } from './QuestionnaireView';
 import { RefList } from './RefList';
 
 const KIND_LABEL: Record<AttentionKind, string> = { critical: 'CRITICAL', ask: 'ASK', todo: 'TODO', alert: 'ALERT', decided: 'DECIDED' };
@@ -30,6 +33,8 @@ interface CardProps {
 	text: string;
 	now: number;
 	onText: (t: string) => void;
+	values?: QuestionValues;
+	onQuestion: (number: number, value: QuestionValue) => void;
 	onReply: () => void;
 	onDismiss: () => void;
 }
@@ -50,8 +55,22 @@ function ElevatedOpenCard({ item, nodeId, now }: { item: AttentionItemDto; nodeI
 	);
 }
 
-function OpenCard({ item, nodeId, text, now, onText, onReply, onDismiss }: CardProps) {
+/** Button answers never overwrite typed text: they are appended on a new line. */
+export function appendAnswer(current: string, addition: string): string {
+	if (!current.trim()) return addition;
+	return `${current.replace(/\s+$/, '')}\n${addition}`;
+}
+
+/** Questionnaire cards can always be answered: the answers are the reply (FR.23.35). */
+const hasQuestions = (i: AttentionItemDto) => (i.questions?.length ?? 0) > 0;
+
+const draftKey = (nodeId: string, itemId: string) => `reply.q.${nodeId}.${itemId}`;
+const SAVE_DEBOUNCE_MS = 400;
+
+function OpenCard({ item, nodeId, text, now, values, onText, onQuestion, onReply, onDismiss }: CardProps) {
 	if (elevatedRunOf(item)) return <ElevatedOpenCard item={item} nodeId={nodeId} now={now} />;
+	const questions = item.questions ?? [];
+	const canReply = hasQuestions(item) || !!text.trim();
 	return (
 		<article className={`card kind-border-${item.kind}`} data-testid="focus-card" data-item-id={item.id}>
 			<header>
@@ -64,17 +83,20 @@ function OpenCard({ item, nodeId, text, now, onText, onReply, onDismiss }: CardP
 			{item.refs && item.refs.length > 0 && <RefList refs={item.refs} />}
 			{item.options.length > 0 && (
 				<div className="options">
-					{item.options.map((o) => <button key={o} type="button" className="btn small" onClick={() => onText(o)}>{o}</button>)}
+					{item.options.map((o) => <button key={o} type="button" className="btn small" onClick={() => onText(appendAnswer(text, o))}>{o}</button>)}
 				</div>
 			)}
 			{item.recommendation && (
-				<button type="button" className="btn small reco" onClick={() => onText(`Accepted your recommendation: ${item.recommendation}`)}>
+				<button type="button" className="btn small reco" onClick={() => onText(appendAnswer(text, `Accepted your recommendation: ${item.recommendation}`))}>
 					Use recommendation: {item.recommendation}
 				</button>
 			)}
-			<textarea rows={2} placeholder="Reply..." value={text} onChange={(e) => onText(e.target.value)} aria-label={`Reply to A${item.number}`} />
+			{questions.length > 0 && values && <QuestionnaireView itemId={item.id} questions={questions} values={values} onChange={onQuestion} onSend={onReply} />}
+			{questions.length > 0 && <label className="qn-note-label" htmlFor={`${item.id}-note`}>Note (optional)</label>}
+			<textarea id={`${item.id}-note`} rows={2} placeholder="Reply..." value={text} onChange={(e) => onText(e.target.value)} aria-label={`Reply to A${item.number}`}
+				onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && canReply) { e.preventDefault(); onReply(); } }} />
 			<div className="card-actions">
-				<button type="button" className="btn primary" disabled={!text.trim()} onClick={onReply}>Reply</button>
+				<button type="button" className="btn primary" disabled={!canReply} onClick={onReply}>Reply</button>
 				<span className="spacer" />
 				<button type="button" className="btn" onClick={onDismiss}>{DISMISS_LABEL[item.kind]}</button>
 			</div>
@@ -108,6 +130,8 @@ export function FocusView() {
 	const [texts, setTexts] = useState<Record<string, string>>({});
 	const [showDecisions, setShowDecisions] = useState(false);
 	const [showClosed, setShowClosed] = useState(false);
+	const [qvals, setQvals] = useState<Record<string, QuestionValues>>({});
+	const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 	const now = nowMs(state);
 
 	const textOf = (id: string) => texts[id] ?? readText(`reply.${nodeId}.${id}`);
@@ -116,17 +140,48 @@ export function FocusView() {
 		writeText(`reply.${nodeId}.${id}`, v);
 	};
 
+	/** Current values of a questionnaire: the in-memory edit, else the stored draft if it still fits (FR.23.37), else the recommendations. */
+	const valuesOf = (i: AttentionItemDto): QuestionValues | undefined => {
+		if (!i.questions || i.questions.length === 0) return undefined;
+		return qvals[i.id] ?? restoreValues(i.questions, readJson<QuestionnaireDraft | null>(draftKey(nodeId, i.id), null)) ?? recommendedValues(i.questions);
+	};
+	const setQuestion = (i: AttentionItemDto, number: number, value: QuestionValue) => {
+		const next = { ...valuesOf(i), [number]: value };
+		setQvals((q) => ({ ...q, [i.id]: next }));
+		clearTimeout(saveTimers.current[i.id]);
+		saveTimers.current[i.id] = setTimeout(() => writeJson(draftKey(nodeId, i.id), { questions: toAnswers(i.questions ?? [], next) }), SAVE_DEBOUNCE_MS);
+	};
+	const dropDraft = (i: AttentionItemDto) => {
+		clearTimeout(saveTimers.current[i.id]);
+		removeKey(draftKey(nodeId, i.id));
+		setQvals((q) => { const { [i.id]: _gone, ...rest } = q; return rest; });
+	};
+	const answerOf = (i: AttentionItemDto): AttentionAnswer => {
+		const answer: AttentionAnswer = { itemId: i.id, text: textOf(i.id).trim() };
+		if (i.questions && i.questions.length > 0) answer.questions = toAnswers(i.questions, valuesOf(i) ?? {});
+		return answer;
+	};
+	const send = async (list: AttentionItemDto[]) => {
+		if (await actions.replyAttention(list.map(answerOf))) list.forEach(dropDraft);
+	};
+
 	const openItems = items.filter((i) => i.status === 'open');
 	const actionable = openItems.filter((i) => i.kind !== 'decided');
 	const decisions = openItems.filter((i) => i.kind === 'decided');
 	const closed = items.filter((i) => i.status !== 'open');
-	const withText = openItems.filter((i) => textOf(i.id).trim());
+	const withText = openItems.filter((i) => hasQuestions(i) || textOf(i.id).trim());
+	const closedKey = items.filter((i) => i.status !== 'open' && hasQuestions(i)).map((i) => i.id).join('|');
+
+	// The draft is deleted when the item closes (FR.23.37). Pending debounced saves still fire after unmount, so a last edit is kept.
+	useEffect(() => {
+		for (const id of closedKey.split('|').filter(Boolean)) removeKey(draftKey(nodeId, id));
+	}, [closedKey, nodeId]);
 
 	if (!open.attention) return <div className="focus"><div className="empty">Loading…</div></div>;
 
 	const card = (i: AttentionItemDto) => (
 		<OpenCard key={i.id} item={i} nodeId={nodeId} text={textOf(i.id)} now={now} onText={(v) => setText(i.id, v)}
-			onReply={() => void actions.replyAttention([{ itemId: i.id, text: textOf(i.id).trim() }])} onDismiss={() => void actions.dismissAttention(i.id)} />
+			values={valuesOf(i)} onQuestion={(n, v) => setQuestion(i, n, v)} onReply={() => void send([i])} onDismiss={() => void actions.dismissAttention(i.id)} />
 	);
 
 	return (
@@ -152,7 +207,7 @@ export function FocusView() {
 			)}
 			{withText.length > 0 && (
 				<div className="send-all">
-					<button type="button" className="btn primary" onClick={() => void actions.replyAttention(withText.map((i) => ({ itemId: i.id, text: textOf(i.id).trim() })))}>
+					<button type="button" className="btn primary" onClick={() => void send(withText)}>
 						Send answers ({withText.length})
 					</button>
 				</div>

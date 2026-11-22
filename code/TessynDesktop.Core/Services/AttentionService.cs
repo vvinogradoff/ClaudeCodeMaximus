@@ -79,6 +79,7 @@ public sealed class AttentionService : IAttentionService
 				item.Body           = request.Body;
 				item.Options        = request.Options.ToList();
 				item.Recommendation = request.Recommendation;
+				item.Questions      = request.Questions.Select(CopyQuestion).ToList();   // FR.23.33: a re-post replaces the whole questionnaire
 				if (request.Refs.Count > 0)
 				{
 					item.Refs = request.Refs.Select(CopyRef).ToList();
@@ -413,6 +414,8 @@ public sealed class AttentionService : IAttentionService
 
 		if (item.Body.Length > 0)
 			sb.Append('\n').Append(item.Body);
+		foreach (var question in item.Questions)
+			sb.Append('\n').Append(AttentionQuestionFormat.SessionLine(question));
 		if (item.Options.Count > 0)
 			sb.Append('\n').Append(Constants.Attention.SystemOptionsPrefix)
 				.Append(string.Join(Constants.Attention.SystemOptionsSeparator, item.Options));
@@ -487,6 +490,13 @@ public sealed class AttentionService : IAttentionService
 		ClosedUtc             = item.ClosedUtc,
 		Refs                  = item.Refs.Select(CopyRef).ToList(),
 		ElevatedRunId         = item.ElevatedRunId,
+		Questions             = item.Questions.Select(CopyQuestion).ToList(),
+	};
+
+	private static AttentionQuestionModel CopyQuestion(AttentionQuestionModel q) => new()
+	{
+		Number = q.Number, Type = q.Type, Text = q.Text, Choices = q.Choices.ToList(), Recommended = q.Recommended,
+		RecommendedChoices = q.RecommendedChoices.ToList(),
 	};
 
 	private static AttentionRefModel CopyRef(AttentionRefModel r) => new()

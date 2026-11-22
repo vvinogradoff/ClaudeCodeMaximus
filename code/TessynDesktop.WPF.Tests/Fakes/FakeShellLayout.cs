@@ -45,5 +45,10 @@ public sealed class FakeShellLayout : IShellLayout
 		Changed?.Invoke(this, EventArgs.Empty);
 	}
 
+	/// <summary>What <see cref="IsSelectedWithSessionView"/> answers; tests set it to the layout they want.</summary>
+	public bool FocusSelectedWithSession { get; set; }
+
+	public bool IsSelectedWithSessionView(string panelId) => FocusSelectedWithSession && panelId == Constants.DockedShell.FocusPanelId;
+
 	public void ResetLayout() => Resets++;
 }

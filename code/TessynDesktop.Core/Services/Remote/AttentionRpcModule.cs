@@ -124,7 +124,8 @@ public sealed class AttentionRpcModule : IRemoteRpcModule
 		{
 			answers.Add(new AttentionAnswerParams(
 				TdcpParams.RequireString(element, "itemId"),
-				TdcpParams.RequireString(element, "text")));
+				TdcpParams.RequireString(element, "text"),
+				TdcpQuestionAnswerParams.Optional(element)));
 		}
 
 		return answers;

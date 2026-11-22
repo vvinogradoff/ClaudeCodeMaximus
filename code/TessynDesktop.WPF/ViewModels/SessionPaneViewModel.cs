@@ -138,6 +138,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		Focus.RefActivated += OnRefActivated;
 		Focus.PathActivated += OnFocusPathActivated;
 		Focus.PropertyChanged += OnFocusPropertyChanged;
+		Focus.SessionLoaded += OnFocusSessionLoaded;
 		_surface.ViewChanged += OnViewChanged;
 		_surface.PathClicked += OnPathClicked;
 		_surface.PathImageRequested += OnPathImageRequested;
@@ -836,6 +837,7 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		Focus.RefActivated -= OnRefActivated;
 		Focus.PathActivated -= OnFocusPathActivated;
 		Focus.PropertyChanged -= OnFocusPropertyChanged;
+		Focus.SessionLoaded -= OnFocusSessionLoaded;
 		Focus.Dispose();
 		Preview?.Dispose();
 	}
