@@ -14,8 +14,8 @@
         <Border x:Name="AuthNotice" Margin="0,0,0,6" Padding="10,6" CornerRadius="4" Background="{DynamicResource SystemFillColorCriticalBackgroundBrush}"
                 Visibility="{Binding HasAuthError, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Sign-in needed">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Command="{Binding ReauthenticateCommand}" Content="{x:Static l:Constants+ComposerTexts.Reauthenticate}" Padding="10,2" Margin="8,0,0,0"
-                        ToolTip="Sign this session's profile in again" AutomationProperties.Name="Re-authenticate" />
+                <Button DockPanel.Dock="Right" Command="{Binding ReauthenticateCommand}" Content="{Binding ReauthenticateLabel}" Padding="10,2" Margin="8,0,0,0"
+                        ToolTip="Sign this session's profile in again" AutomationProperties.Name="{Binding ReauthenticateLabel}" />
                 <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" FontSize="14" Margin="0,0,8,0" Text="{StaticResource GlyphWarning}" />
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{x:Static l:Constants+ComposerTexts.AuthErrorMessage}" TextWrapping="Wrap" />

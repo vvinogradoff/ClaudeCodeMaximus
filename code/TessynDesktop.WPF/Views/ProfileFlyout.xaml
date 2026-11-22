@@ -17,6 +17,44 @@
                     Padding="8" MinWidth="380" MaxHeight="420">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Profiles" Margin="0,0,0,6" />
+                    <!-- FR.33.13: the open session's ChatGPT profile, with Sign in again on an auth error (never Claude's re-authenticate; rename and delete live in Settings) -->
+                    <Border DockPanel.Dock="Top" Margin="0,0,0,8" Padding="8,6" CornerRadius="4" Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                            Visibility="{Binding HasSessionChatGptProfile, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Session ChatGPT profile">
+                        <StackPanel>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{Binding SessionChatGptHeader}" />
+                            <DockPanel Margin="0,2,0,0">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource FlyoutLink}" Content="Sign in again" Command="{Binding SignInSessionProfileAgainCommand}"
+                                        Visibility="{Binding SessionNeedsSignIn, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="{Binding SessionSignInAgainName}" />
+                                <StackPanel>
+                                    <TextBlock TextTrimming="CharacterEllipsis">
+                                        <Run Text="{Binding SessionChatGptProfile.DisplayName, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding SessionChatGptProfile.PlanText, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </TextBlock>
+                                    <TextBlock FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{Binding SessionChatGptProfile.StateText}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <!-- The sign-in in progress (started here or in Settings): the code and the address when signing in with a code; Cancel ends it -->
+                            <StackPanel DataContext="{Binding SignIn}" Margin="0,6,0,0" AutomationProperties.Name="Flyout ChatGPT sign-in">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Text="{Binding Instruction}" />
+                                <TextBox Margin="0,4,0,0" IsReadOnly="True" Text="{Binding UserCode, Mode=OneWay}" FontFamily="Consolas" Visibility="{Binding IsDeviceCode, Converter={StaticResource BoolToVis}}"
+                                         AutomationProperties.Name="Flyout sign-in code" />
+                                <TextBox Margin="0,4,0,0" IsReadOnly="True" Text="{Binding Address, Mode=OneWay}" Visibility="{Binding ShowsAddress, Converter={StaticResource BoolToVis}}"
+                                         AutomationProperties.Name="Flyout sign-in address" />
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{Binding DeviceCodeNote}"
+                                           Visibility="{Binding IsDeviceCode, Converter={StaticResource BoolToVis}}" />
+                                <Button HorizontalAlignment="Left" Margin="0,4,0,0" Padding="8,2" Content="Cancel" AutomationProperties.Name="Cancel flyout sign-in"
+                                        Command="{Binding DataContext.CancelSignInCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                     <TextBlock DockPanel.Dock="Bottom" Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding StatusText}" AutomationProperties.Name="Profile status"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}" />
                     <Button DockPanel.Dock="Bottom" Margin="0,6,0,0" HorizontalAlignment="Left" Padding="10,4" Content="Add profile…" Command="{Binding AddCommand}"

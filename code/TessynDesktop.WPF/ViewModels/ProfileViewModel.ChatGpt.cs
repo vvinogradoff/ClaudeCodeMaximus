@@ -33,6 +33,53 @@ public sealed partial class ProfileViewModel
 
 	public ObservableCollection<ChatGptProfileRowViewModel> ChatGptProfiles { get; } = [];
 
+	private string? _sessionProfileId;
+	private bool _sessionHasAuthError;
+
+	/// <summary>
+	/// FR.33.13, the status-bar flyout: the open session's ChatGPT profile (null when the session uses a Claude profile or none is open). The flyout shows
+	/// it with its state and offers <b>Sign in again</b> (never Claude's re-authenticate); rename and delete stay in Settings > Profiles.
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasSessionChatGptProfile))]
+	[NotifyPropertyChangedFor(nameof(SessionNeedsSignIn))]
+	[NotifyPropertyChangedFor(nameof(SessionSignInAgainName))]
+	private ChatGptProfileRowViewModel? _sessionChatGptProfile;
+
+	public bool HasSessionChatGptProfile => SessionChatGptProfile != null;
+
+	/// <summary>Sign in again is offered when the profile has an auth error or is signed out, or the session reports an auth error.</summary>
+	public bool SessionNeedsSignIn => SessionChatGptProfile is { } row && (!row.IsSignedIn || _sessionHasAuthError);
+
+	public string SessionSignInAgainName => SessionChatGptProfile == null ? string.Empty : string.Format(Constants.Codex.FlyoutSignInAgainFormat, SessionChatGptProfile.DisplayName);
+
+	public string SessionChatGptHeader => Constants.Codex.FlyoutSessionHeader;
+
+	/// <summary>The open session's profile (any engine; only a ChatGPT one is shown) and its auth-error flag, followed from the session pane.</summary>
+	public void ShowSession(string? chatGptProfileId, bool hasAuthError)
+	{
+		_sessionProfileId = chatGptProfileId;
+		_sessionHasAuthError = hasAuthError;
+		UpdateSessionChatGptProfile();
+	}
+
+	private void UpdateSessionChatGptProfile()
+	{
+		var id = _sessionProfileId;
+		var row = id == null ? null : ChatGptProfiles.FirstOrDefault(p => p.Id == id);
+		if (ReferenceEquals(row, SessionChatGptProfile))
+		{
+			OnPropertyChanged(nameof(SessionNeedsSignIn));
+			return;
+		}
+
+		SessionChatGptProfile = row;
+	}
+
+	/// <summary>Sign in again for the session's ChatGPT profile (the flyout's button).</summary>
+	[RelayCommand]
+	public Task SignInSessionProfileAgainAsync() => SignInAgainAsync(SessionChatGptProfile);
+
 	public bool IsSigningIn => SignIn != null;
 
 	public string CodexDefaultWarning => Constants.Codex.CodexDefaultWarning;
@@ -47,6 +94,7 @@ public sealed partial class ProfileViewModel
 			ChatGptProfiles.Add(new ChatGptProfileRowViewModel(profile));
 
 		IsChatGptAvailable = profiles != null && HasChatGptCapability;
+		UpdateSessionChatGptProfile();
 	}
 
 	private bool CanStartSignIn() => SignIn == null;

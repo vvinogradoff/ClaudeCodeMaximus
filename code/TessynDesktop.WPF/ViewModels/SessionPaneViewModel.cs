@@ -420,6 +420,9 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 		if (TryHandleTurnNotification(notification))
 			return;
 
+		if (TryHandleCodexLoginCompleted(notification))
+			return;
+
 		if (notification.TryGetDraftChanged(out var draftChanged))
 		{
 			_ui.Post(() => OnDraftChanged(draftChanged));

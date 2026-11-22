@@ -87,6 +87,19 @@ public static partial class Constants
 		public const string AuthErrorText = "Needs sign-in again";
 		public const string CatalogProfileText = "model list";
 		public const string PlanPrefix = "ChatGPT ";
+
+		/// <summary>The forms of ChatGPT profile ids (tdcp-spec 10.A14): Codex Default and the stored <c>codex_N</c>.</summary>
+		public const string CodexDefaultProfileId = "codex-default";
+		public const string StoredProfileIdPrefix = "codex_";
+
+		// The composer's auth notice for a ChatGPT profile (FR.33.13).
+		public const string BannerBrowserOpened = "The ChatGPT sign-in opened in your browser. Finish it there. (To sign in with a code, use Settings > Profiles.)";
+		public const string BannerOpenAddressFormat = "Open this address to sign in to ChatGPT: {0}";
+		public const string BannerSignedInFormat = "Signed in to ChatGPT as {0}. Send again to continue.";
+
+		// The profile flyout's section for the session's ChatGPT profile (FR.33.13).
+		public const string FlyoutSessionHeader = "This session's ChatGPT profile";
+		public const string FlyoutSignInAgainFormat = "Sign in again {0}";
 		public const string SignInAgainAction = "Sign in again";
 		public const string SignOutAction = "Sign out";
 		public const string DeleteAction = "Delete";

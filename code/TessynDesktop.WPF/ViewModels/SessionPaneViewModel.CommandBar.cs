@@ -119,6 +119,7 @@ public sealed partial class SessionPaneViewModel
 		}
 
 		IsCodexSession = SelectedModel != null ? ModelPickerList.EngineOf(model) == RemoteProtocol.Engines.Codex : _sessionEngine == RemoteProtocol.Engines.Codex;
+		UpdateChatGptProfile();
 	}
 
 	private static bool SameIds(IReadOnlyList<SelectorOptionViewModel> shown, IReadOnlyList<SelectorOptionViewModel> next) =>
@@ -163,6 +164,7 @@ public sealed partial class SessionPaneViewModel
 		_lastUsed = lastUsed;
 		_lastUsedNodeId = NodeId;
 		ApplyCurrentSelection();
+		UpdateChatGptProfile();
 	}
 
 	private void ApplyCurrentSelection()
@@ -232,7 +234,11 @@ public sealed partial class SessionPaneViewModel
 
 	partial void OnSelectedEffortChanged(SelectorOptionViewModel? value) => RememberPick(value, p => p with { EffortId = value!.Id });
 
-	partial void OnSelectedProfileChanged(SelectorOptionViewModel? value) => RememberPick(value, p => p with { ProfileId = value!.Id });
+	partial void OnSelectedProfileChanged(SelectorOptionViewModel? value)
+	{
+		RememberPick(value, p => p with { ProfileId = value!.Id });
+		UpdateChatGptProfile();
+	}
 
 	/// <summary>Reads the session's header again (after a resync) so its running flag and settings are current.</summary>
 	private async Task RefreshDetailAsync(string nodeId)
