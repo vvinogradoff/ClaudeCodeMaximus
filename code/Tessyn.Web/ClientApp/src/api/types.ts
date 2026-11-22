@@ -89,6 +89,9 @@ export interface SessionEntryDto {
 export interface SessionEntriesResult { nodeId: string; epoch: number; total: number; entries: SessionEntryDto[]; fileId?: string; seq?: number }
 export interface SessionSendResult { accepted: true; queued: boolean }
 
+export type AttentionQuestionType = 'yesNo' | 'single' | 'multi' | 'text';
+export interface AttentionQuestionDto { number: number; type: AttentionQuestionType; text: string; choices: string[]; recommended?: string; recommendedChoices: string[] }
+
 export interface AttentionItemDto {
 	id: string;
 	number: number;
@@ -104,9 +107,11 @@ export interface AttentionItemDto {
 	updatedUtc: string;
 	closedUtc?: string;
 	refs?: AttentionRefDto[];
+	questions?: AttentionQuestionDto[];
 }
 export interface AttentionListResult { nodeId: string; summary: AttentionSummaryDto; items: AttentionItemDto[] }
-export interface AttentionAnswer { itemId: string; text: string }
+export interface AttentionQuestionAnswer { number: number; value?: string; choices?: string[] }
+export interface AttentionAnswer { itemId: string; text: string; questions?: AttentionQuestionAnswer[] }
 export interface AttentionReplyResult { answeredIds: string[]; skippedIds: string[]; turnStarted: boolean }
 
 export interface ModelOptionDto { id: string; displayName: string; provider?: string }
