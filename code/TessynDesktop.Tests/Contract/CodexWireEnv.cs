@@ -37,7 +37,8 @@ internal sealed class CodexWireEnv : IAsyncDisposable
 		ClaudeProfiles.SetEmail(null, "system.account@example.com");
 		var labels = new ProfileLabelService(ClaudeProfiles, Settings);
 
-		Sections     = new SettingsSectionService(Settings, [new GeneralSettingsSection(new CodexSettingsService(Settings, new CodexExecutableLocator(LocatorEnvironment)))], Bus);
+		CodexSettings = new CodexSettingsService(Settings, new CodexExecutableLocator(LocatorEnvironment));
+		Sections     = new SettingsSectionService(Settings, [new GeneralSettingsSection(CodexSettings)], Bus);
 		ProfileAdmin = new ProfileAdminService(ClaudeProfiles, Settings, Bus);
 		CodexAdmin   = new CodexProfileAdminService(Codex.Profiles, Settings, Bus);
 		Registry     = new SessionRegistry(Settings, new FakeSessionFileService(), new FakeDirectoryLabelService(), new FakeClaudeSessionStatusService());
@@ -49,8 +50,8 @@ internal sealed class CodexWireEnv : IAsyncDisposable
 		var runInfo = new DaemonRunInfo();
 		Dispatcher = new TdcpDispatcher(
 		[
-			new ClientRpcModule(runInfo: runInfo, eventLog: new EventLog(Bus), settingsSections: Sections, profileAdmin: ProfileAdmin, engines: Engines,
-				codexProfiles: Codex.Profiles),
+			new ClientRpcModule(time: Codex.Clock, runInfo: runInfo, eventLog: new EventLog(Bus), settingsSections: Sections, profileAdmin: ProfileAdmin, engines: Engines,
+				codexProfiles: Codex.Profiles, codexSettings: CodexSettings),
 			new SettingsRpcModule(Sections),
 			new ProfileAdminRpcModule(ProfileAdmin, labels, Codex.Profiles, CodexAdmin, Settings),
 			new CatalogRpcModule(Codex.Claude, Settings, labels, Codex.Models, Codex.Profiles, Engines),
@@ -67,6 +68,7 @@ internal sealed class CodexWireEnv : IAsyncDisposable
 	public ScriptedProfileService ClaudeProfiles { get; }
 	public RemoteEventBus Bus { get; } = new();
 	public SettingsSectionService Sections { get; }
+	public CodexSettingsService CodexSettings { get; }
 	public ProfileAdminService ProfileAdmin { get; }
 	public CodexProfileAdminService CodexAdmin { get; }
 	public SessionRegistry Registry { get; }

@@ -58,6 +58,53 @@ public sealed class CodexWireContractTests : IAsyncLifetime
 	}
 
 	[Fact]
+	public async Task Hello_carries_the_read_only_Codex_status_on_both_transports_without_a_path_or_profile_data()
+	{
+		var loopback = await _env.CallAsync("client.hello");
+		var relay    = await _env.CallAsync("client.hello", transport: TdcpTransport.Relay);
+
+		AssertGolden("client.hello.codex", relay["codex"]!);
+		Assert.Equal(loopback["codex"]!.ToJsonString(), relay["codex"]!.ToJsonString());
+		Assert.True((bool)relay["codex"]!["found"]!);
+		Assert.Equal("0.171.0", (string?)relay["codex"]!["version"]);
+		Assert.Equal(Constants.Codex.TestedVersion, (string?)relay["codex"]!["testedVersion"]);
+		Assert.False(relay["codex"]!.AsObject().ContainsKey("note")); // the tested version has none
+		Assert.Equal(["found", "version", "testedVersion"], relay["codex"]!.AsObject().Select(p => p.Key).ToArray());
+		Assert.DoesNotContain("Tools", relay.ToJsonString()); // no path anywhere in the hello
+	}
+
+	[Fact]
+	public async Task Hello_reuses_its_Codex_reading_for_a_minute_and_then_shows_a_newer_version_and_a_missing_path()
+	{
+		var first = await _env.CallAsync("client.hello", transport: TdcpTransport.Relay);
+		_env.LocatorEnvironment.VersionOutputs[CodexWireEnv.CodexExe] = "codex-cli 0.172.0";
+		var cached = await _env.CallAsync("client.hello", transport: TdcpTransport.Relay);
+		_env.Codex.Clock.Advance(Constants.Remote.HelloCodexStatusLifetime);
+		var newer = await _env.CallAsync("client.hello", transport: TdcpTransport.Relay);
+		_env.Settings.Settings.CodexPath = @"C:\Nowhere\codex.exe";
+		_env.Codex.Clock.Advance(Constants.Remote.HelloCodexStatusLifetime);
+		var missing = await _env.CallAsync("client.hello", transport: TdcpTransport.Relay);
+
+		Assert.Equal("0.171.0", (string?)first["codex"]!["version"]);
+		Assert.Equal("0.171.0", (string?)cached["codex"]!["version"]);
+		Assert.Equal("0.172.0", (string?)newer["codex"]!["version"]);
+		Assert.StartsWith("Codex 0.172.0 is newer than the tested", (string?)newer["codex"]!["note"]);
+		Assert.False((bool)missing["codex"]!["found"]!);
+		Assert.False(missing["codex"]!.AsObject().ContainsKey("version"));
+		Assert.Equal(Constants.Codex.TestedVersion, (string?)missing["codex"]!["testedVersion"]);
+		Assert.DoesNotContain("Nowhere", missing.ToJsonString());
+	}
+
+	[Fact]
+	public async Task Hello_omits_the_Codex_status_on_a_daemon_without_the_Codex_settings_service()
+	{
+		var dispatcher = new TdcpDispatcher([new ClientRpcModule()]);
+		var response = (await dispatcher.HandleTextAsync("""{"jsonrpc":"2.0","id":1,"method":"client.hello"}""", TdcpTransport.Relay, CancellationToken.None))!;
+
+		Assert.False(response["result"]!.AsObject().ContainsKey("codex"));
+	}
+
+	[Fact]
 	public void The_real_availability_lists_Codex_only_when_the_locator_finds_it()
 	{
 		var engines = new ISessionEngine[] { new TessynDesktop.Tests.Services.Engines.FakeSessionEngine("claude"), new TessynDesktop.Tests.Services.Engines.FakeSessionEngine("codex") };

@@ -117,6 +117,12 @@ public static partial class Constants
 		/// <summary>Oldest client protocol version the daemon still serves.</summary>
 		public const int MinProtocolVersion = RemoteProtocol.MinProtocolVersion;
 
+		/// <summary>
+		/// How long <c>client.hello</c> reuses its read-only Codex status (FR.33.17, tdcp-spec 10.A14). Reading it runs <c>codex --version</c>, and the
+		/// web calls <c>client.hello</c> on every resync, so the reading is shared; a changed Codex path shows within this time.
+		/// </summary>
+		public static readonly TimeSpan HelloCodexStatusLifetime = TimeSpan.FromMinutes(1);
+
 		/// <summary>Daemon discovery file (<c>daemon.json</c>) and the local token file.</summary>
 		public static class Discovery
 		{

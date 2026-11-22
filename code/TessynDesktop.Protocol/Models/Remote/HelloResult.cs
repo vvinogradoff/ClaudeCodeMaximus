@@ -14,6 +14,7 @@ namespace TessynDesktop.Models.Remote;
 /// <param name="EventSeq">Seq of the newest event in the daemon's event log at the time of the call (0 before the first); resume a stream from it.</param>
 /// <param name="Elevated">True when the daemon process runs elevated (as administrator), false when it runs normally; null from an older daemon that does not report it (FR.32.12, tdcp-spec 10.A10).</param>
 /// <param name="Engines">The session engines whose CLI was found (<c>claude</c>, <c>codex</c>), with the capability <c>engines</c> (FR.33, tdcp-spec 10.A14); null from an older daemon.</param>
+/// <param name="Codex">The read-only Codex status for every client, the relay included (FR.33.17, tdcp-spec 10.A14): no path, no profile data; null from an older daemon or one without the Codex engine.</param>
 /// <remarks>Created by Claude</remarks>
 public sealed record HelloResult(
 	int ProtocolVersion,
@@ -25,4 +26,5 @@ public sealed record HelloResult(
 	int MinProtocolVersion,
 	long EventSeq,
 	bool? Elevated = null,
-	IReadOnlyList<string>? Engines = null);
+	IReadOnlyList<string>? Engines = null,
+	CodexHelloStatusDto? Codex = null);
