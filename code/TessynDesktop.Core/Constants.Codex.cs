@@ -243,6 +243,12 @@ public static partial class Constants
 			public const string DecisionAccept = "accept";
 			public const string ElicitationDecline = "decline";
 			public const string PermissionScopeTurn = "turn";
+
+			/// <summary>FR.33.8: a model takes <c>localImage</c> items when its input modalities list this.</summary>
+			public const string ImageModality = "image";
+
+			/// <summary>The MIME prefix of an image attachment (FR.31).</summary>
+			public const string ImageMimePrefix = "image/";
 		}
 
 		/// <summary>JSON-RPC method names of the stable subset Tessyn uses.</summary>
@@ -352,6 +358,12 @@ public static partial class Constants
 		public static class Texts
 		{
 			public const string InterruptedMarker = "[interrupted]";
+
+			/// <summary>FR.33.5: the turn's ChatGPT profile was deleted while it ran (its host was stopped).</summary>
+			public const string ProfileRemovedStop = "Codex stopped: the profile was removed.";
+
+			/// <summary>The turn's host was stopped on purpose ("Terminate all", daemon exit).</summary>
+			public const string HostStoppedOnPurpose = "Codex was stopped. Send again to continue.";
 
 			/// <summary>FR.33.15: the line added to the orchestration tool descriptions.</summary>
 			public const string GptToolDescription = " GPT models (ids from catalog.get / the model list, for example the ids Codex reports) run on the user's ChatGPT plan through Codex.";

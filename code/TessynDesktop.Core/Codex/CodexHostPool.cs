@@ -114,6 +114,8 @@ public sealed class CodexHostPool : IAsyncDisposable
 				return;
 		}
 
+		// The turns still running on it end with "the profile was removed" (the listeners get the reason before the process closes).
+		await host.StopAsync(CodexHostStopReason.ProfileRemoved).ConfigureAwait(false);
 		await host.DisposeAsync().ConfigureAwait(false);
 	}
 

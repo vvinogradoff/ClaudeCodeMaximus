@@ -93,6 +93,40 @@ public sealed class CodexThreadConfigBuilder
 		return copy;
 	}
 
+	/// <summary>
+	/// <paramref name="text"/> with every secret of the thread's config (header and env values, and the agent token) replaced by <c>&lt;redacted&gt;</c>.
+	/// For error texts before they are logged or written: Codex may quote a config value in a <c>failed to load configuration</c> error.
+	/// </summary>
+	public string RedactText(string text, JsonObject? config, string? agentToken)
+	{
+		if (string.IsNullOrEmpty(text))
+			return text;
+
+		var secrets = new List<string>();
+		if (!string.IsNullOrEmpty(agentToken))
+			secrets.Add(agentToken);
+		if (config?[Constants.Codex.Config.McpServers] is JsonObject servers)
+		{
+			foreach (var (_, server) in servers)
+			{
+				foreach (var key in new[] { Constants.Codex.Config.HttpHeaders, Constants.Codex.Config.Env })
+				{
+					if (server?[key] is not JsonObject values)
+						continue;
+					foreach (var (_, value) in values)
+					{
+						if (value is JsonValue v && v.TryGetValue<string>(out var secret) && !string.IsNullOrEmpty(secret))
+							secrets.Add(secret);
+					}
+				}
+			}
+		}
+
+		foreach (var secret in secrets.Distinct().OrderByDescending(s => s.Length))
+			text = text.Replace(secret, Constants.Codex.Config.Redacted, StringComparison.Ordinal);
+		return text;
+	}
+
 	/// <summary>The cmx entry, under the same preconditions as the Claude <c>--mcp-config</c> (a listener and a node identity, FR.14.3).</summary>
 	private JsonObject? CmxServer(SessionNodeModel node)
 	{

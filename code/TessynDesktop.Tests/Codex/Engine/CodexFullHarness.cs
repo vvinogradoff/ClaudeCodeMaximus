@@ -24,6 +24,7 @@ internal sealed class CodexFullHarness : IAsyncDisposable
 	{
 		H = new TurnEngineHarness(agentTools: true);
 		S = new CodexServicesFixture(H.Settings, H.Files);
+		Entries = new InMemoryEntryReader(H.Files);
 
 		var config = new CodexThreadConfigBuilder(H.Settings, new Lazy<IAgentMcpServer>(() => Mcp), new McpConfigMerger(new FakeMcpOAuthService()));
 		Codex  = new CodexSessionEngine(S.Pool, config, H.Files, H.Settings, registry: null, profiles: S.Resolver, time: EngineClock,
@@ -36,7 +37,7 @@ internal sealed class CodexFullHarness : IAsyncDisposable
 		var resolver       = new ProfileResolver(H.Settings, claudeProfiles);
 		var modelSettings  = new SessionModelSettings(H.Settings, S.Claude);
 		Interactive = new TurnEngine(H.Files, H.Registry, H.Turns, Router, H.Settings, new Lazy<ITelegramBridgeService>(() => H.Telegram),
-			H.Attention.Service, H.Tags.Service, [Progress], authErrors: H.AuthErrors);
+			H.Attention.Service, H.Tags.Service, [Progress], authErrors: H.AuthErrors, entries: Entries);
 		TurnSettings = new TurnSettingsResolver(H.Settings, H.Turns, claudeProfiles, S.Claude, labels, resolver, modelSettings, Router, S.Resolver);
 		Headless = new SessionTurnService(Router, H.Files, H.Settings, claudeProfiles, new FakeRegistryForTurnService(), S.Claude,
 			new Lazy<ITelegramBridgeService>(() => H.Telegram), H.Attention.Service, H.Tags.Service, labels, [Progress],
@@ -44,6 +45,7 @@ internal sealed class CodexFullHarness : IAsyncDisposable
 	}
 
 	public TurnEngineHarness H { get; }
+	public InMemoryEntryReader Entries { get; }
 	public CodexServicesFixture S { get; }
 	public ManualTimerTimeProvider EngineClock { get; } = new();
 	public FakeCmxMcpServer Mcp { get; } = new();
@@ -76,11 +78,17 @@ internal sealed class CodexFullHarness : IAsyncDisposable
 	}
 
 	/// <summary>An interactive turn the way a client sends it: the settings resolved for the session (and the per-turn picks), then the turn.</summary>
-	public async Task<TurnOutcome> RunAsync(SessionNodeModel node, string message = "Hi", TurnOptionsModel? options = null, ITurnObserver? observer = null)
+	public async Task<TurnOutcome> RunAsync(SessionNodeModel node, string message = "Hi", TurnOptionsModel? options = null, ITurnObserver? observer = null,
+		TurnEngine? via = null)
 	{
 		var settings = await TurnSettings.ResolveAsync(node, options);
-		return await Interactive.RunAsync(new TurnRequest(node, message, settings, false), observer).WaitAsync(TimeSpan.FromSeconds(20));
+		return await (via ?? Interactive).RunAsync(new TurnRequest(node, message, settings, false), observer).WaitAsync(TimeSpan.FromSeconds(20));
 	}
+
+	/// <summary>Another interactive pipeline over the same pieces, with the given profile switch service (the one the daemon has).</summary>
+	public TurnEngine NewInteractive(IProfileSwitchService profileSwitch) =>
+		new(H.Files, H.Registry, H.Turns, Router, H.Settings, new Lazy<ITelegramBridgeService>(() => H.Telegram),
+			H.Attention.Service, H.Tags.Service, [Progress], profileSwitch: profileSwitch, authErrors: H.AuthErrors, entries: Entries);
 
 	public JsonElement[] Requests(string method) => S.Requests(method);
 

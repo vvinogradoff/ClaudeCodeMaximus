@@ -98,6 +98,13 @@ public sealed class CodexModelCatalog : ICodexModelCatalog
 			}
 
 			var models = Order(listed.Where(m => !m.Hidden).Select(ToCatalogModel)).ToList();
+			if (models.Count == 0)
+			{
+				// An empty answer is never stored: it would make every GPT id "not in the catalog" and move every Codex session to Claude.
+				_log.Warning("GPT catalog: model/list on profile {Profile} returned no models; the cached list ({Count} models) is kept", source.ProfileId, Models.Count);
+				return false;
+			}
+
 			var cache  = new CodexModelCacheModel { FetchedAtUtc = _time.GetUtcNow(), SourceProfileId = source.ProfileId, Models = models };
 			Volatile.Write(ref _cache, cache);
 			SaveCache(cache);

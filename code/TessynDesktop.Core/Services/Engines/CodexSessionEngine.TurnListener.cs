@@ -28,6 +28,7 @@ public sealed partial class CodexSessionEngine
 			_dispatch = dispatch;
 			_host.NotificationReceived += OnNotification;
 			_host.Crashed              += OnCrashed;
+			_host.Stopped              += OnStopped;
 		}
 
 		public Task<TurnFinish> Finished => _done.Task;
@@ -47,6 +48,7 @@ public sealed partial class CodexSessionEngine
 		{
 			_host.NotificationReceived -= OnNotification;
 			_host.Crashed              -= OnCrashed;
+			_host.Stopped              -= OnStopped;
 		}
 
 		private void OnNotification(CodexNotification notification)
@@ -67,13 +69,16 @@ public sealed partial class CodexSessionEngine
 				}
 
 				if (turnEvent is CodexTurnCompletedEvent completed)
-					_done.TrySetResult(new TurnFinish(completed, null));
+					_done.TrySetResult(new TurnFinish(completed, null, null));
 			}
 		}
 
-		private void OnCrashed(CodexHostCrashInfo crash) => _done.TrySetResult(new TurnFinish(null, crash));
+		private void OnCrashed(CodexHostCrashInfo crash) => _done.TrySetResult(new TurnFinish(null, crash, null));
+
+		/// <summary>The host is stopped on purpose (a profile delete, Terminate all): no turn/completed will come, so the turn ends now.</summary>
+		private void OnStopped(CodexHostStopReason reason) => _done.TrySetResult(new TurnFinish(null, null, reason));
 	}
 
-	/// <summary>How a listened turn ended: its <c>turn/completed</c>, or the crash of its host.</summary>
-	private sealed record TurnFinish(CodexTurnCompletedEvent? Completion, CodexHostCrashInfo? Crash);
+	/// <summary>How a listened turn ended: its <c>turn/completed</c>, the crash of its host, or a deliberate stop of its host.</summary>
+	private sealed record TurnFinish(CodexTurnCompletedEvent? Completion, CodexHostCrashInfo? Crash, CodexHostStopReason? Stopped);
 }

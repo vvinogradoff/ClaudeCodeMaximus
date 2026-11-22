@@ -30,7 +30,7 @@ internal sealed class CodexEngineFixture : IAsyncDisposable
 	private int _nodeCounter;
 
 	public CodexEngineFixture(bool agentTools = true, string profileId = Constants.Codex.Profiles.DefaultProfileId, string? codexHome = null,
-		ISessionRegistry? registry = null)
+		ISessionRegistry? registry = null, IAttachmentService? attachments = null, ISessionModelCatalog? models = null)
 	{
 		Dir = Path.Combine(Path.GetTempPath(), $"codex-engine-tests-{Guid.NewGuid():N}");
 		Directory.CreateDirectory(Dir);
@@ -41,7 +41,7 @@ internal sealed class CodexEngineFixture : IAsyncDisposable
 		Pool     = new CodexHostPool(Launcher, time: HostClock, executablePath: Executable);
 		Config   = new CodexThreadConfigBuilder(Settings, new Lazy<IAgentMcpServer>(() => Mcp), new McpConfigMerger(OAuth));
 		_profiles = new FixedProfileSelector(new CodexProfileRef(profileId, codexHome));
-		Engine   = new CodexSessionEngine(Pool, Config, Files, Settings, registry, _profiles, EngineClock);
+		Engine   = new CodexSessionEngine(Pool, Config, Files, Settings, registry, _profiles, EngineClock, models: models, attachments: attachments);
 	}
 
 	public string Dir { get; }

@@ -90,6 +90,12 @@ public sealed partial class CodexAppServerHost : IAsyncDisposable
 	/// <summary>The process ended without being asked to (FR.33.6).</summary>
 	public event Action<CodexHostCrashInfo>? Crashed;
 
+	/// <summary>
+	/// The process is being stopped on purpose (a profile delete, Terminate all, dispose, the idle shutdown). Raised before the process is closed,
+	/// so turns still waiting on it end at once with an error instead of waiting for a <c>turn/completed</c> that never comes.
+	/// </summary>
+	public event Action<CodexHostStopReason>? Stopped;
+
 	/// <summary>True when the thread was started or resumed on the current process and not unsubscribed or closed since.</summary>
 	public bool IsThreadLoaded(string threadId)
 	{
@@ -220,10 +226,10 @@ public sealed partial class CodexAppServerHost : IAsyncDisposable
 		InvokeAsync<CodexEmptyResult>(Constants.Codex.Methods.AccountLogout, null, cancellationToken);
 
 	/// <summary>Closes the app-server's stdin and waits up to <see cref="CodexHostOptions.StopGrace"/> for it to exit, then kills it.</summary>
-	public Task StopAsync() => StopCoreAsync(onlyIfIdle: false, kill: false);
+	public Task StopAsync(CodexHostStopReason reason = CodexHostStopReason.Requested) => StopCoreAsync(onlyIfIdle: false, kill: false, reason);
 
 	/// <summary>Kills the app-server at once ("Terminate all", FR.15.5).</summary>
-	public Task TerminateAsync() => StopCoreAsync(onlyIfIdle: false, kill: true);
+	public Task TerminateAsync() => StopCoreAsync(onlyIfIdle: false, kill: true, CodexHostStopReason.Terminated);
 
 	public async ValueTask DisposeAsync()
 	{
@@ -457,7 +463,7 @@ public sealed partial class CodexAppServerHost : IAsyncDisposable
 		}
 	}
 
-	private async Task StopCoreAsync(bool onlyIfIdle, bool kill)
+	private async Task StopCoreAsync(bool onlyIfIdle, bool kill, CodexHostStopReason reason)
 	{
 		await _gate.WaitAsync().ConfigureAwait(false);
 		try
@@ -480,6 +486,15 @@ public sealed partial class CodexAppServerHost : IAsyncDisposable
 				return;
 
 			session.StopRequested = true;
+			try
+			{
+				Stopped?.Invoke(reason);
+			}
+			catch (Exception ex)
+			{
+				_log.Error(ex, "A Codex host-stopped handler failed");
+			}
+
 			if (kill)
 				session.Process.Kill();
 			else
@@ -622,7 +637,7 @@ public sealed partial class CodexAppServerHost : IAsyncDisposable
 		try
 		{
 			_log.Information("Codex ({Profile}) app-server idle for {Idle}; stopping it", ProfileId, _options.IdleShutdown);
-			await StopCoreAsync(onlyIfIdle: true, kill: false).ConfigureAwait(false);
+			await StopCoreAsync(onlyIfIdle: true, kill: false, CodexHostStopReason.Idle).ConfigureAwait(false);
 		}
 		catch (Exception ex)
 		{

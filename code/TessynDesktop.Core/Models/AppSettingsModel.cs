@@ -214,6 +214,9 @@ public sealed class AppSettingsModel
 	/// <summary>FR.33.14: the GPT tier table, top row first; null means the defaults (<c>Constants.Codex.Tiers.Defaults</c>).</summary>
 	public List<CodexModelTierModel>? CodexModelTiers { get; set; }
 
+	/// <summary>FR.33.5: the highest stored ChatGPT profile number ever added; a deleted profile's id is never given out again.</summary>
+	public int CodexLastProfileNumber { get; set; }
+
 	/// <summary>FR.33.5: the ChatGPT profiles (the stored ones, and Codex Default once its account was read).</summary>
 	public List<CodexProfileModel> CodexProfiles { get; set; } = [];
 }

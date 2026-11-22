@@ -22,6 +22,7 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 	private readonly ISessionModelSettings _modelSettings;
 	private readonly ISessionEngineRouter? _engines;
 	private readonly TessynDesktop.Codex.ICodexProfileResolver? _codexProfiles;
+	private readonly TessynDesktop.Codex.CodexProfileNaming _codexNaming = new();
 
 	public TurnSettingsResolver(
 		IAppSettingsService appSettings,
@@ -54,7 +55,10 @@ public sealed class TurnSettingsResolver : ITurnSettingsResolver
 			var gptTurn = _modelSettings.ResolveTurn(node, options);
 			if (string.Equals(_engines.Peek(node, gptTurn.ModelId).EngineId, Constants.SessionEngines.Codex, StringComparison.OrdinalIgnoreCase))
 			{
-				var choice = _codexProfiles.ResolveForTurn(node, options?.ProfileName);
+				// FR.12.28, FR.33.5: a ChatGPT switch queued while the session ran is the profile of its next turn (it is applied under the lock),
+				// as the Claude branch below resolves the queued target.
+				var queuedCodex = options?.ProfileName == null && _codexNaming.IsCodexProfileId(node.PendingProfileId) ? node.PendingProfileId : null;
+				var choice  = _codexProfiles.ResolveForTurn(node, options?.ProfileName ?? queuedCodex);
 				if (!choice.IsResolved)
 					throw new TdcpException(choice.Error!);
 

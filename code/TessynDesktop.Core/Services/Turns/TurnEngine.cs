@@ -36,6 +36,7 @@ public sealed class TurnEngine : ITurnEngine
 	private readonly ISessionAuthErrorTracker? _authErrors;
 
 	private readonly ConcurrentDictionary<string, TurnNodeContext> _nodes = new();
+	private readonly UserEntryIdLocator _userEntries;
 
 	public TurnEngine(
 		ISessionFileService files,
@@ -49,8 +50,10 @@ public sealed class TurnEngine : ITurnEngine
 		IEnumerable<ITurnProgressSink>? progressSinks = null,
 		IProfileSwitchService? profileSwitch = null,
 		ISessionCompactionService? compaction = null,
-		ISessionAuthErrorTracker? authErrors = null)
+		ISessionAuthErrorTracker? authErrors = null,
+		ISessionEntryReader? entries = null)
 	{
+		_userEntries      = new UserEntryIdLocator(entries);
 		_files            = files;
 		_registry         = registry;
 		_turns            = turns;
@@ -91,8 +94,9 @@ public sealed class TurnEngine : ITurnEngine
 		if (request.AutoCompact && string.IsNullOrEmpty(request.Message))
 			return await RunCompactionOnlyAsync(request, observer ?? new NullTurnObserver(), cancellationToken);
 
-		// FR.33.1, FR.33.4: the engine of the turn's resolved model, resolved (and stored on the session) before anything is written to the transcript.
-		var engine   = _engines.ForTurn(node, settings.ModelId);
+		// FR.33.1, FR.33.4: the engine the turn's model would run on, looked at before anything is written (nothing is stored here). The engine is
+		// chosen, stored and an engine change applied only under the turn lock below, so none of it can touch a turn that is still running.
+		var engine   = _engines.Peek(node, settings.ModelId);
 
 		var context  = _nodes.GetOrAdd(nodeId, _ => new TurnNodeContext());
 		var turnId   = request.TurnId ?? Guid.NewGuid().ToString(Constants.Turns.TurnIdFormat);
@@ -123,35 +127,14 @@ public sealed class TurnEngine : ITurnEngine
 			// bridge was enabled. Fire-and-forget: never throws, never delays the turn.
 			_ = _telegramBridge.Value.EnsureTopicForSessionAsync(node);
 
-			// FR.33.4: the first turn on a new engine detaches the other engine's conversation (the new one is seeded from the transcript below).
-			if (_engines.ApplyEngineChange(node, engine) is { } engineChanged)
-				_files.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, engineChanged);
-
 			// Store only the clean user message in the file (FR.11.2).
 			_files.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, request.Message, profileName: settings.ProfileDisplayName);
 			observer.UserEntryAppended(DateTimeOffset.UtcNow, settings.ProfileDisplayName);
-
-			var sessionId = engine.GetConversationId(node);
+			var userEntryId = _userEntries.Locate(node.FileName, request.Message);
 
 			// The cross-profile adoption (FR.11.13) moves the transcript and session folder, so it runs below, under the turn lock:
-			// before it a queued message could move the files from under the turn that is still running.
-
-			var augmentedMessage = request.Message + BuildInstructionBlock(node, engine, request.IsNewBranch, sessionId == null);
-
-			// Proactive context reload (FR.11.10): if the file has history but no session id, wrap with context.
-			var messageToSend = augmentedMessage;
-			if (sessionId == null)
-			{
-				var entries = _files.ReadEntries(node.FileName);
-				var priorEntries = entries
-					.Where(e => e.Role is Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant)
-					.ToList();
-				if (priorEntries.Count > 1) // more than just the current prompt
-				{
-					messageToSend = InstructionBlockBuilder.BuildContextPreamble(entries, augmentedMessage);
-					_log.Information("Proactive context reload for session {FileName}", node.FileName);
-				}
-			}
+			// before it a queued message could move the files from under the turn that is still running. The conversation id, the instruction
+			// block and the context preamble are read there too, after a queued profile switch and an engine change have been applied.
 
 			var preparation = await engine.PrepareTurnAsync(node, settings);
 
@@ -187,6 +170,36 @@ public sealed class TurnEngine : ITurnEngine
 				_profileSwitch?.ApplyPending(node);
 				_profileSwitch?.RecordTurnProfile(node, settings.ProfileDisplayName);
 
+				// FR.33.1, FR.33.4: the turn's engine, stored on the session, and the engine change (the other engine's conversation is detached and
+				// the new one is seeded from the transcript), as the headless path does: under the lock, after the previous turn ended.
+				var turnEngine = _engines.ForTurn(node, settings.ModelId);
+				if (!ReferenceEquals(turnEngine, engine))
+				{
+					engine      = turnEngine;
+					preparation = await engine.PrepareTurnAsync(node, settings);
+				}
+
+				if (_engines.ApplyEngineChange(node, engine) is { } engineChanged)
+					_files.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, engineChanged);
+
+				var sessionId        = engine.GetConversationId(node);
+				var augmentedMessage = request.Message + BuildInstructionBlock(node, engine, request.IsNewBranch, sessionId == null);
+
+				// Proactive context reload (FR.11.10): if the file has history but no session id, wrap with context.
+				var messageToSend = augmentedMessage;
+				if (sessionId == null)
+				{
+					var entries = _files.ReadEntries(node.FileName);
+					var priorEntries = entries
+						.Where(e => e.Role is Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant)
+						.ToList();
+					if (priorEntries.Count > 1) // more than just the current prompt
+					{
+						messageToSend = InstructionBlockBuilder.BuildContextPreamble(entries, augmentedMessage);
+						_log.Information("Proactive context reload for session {FileName}", node.FileName);
+					}
+				}
+
 				// Cross-profile session adoption (FR.11.13): if this session was created under a different profile than the one now
 				// active, move its JSONL into the active profile's store before attempting --resume. Under the turn lock (ISSUE.013 N1).
 				if (sessionId != null)
@@ -199,7 +212,7 @@ public sealed class TurnEngine : ITurnEngine
 				// Streaming Session Mode (FR.19) runs in the session's persistent process, whose sink routes every event to the active run.
 				var persistent = node.IsStreamingMode;
 				var engineRequest = new EngineTurnRequest(node, messageToSend, augmentedMessage, sessionId, settings, preparation,
-					EngineTurnMode.Interactive, persistent, persistent ? StreamSinkFor(context, node) : null);
+					EngineTurnMode.Interactive, persistent, persistent ? StreamSinkFor(context, node) : null, userEntryId);
 				await engine.RunTurnAsync(engineRequest, run, ct);
 
 				// Post-response step of the client (Auto-Compact, FR.11.6), still holding the turn lock.

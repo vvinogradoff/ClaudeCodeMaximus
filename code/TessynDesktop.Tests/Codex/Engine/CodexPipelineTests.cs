@@ -124,8 +124,9 @@ public sealed class CodexPipelineTests : IAsyncLifetime
 		Assert.Null(node.ClaudeSessionId);
 		Assert.Equal(["claude-sess-1"], node.PriorClaudeSessionIds);
 		Assert.NotNull(node.CodexThreadId);
+		// The interactive USER entry is written before the turn lock; the engine change is applied under it (review M1), so it follows the USER entry.
 		var written = _p.H.Files.Entries.Skip(2).Select(e => (e.Role, e.Content)).Take(2).ToList();
-		Assert.Equal([("SYSTEM", EngineChangedToCodex), ("USER", "Go on")], written);
+		Assert.Equal([("USER", "Go on"), ("SYSTEM", EngineChangedToCodex)], written);
 		var input = CodexEngineFixture.InputText(_p.Requests("turn/start").Single());
 		Assert.StartsWith("The following is the conversation history", input);
 		Assert.Contains("[Human]: Plan the release", input);

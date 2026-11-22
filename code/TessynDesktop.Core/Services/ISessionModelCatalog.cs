@@ -20,10 +20,13 @@ public interface ISessionModelCatalog
 	/// <summary>True when the id is a GPT model of the catalog.</summary>
 	bool IsGpt(string? modelId);
 
-	/// <summary>True when the id looks like a GPT model (<c>gpt-</c> prefix, or <c>o</c> followed by a digit), in the catalog or not (FR.33.15).</summary>
+	/// <summary>
+	/// True when the id looks like a GPT model (<c>gpt-</c> prefix, or <c>o</c> followed by a digit) and is not a model of the Anthropic or Ollama
+	/// list (FR.33.15: catalog membership comes first). It may or may not be in the GPT list.
+	/// </summary>
 	bool LooksLikeGpt(string? modelId);
 
-	/// <summary>True once the GPT list was loaded (from the cache or Codex); before that no id can be told to be a GPT model.</summary>
+	/// <summary>True once a GPT list with at least one model was loaded (from the cache or Codex); before that no id can be told to be a GPT model.</summary>
 	bool IsGptCatalogLoaded { get; }
 
 	/// <summary>The efforts the model offers, in picker order without Default; Claude, Ollama and unknown models get the Claude list.</summary>
