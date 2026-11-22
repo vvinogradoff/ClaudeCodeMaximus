@@ -42,7 +42,7 @@ public sealed class WpfAppE2ETests : IDisposable
 		_directoryId = _env.Directory.NodeId;
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Registry, _env.Streaming, _env.Attention, activity);
+		var states = new SessionStateBuilder(_env.Registry, TestEngines.Claude(_env.Streaming), _env.Attention, activity);
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Settings), _env.Registry, states, activity, new TreeVersionTracker(),
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
 		_host = new ClientTestHost((run, log) => new TdcpDispatcher([new ClientRpcModule(runInfo: run, eventLog: log), _env.Module, tree]));

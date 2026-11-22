@@ -37,11 +37,9 @@ public sealed class SessionTurnServiceProgressTests : IDisposable
 		_appSettings.Settings.AgentToolsEnabled = false;
 
 		_sut = new SessionTurnService(
-			_process, _files, _appSettings, _profiles,
-			new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService()),
-			_registry, new RecordingSessionStatusService(), new FakeModelServiceForTurnService(),
-			new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()),
-			_streaming, _attention.Service, _tags.Service,
+			TestEngines.Claude(_streaming, _process, _files, _appSettings, new RecordingSessionStatusService(), new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService())), _files, _appSettings, _profiles,
+			_registry, new FakeModelServiceForTurnService(),
+			new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()), _attention.Service, _tags.Service,
 			new ProfileLabelService(_profiles, _appSettings), [_sink]);
 	}
 

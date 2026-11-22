@@ -47,7 +47,7 @@ public sealed class WpfReplyDraftRecencyE2ETests : IDisposable
 		File.SetLastWriteTimeUtc(Path.Combine(_root, "drafts", _other.FileName + Constants.DraftFileExtension), DateTime.UtcNow.AddHours(-1));
 
 		var activity = new SessionActivityService(_env.Base.Files, _drafts);
-		var states = new SessionStateBuilder(_env.Base.Registry, new StubStreamingManager(), _env.Attention, activity);
+		var states = new SessionStateBuilder(_env.Base.Registry, TestEngines.Claude(new StubStreamingManager()), _env.Attention, activity);
 		var reader = new RemoteTreeReader(_env.Base.Settings);
 		var labels = new FakeDirectoryLabelService();
 		var tree = new TreeRemoteRpcModule(reader, _env.Base.Registry, states, activity, new TreeVersionTracker(), labels, new InProcFakeIndexService(), new FakeSessionSearchService());

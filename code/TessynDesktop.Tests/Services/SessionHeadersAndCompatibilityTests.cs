@@ -252,11 +252,11 @@ public sealed class SessionHeadersAndCompatibilityTests : IDisposable
 		var failing = new FailingLastUsedReader(_env.Reader);
 		var module = new SessionRpcModule(
 			_env.Registry, _env.Settings,
-			new SessionStateBuilder(_env.Registry, new StubStreamingManager(), new FakeAttentionService(), new FakeActivityService()),
+			new SessionStateBuilder(_env.Registry, TestEngines.Claude(new StubStreamingManager()), new FakeAttentionService(), new FakeActivityService()),
 			new StubTagService(), new FakeAttentionService(), failing, _env.Epochs, _env.Models,
 			new ProfileLabelService(_env.ProfileService, _env.Settings), new SessionSendService(new StubTurnService(), _env.Registry),
 			new TurnOptionsResolver(_env.Models, _env.Settings, new ProfileLabelService(_env.ProfileService, _env.Settings)),
-			new StubTurnService(), new StubStreamingManager());
+			new StubTurnService(), TestEngines.Claude(new StubStreamingManager()));
 
 		var result = await RemoteTestHelpers.CallAsync(module, "session.get", _env.NodeParams());
 		var legacy = await _env.LegacyResultAsync("session.get", _env.NodeParams());
@@ -288,10 +288,10 @@ public sealed class SessionHeadersAndCompatibilityTests : IDisposable
 		var labels = new ProfileLabelService(_env.ProfileService, _env.Settings);
 		var module = new SessionRpcModule(
 			_env.Registry, _env.Settings,
-			new SessionStateBuilder(_env.Registry, new StubStreamingManager(), new FakeAttentionService(), new FakeActivityService()),
+			new SessionStateBuilder(_env.Registry, TestEngines.Claude(new StubStreamingManager()), new FakeAttentionService(), new FakeActivityService()),
 			new StubTagService(), new FakeAttentionService(), _env.Reader, _env.Epochs, models, labels,
 			new SessionSendService(new StubTurnService(), _env.Registry), new TurnOptionsResolver(_env.Models, _env.Settings, labels),
-			new StubTurnService(), new StubStreamingManager());
+			new StubTurnService(), TestEngines.Claude(new StubStreamingManager()));
 
 		var registry = new TdcpMethodRegistry();
 		module.Register(registry);

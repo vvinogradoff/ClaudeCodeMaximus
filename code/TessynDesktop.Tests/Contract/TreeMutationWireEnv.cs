@@ -28,7 +28,7 @@ internal sealed class TreeMutationWireEnv : IDisposable
 		var labels   = new FakeDirectoryLabelService();
 		var tree     = new TreeMutationService(Turn.Registry, Turn.Settings, labels, Origins);
 		var resolver = new TurnSettingsResolver(Turn.Settings, Turn.Turns, Turn.ProfileService, Turn.Models, new ProfileLabelService(Turn.ProfileService, Turn.Settings));
-		var options  = new SessionOptionsService(Turn.Registry, Turn.Settings, Turn.Engine, resolver, Turn.Streaming, Turn.Turns);
+		var options  = new SessionOptionsService(Turn.Registry, Turn.Settings, Turn.Engine, resolver, TestEngines.Claude(Turn.Streaming), Turn.Turns);
 		var local    = new LocalToolsService(Turn.Registry, Turn.Settings);
 
 		var runInfo = new DaemonRunInfo();
@@ -41,7 +41,7 @@ internal sealed class TreeMutationWireEnv : IDisposable
 			new TreeMutationRpcModule(tree),
 			new SessionOptionsRpcModule(options),
 			new LocalToolsRpcModule(local),
-			new TurnRpcModule(Turn.Registry, new TurnOptionsResolver(Turn.Models, Turn.Settings, new ProfileLabelService(Turn.ProfileService, Turn.Settings)), resolver, new TurnSendService(Turn.Engine, Turn.Registry), Turn.Engine, Turn.Turns, Turn.Streaming, new SessionModelSettings(Turn.Settings)),
+			new TurnRpcModule(Turn.Registry, new TurnOptionsResolver(Turn.Models, Turn.Settings, new ProfileLabelService(Turn.ProfileService, Turn.Settings)), resolver, new TurnSendService(Turn.Engine, Turn.Registry), Turn.Engine, Turn.Turns, TestEngines.Claude(Turn.Streaming), new SessionModelSettings(Turn.Settings)),
 		]);
 		Host = new TdcpTestHost(Dispatcher, bus: Turn.Bus, runInfo: runInfo);
 	}

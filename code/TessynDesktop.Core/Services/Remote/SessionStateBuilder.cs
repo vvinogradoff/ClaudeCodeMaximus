@@ -8,7 +8,7 @@ namespace TessynDesktop.Services;
 public sealed class SessionStateBuilder : ISessionStateBuilder
 {
 	private readonly ISessionRegistry _registry;
-	private readonly IClaudeStreamingSessionManager _streaming;
+	private readonly ISessionEngineRouter _engines;
 	private readonly IAttentionService _attention;
 	private readonly ISessionActivityService _activity;
 	private readonly ISessionAuthErrorTracker? _authErrors;
@@ -18,7 +18,7 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 
 	public SessionStateBuilder(
 		ISessionRegistry registry,
-		IClaudeStreamingSessionManager streaming,
+		ISessionEngineRouter engines,
 		IAttentionService attention,
 		ISessionActivityService activity,
 		ISessionAuthErrorTracker? authErrors = null,
@@ -30,7 +30,7 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 		_profiles  = profiles;
 		_scheduler = scheduler;
 		_registry  = registry;
-		_streaming = streaming;
+		_engines = engines;
 		_attention = attention;
 		_activity  = activity;
 		_authErrors = authErrors;
@@ -54,7 +54,7 @@ public sealed class SessionStateBuilder : ISessionStateBuilder
 		return new SessionStateDto(
 			Id:              nodeId,
 			Running:         _registry.IsSessionRunning(nodeId),
-			StreamingAlive:  _streaming.IsAlive(nodeId),
+			StreamingAlive:  _engines.IsAlive(nodeId),
 			Attention:       attention,
 			Favorite:        node.IsFavorite,
 			LastActivityUtc: activity.LastActivityUtc,

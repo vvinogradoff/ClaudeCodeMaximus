@@ -38,7 +38,7 @@ public sealed class SessionStateBuilderTests : IDisposable
 			new FakeSessionFileService(),
 			new FakeDirectoryLabelService(),
 			new FakeClaudeSessionStatusService());
-		_sut = new SessionStateBuilder(_registry, _streaming, _attention, _activity);
+		_sut = new SessionStateBuilder(_registry, TestEngines.Claude(_streaming), _attention, _activity);
 	}
 
 	public void Dispose() => Directory.Delete(_tempDir, recursive: true);

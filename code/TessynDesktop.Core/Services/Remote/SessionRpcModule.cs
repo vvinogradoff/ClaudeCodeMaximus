@@ -28,7 +28,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 	private readonly ISessionSendService _send;
 	private readonly ITurnOptionsResolver _options;
 	private readonly ISessionTurnService _turns;
-	private readonly IClaudeStreamingSessionManager _streaming;
+	private readonly ISessionEngineRouter _engines;
 	private readonly ITurnEngine? _engine;
 	private readonly ISessionModelSettings _modelSettings;
 
@@ -45,7 +45,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		ISessionSendService send,
 		ITurnOptionsResolver options,
 		ISessionTurnService turns,
-		IClaudeStreamingSessionManager streaming,
+		ISessionEngineRouter engines,
 		ITurnEngine? engine = null,
 		ISessionModelSettings? modelSettings = null)
 	{
@@ -61,7 +61,7 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		_send         = send;
 		_options      = options;
 		_turns        = turns;
-		_streaming    = streaming;
+		_engines    = engines;
 		_engine       = engine;
 		_modelSettings = modelSettings ?? new SessionModelSettings(appSettings, models);
 	}
@@ -462,9 +462,9 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 	{
 		var node = RemoteSessionLookup.Require(_registry, TdcpParams.RequireString(@params, "nodeId"));
 
-		var processAlive = _streaming.IsAlive(node.NodeId);
+		var processAlive = _engines.IsAlive(node.NodeId);
 		if (processAlive)
-			_streaming.Stop(node.NodeId);
+			_engines.Stop(node.NodeId);
 
 		// A turn the engine runs (started with turn.send) is stopped here too.
 		var cancelled = _turns.CancelTurn(node.NodeId) | (_engine?.CancelRuns(node.NodeId) ?? false);
@@ -502,12 +502,12 @@ public sealed class SessionRpcModule : IRemoteRpcModule
 		var force   = TdcpParams.OptionalBool(@params, "force") ?? false;
 
 		var processStopped = false;
-		if (!enabled && _streaming.IsAlive(node.NodeId))
+		if (!enabled && _engines.IsAlive(node.NodeId))
 		{
 			if (!force)
 				return new SetStreamingResult(Enabled: node.IsStreamingMode, NeedsConfirm: true);
 
-			_streaming.Stop(node.NodeId);
+			_engines.Stop(node.NodeId);
 			processStopped = true;
 		}
 

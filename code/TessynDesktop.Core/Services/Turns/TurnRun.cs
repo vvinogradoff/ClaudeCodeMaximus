@@ -1,23 +1,21 @@
 using System;
 using System.Threading;
-using Serilog;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Engines;
+using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.Services;
 
 /// <summary>
-/// The state and the stream-event handling of one engine turn: which events become transcript entries, which are suppressed
-/// because the engine retries instead, and what the observer is told. Moved unchanged from <c>TurnController.HandleStreamEvent</c>,
-/// with the per-controller fields now per turn.
+/// The state and the event handling of one interactive turn: which neutral engine events become transcript entries and what the observer
+/// is told. Formerly <c>TurnController.HandleStreamEvent</c>; the Claude-specific matching (retry markers, auth and limits detection, the
+/// session id) moved into the Claude engine (FR.33.1), which reports here through <see cref="IEngineEventSink"/>.
 /// </summary>
 /// <remarks>Created by Claude</remarks>
-internal sealed class TurnRun
+internal sealed class TurnRun : IEngineEventSink
 {
-	private static readonly ILogger _log = Log.ForContext<TurnRun>();
-
 	private readonly SessionNodeModel _node;
 	private readonly ISessionFileService _files;
-	private readonly IAppSettingsService _appSettings;
 	private readonly ITurnObserver _observer;
 	private readonly TurnProgressTracker _progress;
 	private readonly Action<bool>? _authErrorChanged;
@@ -27,7 +25,7 @@ internal sealed class TurnRun
 	private string? _pendingModelId;
 	private string? _pendingEffort;
 
-	public TurnRun(string turnId, SessionNodeModel node, ISessionFileService files, IAppSettingsService appSettings, ITurnObserver observer,
+	public TurnRun(string turnId, SessionNodeModel node, ISessionFileService files, ITurnObserver observer,
 		TurnProgressTracker progress, string? pendingModelId, string? pendingEffort, Action<bool>? authErrorChanged = null, Action<string?>? limitErrorChanged = null)
 	{
 		_authErrorChanged = authErrorChanged;
@@ -35,7 +33,6 @@ internal sealed class TurnRun
 		TurnId          = turnId;
 		_node           = node;
 		_files          = files;
-		_appSettings    = appSettings;
 		_observer       = observer;
 		_progress       = progress;
 		_pendingModelId = pendingModelId;
@@ -44,96 +41,106 @@ internal sealed class TurnRun
 
 	public string TurnId { get; }
 
-	/// <summary>Reports this turn's progress to the sinks.</summary>
-	public TurnProgressTracker Progress => _progress;
-
-	/// <summary>"No conversation found": the engine retries once with the history as context. Reset when the retry is launched.</summary>
-	public bool NeedsContextRetry { get; set; }
-
-	/// <summary>ISSUE.010: the transient OAuth refresh race; the engine retries once, silently. Reset when the retry is launched.</summary>
-	public bool NeedsAuthRaceRetry { get; set; }
-
 	/// <summary>FR.21.22: text of the error result of this turn, reported with <c>TurnCompleted</c>; reset on every retry.</summary>
 	public string? SendErrorText { get; set; }
 
-	/// <summary>Handles one parsed event of the claude stream (any thread).</summary>
-	public void HandleStreamEvent(ClaudeStreamEvent evt)
+	/// <inheritdoc />
+	public void AssistantText(EngineAssistantText message)
 	{
-		switch (evt.Type)
-		{
-			case Constants.Turns.EventTypes.Assistant when !string.IsNullOrWhiteSpace(evt.Content):
-				if (LimitErrorDetector.IsStructuredLimit(evt))
-					SetLimitError(evt.Content);
-				var fileModelId = Interlocked.Exchange(ref _pendingModelId, null);
-				var fileEffort  = Interlocked.Exchange(ref _pendingEffort, null);
-				_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleAssistant, evt.Content,
-					modelId: fileModelId, effort: fileEffort);
-				_observer.AssistantEntryAppended(evt.Content, evt.Timestamp, fileModelId, fileEffort);
-				break;
-
-			case Constants.Turns.EventTypes.System when evt.Subtype is Constants.Turns.EventSubtypes.Compact:
-				_files.AppendCompactionSeparator(_node.FileName);
-				_observer.CompactionAppended(evt.Timestamp);
-				break;
-
-			case Constants.Turns.EventTypes.System when evt.Subtype is Constants.Turns.EventSubtypes.TaskProgress or Constants.Turns.EventSubtypes.TaskStarted
-			                                            && !string.IsNullOrWhiteSpace(evt.Content):
-				_observer.ProgressText(evt.Content, evt.Timestamp);
-				break;
-
-			case Constants.Turns.EventTypes.System when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-				HandleSystemError(evt);
-				break;
-
-			case Constants.Turns.EventTypes.Result when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
-				&& evt.Content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase):
-				// "No conversation found" - transient infrastructure error. Flag the auto-retry with the context preamble;
-				// nothing is written to the transcript.
-				_log.Information("No conversation found for session {FileName} - will retry with context", _node.FileName);
-				_node.ClaudeSessionId = null;
-				_appSettings.Save();
-				NeedsContextRetry = true;
-				SendErrorText     = null;
-				break;
-
-			case Constants.Turns.EventTypes.Result when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content)
-				&& evt.Content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase):
-				// ISSUE.010 - transient cross-process OAuth refresh-token race, not a real auth failure. Flag a single silent
-				// retry; nothing is written so it never reads as a real failure.
-				_log.Information("OAuth refresh race for session {FileName} - will retry once", _node.FileName);
-				NeedsAuthRaceRetry = true;
-				SendErrorText      = null;
-				break;
-
-			case Constants.Turns.EventTypes.Result when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
-				_log.Warning("Claude result error: {Error}", evt.Content);
-				SendErrorText = evt.Content;
-				_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
-				if (evt.Content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
-					SetAuthError(true);
-				if (LimitErrorDetector.IsLimit(evt))
-					SetLimitError(evt.Content);
-				_observer.ResultError(evt.Content, evt.Timestamp);
-				break;
-
-			case Constants.Turns.EventTypes.Result when !evt.IsError && evt.SessionId is not null:
-				SetAuthError(false);
-				SetLimitError(null);
-				_node.ClaudeSessionId = evt.SessionId;
-				_appSettings.Save();
-				_observer.SessionIdCaptured();
-				_observer.ResultEnded();
-				break;
-
-			case Constants.Turns.EventTypes.Result:
-				if (!evt.IsError)
-					SetLimitError(null);
-				_observer.ResultEnded();
-				break;
-		}
+		if (message.IsLimitError)
+			SetLimitError(message.Text);
+		var fileModelId = Interlocked.Exchange(ref _pendingModelId, null);
+		var fileEffort  = Interlocked.Exchange(ref _pendingEffort, null);
+		_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleAssistant, message.Text,
+			modelId: fileModelId, effort: fileEffort);
+		_observer.AssistantEntryAppended(message.Text, message.Timestamp, fileModelId, fileEffort);
 
 		// After the persistence above, so a delta never announces text that is not in the transcript yet.
-		_progress.Observe(evt);
+		_progress.Delta(TurnDeltaKind.Text, message.Text);
+	}
+
+	/// <inheritdoc />
+	public void Thinking(string text) => _progress.Delta(TurnDeltaKind.Thinking, text);
+
+	/// <inheritdoc />
+	public void ToolStarted(string toolId, string? name, string? summary) => _progress.ToolStarted(toolId, name, summary);
+
+	/// <inheritdoc />
+	public void ToolFinished(string toolId, string? summary, bool isError) => _progress.ToolFinished(toolId, summary, isError);
+
+	/// <inheritdoc />
+	public void Progress(string text, DateTimeOffset timestamp) => _observer.ProgressText(text, timestamp);
+
+	/// <inheritdoc />
+	public void Compacted(DateTimeOffset timestamp)
+	{
+		_files.AppendCompactionSeparator(_node.FileName);
+		_observer.CompactionAppended(timestamp);
+	}
+
+	/// <inheritdoc />
+	public void Error(EngineError error)
+	{
+		_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, error.Text);
+		if (error.IsAuthError)
+			SetAuthError(true);
+		if (error.IsLimitError)
+			SetLimitError(error.Text);
+		_observer.SystemError(error.Text, error.Timestamp);
+	}
+
+	/// <inheritdoc />
+	public void RetryPending(EngineRetryKind kind) => SendErrorText = null;
+
+	/// <inheritdoc />
+	public void Retrying(EngineRetryKind kind)
+	{
+		if (kind == EngineRetryKind.LostConversation)
+		{
+			_observer.ContextRetrying();
+			_progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryContext);
+		}
+		else
+			_progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryAuth);
+	}
+
+	/// <inheritdoc />
+	public void RetryRunning() => _progress.Status(TurnState.Running);
+
+	/// <inheritdoc />
+	public void PersistentProcessStarted() => _observer.StreamingProcessStarted();
+
+	/// <inheritdoc />
+	public void TurnEnded(EngineTurnEnd end)
+	{
+		if (!string.IsNullOrWhiteSpace(end.ErrorText))
+		{
+			SendErrorText = end.ErrorText;
+			_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, end.ErrorText);
+			if (end.IsAuthError)
+				SetAuthError(true);
+			if (end.IsLimitError)
+				SetLimitError(end.ErrorText);
+			_observer.ResultError(end.ErrorText, end.Timestamp);
+			return;
+		}
+
+		if (end.Success && end.ConversationId is not null)
+		{
+			SetAuthError(false);
+			SetLimitError(null);
+			_observer.SessionIdCaptured();
+			_observer.ResultEnded();
+		}
+		else
+		{
+			if (end.Success)
+				SetLimitError(null);
+			_observer.ResultEnded();
+		}
+
+		if (end.Success)
+			_progress.Usage(end.InputTokens, end.OutputTokens, end.CostUsd);
 	}
 
 	/// <summary>The auth outcome goes to the observer (the client that runs the turn) and to the session's state (every client).</summary>
@@ -146,39 +153,4 @@ internal sealed class TurnRun
 	/// <summary>The limits outcome of the turn goes to the session's state (every client): the shortened text, or null when a later turn succeeded.</summary>
 	private void SetLimitError(string? text) =>
 		_limitErrorChanged?.Invoke(text == null ? null : LimitErrorDetector.Shorten(text));
-
-	private void HandleSystemError(ClaudeStreamEvent evt)
-	{
-		var content = evt.Content!;
-
-		// When a context retry or an auth-race retry is pending, stderr-based errors are suppressed: they echo the same
-		// error the result event already handled.
-		if (NeedsContextRetry || NeedsAuthRaceRetry)
-			return;
-
-		if (content.Contains(Constants.ContextRestore.NoConversationFoundMarker, StringComparison.OrdinalIgnoreCase))
-		{
-			_log.Information("No conversation found (system error) for session {FileName} - will retry with context", _node.FileName);
-			_node.ClaudeSessionId = null;
-			_appSettings.Save();
-			NeedsContextRetry = true;
-			SendErrorText     = null;
-			return;
-		}
-
-		if (content.Contains(Constants.Auth.OAuthRefreshRaceMarker, StringComparison.OrdinalIgnoreCase))
-		{
-			_log.Information("OAuth refresh race (system error) for session {FileName} - will retry once", _node.FileName);
-			NeedsAuthRaceRetry = true;
-			SendErrorText      = null;
-			return;
-		}
-
-		_files.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, content);
-		if (content.Contains(Constants.Auth.InvalidCredentialsMarker, StringComparison.OrdinalIgnoreCase))
-			SetAuthError(true);
-		if (LimitErrorDetector.IsLimit(evt))
-			SetLimitError(content);
-		_observer.SystemError(content, evt.Timestamp);
-	}
 }

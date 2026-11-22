@@ -63,9 +63,7 @@ public sealed class Issue013ReviewFixTests : IDisposable
 		using var h = new TurnEngineHarness();
 		var observer = new LockObservingSwitchService(() => h.Turns.GetTurnLock(TurnEngineHarness.NodeId).CurrentCount == 0);
 		var engine = new TurnEngine(
-			h.Files, h.Registry, h.Turns, h.Process, h.Streaming, h.Settings,
-			new Lazy<IAgentMcpServer>(() => h.Mcp), new Lazy<ITelegramBridgeService>(() => h.Telegram),
-			h.Status, h.Attention.Service, h.Tags.Service, null, observer);
+			h.Files, h.Registry, h.Turns, TestEngines.Claude(h.Streaming, h.Process, h.Files, h.Settings, h.Status, new Lazy<IAgentMcpServer>(() => h.Mcp)), h.Settings, new Lazy<ITelegramBridgeService>(() => h.Telegram), h.Attention.Service, h.Tags.Service, null, observer);
 		h.Process.ScriptEvents(new ClaudeStreamEvent { Type = "result", SessionId = "s1" });
 		var node = TurnEngineHarness.Node(sessionId: "s1");
 		node.PendingProfileId = "p2";   // a switch is queued for this session
@@ -480,11 +478,10 @@ public sealed class Issue013ReviewFixTests : IDisposable
 			EmitEvents = onEvent => { onEvent(new ClaudeStreamEvent { Type = "result", SessionId = "s1" }); return Task.CompletedTask; },
 		};
 		var status = new RecordingSessionStatusService();
+		var files  = new FakeFileServiceForTurnService();
 		var sut = new SessionTurnService(
-			process, new FakeFileServiceForTurnService(), settings, profiles,
-			new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService()), new FakeRegistryForTurnService(), status,
-			new FakeModelServiceForTurnService(), new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()),
-			new FakeStreamingManagerForTurnService(), attention.Service, tags.Service, new ProfileLabelService(profiles, settings));
+			TestEngines.Claude(new FakeStreamingManagerForTurnService(), process, files, settings, status, new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService())), files, settings, profiles, new FakeRegistryForTurnService(),
+			new FakeModelServiceForTurnService(), new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()), attention.Service, tags.Service, new ProfileLabelService(profiles, settings));
 		var node = new SessionNodeModel { NodeId = "n1", Name = "N", FileName = "n1.txt", WorkingDirectory = @"C:\proj", ClaudeSessionId = "s1" };
 		var turnLock = sut.GetTurnLock(node.NodeId);
 		await turnLock.WaitAsync();   // a turn is running

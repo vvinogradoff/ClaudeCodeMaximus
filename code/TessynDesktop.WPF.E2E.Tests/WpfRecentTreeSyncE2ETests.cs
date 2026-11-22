@@ -44,7 +44,7 @@ public sealed class WpfRecentTreeSyncE2ETests : IDisposable
 		var recent = new RecentTestModule([_deep, _last, .. all.Where(n => n != _deep && n != _last)]);   // the two targets head the dropdown (it lists in the given order), far down the tree
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Base.Registry, new StubStreamingManager(), _env.Attention, activity);
+		var states = new SessionStateBuilder(_env.Base.Registry, TestEngines.Claude(new StubStreamingManager()), _env.Attention, activity);
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Base.Settings), _env.Base.Registry, states, activity, new TreeVersionTracker(),
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
 		_host = new ClientTestHost((run, log) => new TdcpDispatcher([new ClientRpcModule(runInfo: run, eventLog: log), .. _env.Modules, tree, recent, new CatalogTestModule([])]));

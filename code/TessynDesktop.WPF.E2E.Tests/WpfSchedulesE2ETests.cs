@@ -40,7 +40,7 @@ public sealed class WpfSchedulesE2ETests : IDisposable
 		_api = new ScheduleApiService(_scheduler, _env.Base.Registry, TimeProvider.System);
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Base.Registry, new StubStreamingManager(), _env.Attention, activity, scheduler: _scheduler);
+		var states = new SessionStateBuilder(_env.Base.Registry, TestEngines.Claude(new StubStreamingManager()), _env.Attention, activity, scheduler: _scheduler);
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Base.Settings), _env.Base.Registry, states, activity, new TreeVersionTracker(),
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
 		_host = new ClientTestHost((run, log) => new TdcpDispatcher([new ClientRpcModule(runInfo: run, eventLog: log, schedules: _api), .. _env.Modules, tree, new ScheduleRpcModule(_api), new CatalogTestModule([])]));

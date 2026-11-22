@@ -22,7 +22,7 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 	private readonly ISessionFileService _files;
 	private readonly IProfileResolver _resolver;
 	private readonly IClaudeSessionMigrator _migrator;
-	private readonly IClaudeStreamingSessionManager _streaming;
+	private readonly ISessionEngineRouter _engines;
 	private readonly Lazy<ISessionTurnService>? _turns;
 
 	/// <param name="turns">Owner of the per-node turn locks; lazy because the turn service itself uses this service. Null = only the running flag is checked.</param>
@@ -32,7 +32,7 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 		ISessionFileService files,
 		IProfileResolver resolver,
 		IClaudeSessionMigrator migrator,
-		IClaudeStreamingSessionManager streaming,
+		ISessionEngineRouter engines,
 		Lazy<ISessionTurnService>? turns = null)
 	{
 		_appSettings = appSettings;
@@ -40,7 +40,7 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 		_files       = files;
 		_resolver    = resolver;
 		_migrator    = migrator;
-		_streaming   = streaming;
+		_engines   = engines;
 		_turns       = turns;
 	}
 
@@ -244,9 +244,9 @@ public sealed class ProfileSwitchService : IProfileSwitchService
 			return new ApplyOutcome(paths, failed, Pinned: false);
 		}
 
-		if (_streaming.IsAlive(session.NodeId))
+		if (_engines.IsAlive(session.NodeId))
 		{
-			_streaming.Stop(session.NodeId); // R7: the next launch builds its prompt and memory path from the new config dir
+			_engines.Stop(session.NodeId); // R7: the next launch builds its prompt and memory path from the new config dir
 			_log.Information("Stopped the streaming process of session {NodeId} for its profile switch", session.NodeId);
 		}
 

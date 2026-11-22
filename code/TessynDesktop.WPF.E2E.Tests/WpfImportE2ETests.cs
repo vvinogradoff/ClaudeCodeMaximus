@@ -41,7 +41,7 @@ public sealed class WpfImportE2ETests : IDisposable
 
 		var import = new ImportService(new ClaudeSessionImportService([_projects]), new InProcFakeIndexService(), _env.Base.Files, _env.Base.Registry, _env.Base.Settings, [_projects]);
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Base.Registry, new StubStreamingManager(), _env.Attention, activity);
+		var states = new SessionStateBuilder(_env.Base.Registry, TestEngines.Claude(new StubStreamingManager()), _env.Attention, activity);
 		var versions = new TreeVersionTracker();
 		// What the daemon's notification publisher does: a structural change of the tree is a new tree version.
 		_env.Base.Registry.TreeChanged += (_, e) =>

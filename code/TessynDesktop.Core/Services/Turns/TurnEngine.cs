@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using TessynDesktop.Models;
+using TessynDesktop.Models.Engines;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.Models.Turns;
 
@@ -24,12 +25,9 @@ public sealed class TurnEngine : ITurnEngine
 	private readonly ISessionFileService _files;
 	private readonly ISessionRegistry _registry;
 	private readonly ISessionTurnService _turns;
-	private readonly IClaudeProcessManager _processManager;
-	private readonly IClaudeStreamingSessionManager _streamingManager;
+	private readonly ISessionEngineRouter _engines;
 	private readonly IAppSettingsService _appSettings;
-	private readonly Lazy<IAgentMcpServer> _mcpServer;
 	private readonly Lazy<ITelegramBridgeService> _telegramBridge;
-	private readonly IClaudeSessionStatusService _sessionStatus;
 	private readonly IAttentionService _attention;
 	private readonly ISessionTagService _tags;
 	private readonly IReadOnlyList<ITurnProgressSink> _progressSinks;
@@ -43,12 +41,9 @@ public sealed class TurnEngine : ITurnEngine
 		ISessionFileService files,
 		ISessionRegistry registry,
 		ISessionTurnService turns,
-		IClaudeProcessManager processManager,
-		IClaudeStreamingSessionManager streamingManager,
+		ISessionEngineRouter engines,
 		IAppSettingsService appSettings,
-		Lazy<IAgentMcpServer> mcpServer,
 		Lazy<ITelegramBridgeService> telegramBridge,
-		IClaudeSessionStatusService sessionStatus,
 		IAttentionService attention,
 		ISessionTagService tags,
 		IEnumerable<ITurnProgressSink>? progressSinks = null,
@@ -59,12 +54,9 @@ public sealed class TurnEngine : ITurnEngine
 		_files            = files;
 		_registry         = registry;
 		_turns            = turns;
-		_processManager   = processManager;
-		_streamingManager = streamingManager;
+		_engines          = engines;
 		_appSettings      = appSettings;
-		_mcpServer        = mcpServer;
 		_telegramBridge   = telegramBridge;
-		_sessionStatus    = sessionStatus;
 		_attention        = attention;
 		_tags             = tags;
 		_progressSinks    = progressSinks?.ToArray() ?? [];
@@ -104,7 +96,7 @@ public sealed class TurnEngine : ITurnEngine
 		observer   ??= new NullTurnObserver();
 
 		var progress = new TurnProgressTracker(nodeId, turnId, _progressSinks);
-		var run = new TurnRun(turnId, node, _files, _appSettings, observer, progress,
+		var run = new TurnRun(turnId, node, _files, observer, progress,
 			settings.ModelId ?? Constants.Turns.DefaultOptionText, settings.Effort ?? Constants.Turns.DefaultOptionText, AuthErrorSink(nodeId), LimitErrorSink(nodeId));
 
 		context.Enter();
@@ -132,7 +124,9 @@ public sealed class TurnEngine : ITurnEngine
 			_files.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, request.Message, profileName: settings.ProfileDisplayName);
 			observer.UserEntryAppended(DateTimeOffset.UtcNow, settings.ProfileDisplayName);
 
-			var sessionId = node.ClaudeSessionId;
+			// FR.33.1: the session's engine (today always Claude; the model->engine rule comes with FR.33.4).
+			var engine    = _engines.For(node);
+			var sessionId = engine.GetConversationId(node);
 
 			// The cross-profile adoption (FR.11.13) moves the transcript and session folder, so it runs below, under the turn lock:
 			// before it a queued message could move the files from under the turn that is still running.
@@ -154,7 +148,7 @@ public sealed class TurnEngine : ITurnEngine
 				}
 			}
 
-			var launch = await PrepareLaunchAsync(node, settings);
+			var preparation = await engine.PrepareTurnAsync(node, settings);
 
 			// Serialize only the CLI dispatch: the message is already in the transcript, and this send's spawn waits behind an
 			// in-flight one to avoid concurrent --resume.
@@ -191,22 +185,17 @@ public sealed class TurnEngine : ITurnEngine
 				// Cross-profile session adoption (FR.11.13): if this session was created under a different profile than the one now
 				// active, move its JSONL into the active profile's store before attempting --resume. Under the turn lock (ISSUE.013 N1).
 				if (sessionId != null)
-					_sessionStatus.TryAdoptSessionFromOtherProfile(node.WorkingDirectory, sessionId, settings.ProfileConfigDir);
+					engine.AdoptConversation(node, sessionId, settings.ProfileConfigDir);
 
 				run.SendErrorText = null;
 				context.Active = run;
 				progress.Status(TurnState.Running);
 
-				if (node.IsStreamingMode)
-				{
-					// Streaming Session Mode (FR.19): no --resume "No conversation found" retry path - the same open process
-					// carries the conversation, so context-retry doesn't apply.
-					await SendViaStreamingAsync(run, observer, context, node, settings, sessionId, messageToSend, launch, ct);
-				}
-				else
-				{
-					await SendOneShotAsync(run, observer, node, settings, sessionId, messageToSend, augmentedMessage, launch, ct);
-				}
+				// Streaming Session Mode (FR.19) runs in the session's persistent process, whose sink routes every event to the active run.
+				var persistent = node.IsStreamingMode;
+				var engineRequest = new EngineTurnRequest(node, messageToSend, augmentedMessage, sessionId, settings, preparation,
+					EngineTurnMode.Interactive, persistent, persistent ? StreamSinkFor(context, node) : null);
+				await engine.RunTurnAsync(engineRequest, run, ct);
 
 				// Post-response step of the client (Auto-Compact, FR.11.6), still holding the turn lock.
 				await observer.AfterResponseWhileLockedAsync();
@@ -430,51 +419,17 @@ public sealed class TurnEngine : ITurnEngine
 	}
 
 	/// <summary>
-	/// The one callback bound to a node's streaming process (bound again on every turn, like the controller's method was). It hands each event
-	/// to the turn holding the lock; events outside any turn - background-task output, native schedules (FR.19.4), anything arriving while the
-	/// next turn still waits for the lock - go to a fresh background run: persisted and rendered by the last observer exactly as the controller
-	/// always did, but without any state of a finished turn (retry flags, error text, model stamp) and without progress.
+	/// The one sink bound to a node's persistent process (created once per node, bound again on every turn). It hands each event to the turn
+	/// holding the lock, or to a fresh background run (see <see cref="TurnNodeStreamSink"/>).
 	/// </summary>
-	private Action<ClaudeStreamEvent> StreamHandlerFor(TurnNodeContext context, SessionNodeModel node) =>
-		context.StreamHandler ??= evt =>
-		{
-			var run = context.Active
-				?? new TurnRun(string.Empty, node, _files, _appSettings, context.LastObserver ?? new NullTurnObserver(),
-					new TurnProgressTracker(node.NodeId, string.Empty, []), null, null, AuthErrorSink(node.NodeId), LimitErrorSink(node.NodeId));
-			run.HandleStreamEvent(evt);
-		};
+	private IEngineEventSink StreamSinkFor(TurnNodeContext context, SessionNodeModel node) =>
+		context.StreamSink ??= new TurnNodeStreamSink(context, () =>
+			new TurnRun(string.Empty, node, _files, context.LastObserver ?? new NullTurnObserver(),
+				new TurnProgressTracker(node.NodeId, string.Empty, []), null, null, AuthErrorSink(node.NodeId), LimitErrorSink(node.NodeId)));
 
 	/// <inheritdoc />
-	public void SendCorrection(SessionNodeModel node, TurnSettings settings, string prompt)
-	{
-		// Like headless turns (FR.19.11), a mid-run correction always spawns a one-shot --resume process against the Claude session
-		// id regardless of Streaming Session Mode - if a streaming process holds that same session id open, this is the same class of
-		// known v1 limitation, not solved here. The Local Tool Profile (FR.12.21) applies here too.
-		var correctionLocalProfile = LocalToolProfileResolver.Resolve(settings.ModelInfo, settings.DirectoryModel);
-
-		_ = _processManager.SendMessageAsync(
-			workingDirectory: node.WorkingDirectory,
-			claudePath:       _appSettings.Settings.ClaudePath,
-			sessionId:        node.ClaudeSessionId,
-			userMessage:      prompt,
-			model:            settings.ModelId,
-			profileConfigDir: settings.ProfileConfigDir,
-			effort:           settings.Effort,
-			ollamaBaseUrl:    settings.OllamaBaseUrl,
-			disableTools:     settings.DisableTools,
-			disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
-			localToolSpec:    correctionLocalProfile?.ToolSpec,
-			strictMcpConfig:  correctionLocalProfile != null,
-			onEvent:          evt =>
-			{
-				// Capture session ID updates but don't write to file or UI
-				if (evt.Type == Constants.Turns.EventTypes.Result && !evt.IsError && evt.SessionId is not null)
-				{
-					node.ClaudeSessionId = evt.SessionId;
-					_appSettings.Save();
-				}
-			});
-	}
+	public void SendCorrection(SessionNodeModel node, TurnSettings settings, string prompt) =>
+		_engines.For(node).SendCorrection(node, settings, prompt);
 
 	/// <summary>
 	/// The hidden instruction block (FR.11.9) via the shared <see cref="InstructionBlockBuilder"/>, so interactive and headless turns
@@ -502,124 +457,6 @@ public sealed class TurnEngine : ITurnEngine
 			IsTagGuidanceDue: tagGuidanceDue,
 			SessionTags: tagGuidanceDue ? _tags.GetTags(nodeId, node.Name) : null);
 		return InstructionBlockBuilder.Build(options);
-	}
-
-	/// <summary>
-	/// The MCP config and the Local Tool Profile of the turn (FR.12.21, FR.14.3, FR.14.11): a tool-capable local Ollama model gets the
-	/// directory's curated <c>--tools</c> list plus a filtered, strict <c>--mcp-config</c>; MCP tools are a separate mechanism from the
-	/// built-in <c>--tools</c> flag, so <c>--mcp-config</c> is skipped entirely for models that cannot call tools.
-	/// </summary>
-	private async Task<TurnLaunch> PrepareLaunchAsync(SessionNodeModel node, TurnSettings settings)
-	{
-		var localProfile = LocalToolProfileResolver.Resolve(settings.ModelInfo, settings.DirectoryModel);
-
-		string? mcpConfigPath = null;
-		var strictMcpConfig = false;
-		LocalToolSpec? localToolSpec = null;
-
-		if (localProfile != null)
-		{
-			strictMcpConfig = true;
-			localToolSpec   = localProfile.ToolSpec;
-			mcpConfigPath   = await _mcpServer.Value.EnsureConfigFileAsync(
-				node.NodeId, node.AgentToken, localProfile.IncludeCmxMcp, localProfile.IncludedExternalMcpServerIds);
-		}
-		else if (_appSettings.Settings.AgentToolsEnabled && !settings.DisableTools)
-			mcpConfigPath = await _mcpServer.Value.EnsureConfigFileAsync(node.NodeId, node.AgentToken);
-
-		return new TurnLaunch(mcpConfigPath, localToolSpec, strictMcpConfig);
-	}
-
-	/// <summary>One-shot Mode: one process per turn, then the single OAuth-race retry and the single context retry.</summary>
-	private async Task SendOneShotAsync(TurnRun run, ITurnObserver observer, SessionNodeModel node, TurnSettings settings,
-		string? sessionId, string messageToSend, string augmentedMessage, TurnLaunch launch, CancellationToken ct)
-	{
-		await LaunchOneShotAsync(run, node, settings, sessionId, messageToSend, launch, ct);
-
-		if (run.NeedsAuthRaceRetry)
-		{
-			run.NeedsAuthRaceRetry = false;
-			_log.Information("Retrying turn after transient OAuth refresh race for session {FileName}", node.FileName);
-			run.Progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryAuth);
-			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
-			run.Progress.Status(TurnState.Running);
-
-			await LaunchOneShotAsync(run, node, settings, sessionId, messageToSend, launch, ct);
-		}
-
-		if (run.NeedsContextRetry)
-		{
-			run.NeedsContextRetry = false;
-			var enrichedMessage = InstructionBlockBuilder.BuildContextPreamble(_files.ReadEntries(node.FileName), augmentedMessage);
-
-			observer.ContextRetrying();
-			run.Progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryContext);
-			run.Progress.Status(TurnState.Running);
-
-			await LaunchOneShotAsync(run, node, settings, null, enrichedMessage, launch, ct);
-		}
-	}
-
-	private Task LaunchOneShotAsync(TurnRun run, SessionNodeModel node, TurnSettings settings, string? sessionId, string message,
-		TurnLaunch launch, CancellationToken ct) =>
-		_processManager.SendMessageAsync(
-			workingDirectory: node.WorkingDirectory,
-			claudePath:       _appSettings.Settings.ClaudePath,
-			sessionId:        sessionId,
-			userMessage:      message,
-			onEvent:          run.HandleStreamEvent,
-			model:            settings.ModelId,
-			profileConfigDir: settings.ProfileConfigDir,
-			effort:           settings.Effort,
-			mcpConfigPath:    launch.McpConfigPath,
-			ollamaBaseUrl:    settings.OllamaBaseUrl,
-			disableTools:     settings.DisableTools,
-			chrome:           settings.Chrome,
-			disallowNativeScheduling: _appSettings.Settings.AgentToolsEnabled,
-			localToolSpec:    launch.LocalToolSpec,
-			strictMcpConfig:  launch.StrictMcpConfig,
-			cancellationToken: ct);
-
-	/// <summary>
-	/// Sends one turn via Streaming Session Mode (FR.19): ensures the session's persistent process is running (spawning it with the
-	/// turn's model/profile/effort/mcp config if this is the first turn), then writes the turn to its open stdin and awaits the next
-	/// result event. The run's event handler is bound as the process's primary callback, as a one-shot launch binds it.
-	/// </summary>
-	private async Task SendViaStreamingAsync(TurnRun run, ITurnObserver observer, TurnNodeContext context, SessionNodeModel node, TurnSettings settings,
-		string? sessionId, string messageToSend, TurnLaunch launch, CancellationToken ct)
-	{
-		var nodeId = node.NodeId;
-		var spawnParams = new StreamingSpawnParams(
-			WorkingDirectory: node.WorkingDirectory,
-			ClaudePath:       _appSettings.Settings.ClaudePath,
-			SessionId:        sessionId,
-			ProfileConfigDir: settings.ProfileConfigDir,
-			Model:            settings.ModelId,
-			Effort:           settings.Effort,
-			McpConfigPath:    launch.McpConfigPath,
-			OllamaBaseUrl:    settings.OllamaBaseUrl,
-			DisableTools:     settings.DisableTools,
-			Chrome:           settings.Chrome,
-			LocalToolSpec:    launch.LocalToolSpec,
-			StrictMcpConfig:  launch.StrictMcpConfig);
-
-		var justStarted = _streamingManager.EnsureStarted(nodeId, spawnParams, StreamHandlerFor(context, node));
-		if (justStarted)
-			observer.StreamingProcessStarted();
-
-		await _streamingManager.SendTurnAsync(nodeId, messageToSend, ct);
-
-		if (run.NeedsAuthRaceRetry)
-		{
-			// ISSUE.010 - same transient cross-process OAuth refresh race as the one-shot path; the streaming process is still
-			// alive, so retrying just writes the turn again.
-			run.NeedsAuthRaceRetry = false;
-			_log.Information("Retrying streaming turn after transient OAuth refresh race for session {FileName}", node.FileName);
-			run.Progress.Status(TurnState.Retrying, RemoteProtocol.TurnStream.RetryAuth);
-			await Task.Delay(Constants.Auth.OAuthRefreshRaceRetryDelayMs, ct);
-			run.Progress.Status(TurnState.Running);
-			await _streamingManager.SendTurnAsync(nodeId, messageToSend, ct);
-		}
 	}
 
 	/// <summary>Opens the node's share of the running flag if the node does not hold it (one share per node, however many sends are queued).</summary>

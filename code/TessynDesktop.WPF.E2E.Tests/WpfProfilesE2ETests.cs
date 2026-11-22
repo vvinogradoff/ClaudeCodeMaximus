@@ -40,7 +40,7 @@ public sealed class WpfProfilesE2ETests : IDisposable
 		_env.Files.Set(_worker.FileName, [User("work", 0), Assistant("done", 1, "claude-opus-5-5", "high")]);
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Registry, _env.Streaming, _env.Attention, activity);
+		var states = new SessionStateBuilder(_env.Registry, TestEngines.Claude(_env.Streaming), _env.Attention, activity);
 		var versions = new TreeVersionTracker();
 		_env.Registry.TreeChanged += (_, e) =>
 		{

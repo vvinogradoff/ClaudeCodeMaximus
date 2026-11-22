@@ -292,9 +292,7 @@ public sealed class TurnEngineAutoCompactTests : IDisposable
 	public async Task AnEngineWithoutACompactionService_IgnoresTheFlag()
 	{
 		var bare = new TurnEngine(
-			_h.Files, _h.Registry, _h.Turns, _h.Process, _h.Streaming, _h.Settings,
-			new Lazy<IAgentMcpServer>(() => _h.Mcp), new Lazy<ITelegramBridgeService>(() => _h.Telegram),
-			_h.Status, _h.Attention.Service, _h.Tags.Service);
+			_h.Files, _h.Registry, _h.Turns, TestEngines.Claude(_h.Streaming, _h.Process, _h.Files, _h.Settings, _h.Status, new Lazy<IAgentMcpServer>(() => _h.Mcp)), _h.Settings, new Lazy<ITelegramBridgeService>(() => _h.Telegram), _h.Attention.Service, _h.Tags.Service);
 		_h.Process.ScriptEvents(Evt.Result());
 
 		var outcome = await bare.RunAsync(new TurnRequest(TurnEngineHarness.Node(), "Hi", TurnEngineHarness.Chosen(), AutoCompact: true)).Within();

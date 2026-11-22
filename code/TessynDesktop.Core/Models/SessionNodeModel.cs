@@ -22,6 +22,12 @@ public sealed class SessionNodeModel
 	public string WorkingDirectory { get; set; } = string.Empty;
 	public string? ClaudeSessionId { get; set; }
 
+	/// <summary>
+	/// The session engine the session runs on (FR.33.1, <see cref="Constants.SessionEngines"/>). Null and <c>claude</c> both mean the Claude engine,
+	/// so settings written before engines existed load unchanged (null values are not written).
+	/// </summary>
+	public string? EngineId { get; set; }
+
 	/// <summary>Stable GUID for this node. Backfilled from empty on first load (FR.14.2).</summary>
 	public string NodeId { get; set; } = string.Empty;
 

@@ -55,7 +55,7 @@ public sealed class RemoteTreePerformanceTests : IDisposable
 		var registry = new SessionRegistry(_settings, _files, new FakeDirectoryLabelService(), new FakeClaudeSessionStatusService());
 		var activity = new SessionActivityService(RecordingProxy<ISessionFileService>.Wrap(_files, out _fileCalls), new FakeDraftService());
 		var attention = new FakeAttentionService();
-		var states = new SessionStateBuilder(registry, new FakeStreamingManagerForTurnService(), attention, activity);
+		var states = new SessionStateBuilder(registry, TestEngines.Claude(new FakeStreamingManagerForTurnService()), attention, activity);
 		var reader = new RemoteTreeReader(_settings);
 		var labels = new FakeDirectoryLabelService();
 		var scheduler = new InProcFakeScheduler();

@@ -114,7 +114,7 @@ public sealed class SessionResumabilityCacheTests : IDisposable
 		_env.Resumable.Refresh();
 		Assert.True(_env.States.Build(yes).Resumable);
 
-		var withoutCache = new SessionStateBuilder(_env.Registry, new FakeStreamingManagerForTurnService(), _env.Attention, _env.Activity);
+		var withoutCache = new SessionStateBuilder(_env.Registry, TestEngines.Claude(new FakeStreamingManagerForTurnService()), _env.Attention, _env.Activity);
 		Assert.Null(withoutCache.Build(yes).Resumable);
 	}
 

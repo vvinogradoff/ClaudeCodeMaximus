@@ -263,8 +263,8 @@ internal sealed class RemoteSessionEnv : IDisposable
 
 		Module = new SessionRpcModule(
 			Registry, Settings,
-			new SessionStateBuilder(Registry, Streaming, Attention, Activity),
-			Tags, Attention, Reader, Epochs, Models, Labels, Send, Options, Turns, Streaming);
+			new SessionStateBuilder(Registry, TestEngines.Claude(Streaming), Attention, Activity),
+			Tags, Attention, Reader, Epochs, Models, Labels, Send, Options, Turns, TestEngines.Claude(Streaming));
 	}
 
 	public Task<JsonNode?> CallAsync(string method, string json) => RemoteTestHelpers.CallAsync(Module, method, json);

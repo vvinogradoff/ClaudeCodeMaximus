@@ -37,7 +37,7 @@ public sealed class WpfInputAreaE2ETests : IDisposable
 		_drafts = new DraftService(Path.Combine(_root, "drafts"));
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Base.Registry, new StubStreamingManager(), _env.Attention, activity);
+		var states = new SessionStateBuilder(_env.Base.Registry, TestEngines.Claude(new StubStreamingManager()), _env.Attention, activity);
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Base.Settings), _env.Base.Registry, states, activity, new TreeVersionTracker(),
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
 		_host = new ClientTestHost((run, log) => new TdcpDispatcher(

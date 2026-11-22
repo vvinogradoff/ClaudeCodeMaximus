@@ -103,9 +103,9 @@ internal sealed class EntryIdsEnv : IDisposable
 
 		return new SessionRpcModule(
 			Registry, Settings,
-			new SessionStateBuilder(Registry, streaming, attention, new FakeActivityService()),
+			new SessionStateBuilder(Registry, TestEngines.Claude(streaming), attention, new FakeActivityService()),
 			TagService, attention, reader, Epochs, Models, labels,
-			new SessionSendService(turns, Registry), options, turns, streaming);
+			new SessionSendService(turns, Registry), options, turns, TestEngines.Claude(streaming));
 	}
 
 	// ── transcript helpers ───────────────────────────────────────────────────────────────────

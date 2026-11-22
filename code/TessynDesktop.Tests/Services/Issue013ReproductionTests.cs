@@ -40,11 +40,9 @@ public sealed class Issue013ReproductionTests : IDisposable
 		};
 
 		_sut = new SessionTurnService(
-			_processManager, _fileService, _appSettings, _profileService,
-			new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService()),
-			new FakeRegistryForTurnService(), new FakeSessionStatusServiceForTurnService(), new FakeModelServiceForTurnService(),
-			new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()),
-			new FakeStreamingManagerForTurnService(), _attention.Service, _tagEnv.Service,
+			TestEngines.Claude(new FakeStreamingManagerForTurnService(), _processManager, _fileService, _appSettings, new FakeSessionStatusServiceForTurnService(), new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService())), _fileService, _appSettings, _profileService,
+			new FakeRegistryForTurnService(), new FakeModelServiceForTurnService(),
+			new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()), _attention.Service, _tagEnv.Service,
 			new ProfileLabelService(_profileService, _appSettings));
 	}
 

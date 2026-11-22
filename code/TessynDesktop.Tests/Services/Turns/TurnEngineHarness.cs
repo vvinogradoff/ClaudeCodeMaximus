@@ -47,9 +47,7 @@ internal sealed class TurnEngineHarness : IDisposable
 		Compaction = new RecordingCompactionService(() => Turns.GetTurnLock(NodeId).CurrentCount, Files.Log);
 
 		Engine = new TurnEngine(
-			Files, Registry, Turns, Process, Streaming, Settings,
-			new Lazy<IAgentMcpServer>(() => Mcp), new Lazy<ITelegramBridgeService>(() => Telegram),
-			Status, Attention.Service, Tags.Service, sinks, compaction: Compaction, authErrors: AuthErrors);
+			Files, Registry, Turns, TestEngines.Claude(Streaming, Process, Files, Settings, Status, new Lazy<IAgentMcpServer>(() => Mcp)), Settings, new Lazy<ITelegramBridgeService>(() => Telegram), Attention.Service, Tags.Service, sinks, compaction: Compaction, authErrors: AuthErrors);
 	}
 
 	public static SessionNodeModel Node(string? sessionId = null, bool streaming = false, int depth = 0) => new()

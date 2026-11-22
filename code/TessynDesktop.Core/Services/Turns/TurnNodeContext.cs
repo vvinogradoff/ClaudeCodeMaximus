@@ -57,8 +57,8 @@ internal sealed class TurnNodeContext
 		}
 	}
 
-	/// <summary>The one callback bound to the node's streaming process; it routes each event to the active run, or to a background handler.</summary>
-	public System.Action<Models.ClaudeStreamEvent>? StreamHandler { get; set; }
+	/// <summary>The one sink bound to the node's persistent process; it routes each event to the active run, or to a background run.</summary>
+	public IEngineEventSink? StreamSink { get; set; }
 
 	/// <summary>True while at least one send of the node is between <see cref="Enter"/> and <see cref="Leave"/>.</summary>
 	public bool IsBusy

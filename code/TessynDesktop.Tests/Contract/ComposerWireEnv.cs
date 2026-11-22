@@ -58,16 +58,14 @@ internal sealed class ComposerWireEnv : IDisposable
 
 		Publisher = new TurnEventPublisher(Bus, TimeSpan.FromMilliseconds(20));
 		Engine = new TurnEngine(
-			Files, Registry, Turns, Process, Streaming, Settings,
-			new Lazy<IAgentMcpServer>(() => new RecordingMcpServer()), new Lazy<ITelegramBridgeService>(() => new RecordingTelegramBridge()),
-			new RecordingSessionStatusService(), Attention.Service, Tags.Service, [Publisher], compaction: Compaction, authErrors: AuthErrors);
+			Files, Registry, Turns, TestEngines.Claude(Streaming, Process, Files, Settings, new RecordingSessionStatusService(), new Lazy<IAgentMcpServer>(() => new RecordingMcpServer())), Settings, new Lazy<ITelegramBridgeService>(() => new RecordingTelegramBridge()), Attention.Service, Tags.Service, [Publisher], compaction: Compaction, authErrors: AuthErrors);
 
 		var models   = new FakeModelServiceForTurnService();
 		var profiles = new FakeProfileServiceForTurnService();
 		var labels   = new ProfileLabelService(profiles, Settings);
 		var options  = new TurnOptionsResolver(models, Settings, labels);
 		var resolver = new TurnSettingsResolver(Settings, Turns, profiles, models, labels);
-		var turnModule = new TurnRpcModule(Registry, options, resolver, new TurnSendService(Engine, Registry), Engine, Turns, Streaming, new SessionModelSettings(Settings));
+		var turnModule = new TurnRpcModule(Registry, options, resolver, new TurnSendService(Engine, Registry), Engine, Turns, TestEngines.Claude(Streaming), new SessionModelSettings(Settings));
 
 		Autocomplete = new AutocompleteRpcModule(Registry, CodeIndex);
 

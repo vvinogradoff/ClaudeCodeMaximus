@@ -57,7 +57,7 @@ public sealed class WpfSideBySideE2ETests : IDisposable
 	private ClientTestHost StartDaemon()
 	{
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Registry, _env.Streaming, _env.Attention, activity);
+		var states = new SessionStateBuilder(_env.Registry, TestEngines.Claude(_env.Streaming), _env.Attention, activity);
 		var versions = new TreeVersionTracker();
 		_env.Registry.TreeChanged += (_, e) =>
 		{

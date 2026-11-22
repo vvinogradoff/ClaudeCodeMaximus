@@ -25,7 +25,7 @@ public sealed class SessionStatePinTests : IDisposable
 	{
 		_env.AddProfile("p1", "Account A");
 		_env.AddProfile("p2", "Account B");
-		_states = new SessionStateBuilder(_env.Registry, _env.Streaming, new FakeAttentionService(), new FakeActivityService(), null, null, _env.Resolver);
+		_states = new SessionStateBuilder(_env.Registry, TestEngines.Claude(_env.Streaming), new FakeAttentionService(), new FakeActivityService(), null, null, _env.Resolver);
 		_env.Registry.SessionSettingsChanged += (_, e) => _changed.Add(e.NodeId);
 	}
 

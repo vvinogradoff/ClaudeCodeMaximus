@@ -165,15 +165,14 @@ public sealed class DaemonHost
 
 		// A23 Q6: the daemon without a window or taskbar entry. The process lives until the tray icon's Exit (or a system shutdown).
 		var processManager = Services.GetRequiredService<IClaudeProcessManager>();
-		var streamingManager = Services.GetRequiredService<IClaudeStreamingSessionManager>();
+		var engines = Services.GetRequiredService<ISessionEngineRouter>();
 		var context = new ApplicationContext();
 		// Exit (tray, or a client's request through the named event) terminates the active sessions the way the old window's close did.
 		var exit = new DaemonHostExit(
 			() => processManager.ActiveProcessCount, HostTray.ConfirmAsync,
 			() =>
 			{
-				processManager.TerminateAll();
-				streamingManager.TerminateAll();
+				engines.TerminateAll();
 			},
 			() => dispatcher.Post(context.ExitThread),
 			ex => Log.Error(ex, "Terminating the sessions failed; shutting down anyway"));
@@ -287,6 +286,10 @@ public sealed class DaemonHost
 		services.AddSingleton<ClaudeProcessLauncher>();
 		services.AddSingleton<IClaudeProcessManager, ClaudeProcessManager>();
 		services.AddSingleton<IClaudeStreamingSessionManager, ClaudeStreamingSessionManager>();
+		// FR.33.1: the session engines behind one seam (today only Claude). Singletons: the engine holds the retry state of the turns running in
+		// persistent processes, and the router is the one list of engines every caller asks.
+		services.AddSingleton<ISessionEngine, ClaudeSessionEngine>();
+		services.AddSingleton<ISessionEngineRouter, SessionEngineRegistry>();
 		services.AddSingleton<ISelfUpdateService, SelfUpdateService>();
 		services.AddSingleton<IClaudeSessionStatusService, ClaudeSessionStatusService>();
 		services.AddSingleton<ISessionSearchService, SessionSearchService>();

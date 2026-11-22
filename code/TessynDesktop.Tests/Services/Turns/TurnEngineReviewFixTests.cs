@@ -380,6 +380,8 @@ public sealed class TurnEngineReviewFixTests : IDisposable
 		services.AddSingleton(sp => new Lazy<IAgentMcpServer>(sp.GetRequiredService<IAgentMcpServer>));
 		services.AddSingleton(sp => new Lazy<ITelegramBridgeService>(sp.GetRequiredService<ITelegramBridgeService>));
 		services.AddSingleton<IClaudeSessionStatusService>(_h.Status);
+		services.AddSingleton<ISessionEngine, ClaudeSessionEngine>();
+		services.AddSingleton<ISessionEngineRouter, SessionEngineRegistry>();
 		services.AddSingleton<IAttentionService>(_h.Attention.Service);
 		services.AddSingleton<ISessionTagService>(_h.Tags.Service);
 		services.AddSingleton<ITurnProgressSink>(_sink);

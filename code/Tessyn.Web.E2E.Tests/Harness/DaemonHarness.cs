@@ -108,6 +108,8 @@ public sealed class DaemonHarness : IDisposable
 		s.AddSingleton<IDraftService>(_ => new DraftService(Path.Combine(root, "drafts")));
 		s.AddSingleton<IClaudeProcessManager>(process);
 		s.AddSingleton<IClaudeStreamingSessionManager, FakeStreamingManager>();
+		s.AddSingleton<ISessionEngine, ClaudeSessionEngine>();
+		s.AddSingleton<ISessionEngineRouter, SessionEngineRegistry>();
 		s.AddSingleton<IClaudeSessionStatusService, FakeSessionStatusService>();
 		s.AddSingleton<ISessionSearchService, SessionSearchService>();
 		s.AddSingleton<IClaudeProfileService>(_ => new FakeProfileService(root));

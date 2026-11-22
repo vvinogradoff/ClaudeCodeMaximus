@@ -38,7 +38,7 @@ public sealed class WpfUserRowsLiveE2ETests : IDisposable
 		_main = _env.Session.NodeId;
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Base.Registry, new StubStreamingManager(), _env.Attention, activity);
+		var states = new SessionStateBuilder(_env.Base.Registry, TestEngines.Claude(new StubStreamingManager()), _env.Attention, activity);
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Base.Settings), _env.Base.Registry, states, activity, new TreeVersionTracker(),
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
 		var catalog = new CatalogResult(

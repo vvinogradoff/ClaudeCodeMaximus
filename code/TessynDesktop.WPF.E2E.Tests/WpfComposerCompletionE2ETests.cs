@@ -54,7 +54,7 @@ public sealed class WpfComposerCompletionE2ETests : IDisposable
 		_env.Base.Settings.Settings.SessionCompletionSoundFile = Path.Combine(_root, "done.wav");
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Base.Registry, new StubStreamingManager(), _env.Attention, activity, _authErrors);
+		var states = new SessionStateBuilder(_env.Base.Registry, TestEngines.Claude(new StubStreamingManager()), _env.Attention, activity, _authErrors);
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Base.Settings), _env.Base.Registry, states, activity, new TreeVersionTracker(),
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
 		var settings = new SettingsRpcModule(new SettingsSectionService(_env.Base.Settings, [new NotificationsSettingsSection()]));

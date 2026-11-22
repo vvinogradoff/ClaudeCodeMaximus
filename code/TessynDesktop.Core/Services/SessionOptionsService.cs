@@ -15,7 +15,7 @@ public sealed class SessionOptionsService : ISessionOptionsService
 	private readonly IAppSettingsService _appSettings;
 	private readonly ITurnEngine _engine;
 	private readonly ITurnSettingsResolver _settings;
-	private readonly IClaudeStreamingSessionManager _streaming;
+	private readonly ISessionEngineRouter _engines;
 	private readonly ISessionTurnService _turns;
 
 	public SessionOptionsService(
@@ -23,7 +23,7 @@ public sealed class SessionOptionsService : ISessionOptionsService
 		IAppSettingsService appSettings,
 		ITurnEngine engine,
 		ITurnSettingsResolver settings,
-		IClaudeStreamingSessionManager streaming,
+		ISessionEngineRouter engines,
 		ISessionTurnService turns)
 	{
 		_turns       = turns;
@@ -31,7 +31,7 @@ public sealed class SessionOptionsService : ISessionOptionsService
 		_appSettings = appSettings;
 		_engine      = engine;
 		_settings    = settings;
-		_streaming   = streaming;
+		_engines   = engines;
 	}
 
 	/// <inheritdoc />
@@ -138,8 +138,8 @@ public sealed class SessionOptionsService : ISessionOptionsService
 
 			// A live streaming process still holds the old conversation; without stopping it the detach would not take effect.
 			// Only while nothing runs: stopping it in the middle of a turn would end that turn and its background tasks (FR.19.4).
-			if (_streaming.IsAlive(nodeId) && !IsRunning(nodeId))
-				_streaming.Stop(nodeId);
+			if (_engines.IsAlive(nodeId) && !IsRunning(nodeId))
+				_engines.Stop(nodeId);
 		}
 		finally
 		{

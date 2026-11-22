@@ -18,7 +18,7 @@ public sealed class TurnRpcModule : IRemoteRpcModule
 	private readonly ITurnSendService _send;
 	private readonly ITurnEngine _engine;
 	private readonly ISessionTurnService _turns;
-	private readonly IClaudeStreamingSessionManager _streaming;
+	private readonly ISessionEngineRouter _engines;
 	private readonly ISessionModelSettings _modelSettings;
 
 	public TurnRpcModule(
@@ -28,7 +28,7 @@ public sealed class TurnRpcModule : IRemoteRpcModule
 		ITurnSendService send,
 		ITurnEngine engine,
 		ISessionTurnService turns,
-		IClaudeStreamingSessionManager streaming,
+		ISessionEngineRouter engines,
 		ISessionModelSettings modelSettings)
 	{
 		_registry  = registry;
@@ -37,7 +37,7 @@ public sealed class TurnRpcModule : IRemoteRpcModule
 		_send      = send;
 		_engine    = engine;
 		_turns     = turns;
-		_streaming = streaming;
+		_engines = engines;
 		_modelSettings = modelSettings;
 	}
 
@@ -78,9 +78,9 @@ public sealed class TurnRpcModule : IRemoteRpcModule
 		var cancelled = _engine.CancelRuns(node.NodeId);
 		cancelled    |= _turns.CancelTurn(node.NodeId);
 
-		var processAlive = _streaming.IsAlive(node.NodeId);
+		var processAlive = _engines.IsAlive(node.NodeId);
 		if (processAlive)
-			_streaming.Stop(node.NodeId);
+			_engines.Stop(node.NodeId);
 
 		return new SessionStopResult(processAlive || cancelled);
 	}

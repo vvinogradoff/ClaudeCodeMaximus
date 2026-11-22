@@ -89,7 +89,7 @@ public sealed class ScheduleStateAndEventTests : IDisposable
 	[Fact]
 	public void TheState_SaysWhetherASessionHasSchedules()
 	{
-		var states = new SessionStateBuilder(_env.Registry, new FakeStreamingManagerForTurnService(), new FakeAttentionService(), new FakeActivityService(), null, _scheduler);
+		var states = new SessionStateBuilder(_env.Registry, TestEngines.Claude(new FakeStreamingManagerForTurnService()), new FakeAttentionService(), new FakeActivityService(), null, _scheduler);
 		Add(_one, raise: false);
 
 		Assert.True(states.Build(_one).HasSchedules);
@@ -99,7 +99,7 @@ public sealed class ScheduleStateAndEventTests : IDisposable
 	[Fact]
 	public void TheState_FollowsTheRemovalOfTheLastSchedule()
 	{
-		var states = new SessionStateBuilder(_env.Registry, new FakeStreamingManagerForTurnService(), new FakeAttentionService(), new FakeActivityService(), null, _scheduler);
+		var states = new SessionStateBuilder(_env.Registry, TestEngines.Claude(new FakeStreamingManagerForTurnService()), new FakeAttentionService(), new FakeActivityService(), null, _scheduler);
 		var schedule = Add(_one, raise: false);
 
 		_scheduler.RemoveSchedule(schedule.ScheduleId);
@@ -110,7 +110,7 @@ public sealed class ScheduleStateAndEventTests : IDisposable
 	[Fact]
 	public void WithoutAScheduler_TheFlagIsFalse()
 	{
-		var states = new SessionStateBuilder(_env.Registry, new FakeStreamingManagerForTurnService(), new FakeAttentionService(), new FakeActivityService());
+		var states = new SessionStateBuilder(_env.Registry, TestEngines.Claude(new FakeStreamingManagerForTurnService()), new FakeAttentionService(), new FakeActivityService());
 
 		Assert.False(states.Build(_one).HasSchedules);
 	}

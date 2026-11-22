@@ -182,7 +182,7 @@ public sealed class LimitErrorTests : IDisposable
 	{
 		using var env = new RemoteTreeTestEnv();
 		var tracker = new SessionAuthErrorTracker();
-		var states = new SessionStateBuilder(env.Registry, new FakeStreamingManagerForTurnService(), env.Attention, env.Activity, tracker);
+		var states = new SessionStateBuilder(env.Registry, TestEngines.Claude(new FakeStreamingManagerForTurnService()), env.Attention, env.Activity, tracker);
 		var session = env.AddSession(env.AddDirectory("p"), "S");
 
 		var clean = states.Build(session);
@@ -199,7 +199,7 @@ public sealed class LimitErrorTests : IDisposable
 	{
 		using var env = new RemoteTreeTestEnv();
 		var tracker = new SessionAuthErrorTracker();
-		var states = new SessionStateBuilder(env.Registry, new FakeStreamingManagerForTurnService(), env.Attention, env.Activity, tracker);
+		var states = new SessionStateBuilder(env.Registry, TestEngines.Claude(new FakeStreamingManagerForTurnService()), env.Attention, env.Activity, tracker);
 		var session = env.AddSession(env.AddDirectory("p"), "S");
 		var daemon = FakeDaemonProxy.Create(out var fake);
 		fake.ByNodeId[session.NodeId] = session;

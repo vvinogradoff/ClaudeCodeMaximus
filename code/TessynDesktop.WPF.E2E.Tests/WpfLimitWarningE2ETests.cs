@@ -36,7 +36,7 @@ public sealed class WpfLimitWarningE2ETests : IDisposable
 		_worker.SupervisorNodeId = _env.Session.NodeId;
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Registry, _env.Streaming, _env.Attention, activity, _tracker);
+		var states = new SessionStateBuilder(_env.Registry, TestEngines.Claude(_env.Streaming), _env.Attention, activity, _tracker);
 		var versions = new TreeVersionTracker();
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(_env.Settings), _env.Registry, states, activity, versions,
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());

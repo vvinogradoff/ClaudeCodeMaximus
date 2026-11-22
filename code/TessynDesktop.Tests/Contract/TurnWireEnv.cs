@@ -51,14 +51,12 @@ internal sealed class TurnWireEnv : IDisposable
 
 		Publisher = new TurnEventPublisher(Bus, TimeSpan.FromMilliseconds(20));
 		Engine = new TurnEngine(
-			Files, Registry, Turns, Process, Streaming, Settings,
-			new Lazy<IAgentMcpServer>(() => new RecordingMcpServer()), new Lazy<ITelegramBridgeService>(() => new RecordingTelegramBridge()),
-			new RecordingSessionStatusService(), Attention.Service, Tags.Service, [Publisher]);
+			Files, Registry, Turns, TestEngines.Claude(Streaming, Process, Files, Settings, new RecordingSessionStatusService(), new Lazy<IAgentMcpServer>(() => new RecordingMcpServer())), Settings, new Lazy<ITelegramBridgeService>(() => new RecordingTelegramBridge()), Attention.Service, Tags.Service, [Publisher]);
 
 		var labels   = new ProfileLabelService(ProfileService, Settings);
 		var options  = new TurnOptionsResolver(Models, Settings, labels);
 		var resolver = new TurnSettingsResolver(Settings, Turns, ProfileService, Models, labels);
-		var module   = new TurnRpcModule(Registry, options, resolver, new TurnSendService(Engine, Registry), Engine, Turns, Streaming, new SessionModelSettings(Settings));
+		var module   = new TurnRpcModule(Registry, options, resolver, new TurnSendService(Engine, Registry), Engine, Turns, TestEngines.Claude(Streaming), new SessionModelSettings(Settings));
 
 		// The event log of hello's capabilities (the host keeps its own for the stream).
 		// The run id of hello must be the one of the stream the client then resumes on.

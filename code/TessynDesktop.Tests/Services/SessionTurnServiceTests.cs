@@ -246,16 +246,13 @@ public sealed class SessionTurnServiceTests : IDisposable
 		_appSettings.Settings.AgentToolsEnabled = false; // keeps IAgentMcpServer/EnsureConfigFileAsync unused
 
 		_sut = new SessionTurnService(
-			_processManager,
+			TestEngines.Claude(_streamingManager, _processManager, _fileService, _appSettings, new FakeSessionStatusServiceForTurnService(), new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService())),
 			_fileService,
 			_appSettings,
 			_profileService,
-			new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService()),
 			_registry,
-			new FakeSessionStatusServiceForTurnService(),
 			new FakeModelServiceForTurnService(),
 			new Lazy<ITelegramBridgeService>(() => new FakeBridgeForTurnService()),
-			_streamingManager,
 			_attention.Service,
 			_tagEnv.Service,
 			new ProfileLabelService(_profileService, _appSettings));
@@ -280,11 +277,9 @@ public sealed class SessionTurnServiceTests : IDisposable
 	public async Task RunTurnAsync_TelegramBridgeLazyThrows_ReleasesTurnLockAndClearsRunning()
 	{
 		var sut = new SessionTurnService(
-			_processManager, _fileService, _appSettings, _profileService,
-			new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService()),
-			_registry, new FakeSessionStatusServiceForTurnService(), new FakeModelServiceForTurnService(),
-			new Lazy<ITelegramBridgeService>(() => throw new InvalidOperationException("bridge ctor failed")),
-			_streamingManager, _attention.Service, _tagEnv.Service,
+			TestEngines.Claude(_streamingManager, _processManager, _fileService, _appSettings, new FakeSessionStatusServiceForTurnService(), new Lazy<IAgentMcpServer>(() => new FakeMcpServerForTurnService())), _fileService, _appSettings, _profileService,
+			_registry, new FakeModelServiceForTurnService(),
+			new Lazy<ITelegramBridgeService>(() => throw new InvalidOperationException("bridge ctor failed")), _attention.Service, _tagEnv.Service,
 			new ProfileLabelService(_profileService, _appSettings));
 		var node = MakeNode();
 

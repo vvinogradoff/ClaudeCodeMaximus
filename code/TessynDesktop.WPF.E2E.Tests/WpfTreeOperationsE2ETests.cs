@@ -48,7 +48,7 @@ public sealed class WpfTreeOperationsE2ETests : IDisposable
 		_gamma = _env.Registry.AddGroup(_env.Directory, "Gamma group");
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(_env.Registry, _env.Streaming, _env.Attention, activity);
+		var states = new SessionStateBuilder(_env.Registry, TestEngines.Claude(_env.Streaming), _env.Attention, activity);
 		var versions = new TreeVersionTracker();
 		// What the daemon's notification publisher does: a structural change of the tree is a new tree version.
 		_env.Registry.TreeChanged += (_, e) =>

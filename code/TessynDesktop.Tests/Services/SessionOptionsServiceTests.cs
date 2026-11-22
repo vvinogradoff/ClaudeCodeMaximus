@@ -25,7 +25,7 @@ public sealed class SessionOptionsServiceTests : IDisposable
 
 	public SessionOptionsServiceTests()
 	{
-		_service = new SessionOptionsService(_env.Registry, _env.Settings, _engine, new FixedSettingsResolver(), _streaming, _turns);
+		_service = new SessionOptionsService(_env.Registry, _env.Settings, _engine, new FixedSettingsResolver(), TestEngines.Claude(_streaming), _turns);
 		_session = _env.AddSession(_env.AddDirectory("proj"), "S");
 		_session.ClaudeSessionId = "claude-1";
 		_env.Registry.SessionSettingsChanged += (_, e) => _settingsChanged.Add(e.NodeId);

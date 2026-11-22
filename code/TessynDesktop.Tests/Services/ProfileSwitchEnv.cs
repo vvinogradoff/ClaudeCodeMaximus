@@ -99,7 +99,7 @@ internal sealed class ProfileSwitchEnv : IDisposable
 		ProfileService = new TempProfileService(ProfilesRoot);
 		Resolver       = new ProfileResolver(Settings, ProfileService);
 		Migrator       = new ClaudeSessionMigrator(ProfileService, DefaultHome);
-		Switch         = new ProfileSwitchService(Settings, Registry, Files, Resolver, Migrator, Streaming, new Lazy<ISessionTurnService>(() => Turns));
+		Switch         = new ProfileSwitchService(Settings, Registry, Files, Resolver, Migrator, TestEngines.Claude(Streaming), new Lazy<ISessionTurnService>(() => Turns));
 		Server = new AgentMcpServer(
 			Settings,
 			new Lazy<ISessionTurnService>(() => Turns),

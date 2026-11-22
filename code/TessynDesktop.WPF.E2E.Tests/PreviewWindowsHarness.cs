@@ -47,7 +47,7 @@ internal sealed class PreviewWindowsHarness : IDisposable
 		Second = Env.AddSession("Second session", "other question", "other answer").NodeId;
 
 		var activity = new ActivityByNodeService();
-		var states = new SessionStateBuilder(Env.Base.Registry, new StubStreamingManager(), Env.Attention, activity);
+		var states = new SessionStateBuilder(Env.Base.Registry, TestEngines.Claude(new StubStreamingManager()), Env.Attention, activity);
 		var tree = new TreeRemoteRpcModule(new RemoteTreeReader(Env.Base.Settings), Env.Base.Registry, states, activity, new TreeVersionTracker(),
 			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
 		_host = new ClientTestHost((run, log) => new TdcpDispatcher([new ClientRpcModule(runInfo: run, eventLog: log), .. Env.Modules, tree, new CatalogTestModule([])]));

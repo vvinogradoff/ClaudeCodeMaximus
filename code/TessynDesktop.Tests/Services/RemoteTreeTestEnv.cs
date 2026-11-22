@@ -62,7 +62,7 @@ internal sealed class RemoteTreeTestEnv : IDisposable
 		Registry = new SessionRegistry(Settings, new FakeSessionFileService(), new FakeDirectoryLabelService(), new FakeClaudeSessionStatusService());
 		var reader = new RemoteTreeReader(Settings);
 		Resumable = new SessionResumabilityCache(reader, Status);
-		States   = new SessionStateBuilder(Registry, new FakeStreamingManagerForTurnService(), Attention, Activity, resumable: Resumable);
+		States   = new SessionStateBuilder(Registry, TestEngines.Claude(new FakeStreamingManagerForTurnService()), Attention, Activity, resumable: Resumable);
 
 		Dispatcher = new TdcpDispatcher(
 		[
