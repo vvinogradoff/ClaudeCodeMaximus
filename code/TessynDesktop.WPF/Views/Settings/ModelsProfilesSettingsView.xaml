@@ -60,11 +60,11 @@
                                 <StackPanel Margin="0,3" AutomationProperties.Name="{Binding AutomationName}">
                                     <DockPanel>
                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                            <Button Padding="8,2" Margin="4,0,0,0" Content="Sign in again" AutomationProperties.Name="Sign in again"
+                                            <Button Padding="8,2" Margin="4,0,0,0" Content="Sign in again" AutomationProperties.Name="{Binding SignInAgainName}"
                                                     Command="{Binding DataContext.Profiles.SignInAgainCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
-                                            <Button Padding="8,2" Margin="4,0,0,0" Content="Sign out" AutomationProperties.Name="Sign out" IsEnabled="{Binding CanSignOut}"
+                                            <Button Padding="8,2" Margin="4,0,0,0" Content="Sign out" AutomationProperties.Name="{Binding SignOutName}" IsEnabled="{Binding CanSignOut}"
                                                     Command="{Binding DataContext.Profiles.SignOutCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
-                                            <Button Padding="8,2" Margin="4,0,0,0" Content="Delete" AutomationProperties.Name="Delete" Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}"
+                                            <Button Padding="8,2" Margin="4,0,0,0" Content="Delete" AutomationProperties.Name="{Binding DeleteName}" Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}"
                                                     Command="{Binding DataContext.Profiles.DeleteChatGptCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
                                         </StackPanel>
                                         <StackPanel>
@@ -76,7 +76,7 @@
                                     </DockPanel>
                                     <!-- FR.33.6: Codex Default shares the User's own Codex CLI home -->
                                     <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding DataContext.Profiles.CodexDefaultWarning, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                               Visibility="{Binding IsCodexDefault, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Codex Default warning" />
+                                               Visibility="{Binding IsCodexDefault, Converter={StaticResource BoolToVis}}" />
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -99,7 +99,7 @@
                         </Border.Style>
                         <StackPanel>
                             <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
-                            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Text="{Binding Instruction}" AutomationProperties.Name="Sign-in instruction" />
+                            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Text="{Binding Instruction}" />
                             <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding BrowserOpenFailedText}" Visibility="{Binding BrowserOpenFailed, Converter={StaticResource BoolToVis}}" />
                             <StackPanel Visibility="{Binding IsDeviceCode, Converter={StaticResource BoolToVis}}" Margin="0,6,0,0">
                                 <TextBlock Style="{StaticResource SettingsHint}" Text="Code" />
@@ -116,16 +116,14 @@
                                     <TextBox Text="{Binding Address, Mode=OneWay}" IsReadOnly="True" AutomationProperties.Name="Sign-in address" />
                                 </DockPanel>
                             </StackPanel>
-                            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding DeviceCodeNote}" Visibility="{Binding IsDeviceCode, Converter={StaticResource BoolToVis}}"
-                                       AutomationProperties.Name="Device code note" />
+                            <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding DeviceCodeNote}" Visibility="{Binding IsDeviceCode, Converter={StaticResource BoolToVis}}" />
                             <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding CopyStatus}" />
                             <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Cancel" AutomationProperties.Name="Cancel sign-in"
                                     Command="{Binding DataContext.Profiles.CancelSignInCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
-                <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding Profiles.StatusText}" Visibility="{Binding Profiles.HasStatus, Converter={StaticResource BoolToVis}}"
-                           AutomationProperties.Name="Profile status" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding Profiles.StatusText}" Visibility="{Binding Profiles.HasStatus, Converter={StaticResource BoolToVis}}" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

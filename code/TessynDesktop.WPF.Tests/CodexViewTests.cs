@@ -152,7 +152,7 @@ public sealed class CodexViewTests
 	}
 
 	[Fact]
-	public void TheGeneralTab_ShowsTheCodexSection_WithTheStatusLine_AndThePathStretchesBesideBrowse()
+	public async Task TheGeneralTab_ShowsTheCodexSection_WithTheStatusLine_AndThePathStretchesBesideBrowse()
 	{
 		var client = new FakeTessynClient().AnnouncingSettings().WithSettingsValues();
 		var values = (GeneralSettingsDto)client.SettingsValues[RemoteProtocol.SettingsApi.GeneralSection];
@@ -162,16 +162,17 @@ public sealed class CodexViewTests
 			CodexModelTiers = [new("astra", 3), new("gpt", 2)],
 		};
 		var general = new GeneralSectionViewModel(client, NullLogger<GeneralSectionViewModel>.Instance);
-		general.InitializeAsync(RemoteProtocol.SettingsApi.Capability).GetAwaiter().GetResult();
+		await general.InitializeAsync(RemoteProtocol.SettingsApi.Capability);
 
 		WithoutBindingErrors(() =>
 		{
 			var view = new GeneralSettingsView { DataContext = general };
 			Layout(view);
 
-			var status = Named<TextBlock>(view, "Codex status");
+			var status = (TextBlock)view.FindName("CodexStatusLine");
 			Assert.True(IsShown(status));
 			Assert.Equal(@"Codex 0.171.0 found at C:\Tools\codex.exe", status.Text);
+			Assert.Equal(status.Text, AutomationProperties.GetName(status));   // UI Automation reads the line itself
 			Assert.Equal(2, FindAll<TextBox>(view).Count(t => AutomationProperties.GetName(t) == "Tier match"));
 
 			var path = Named<TextBox>(view, "Codex path");
@@ -186,7 +187,7 @@ public sealed class CodexViewTests
 	}
 
 	[Fact]
-	public void TheProfilesTab_ShowsTheChatGptGroup_AndTheCodeSignIn()
+	public async Task TheProfilesTab_ShowsTheChatGptGroup_AndTheCodeSignIn()
 	{
 		var client = new FakeTessynClient().AnnouncingSettings();
 		client.ServerInfo = client.ServerInfo! with { Capabilities = [.. client.ServerInfo.Capabilities, RemoteProtocol.CodexProfilesAdmin.Capability] };
@@ -202,8 +203,8 @@ public sealed class CodexViewTests
 		};
 		var ui = new ImmediateUiDispatcher();
 		var profiles = new ProfileViewModel(new DialogService(presenter, ui), ui, NullLogger<ProfileViewModel>.Instance, new FakeSystemUrlLauncher(), new FakeClipboardWriter());
-		profiles.AttachAsync(client).GetAwaiter().GetResult();
-		profiles.NewChatGptProfileAsync().GetAwaiter().GetResult();
+		await profiles.AttachAsync(client);
+		await profiles.NewChatGptProfileAsync();
 		var section = new ModelsProfilesSectionViewModel(client, profiles, NullLogger<ModelsProfilesSectionViewModel>.Instance);
 
 		WithoutBindingErrors(() =>
@@ -212,11 +213,11 @@ public sealed class CodexViewTests
 			Layout(view);
 
 			Assert.True(IsShown(Named<StackPanel>(view, "ChatGPT profiles")));
-			Assert.True(IsShown(Named<TextBlock>(view, "Codex Default warning")));
-			Assert.False(IsShown(Named<Button>(view, "Delete")));   // Codex Default is never deleted
+			Assert.True(IsShown(FindAll<TextBlock>(view).Single(t => t.Text == Constants.Codex.CodexDefaultWarning)));
+			Assert.False(IsShown(Named<Button>(view, "Delete: ChatGPT · me@example.com (codex-default)")));   // Codex Default is never deleted
 			Assert.True(IsShown(Named<Border>(view, "ChatGPT sign-in")));
 			Assert.Equal("ABCD-1234", Named<TextBox>(view, "Sign-in code").Text);
-			Assert.True(IsShown(Named<TextBlock>(view, "Device code note")));
+			Assert.True(IsShown(FindAll<TextBlock>(view).Single(t => t.Text == Constants.Codex.DeviceCodeNote)));
 			Assert.True(IsShown(Named<Button>(view, "Cancel sign-in")));
 		});
 	}

@@ -51,7 +51,7 @@
                         <TextBox Text="{Binding CodexPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Codex path" />
                     </DockPanel>
                     <TextBlock Style="{StaticResource SettingsHint}" Text="Empty finds codex.exe (the official installer, winget, npm, then the PATH). Applies to Codex processes started after saving." />
-                    <TextBlock x:Name="CodexStatusLine" Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding CodexStatusLine}" AutomationProperties.Name="Codex status">
+                    <TextBlock x:Name="CodexStatusLine" Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding CodexStatusLine}" AutomationProperties.Name="{Binding CodexStatusLine}" AutomationProperties.AutomationId="CodexStatus">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Style.Triggers>
@@ -62,9 +62,8 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding CodexNote}" Visibility="{Binding HasCodexNote, Converter={StaticResource BoolToVis}}"
-                               AutomationProperties.Name="Codex version note" />
-                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding CodexTestedText}" AutomationProperties.Name="Codex tested version" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding CodexNote}" Visibility="{Binding HasCodexNote, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding CodexTestedText}" />
 
                     <TextBlock Style="{StaticResource SettingsLabel}" Text="Profile for the GPT model list" />
                     <ComboBox ItemsSource="{Binding CatalogProfiles}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding CodexCatalogProfileId}"
@@ -95,7 +94,7 @@
                         <Button Style="{StaticResource SettingsButton}" Content="Add row" Command="{Binding AddTierCommand}" AutomationProperties.Name="Add tier row" />
                         <Button Style="{StaticResource SettingsButton}" Content="Reset to defaults" Command="{Binding ResetTiersCommand}" AutomationProperties.Name="Reset tiers to defaults" />
                     </StackPanel>
-                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding TierTableNote}" AutomationProperties.Name="Tier table note" />
+                    <TextBlock Style="{StaticResource SettingsHint}" Text="{Binding TierTableNote}" />
                 </StackPanel>
 
                 <s:SectionMessages Margin="0,8,0,0" />

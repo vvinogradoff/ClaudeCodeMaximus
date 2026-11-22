@@ -87,6 +87,12 @@ public static partial class Constants
 		public const string AuthErrorText = "Needs sign-in again";
 		public const string CatalogProfileText = "model list";
 		public const string PlanPrefix = "ChatGPT ";
+		public const string SignInAgainAction = "Sign in again";
+		public const string SignOutAction = "Sign out";
+		public const string DeleteAction = "Delete";
+
+		/// <summary>{0} the action, {1} the profile's name, {2} its id (two profiles can share an e-mail).</summary>
+		public const string RowActionNameFormat = "{0}: {1} ({2})";
 
 		/// <summary>FR.33.6: the warning next to Codex Default.</summary>
 		public const string CodexDefaultWarning =
