@@ -41,6 +41,34 @@ public sealed class RpcRelayTests
 	}
 
 	[Fact]
+	public async Task Attention_reply_questionnaire_answers_and_item_questions_pass_through_unchanged()   // FR.23.36, FR.23.38
+	{
+		using var factory = new TessynWebFactory();
+		using var browser = await factory.CreateLoggedInBrowserAsync();
+		await using var daemon = await FakeDaemon.ConnectAsync(factory);
+
+		const string answers = "[{\"itemId\":\"A1\",\"text\":\"\",\"questions\":[{\"number\":1,\"value\":\"yes\"},{\"number\":3,\"choices\":[\"EU\",\"Asia\"]}]}]";
+		var call = CallAsync(browser, "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"attention.reply\",\"params\":{\"nodeId\":\"abc\",\"answers\":" + answers + "}}");
+		using var request = await daemon.ReadRequestAsync();
+
+		var sent = request.RootElement.GetProperty("params").GetProperty("answers")[0];
+		Assert.Equal("A1", sent.GetProperty("itemId").GetString());
+		var questions = sent.GetProperty("questions");
+		Assert.Equal(2, questions.GetArrayLength());
+		Assert.Equal("yes", questions[0].GetProperty("value").GetString());
+		Assert.Equal(3, questions[1].GetProperty("number").GetInt32());
+		Assert.Equal("Asia", questions[1].GetProperty("choices")[1].GetString());
+
+		const string reply = "{\"nodeId\":\"abc\",\"items\":[{\"id\":\"A1\",\"questions\":[{\"number\":1,\"type\":\"yesNo\",\"text\":\"Ship it?\",\"choices\":[],\"recommended\":\"yes\",\"recommendedChoices\":[]}]}]}";
+		await daemon.ReplyAsync(request.RootElement.GetProperty("id").GetString()!, reply);
+		using var response = await call;
+
+		var question = response.RootElement.GetProperty("result").GetProperty("items")[0].GetProperty("questions")[0];
+		Assert.Equal("yesNo", question.GetProperty("type").GetString());
+		Assert.Equal("yes", question.GetProperty("recommended").GetString());
+	}
+
+	[Fact]
 	public async Task String_ids_are_preserved_and_server_ids_are_unique_per_request()
 	{
 		using var factory = new TessynWebFactory();

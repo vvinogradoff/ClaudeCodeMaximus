@@ -19,4 +19,7 @@ public sealed class AttentionPostRequestModel
 
 	/// <summary>Already resolved references. A re-post that carries some replaces the item's; one without keeps them.</summary>
 	public IReadOnlyList<AttentionRefModel> Refs { get; init; } = [];
+
+	/// <summary>The already validated questionnaire (FR.23.33). A re-post replaces the item's whole questionnaire, so an empty list clears it.</summary>
+	public IReadOnlyList<AttentionQuestionModel> Questions { get; init; } = [];
 }

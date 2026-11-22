@@ -205,9 +205,13 @@ public static partial class Constants
 		/// FR.23.10 — Emitted once per fresh session, with the same gate as <see cref="NoWorkflowTool"/> plus
 		/// "not a Worker Session". Session policy: how and when to pin items in the user's Focus view.
 		/// </summary>
+		/// <summary>FR.23.34: the questionnaire sentence of <see cref="AttentionGuidance"/>.</summary>
+		public const string QuestionnaireGuidanceSentence =
+			"When you need several decisions at once, post one ask with a questionnaire (questions, each with your recommended answer) instead of listing the questions in the body.";
+
 		public const string AttentionGuidance =
 			"The user has a Focus view beside this session's output. Pin anything they need there with `mcp__" + Agent.McpServerName + "__post_attention`: `critical` — they must know immediately (it notifies them at once); `ask` — you need their answer, decision or approval; `todo` — something only they can do; `alert` — worth knowing, no reply needed; `decided` — a call you made for them so work isn't blocked, which they may want to override. When an item is about bulky output or a file you wrote (a plan, a report), do not paste it into the body: add `refs` — an `entry` ref with an exact `quote` from the output, or a `file` ref with the path — so the user can jump to it or preview it. Write each item so it stands on its own: the user may read it days later without this conversation. Post each item once — it stays pinned until resolved, so don't restate pinned items in later replies; refer to them by id. When the user answers an item in conversation, or it no longer applies, call `mcp__" + Agent.McpServerName + "__resolve_attention`. " +
-			"When you need the user's decision, approval or action, post it with `mcp__" + Agent.McpServerName + "__post_attention` (kind `ask` with `options` and your `recommendation`, or `todo`), not only in the reply text. Report decisions you made on their behalf as `decided`. When the user answers in chat, close the item with `mcp__" + Agent.McpServerName + "__resolve_attention`. This takes precedence over a project's \"ask in plain text\" rule, which is about the interactive question picker, not the Focus view.";
+			"When you need the user's decision, approval or action, post it with `mcp__" + Agent.McpServerName + "__post_attention` (kind `ask` with `options` and your `recommendation`, or `todo`), not only in the reply text. Report decisions you made on their behalf as `decided`. " + QuestionnaireGuidanceSentence + " When the user answers in chat, close the item with `mcp__" + Agent.McpServerName + "__resolve_attention`. This takes precedence over a project's \"ask in plain text\" rule, which is about the interactive question picker, not the Focus view.";
 
 		/// <summary>
 		/// FR.24.6 — Emitted on a top-level session's first turn in each app run (not only fresh sessions, so
@@ -504,6 +508,62 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const int MaxRecommendationLength = 1_000;
 		public const int MaxKeyLength = 100;
 
+		// ── Questionnaires (FR.23.33, FR.23.39) ──
+		public const int MaxQuestionsPerItem = 20;
+		public const int MinQuestionChoices = 2;
+		public const int MaxQuestionChoices = 4;
+		public const int MaxQuestionTextLength = 500;
+		public const int MaxQuestionChoiceLength = 100;
+		public const int MaxQuestionRecommendationLength = 1_000;
+
+		/// <summary>Type names of the <c>post_attention</c> input (FR.23.34).</summary>
+		public const string QuestionTypeYesNo = "yes_no";
+		public const string QuestionTypeSingle = "single";
+		public const string QuestionTypeMulti = "multi";
+		public const string QuestionTypeText = "text";
+
+		/// <summary>The two values of a YesNo question, lower case (FR.23.36).</summary>
+		public const string AnswerYes = "yes";
+		public const string AnswerNo = "no";
+
+		/// <summary>Result line suffix of an item with a questionnaire (FR.23.34): <c>A12 posted (ask) with 7 questions.</c></summary>
+		public const string PostedWithQuestionsFormat = " with {0} questions";
+
+		/// <summary>Pinned list suffix (FR.23.38).</summary>
+		public const string PinnedQuestionnaireSuffixFormat = " (questionnaire, {0} questions)";
+
+		/// <summary><c>list_attention</c> suffix of an open questionnaire item (FR.23.38).</summary>
+		public const string ListQuestionsSuffixFormat = " - {0} questions";
+
+		/// <summary>Notification addition for a single created questionnaire item (FR.23.38): count, first texts, then the ellipsis.</summary>
+		public const string NotifyQuestionsFormat = "{0} questions: {1}...";
+		public const int NotifyQuestionTexts = 3;
+		public const string NotifyQuestionsSeparator = "; ";
+
+		/// <summary>Joins the lines of a multi-line question or answer onto one line (FR.23.36).</summary>
+		public const string MultiLineJoiner = " / ";
+
+		// ── Session-file question lines (FR.23.38) ──
+		public const string SystemQuestionYesNoFormat = "Q{0} [yes/no] {1}";
+		public const string SystemQuestionSingleFormat = "Q{0} [single: {1}] {2}";
+		public const string SystemQuestionMultiFormat = "Q{0} [multi: {1}] {2}";
+		public const string SystemQuestionTextFormat = "Q{0} [text] {1}";
+		public const string SystemQuestionChoiceSeparator = " | ";
+		public const string SystemQuestionRecommendedFormat = " (recommended: {0})";
+		public const string SystemQuestionRecommendedSeparator = ", ";
+
+		// ── Answer lines (FR.23.36) ──
+		public const string AnswerQuestionLineFormat = "Q{0} {1}: {2}";
+		public const string AnswerChoiceFormat = "{0} {1}";
+		public const string AnswerChoiceSeparator = ", ";
+		public const string AnswerNoAnswer = "no answer";
+		public const string AnswerNoneSelected = "none selected";
+		public const string AnswerAsRecommended = " (as recommended)";
+		public const string AnswerChangedFormat = " (changed; recommended: {0})";
+		public const string AnswerChangedText = " (changed)";
+		public const string AnswerYesLabel = "Yes";
+		public const string AnswerNoLabel = "No";
+
 		/// <summary>Maximum length of a <c>resolve_attention</c> note (FR.23.5).</summary>
 		public const int MaxNoteLength = 2_000;
 
@@ -546,8 +606,12 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string ResolveToolName = "resolve_attention";
 		public const string ListToolName = "list_attention";
 
+		/// <summary>FR.23.34: the questionnaire sentence of the <c>post_attention</c> tool description.</summary>
+		public const string QuestionnaireToolSentence =
+			"An ask can carry a questionnaire: up to 20 questions, each yes_no, single (2-4 choices), multi (2-4 choices) or text, with your recommended answer filled in; the user keeps or overrides each one and answers them all in one reply. Use it whenever you need several decisions at once — put the context in body and the questions in questions, not in body.";
+
 		public const string PostToolDescription =
-			"Pin items in the user's Focus view, next to this session's output, where they stay visible until resolved. Kinds: critical (the user must know immediately — always notifies them), ask (you need their answer or approval), todo (something only they can do), alert (worth knowing, no reply needed), decided (a call you made for them that they may override). Write each body so it stands on its own. Post an item once: re-posting an open item with the same key or title updates it instead of adding a copy. Don't restate pinned items in later replies — refer to them by id (A1, A2, …). Set notify=true to also ping the user's Telegram and desktop, only when they must act soon. Add `refs` (up to 10 per item) when the item is about bulky output or a file you wrote, instead of pasting it into the body: kind=entry with `quote` (text copied exactly from an entry of this session, or of another session with `session`; up to 300 characters, `occurrence` last or first) lets the user jump to that spot in the output; kind=file with `path` (absolute, or relative to the working directory; a relative path must stay inside it, otherwise give an absolute path) lets them preview a file, for example a plan awaiting approval; kind=url links a page. A quote that is not found, or that occurs more than once in the entry, and a file that does not exist fail the whole call with a message naming the reference — fix it and post again. Top-level sessions only — a worker's call is refused; report to your supervisor instead.";
+			"Pin items in the user's Focus view, next to this session's output, where they stay visible until resolved. Kinds: critical (the user must know immediately — always notifies them), ask (you need their answer or approval), todo (something only they can do), alert (worth knowing, no reply needed), decided (a call you made for them that they may override). Write each body so it stands on its own. Post an item once: re-posting an open item with the same key or title updates it instead of adding a copy. Don't restate pinned items in later replies — refer to them by id (A1, A2, …). Set notify=true to also ping the user's Telegram and desktop, only when they must act soon. Add `refs` (up to 10 per item) when the item is about bulky output or a file you wrote, instead of pasting it into the body: kind=entry with `quote` (text copied exactly from an entry of this session, or of another session with `session`; up to 300 characters, `occurrence` last or first) lets the user jump to that spot in the output; kind=file with `path` (absolute, or relative to the working directory; a relative path must stay inside it, otherwise give an absolute path) lets them preview a file, for example a plan awaiting approval; kind=url links a page. A quote that is not found, or that occurs more than once in the entry, and a file that does not exist fail the whole call with a message naming the reference — fix it and post again. " + QuestionnaireToolSentence + " Top-level sessions only — a worker's call is refused; report to your supervisor instead.";
 
 		public const string ResolveToolDescription =
 			"Close a pinned Focus item: status=answered when the user answered it in conversation (note = their answer), status=resolved when it is done or no longer applies (note = why).";
@@ -557,8 +621,8 @@ SESSION TRANSCRIPT TO COMPACT:
 
 		// ── Tool result texts (FR.23.4–FR.23.7, FR.23.9) ──
 		public const string WorkerRefusalText = "Not posted - worker sessions can't post to the user's Focus view. Report to your supervisor instead.";
-		public const string PostedLineFormat = "{0} posted ({1}).";
-		public const string AlreadyPinnedLineFormat = "{0} already pinned ({1}) - updated, not re-posted.";
+		public const string PostedLineFormat = "{0} posted ({1}){2}.";
+		public const string AlreadyPinnedLineFormat = "{0} already pinned ({1}){2} - updated, not re-posted.";
 		public const string NotifiedLineFormat = "Notified: {0}.";
 		public const string NotNotifiedLine = "Notification not sent - neither Telegram nor desktop notifications are enabled.";
 		public const string PostClosingLine = "Pinned items stay in the user's Focus view until resolved - don't restate them; refer to them by id.";

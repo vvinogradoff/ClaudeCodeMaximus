@@ -283,8 +283,8 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		if (node == null || _drafts == null)
 			return null;
 
-		var text = itemId == null ? _drafts.LoadDraft(fileName) : _drafts.LoadItemDraft(fileName, itemId);
-		return new DraftChangedPayload(node.NodeId, _revisions.Of(text), itemId);
+		var revision = itemId == null ? _revisions.Of(_drafts.LoadDraft(fileName)) : _revisions.Of(_drafts.LoadItemDraftFull(fileName, itemId));
+		return new DraftChangedPayload(node.NodeId, revision, itemId);
 	}
 
 	// schedule.changed is local-stream only (the relay filters it). The scheduler event does not say what changed, so when the window ends the schedule ids

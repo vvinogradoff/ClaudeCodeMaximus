@@ -100,7 +100,8 @@ public static class InstructionBlockBuilder
 			lines.AppendLine($"- {Constants.Attention.PinnedHeaderLine}");
 			foreach (var item in open.Take(Constants.Attention.MaxPinnedLines))
 				lines.AppendLine(string.Format(
-					Constants.Attention.PinnedItemLineFormat, item.Id, AttentionFormat.KindName(item.Kind), CutTitle(item.Title)));
+					Constants.Attention.PinnedItemLineFormat, item.Id, AttentionFormat.KindName(item.Kind), CutTitle(item.Title))
+					+ (item.Questions.Count == 0 ? string.Empty : string.Format(Constants.Attention.PinnedQuestionnaireSuffixFormat, item.Questions.Count)));
 
 			if (open.Count > Constants.Attention.MaxPinnedLines)
 				lines.AppendLine(string.Format(Constants.Attention.PinnedMoreLineFormat, open.Count - Constants.Attention.MaxPinnedLines));

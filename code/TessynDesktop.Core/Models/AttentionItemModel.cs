@@ -26,4 +26,7 @@ public sealed class AttentionItemModel
 
 	/// <summary>References to entries, files and URLs, resolved when the item was posted. Ledger files without the field read as none.</summary>
 	public List<AttentionRefModel> Refs { get; set; } = [];
+
+	/// <summary>The questionnaire of an ask or critical item (FR.23.33); empty for any other. Ledger files without the field read as none.</summary>
+	public List<AttentionQuestionModel> Questions { get; set; } = [];
 }
