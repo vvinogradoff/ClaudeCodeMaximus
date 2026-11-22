@@ -21,8 +21,8 @@ public static class AttentionPromptBuilder
 		var sb = new StringBuilder(Constants.Attention.AnswersPromptHeader);
 		foreach (var answer in answers)
 		{
-			var text = answer.Answer.Trim().Replace("\r\n", "\n").Replace('\r', '\n')
-				.Replace("\n", "\n" + Constants.Attention.AnswersContinuationIndent);
+			var text = (answer.StartsWithQuestions ? "\n" : string.Empty) + answer.Answer.Trim().Replace("\r\n", "\n").Replace('\r', '\n');
+			text = text.Replace("\n", "\n" + Constants.Attention.AnswersContinuationIndent);
 			sb.Append('\n').Append(string.Format(Constants.Attention.AnswersPromptLineFormat, answer.ItemId, answer.Title, text));
 		}
 
