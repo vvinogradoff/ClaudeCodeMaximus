@@ -1265,3 +1265,16 @@ Architect decision 2026-11-19 (Focus A1): WPF always runs normally; the daemon h
 - [DONE] Feature summary `docs/features/elevated-daemon.md` (approved by the Architect 2026-11-19)
 - [DONE] FR.32.15 banner when WPF itself runs elevated (decision A8, banner only): docs approved 2026-11-19 (A9); built on branch `wpf/elevated-wpf-banner`, merged as `60286f4`; all five suites green
 - [DONE] Manual TC.HS.32 by the Architect, 2026-11-19 (an elevated start showed the banner, a normal start did not; both logged at 12:57)
+
+## Phase 46 — Code references setting and session suggestions for `#` (FR.7.13, FR.7.14, FR.4.8)
+
+Architect decision 2026-11-19. Docs: FR.7.13, FR.7.14, FR.4.8, tdcp-spec 10.A12, UC.CR.01-UC.CR.05, TC.CR.01-TC.CR.24 (draft, to be approved by the Architect). The query-with-spaces rule (FR.7.14) was confirmed by the Architect (Focus A2). Web client unaffected.
+
+- [ ] Docs approved by the Architect (FR.7.13, FR.7.14, FR.4.8, tdcp-spec 10.A12, UC.CR.01, TC.CR.01, glossary rows)
+- [x] [DONE] Setting plumbing: `CodeReferencesEnabled` in `AppSettingsModel` (default false), `GeneralSettingsDto` / `GeneralSettingsPatch` / `GeneralSettingsSection`, Settings > General checkbox "Code references" with hint (FR.4.8, FR.7.13)
+- [x] [DONE] Daemon: `AutocompleteRpcModule` reads the setting per request; OFF: mode `session` from the session registry (tiers, 10-result threshold, workers and current session excluded, 15 max, short id, no lease or index wait); ON: unchanged (FR.7.14, FR.7.13)
+- [x] [DONE] Daemon: `AutocompleteTriggerParser` session query rule (from `#` to the caret on the line, spaces allowed, not `##`) (FR.7.14)
+- [x] [DONE] Daemon: `CodeIndex` skips symbol parsing for indexes created while OFF; existing indexes keep symbols until released; `##` and drive paths untouched (FR.7.13)
+- [x] [DONE] WPF: the pre-filter lets an earlier `#` on the line through; popup shows `session` rows; accept inserts `session "<name>" (<shortid>)` (FR.7.14)
+- [ ] (unit, contract, WPF VM tests DONE; WPF E2E TC.CR.23/TC.CR.24 written in WpfCodeReferencesE2ETests, compile, run pending) Tests TC.CR.01-TC.CR.24: parser, tiers and threshold, exclusions, spaces, no-match closes, ON keeps symbols, OFF keeps `##` and drive paths, setting persists and applies without restart, insert format, contract golden, WPF unit and E2E (UC.CR.01-UC.CR.05)
+- [x] [DONE] Update `ComposerWireEnv` / `WpfComposerCompletionE2ETests` construction of `AutocompleteRpcModule` for the new constructor argument; update the settings enumeration tests for the new `general` member

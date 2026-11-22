@@ -49,5 +49,17 @@ public static partial class Constants
 
 		/// <summary>Kind of a directory suggestion (path mode).</summary>
 		public const string DirectoryKind = "directory";
+
+		/// <summary>Kind of a session suggestion (session mode, FR.7.14).</summary>
+		public const string SessionKind = "session";
+
+		/// <summary>Insert text of a session suggestion: <c>session "&lt;name&gt;" (&lt;shortid&gt;)</c> (FR.7.14).</summary>
+		public const string SessionInsertFormat = "session \"{0}\" ({1})";
+
+		/// <summary>Separator of the project label and the group path in the detail of a session suggestion (FR.7.14).</summary>
+		public const string SessionDetailSeparator = " / ";
+
+		/// <summary>Session suggestions of other projects are added only while the same-project tiers gave fewer results than this (FR.7.14).</summary>
+		public const int SessionOtherProjectsBelow = 10;
 	}
 }

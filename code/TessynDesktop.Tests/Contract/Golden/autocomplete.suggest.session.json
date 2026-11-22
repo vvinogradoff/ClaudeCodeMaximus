@@ -1,0 +1,64 @@
+{
+  "mode": "session",
+  "triggerStart": 4,
+  "triggerLength": 6,
+  "indexReady": true,
+  "items": [
+    {
+      "label": "alpha fav",
+      "insertText": "session \u0022alpha fav\u0022 (00000004)",
+      "kind": "session",
+      "detail": "<P> / G1",
+      "matchStart": 0,
+      "matchLength": 5
+    },
+    {
+      "label": "Alpha tests",
+      "insertText": "session \u0022Alpha tests\u0022 (00000002)",
+      "kind": "session",
+      "detail": "<P> / G1",
+      "matchStart": 0,
+      "matchLength": 5
+    },
+    {
+      "label": "Beta alpha",
+      "insertText": "session \u0022Beta alpha\u0022 (00000003)",
+      "kind": "session",
+      "detail": "<P> / G1",
+      "matchStart": 5,
+      "matchLength": 5
+    },
+    {
+      "label": "Alpha docs",
+      "insertText": "session \u0022Alpha docs\u0022 (00000005)",
+      "kind": "session",
+      "detail": "<P> / G2",
+      "matchStart": 0,
+      "matchLength": 5
+    },
+    {
+      "label": "Alpha loose",
+      "insertText": "session \u0022Alpha loose\u0022 (00000006)",
+      "kind": "session",
+      "detail": "<P>",
+      "matchStart": 0,
+      "matchLength": 5
+    },
+    {
+      "label": "Alpha web",
+      "insertText": "session \u0022Alpha web\u0022 (00000008)",
+      "kind": "session",
+      "detail": "<Q>",
+      "matchStart": 0,
+      "matchLength": 5
+    },
+    {
+      "label": "Alpha qa",
+      "insertText": "session \u0022Alpha qa\u0022 (00000009)",
+      "kind": "session",
+      "detail": "<Q>",
+      "matchStart": 0,
+      "matchLength": 5
+    }
+  ]
+}

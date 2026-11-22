@@ -39,11 +39,12 @@ public static partial class RemoteProtocol
 		/// <summary>Revision of a session that has no draft; also the <c>baseRevision</c> for the first write.</summary>
 		public const string EmptyDraftRevision = "0";
 
-		/// <summary>Mode names of an autocomplete answer: <c>none</c>, <c>symbol</c> (<c>#</c>), <c>file</c> (<c>##</c>) and <c>path</c> (a drive path).</summary>
+		/// <summary>Mode names of an autocomplete answer: <c>none</c>, <c>symbol</c> (<c>#</c>, Code references on), <c>session</c> (<c>#</c>, Code references off; FR.7.14), <c>file</c> (<c>##</c>) and <c>path</c> (a drive path).</summary>
 		public static class AutocompleteModes
 		{
 			public const string None = "none";
 			public const string Symbol = "symbol";
+			public const string Session = "session";
 			public const string File = "file";
 			public const string Path = "path";
 		}

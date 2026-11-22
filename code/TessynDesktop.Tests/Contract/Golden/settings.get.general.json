@@ -8,6 +8,7 @@
     "httpsProxy": "",
     "ollamaBaseUrl": "http://localhost:11434",
     "agentToolsEnabled": true,
+    "codeReferencesEnabled": false,
     "fileAccess": {
       "mode": "workingDirectory",
       "maxRelayChunkBytes": 524288,

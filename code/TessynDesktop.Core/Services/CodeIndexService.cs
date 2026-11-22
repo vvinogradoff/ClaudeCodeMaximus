@@ -16,8 +16,14 @@ public sealed class CodeIndexService : ICodeIndexService
 
 	private readonly ConcurrentDictionary<string, CodeIndex> _indexes = new(StringComparer.OrdinalIgnoreCase);
 
-	/// <summary>Test seam: creates the index for a directory.</summary>
-	internal Func<string, CodeIndex> IndexFactory { get; set; } = static directory => new CodeIndex(directory);
+	/// <summary>Test seam: creates the index for a directory. The default reads Code references at creation time (FR.7.13); existing indexes are never touched.</summary>
+	internal Func<string, CodeIndex> IndexFactory { get; set; }
+
+	/// <param name="settings">Source of the Code references flag; without it (tests) new indexes parse symbols.</param>
+	public CodeIndexService(IAppSettingsService? settings = null)
+	{
+		IndexFactory = directory => new CodeIndex(directory, parseSymbols: settings is null || settings.Settings.CodeReferencesEnabled);
+	}
 
 	public async Task<bool> GetOrCreateIndexAsync(string workingDirectory)
 	{

@@ -1015,14 +1015,26 @@ public sealed class SessionRegistry : ISessionRegistry
 
         lock (_appSettings.SyncRoot)
         {
+            var treeOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var dir in _appSettings.Settings.Tree)
             {
                 var label = _labelService.GetLabel(dir.Path);
-                CollectSnapshots(dir.Sessions, dir.Groups, dir.Path, label, new List<string>(), result);
+                AssignTreeOrder(dir.Sessions, dir.Groups, treeOrder);
+                CollectSnapshots(dir.Sessions, dir.Groups, dir.Path, label, new List<string>(), null, treeOrder, result);
             }
         }
 
         return result;
+    }
+
+    /// <summary>The order the tree shows the sessions in: a node's groups (recursively) first, then its own sessions (FR.7.14 "tree order").</summary>
+    private static void AssignTreeOrder(List<SessionNodeModel> sessions, List<GroupNodeModel> groups, Dictionary<string, int> order)
+    {
+        foreach (var g in groups)
+            AssignTreeOrder(g.Sessions, g.Groups, order);
+
+        foreach (var s in sessions)
+            order[s.NodeId] = order.Count;
     }
 
     private void CollectSnapshots(
@@ -1031,6 +1043,8 @@ public sealed class SessionRegistry : ISessionRegistry
         string directoryPath,
         string directoryLabel,
         List<string> groupPath,
+        string? groupNodeId,
+        Dictionary<string, int> treeOrder,
         List<SessionSnapshotModel> result)
     {
         foreach (var s in sessions)
@@ -1051,13 +1065,15 @@ public sealed class SessionRegistry : ISessionRegistry
                 DirectoryPath      = directoryPath,
                 DirectoryLabel     = directoryLabel,
                 GroupPath          = groupPath.ToArray(),
+                GroupNodeId        = groupNodeId,
+                TreeOrder          = treeOrder.GetValueOrDefault(s.NodeId),
             });
         }
 
         foreach (var g in groups)
         {
             groupPath.Add(g.Name);
-            CollectSnapshots(g.Sessions, g.Groups, directoryPath, directoryLabel, groupPath, result);
+            CollectSnapshots(g.Sessions, g.Groups, directoryPath, directoryLabel, groupPath, g.NodeId, treeOrder, result);
             groupPath.RemoveAt(groupPath.Count - 1);
         }
     }

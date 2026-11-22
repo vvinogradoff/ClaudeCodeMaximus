@@ -21,7 +21,7 @@ internal sealed class ScriptedSettingsSections : ISettingsSectionService
 		["telegram"] = 1,
 	};
 
-	private GeneralSettingsDto _general = new(@"C:\Sessions", "claude", @"C:\Src", string.Empty, "http://localhost:11434", false,
+	private GeneralSettingsDto _general = new(@"C:\Sessions", "claude", @"C:\Src", string.Empty, "http://localhost:11434", false, false,
 		new FileAccessSettingsDto(FileAccessModeDto.ReferencedOnly, 65536, 1000, 2000, 3000, 4000), []);
 
 	private NotificationsSettingsDto _notifications = new(true, string.Empty, 180);

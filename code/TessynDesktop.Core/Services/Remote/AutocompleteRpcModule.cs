@@ -11,7 +11,7 @@ using TessynDesktop.Models.Remote;
 namespace TessynDesktop.Services;
 
 /// <summary>
-/// <c>autocomplete.suggest</c> for a local client (package J2): the <c>#</c> symbol, <c>##</c> file and drive-path suggestions of the composer,
+/// <c>autocomplete.suggest</c> for a local client (package J2): the <c>#</c> symbol (Code references on) or session (off; FR.7.14), <c>##</c> file and drive-path suggestions of the composer,
 /// built with the same <see cref="AutocompleteTriggerParser"/> and <see cref="ICodeIndexService"/> as the Avalonia popup. Loopback only. The
 /// debounce stays on the client. A code index that is not built yet is never waited for (ISSUE.016): see <see cref="AutocompleteIndexLeases"/>.
 /// </summary>
@@ -24,13 +24,17 @@ public sealed class AutocompleteRpcModule : IRemoteRpcModule, IDisposable
 
 	private readonly ISessionRegistry _registry;
 	private readonly ICodeIndexService _index;
+	private readonly IAppSettingsService _settings;
+	private readonly SessionReferenceSuggester _sessions;
 	private readonly AutocompleteIndexLeases _leases;
 	private readonly AutocompleteTriggerParser _parser = new();
 
-	public AutocompleteRpcModule(ISessionRegistry registry, ICodeIndexService index)
+	public AutocompleteRpcModule(ISessionRegistry registry, ICodeIndexService index, IAppSettingsService settings)
 	{
 		_registry = registry;
 		_index    = index;
+		_settings = settings;
+		_sessions = new SessionReferenceSuggester(registry);
 		_leases   = new AutocompleteIndexLeases(index);
 	}
 
@@ -46,14 +50,29 @@ public sealed class AutocompleteRpcModule : IRemoteRpcModule, IDisposable
 		var text  = TdcpParams.RequireString(@params, "text");
 		var caret = TdcpParams.OptionalInt(@params, "caret") ?? throw new TdcpInvalidParamsException("'caret' is required");
 
-		var trigger = _parser.Parse(text, caret);
-		if (trigger.Mode == AutocompleteMode.None || string.IsNullOrEmpty(trigger.Query))
+		// Code references (FR.7.13) is read on every request: a flip applies at the next suggestion, with no restart.
+		var codeReferences = _settings.Settings.CodeReferencesEnabled;
+		var trigger        = _parser.Parse(text, caret, sessionMode: !codeReferences);
+		if (trigger.Mode == AutocompleteMode.None || string.IsNullOrEmpty(trigger.Query)
+		    || (trigger.Mode == AutocompleteMode.Session && string.IsNullOrWhiteSpace(trigger.Query)))
 			return new AutocompleteSuggestResult(RemoteProtocol.Composer.AutocompleteModes.None, 0, 0, true, []);
+
+		if (trigger.Mode == AutocompleteMode.Session)
+			return await Task.Run(() => BuildSession(trigger, node.NodeId));
 
 		var directory = node.WorkingDirectory;
 
 		// Off the request path: only a lookup in a ready index or a bounded directory listing happens here; a missing index is built in the background.
 		return await Task.Run(() => Build(trigger, directory));
+	}
+
+	/// <summary>Session suggestions come from the registry: no index, no lease, ready at once. No match closes the popup (mode none).</summary>
+	private AutocompleteSuggestResult BuildSession(AutocompleteTriggerModel trigger, string currentNodeId)
+	{
+		var items = _sessions.Suggest(currentNodeId, trigger.Query);
+		return items.Count == 0
+			? new AutocompleteSuggestResult(RemoteProtocol.Composer.AutocompleteModes.None, 0, 0, true, [])
+			: new AutocompleteSuggestResult(RemoteProtocol.Composer.AutocompleteModes.Session, trigger.TriggerStartIndex, trigger.TriggerLength, true, items);
 	}
 
 	private AutocompleteSuggestResult Build(AutocompleteTriggerModel trigger, string workingDirectory)

@@ -15,18 +15,66 @@ public sealed class AutocompleteTriggerParser
 		TriggerLength = 0
 	};
 
-	public AutocompleteTriggerModel Parse(string text, int caretIndex)
+	/// <param name="sessionMode">True while Code references is off (FR.7.14): a single <c>#</c> then starts a session query, which may contain spaces.</param>
+	public AutocompleteTriggerModel Parse(string text, int caretIndex, bool sessionMode = false)
 	{
 		if (string.IsNullOrEmpty(text) || caretIndex <= 0 || caretIndex > text.Length)
 			return _none;
 
 		// Check for # / ## triggers first — they are unambiguous delimiters
 		var hashResult = TryParseHash(text, caretIndex);
+		if (hashResult.Mode == AutocompleteMode.Symbol && sessionMode)
+			return AsSession(hashResult);
 		if (hashResult.Mode != AutocompleteMode.None)
 			return hashResult;
 
 		// Then check for filesystem path trigger (e.g. C:\Users\...)
-		return TryParsePath(text, caretIndex) ?? _none;
+		var pathResult = TryParsePath(text, caretIndex);
+		if (pathResult != null)
+			return pathResult;
+
+		return sessionMode ? TryParseSession(text, caretIndex) : _none;
+	}
+
+	private static AutocompleteTriggerModel AsSession(AutocompleteTriggerModel symbol) => new()
+	{
+		Mode = AutocompleteMode.Session,
+		Query = symbol.Query,
+		TriggerStartIndex = symbol.TriggerStartIndex,
+		TriggerLength = symbol.TriggerLength
+	};
+
+	/// <summary>
+	/// A session query (FR.7.14): from a single <c>#</c> at line start or after whitespace to the caret on the same line; spaces are part of the
+	/// query. A <c>##</c> is never a session trigger. Reached only when the word before the caret holds no <c>#</c> (otherwise the word parse answered).
+	/// </summary>
+	private AutocompleteTriggerModel TryParseSession(string text, int caretIndex)
+	{
+		for (var i = caretIndex - 1; i >= 0; i--)
+		{
+			var ch = text[i];
+			if (ch == '\n' || ch == '\r')
+				return _none;
+
+			if (ch != '#')
+				continue;
+
+			if (i > 0 && text[i - 1] == '#')
+				return _none;
+
+			if (i > 0 && text[i - 1] is not (' ' or '\t'))
+				continue;
+
+			return new AutocompleteTriggerModel
+			{
+				Mode = AutocompleteMode.Session,
+				Query = text.Substring(i + 1, caretIndex - (i + 1)),
+				TriggerStartIndex = i,
+				TriggerLength = caretIndex - i
+			};
+		}
+
+		return _none;
 	}
 
 	private AutocompleteTriggerModel? TryParsePath(string text, int caretIndex)

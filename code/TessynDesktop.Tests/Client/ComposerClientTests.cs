@@ -180,6 +180,7 @@ public sealed class ComposerClientTests : IDisposable
 	[Fact]
 	public async Task AutocompleteSuggestAsync_WhileTheIndexBuilds_AnswersNotReadyWithoutWaiting()
 	{
+		_env.Settings.Settings.CodeReferencesEnabled = true;   // # is the symbol trigger only while Code references is on (FR.7.13)
 		await using var client = NewClient();
 		await client.ConnectAsync();
 
