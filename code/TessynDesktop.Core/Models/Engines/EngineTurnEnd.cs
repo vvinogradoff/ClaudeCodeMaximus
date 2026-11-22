@@ -15,6 +15,10 @@ namespace TessynDesktop.Models.Engines;
 /// <param name="OutputTokens">Output tokens of the turn (FR.17.1); 0 when not reported.</param>
 /// <param name="CostUsd">Cost in USD (FR.17.1); 0 when not reported.</param>
 /// <param name="Timestamp">When the engine reported it.</param>
+/// <param name="ResultText">
+/// The worker result of the turn (<c>TurnResultModel.AssistantText</c>, FR.15) when the engine composes it itself (Codex: the agentMessage texts
+/// separated by a blank line, FR.33.11); null keeps the assistant texts as they were reported.
+/// </param>
 /// <remarks>Created by Claude</remarks>
 public sealed record EngineTurnEnd(
 	bool Success,
@@ -25,4 +29,5 @@ public sealed record EngineTurnEnd(
 	int InputTokens,
 	int OutputTokens,
 	double CostUsd,
-	DateTimeOffset Timestamp);
+	DateTimeOffset Timestamp,
+	string? ResultText = null);

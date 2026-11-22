@@ -45,10 +45,26 @@ public static class InstructionBlockBuilder
 		// rationale (the process dies between turns) doesn't hold for a persistent streaming process.
 		// NoWorkflowTool is unconditional on mode — the concern it addresses (subagents invisible to
 		// the session tree) applies regardless of process lifetime.
-		if (options.IsAgentToolsEnabled && options.IsNewSession && !options.IsStreamingMode)
-			lines.AppendLine($"- {Constants.Instructions.NativeSchedulingRedirect}");
-		if (options.IsAgentToolsEnabled && options.IsNewSession)
-			lines.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
+		//
+		// FR.33.16 — a Codex session gets the Codex wording: the native scheduling ban and the Workflow/Agent/deep-research ban are one
+		// sub-agent line (with the same cmx tools), scheduling through cmx keeps its content, and one line names the shell.
+		if (options.IsCodex)
+		{
+			if (options.IsNewSession)
+				lines.AppendLine($"- {Constants.Instructions.Codex.Shell}");
+			if (options.IsAgentToolsEnabled && options.IsNewSession)
+			{
+				lines.AppendLine($"- {Constants.Instructions.Codex.Scheduling}");
+				lines.AppendLine($"- {Constants.Instructions.Codex.Orchestration}");
+			}
+		}
+		else
+		{
+			if (options.IsAgentToolsEnabled && options.IsNewSession && !options.IsStreamingMode)
+				lines.AppendLine($"- {Constants.Instructions.NativeSchedulingRedirect}");
+			if (options.IsAgentToolsEnabled && options.IsNewSession)
+				lines.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
+		}
 
 		// FR.23.10 — same gate as NoWorkflowTool, plus never for a Worker Session (its post_attention
 		// call is refused, FR.23.6): session policy on how to pin items in the user's Focus view.
@@ -65,7 +81,7 @@ public static class InstructionBlockBuilder
 		// its own notify_user call is dropped outright by the bridge (FR.21.19), so the guidance
 		// would only invite a wasted call.
 		if (options.IsAgentToolsEnabled && options.IsTelegramEnabled && options.IsNewSession && !options.IsWorkerSession)
-			lines.AppendLine($"- {Constants.Instructions.TelegramNotifyGuidance}");
+			lines.AppendLine($"- {(options.IsCodex ? Constants.Instructions.Codex.TelegramNotifyGuidance : Constants.Instructions.TelegramNotifyGuidance)}");
 
 		// FR.21.24 — describes this turn, not session policy, so no IsNewSession gate.
 		if (options.IsAgentToolsEnabled && options.IsTelegramEnabled && options.IsScheduledTurn && !options.IsWorkerSession)

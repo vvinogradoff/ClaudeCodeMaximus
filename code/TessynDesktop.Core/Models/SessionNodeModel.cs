@@ -28,6 +28,18 @@ public sealed class SessionNodeModel
 	/// </summary>
 	public string? EngineId { get; set; }
 
+	/// <summary>
+	/// The Codex thread of a Codex session (FR.33.7): its conversation on the Codex engine, like <see cref="ClaudeSessionId"/> on the Claude engine.
+	/// Null for a Claude session, and for a Codex session whose thread was never started or was detached.
+	/// </summary>
+	public string? CodexThreadId { get; set; }
+
+	/// <summary>
+	/// Codex threads the session ran on before (FR.33.7, FR.33.12, FR.33.4): a reset, an engine change or a thread that was gone. Null until the
+	/// first one, so the settings of sessions that never ran on Codex stay as they are (null values are not written).
+	/// </summary>
+	public List<string>? PriorCodexThreadIds { get; set; }
+
 	/// <summary>Stable GUID for this node. Backfilled from empty on first load (FR.14.2).</summary>
 	public string NodeId { get; set; } = string.Empty;
 

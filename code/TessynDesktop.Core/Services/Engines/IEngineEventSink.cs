@@ -50,6 +50,13 @@ public interface IEngineEventSink
 	/// <summary>A persistent process was started for the session by this turn (FR.19).</summary>
 	void PersistentProcessStarted();
 
+	/// <summary>
+	/// The token usage of the turn so far, while it runs (Codex reports it after every model call, FR.33.11): a <c>turn.usage</c> with the running
+	/// totals, which a client shows in place of the last one. The final usage still comes with <see cref="TurnEnded"/>. Engines that only know it
+	/// at the end (Claude) never call it.
+	/// </summary>
+	void Usage(int inputTokens, int outputTokens) { }
+
 	/// <summary>The result of the turn (or of one attempt of it).</summary>
 	void TurnEnded(EngineTurnEnd end);
 }

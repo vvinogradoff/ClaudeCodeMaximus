@@ -40,5 +40,6 @@ internal sealed class TurnNodeStreamSink : IEngineEventSink
 	public void Retrying(EngineRetryKind kind) => Target.Retrying(kind);
 	public void RetryRunning() => Target.RetryRunning();
 	public void PersistentProcessStarted() => Target.PersistentProcessStarted();
+	public void Usage(int inputTokens, int outputTokens) => Target.Usage(inputTokens, outputTokens);
 	public void TurnEnded(EngineTurnEnd end) => Target.TurnEnded(end);
 }

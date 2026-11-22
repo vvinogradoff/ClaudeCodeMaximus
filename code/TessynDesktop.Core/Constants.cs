@@ -224,6 +224,47 @@ public static partial class Constants
 		public const string FullUrlReferences =
 			"When you refer to a GitHub pull request, issue or commit, a Linear issue or a Slack message, write its full URL (for example https://github.com/tryhardstop/windows-app/pull/196 or https://linear.app/hardstop/issue/HSE-240), never a shorthand such as PR#196 or HSE-240.";
 
+		/// <summary>
+		/// FR.33.16 — the wording for a Codex session. Codex shows MCP tools with the same <c>mcp__cmx__*</c> names as Claude Code (FR.33.9), so
+		/// only the texts that name Claude Code tools change: the native scheduling ban and the Workflow/Agent/deep-research ban become one
+		/// sub-agent line, and a line says which shell runs commands. Everything else keeps its content.
+		/// </summary>
+		public static class Codex
+		{
+			/// <summary>Replaces <see cref="NativeSchedulingRedirect"/> and the ban part of <see cref="NoWorkflowTool"/> (FR.33.16).</summary>
+			public const string NoSubAgents =
+				"Do not use Codex sub-agents or Codex's own multi-agent features; start sessions with the cmx tools so they appear in the user's session tree.";
+
+			/// <summary>FR.33.16 — Codex runs commands through <c>powershell.exe -Command</c> (spike item 10).</summary>
+			public const string Shell = "Shell commands run in Windows PowerShell 5.1.";
+
+			/// <summary>The scheduling part of <see cref="NativeSchedulingRedirect"/>, without the Claude Code tool names (schedules through cmx keep their content).</summary>
+			public const string Scheduling =
+				"To run a later turn of this session, use the TessynDesktop MCP tools: `mcp__" + Agent.McpServerName + "__schedule_wake` (accepts `inSeconds`, `at` ISO time, or `cron`), `mcp__" + Agent.McpServerName + "__list_schedules`, `mcp__" + Agent.McpServerName + "__cancel_schedule`. These are persisted by the host application and re-arm across restarts.";
+
+			/// <summary><see cref="NoWorkflowTool"/> for Codex: the sub-agent line, then the same cmx orchestration tools.</summary>
+			public const string Orchestration =
+				NoSubAgents + " " +
+				"Use the TessynDesktop MCP tools for all multi-agent, orchestration, and research fan-out work: " +
+				"`mcp__" + Agent.McpServerName + "__spawn_session` to create child sessions (supports `model`, `outputFormat` args), " +
+				"`mcp__" + Agent.McpServerName + "__" + CreateSession.ToolName + "` to create a new top-level session for the user, not a worker of yours (only when the user asks for a new session; supports `after` to place it right after a session, `model`, `effort`, `profile`, `streaming`, `sound`), " +
+				"`mcp__" + Agent.McpServerName + "__send_to_session` to send prompts (use `wait` mode for sequential work, `async` for parallel fan-out; supports `outputFormat` arg for a markdown shape hint), " +
+				"`mcp__" + Agent.McpServerName + "__read_session` to retrieve results, " +
+				"`mcp__" + Agent.McpServerName + "__stop_session` to cancel a running turn, " +
+				"`mcp__" + Agent.McpServerName + "__list_sessions` to find sessions (one page, newest first: your project, with your own workers under you; narrow with `query`, `running` or `scope`), " +
+				"`mcp__" + Agent.McpServerName + "__orchestrate_parallel` for concurrent fan-out over a task array (returns all results together as one markdown document), " +
+				"`mcp__" + Agent.McpServerName + "__orchestrate_pipeline` for pipelined fan-out where items flow through stages independently (no barrier; returns one markdown document), " +
+				"`mcp__" + Agent.McpServerName + "__workflow_phase` to mark a named phase for progress tracking in the UI, " +
+				"`mcp__" + Agent.McpServerName + "__workflow_log` to emit a progress message visible in the session tree, " +
+				"`mcp__" + Agent.McpServerName + "__get_budget` to check remaining token budget for the current orchestration, and " +
+				"`mcp__" + Agent.McpServerName + "__set_session_model` to switch the model of a child session mid-orchestration. " +
+				"For detailed guidance on orchestrating multi-session workflows, or on how to respond if you were spawned as a worker by another session, use the `" + Agent.OrchestrationSkillName + "` skill.";
+
+			/// <summary><see cref="TelegramNotifyGuidance"/> for Codex: the same policy without the Claude Code Task tool.</summary>
+			public const string TelegramNotifyGuidance =
+				"A Telegram bridge is available: `critical` items, and items you post with `notify: true`, also ping the user's Telegram and desktop. Use `notify: true` only when the user must act soon — never for progress updates — and only from this top-level session, never from a worker (report back to your supervisor instead). `mcp__" + Agent.McpServerName + "__notify_user` still sends a plain message and is also pinned as an ask, but prefer `post_attention`. There is no blocking \"ask and wait\" tool — after posting an ask, end your turn normally instead of waiting idle for a reply. The user's reply arrives later as an ordinary new prompt in this same session.";
+		}
+
 		/// <summary>FR.24.6 — Suffix of <see cref="SessionTagGuidance"/>; arg 0 = the labels joined with ", ".</summary>
 		public const string SessionTagCurrentTagsFormat = " Current tags: {0}.";
 

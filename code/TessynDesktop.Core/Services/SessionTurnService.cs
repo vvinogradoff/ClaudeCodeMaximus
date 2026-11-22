@@ -187,6 +187,11 @@ public sealed class SessionTurnService : ISessionTurnService
 			// Stamped with the profile display name actually used, as the desktop does, so that
 			// "last used profile" restores correctly afterwards.
 			var stampedProfileName = profile.IsDefault ? await _profileLabels.GetDefaultLabelAsync() : profile.DisplayName;
+
+			// FR.33.4: the first turn on a new engine detaches the other engine's conversation (the new one is seeded from the transcript below).
+			if (_engines.ApplyEngineChange(node, engine) is { } engineChanged)
+				_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, engineChanged);
+
 			_fileService.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, prompt, profileName: stampedProfileName,
 				source: EntrySources.FromTurnSource(source));
 
@@ -261,7 +266,8 @@ public sealed class SessionTurnService : ISessionTurnService
 				IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0,
 				IsScheduledTurn: source == TurnSource.Scheduled,
 				PinnedAttentionItems: PinnedItemsFor(node), UserClosedAttentionItems: TakeUserClosuresFor(node),
-				IsTagGuidanceDue: tagGuidanceDue, SessionTags: tagGuidanceDue ? _tags.GetTags(node.NodeId, node.Name) : null);
+				IsTagGuidanceDue: tagGuidanceDue, SessionTags: tagGuidanceDue ? _tags.GetTags(node.NodeId, node.Name) : null,
+				EngineId: engine.EngineId);
 			var instructionBlock = InstructionBlockBuilder.Build(options);
 			var augmentedPrompt  = prompt + instructionBlock;
 
@@ -349,7 +355,8 @@ public sealed class SessionTurnService : ISessionTurnService
 			IsTelegramEnabled: _appSettings.Settings.TelegramEnabled, IsWorkerSession: node.OrchestrationDepth > 0,
 			IsScheduledTurn: source == TurnSource.Scheduled,
 			PinnedAttentionItems: PinnedItemsFor(node), UserClosedAttentionItems: TakeUserClosuresFor(node),
-			IsTagGuidanceDue: tagGuidanceDue, SessionTags: tagGuidanceDue ? _tags.GetTags(node.NodeId, node.Name) : null);
+			IsTagGuidanceDue: tagGuidanceDue, SessionTags: tagGuidanceDue ? _tags.GetTags(node.NodeId, node.Name) : null,
+			EngineId: engine.EngineId);
 		var augmentedPrompt = prompt + InstructionBlockBuilder.Build(options);
 
 		var sink = new HeadlessTurnSink(node, _fileService, progress, persists: false);

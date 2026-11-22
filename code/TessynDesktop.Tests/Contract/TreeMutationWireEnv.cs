@@ -28,7 +28,7 @@ internal sealed class TreeMutationWireEnv : IDisposable
 		var labels   = new FakeDirectoryLabelService();
 		var tree     = new TreeMutationService(Turn.Registry, Turn.Settings, labels, Origins);
 		var resolver = new TurnSettingsResolver(Turn.Settings, Turn.Turns, Turn.ProfileService, Turn.Models, new ProfileLabelService(Turn.ProfileService, Turn.Settings));
-		var options  = new SessionOptionsService(Turn.Registry, Turn.Settings, Turn.Engine, resolver, TestEngines.Claude(Turn.Streaming), Turn.Turns);
+		var options  = new SessionOptionsService(Turn.Registry, Turn.Settings, Turn.Engine, resolver, TestEngines.Claude(Turn.Streaming, Turn.Settings), Turn.Turns);
 		var local    = new LocalToolsService(Turn.Registry, Turn.Settings);
 
 		var runInfo = new DaemonRunInfo();

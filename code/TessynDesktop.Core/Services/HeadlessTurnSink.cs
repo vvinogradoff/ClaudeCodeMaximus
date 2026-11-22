@@ -126,8 +126,17 @@ internal sealed class HeadlessTurnSink : IEngineEventSink
 	}
 
 	/// <inheritdoc />
+	public void Usage(int inputTokens, int outputTokens) => _progress.Usage(inputTokens, outputTokens, 0);
+
+	/// <inheritdoc />
 	public void TurnEnded(EngineTurnEnd end)
 	{
+		if (end.ResultText is not null)
+		{
+			_resultText.Clear();
+			_resultText.Append(end.ResultText);
+		}
+
 		if (!string.IsNullOrWhiteSpace(end.ErrorText))
 		{
 			IsError      = true;

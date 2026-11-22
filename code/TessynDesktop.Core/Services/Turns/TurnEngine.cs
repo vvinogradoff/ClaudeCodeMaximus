@@ -124,6 +124,10 @@ public sealed class TurnEngine : ITurnEngine
 			// bridge was enabled. Fire-and-forget: never throws, never delays the turn.
 			_ = _telegramBridge.Value.EnsureTopicForSessionAsync(node);
 
+			// FR.33.4: the first turn on a new engine detaches the other engine's conversation (the new one is seeded from the transcript below).
+			if (_engines.ApplyEngineChange(node, engine) is { } engineChanged)
+				_files.AppendMessage(node.FileName, Constants.SessionFile.RoleSystem, engineChanged);
+
 			// Store only the clean user message in the file (FR.11.2).
 			_files.AppendMessage(node.FileName, Constants.SessionFile.RoleUser, request.Message, profileName: settings.ProfileDisplayName);
 			observer.UserEntryAppended(DateTimeOffset.UtcNow, settings.ProfileDisplayName);
@@ -133,7 +137,7 @@ public sealed class TurnEngine : ITurnEngine
 			// The cross-profile adoption (FR.11.13) moves the transcript and session folder, so it runs below, under the turn lock:
 			// before it a queued message could move the files from under the turn that is still running.
 
-			var augmentedMessage = request.Message + BuildInstructionBlock(node, request.IsNewBranch, sessionId == null);
+			var augmentedMessage = request.Message + BuildInstructionBlock(node, engine, request.IsNewBranch, sessionId == null);
 
 			// Proactive context reload (FR.11.10): if the file has history but no session id, wrap with context.
 			var messageToSend = augmentedMessage;
@@ -438,7 +442,7 @@ public sealed class TurnEngine : ITurnEngine
 	/// emit identical instructions. <paramref name="isNewSession"/> is true only when this turn is about to start a fresh claude
 	/// process, because the tool-usage bans are sent once per fresh process.
 	/// </summary>
-	private string BuildInstructionBlock(SessionNodeModel node, bool isNewBranch, bool isNewSession)
+	private string BuildInstructionBlock(SessionNodeModel node, ISessionEngine engine, bool isNewBranch, bool isNewSession)
 	{
 		// FR.23.11 - pinned items and the user's Focus-view closures. Taking the closures clears their flag, so it is done only when
 		// the block will actually report them.
@@ -457,7 +461,8 @@ public sealed class TurnEngine : ITurnEngine
 			PinnedAttentionItems: hasAttention ? _attention.GetItems(nodeId) : null,
 			UserClosedAttentionItems: hasAttention ? _attention.TakeUnreportedUserClosures(nodeId) : null,
 			IsTagGuidanceDue: tagGuidanceDue,
-			SessionTags: tagGuidanceDue ? _tags.GetTags(nodeId, node.Name) : null);
+			SessionTags: tagGuidanceDue ? _tags.GetTags(nodeId, node.Name) : null,
+			EngineId: engine.EngineId);
 		return InstructionBlockBuilder.Build(options);
 	}
 

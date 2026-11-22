@@ -289,6 +289,12 @@ public sealed class DaemonHost
 		// FR.33.1: the session engines behind one seam (today only Claude). Singletons: the engine holds the retry state of the turns running in
 		// persistent processes, and the router is the one list of engines every caller asks.
 		services.AddSingleton<ISessionEngine, ClaudeSessionEngine>();
+		// FR.33 phase 2b: the Codex engine. Singletons: the pool owns the one app-server process per Codex profile that every Codex session of
+		// that profile shares (FR.33.6); the engine holds each node's running turn (Stop), its queued corrections and the thread names it set;
+		// the config builder is stateless but is shared by the engine for every thread.
+		services.AddSingleton<TessynDesktop.Codex.CodexHostPool>();
+		services.AddSingleton<TessynDesktop.Codex.CodexThreadConfigBuilder>();
+		services.AddSingleton<ISessionEngine, CodexSessionEngine>();
 		services.AddSingleton<ISessionEngineRouter, SessionEngineRegistry>();
 		services.AddSingleton<ISelfUpdateService, SelfUpdateService>();
 		services.AddSingleton<IClaudeSessionStatusService, ClaudeSessionStatusService>();

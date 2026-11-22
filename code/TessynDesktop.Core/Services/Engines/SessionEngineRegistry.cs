@@ -14,13 +14,15 @@ public sealed class SessionEngineRegistry : ISessionEngineRouter
 	private readonly IReadOnlyList<ISessionEngine> _engines;
 	private readonly Dictionary<string, ISessionEngine> _byId;
 	private readonly ILogger _log;
+	private readonly ISessionEngineSelector? _selector;
 
 	// Nodes whose unknown engine id was already reported: one Warning per node, not one per turn.
 	private readonly ConcurrentDictionary<string, byte> _warnedNodes = new(StringComparer.Ordinal);
 
-	public SessionEngineRegistry(IEnumerable<ISessionEngine> engines, ILogger? log = null)
+	public SessionEngineRegistry(IEnumerable<ISessionEngine> engines, ILogger? log = null, ISessionEngineSelector? selector = null)
 	{
-		_log     = log ?? Log.ForContext<SessionEngineRegistry>();
+		_log      = log ?? Log.ForContext<SessionEngineRegistry>();
+		_selector = selector;
 		_engines = engines.ToArray();
 		_byId    = new Dictionary<string, ISessionEngine>(StringComparer.OrdinalIgnoreCase);
 
@@ -53,14 +55,41 @@ public sealed class SessionEngineRegistry : ISessionEngineRouter
 	/// </summary>
 	public ISessionEngine For(SessionNodeModel node)
 	{
-		var id = string.IsNullOrEmpty(node.EngineId) ? Constants.SessionEngines.Claude : node.EngineId;
+		var selected = _selector?.SelectEngineId(node);
+		var stored   = string.IsNullOrEmpty(selected) ? node.EngineId : selected;
+		var id       = string.IsNullOrEmpty(stored) ? Constants.SessionEngines.Claude : stored;
 		if (_byId.TryGetValue(id, out var engine))
 			return engine;
 
 		if (_warnedNodes.TryAdd(node.NodeId, 0))
-			_log.Warning("Unknown engine '{EngineId:l}' on session {NodeId:l}; using Claude.", node.EngineId, node.NodeId);
+			_log.Warning("Unknown engine '{EngineId:l}' on session {NodeId:l}; using Claude.", stored, node.NodeId);
 
 		return _byId[Constants.SessionEngines.Claude];
+	}
+
+	/// <inheritdoc />
+	public string? ApplyEngineChange(SessionNodeModel node, ISessionEngine engine)
+	{
+		ISessionEngine? previous = null;
+		foreach (var other in _engines)
+		{
+			if (ReferenceEquals(other, engine) || other.GetConversationId(node) is null)
+				continue;
+
+			// A live persistent process of the old engine still holds the old conversation (FR.19); it would answer the next background event.
+			if (other.IsAlive(node.NodeId))
+				other.Stop(node.NodeId);
+
+			if (other.DetachConversation(node))
+				previous ??= other;
+		}
+
+		if (previous is null)
+			return null;
+
+		_log.Information("Session {NodeId:l} changed engine from {Old:l} to {New:l}; its conversation is detached and seeded from the transcript",
+			node.NodeId, previous.EngineId, engine.EngineId);
+		return string.Format(Constants.SessionEngines.EngineChangedFormat, previous.DisplayName, engine.DisplayName);
 	}
 
 	/// <inheritdoc />

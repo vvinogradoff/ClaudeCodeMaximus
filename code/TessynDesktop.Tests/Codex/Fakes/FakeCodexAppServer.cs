@@ -70,6 +70,9 @@ internal sealed class FakeCodexAppServer
 
 	public void MarkLoaded(string threadId) => _loadedThreads[threadId] = 0;
 
+	/// <summary>Forgets a loaded thread behind the client's back, so its next <c>turn/start</c> fails with <c>thread not found</c>.</summary>
+	public void Unload(string threadId) => _loadedThreads.TryRemove(threadId, out _);
+
 	public void On(string method, Func<FakeCodexCall, Task> handler) => _handlers[method] = handler;
 
 	public void Start() => _ = Task.Run(ReadLoopAsync);

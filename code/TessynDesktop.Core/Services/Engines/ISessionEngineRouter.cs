@@ -19,6 +19,13 @@ public interface ISessionEngineRouter
 	/// <summary>The engine the session runs on (<see cref="SessionNodeModel.EngineId"/>). An unknown id falls back to Claude with a Warning, never an error.</summary>
 	ISessionEngine For(SessionNodeModel node);
 
+	/// <summary>
+	/// The first turn on a new engine (FR.33.4): every other engine's conversation of the session is detached into its prior ids. Returns the
+	/// SYSTEM text to write (<c>Engine changed: Claude -&gt; Codex (GPT). …</c>), or null when no other engine had a conversation. The new
+	/// engine has none, so the turn seeds its conversation from the transcript (FR.11.11).
+	/// </summary>
+	string? ApplyEngineChange(SessionNodeModel node, ISessionEngine engine);
+
 	/// <summary>The session has a live persistent process on any engine.</summary>
 	bool IsAlive(string nodeId);
 

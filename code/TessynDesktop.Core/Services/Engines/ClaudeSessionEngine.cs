@@ -57,6 +57,9 @@ public sealed class ClaudeSessionEngine : ISessionEngine
 	public string EngineId => Constants.SessionEngines.Claude;
 
 	/// <inheritdoc />
+	public string DisplayName => Constants.SessionEngines.ClaudeDisplayName;
+
+	/// <inheritdoc />
 	public EngineCapabilities Capabilities => ClaudeCapabilities;
 
 	/// <inheritdoc />
@@ -67,6 +70,22 @@ public sealed class ClaudeSessionEngine : ISessionEngine
 	{
 		node.ClaudeSessionId = null;
 		_appSettings.Save();
+	}
+
+	/// <inheritdoc />
+	public bool DetachConversation(SessionNodeModel node)
+	{
+		lock (_appSettings.SyncRoot)
+		{
+			var current = node.ClaudeSessionId;
+			if (string.IsNullOrEmpty(current))
+				return false;
+
+			node.PriorClaudeSessionIds.Add(current);
+			node.ClaudeSessionId = null;
+			_appSettings.Save();
+			return true;
+		}
 	}
 
 	/// <inheritdoc />

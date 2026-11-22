@@ -114,6 +114,9 @@ internal sealed class TurnRun : IEngineEventSink
 	public void PersistentProcessStarted() => _observer.StreamingProcessStarted();
 
 	/// <inheritdoc />
+	public void Usage(int inputTokens, int outputTokens) => _progress.Usage(inputTokens, outputTokens, 0);
+
+	/// <inheritdoc />
 	public void TurnEnded(EngineTurnEnd end)
 	{
 		if (!string.IsNullOrWhiteSpace(end.ErrorText))

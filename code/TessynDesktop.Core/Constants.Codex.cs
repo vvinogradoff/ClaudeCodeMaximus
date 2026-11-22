@@ -47,6 +47,47 @@ public static partial class Constants
 			DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
 		};
 
+		/// <summary>How long Stop waits for <c>turn/completed</c> after <c>turn/interrupt</c> before it ends the turn as cancelled (FR.33.8).</summary>
+		public static readonly TimeSpan StopConfirmTimeout = TimeSpan.FromSeconds(15);
+
+		/// <summary>Codex profiles (FR.33.5).</summary>
+		public static class Profiles
+		{
+			/// <summary>The User's own <c>%USERPROFILE%\.codex</c>, used without <c>CODEX_HOME</c>.</summary>
+			public const string DefaultProfileId = "codex-default";
+		}
+
+		/// <summary>The keys of the per-thread <c>config</c> of <c>thread/start</c> and <c>thread/resume</c> (FR.33.7, FR.33.9, FR.33.16).</summary>
+		public static class Config
+		{
+			public const string McpServers = "mcp_servers";
+			public const string Url = "url";
+			public const string HttpHeaders = "http_headers";
+			public const string Command = "command";
+			public const string Args = "args";
+			public const string Env = "env";
+			public const string StartupTimeoutSec = "startup_timeout_sec";
+			public const string ToolTimeoutSec = "tool_timeout_sec";
+			public const string DefaultToolsApprovalMode = "default_tools_approval_mode";
+			public const string ApprovalModeApprove = "approve";
+			public const string ProjectDocFallbackFilenames = "project_doc_fallback_filenames";
+			public const string ProjectDocFallbackClaude = "CLAUDE.md";
+			public const string FeaturesApps = "features.apps";
+
+			/// <summary>The cmx server: up to 20 s to start, and orchestration calls may block for an hour (FR.15.1 <c>wait</c> mode).</summary>
+			public const int CmxStartupTimeoutSec = 20;
+			public const int CmxToolTimeoutSec = 3600;
+
+			/// <summary>What a redacted secret is shown as in the logs and in <c>ToString</c>.</summary>
+			public const string Redacted = "<redacted>";
+
+			/// <summary>The member names of a merged registry entry (the Claude <c>--mcp-config</c> shape) that are read when it is turned into Codex form.</summary>
+			public const string RegistryType = "type";
+			public const string RegistryTypeStdio = "stdio";
+			public const string RegistryHeaders = "headers";
+			public const string RegistryEnv = "env";
+		}
+
 		/// <summary>Process launch (FR.33.6, FR.33.5).</summary>
 		public static class Launch
 		{
@@ -225,6 +266,28 @@ public static partial class Constants
 		public static class Texts
 		{
 			public const string InterruptedMarker = "[interrupted]";
+
+			/// <summary>FR.33.8: Stop sent <c>turn/interrupt</c> but <c>turn/completed</c> did not come within 15 s.</summary>
+			public const string StopNotConfirmed = "Stop did not confirm within 15 s; the Codex turn may still be finishing.";
+
+			/// <summary>FR.33.7: another Codex process on the same <c>CODEX_HOME</c> has the thread open.</summary>
+			public const string ActiveWriter = "This conversation is open in another Codex window. Close it there and send again.";
+
+			/// <summary>FR.33.6: the app-server exited during the turn. Arg 0 = the exit code, or <c>unknown</c>.</summary>
+			public const string HostStoppedFormat = "Codex stopped unexpectedly (exit {0}). Send again to continue.";
+			public const string UnknownExitCode = "unknown";
+
+			/// <summary>A Codex call failed before the turn ran (not found, a timeout, a protocol error). Arg 0 = the reason.</summary>
+			public const string StartFailedFormat = "Codex could not start the turn: {0}";
+
+			/// <summary>FR.33.12: <c>thread/compact/start</c> finished; the thread is kept.</summary>
+			public const string Compacted = "[Session compacted by Codex — the conversation continues on the same thread]";
+
+			/// <summary>FR.33.12: Compact now on a thread Codex no longer has; the next turn starts a new one from the transcript.</summary>
+			public const string CompactThreadGone = "the Codex thread is gone; the next prompt starts a new one from the transcript";
+
+			/// <summary>The turn ended as interrupted without a Stop from Tessyn.</summary>
+			public const string InterruptedElsewhere = "The Codex turn was interrupted.";
 			public const string ErrorFormat = "Codex error: {0}";
 			public const string ErrorWithCodeFormat = "Codex error: {0} ({1})";
 			public const string ContextWindowExceeded = "Codex error: the conversation is longer than the model's context window. Compact the session (Compact now) and send again.";

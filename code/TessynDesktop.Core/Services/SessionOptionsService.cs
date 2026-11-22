@@ -119,19 +119,9 @@ public sealed class SessionOptionsService : ISessionOptionsService
 			if (IsRunning(nodeId))
 				throw new TdcpException(Constants.TreeMutation.TurnRunning);
 
-			bool cleared;
-			lock (_appSettings.SyncRoot)
-			{
-				var current = node.ClaudeSessionId;
-				cleared = !string.IsNullOrEmpty(current);
-				if (cleared)
-				{
-					// The JSONL stays viewable (FR.11.8): the id moves to the prior ids, the next prompt feeds the text session as context.
-					node.PriorClaudeSessionIds.Add(current!);
-					node.ClaudeSessionId = null;
-					_appSettings.Save();
-				}
-			}
+			// The JSONL stays viewable (FR.11.8): the id moves to the engine's prior ids (a Codex thread to PriorCodexThreadIds, FR.33.12), and the
+			// next prompt feeds the text session as context.
+			var cleared = _engines.For(node).DetachConversation(node);
 
 			if (!cleared)
 				return new SessionResetConversationResult(false);
@@ -146,7 +136,7 @@ public sealed class SessionOptionsService : ISessionOptionsService
 			gate.Release();
 		}
 
-		_log.Information("Detached the Claude session of {NodeId}", nodeId);
+		_log.Information("Detached the {Engine} conversation of {NodeId}", _engines.For(node).EngineId, nodeId);
 		_registry.RaiseSessionSettingsChanged(nodeId);
 		return new SessionResetConversationResult(true);
 	}

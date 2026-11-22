@@ -49,6 +49,10 @@ namespace TessynDesktop.Models;
 /// True on a top-level session's first turn in this app run (FR.24.6, <c>ISessionTagService.TakeTagGuidanceDue</c>) — adds
 /// <see cref="Constants.Instructions.SessionTagGuidance"/>. Not gated on <see cref="IsNewSession"/>.
 /// </param>
+/// <param name="EngineId">
+/// The engine the turn runs on (FR.33.16): <see cref="Constants.SessionEngines.Codex"/> selects the Codex wording
+/// (<see cref="Constants.Instructions.Codex"/>); null or Claude keeps today's texts.
+/// </param>
 /// <param name="SessionTags">
 /// The session's tags in Tag-row order (FR.24.7); when the guidance is emitted they are appended to it as the current tags.
 /// </param>
@@ -65,4 +69,9 @@ public sealed record InstructionOptionsModel(
 	IReadOnlyList<AttentionItemModel>? PinnedAttentionItems = null,
 	IReadOnlyList<AttentionItemModel>? UserClosedAttentionItems = null,
 	bool IsTagGuidanceDue = false,
-	IReadOnlyList<SessionTagModel>? SessionTags = null);
+	IReadOnlyList<SessionTagModel>? SessionTags = null,
+	string? EngineId = null)
+{
+	/// <summary>The turn runs on the Codex engine (FR.33.16).</summary>
+	public bool IsCodex => string.Equals(EngineId, Constants.SessionEngines.Codex, System.StringComparison.OrdinalIgnoreCase);
+}

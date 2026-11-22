@@ -31,6 +31,7 @@ internal sealed class RecordingEngineSink : IEngineEventSink
 	public void Retrying(EngineRetryKind kind) => Add($"Retrying({kind})");
 	public void RetryRunning() => Add("RetryRunning");
 	public void PersistentProcessStarted() => Add("PersistentProcessStarted");
+	public void Usage(int inputTokens, int outputTokens) => Add($"Usage({inputTokens}/{outputTokens})");
 
 	public void TurnEnded(EngineTurnEnd end)
 	{

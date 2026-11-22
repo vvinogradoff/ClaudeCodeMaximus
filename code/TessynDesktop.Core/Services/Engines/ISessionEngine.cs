@@ -18,6 +18,9 @@ public interface ISessionEngine
 	/// <summary>The engine's id (<see cref="Constants.SessionEngines"/>), as stored in <see cref="SessionNodeModel.EngineId"/>.</summary>
 	string EngineId { get; }
 
+	/// <summary>The engine's name in the transcript (FR.33.4 <c>Engine changed</c> entry).</summary>
+	string DisplayName { get; }
+
 	EngineCapabilities Capabilities { get; }
 
 	/// <summary>The id of the session's conversation on this engine; null when there is none yet (a new or detached conversation).</summary>
@@ -25,6 +28,12 @@ public interface ISessionEngine
 
 	/// <summary>Forgets the session's conversation (the next turn starts a new one, seeded from the transcript) and saves the settings.</summary>
 	void ClearConversation(SessionNodeModel node);
+
+	/// <summary>
+	/// Detaches the session's conversation (FR.11.8, FR.33.4, FR.33.12): its id moves to the engine's prior ids, so the transcript of it stays
+	/// findable, and the next turn starts a new conversation seeded from the transcript. Saves the settings. False when there was none.
+	/// </summary>
+	bool DetachConversation(SessionNodeModel node);
 
 	/// <summary>
 	/// Makes the conversation resumable under the profile of the turn (Claude: the cross-profile adoption of FR.11.13). False when it can't be

@@ -19,14 +19,17 @@ public sealed class SessionCompactionService : ISessionCompactionService
 	private readonly IAppSettingsService   _appSettings;
 	private readonly ISessionRegistry      _registry;
 	private readonly ISessionTurnService   _turnService;
+	private readonly ISessionEngineRouter? _engines;
 
 	public SessionCompactionService(
 		IClaudeProcessManager processManager,
 		ISessionFileService fileService,
 		IAppSettingsService appSettings,
 		ISessionRegistry registry,
-		ISessionTurnService turnService)
+		ISessionTurnService turnService,
+		ISessionEngineRouter? engines = null)
 	{
+		_engines        = engines;
 		_processManager = processManager;
 		_fileService    = fileService;
 		_appSettings    = appSettings;
@@ -69,6 +72,14 @@ public sealed class SessionCompactionService : ISessionCompactionService
 
 	private async Task<SessionCompactionResultModel> RunAsync(SessionNodeModel node, SessionCompactionOptionsModel options, CancellationToken cancellationToken)
 	{
+		// FR.33.12: an engine that compacts its own conversation (Codex, thread/compact/start) does it natively; no Claude process starts and
+		// the transcript is not rewritten.
+		if (_engines?.For(node) is INativeCompactionEngine native)
+		{
+			_log.Information("Starting native compaction for session {FileName}", node.FileName);
+			return await native.CompactConversationAsync(node, cancellationToken);
+		}
+
 		_log.Information("Starting auto-compaction for session {FileName}", node.FileName);
 
 		// The prompt embeds the whole transcript from the always-complete text Session File, so the call is stateless

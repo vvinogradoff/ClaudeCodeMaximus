@@ -15,6 +15,7 @@ internal sealed class FakeSessionEngine : ISessionEngine
 	public FakeSessionEngine(string engineId) => EngineId = engineId;
 
 	public string EngineId { get; }
+	public string DisplayName => EngineId;
 	public EngineCapabilities Capabilities { get; } = new(false, true, true, false, true, false, false, false);
 	public HashSet<string> Alive { get; } = [];
 	public List<string> Stopped { get; } = [];
@@ -22,6 +23,7 @@ internal sealed class FakeSessionEngine : ISessionEngine
 
 	public string? GetConversationId(SessionNodeModel node) => null;
 	public void ClearConversation(SessionNodeModel node) { }
+	public bool DetachConversation(SessionNodeModel node) => false;
 	public bool AdoptConversation(SessionNodeModel node, string conversationId, string? profileConfigDir) => true;
 	public Task<EngineTurnPreparation?> PrepareTurnAsync(SessionNodeModel node, TurnSettings settings) => Task.FromResult<EngineTurnPreparation?>(null);
 	public Task RunTurnAsync(EngineTurnRequest request, IEngineEventSink sink, CancellationToken cancellationToken) => Task.CompletedTask;

@@ -26,4 +26,11 @@ internal static class TestEngines
 	/// </summary>
 	public static SessionEngineRegistry Claude(IClaudeStreamingSessionManager streaming) =>
 		new([new ClaudeSessionEngine(null!, streaming, null!, null!, null!, new Lazy<IAgentMcpServer>(() => null!))]);
+
+	/// <summary>
+	/// The same light router, with the settings the engine saves through when it detaches a conversation (reset conversation, FR.11.8, and the
+	/// engine change of FR.33.4).
+	/// </summary>
+	public static SessionEngineRegistry Claude(IClaudeStreamingSessionManager streaming, IAppSettingsService settings) =>
+		new([new ClaudeSessionEngine(null!, streaming, null!, settings, null!, new Lazy<IAgentMcpServer>(() => null!))]);
 }
