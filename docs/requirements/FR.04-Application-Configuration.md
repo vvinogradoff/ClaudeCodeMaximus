@@ -27,6 +27,7 @@
 | Existing | Amended by | Change |
 |---|---|---|
 | FR.4.4 Settings window | FR.4.7 | Closing the window with unsaved changes asks first. |
+| FR.4.4 Settings window | FR.4.8 | The General tab gains the **Code references** checkbox. |
 
 **FR.4.7 — Ask before closing Settings with unsaved changes (WPF; decision A54).** When the Settings window is closed (the **Close** button, Esc, the title bar's close button or Alt+F4) while **any tab** has unsaved changes, including pending colours (FR.9.19), a dialog asks: **Save**, **Discard** or **Cancel**.
 - **Save** saves every changed tab, as the window's Save button does, then closes. If a save fails, the window stays open and shows the error, as Save does.
@@ -35,5 +36,10 @@
 - **No changes:** the window closes at once, with no dialog.
 - The dialog names the tabs with unsaved changes (for example `Unsaved changes in Colours, Appearance.`).
 - Closing the main window, or the application exiting, while Settings is open behaves the same; Cancel then also stops the main window from closing.
+
+**FR.4.8 — Code references checkbox in Settings > General (decision of the Architect, 2026-11-19).** The General tab of the Settings window shows a checkbox **Code references**, bound to the daemon setting `CodeReferencesEnabled` (default off; FR.7.13).
+- A hint under the checkbox says what it does: when on, `#` in the message box suggests C# code symbols and the code index parses C# symbols; when off, `#` suggests sessions and no new symbol parsing is done; `##` files and drive paths work either way; the change applies at the next suggestion.
+- It is a daemon setting: it is stored in `appsettings.json`, saved by the Save button with the other General settings (FR.4.7 applies: closing with the box changed and unsaved asks first), and read again by the daemon on each suggestion, with no restart.
+- The control has the UI Automation name `Code references`.
 
 ---

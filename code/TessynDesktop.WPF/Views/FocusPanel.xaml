@@ -141,6 +141,46 @@
                     </Border>
             </DataTemplate>
 
+            <!-- The card of an elevated run (FR.23.32): header, id and title, then the facts and the state-dependent buttons. No options, no reply box, no Reply and no Dismiss. -->
+            <DataTemplate x:Key="ElevatedCardTemplate" DataType="{x:Type vm:FocusItemViewModel}">
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <DockPanel LastChildFill="False" Margin="0,0,0,6">
+                            <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Tag="{Binding KindKey}">
+                                <TextBlock Style="{StaticResource KindChipText}" Text="{Binding KindText}" />
+                            </Border>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </DockPanel>
+                        <v:FocusCardText Item="{Binding}" />
+                        <v:ElevatedRunFactsView DataContext="{Binding Elevated}" />
+                        <v:ElevatedRunStateView DataContext="{Binding Elevated}" />
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+            <v:FocusCardTemplateSelector x:Key="OpenCardSelector" Standard="{StaticResource OpenCardTemplate}" Elevated="{StaticResource ElevatedCardTemplate}" />
+
+            <!-- The facts of a closed elevated-run card, shown with the expanded header (FR.23.32: the command block and the log path). -->
+            <Style x:Key="ClosedElevatedFacts" TargetType="ContentControl">
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Setter Property="ContentTemplate">
+                    <Setter.Value>
+                        <DataTemplate DataType="{x:Type vm:ElevatedRunCardViewModel}">
+                            <StackPanel>
+                                <v:ElevatedRunFactsView />
+                                <TextBox IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" TextWrapping="Wrap" Margin="0,6,0,0" Text="{Binding LogPathText, Mode=OneWay}"
+                                         Visibility="{Binding HasLogPath, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Log path" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsBodyExpanded}" Value="True">
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
             <!-- Closed card (FR.23.14): compact, header row plus the outcome line; a click on the header shows or hides the body. -->
             <DataTemplate x:Key="ClosedCardTemplate" DataType="{x:Type vm:FocusItemViewModel}">
                 <Border Style="{StaticResource CardBorder}" Padding="12,8" PreviewMouseLeftButtonDown="OnClosedCardDown" PreviewMouseLeftButtonUp="OnClosedCardUp">
@@ -155,6 +195,8 @@
                         <v:FocusCardText Item="{Binding}" />
                         <!-- references only while expanded (FR.23.29) -->
                         <ContentControl Content="{Binding}" Style="{StaticResource ClosedRefs}" />
+                        <!-- an elevated run's facts only while expanded (FR.23.32); Content is null for every other item -->
+                        <ContentControl Content="{Binding Elevated}" Style="{StaticResource ClosedElevatedFacts}" />
                     </StackPanel>
                 </Border>
             </DataTemplate>
@@ -237,7 +279,7 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <ItemsControl ItemsSource="{Binding OpenItems}" ItemTemplate="{StaticResource OpenCardTemplate}" Focusable="False" />
+                <ItemsControl ItemsSource="{Binding OpenItems}" ItemTemplateSelector="{StaticResource OpenCardSelector}" Focusable="False" />
 
                 <Expander Header="{Binding DecisionsHeader}" IsExpanded="{Binding IsDecisionsExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.AutomationId="FocusDecisionsExpander"
                           Visibility="{Binding HasDecisions, Converter={StaticResource BoolToVis}}">

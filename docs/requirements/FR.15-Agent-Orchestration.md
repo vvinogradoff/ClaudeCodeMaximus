@@ -189,3 +189,111 @@ Use cases: [UC.15.4](/docs/usecases/UC.15-Agent-Orchestration.md). Test cases: [
   - The description says that the new session belongs to the user, that it is not a worker, and that `spawn_session` is the tool for workers.
   - `Constants.Instructions.NoWorkflowTool` lists the tool.
   - The `cmx-orchestration` skill (FR.15.11) says to use it only when the user asks for a new session.
+
+---
+## Amendments and additions (2026-11-20, elevated runs requested by an agent)
+
+> **Why.** Some work needs administrator rights, and a session can't get them: WPF stays normal and the daemon runs normally unless the User chose otherwise (FR.32.10). The case that started this: `tools\e2e\Run-WpfE2E.ps1` needs an elevated caller (NR.6), so a session that changed WPF code could not run the WPF end-to-end tests itself and the User ran them by hand. This feature lets a session **ask**, and the User **approves each run** at the Windows administrator prompt. **Architect decisions of 2026-11-20:** any command may be requested (no allowlist) but it is always shown verbatim on the card; the card is pinned in the Focus view; the User approves in the WPF client on this PC; the outcome comes back to the session as a new turn. Use cases: [UC.ER.01](/docs/usecases/UC.ER.01-Elevated-Runs.md). Test cases: [TC.ER.01](/docs/testcases/TC.ER.01-Elevated-Runs.md). Wire: [tdcp-spec 10.A13](/docs/refactoring/tdcp-spec.md). Related: FR.23.31, FR.23.32, FR.32.16.
+
+### Amendments to existing requirements
+
+| Existing | Amended by | Change |
+|---|---|---|
+| FR.15.1 Orchestration tools | FR.15.16, FR.15.17 | New tools `request_elevated_run`, `cancel_elevated_run`, `list_elevated_runs`. Unlike `post_attention`, a Worker Session may call them (FR.15.16). |
+| FR.15.3 Async mailbox, FR.15.12 Mailbox coalescing | FR.15.19 | The outcome of an elevated run is a delivery to the requesting session with its own header (`[Elevated run <id> <status>]`). It is merged with other pending deliveries and held while the session is busy, exactly as worker results are. |
+| FR.15.11 CMX Orchestration Skill | FR.15.20 | The skill and the session-start instruction name the tools and when to use them. |
+| FR.15.14 `workingDir` rule | FR.15.16 | The elevated-run working-directory rule is stricter than the `spawn_session` rule in one way (it resolves links) and wider in another (sibling worktrees). |
+
+### New requirements
+
+**FR.15.16 — `request_elevated_run`.** A session (top-level or worker) asks the User to run one command line as administrator. The call **returns at once**; nothing runs until the User approves it in the WPF client (FR.23.32).
+
+| Arg | Required | Meaning |
+|---|---|---|
+| `command` | yes | The full command line, one line, at most 4,000 characters, no NUL. It is handed **unchanged** to `cmd.exe /d /s /c` (FR.15.19), so batch syntax, redirection and `&&` work; for PowerShell write `powershell -NoProfile -ExecutionPolicy Bypass -File ...` or `-Command ...`. |
+| `workingDir` | yes | The folder the command starts in. The rule is below. |
+| `reason` | yes | One line saying why the run is needed (trimmed, line breaks become spaces, at most 300 characters; blank is an error). Shown on the card. |
+| `timeoutMinutes` | no | Whole minutes the process may run, counted from the moment it starts. Default 60, minimum 1, maximum 240. A value outside 1–240 or not a whole number is an error (it is not clamped silently). |
+
+- **Scope: any command.** There is **no allowlist and no denylist**. The safeguard is that the User sees the exact command and confirms it twice (the card, then the Windows administrator prompt). The card shows the command, not the contents of a script it calls; a session that asks to run a script is expected to say in `reason` what the script does.
+- **The working-directory rule.** `workingDir` is made absolute (a relative path is resolved against the **caller's working directory**), must be an **existing folder**, and then its **real path** (links, junctions and `..` resolved) must be one of:
+  1. the caller's own working directory, or a folder below it;
+  2. a registered project directory (a Directory Node of the Tessyn tree), or a folder below one — the match of FR.15.14: separator-aware, case-insensitive, trailing separators ignored (`C:\a\bc` is not under `C:\a\b`);
+  3. a **sibling worktree** of a registered project directory `P`: a folder (or a folder below one) whose parent folder is the parent folder of `P` and whose name starts with `<name of P>-wt-` (case-insensitive), for example `C:\Projects\Personal\Tessyn-wt-fix` for the project `C:\Projects\Personal\Tessyn`. A worktree created anywhere else is not allowed (the User can register it as a project).
+  A path that fails the rule is a tool error: `'<dir>' is not allowed for an elevated run. Use the session's working directory, a folder in a project of the Tessyn tree, or a sibling worktree named '<project>-wt-*'. Registered: <a>, <b>, ... (+N more).` (the first 12 are listed, as in FR.15.14).
+- **Fixed at request time.** The daemon stores `command`, `workingDir` and `timeoutMinutes` as given (after the checks) in the request record (FR.15.18). The card shows that record; the run uses that record; **nothing is read from the agent again**. Calling the tool again creates a new request.
+- **Dedupe.** While a request of the same session with the same `command` and `workingDir` is `pending`, a repeated call returns that request's id and creates nothing: `Elevated run <id> is already pending with this command and working directory - not requested again.`
+- **Result** (plain text): `Elevated run <id> requested (pending). The user was notified and must approve it in the Tessyn desktop app, on the Focus card. It expires in 24 hours. The outcome will arrive as a new turn in this session - end your turn instead of waiting.` `<id>` is the request id: 8 lowercase hex characters, unique among run folders.
+- **Errors** (a tool error; nothing is created):
+  - a blank or over-long `command`, or one with a line break or NUL: `The command must be one non-empty line of at most 4,000 characters.`;
+  - a blank `reason`; a bad `timeoutMinutes`: `timeoutMinutes must be a whole number from 1 to 240.`;
+  - a `workingDir` that fails the rule, or that does not exist (message above, or `'<dir>' does not exist.`);
+  - the limits of FR.15.18: `This session already has 3 elevated runs waiting for the user. Wait for them or withdraw one with cancel_elevated_run.` and `Too many elevated runs are waiting for the user (10). Try again later.`;
+  - the daemon already runs elevated (hello `elevated` = true, FR.32.12): `The daemon already runs as administrator, so this session's commands do too. Run the command directly.` The tool is then of no use, and no card is made;
+  - agent tools disabled: the tools are not offered.
+- **Tool description (this wording):**
+
+  > Ask the user to run ONE command line as administrator. Nothing runs until the user approves it in the Tessyn desktop app: they see the command exactly as you give it, your reason and the working directory on a card in their Focus view, then confirm the Windows administrator prompt. The call returns at once with a request id; the outcome (status, exit code, duration, the last lines of output, the log path) arrives later as a new turn in this session - do not wait for it and do not poll. Use it only for what really needs administrator rights, for example the WPF end-to-end tests: `powershell -NoProfile -ExecutionPolicy Bypass -File tools\e2e\Run-WpfE2E.ps1 --no-build --filter "..."` in your worktree. Give the exact command (no placeholders), a one-line reason, and a working directory that is your own, a project directory or a sibling `-wt-` worktree. Requests expire after 24 hours; withdraw one you no longer need with cancel_elevated_run.
+
+**FR.15.17 — `cancel_elevated_run` and `list_elevated_runs`.**
+- `cancel_elevated_run { requestId }` withdraws the caller's own request while it is `pending`: it becomes `cancelled` (cancelled by the agent, FR.15.18), its cards close, **no outcome turn is delivered** (the caller already knows) and the result is `Elevated run <id> withdrawn.` Another session's id, or an unknown id: `Unknown elevated run '<id>'.` (the same text, so ids of other sessions are not revealed). A request that is already `launching` or `running`: `Elevated run <id> is already <status> - the user can stop it from the card.` A finished one: `Elevated run <id> is already <status>.` (no change). The id may be a unique prefix of at least 4 characters.
+- `list_elevated_runs { status? }` lists the **caller's own** requests, newest first, one line each: `<id> [<status>] <command cut to 80 characters> - <reason cut to 80>` and, when finished, ` - exit <code>, <duration>` or ` - <failure>`. `status`: `active` (default: pending, launching, running) or `all`. Empty: `No elevated runs.` It exists so a session that lost its context (compaction, restart) can find its requests; it never shows another session's runs.
+- Both tools are available to Worker Sessions for their own requests.
+
+**FR.15.18 — Request lifecycle, limits and records.**
+- **Statuses** (wire names in brackets): `pending` [pending] — waiting for the User; `launching` [launching] — the User approved, the Windows prompt is open or the process is starting; `running` [running] — the wrapper reported that the process started; and the final ones: `completed` [completed] — the process ended by itself, whatever its exit code; `declined` [declined] — the User declined on the card; `declined at the Windows prompt` [declinedAtPrompt]; `failed to start` [failedToStart]; `timed out` [timedOut] — the process was killed at `timeoutMinutes`; `cancelled` [cancelled] — withdrawn by the agent while pending, or stopped by the User while running (`cancelledBy` = `agent` or `user`); `expired` [expired] — not approved within 24 hours.
+- **Transitions.** `pending` → `launching` (approve), `declined`, `cancelled`, `expired`. `launching` → `running`, `declinedAtPrompt`, `failedToStart`. `running` → `completed`, `timedOut`, `cancelled`, `failedToStart` (the wrapper ended without a result, see below). Every transition is a compare-and-set under one lock in the daemon: **only the first approve wins, and a request is launched at most once.** A second approve, from a second WPF window or a double click, is refused (`This request is no longer pending (<status>).`). A final status never changes.
+- **Request record.** `%AppData%\TessynDesktop\elevated-runs\<id>\request.json` holds the id, the requesting session (NodeId, name), its top-level supervisor (NodeId, name; none for a top-level requester), `reason`, `workingDir`, `command`, `timeoutMinutes`, `createdUtc`, `expiresUtc`, the status and its timestamps, `exitCode`, `cancelledBy`, the decline note and the failure text. It is written atomically (temp file, then rename, as FR.23.3) on every transition and **is the only source of what runs**. The run folder also holds the files of FR.15.19. Run folders are **never deleted by Tessyn** (the no-cascade policy of FR.1.7).
+- **Limits.** At most **3** requests per session are `pending` or `launching` at once (`Constants.ElevatedRuns.MaxOpenPerSession`), and at most 10 across the app (`MaxOpenTotal`). A refused call creates nothing and does not count.
+- **Expiry.** `expiresUtc = createdUtc + 24 h` (`Constants.ElevatedRuns.PendingLifetime`). The daemon checks every minute and at start; an expired request becomes `expired`, its cards close and the outcome is delivered (FR.15.19). An approve that arrives after `expiresUtc` is refused as expired, even before the sweep ran.
+- **Restart of the daemon.** At start the daemon reads every run folder that is not final. `pending` stays pending (the 24 h clock keeps running). For `launching` and `running` it looks at the run folder: a `result.json` gives the outcome; a `started.json` whose wrapper process still exists resumes the monitoring; anything else becomes `failedToStart` with `The daemon restarted before the outcome was known.` The outcome is then delivered as usual.
+- **Logging.** Every request and every status change writes one daemon log line at Information level: `ElevatedRun <id> <status> session=<nodeId> "<name>" dir=<workingDir> exit=<code> command=<command cut to 300>`. The command is logged verbatim up to that cut (a run is an audit event).
+- **One run, one outcome.** A request produces exactly one outcome delivery.
+
+**FR.15.19 — Execution and outcome delivery.**
+- **Who starts it.** Only the WPF client on this PC, after the User clicked **Run as administrator** (FR.23.32): it asks the daemon to approve (`elevated.approve`), receives the launch description the **daemon** built, and starts it through ShellExecute with the `runas` verb (the mechanism and verb of FR.32.10; `Constants.Switch.RunAsVerb`), hidden, with no pipes. The Windows administrator prompt appears and the User confirms. WPF itself stays normal (FR.32.16). The Web client and Telegram can't approve.
+- **The launch line.** `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand <base64>`. The encoded script is a **fixed wrapper** (`Constants.ElevatedRuns.WrapperScript`) with the request's `command`, `workingDir`, the time limit in seconds (`timeoutMinutes` x 60) and the run folder embedded as data. **Nothing the elevated process executes is read from a file a normal process could change**: the command travels in the launch line, not in a script file, so there is no window between approval and execution in which it could be replaced. (The run folder is only written by the wrapper, and read by the daemon.) The request is refused at request time when the encoded line would exceed 30,000 characters (the 4,000-character command limit keeps it well below).
+- **The wrapper.** It sets the working directory, starts `cmd.exe /d /s /c <command>` with standard output and standard error both appended to `output.log` in the run folder (interleaved in arrival order; limit 20 MB, after which `[output truncated at 20 MB]` is written once and the process keeps running), and writes:
+  - `started.json` `{ pid, startedUtc }` once the process exists;
+  - `result.json` `{ exitCode, endedUtc, ended }` when it is over, `ended` being `exited`, `timedOut` or `stopped`; it is written last and atomically.
+  - It polls once a second. When the file `stop` appears in the run folder it kills the process tree (`taskkill /T /F`) and writes `ended: stopped`. When `timeoutMinutes` pass it does the same with `ended: timedOut`. A wrapper that is itself killed leaves no `result.json`.
+- **Watching.** The **daemon** watches the run folder (a poll every 2 s), not WPF, so the outcome is not lost when WPF closes. `started.json` makes the request `running`. `result.json` makes it final (`exited` → `completed` with the exit code, `timedOut` → `timedOut`, `stopped` → `cancelled` by the user). If the wrapper's process is gone and there is no `result.json`, the request becomes `failedToStart` with `The elevated process ended without a result.` If **60 s** pass after WPF reported the launch (`elevated.launched`) with no `started.json`: `failedToStart` (`The elevated process did not start within 60 seconds.`). If WPF reports neither a launch nor a failure within 5 minutes of the approve: `failedToStart` (`The client did not report the start.`). The wait for the Windows prompt itself is not limited (the launch call blocks until the User answers).
+- **Another administrator account.** When the User confirms the Windows prompt with a different administrator account, the run uses that account's profile and environment (`%USERPROFILE%`, `%APPDATA%`, the PATH); the run folder and the working directory stay as requested (Architect decision 2026-11-21, Focus A8, question 7).
+- **Declined at the prompt.** When the User cancels the Windows prompt (Win32 error 1223), WPF reports `declined: true` and the status is `declinedAtPrompt`. Any other failure of the launch call is `failedToStart` with the system's message.
+- **Stop.** While `running`, **Stop** on the card (`elevated.stop`) makes the daemon create the `stop` file. A normal WPF can't signal an elevated process directly, which is why the file is used; the wrapper kills the whole tree within a second. If no `result.json` appears 30 s after the marker, the request becomes `cancelled` with the note `Stop was requested; the process may still be running.` and the line is logged.
+- **Outcome delivery.** When a request reaches a final status the daemon delivers **one new turn to the requesting session** (the worker itself for a worker request — it reports further to its supervisor in its own way). It reuses the Mailbox Delivery machinery of FR.15.3 and FR.15.12 with its own header: a delay-0 schedule targeting the session, merged with a pending delivery for that session, held while the session has a turn in progress. The prompt:
+
+  ```
+  [Elevated run <id> <status words>] <reason>
+  Command: <command, cut to 500 characters>
+  Working directory: <workingDir>
+  Exit code: <n>              (only when the process ran)
+  Duration: <1h 02m 05s>      (only when it ran)
+  Log: <absolute path of output.log>   (only when it ran)
+  Output (last <n> lines):    (only when there is output)
+  <the last 200 lines, each cut to 500 characters, at most 20,000 characters in all>
+  ```
+
+  `<status words>`: `completed`, `declined by the user` (followed by `Note: <text>` when the User gave one), `declined at the Windows prompt`, `failed to start: <failure>`, `timed out after <n> min (the process was killed)`, `cancelled by the user (stopped while running)`, `expired (not approved within 24 hours)`. A withdrawal by the agent delivers nothing (FR.15.17). A request whose session no longer exists logs the outcome and delivers nothing.
+- **The cards resolve themselves.** On the final status the daemon resolves the request's Focus items (FR.23.31) with the outcome as their note, so the Focus view needs no action from the session.
+- **Seam for tests.** WPF starts the launch through `IElevatedRunLauncher` (FR.32.16); the daemon takes the clock (`TimeProvider`) and the run folder root in its constructor. Tests inject a launcher that does not elevate (TC.ER.01 legend).
+
+**FR.15.20 — Guidance, the skill and the E2E suite.**
+- **Session-start instruction.** `Constants.Instructions.ElevatedRunGuidance`, once per fresh session (`IsAgentToolsEnabled && IsNewSession`, workers included), text:
+
+  > You cannot run commands as administrator yourself. When something really needs it (for example the WPF end-to-end tests), call `mcp__cmx__request_elevated_run` with the exact command line, a working directory (yours, a project directory or a sibling `-wt-` worktree), a one-line reason and, for a long run, `timeoutMinutes`. The user approves it in the desktop app; the call returns at once and the outcome arrives later as a new turn in this session, so end your turn instead of waiting or polling. Never ask the user to run something as administrator in plain text when this tool applies. Do not request the same run twice; `mcp__cmx__list_elevated_runs` shows your requests.
+
+- **Skill.** The `cmx-orchestration` skill (FR.15.11) gets an "Elevated runs" paragraph with the same content, and says that a worker that needs one requests it itself (the User sees the card on the top-level session) and reports the outcome to its supervisor.
+- **Using it for the E2E suite.** The WPF end-to-end tests must run through `tools\e2e\Run-WpfE2E.ps1` (NR.6), which needs an elevated caller. A session therefore builds and runs the unit and integration tests itself, then requests, for example, in its worktree:
+
+  ```
+  command:    powershell -NoProfile -ExecutionPolicy Bypass -File tools\e2e\Run-WpfE2E.ps1 --no-build --filter "FullyQualifiedName~Recent"
+  workingDir: C:\Projects\Personal\Tessyn-wt-recent
+  reason:     WPF E2E for the Recent tab (TC.RT.01)
+  timeoutMinutes: 90
+  ```
+
+  The runner serialises runs machine-wide and may wait for another run (`-WaitMinutes`, default 120), so a generous `timeoutMinutes` is the rule. The build comes first and without elevation (`dotnet build` in the worktree), because the runner is called with `--no-build`. The outcome turn carries the exit code and the tail of the test output; the full output is in the log file.
+- **Proposed wording for `CLAUDE.md` (a proposal for the Architect — `CLAUDE.md` is not edited by this change).** In the E2E paragraph (`Cover all use cases with E2E tests`, item 4), after "Run the WPF tests only through `tools\e2e\Run-WpfE2E.ps1` (NR.6), after `dotnet build code/TessynDesktop.sln`; it runs them as the `tessyn-e2e` user in its own session (no focus stealing) and needs an elevated shell.", add:
+
+  > A session that is not elevated requests the run with the cmx tool `request_elevated_run` (command `powershell -NoProfile -ExecutionPolicy Bypass -File tools\e2e\Run-WpfE2E.ps1 --no-build --filter "<filter>"`, `workingDir` = its tree or worktree, a one-line reason, `timeoutMinutes` 60–120). The User approves it on the Focus card and at the Windows prompt; the exit code and the output tail arrive as a new turn, and the full output is in the log file it names. Do not ask the User to run the E2E tests by hand, and do not report a requirement implemented before that outcome shows a green run.

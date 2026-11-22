@@ -251,6 +251,7 @@ internal sealed class InProcFakeScheduler : ISchedulerService
 
     public void AddSchedule(ScheduleModel schedule) { AddedSchedule = schedule; _schedules.Add(schedule); }
     public void AddOrMergeMailboxDelivery(string supervisorNodeId, string workerName, string resultText) { }
+    public void AddOrMergeElevatedRunDelivery(string targetNodeId, string runId, string outcomeText) { }
     public bool RemoveSchedule(string scheduleId) { RemovedScheduleId = scheduleId; return RemoveResult; }
 
     public IReadOnlyList<ScheduleModel> GetSchedules(string? targetNodeId = null)

@@ -306,7 +306,7 @@ public sealed partial class FakeTessynClient : ITessynClient
 		if (AttentionListException != null)
 			throw AttentionListException;
 		Attention.TryGetValue(nodeId, out var items);
-		return Task.FromResult(new AttentionListResult(nodeId, new AttentionSummaryDto(), [.. items ?? []]));
+		return Task.FromResult(new AttentionListResult(nodeId, new AttentionSummaryDto(), [.. (items ?? []).Select(WithCurrentElevatedRun)]));
 	}
 
 	public Task<AttentionReplyResult> AttentionReplyAsync(string nodeId, IReadOnlyList<AttentionAnswerParams> answers, string? modelId = null, string? effort = null, string? profileId = null, CancellationToken cancellationToken = default)

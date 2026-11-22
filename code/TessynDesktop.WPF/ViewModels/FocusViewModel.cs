@@ -8,6 +8,8 @@ using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
 using TessynDesktop.Services;
 using TessynDesktop.WPF.Infrastructure;
+using TessynDesktop.WPF.Services;
+using TessynDesktop.WPF.Switch;
 
 namespace TessynDesktop.WPF.ViewModels;
 
@@ -26,6 +28,9 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	private readonly ITessynClient _client;
 	private readonly IUiDispatcher _ui;
 	private readonly ILogger<FocusViewModel> _logger;
+	private readonly IElevatedRunLauncher? _elevatedLauncher;
+	private readonly IClipboardWriter? _clipboard;
+	private readonly TimeProvider _time;
 	private readonly Dictionary<(string NodeId, string ItemId), string> _drafts = new();
 	private readonly Dictionary<string, FocusItemViewModel> _byId = new(StringComparer.OrdinalIgnoreCase);
 	private bool _applyingReply;
@@ -47,11 +52,18 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	[ObservableProperty]
 	private int _answerCount;
 
-	public FocusViewModel(ITessynClient client, IUiDispatcher ui, ILogger<FocusViewModel> logger)
+	/// <param name="elevatedLauncher">Starts the process of an approved elevated run (FR.32.16); without one the card's Run as administrator says so instead of starting anything.</param>
+	/// <param name="clipboard">Receives the text of the card's Copy command button.</param>
+	/// <param name="time">The clock of the elevated-run cards (elapsed time, the 2 s output refresh); tests pass a manual one.</param>
+	public FocusViewModel(ITessynClient client, IUiDispatcher ui, ILogger<FocusViewModel> logger,
+		IElevatedRunLauncher? elevatedLauncher = null, IClipboardWriter? clipboard = null, TimeProvider? time = null)
 	{
 		_client = client;
 		_ui = ui;
 		_logger = logger;
+		_elevatedLauncher = elevatedLauncher;
+		_clipboard = clipboard;
+		_time = time ?? TimeProvider.System;
 		ReplySync = new DraftSynchronizer(
 			(key, ct) => _client.ReplyDraftGetAsync(NodeOf(key), ItemOf(key), ct),
 			(key, text, baseRevision) => _client.ReplyDraftSetAsync(NodeOf(key), ItemOf(key), text, baseRevision),
@@ -236,7 +248,8 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 				SetReplyQuietly(item, draft);   // a quick return: what was typed before the pane left, until the daemon's text arrives
 			_byId[dto.Id] = item;
 			wanted.Add(item);
-			_ = ReconcileReplyAsync(item);
+			if (!item.IsElevatedRun)
+				_ = ReconcileReplyAsync(item);   // the card of an elevated run has no reply box and no draft
 		}
 
 		// Sync in place (no Clear): a card the user is typing into keeps its focus across refreshes.
@@ -244,7 +257,9 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		{
 			Items.Remove(gone);
 			_byId.Remove(gone.Id);
-			KeepOrDiscardGoneReply(nodeId, gone);
+			gone.Elevated?.Dispose();
+			if (!gone.IsElevatedRun)
+				KeepOrDiscardGoneReply(nodeId, gone);
 		}
 
 		for (var i = 0; i < wanted.Count; i++)
@@ -296,7 +311,10 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 		}
 
 		foreach (var id in _closedById.Keys.Where(k => !keep.Contains(k)).ToList())
-			_closedById.Remove(id);
+		{
+			_closedById.Remove(id, out var removed);
+			removed?.Elevated?.Dispose();
+		}
 
 		SyncList(ClosedItems, wanted);
 	}
@@ -321,6 +339,8 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 	private void ClearItems()
 	{
+		foreach (var card in _byId.Values.Concat(_closedById.Values))
+			card.Elevated?.Dispose();
 		Items.Clear();
 		OpenItems.Clear();
 		DecidedItems.Clear();
@@ -463,6 +483,10 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 			ReplySync.Schedule(KeyOf(item.NodeId, item.Id), item.ReplyText);
 	}
 
+	/// <summary>The card of an elevated run (FR.23.32) for an item of this view; when the run becomes final the item list is read again (the item closes).</summary>
+	internal ElevatedRunCardViewModel CreateElevatedCard(ElevatedRunDto run, string nodeId) =>
+		new(run, nodeId, _client, _elevatedLauncher, _clipboard, _ui, _logger, _time, () => _ui.Post(() => _ = RequestRefresh()));
+
 	internal void ActivatePath(FocusItemViewModel item, string path) =>
 		PathActivated?.Invoke(this, new FocusPathRequest(item.NodeId, item.Id, path, item.IsClosed));
 
@@ -540,6 +564,12 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 			return;
 		}
 
+		if (notification.TryGetElevatedChanged(out var elevated))
+		{
+			OnElevatedChanged(elevated);
+			return;
+		}
+
 		if (notification.Method != RemoteProtocol.Events.AttentionChanged)
 			return;
 
@@ -551,6 +581,20 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 					_ = RequestRefresh();
 			});
 	}
+
+	/// <summary>
+	/// An elevated run changed status (tdcp-spec 10.A13): every card of that run (the requester's and the supervisor's) reads the run again, so it moves between its states
+	/// without waiting for the item list; a final status or a run this view does not know yet reads the list too (the item closes or appears).
+	/// </summary>
+	private void OnElevatedChanged(ElevatedChangedPayload payload) => _ui.Post(() =>
+	{
+		var cards = Items.Concat(ClosedItems).Where(i => i.Elevated != null && string.Equals(i.Elevated.Id, payload.RequestId, StringComparison.Ordinal)).ToList();
+		foreach (var card in cards)
+			_ = card.Elevated!.RefreshAsync();
+
+		if (NodeId != null && (cards.Count == 0 && payload.NodeId == NodeId || ElevatedRunText.IsFinal(payload.Status) && cards.Count > 0))
+			_ = RequestRefresh();
+	});
 
 	/// <summary>The reply draft of an item changed (another client, or this one's own write echoing back): the card reads it again unless the revision is the one known here.</summary>
 	private void OnDraftChanged(RemoteNotification notification)
@@ -578,7 +622,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 		_ = RequestRefresh();
 		_ = ReplySync.FlushAllAsync();   // what a lost connection kept from being written goes out now
-		foreach (var item in Items.ToList())
+		foreach (var item in Items.Where(i => !i.IsElevatedRun).ToList())
 			_ = ReconcileReplyAsync(item);   // draft events may have been lost
 	});
 
@@ -586,6 +630,8 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	{
 		_client.NotificationReceived -= OnNotification;
 		_client.Resynced -= OnResynced;
+		foreach (var card in _byId.Values.Concat(_closedById.Values))
+			card.Elevated?.Dispose();
 		ReplySync.Merged -= OnReplyMerged;
 		ReplySync.Dispose();
 	}

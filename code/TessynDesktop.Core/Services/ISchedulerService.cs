@@ -29,6 +29,12 @@ public interface ISchedulerService
 	/// </summary>
 	void AddOrMergeMailboxDelivery(string supervisorNodeId, string workerName, string resultText);
 
+	/// <summary>
+	/// Hands the outcome of an elevated run to the requesting session as a delivery with its own header (FR.15.19): merged with the session's pending delivery when
+	/// there is one, held while the session has a turn in progress, exactly as worker results are (FR.15.12).
+	/// </summary>
+	void AddOrMergeElevatedRunDelivery(string targetNodeId, string runId, string outcomeText);
+
 	/// <summary>Removes a schedule by ID. Returns true if found and removed.</summary>
 	bool RemoveSchedule(string scheduleId);
 

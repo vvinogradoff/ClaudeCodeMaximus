@@ -63,7 +63,13 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	/// <summary>A path written in this card's title or body was activated (Ctrl+click or Invoke, FR.23.30).</summary>
 	public void OpenPath(string path) => _owner.ActivatePath(this, path);
 
-	public bool HasBody => !string.IsNullOrWhiteSpace(Body);
+	/// <summary>The card of an elevated run (FR.23.32), set when the item carries the <c>elevatedRun</c> action; null for every other item. The facts come from it, never from the body.</summary>
+	public ElevatedRunCardViewModel? Elevated { get; private set; }
+
+	/// <summary>True for the item of an elevated run: it has its own card and no markdown body (the body only serves clients that do not know the action).</summary>
+	public bool IsElevatedRun => Elevated != null;
+
+	public bool HasBody => Elevated == null && !string.IsNullOrWhiteSpace(Body);
 
 	public bool HasOptions => Options.Count > 0;
 
@@ -83,7 +89,7 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	public bool IsClosed => _status != AttentionStatus.Open;
 
 	/// <summary>The outcome line of a closed card: <c>Answered: ...</c>, <c>Resolved: ...</c> or <c>Dismissed</c>.</summary>
-	public string OutcomeText => _status switch
+	public string OutcomeText => Elevated is { IsFinal: true } elevated && _status != AttentionStatus.Open ? elevated.OutcomeText : _status switch
 	{
 		AttentionStatus.Answered => FormatOutcome(Constants.Texts.OutcomeAnswered, _answer),
 		AttentionStatus.Resolved => FormatOutcome(Constants.Texts.OutcomeResolved, _resolutionNote),
@@ -123,6 +129,7 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	/// <summary>Takes the fields the daemon may change (everything but the id and the reply box).</summary>
 	public void Update(AttentionItemDto item)
 	{
+		ApplyAction(item.Action);
 		_status = item.Status;
 		_answer = item.Answer;
 		_resolutionNote = item.ResolutionNote;
@@ -157,6 +164,24 @@ public sealed partial class FocusItemViewModel : ObservableObject
 			foreach (var reference in refs)
 				Refs.Add(new FocusRefViewModel(reference, _owner.ActivateRef, _owner.ActivateRefInSystemBrowser));
 			OnPropertyChanged(nameof(HasRefs));
+		}
+	}
+
+	private void ApplyAction(AttentionActionDto? action)
+	{
+		if (action is not { Type: RemoteProtocol.ElevatedRuns.ActionType, Run: { } run })
+			return;
+
+		if (Elevated == null)
+		{
+			Elevated = _owner.CreateElevatedCard(run, NodeId);
+			OnPropertyChanged(nameof(Elevated));
+			OnPropertyChanged(nameof(IsElevatedRun));
+			OnPropertyChanged(nameof(HasBody));
+		}
+		else
+		{
+			Elevated.ApplyRun(run);
 		}
 	}
 

@@ -33,6 +33,16 @@ public interface IAttentionService
 	/// </summary>
 	AttentionResolveResultModel ResolveBySession(SessionNodeModel node, string itemId, AttentionStatus status, string? note);
 
+	/// <summary>
+	/// Closes every open item of the node that is the card of elevated run <paramref name="runId"/> as <see cref="AttentionStatus.Resolved"/> with
+	/// <paramref name="note"/> (FR.23.31); never Dismissed, so no "closed by the user" line follows. Writes a SYSTEM entry per item when <paramref name="node"/> is
+	/// known. Returns how many items were closed.
+	/// </summary>
+	int CloseElevatedRunItems(string nodeId, SessionNodeModel? node, string runId, string note);
+
+	/// <summary>Raises <see cref="AttentionChanged"/> for the node without changing a ledger: the run behind an elevated-run item changed (tdcp-spec 10.A13).</summary>
+	void NotifyChanged(string nodeId);
+
 	/// <summary>All items of the node, any status, in FR.23.2 order. Returns copies.</summary>
 	IReadOnlyList<AttentionItemModel> GetItems(string nodeId);
 

@@ -1,0 +1,20 @@
+{
+  "run": {
+    "id": "<run>",
+    "status": "running",
+    "requester": {
+      "nodeId": "<lead>",
+      "name": "Lead",
+      "shortId": "<lead8>"
+    },
+    "reason": "because",
+    "workingDir": "<root>/Proj/Alpha",
+    "command": "echo hi",
+    "timeoutMinutes": 60,
+    "createdUtc": "<ts>",
+    "expiresUtc": "<ts>",
+    "startedUtc": "<ts>",
+    "logPath": "<root>/runs/<run>/output.log"
+  },
+  "outputTail": "two\nthree"
+}

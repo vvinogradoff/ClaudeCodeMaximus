@@ -162,6 +162,12 @@ public sealed class DaemonHarness : IDisposable
 		s.AddTransient<IAttentionReplyService, AttentionReplyService>();
 		s.AddTransient<IRemoteRpcModule, SessionRpcModule>();
 		s.AddTransient<IRemoteRpcModule, AttentionRpcModule>();
+		// FR.15.16 / FR.23.31: the elevated-run requests the Focus card shows. The channels are recorded, never sent; nothing here ever starts an elevated process.
+		s.AddSingleton<IUserMessageChannels, FakeUserMessageChannels>();
+		s.AddSingleton<IElevatedRunService>(sp => new ElevatedRunService(
+			sp.GetRequiredService<IAppSettingsService>(), sp.GetRequiredService<ISessionRegistry>(), sp.GetRequiredService<IAttentionService>(),
+			new Lazy<ISchedulerService>(() => sp.GetRequiredService<ISchedulerService>()), sp.GetRequiredService<IUserMessageChannels>(),
+			rootDir: Path.Combine(root, "elevated-runs"), isElevated: false));
 		s.AddSingleton<RelayBlobGateway>();
 		s.AddSingleton<IRelayBlobClient>(sp => sp.GetRequiredService<RelayBlobGateway>());
 		s.AddSingleton<IAttachmentService>(sp => new AttachmentService(

@@ -50,6 +50,10 @@ public static class InstructionBlockBuilder
 		if (options.IsAgentToolsEnabled && options.IsNewSession)
 			lines.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
 
+		// FR.15.20 — same gate as NoWorkflowTool, Worker Sessions included: a worker may request an elevated run for itself.
+		if (options.IsAgentToolsEnabled && options.IsNewSession)
+			lines.AppendLine($"- {Constants.Instructions.ElevatedRunGuidance}");
+
 		// FR.23.10 — same gate as NoWorkflowTool, plus never for a Worker Session (its post_attention
 		// call is refused, FR.23.6): session policy on how to pin items in the user's Focus view.
 		if (options.IsAgentToolsEnabled && options.IsNewSession && !options.IsWorkerSession)

@@ -41,6 +41,7 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 	private readonly bool            _hasTelegramSettings;
 	private readonly bool            _hasRelaySettings;
 	private readonly bool            _hasModelsAdmin;
+	private readonly bool            _hasElevatedRuns;
 	private readonly string          _daemonVersion;
 	private readonly bool            _elevated;
 
@@ -52,7 +53,7 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		IImportService? import = null, IGlobalSearchService? search = null, IScheduleApiService? schedules = null,
 		IAttentionOverviewService? attentionOverview = null, IDaemonHealthService? health = null,
 		IMcpRegistryService? mcpRegistry = null, ITelegramTokenStore? telegramTokens = null, IRelayConfigStore? relayConfig = null, IClaudeModelService? models = null,
-		bool? elevated = null)
+		bool? elevated = null, IElevatedRunService? elevatedRuns = null)
 	{
 		_elevated      = elevated ?? Environment.IsPrivilegedProcess;   // FR.32.12: read once; a process cannot change its elevation
 		_presence      = presence;
@@ -80,6 +81,7 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 		_hasTelegramSettings = telegramTokens != null;
 		_hasRelaySettings    = relayConfig != null;
 		_hasModelsAdmin      = models != null;
+		_hasElevatedRuns     = elevatedRuns != null;
 		_daemonVersion = ReadDaemonVersion();
 	}
 
@@ -275,6 +277,10 @@ public sealed class ClientRpcModule : IRemoteRpcModule
 			capabilities.Add(RemoteProtocol.RelayApi.Capability);
 		if (_hasModelsAdmin)
 			capabilities.Add(RemoteProtocol.ModelsApi.Capability);
+
+		// Elevated runs requested by an agent (tdcp-spec 10.A13): the methods are loopback only, so only the loopback hello announces them.
+		if (_hasElevatedRuns)
+			capabilities.Add(RemoteProtocol.ElevatedRuns.Capability);
 
 		return capabilities;
 	}

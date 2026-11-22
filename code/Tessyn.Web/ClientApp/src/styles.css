@@ -350,3 +350,14 @@ mark.ref-mark { background: rgba(250, 204, 21, 0.55); color: inherit; border-rad
 .upload-pct { flex: none; width: 3.2em; text-align: right; }
 .attach-error { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; min-width: 0; font-size: 13px; color: #b91c1c; padding: 0 0 6px; overflow-wrap: anywhere; }
 .pv-md a:not([href]) { color: inherit; text-decoration: none; }
+
+/* The elevated-run card (FR.23.32), read-only on the web: facts, the command whole and verbatim, the status; no buttons. */
+.elev-facts { display: grid; gap: 2px; margin: 6px 0; }
+.elev-by { color: var(--muted); font-size: 13px; }
+.elev-label { color: var(--muted); font-size: 12px; font-weight: 600; margin-top: 6px; }
+.elev-reason, .elev-dir { overflow-wrap: anywhere; }
+.elev-dir { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+.elev-command { margin: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; white-space: pre; overflow: auto; max-height: 12lh; max-width: 100%; user-select: text; }
+.elev-limit { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.elev-note, .elev-status, .elev-outcome { margin-top: 8px; font-weight: 600; }
+.elev-note { color: var(--muted); }

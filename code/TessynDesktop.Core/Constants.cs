@@ -224,6 +224,13 @@ public static partial class Constants
 		public const string FullUrlReferences =
 			"When you refer to a GitHub pull request, issue or commit, a Linear issue or a Slack message, write its full URL (for example https://github.com/tryhardstop/windows-app/pull/196 or https://linear.app/hardstop/issue/HSE-240), never a shorthand such as PR#196 or HSE-240.";
 
+		/// <summary>
+		/// FR.15.20 — Emitted once per fresh session (<c>IsAgentToolsEnabled &amp;&amp; IsNewSession</c>), Worker Sessions included: how to get a command run as
+		/// administrator, which a session cannot do itself.
+		/// </summary>
+		public const string ElevatedRunGuidance =
+			"You cannot run commands as administrator yourself. When something really needs it (for example the WPF end-to-end tests), call `mcp__" + Agent.McpServerName + "__" + ElevatedRuns.RequestToolName + "` with the exact command line, a working directory (yours, a project directory or a sibling `-wt-` worktree), a one-line reason and, for a long run, `timeoutMinutes`. The user approves it in the desktop app; the call returns at once and the outcome arrives later as a new turn in this session, so end your turn instead of waiting or polling. Never ask the user to run something as administrator in plain text when this tool applies. Do not request the same run twice; `mcp__" + Agent.McpServerName + "__" + ElevatedRuns.ListToolName + "` shows your requests.";
+
 		/// <summary>FR.24.6 — Suffix of <see cref="SessionTagGuidance"/>; arg 0 = the labels joined with ", ".</summary>
 		public const string SessionTagCurrentTagsFormat = " Current tags: {0}.";
 
@@ -918,6 +925,20 @@ SESSION TRANSCRIPT TO COMPACT:
 			`streaming` and `sound` as the user asked. An optional `prompt` starts its first turn in
 			the background. Only top-level sessions can call it, and the number of sessions created
 			per hour is capped.
+
+			## Elevated runs
+
+			You cannot run commands as administrator yourself. When something really needs it (for
+			example the WPF end-to-end tests), call `request_elevated_run` with the exact command
+			line, a working directory (yours, a project directory or a sibling `-wt-` worktree), a
+			one-line reason and, for a long run, `timeoutMinutes`. The user approves it in the desktop
+			app; the call returns at once and the outcome (status, exit code, duration, the last lines
+			of output, the log path) arrives later as a new turn in this session, so end your turn
+			instead of waiting or polling. Never ask the user to run something as administrator in
+			plain text when this tool applies. Do not request the same run twice: `list_elevated_runs`
+			shows your requests, and `cancel_elevated_run` withdraws one that is still pending. A
+			worker that needs an elevated run requests it itself (the user sees the card on the
+			top-level session) and reports the outcome to its supervisor in its final response.
 
 			## As a worker
 

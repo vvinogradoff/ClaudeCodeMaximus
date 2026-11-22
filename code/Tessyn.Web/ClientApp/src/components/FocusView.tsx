@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import type { AttentionItemDto, AttentionKind } from '../api/types';
+import { elevatedRunOf, outcomeLine } from '../lib/elevated';
 import { formatSmartTime } from '../lib/format';
 import { readText, writeText } from '../lib/storage';
 import { nowMs } from '../state/appState';
 import { useApp } from '../state/AppContext';
+import { ElevatedFacts, ElevatedRunBody } from './ElevatedRunCard';
 import { Markdown } from './Markdown';
 import { RefList } from './RefList';
 
@@ -11,6 +13,8 @@ const KIND_LABEL: Record<AttentionKind, string> = { critical: 'CRITICAL', ask: '
 const DISMISS_LABEL: Record<AttentionKind, string> = { critical: 'Got it', alert: 'Got it', decided: 'Got it', ask: 'Dismiss', todo: 'Dismiss' };
 
 function outcome(i: AttentionItemDto): string {
+	const run = elevatedRunOf(i);
+	if (run && i.status === 'resolved') return outcomeLine(run) || `Resolved: ${i.resolutionNote ?? ''}`;
 	if (i.status === 'answered') return `Answered: ${i.answer ?? ''}`;
 	if (i.status === 'resolved') return `Resolved: ${i.resolutionNote ?? ''}`;
 	return 'Dismissed';
@@ -30,7 +34,24 @@ interface CardProps {
 	onDismiss: () => void;
 }
 
-function OpenCard({ item, text, now, onText, onReply, onDismiss }: CardProps) {
+/** The elevated-run card (FR.23.32), read-only: the facts, the status and "Approve on the PC"; no reply box, no Reply, no Dismiss and no Run/Decline/Stop (those live on the PC). */
+function ElevatedOpenCard({ item, nodeId, now }: { item: AttentionItemDto; nodeId: string; now: number }) {
+	const run = elevatedRunOf(item)!;
+	return (
+		<article className={`card kind-border-${item.kind} elevated`} data-testid="focus-card" data-item-id={item.id} data-elevated-run={run.id}>
+			<header>
+				<KindChip kind={item.kind} />
+				<span className="card-id">A{item.number}</span>
+				<strong className="card-title">{item.title}</strong>
+				<time>{formatSmartTime(item.createdUtc, now)}</time>
+			</header>
+			<ElevatedRunBody run={run} sessionNodeId={nodeId} now={now} />
+		</article>
+	);
+}
+
+function OpenCard({ item, nodeId, text, now, onText, onReply, onDismiss }: CardProps) {
+	if (elevatedRunOf(item)) return <ElevatedOpenCard item={item} nodeId={nodeId} now={now} />;
 	return (
 		<article className={`card kind-border-${item.kind}`} data-testid="focus-card" data-item-id={item.id}>
 			<header>
@@ -61,8 +82,9 @@ function OpenCard({ item, text, now, onText, onReply, onDismiss }: CardProps) {
 	);
 }
 
-function ClosedCard({ item }: { item: AttentionItemDto }) {
+function ClosedCard({ item, nodeId }: { item: AttentionItemDto; nodeId: string }) {
 	const [open, setOpen] = useState(false);
+	const run = elevatedRunOf(item);
 	return (
 		<article className="card closed" onClick={() => setOpen((o) => !o)} data-testid="closed-card">
 			<header>
@@ -71,7 +93,8 @@ function ClosedCard({ item }: { item: AttentionItemDto }) {
 				<strong className="card-title">{item.title}</strong>
 			</header>
 			<div className="outcome">{outcome(item)}</div>
-			{open && item.body && <Markdown text={item.body} className="card-body" />}
+			{open && run && <ElevatedFacts run={run} sessionNodeId={nodeId} />}
+			{open && !run && item.body && <Markdown text={item.body} className="card-body" />}
 			{item.refs && item.refs.length > 0 && <RefList refs={item.refs} />}
 		</article>
 	);
@@ -124,7 +147,7 @@ export function FocusView() {
 					<button type="button" className="expander" aria-expanded={showClosed} onClick={() => setShowClosed((v) => !v)}>
 						{showClosed ? '⌄' : '›'} Closed ({closed.length})
 					</button>
-					{showClosed && closed.map((i) => <ClosedCard key={i.id} item={i} />)}
+					{showClosed && closed.map((i) => <ClosedCard key={i.id} item={i} nodeId={nodeId} />)}
 				</>
 			)}
 			{withText.length > 0 && (

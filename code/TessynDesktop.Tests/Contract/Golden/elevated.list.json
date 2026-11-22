@@ -1,0 +1,20 @@
+{
+  "runs": [
+    {
+      "id": "<run>",
+      "status": "pending",
+      "requester": {
+        "nodeId": "<lead>",
+        "name": "Lead",
+        "shortId": "<lead8>"
+      },
+      "reason": "because",
+      "workingDir": "<root>/Proj/Alpha",
+      "command": "echo hi",
+      "timeoutMinutes": 60,
+      "createdUtc": "<ts>",
+      "expiresUtc": "<ts>",
+      "logPath": "<root>/runs/<run>/output.log"
+    }
+  ]
+}

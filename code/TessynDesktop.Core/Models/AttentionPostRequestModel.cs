@@ -19,4 +19,13 @@ public sealed class AttentionPostRequestModel
 
 	/// <summary>Already resolved references. A re-post that carries some replaces the item's; one without keeps them.</summary>
 	public IReadOnlyList<AttentionRefModel> Refs { get; init; } = [];
+
+	/// <summary>The elevated run this item is the card of (FR.23.31).</summary>
+	public string? ElevatedRunId { get; init; }
+
+	/// <summary>True for the mirror in a supervisor's ledger: the created item raises no <c>ItemsCreated</c> (no second sound, FR.23.31).</summary>
+	public bool IsSilent { get; init; }
+
+	/// <summary>The text of the SYSTEM entry in place of the title and body (FR.23.8); null = the usual entry.</summary>
+	public string? SystemText { get; init; }
 }

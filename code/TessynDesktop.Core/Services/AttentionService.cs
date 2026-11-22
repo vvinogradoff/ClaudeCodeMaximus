@@ -50,6 +50,7 @@ public sealed class AttentionService : IAttentionService
 
 		var outcomes = new List<AttentionPostOutcomeModel>();
 		var entries  = new List<string>();
+		var silent   = new HashSet<string>(StringComparer.Ordinal);
 
 		lock (_lock)
 		{
@@ -85,10 +86,14 @@ public sealed class AttentionService : IAttentionService
 				}
 				if (!string.IsNullOrWhiteSpace(request.Key))
 					item.Key = request.Key;
+				if (request.ElevatedRunId != null)
+					item.ElevatedRunId = request.ElevatedRunId;
 				item.UpdatedUtc = now;
 
-				entries.Add(BuildPostEntry(item, created));
+				entries.Add(BuildPostEntry(item, created, request.SystemText));
 				outcomes.Add(new AttentionPostOutcomeModel { Item = Copy(item), IsCreated = created });
+				if (request.IsSilent)
+					silent.Add(item.Id);
 			}
 
 			SaveLocked(ledger);
@@ -96,7 +101,7 @@ public sealed class AttentionService : IAttentionService
 
 		AppendEntries(node, entries);
 		RaiseChanged(node.NodeId);
-		RaiseCreated(node.NodeId, outcomes);
+		RaiseCreated(node.NodeId, outcomes.Where(o => !silent.Contains(o.Item.Id)).ToList());
 		return outcomes;
 	}
 
@@ -117,6 +122,10 @@ public sealed class AttentionService : IAttentionService
 			if (item.Status != AttentionStatus.Open)
 				return new AttentionResolveResultModel { Outcome = AttentionResolveOutcome.AlreadyClosed, Item = Copy(item) };
 
+			// FR.23.31: the card of an elevated run is closed by the run's own status, never by the session.
+			if (item.ElevatedRunId != null)
+				return new AttentionResolveResultModel { Outcome = AttentionResolveOutcome.ElevatedRun, Item = Copy(item) };
+
 			var now = _time.GetUtcNow();
 			item.Status     = status;
 			item.UpdatedUtc = now;
@@ -135,6 +144,38 @@ public sealed class AttentionService : IAttentionService
 		RaiseChanged(node.NodeId);
 		return new AttentionResolveResultModel { Outcome = AttentionResolveOutcome.Closed, Item = snapshot };
 	}
+
+	public int CloseElevatedRunItems(string nodeId, SessionNodeModel? node, string runId, string note)
+	{
+		var entries = new List<string>();
+
+		lock (_lock)
+		{
+			var ledger = LoadLocked(nodeId);
+			var now    = _time.GetUtcNow();
+			foreach (var item in ledger.Items.Where(i => i.Status == AttentionStatus.Open && string.Equals(i.ElevatedRunId, runId, StringComparison.Ordinal)))
+			{
+				// Resolved, never Dismissed: the session gets the outcome as its own turn and must not also be told the user dismissed it (FR.23.31).
+				item.Status         = AttentionStatus.Resolved;
+				item.ResolutionNote = Cut(note, Constants.Attention.MaxNoteLength);
+				item.UpdatedUtc     = now;
+				item.ClosedUtc      = now;
+				entries.Add(string.Format(Constants.Attention.SystemClosedFormat, item.Id, AttentionFormat.StatusName(AttentionStatus.Resolved)) + " " + item.ResolutionNote);
+			}
+
+			if (entries.Count == 0)
+				return 0;
+
+			SaveLocked(ledger);
+		}
+
+		if (node != null)
+			AppendEntries(node, entries);
+		RaiseChanged(nodeId);
+		return entries.Count;
+	}
+
+	public void NotifyChanged(string nodeId) => RaiseChanged(nodeId);
 
 	public IReadOnlyList<AttentionItemModel> GetItems(string nodeId)
 	{
@@ -360,11 +401,15 @@ public sealed class AttentionService : IAttentionService
 	}
 
 	/// <summary>FR.23.8 layout: first line, then body, Options and Recommendation lines when present. ASCII separators only.</summary>
-	private static string BuildPostEntry(AttentionItemModel item, bool created)
+	private static string BuildPostEntry(AttentionItemModel item, bool created, string? systemText = null)
 	{
 		var sb = new StringBuilder(string.Format(
 			created ? Constants.Attention.SystemCreatedFormat : Constants.Attention.SystemUpdatedFormat,
-			item.Id, AttentionFormat.KindName(item.Kind), item.Title));
+			item.Id, AttentionFormat.KindName(item.Kind), systemText ?? item.Title));
+
+		// FR.23.31: the SYSTEM entry of an elevated run carries the reason only, never the command or the body.
+		if (systemText != null)
+			return sb.ToString();
 
 		if (item.Body.Length > 0)
 			sb.Append('\n').Append(item.Body);
@@ -441,6 +486,7 @@ public sealed class AttentionService : IAttentionService
 		UpdatedUtc            = item.UpdatedUtc,
 		ClosedUtc             = item.ClosedUtc,
 		Refs                  = item.Refs.Select(CopyRef).ToList(),
+		ElevatedRunId         = item.ElevatedRunId,
 	};
 
 	private static AttentionRefModel CopyRef(AttentionRefModel r) => new()

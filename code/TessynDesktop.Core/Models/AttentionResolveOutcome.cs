@@ -7,4 +7,7 @@ public enum AttentionResolveOutcome
 	Closed,
 	AlreadyClosed,
 	Unknown,
+
+	/// <summary>The item is the card of an elevated run: the session withdraws the request with <c>cancel_elevated_run</c> instead (FR.23.31).</summary>
+	ElevatedRun,
 }

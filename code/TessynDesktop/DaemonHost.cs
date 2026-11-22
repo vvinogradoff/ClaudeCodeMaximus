@@ -112,6 +112,16 @@ public sealed class DaemonHost
 			Log.Error(ex, "Could not start the Focus draft lifecycle");
 		}
 
+		// FR.15.18: reconcile the run folders of the last run, then watch them. Never allowed to break start-up.
+		try
+		{
+			Services.GetRequiredService<IElevatedRunService>().Start();
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Could not start the elevated run service");
+		}
+
 		// FR.22: the Focus item sound (the host plays it, or a presenting client does). Never allowed to break start-up.
 		try
 		{
@@ -214,6 +224,7 @@ public sealed class DaemonHost
 		}
 		if (appSettings.Settings.TelegramEnabled)
 			Services.GetRequiredService<ITelegramBridgeService>().Stop();
+		Services.GetRequiredService<IElevatedRunService>().Stop();
 		try
 		{
 			Services.GetRequiredService<IRelayConnectorService>().Stop();
@@ -278,6 +289,10 @@ public sealed class DaemonHost
 		// AgentMcpServer, SessionTurnService and InProcDaemonClient); the store is stateless but shared with it.
 		services.AddSingleton<AttentionLedgerStore>();
 		services.AddSingleton<IAttentionService, AttentionService>();
+		// FR.15.16-FR.15.19 — Singletons: the elevated-run service owns the request records, the one lock of the transitions and the polling timer; the channels
+		// are the stateless Telegram plus desktop fan-out of notify_user, shared so that the request of an elevated run uses the very same one.
+		services.AddSingleton<IUserMessageChannels, UserMessageChannels>();
+		services.AddSingleton<IElevatedRunService, ElevatedRunService>();
 		// FR.24 — Singletons for the same reason: the service owns the tag cache, the workspace map and the write lock.
 		services.AddSingleton<SessionTagStore>();
 		services.AddSingleton<ISessionTagService, SessionTagService>();
@@ -371,6 +386,7 @@ public sealed class DaemonHost
 		services.AddSingleton<IRemoteRpcModule, ClientRpcModule>(); // gets the shared IDaemonRunInfo and IEventLog from DI
 		services.AddSingleton<TdcpDispatcher>();
 		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
+		services.AddTransient<IRemoteRpcModule, ElevatedRunRpcModule>(); // tdcp-spec 10.A13: elevated.*, loopback only
 		services.AddTransient<IRemoteRpcModule, ProfileRpcModule>();
 		// Package J3: settings sections, profile administration and sounds. The profile service is shared with the settings modules;
 		// the three modules are loopback only. The section service is a singleton: it owns the per-section versions and the Saved subscription.

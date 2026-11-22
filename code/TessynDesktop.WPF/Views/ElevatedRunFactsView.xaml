@@ -1,0 +1,46 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.ElevatedRunFactsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:TessynDesktop.WPF.ViewModels"
+             xmlns:c="clr-namespace:TessynDesktop.WPF">
+    <!-- The facts of an elevated run (FR.23.32), from the run record: who asked, the reason, the working directory, the command (verbatim, scrollable, selectable, never parsed) and the limits.
+         DataContext = ElevatedRunCardViewModel. Text is shown in read-only text boxes: selectable, and read by UI Automation under the names of FR.23.32. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <Style x:Key="FactLabel" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,8,0,2" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style x:Key="FactText" TargetType="TextBox">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Resources>
+    <StackPanel>
+        <TextBlock Text="{Binding RequestedByText}" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,4,0,0" />
+
+        <TextBlock Style="{StaticResource FactLabel}" Text="{x:Static c:Constants+ElevatedRuns.ReasonLabel}" AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.ReasonLabelName}" />
+        <TextBox Style="{StaticResource FactText}" Text="{Binding Reason, Mode=OneWay}" AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.ReasonName}" />
+
+        <TextBlock Style="{StaticResource FactLabel}" Text="{x:Static c:Constants+ElevatedRuns.WorkingDirectoryLabel}" AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.WorkingDirectoryLabelName}" />
+        <TextBox Style="{StaticResource FactText}" FontFamily="Consolas" Text="{Binding WorkingDirectory, Mode=OneWay}" AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.WorkingDirectoryName}" />
+
+        <TextBlock Style="{StaticResource FactLabel}" Text="{x:Static c:Constants+ElevatedRuns.CommandLabel}" AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.CommandLabelName}" />
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="{x:Static c:Constants+ElevatedRuns.CopyCommandText}" Command="{Binding CopyCommand}" VerticalAlignment="Top" Margin="8,0,0,0" Padding="8,3"
+                    AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.CopyCommandName}" ToolTip="Puts the command on the clipboard exactly as shown" />
+            <!-- The command block: monospace, verbatim, no wrapping; scrolls both ways, at most 12 lines tall (FR.23.32). -->
+            <TextBox x:Name="CommandBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" Padding="6,4"
+                     HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" MinLines="1" MaxLines="12"
+                     Text="{Binding Command, Mode=OneWay}" AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.CommandName}" />
+        </DockPanel>
+
+        <TextBlock Text="{Binding TimeLimitText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,6,0,0" />
+        <TextBlock Text="{Binding ExpiresText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Visibility="{Binding IsPending, Converter={StaticResource BoolToVis}}" />
+    </StackPanel>
+</UserControl>

@@ -46,6 +46,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 	private readonly IProfileSwitchService?    _profileSwitch;
 	private readonly ISessionModelSettings     _modelSettings;
 	private readonly TimeProvider              _clock;
+	private readonly IElevatedRunService?      _elevatedRuns;
+	private readonly IUserMessageChannels      _userChannels;
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
 	private readonly SessionTagSearchPageBuilder _tagSearchBuilder   = new();
@@ -84,7 +86,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		IProfileResolver? profiles = null,
 		IProfileSwitchService? profileSwitch = null,
 		ISessionModelSettings? modelSettings = null,
-		TimeProvider? clock = null)
+		TimeProvider? clock = null,
+		IElevatedRunService? elevatedRuns = null)
 	{
 		_appSettings  = appSettings;
 		_turnService  = turnService;
@@ -106,6 +109,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		_profileSwitch  = profileSwitch;
 		_modelSettings  = modelSettings ?? new SessionModelSettings(appSettings, modelService);
 		_clock          = clock ?? TimeProvider.System;
+		_elevatedRuns   = elevatedRuns;
+		_userChannels   = new UserMessageChannels(telegramBridge, notifications, labelService);
 	}
 
 	public void Start()
@@ -462,6 +467,15 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			BuildToolDef(Constants.Attention.ListToolName,
 				Constants.Attention.ListToolDescription,
 				ListAttentionSchema()),
+			BuildToolDef(Constants.ElevatedRuns.RequestToolName,
+				Constants.ElevatedRuns.RequestToolDescription,
+				RequestElevatedRunSchema()),
+			BuildToolDef(Constants.ElevatedRuns.CancelToolName,
+				Constants.ElevatedRuns.CancelToolDescription,
+				CancelElevatedRunSchema()),
+			BuildToolDef(Constants.ElevatedRuns.ListToolName,
+				Constants.ElevatedRuns.ListToolDescription,
+				ListElevatedRunsSchema()),
 			BuildToolDef(Constants.SessionTags.ToolName,
 				Constants.SessionTags.ToolDescription,
 				TagSessionSchema()),
@@ -508,6 +522,9 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			Constants.Attention.PostToolName    => await PostAttentionAsync(arguments, callerNode),
 			Constants.Attention.ResolveToolName => ResolveAttention(arguments, callerNode),
 			Constants.Attention.ListToolName    => ListAttention(arguments, callerNode),
+			Constants.ElevatedRuns.RequestToolName => await RequestElevatedRunAsync(arguments, callerNode),
+			Constants.ElevatedRuns.CancelToolName  => CancelElevatedRun(arguments, callerNode),
+			Constants.ElevatedRuns.ListToolName    => ListElevatedRuns(arguments, callerNode),
 			Constants.SessionTags.ToolName      => TagSession(arguments, callerNode),
 			Constants.SessionTags.SearchToolName => SearchTags(arguments, callerNode),
 			Constants.Diagnostics.SnapshotToolName => RunDiagnosticsTool(h => h.Snapshot()),
@@ -1300,37 +1317,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 	/// (FR.23.9). Returns the channels that delivered; each is gated as today and a failure in one never
 	/// stops the other.
 	/// </summary>
-	private async Task<List<string>> NotifyChannelsAsync(SessionNodeModel callerNode, string message)
-	{
-		var channels = new List<string>();
-		try
-		{
-			if (await _telegramBridge.NotifyAsync(callerNode.NodeId, message))
-				channels.Add(Constants.Attention.ChannelTelegram);
-		}
-		catch (Exception ex)
-		{
-			_log.Warning(ex, "User notification: Telegram channel failed for node {NodeId}", callerNode.NodeId);
-		}
-
-		try
-		{
-			var title = string.Format(Constants.Attention.NotifyToastTitleFormat,
-				_labelService.GetLabel(callerNode.WorkingDirectory), callerNode.Name);
-			// The toast service may wait up to 3 s for a presenting client's acknowledgement (V3). This method can still be running on the
-			// accept loop's thread when every earlier await completed synchronously, so the blocking call is moved to the pool: one hung client
-			// must not delay the other MCP and TDCP connections (R1).
-			var nodeId = callerNode.NodeId;
-			if (await Task.Run(() => _notifications.ShowUserNotification(nodeId, title, message)).ConfigureAwait(false))
-				channels.Add(Constants.Attention.ChannelDesktop);
-		}
-		catch (Exception ex)
-		{
-			_log.Warning(ex, "User notification: desktop channel failed for node {NodeId}", callerNode.NodeId);
-		}
-
-		return channels;
-	}
+	private async Task<List<string>> NotifyChannelsAsync(SessionNodeModel callerNode, string message) =>
+		[.. await _userChannels.NotifyAsync(callerNode, message)];
 
 	/// <summary>
 	/// FR.23.7 — pins a <c>notify_user</c> message as an Ask (source NotifyUser; title = first non-empty
@@ -1571,6 +1559,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		{
 			AttentionResolveOutcome.Unknown => throw new McpToolException(
 				string.Format(Constants.Attention.UnknownItemFormat, id.ToUpperInvariant())),
+			AttentionResolveOutcome.ElevatedRun => string.Format(Constants.ElevatedRuns.ResolveRefusalFormat, result.Item!.Id),
 			AttentionResolveOutcome.AlreadyClosed => string.Format(
 				Constants.Attention.AlreadyClosedFormat, result.Item!.Id, AttentionFormat.StatusName(result.Item.Status)),
 			_ => string.Format(
