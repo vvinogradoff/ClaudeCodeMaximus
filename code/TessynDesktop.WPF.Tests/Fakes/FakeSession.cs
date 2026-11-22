@@ -30,7 +30,10 @@ public sealed class FakeSession
 	/// <summary>The daemon's auth-error flag of the session (<c>SessionStateDto.authError</c>).</summary>
 	public bool AuthError { get; set; }
 
-	public SessionStateDto State(string nodeId) => new(nodeId, Running, StreamingAlive, null, false, null, null, false, null, AuthError);
+	/// <summary>The stored session engine (<c>SessionStateDto.engine</c>, FR.33.1).</summary>
+	public string Engine { get; set; } = RemoteProtocol.Engines.Claude;
+
+	public SessionStateDto State(string nodeId) => new(nodeId, Running, StreamingAlive, null, false, null, null, false, null, AuthError, Engine: Engine);
 
 	public static FakeSession WithEntries(int count, string name = "session")
 	{

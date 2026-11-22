@@ -8,7 +8,7 @@ namespace TessynDesktop.WPF.ViewModels;
 /// <summary>
 /// The selectors of the command bar (W1a): model, effort and profile. The lists come from <c>catalog.get</c>; the selection is restored from the
 /// session's <c>lastUsed</c> when it is opened, and what the user picks is remembered per session while the pane lives. Send reads the selection
-/// at the moment it is pressed.
+/// at the moment it is pressed. The model picker is grouped by engine, and the effort and profile lists follow the selected model (FR.33.2, FR.33.3, FR.33.5).
 /// </summary>
 /// <remarks>Created by Claude</remarks>
 public sealed partial class SessionPaneViewModel
@@ -17,6 +17,16 @@ public sealed partial class SessionPaneViewModel
 	private LastUsedSettingsDto? _lastUsed;
 	private string? _lastUsedNodeId;
 	private bool _applyingSelection;
+	private List<SelectorOptionViewModel> _globalEfforts = [];
+	private List<SelectorOptionViewModel> _allProfiles = [];
+	private string? _sessionEngine;
+
+	/// <summary>
+	/// The next turn runs on the Codex engine (a GPT model is selected, or, before the catalog is known, the session's stored engine is <c>codex</c>):
+	/// the Streaming and Tools toggles are hidden (FR.33.1). The selectors stay enabled while idle (FR.33.8).
+	/// </summary>
+	[ObservableProperty]
+	private bool _isCodexSession;
 
 	[ObservableProperty]
 	private SelectorOptionViewModel? _selectedModel;
@@ -45,11 +55,14 @@ public sealed partial class SessionPaneViewModel
 		{
 			var catalog = await _client.CatalogGetAsync();
 			_applyingSelection = true;   // refilling the lists makes the combo boxes report an empty selection: that is no pick
-			Fill(Models, catalog.Models.Select(m => new SelectorOptionViewModel(m.Id, m.DisplayName, m.Provider)));
-			Fill(Efforts, catalog.Efforts.Select(e => new SelectorOptionViewModel(e, Capitalize(e))));
-			Fill(Profiles, catalog.Profiles.Select(p => new SelectorOptionViewModel(p.Id, p.DisplayName)));
+			Fill(Models, ModelPickerList.Models(catalog));
+			_globalEfforts = ModelPickerList.GlobalEfforts(catalog);
+			_allProfiles = ModelPickerList.Profiles(catalog);
+			Fill(Efforts, ModelPickerList.EffortsFor(SelectedModel, _globalEfforts));
+			Fill(Profiles, ModelPickerList.ProfilesFor(SelectedModel, _allProfiles));
 			_applyingSelection = false;
 			ApplyCurrentSelection();
+			UpdateEngineLists();
 		}
 		catch (Exception ex)
 		{
@@ -68,13 +81,68 @@ public sealed partial class SessionPaneViewModel
 			target.Add(item);
 	}
 
-	private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+	/// <summary>
+	/// FR.33.3, FR.33.5: the effort and profile lists follow the selected model (its own efforts; the profiles of its engine). A stored or picked value
+	/// the new list lacks shows as Default (or the engine's first profile) and is not sent, but it is not forgotten: it returns with a model that offers it.
+	/// </summary>
+	private void UpdateEngineLists()
+	{
+		var model = SelectedModel is { IsSelectable: true } selected ? selected : null;
+		var efforts = ModelPickerList.EffortsFor(model, _globalEfforts);
+		var profiles = ModelPickerList.ProfilesFor(model, _allProfiles);
+		var effortsChanged = !SameIds(Efforts, efforts);
+		var profilesChanged = !SameIds(Profiles, profiles);
+		if (effortsChanged || profilesChanged)
+		{
+			var wasApplying = _applyingSelection;
+			_applyingSelection = true;
+			try
+			{
+				var picks = NodeId != null && _picks.TryGetValue(NodeId, out var stored) ? stored : new SessionSelection();
+				var last = _lastUsedNodeId == NodeId ? _lastUsed : null;
+				if (effortsChanged)
+				{
+					Fill(Efforts, efforts);
+					SelectedEffort = Pick(Efforts, picks.EffortId ?? last?.Effort ?? Constants.TurnTexts.DefaultOption);
+				}
+
+				if (profilesChanged)
+				{
+					Fill(Profiles, profiles);
+					SelectedProfile = Pick(Profiles, picks.ProfileId ?? last?.ProfileId ?? Constants.TurnTexts.DefaultOption);
+				}
+			}
+			finally
+			{
+				_applyingSelection = wasApplying;
+			}
+		}
+
+		IsCodexSession = SelectedModel != null ? ModelPickerList.EngineOf(model) == RemoteProtocol.Engines.Codex : _sessionEngine == RemoteProtocol.Engines.Codex;
+	}
+
+	private static bool SameIds(IReadOnlyList<SelectorOptionViewModel> shown, IReadOnlyList<SelectorOptionViewModel> next) =>
+		shown.Count == next.Count && shown.Select(o => (o.Id, o.ToolTip)).SequenceEqual(next.Select(o => (o.Id, o.ToolTip)));
+
+	/// <summary>The session's stored engine arrived with its detail or a state push (used while no model is selected yet).</summary>
+	private void ApplySessionEngine(string? engine)
+	{
+		_sessionEngine = engine;
+		UpdateEngineLists();
+	}
+
+	partial void OnIsCodexSessionChanged(bool value)
+	{
+		if (Toggles != null)   // set up after the selectors in the constructor
+			Toggles.IsStreamingApplicable = !value;
+	}
 
 	/// <summary>A session is being opened: nothing of the previous one may show or be sent, and Send waits for this session's detail.</summary>
 	private void ResetSelectionForOpen()
 	{
 		_lastUsed = null;
 		_lastUsedNodeId = null;
+		_sessionEngine = null;
 		IsSessionReady = false;
 		_applyingSelection = true;
 		try
@@ -118,9 +186,14 @@ public sealed partial class SessionPaneViewModel
 		}
 	}
 
-	/// <summary>The option with this id; the "default" option when the id is not in the list (a deleted profile, a model that went away).</summary>
+	/// <summary>
+	/// The option with this id; the "default" option when the id is not in the list (a deleted profile, a model that went away), or the first option
+	/// when the list has no "default" (the ChatGPT profiles, FR.33.5). Headers and hints are never picked.
+	/// </summary>
 	private static SelectorOptionViewModel? Pick(IReadOnlyList<SelectorOptionViewModel> options, string id) =>
-		options.FirstOrDefault(o => o.Id == id) ?? options.FirstOrDefault(o => o.Id == Constants.TurnTexts.DefaultOption);
+		options.FirstOrDefault(o => o.IsSelectable && o.Id == id)
+		?? options.FirstOrDefault(o => o.Id == Constants.TurnTexts.DefaultOption)
+		?? options.FirstOrDefault(o => o.IsSelectable);
 
 	/// <summary>The fields the user picked for the open session; what a turn sent now carries (null = not picked, the daemon resolves it).</summary>
 	private SessionSelection PicksOfOpenSession()
@@ -139,18 +212,23 @@ public sealed partial class SessionPaneViewModel
 
 	/// <summary>The id when it is in the list (or the list is not loaded, so nothing can be judged); otherwise null.</summary>
 	private static string? StillListed(IReadOnlyCollection<SelectorOptionViewModel> options, string? id) =>
-		id == null || options.Count == 0 || options.Any(o => o.Id == id) ? id : null;
+		id == null || options.Count == 0 || options.Any(o => o.IsSelectable && o.Id == id) ? id : null;
 
 	private void RememberPick(SelectorOptionViewModel? value, Func<SessionSelection, SessionSelection> change)
 	{
 		var id = NodeId;
-		if (_applyingSelection || id == null || value == null)
+		if (_applyingSelection || id == null || value is not { IsSelectable: true })
 			return;
 
-		_picks[id] = change(PicksOfOpenSession());
+		// The raw picks, not the filtered ones: a pick the current list lacks (an effort the new model does not offer) is kept for when it fits again.
+		_picks[id] = change(_picks.TryGetValue(id, out var picks) ? picks : new SessionSelection());
 	}
 
-	partial void OnSelectedModelChanged(SelectorOptionViewModel? value) => RememberPick(value, p => p with { ModelId = value!.Id });
+	partial void OnSelectedModelChanged(SelectorOptionViewModel? value)
+	{
+		RememberPick(value, p => p with { ModelId = value!.Id });
+		UpdateEngineLists();
+	}
 
 	partial void OnSelectedEffortChanged(SelectorOptionViewModel? value) => RememberPick(value, p => p with { EffortId = value!.Id });
 

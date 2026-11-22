@@ -36,11 +36,15 @@ public sealed partial class ProfileViewModel : ObservableObject, IDisposable
 	/// <summary>True when the connected daemon announces <c>profiles.admin</c>.</summary>
 	public bool IsSupported { get; private set; }
 
-	public ProfileViewModel(IDialogService dialogs, IUiDispatcher ui, ILogger<ProfileViewModel> logger)
+	/// <param name="urlLauncher">The system browser (FR.26.9) for a ChatGPT sign-in's address; without one the address is only shown.</param>
+	/// <param name="clipboard">For the copy buttons of a ChatGPT sign-in with a code.</param>
+	public ProfileViewModel(IDialogService dialogs, IUiDispatcher ui, ILogger<ProfileViewModel> logger, ISystemUrlLauncher? urlLauncher = null, IClipboardWriter? clipboard = null)
 	{
 		_dialogs = dialogs;
 		_ui = ui;
 		_logger = logger;
+		_urlLauncher = urlLauncher;
+		_clipboard = clipboard;
 	}
 
 	public ObservableCollection<ProfileRowViewModel> Profiles { get; } = [];
@@ -94,6 +98,7 @@ public sealed partial class ProfileViewModel : ObservableObject, IDisposable
 				Profiles.Clear();
 				foreach (var profile in result.Profiles)
 					Profiles.Add(new ProfileRowViewModel(profile));
+				ApplyChatGptProfiles(result.CodexProfiles);
 
 				IsAvailable = true;
 			});
@@ -221,5 +226,7 @@ public sealed partial class ProfileViewModel : ObservableObject, IDisposable
 	{
 		if (notification.IsProfilesChanged())
 			_ = RefreshAsync();
+		else if (notification.TryGetCodexLoginCompleted(out var completed))
+			OnCodexLoginCompleted(completed);
 	}
 }

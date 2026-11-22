@@ -19,6 +19,21 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+        <!-- FR.33.10: the window a ChatGPT plan ran out of is drawn in the limits-error colour (FR.9.17). -->
+        <Style x:Key="FiveHourMeterStyle" TargetType="ProgressBar" BasedOn="{StaticResource Meter}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFiveHourExhausted}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Colour.LimitWarning}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SevenDayMeterStyle" TargetType="ProgressBar" BasedOn="{StaticResource Meter}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSevenDayExhausted}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Colour.LimitWarning}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
     <!-- The model line and the note take what they need; the meters take all the rest, edge to edge. -->
     <Grid>
@@ -32,13 +47,16 @@
         <TextBlock Grid.Column="1" Text="{Binding UsageNote}" VerticalAlignment="Center" FontSize="11" Margin="4,0" Opacity="0.85"
                    Visibility="{Binding HasNote, Converter={StaticResource BoolToVis}}" />
         <StackPanel x:Name="Meters" Grid.Column="2" Margin="4,0,0,0" VerticalAlignment="Stretch" Visibility="{Binding HasUsage, Converter={StaticResource BoolToVis}}">
-            <Grid Height="13">
-                <ProgressBar x:Name="FiveHourMeter" Style="{StaticResource Meter}" Value="{Binding FiveHourPercent, Mode=OneWay}" AutomationProperties.Name="5-hour usage" />
-                <TextBlock Text="{Binding FiveHourLabel}" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MeterTextBrush}" />
+            <!-- The labels come from the windows themselves (5h, 7d, or a ChatGPT plan's own); a plan without a window hides that bar (FR.33.10). -->
+            <Grid Height="13" Visibility="{Binding HasFiveHour, Converter={StaticResource BoolToVis}}" ToolTip="{Binding FiveHourToolTip}">
+                <ProgressBar x:Name="FiveHourMeter" Style="{StaticResource FiveHourMeterStyle}" Value="{Binding FiveHourPercent, Mode=OneWay}"
+                             AutomationProperties.Name="5-hour usage" AutomationProperties.HelpText="{Binding FiveHourLabel}" />
+                <TextBlock x:Name="FiveHourText" Text="{Binding FiveHourLabel}" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MeterTextBrush}" />
             </Grid>
-            <Grid Height="13">
-                <ProgressBar x:Name="SevenDayMeter" Style="{StaticResource Meter}" Value="{Binding SevenDayPercent, Mode=OneWay}" AutomationProperties.Name="7-day usage" />
-                <TextBlock Text="{Binding SevenDayLabel}" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MeterTextBrush}" />
+            <Grid Height="13" Visibility="{Binding HasSevenDay, Converter={StaticResource BoolToVis}}" ToolTip="{Binding SevenDayToolTip}">
+                <ProgressBar x:Name="SevenDayMeter" Style="{StaticResource SevenDayMeterStyle}" Value="{Binding SevenDayPercent, Mode=OneWay}"
+                             AutomationProperties.Name="7-day usage" AutomationProperties.HelpText="{Binding SevenDayLabel}" />
+                <TextBlock x:Name="SevenDayText" Text="{Binding SevenDayLabel}" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MeterTextBrush}" />
             </Grid>
         </StackPanel>
     </Grid>

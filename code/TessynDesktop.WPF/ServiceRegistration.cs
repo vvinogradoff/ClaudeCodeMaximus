@@ -43,9 +43,15 @@ public sealed class ServiceRegistration
 		services.AddSingleton<TreeContext>();
 		services.AddSingleton<IShellModule, TreeShellModule>();
 		if (options.TestWindow)
+		{
 			services.AddSingleton<IFolderPicker>(sp => new ScriptedFolderPicker(options.TestFolderAnswers, sp.GetRequiredService<ILogger<ScriptedFolderPicker>>()));
+			services.AddSingleton<IFilePicker, ScriptedFilePicker>();
+		}
 		else
+		{
 			services.AddSingleton<IFolderPicker, WpfFolderPicker>();
+			services.AddSingleton<IFilePicker, WpfFilePicker>();
+		}
 
 		services.AddSingleton<Func<ITessynClient, TreeViewModel>>(sp => client =>
 		{
@@ -152,7 +158,7 @@ public sealed class ServiceRegistration
 			sp.GetRequiredService<IFolderPicker>(), sp.GetRequiredService<IMcpServerEditorPresenter>(), sp.GetRequiredService<ProfileViewModel>(),
 			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILoggerFactory>(), sp.GetRequiredService<IAppearanceService>(),
 			sp.GetRequiredService<IPreviewSettingsService>(), sp.GetRequiredService<PreviewGroupMatcher>(), sp.GetRequiredService<IBrowserDataCleaner>(),
-			sp.GetRequiredService<ConnectionViewModel>()));
+			sp.GetRequiredService<ConnectionViewModel>(), sp.GetRequiredService<IFilePicker>()));
 		services.AddSingleton<SettingsHost>();
 		services.AddSingleton<IShellModule, SettingsShellModule>();
 

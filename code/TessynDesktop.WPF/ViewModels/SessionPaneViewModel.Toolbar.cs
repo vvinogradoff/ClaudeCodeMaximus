@@ -63,5 +63,6 @@ public sealed partial class SessionPaneViewModel
 	{
 		Toggles.ApplyDetail(detail.Id, detail.IsStreamingMode, detail.State.StreamingAlive);
 		LocalTools.ApplyDetail(detail.DirectoryId);
+		ApplySessionEngine(detail.State.Engine);
 	}
 }

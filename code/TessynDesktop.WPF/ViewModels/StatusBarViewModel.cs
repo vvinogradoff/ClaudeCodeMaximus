@@ -45,6 +45,27 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
 	[ObservableProperty]
 	private string _sevenDayLabel = string.Empty;
 
+	/// <summary>The top bar has a window (always for Claude; a ChatGPT plan may have none, FR.33.10).</summary>
+	[ObservableProperty]
+	private bool _hasFiveHour = true;
+
+	[ObservableProperty]
+	private bool _hasSevenDay = true;
+
+	/// <summary>FR.33.10: the window ran out of credits, shown in the limits-error colour (FR.9.17).</summary>
+	[ObservableProperty]
+	private bool _isFiveHourExhausted;
+
+	[ObservableProperty]
+	private bool _isSevenDayExhausted;
+
+	/// <summary>Why the window is exhausted (Codex's reason and the reset); null when it is not.</summary>
+	[ObservableProperty]
+	private string? _fiveHourToolTip;
+
+	[ObservableProperty]
+	private string? _sevenDayToolTip;
+
 	public StatusBarViewModel(ConnectionViewModel connection, MainViewModel main, IUiDispatcher ui, ILogger<StatusBarViewModel> logger)
 	{
 		_ui = ui;
@@ -116,7 +137,9 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
 	private void UpdateModel()
 	{
 		var model = _session?.SelectedModel;
-		ModelText = _session is { HasSession: true } && model != null ? StatusBarText.Model(model.Id, model.Provider) : string.Empty;
+		ModelText = _session is { HasSession: true } && model is { IsSelectable: true }
+			? model.IsCodex ? StatusBarText.GptModel(model.Label) : StatusBarText.Model(model.Id, model.Provider)
+			: string.Empty;
 	}
 
 	private void UpdateProfile()
@@ -171,11 +194,18 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
 	{
 		switch (usage.State)
 		{
-			case UsageState.Ok when usage.FiveHour != null && usage.SevenDay != null:
-				FiveHourPercent = Math.Clamp(usage.FiveHour.Utilization, 0, 100);
-				SevenDayPercent = Math.Clamp(usage.SevenDay.Utilization, 0, 100);
-				FiveHourLabel = StatusBarText.FiveHour(usage.FiveHour);
-				SevenDayLabel = StatusBarText.SevenDay(usage.SevenDay);
+			// A ChatGPT plan can lack a window (Pro has no short one, FR.33.10): that bar is hidden, the other one still shows.
+			case UsageState.Ok when usage.FiveHour != null || usage.SevenDay != null:
+				FiveHourPercent = Math.Clamp(usage.FiveHour?.Utilization ?? 0, 0, 100);
+				SevenDayPercent = Math.Clamp(usage.SevenDay?.Utilization ?? 0, 0, 100);
+				FiveHourLabel = usage.FiveHour == null ? string.Empty : StatusBarText.FiveHour(usage.FiveHour);
+				SevenDayLabel = usage.SevenDay == null ? string.Empty : StatusBarText.SevenDay(usage.SevenDay);
+				HasFiveHour = usage.FiveHour != null;
+				HasSevenDay = usage.SevenDay != null;
+				IsFiveHourExhausted = usage.FiveHour?.IsExhausted == true;
+				IsSevenDayExhausted = usage.SevenDay?.IsExhausted == true;
+				FiveHourToolTip = StatusBarText.ExhaustedToolTip(usage.FiveHour, usage.Exhausted);
+				SevenDayToolTip = StatusBarText.ExhaustedToolTip(usage.SevenDay, usage.Exhausted);
 				UsageNote = string.Empty;
 				HasUsage = true;
 				break;

@@ -10,8 +10,13 @@
     <!-- The toggles of the command bar (W4): Streaming Session Mode, Focus item sound and the local-tools button, as icons with tooltips so they stay on the line of the selectors.
          The DataContext is the SessionPaneViewModel. -->
     <StackPanel Orientation="Horizontal" Margin="12,6,0,0">
+        <StackPanel.Resources>
+            <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        </StackPanel.Resources>
         <StackPanel DataContext="{Binding Toggles}" Orientation="Horizontal">
+            <!-- Hidden for a Codex session (FR.33.1): it always runs in a persistent app-server process. The Tools button hides itself for a non-local model. -->
             <ToggleButton Style="{StaticResource PlainToggle}" Padding="8,5" Margin="0,0,6,0" IsEnabled="{Binding IsStreamingKnown}" IsChecked="{Binding StreamingChecked, Mode=TwoWay}"
+                          Visibility="{Binding IsStreamingApplicable, Converter={StaticResource BoolToVis}}"
                           ToolTip="Streaming Session Mode: keep one claude process alive for the session's turns." AutomationProperties.Name="Streaming Session Mode">
                 <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="{StaticResource GlyphStreaming}" />
             </ToggleButton>
