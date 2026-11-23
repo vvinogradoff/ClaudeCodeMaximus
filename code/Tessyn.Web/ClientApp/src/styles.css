@@ -157,6 +157,7 @@ input, textarea, select { font: inherit; font-size: 16px; color: var(--fg); }
 .kind-ask { background: #daa520; color: #000; }
 .kind-todo { background: var(--fg); color: var(--bg); }
 .kind-alert { background: transparent; color: var(--fg); outline: 1px solid var(--fg); outline-offset: -1px; }
+.kind-running { background: var(--muted); color: var(--bg); }
 .kind-decided { background: #707070; color: #fff; }
 
 /* ---------- tags ---------- */
@@ -241,6 +242,9 @@ input, textarea, select { font: inherit; font-size: 16px; color: var(--fg); }
 /* ---------- focus ---------- */
 .focus { min-width: 0; overflow-x: hidden; overflow-y: auto; padding: 10px 12px calc(16px + var(--sab)); display: flex; flex-direction: column; gap: 10px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-left-width: 5px; border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.kind-border-running { border-left-color: var(--muted); }
+.running-group { display: grid; gap: 8px; }
+.group-header { margin: 4px 0 0; font-size: 13px; font-weight: 700; color: var(--muted); }
 .kind-border-critical { border-left-color: #8b0000; } .kind-border-ask { border-left-color: #daa520; } .kind-border-todo { border-left-color: var(--fg); }
 .kind-border-alert { border-left-color: var(--muted); } .kind-border-decided { border-left-color: #707070; }
 .card header { min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
