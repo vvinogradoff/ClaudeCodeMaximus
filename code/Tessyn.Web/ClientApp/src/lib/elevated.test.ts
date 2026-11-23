@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { AttentionItemDto, ElevatedRunDto, ElevatedRunStatus } from '../api/types';
 import { ElevatedRunBody } from '../components/ElevatedRunCard';
-import { APPROVE_ON_PC, elevatedRunOf, folderName, formatRunDuration, isFinalStatus, openStatusLine, outcomeLine, requestedBy } from './elevated';
+import { APPROVE_ON_PC, elevatedRunOf, folderName, formatRunDuration, isFinalStatus, isInProgress, openStatusLine, outcomeLine, requestedBy, runningItems } from './elevated';
 
 // TC.ER.62 (unit part): the Focus tab shows the elevated-run card read-only: reason, the folder NAME, the whole command, "Approve on the PC", no button in any state, the outcome at the end.
 
@@ -90,5 +90,38 @@ describe('elevated-run card on the web', () => {
 		expect(elevatedRunOf(item({ type: 'elevatedRun', run: run() }))?.id).toBe('er-1');
 		expect(elevatedRunOf(item())).toBeUndefined();
 		expect(elevatedRunOf(item({ type: 'somethingElse', run: run() }))).toBeUndefined();
+	});
+});
+
+// FR.23.41, FR.23.42: an approved run (launching, running) is in progress: the Running group, not the open cards, not counted.
+describe('in-progress elevated runs on the web', () => {
+	const item = (id: number, r: ElevatedRunDto | undefined, extra: Partial<AttentionItemDto> = {}): AttentionItemDto => ({
+		id: `A${id}`, number: id, kind: 'ask', title: `t${id}`, options: [], status: 'open', createdUtc: `2026-11-21T09:0${id}:00Z`, updatedUtc: '2026-11-21T09:00:00Z',
+		action: r ? { type: 'elevatedRun', run: r } : undefined, ...extra,
+	});
+
+	it.each<[ElevatedRunStatus, boolean]>([
+		['pending', false], ['launching', true], ['running', true], ['completed', false], ['declined', false], ['declinedAtPrompt', false],
+		['failedToStart', false], ['timedOut', false], ['cancelled', false], ['expired', false],
+	])('status %s in progress: %s', (status, expected) => {
+		expect(isInProgress(item(1, run(status)))).toBe(expected);
+	});
+
+	it('is false for a plain ask and for a closed item', () => {
+		expect(isInProgress(item(1, undefined))).toBe(false);
+		expect(isInProgress(item(2, run('running'), { status: 'resolved' }))).toBe(false);
+	});
+
+	it('lists the in-progress items oldest approval first and leaves the rest out', () => {
+		const items = [
+			item(5, run('running', { startedUtc: '2026-11-21T09:09:00Z' })),
+			item(1, undefined),
+			item(2, run('launching')),                       // not started yet: falls back to its creation time (09:02)
+			item(3, run('pending')),
+			item(4, run('running', { startedUtc: '2026-11-21T09:01:00Z' })),
+		];
+
+		expect(runningItems(items).map((i) => i.id)).toEqual(['A4', 'A2', 'A5']);
+		expect(runningItems([item(1, undefined), item(3, run('pending'))])).toEqual([]);
 	});
 });

@@ -151,6 +151,17 @@ export class MockDaemon {
 		const att2 = put(imp, datalabs, imp, { name: 'Importer: schema drift', lastActivityMin: 150 }, 'schema', 2);
 		this.seedNestedRef(this.addAttention(att2, 'ask', 'Drop the legacy column?', 'The column `Legacy_Id` has no readers left.', ['Drop it', 'Keep it'], 'Drop it'));
 
+		// --- an approved elevated run (FR.23.41, FR.23.42): in progress, so it shows in the Running group and counts nowhere
+		const elev = this.addAttention(att2, 'ask', 'Run the WPF E2E suite as the test user', 'Needs the elevated shell.', [], undefined);
+		elev.action = {
+			type: 'elevatedRun',
+			run: {
+				id: 'er-mock-1', status: 'running', requester: { nodeId: att2.id, name: att2.name, shortId: att2.id.slice(0, 8) }, reason: 'Run the WPF E2E suite as the test user',
+				workingDirName: 'Tessyn-wt-elevruns', command: 'powershell -File tools\e2e\Run-WpfE2E.ps1', timeoutMinutes: 60,
+				createdUtc: ago(20), expiresUtc: ago(-10), startedUtc: ago(5),
+			},
+		};
+
 		// --- a questionnaire item (FR.23.33): all four question types, recommendations filled in, a long choice for wrapping
 		const plan = this.addAttention(att2, 'ask', 'Approve the schema migration plan?', 'Plan: add `Tag` columns, backfill, then drop `Legacy_Id`.', [], undefined);
 		plan.questions = [
@@ -315,12 +326,18 @@ ${'const veryLongLine = 1; '.repeat(12)}
 	}
 
 	// ------------------------------------------------------------------ DTO builders
+	private inProgress(a: AttentionItemDto): boolean {
+		const status = a.action?.type === 'elevatedRun' ? a.action.run?.status : undefined;
+		return status === 'launching' || status === 'running';
+	}
+
 	private summary(s: MockSession): AttentionSummaryDto {
 		const order: AttentionKind[] = ['critical', 'ask', 'todo', 'alert', 'decided'];
 		const open = s.attention.filter((a) => a.status === 'open');
 		const top = (items: AttentionItemDto[]) => order.find((k) => items.some((i) => i.kind === k));
-		const nonDecided = open.filter((a) => a.kind !== 'decided');
-		return { openCount: nonDecided.length, topKind: top(nonDecided), allOpenCount: open.length, allOpenTopKind: top(open) };
+		const nonDecided = open.filter((a) => a.kind !== 'decided' && !this.inProgress(a));
+		const counted = open.filter((a) => !this.inProgress(a)); // FR.23.41: an approved elevated run is not counted anywhere
+		return { openCount: nonDecided.length, topKind: top(nonDecided), allOpenCount: counted.length, allOpenTopKind: top(counted) };
 	}
 
 	private lastPromptMin(s: MockSession): number | null {
