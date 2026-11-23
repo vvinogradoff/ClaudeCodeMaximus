@@ -51,7 +51,7 @@ public sealed partial class ProfileViewModel
 	/// <summary>Sign in again is offered when the profile has an auth error or is signed out, or the session reports an auth error.</summary>
 	public bool SessionNeedsSignIn => SessionChatGptProfile is { } row && (!row.IsSignedIn || _sessionHasAuthError);
 
-	public string SessionSignInAgainName => SessionChatGptProfile == null ? string.Empty : string.Format(Constants.Codex.FlyoutSignInAgainFormat, SessionChatGptProfile.DisplayName);
+	public string SessionSignInAgainName => SessionChatGptProfile == null ? string.Empty : ButtonAutomationName.Escape(string.Format(Constants.Codex.FlyoutSignInAgainFormat, SessionChatGptProfile.DisplayName));
 
 	public string SessionChatGptHeader => Constants.Codex.FlyoutSessionHeader;
 

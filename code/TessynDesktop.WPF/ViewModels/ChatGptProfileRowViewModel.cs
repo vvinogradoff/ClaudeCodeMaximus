@@ -45,12 +45,12 @@ public sealed class ChatGptProfileRowViewModel
 
 	public string AutomationName => DisplayName;
 
-	/// <summary>The buttons' accessible names carry the profile, so a screen reader (and UI Automation) can tell the rows' buttons apart.</summary>
-	public string SignInAgainName => string.Format(Constants.Codex.RowActionNameFormat, Constants.Codex.SignInAgainAction, DisplayName, Id);
+	/// <summary>The buttons' accessible names carry the profile, so a screen reader (and UI Automation) can tell the rows' buttons apart; underscores escaped (<see cref="ButtonAutomationName"/>).</summary>
+	public string SignInAgainName => ButtonAutomationName.Escape(string.Format(Constants.Codex.RowActionNameFormat, Constants.Codex.SignInAgainAction, DisplayName, Id));
 
-	public string SignOutName => string.Format(Constants.Codex.RowActionNameFormat, Constants.Codex.SignOutAction, DisplayName, Id);
+	public string SignOutName => ButtonAutomationName.Escape(string.Format(Constants.Codex.RowActionNameFormat, Constants.Codex.SignOutAction, DisplayName, Id));
 
-	public string DeleteName => string.Format(Constants.Codex.RowActionNameFormat, Constants.Codex.DeleteAction, DisplayName, Id);
+	public string DeleteName => ButtonAutomationName.Escape(string.Format(Constants.Codex.RowActionNameFormat, Constants.Codex.DeleteAction, DisplayName, Id));
 
 	/// <summary><c>plus</c> → <c>ChatGPT Plus</c>; empty for an unknown plan.</summary>
 	public static string PlanLabel(string? plan) =>

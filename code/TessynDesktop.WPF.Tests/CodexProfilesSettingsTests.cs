@@ -216,4 +216,28 @@ public sealed class CodexProfilesSettingsTests
 
 		Assert.DoesNotContain(_client.Calls, c => c.StartsWith("profile.remove", StringComparison.Ordinal));
 	}
+
+	/// <summary>
+	/// The row buttons' accessible names keep the id's underscore: WPF's button peer drops an unescaped underscore as an access-key marker, so
+	/// <c>Sign out: ... (codex_1)</c> was read as <c>(codex1)</c> and TC.CX.41 could not find the button.
+	/// </summary>
+	[Fact]
+	public void TheRowButtonNames_ReadByUiAutomation_KeepTheUnderscoresOfTheIdAndTheEmail()
+	{
+		var row = new ChatGptProfileRowViewModel(new CodexProfileDto("codex_1", "ChatGPT · u_x@example.com", "u_x@example.com", "plus", false, true, false, true));
+		StaTestRunner.Run(() =>
+		{
+			foreach (var (bound, expected) in new[]
+			{
+				(row.SignOutName, "Sign out: ChatGPT · u_x@example.com (codex_1)"),
+				(row.SignInAgainName, "Sign in again: ChatGPT · u_x@example.com (codex_1)"),
+				(row.DeleteName, "Delete: ChatGPT · u_x@example.com (codex_1)"),
+			})
+			{
+				var button = new System.Windows.Controls.Button { Content = "Sign out" };
+				System.Windows.Automation.AutomationProperties.SetName(button, bound);
+				Assert.Equal(expected, System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(button).GetName());
+			}
+		});
+	}
 }
