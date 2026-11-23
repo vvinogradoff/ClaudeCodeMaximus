@@ -73,17 +73,32 @@ internal sealed class CodexE2EDaemon : IAsyncDisposable
 
 		var activity = new ActivityByNodeService();
 		var states   = new SessionStateBuilder(Env.Base.Registry, Router, Env.Attention, activity, codexProfiles: Codex.Profiles);
-		var tree     = new TreeRemoteRpcModule(new RemoteTreeReader(Settings), Env.Base.Registry, states, activity, new TreeVersionTracker(),
-			new FakeDirectoryLabelService(), new InProcFakeIndexService(), new FakeSessionSearchService());
+		var reader   = new RemoteTreeReader(Settings);
+		var dirLabels = new FakeDirectoryLabelService();
+		var tree     = new TreeRemoteRpcModule(reader, Env.Base.Registry, states, activity, new TreeVersionTracker(),
+			dirLabels, new InProcFakeIndexService(), new FakeSessionSearchService());
+
+		// The rest of what the app calls on a session (drafts, the tree's node info, session options, local tools, Recent and the tag search), so these
+		// tests run against a complete daemon rather than one that answers "Method not found" to the app's routine calls.
+		var drafts       = new DraftService(Path.Combine(Codex.Root, "drafts"));
+		var mutation     = new TreeMutationService(Env.Base.Registry, Settings, dirLabels, new FakeDirectoryGitOrigins());
+		var sessionOpts  = new SessionOptionsService(Env.Base.Registry, Settings, Engine, resolver, Router, turns);
+		var localTools   = new LocalToolsService(Env.Base.Registry, Settings);
 
 		ClientTestHost? host = null;
 		Bus.Published += n => host?.Bus.Publish(n.Method, n.Params);   // the services publish on this bus; the stream reads the host's
 		_host = host = new ClientTestHost((run, log) => new TdcpDispatcher(
 		[
-			new ClientRpcModule(runInfo: run, eventLog: log, turnEngine: Engine, settingsSections: Sections, profileAdmin: profileAdmin, engines: Engines,
-				codexProfiles: Codex.Profiles),
+			new ClientRpcModule(runInfo: run, eventLog: log, turnEngine: Engine, settingsSections: Sections, profileAdmin: profileAdmin, drafts: drafts,
+				treeMutation: mutation, sessionOptions: sessionOpts, localTools: localTools, engines: Engines, codexProfiles: Codex.Profiles),
 			.. Env.Modules,
 			tree,
+			new DraftRpcModule(Env.Base.Registry, drafts, Env.Attention),
+			new TreeMutationRpcModule(mutation),
+			new SessionOptionsRpcModule(sessionOpts),
+			new LocalToolsRpcModule(localTools),
+			new RecentRemoteRpcModule(reader, states, activity, Env.Attention, new InProcFakeScheduler(), dirLabels, Env.Base.Registry, Settings),
+			new TagsRemoteRpcModule(reader, Env.Base.TagService, activity, states, dirLabels),
 			new SettingsRpcModule(Sections),
 			new ProfileAdminRpcModule(profileAdmin, labels, Codex.Profiles, codexAdmin, Settings),
 			new CatalogRpcModule(Codex.Claude, Settings, labels, Codex.Models, Codex.Profiles, Engines),
