@@ -73,6 +73,11 @@ public sealed class ServiceRegistration
 		services.AddSingleton<IUrlLauncher>(sp => new PreviewRoutingUrlLauncher(sp.GetRequiredService<IPreviewRouter>(), sp.GetRequiredService<SystemUrlLauncher>(), sp.GetRequiredService<UrlPolicy>()));
 		RegisterPreviewWindows(services, options);
 		services.AddSingleton<IClipboardWriter, SystemClipboardWriter>();
+		// FR.32.16: the real launcher goes through the Windows administrator prompt. Only a test window with --elevated-launcher=fake:<mode> gets the fake one (options.TestElevatedLauncher is null otherwise).
+		if (options.TestElevatedLauncher is { } fakeMode)
+			services.AddSingleton<IElevatedRunLauncher>(sp => new FakeElevatedRunLauncher(fakeMode, sp.GetRequiredService<ILogger<FakeElevatedRunLauncher>>()));
+		else
+			services.AddSingleton<IElevatedRunLauncher, ShellExecuteElevatedRunLauncher>();
 		services.AddSingleton<MediaPreviewPolicy>();
 		services.AddSingleton<PrivateAddressCheck>();
 		services.AddSingleton<MediaProxyUrl>();
@@ -105,7 +110,8 @@ public sealed class ServiceRegistration
 			client, sp.GetRequiredService<ITranscriptSurface>(), sp.GetRequiredService<IEntryRenderer>(), sp.GetRequiredService<IUrlLauncher>(),
 			sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<SwitchLatencyTracker>(), sp.GetRequiredService<ILogger<SessionPaneViewModel>>(),
 			Constants.Limits.MaxCachedTranscripts,
-			new FocusViewModel(client, sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FocusViewModel>>()),
+			new FocusViewModel(client, sp.GetRequiredService<IUiDispatcher>(), sp.GetRequiredService<ILogger<FocusViewModel>>(),
+				sp.GetRequiredService<IElevatedRunLauncher>(), sp.GetRequiredService<IClipboardWriter>()),
 			new FilePreviewViewModel(
 				new FilePreviewLoader(client, sp.GetRequiredService<FileKindClassifier>(), sp.GetRequiredService<PreviewFileStore>(), sp.GetRequiredService<ExternalOpenPolicy>(), sp.GetRequiredService<ITiffConverter>()),
 				sp.GetRequiredService<IPreviewSurface>(), sp.GetRequiredService<IMarkdownRenderer>(), sp.GetRequiredService<IExternalFileLauncher>(),

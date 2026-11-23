@@ -60,6 +60,13 @@ internal sealed class RecordingScheduler : ISchedulerService
 		lock (Deliveries) Deliveries.Add((supervisorNodeId, workerName, resultText));
 	}
 
+	public List<(string target, string runId, string text)> ElevatedDeliveries { get; } = new();
+
+	public void AddOrMergeElevatedRunDelivery(string targetNodeId, string runId, string outcomeText)
+	{
+		lock (ElevatedDeliveries) ElevatedDeliveries.Add((targetNodeId, runId, outcomeText));
+	}
+
 	public bool RemoveSchedule(string scheduleId) => false;
 	public IReadOnlyList<ScheduleModel> GetSchedules(string? targetNodeId = null) => Array.Empty<ScheduleModel>();
 }

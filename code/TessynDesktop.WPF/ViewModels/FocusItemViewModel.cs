@@ -63,13 +63,29 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	/// <summary>A path written in this card's title or body was activated (Ctrl+click or Invoke, FR.23.30).</summary>
 	public void OpenPath(string path) => _owner.ActivatePath(this, path);
 
-	public bool HasBody => !string.IsNullOrWhiteSpace(Body);
+	/// <summary>The card of an elevated run (FR.23.32), set when the item carries the <c>elevatedRun</c> action; null for every other item. The facts come from it, never from the body.</summary>
+	public ElevatedRunCardViewModel? Elevated { get; private set; }
+
+	/// <summary>True for the item of an elevated run: it has its own card and no markdown body (the body only serves clients that do not know the action).</summary>
+	public bool IsElevatedRun => Elevated != null;
+
+	public bool HasBody => Elevated == null && !string.IsNullOrWhiteSpace(Body);
 
 	public bool HasOptions => Options.Count > 0;
 
 	public bool HasRecommendation => !string.IsNullOrWhiteSpace(Recommendation);
 
 	public bool HasRefs => Refs.Count > 0;
+
+	/// <summary>The questions of a questionnaire card (FR.23.35), in order; empty on any other card.</summary>
+	public ObservableCollection<FocusQuestionViewModel> Questions { get; } = [];
+
+	private string _questionSignature = string.Empty;
+
+	public bool HasQuestions => Questions.Count > 0;
+
+	/// <summary>The label above the reply box: <c>Note (optional)</c> on a questionnaire card, none on others.</summary>
+	public string? NoteLabel => HasQuestions ? Constants.Questionnaire.NoteLabel : null;
 
 	/// <summary>Lower-case kind name, for styling.</summary>
 	public string KindKey => Kind.ToString().ToLowerInvariant();
@@ -83,7 +99,7 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	public bool IsClosed => _status != AttentionStatus.Open;
 
 	/// <summary>The outcome line of a closed card: <c>Answered: ...</c>, <c>Resolved: ...</c> or <c>Dismissed</c>.</summary>
-	public string OutcomeText => _status switch
+	public string OutcomeText => Elevated is { IsFinal: true } elevated && _status != AttentionStatus.Open ? elevated.OutcomeText : _status switch
 	{
 		AttentionStatus.Answered => FormatOutcome(Constants.Texts.OutcomeAnswered, _answer),
 		AttentionStatus.Resolved => FormatOutcome(Constants.Texts.OutcomeResolved, _resolutionNote),
@@ -123,6 +139,7 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	/// <summary>Takes the fields the daemon may change (everything but the id and the reply box).</summary>
 	public void Update(AttentionItemDto item)
 	{
+		ApplyAction(item.Action);
 		_status = item.Status;
 		_answer = item.Answer;
 		_resolutionNote = item.ResolutionNote;
@@ -150,6 +167,8 @@ public sealed partial class FocusItemViewModel : ObservableObject
 			OnPropertyChanged(nameof(HasOptions));
 		}
 
+		SyncQuestions(item.Questions ?? []);
+
 		var refs = item.Refs ?? [];
 		if (!Refs.Select(r => r.Reference).SequenceEqual(refs))
 		{
@@ -157,6 +176,24 @@ public sealed partial class FocusItemViewModel : ObservableObject
 			foreach (var reference in refs)
 				Refs.Add(new FocusRefViewModel(reference, _owner.ActivateRef, _owner.ActivateRefInSystemBrowser));
 			OnPropertyChanged(nameof(HasRefs));
+		}
+	}
+
+	private void ApplyAction(AttentionActionDto? action)
+	{
+		if (action is not { Type: RemoteProtocol.ElevatedRuns.ActionType, Run: { } run })
+			return;
+
+		if (Elevated == null)
+		{
+			Elevated = _owner.CreateElevatedCard(run, NodeId);
+			OnPropertyChanged(nameof(Elevated));
+			OnPropertyChanged(nameof(IsElevatedRun));
+			OnPropertyChanged(nameof(HasBody));
+		}
+		else
+		{
+			Elevated.ApplyRun(run);
 		}
 	}
 
@@ -175,8 +212,8 @@ public sealed partial class FocusItemViewModel : ObservableObject
 		OnPropertyChanged(nameof(CloseText));
 	}
 
-	/// <summary>True when the reply box holds something to send.</summary>
-	public bool HasReply => !string.IsNullOrWhiteSpace(ReplyText);
+	/// <summary>True when the card has something to send: text in the reply box, or a questionnaire (its answers are the reply, FR.23.35).</summary>
+	public bool HasReply => HasQuestions || !string.IsNullOrWhiteSpace(ReplyText);
 
 	partial void OnReplyTextChanged(string value)
 	{
@@ -196,4 +233,44 @@ public sealed partial class FocusItemViewModel : ObservableObject
 
 	[RelayCommand]
 	private Task DismissAsync() => _owner.DismissAsync(this);
+
+	/// <summary>Builds the question view models again when the daemon sent other questions (a re-post replaces the whole questionnaire, FR.23.33); equal ones keep their answers.</summary>
+	private void SyncQuestions(IReadOnlyList<AttentionQuestionDto> dtos)
+	{
+		var signature = QuestionSignature(dtos);
+		if (signature == _questionSignature)
+			return;
+
+		_questionSignature = signature;
+		Questions.Clear();
+		foreach (var dto in dtos.OrderBy(q => q.Number))
+			Questions.Add(new FocusQuestionViewModel(dto, _ => _owner.OnQuestionChanged(this)));
+		OnPropertyChanged(nameof(HasQuestions));
+		OnPropertyChanged(nameof(NoteLabel));
+		OnPropertyChanged(nameof(HasReply));
+		ReplyCommand.NotifyCanExecuteChanged();
+	}
+
+	private static string QuestionSignature(IReadOnlyList<AttentionQuestionDto> dtos) => string.Join('\u001e', dtos.Select(q =>
+		string.Join('\u001f', q.Number.ToString(), q.Type.ToString(), q.Text, string.Join('\u001d', q.Choices), q.Recommended ?? string.Empty, string.Join('\u001d', q.RecommendedChoices))));
+
+	/// <summary>The current value of every question, for <c>attention.reply</c> (FR.23.36); null on a card without a questionnaire.</summary>
+	public IReadOnlyList<AttentionQuestionAnswerParams>? BuildAnswers() => HasQuestions ? Questions.Select(q => q.ToAnswer()).ToList() : null;
+
+	/// <summary>The values to keep as a draft (FR.23.37): null while every question is at its start (nothing worth keeping), otherwise all of them.</summary>
+	public IReadOnlyList<AttentionQuestionAnswerParams>? BuildDraftAnswers() => HasChangedQuestions ? BuildAnswers() : null;
+
+	/// <summary>True when some question differs from its start (the recommendation, or empty).</summary>
+	public bool HasChangedQuestions => Questions.Any(q => !q.IsAtStart);
+
+	/// <summary>Shows kept values (a draft, FR.23.37) without saving them again. False, and nothing changes, when they do not fit this questionnaire (it was re-posted with other questions).</summary>
+	public bool TryRestoreQuestions(IReadOnlyList<AttentionQuestionAnswerParams> answers)
+	{
+		if (!HasQuestions || answers.Count != Questions.Count || Questions.Where((q, i) => !q.Fits(answers[i])).Any())
+			return false;
+
+		for (var i = 0; i < Questions.Count; i++)
+			Questions[i].Restore(answers[i]);
+		return true;
+	}
 }

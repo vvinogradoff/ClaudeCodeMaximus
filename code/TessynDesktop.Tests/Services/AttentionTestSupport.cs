@@ -162,6 +162,18 @@ internal sealed class FakeAttentionService : IAttentionService
 		return true;
 	}
 
+	public List<(string NodeId, string RunId, string Note)> ElevatedClosures { get; } = new();
+
+	public List<string> Touched { get; } = new();
+
+	public int CloseElevatedRunItems(string nodeId, SessionNodeModel? node, string runId, string note)
+	{
+		ElevatedClosures.Add((nodeId, runId, note));
+		return 0;
+	}
+
+	public void NotifyChanged(string nodeId) => Touched.Add(nodeId);
+
 	public (string NodeId, AttentionRefModel Ref)? FindFileRef(string refId) => null;
 
 	public IReadOnlyList<AttentionRefModel> GetActiveFileRefs(string nodeId) => [];

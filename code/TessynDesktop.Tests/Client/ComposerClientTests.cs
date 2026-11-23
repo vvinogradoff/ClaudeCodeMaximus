@@ -113,6 +113,40 @@ public sealed class ComposerClientTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ReplyDrafts_CarryTheQuestionValues_ThroughTheClient()   // FR.23.37
+	{
+		await using var client = NewClient();
+		await client.ConnectAsync();
+		var item = _env.Attention.Service.Post(_env.Session,
+		[
+			new AttentionPostRequestModel
+			{
+				Kind      = AttentionKind.Ask,
+				Title     = "Plan questions",
+				Questions = [new AttentionQuestionModel { Number = 1, Type = AttentionQuestionType.YesNo, Text = "Ship it?" }],
+			},
+		]).Single().Item;
+		List<AttentionQuestionAnswerParams> questions = [new(1, "yes"), new(2, null, ["EU"])];
+
+		var empty = await client.ReplyDraftGetAsync(_env.NodeId, item.Id);
+		var set   = await client.ReplyDraftSetAsync(_env.NodeId, item.Id, "my note", empty.Revision, questions);
+		var read  = await client.ReplyDraftGetAsync(_env.NodeId, item.Id);
+
+		Assert.Null(empty.Questions);
+		Assert.Equal("my note", read.Text);
+		Assert.Equal(set.Revision, read.Revision);
+		Assert.Equal([1, 2], read.Questions!.Select(q => q.Number));
+		Assert.Equal("yes", read.Questions![0].Value);
+		Assert.Equal(["EU"], read.Questions![1].Choices);
+
+		// without question values the draft is the old text-only one
+		var plain = await client.ReplyDraftSetAsync(_env.NodeId, item.Id, "only a note", read.Revision);
+		var back  = await client.ReplyDraftGetAsync(_env.NodeId, item.Id);
+		Assert.Equal(plain.Revision, back.Revision);
+		Assert.Null(back.Questions);
+	}
+
+	[Fact]
 	public async Task DraftSetAsync_WithAStaleRevision_ThrowsDraftChanged_AndNothingIsOverwritten()
 	{
 		await using var client = NewClient();
@@ -180,6 +214,7 @@ public sealed class ComposerClientTests : IDisposable
 	[Fact]
 	public async Task AutocompleteSuggestAsync_WhileTheIndexBuilds_AnswersNotReadyWithoutWaiting()
 	{
+		_env.Settings.Settings.CodeReferencesEnabled = true;   // # is the symbol trigger only while Code references is on (FR.7.13)
 		await using var client = NewClient();
 		await client.ConnectAsync();
 

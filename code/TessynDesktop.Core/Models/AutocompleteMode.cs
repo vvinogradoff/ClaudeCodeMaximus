@@ -5,6 +5,7 @@ public enum AutocompleteMode
 {
 	None,
 	Symbol,
+	Session,
 	File,
 	Path
 }

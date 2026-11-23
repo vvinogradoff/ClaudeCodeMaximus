@@ -1,0 +1,41 @@
+{
+  "nodeId": "<lead>",
+  "summary": {
+    "openCount": 1,
+    "topKind": "ask",
+    "allOpenCount": 1,
+    "allOpenTopKind": "ask"
+  },
+  "items": [
+    {
+      "id": "A1",
+      "number": 1,
+      "kind": "ask",
+      "title": "Run as administrator: echo `ticks` and \"quotes\"",
+      "body": "Reason: because\nWorking directory: <root>/Proj/Alpha\nRequested by: Lead (<lead8>)\nApprove this on the PC (Tessyn desktop app).\n\n```\necho `ticks` and \"quotes\"\n```",
+      "options": [],
+      "status": "open",
+      "createdUtc": "<ts>",
+      "updatedUtc": "<ts>",
+      "action": {
+        "type": "elevatedRun",
+        "run": {
+          "id": "<run>",
+          "status": "pending",
+          "requester": {
+            "nodeId": "<lead>",
+            "name": "Lead",
+            "shortId": "<lead8>"
+          },
+          "reason": "because",
+          "workingDir": "<root>/Proj/Alpha",
+          "command": "echo `ticks` and \"quotes\"",
+          "timeoutMinutes": 60,
+          "createdUtc": "<ts>",
+          "expiresUtc": "<ts>",
+          "logPath": "<root>/runs/<run>/output.log"
+        }
+      }
+    }
+  ]
+}

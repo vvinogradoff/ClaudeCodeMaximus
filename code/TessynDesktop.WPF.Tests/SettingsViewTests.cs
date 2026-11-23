@@ -170,6 +170,28 @@ public sealed class SettingsViewTests
 	}
 
 	[Fact]
+	public async Task TCCR21_TheGeneralTab_ShowsTheCodeReferencesCheckBox_WithItsHint_BoundToTheSetting()
+	{
+		var settings = await LoadedSettingsAsync(RichClient());
+
+		WithoutBindingErrors(() =>
+		{
+			var general = new GeneralSettingsView { DataContext = settings.General };
+			Layout(general);
+
+			var box = FindAll<CheckBox>(general).Single(c => System.Windows.Automation.AutomationProperties.GetName(c) == "Code references");
+			Assert.Equal("Code references", box.Content);
+			Assert.False(box.IsChecked);
+			Assert.Contains(FindAll<TextBlock>(general).Select(t => t.Text), t => t.Contains("# suggests sessions", StringComparison.Ordinal) && t.Contains("Applies at the next suggestion", StringComparison.Ordinal));
+
+			settings.General.CodeReferencesEnabled = true;
+			Assert.True(box.IsChecked);
+			box.IsChecked = false;
+			Assert.False(settings.General.CodeReferencesEnabled);
+		});
+	}
+
+	[Fact]
 	public async Task ASectionWithoutItsCapability_ShowsTheNote_AndHidesTheControls()
 	{
 		var client = new FakeTessynClient().AnnouncingSettings(RemoteProtocol.ProfilesAdmin.Capability);

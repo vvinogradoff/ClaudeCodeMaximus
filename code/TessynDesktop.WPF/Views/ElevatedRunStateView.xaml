@@ -1,0 +1,68 @@
+<UserControl x:Class="TessynDesktop.WPF.Views.ElevatedRunStateView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:TessynDesktop.WPF">
+    <!-- What the User can do with an elevated run, by its status (FR.23.32). DataContext = ElevatedRunCardViewModel.
+         Deliberate click: "Run as administrator" is not the default button, has no access key (its content is plain text), no input binding and no shortcut; nothing here takes keyboard focus. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </UserControl.Resources>
+    <StackPanel Margin="0,8,0,0">
+        <!-- pending: two buttons and the optional note (used by Decline only) -->
+        <StackPanel Visibility="{Binding IsPending, Converter={StaticResource BoolToVis}}">
+            <Grid Margin="0,0,0,8">
+                <TextBox x:Name="NoteBox" Text="{Binding NoteText, UpdateSourceTrigger=PropertyChanged}" MaxLength="500" AcceptsReturn="False" Padding="6,4"
+                         AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.NoteName}" ToolTip="Used by Decline: the agent gets it with the outcome" />
+                <TextBlock Text="{x:Static c:Constants+ElevatedRuns.NoteWatermark}" IsHitTestVisible="False" Margin="9,0,0,0" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Text.Length, ElementName=NoteBox}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="RunButton" Content="{x:Static c:Constants+ElevatedRuns.RunText}" Command="{Binding ApproveCommand}" Padding="12,5" IsDefault="False"
+                        AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.RunAsAdministratorName}" ToolTip="Opens the Windows administrator prompt and runs the command shown above" />
+                <Button x:Name="DeclineButton" Content="{x:Static c:Constants+ElevatedRuns.DeclineText}" Command="{Binding DeclineCommand}" Padding="12,5" Margin="8,0,0,0"
+                        AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.DeclineName}" ToolTip="Refuses the request; the agent is told" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- launching: the buttons are gone (no second approve) -->
+        <TextBlock Text="{Binding LaunchingText}" TextWrapping="Wrap" Visibility="{Binding IsLaunching, Converter={StaticResource BoolToVis}}"
+                   AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.StateTextName}" />
+
+        <!-- running: elapsed, Stop, and the output of the last 20 lines -->
+        <StackPanel Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" x:Name="StopButton" Content="{x:Static c:Constants+ElevatedRuns.StopText}" Command="{Binding StopCommand}" Padding="12,5" Margin="8,0,0,0"
+                        AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.StopName}" ToolTip="Stops the run" />
+                <TextBlock Text="{Binding RunningText}" TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.StateTextName}" />
+            </DockPanel>
+            <Expander x:Name="OutputExpander" Header="{x:Static c:Constants+ElevatedRuns.OutputHeader}" IsExpanded="{Binding IsOutputExpanded, Mode=TwoWay}" Margin="0,6,0,0"
+                      AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.OutputName}">
+                <StackPanel Margin="0,4,0,0">
+                    <TextBox IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" Padding="6,4" MinLines="1" MaxLines="20"
+                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Text="{Binding OutputText, Mode=OneWay}"
+                             AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.OutputTextName}" />
+                    <TextBox IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" TextWrapping="Wrap" Margin="0,4,0,0" Text="{Binding LogPathText, Mode=OneWay}"
+                             Visibility="{Binding HasLogPath, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.LogPathName}" />
+                </StackPanel>
+            </Expander>
+        </StackPanel>
+
+        <!-- finished (the item closes at once; this shows until the list is read again): the outcome, no buttons -->
+        <TextBlock Text="{Binding OutcomeText}" TextWrapping="Wrap" Visibility="{Binding IsFinal, Converter={StaticResource BoolToVis}}"
+                   AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.OutcomeTextName}" />
+
+        <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,6,0,0" Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                   Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="{x:Static c:Constants+ElevatedRuns.ErrorTextName}" />
+    </StackPanel>
+</UserControl>

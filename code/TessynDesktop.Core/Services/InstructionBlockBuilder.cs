@@ -66,6 +66,10 @@ public static class InstructionBlockBuilder
 				lines.AppendLine($"- {Constants.Instructions.NoWorkflowTool}");
 		}
 
+		// FR.15.20 — same gate as NoWorkflowTool, Worker Sessions included: a worker may request an elevated run for itself.
+		if (options.IsAgentToolsEnabled && options.IsNewSession)
+			lines.AppendLine($"- {Constants.Instructions.ElevatedRunGuidance}");
+
 		// FR.23.10 — same gate as NoWorkflowTool, plus never for a Worker Session (its post_attention
 		// call is refused, FR.23.6): session policy on how to pin items in the user's Focus view.
 		if (options.IsAgentToolsEnabled && options.IsNewSession && !options.IsWorkerSession)
@@ -116,7 +120,8 @@ public static class InstructionBlockBuilder
 			lines.AppendLine($"- {Constants.Attention.PinnedHeaderLine}");
 			foreach (var item in open.Take(Constants.Attention.MaxPinnedLines))
 				lines.AppendLine(string.Format(
-					Constants.Attention.PinnedItemLineFormat, item.Id, AttentionFormat.KindName(item.Kind), CutTitle(item.Title)));
+					Constants.Attention.PinnedItemLineFormat, item.Id, AttentionFormat.KindName(item.Kind), CutTitle(item.Title))
+					+ (item.Questions.Count == 0 ? string.Empty : string.Format(Constants.Attention.PinnedQuestionnaireSuffixFormat, item.Questions.Count, item.Questions.Count == 1 ? Constants.Attention.QuestionNoun : Constants.Attention.QuestionsNoun)));
 
 			if (open.Count > Constants.Attention.MaxPinnedLines)
 				lines.AppendLine(string.Format(Constants.Attention.PinnedMoreLineFormat, open.Count - Constants.Attention.MaxPinnedLines));

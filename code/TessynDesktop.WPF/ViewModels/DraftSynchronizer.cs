@@ -8,8 +8,9 @@ namespace TessynDesktop.WPF.ViewModels;
 /// <param name="Text">The daemon's draft text.</param>
 /// <param name="Revision">Its revision.</param>
 /// <param name="PreviousBase">The text this client last read from or wrote to the daemon for that session.</param>
+/// <param name="Questions">The question values stored with a reply draft (FR.23.37); null when there are none.</param>
 /// <remarks>Created by Claude</remarks>
-public sealed record DraftLoad(string Text, string Revision, string? PreviousBase);
+public sealed record DraftLoad(string Text, string Revision, string? PreviousBase, IReadOnlyList<AttentionQuestionAnswerParams>? Questions = null);
 
 /// <summary>A conflicting <c>draft.set</c> was merged with the daemon's newer text; <see cref="Merged"/> is what the daemon stores now.</summary>
 /// <remarks>Created by Claude</remarks>
@@ -29,6 +30,7 @@ public sealed class DraftSynchronizer : IDisposable
 	private readonly Func<string, CancellationToken, Task<DraftGetResult>> _get;
 	private readonly Func<string, string, string?, Task<DraftSetResult>> _set;
 	private readonly ILogger _logger;
+	private readonly Func<string, bool>? _hasPayload;
 	private readonly Dictionary<string, Entry> _entries = new();
 	private readonly object _lock = new();
 	private bool _disposed;
@@ -39,9 +41,12 @@ public sealed class DraftSynchronizer : IDisposable
 	}
 
 	/// <summary>A synchronizer over any draft endpoint: <paramref name="get"/> reads the draft of a key, <paramref name="set"/> writes it (key, text, base revision).</summary>
+	/// <param name="hasPayload">Says whether a key has more to store than its text (the question values of a reply draft, FR.23.37): an empty text with a payload is still written.</param>
 	public DraftSynchronizer(
-		Func<string, CancellationToken, Task<DraftGetResult>> get, Func<string, string, string?, Task<DraftSetResult>> set, ILogger logger, TimeSpan delay)
+		Func<string, CancellationToken, Task<DraftGetResult>> get, Func<string, string, string?, Task<DraftSetResult>> set, ILogger logger, TimeSpan delay,
+		Func<string, bool>? hasPayload = null)
 	{
+		_hasPayload = hasPayload;
 		_get = get;
 		_set = set;
 		_logger = logger;
@@ -175,7 +180,7 @@ public sealed class DraftSynchronizer : IDisposable
 			entry.Known = true;
 			entry.Revision = result.Revision;
 			entry.BaseText = result.Text;
-			return new DraftLoad(result.Text, result.Revision, previous);
+			return new DraftLoad(result.Text, result.Revision, previous, result.Questions);
 		}
 	}
 
@@ -254,7 +259,7 @@ public sealed class DraftSynchronizer : IDisposable
 			string? baseRevision;
 			lock (_lock)
 			{
-				if (entry.Known && text.Length == 0 && entry.Revision == RemoteProtocol.Composer.EmptyDraftRevision)
+				if (entry.Known && text.Length == 0 && entry.Revision == RemoteProtocol.Composer.EmptyDraftRevision && _hasPayload?.Invoke(nodeId) != true)
 					return;   // nothing stored, nothing to delete
 
 				baseRevision = entry.Known ? entry.Revision : null;

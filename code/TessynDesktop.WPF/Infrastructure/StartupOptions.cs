@@ -17,6 +17,9 @@ public sealed class StartupOptions
 	public const string TestFolderArgument = "--test-folder";
 	public const string TestMonitorsArgument = "--test-monitors";
 
+	/// <summary>The prefix of the elevated-launcher test switch: <c>--elevated-launcher=fake:&lt;accept|decline|fail|hang&gt;</c>.</summary>
+	public const string ElevatedLauncherArgumentPrefix = "--elevated-launcher=fake:";
+
 	/// <summary>The arguments the process was started with (a self-update restarts the client with them).</summary>
 	public IReadOnlyList<string> Arguments { get; init; } = [];
 
@@ -69,6 +72,12 @@ public sealed class StartupOptions
 	/// <summary>Test seam (only with <c>--test-window</c>; <c>--test-monitors &lt;n&gt;</c>, n = 1 to 4, anything else is ignored): the app sees n monitors of 1920×1080 side by side (see <c>ScriptedMonitorWatcher</c>).</summary>
 	public int? TestMonitorCount { get; init; }
 
+	/// <summary>
+	/// Test seam (A8 Q4; <c>--elevated-launcher=fake:&lt;accept|decline|fail|hang&gt;</c>), honoured ONLY together with <c>--test-window</c> and ignored otherwise: the elevated-run launcher is the fake one
+	/// (<see cref="Switch.FakeElevatedRunLauncher"/>), so no Windows prompt opens and nothing runs elevated. Null = the real launcher.
+	/// </summary>
+	public Switch.FakeElevatedLauncherMode? TestElevatedLauncher { get; init; }
+
 	/// <summary>The single-instance mutex name for this run.</summary>
 	public string MutexName => DataRoot == null
 		? Constants.Identity.SingleInstanceMutexName
@@ -101,9 +110,24 @@ public sealed class StartupOptions
 			}
 		}
 
+		var elevatedLauncher = ParseElevatedLauncher(args);
 		var testWindow = args.Any(a => string.Equals(a, TestWindowArgument, StringComparison.OrdinalIgnoreCase));
 		var noSelfUpdate = args.Any(a => string.Equals(a, Constants.Switch.NoSelfUpdateArgument, StringComparison.OrdinalIgnoreCase));
 		var noHostStart = args.Any(a => string.Equals(a, Constants.Switch.NoHostStartArgument, StringComparison.OrdinalIgnoreCase));
-		return new StartupOptions { Arguments = [.. args], NoSelfUpdate = noSelfUpdate, NoHostStart = noHostStart, DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [], TestDialogAnswers = testWindow ? testDialogs : [], TestFolderAnswers = testWindow ? testFolders : [], TestMonitorCount = testWindow ? testMonitors : null };
+		return new StartupOptions { Arguments = [.. args], NoSelfUpdate = noSelfUpdate, NoHostStart = noHostStart, DaemonFile = daemonFile, DataRoot = dataRoot, TestWindow = testWindow, TestDropPaths = testWindow ? testDrops : [], TestDialogAnswers = testWindow ? testDialogs : [], TestFolderAnswers = testWindow ? testFolders : [], TestMonitorCount = testWindow ? testMonitors : null, TestElevatedLauncher = testWindow ? elevatedLauncher : null };
+	}
+
+	private static Switch.FakeElevatedLauncherMode? ParseElevatedLauncher(IReadOnlyList<string> args)
+	{
+		foreach (var arg in args)
+		{
+			if (!arg.StartsWith(ElevatedLauncherArgumentPrefix, StringComparison.OrdinalIgnoreCase))
+				continue;
+
+			if (Enum.TryParse<Switch.FakeElevatedLauncherMode>(arg[ElevatedLauncherArgumentPrefix.Length..], ignoreCase: true, out var mode) && Enum.IsDefined(mode))
+				return mode;
+		}
+
+		return null;
 	}
 }

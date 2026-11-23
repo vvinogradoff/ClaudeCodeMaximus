@@ -1,6 +1,7 @@
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using TessynDesktop.Models;
 using TessynDesktop.Models.Remote;
 
 namespace TessynDesktop.Services;
@@ -13,6 +14,9 @@ namespace TessynDesktop.Services;
 public sealed class DraftRevisions
 {
 	private const int HexLength = 16;
+
+	/// <summary>The revision of a Focus item's reply draft: of its note, and of its question values when it has any (FR.23.37). Without them it is the revision of the text alone.</summary>
+	public string Of(ItemDraftModel? draft) => draft == null ? Of((string?)null) : Of(ItemDraftCodec.Encode(draft.Text, draft.Questions));
 
 	/// <summary>The revision of <paramref name="text"/>; null or empty means there is no draft.</summary>
 	public string Of(string? text)

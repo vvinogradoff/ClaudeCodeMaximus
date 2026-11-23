@@ -101,6 +101,12 @@ public sealed class AppSettingsModel
 	public bool AgentToolsEnabled { get; set; } = true;
 
 	/// <summary>
+	/// Code references (FR.7.13, default off): when on, <c>#</c> in the composer suggests C# symbols and new code indexes parse them;
+	/// when off, <c>#</c> suggests sessions (FR.7.14) and new code indexes skip the symbol pass. Read on every suggestion; no restart.
+	/// </summary>
+	public bool CodeReferencesEnabled { get; set; } = false;
+
+	/// <summary>
 	/// Port for the loopback MCP HTTP server (FR.14.1). 0 = pick a free port at startup.
 	/// Updated with the actual port after the server starts.
 	/// </summary>

@@ -31,6 +31,9 @@
                 <CheckBox Margin="0,12,0,0" Content="Give agents the Tessyn tools (cmx)" IsChecked="{Binding AgentToolsEnabled}" AutomationProperties.Name="Agent tools" />
                 <TextBlock Style="{StaticResource SettingsHint}" Text="Takes effect the next time the daemon starts." />
 
+                <CheckBox Margin="0,12,0,0" Content="Code references" IsChecked="{Binding CodeReferencesEnabled}" AutomationProperties.Name="Code references" />
+                <TextBlock Style="{StaticResource SettingsHint}" Text="When on, # in the message box suggests C# code symbols and the code index parses C# symbols. When off, # suggests sessions and no new symbol parsing is done. ## files and drive paths work either way. Applies at the next suggestion." />
+
                 <TextBlock Style="{StaticResource SettingsLabel}" Text="File access for remote clients" />
                 <ComboBox ItemsSource="{Binding FileAccessModes}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding FileAccessMode}"
                           AutomationProperties.Name="File access mode" />

@@ -16,6 +16,7 @@ public sealed record GeneralSettingsDto(
 	string HttpsProxy,
 	string OllamaBaseUrl,
 	bool AgentToolsEnabled,
+	bool CodeReferencesEnabled,
 	FileAccessSettingsDto FileAccess,
 	IReadOnlyList<string> MediaPreviewHosts,
 	string CodexPath = "",

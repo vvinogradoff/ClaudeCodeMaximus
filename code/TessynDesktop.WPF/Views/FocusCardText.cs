@@ -285,6 +285,9 @@ public sealed class FocusCardText : RichTextBox
 	/// <summary>The paths the title and the body spell, by the same rules as the session output (FR.26.5, FR.26.7): one detector, no second set of rules.</summary>
 	private List<string> PathsOf(string title, string? body)
 	{
+		if (Item?.IsElevatedRun == true)
+			return [];   // the title of an elevated run is the start of its command: never parsed for paths (FR.23.32)
+
 		var paths = new List<string>(_pathDetector.Detect(title));
 		if (!string.IsNullOrEmpty(body))
 			paths.AddRange(_pathDetector.Detect(body).Where(p => !paths.Contains(p, StringComparer.Ordinal)));

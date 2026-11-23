@@ -16,6 +16,7 @@ public sealed record GeneralSettingsPatch(
 	string? HttpsProxy = null,
 	string? OllamaBaseUrl = null,
 	bool? AgentToolsEnabled = null,
+	bool? CodeReferencesEnabled = null,
 	FileAccessSettingsPatch? FileAccess = null,
 	IReadOnlyList<string>? MediaPreviewHosts = null,
 	string? CodexPath = null,

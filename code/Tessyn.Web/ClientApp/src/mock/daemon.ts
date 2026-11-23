@@ -2,7 +2,7 @@
 import { LoginError, RpcError, UploadError } from '../api/rpc';
 import type { EventSourceHandle, EventSourceHandlers, LoginResult, Transport, UploadHandle } from '../api/rpc';
 import type {
-	AttachmentResult, AttentionItemDto, AttentionKind, AttentionSummaryDto, EventFrame, SessionEntryDto, SessionStateDto, SessionTagDto, TagKind, TagRefDto,
+	AttachmentResult, AttentionItemDto, AttentionKind, AttentionQuestionAnswer, AttentionQuestionDto, AttentionSummaryDto, EventFrame, SessionEntryDto, SessionStateDto, SessionTagDto, TagKind, TagRefDto,
 	TreeDirectoryDto, TreeGroupDto, TreeSessionDto, UsageResult, EffortId,
 } from '../api/types';
 import { buildMockFiles, readChunk, sizeOf } from './files';
@@ -160,6 +160,16 @@ export class MockDaemon {
 
 		const att2 = put(imp, datalabs, imp, { name: 'Importer: schema drift', lastActivityMin: 150 }, 'schema', 2);
 		this.seedNestedRef(this.addAttention(att2, 'ask', 'Drop the legacy column?', 'The column `Legacy_Id` has no readers left.', ['Drop it', 'Keep it'], 'Drop it'));
+
+		// --- a questionnaire item (FR.23.33): all four question types, recommendations filled in, a long choice for wrapping
+		const plan = this.addAttention(att2, 'ask', 'Approve the schema migration plan?', 'Plan: add `Tag` columns, backfill, then drop `Legacy_Id`.', [], undefined);
+		plan.questions = [
+			{ number: 1, type: 'yesNo', text: 'Run the backfill during business hours?', choices: [], recommended: 'no', recommendedChoices: [] },
+			{ number: 2, type: 'single', text: 'Which rollout order?', choices: ['Staging first', 'Production first', 'Both at once, with a very long label that has to wrap on a phone screen'], recommended: 'Staging first', recommendedChoices: [] },
+			{ number: 3, type: 'multi', text: 'Which tables to include?', choices: ['Products', 'Orders', 'Customers', 'Audit log'], recommendedChoices: ['Products', 'Orders'] },
+			{ number: 4, type: 'text', text: 'Anything to add to the rollback plan?', choices: [], recommended: 'Keep the snapshot for 7 days.', recommendedChoices: [] },
+			{ number: 5, type: 'yesNo', text: 'Notify the data team?', choices: [], recommendedChoices: [] },
+		];
 
 		// --- tree filler with a spread of recency
 		const filler: Array<[string, MockDir, MockGroup | undefined, number | null, Partial<MockSession>?]> = [
@@ -583,24 +593,35 @@ ${'const veryLongLine = 1; '.repeat(12)}
 
 	private attentionReply(params: Record<string, unknown>) {
 		const s = this.get(params.nodeId);
-		const answers = (params.answers as Array<{ itemId: string; text: string }>) ?? [];
+		const answers = (params.answers as Array<{ itemId: string; text: string; questions?: AttentionQuestionAnswer[] }>) ?? [];
 		const answeredIds: string[] = [];
 		const skippedIds: string[] = [];
 		const lines: string[] = [];
 		for (const a of answers) {
 			const item = s.attention.find((x) => x.id === a.itemId);
 			if (!item || item.status !== 'open') { skippedIds.push(a.itemId); continue; }
+			// The real daemon formats questionnaire answers with the shared Core formatter; the mock only needs a readable text.
+			const qa = this.formatQuestions(item.questions, a.questions);
+			const text = [a.text, ...qa].filter(Boolean).join('\n');
 			item.status = 'answered';
-			item.answer = a.text;
+			item.answer = text;
 			item.closedUtc = new Date().toISOString();
 			answeredIds.push(item.id);
-			lines.push(`A${item.number} (${item.title}): ${a.text}`);
+			lines.push(`A${item.number} (${item.title}): ${text}`);
 		}
 		if (answeredIds.length > 0) {
 			this.attentionChanged(s);
 			this.runTurn(s, lines.join('\n'));
 		}
 		return { answeredIds, skippedIds, turnStarted: answeredIds.length > 0 };
+	}
+
+	private formatQuestions(questions: AttentionQuestionDto[] | undefined, answers: AttentionQuestionAnswer[] | undefined): string[] {
+		return (questions ?? []).map((q) => {
+			const a = answers?.find((x) => x.number === q.number);
+			const shown = q.type === 'multi' ? ((a?.choices ?? []).join(', ') || 'none selected') : (a?.value || 'no answer');
+			return `Q${q.number} ${q.text}: ${shown}`;
+		});
 	}
 
 	private sessionGet(params: Record<string, unknown>) {

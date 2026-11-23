@@ -88,9 +88,26 @@ public sealed class SchedulerService : ISchedulerService
 		catch (Exception ex) { _log.Warning(ex, "SchedulerService: could not notify the supervisor of {NodeId}", targetNode.NodeId); }
 	}
 
-	public void AddOrMergeMailboxDelivery(string supervisorNodeId, string workerName, string resultText)
+	public void AddOrMergeMailboxDelivery(string supervisorNodeId, string workerName, string resultText) =>
+		AddOrMergeBlock(
+			supervisorNodeId,
+			$"{Constants.Agent.WorkerFinishedPrefix} {workerName}\n{resultText}",
+			workerName,
+			string.Format(Constants.Agent.MailboxSingleNoteFormat, workerName));
+
+	public void AddOrMergeElevatedRunDelivery(string targetNodeId, string runId, string outcomeText) =>
+		AddOrMergeBlock(
+			targetNodeId,
+			outcomeText,
+			string.Format(Constants.ElevatedRuns.MailboxNoteFormat, runId),
+			string.Format(Constants.ElevatedRuns.MailboxNoteFormat, runId));
+
+	/// <summary>
+	/// The mailbox delivery of FR.15.12: appends <paramref name="block"/> to the target's pending delivery (a worker result or the outcome of an elevated run,
+	/// FR.15.19) when there is one, otherwise adds a new delay-0 delivery with <paramref name="singleNote"/>.
+	/// </summary>
+	private void AddOrMergeBlock(string supervisorNodeId, string block, string workerName, string singleNote)
 	{
-		var block = $"{Constants.Agent.WorkerFinishedPrefix} {workerName}\n{resultText}";
 		ScheduleModel schedule;
 
 		// The merge and Poll/FireScheduleAsync's removal both run under _lock, so a result either lands in a
@@ -112,7 +129,7 @@ public sealed class SchedulerService : ISchedulerService
 					ScheduleId        = Guid.NewGuid().ToString("N")[..8],
 					TargetNodeId      = supervisorNodeId,
 					Prompt            = block,
-					Note              = string.Format(Constants.Agent.MailboxSingleNoteFormat, workerName),
+					Note              = singleNote,
 					Kind              = ScheduleKind.Delay,
 					FireAtUtc         = DateTimeOffset.UtcNow,
 					IsMailboxDelivery = true,

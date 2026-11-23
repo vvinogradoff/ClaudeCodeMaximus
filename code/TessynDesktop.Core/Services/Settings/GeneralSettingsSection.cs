@@ -47,6 +47,7 @@ public sealed partial class GeneralSettingsSection : ISettingsSection
 			settings.HttpsProxy,
 			settings.OllamaBaseUrl,
 			settings.AgentToolsEnabled,
+			settings.CodeReferencesEnabled,
 			new FileAccessSettingsDto(
 				(FileAccessModeDto)(int)access.Mode, access.MaxRelayChunkBytes, access.MaxTextFileBytes,
 				access.MaxImageFileBytes, access.MaxPdfFileBytes, access.MaxVideoFileBytes),
@@ -74,14 +75,14 @@ public sealed partial class GeneralSettingsSection : ISettingsSection
 	/// <inheritdoc />
 	public Action CaptureRestore(AppSettingsModel settings)
 	{
-		var (proxy, ollama, agentTools, hosts) = (settings.HttpsProxy, settings.OllamaBaseUrl, settings.AgentToolsEnabled, settings.MediaPreviewHosts);
+		var (proxy, ollama, agentTools, codeRefs, hosts) = (settings.HttpsProxy, settings.OllamaBaseUrl, settings.AgentToolsEnabled, settings.CodeReferencesEnabled, settings.MediaPreviewHosts);
 		var (codexPath, catalogProfile, tiers) = (settings.CodexPath, settings.CodexCatalogProfileId, settings.CodexModelTiers);
 		var hadAccess = settings.FileAccess;
 		var access = hadAccess == null ? ((FileAccessMode, int, long, long, long, long)?)null
 			: (hadAccess.Mode, hadAccess.MaxRelayChunkBytes, hadAccess.MaxTextFileBytes, hadAccess.MaxImageFileBytes, hadAccess.MaxPdfFileBytes, hadAccess.MaxVideoFileBytes);
 		return () =>
 		{
-			(settings.HttpsProxy, settings.OllamaBaseUrl, settings.AgentToolsEnabled, settings.MediaPreviewHosts) = (proxy, ollama, agentTools, hosts);
+			(settings.HttpsProxy, settings.OllamaBaseUrl, settings.AgentToolsEnabled, settings.CodeReferencesEnabled, settings.MediaPreviewHosts) = (proxy, ollama, agentTools, codeRefs, hosts);
 			(settings.CodexPath, settings.CodexCatalogProfileId, settings.CodexModelTiers) = (codexPath, catalogProfile, tiers);
 			settings.FileAccess = hadAccess;
 			if (hadAccess != null && access is { } v)
@@ -108,6 +109,7 @@ public sealed partial class GeneralSettingsSection : ISettingsSection
 		if (proxy != null)            settings.HttpsProxy = proxy;
 		if (ollama != null)           settings.OllamaBaseUrl = ollama;
 		if (p.AgentToolsEnabled is { } agentTools) settings.AgentToolsEnabled = agentTools;
+		if (p.CodeReferencesEnabled is { } codeRefs) settings.CodeReferencesEnabled = codeRefs;
 		if (hosts != null)            settings.MediaPreviewHosts = hosts;
 		if (access != null)
 			ApplyAccess(settings, access);

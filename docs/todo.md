@@ -1276,3 +1276,37 @@ Architect decision 2026-11-19 (Focus A1): WPF always runs normally; the daemon h
 - [DONE] Feature summary `docs/features/elevated-daemon.md` (approved by the Architect 2026-11-19)
 - [DONE] FR.32.15 banner when WPF itself runs elevated (decision A8, banner only): docs approved 2026-11-19 (A9); built on branch `wpf/elevated-wpf-banner`, merged as `60286f4`; all five suites green
 - [DONE] Manual TC.HS.32 by the Architect, 2026-11-19 (an elevated start showed the banner, a normal start did not; both logged at 12:57)
+
+## Phase 46 — Code references setting and session suggestions for `#` (FR.7.13, FR.7.14, FR.4.8)
+
+Architect decision 2026-11-19. Docs: FR.7.13, FR.7.14, FR.4.8, tdcp-spec 10.A12, UC.CR.01-UC.CR.05, TC.CR.01-TC.CR.24 (draft, to be approved by the Architect). The query-with-spaces rule (FR.7.14) was confirmed by the Architect (Focus A2). Web client unaffected.
+
+- [ ] Docs approved by the Architect (FR.7.13, FR.7.14, FR.4.8, tdcp-spec 10.A12, UC.CR.01, TC.CR.01, glossary rows)
+- [x] [DONE] Setting plumbing: `CodeReferencesEnabled` in `AppSettingsModel` (default false), `GeneralSettingsDto` / `GeneralSettingsPatch` / `GeneralSettingsSection`, Settings > General checkbox "Code references" with hint (FR.4.8, FR.7.13)
+- [x] [DONE] Daemon: `AutocompleteRpcModule` reads the setting per request; OFF: mode `session` from the session registry (tiers, 10-result threshold, workers and current session excluded, 15 max, short id, no lease or index wait); ON: unchanged (FR.7.14, FR.7.13)
+- [x] [DONE] Daemon: `AutocompleteTriggerParser` session query rule (from `#` to the caret on the line, spaces allowed, not `##`) (FR.7.14)
+- [x] [DONE] Daemon: `CodeIndex` skips symbol parsing for indexes created while OFF; existing indexes keep symbols until released; `##` and drive paths untouched (FR.7.13)
+- [x] [DONE] WPF: the pre-filter lets an earlier `#` on the line through; popup shows `session` rows; accept inserts `session "<name>" (<shortid>)` (FR.7.14)
+- [ ] (unit, contract, WPF VM tests DONE; WPF E2E TC.CR.23/TC.CR.24 written in WpfCodeReferencesE2ETests, compile, run pending) Tests TC.CR.01-TC.CR.24: parser, tiers and threshold, exclusions, spaces, no-match closes, ON keeps symbols, OFF keeps `##` and drive paths, setting persists and applies without restart, insert format, contract golden, WPF unit and E2E (UC.CR.01-UC.CR.05)
+- [x] [DONE] Update `ComposerWireEnv` / `WpfComposerCompletionE2ETests` construction of `AutocompleteRpcModule` for the new constructor argument; update the settings enumeration tests for the new `general` member
+
+## Phase 47 — Elevated runs requested by an agent (FR.15.16–FR.15.20, FR.23.31, FR.23.32, FR.32.16)
+
+Architect decision 2026-11-20. Docs: FR.15.16–FR.15.20, FR.23.31, FR.23.32, FR.32.16, tdcp-spec 10.A13, UC.ER.01, TC.ER.01–TC.ER.65, glossary rows (draft, to be approved by the Architect). Motivation: `tools\e2e\Run-WpfE2E.ps1` needs an elevated caller (NR.6). WPF stays normal and the daemon stays as the User chose (FR.32.10).
+
+- [DONE] Docs approved by the Architect 2026-11-21 (Focus A8), including the open questions (any command, no allowlist; test switch `--elevated-launcher=fake:<mode>`; the `ElevatedRunId` field in the attention ledger JSON; relay shows folder name, not path; agent cancels pending runs only; sibling worktrees by name only)
+- [DONE] Core: `ElevatedRunService` (request record store under `elevated-runs\<id>\`, statuses and transitions under one lock, limits 3 per session and 10 total, 24 h expiry sweep, restart reconciliation, run-folder watcher, log lines) with `TimeProvider` and the root in the constructor (FR.15.18, FR.15.19)
+- [DONE] Core: the workingDir rule (own dir, registered project, sibling `<project>-wt-*` worktree, real path, relative resolved) (FR.15.16)
+- [DONE] Core: the fixed wrapper script (`Constants.ElevatedRuns.WrapperScript`) and the launch line (`powershell -EncodedCommand`; command, dir, seconds, run folder as data; `cmd.exe /d /s /c`; `output.log` cap 20 MB; `started.json`, `result.json`, `stop` marker, kill tree) (FR.15.19)
+- [DONE] MCP: `request_elevated_run`, `cancel_elevated_run`, `list_elevated_runs` in `AgentMcpServer`; worker allowed; refusal when the daemon runs elevated (FR.15.16, FR.15.17)
+- [DONE] Outcome delivery as a mailbox-style delivery with the `[Elevated run <id> ...]` header (generalise `AddOrMergeMailboxDelivery`), tail of 200 lines (FR.15.19)
+- [DONE] Attention: `Ask` item with `ElevatedRunId` and `AttentionSource.ElevatedRun`; mirroring to the top-level supervisor; resolve all items on a final status; `resolve_attention` refusal; notification incl. worker request; ledger JSON field is additive (FR.23.31)
+- [DONE] Guidance: `Constants.Instructions.ElevatedRunGuidance`, the `cmx-orchestration` skill paragraph, tool descriptions (FR.15.20)
+- [DONE] TDCP: `elevated.*` methods and `elevated.changed` (loopback only), `attention.list` `action`, relay variant without paths, `elevatedRuns` capability, golden files (tdcp-spec 10.A13)
+- [DONE] WPF: the card (facts, verbatim monospace command block, Copy, Run as administrator, Decline with note, launching, running with Stop and Output, closed outcome lines), deliberate-click rules, UIA names (FR.23.32)
+- [DONE] WPF: `IElevatedRunLauncher`, `ShellExecuteElevatedRunLauncher` (runas), `FakeElevatedRunLauncher` (accept, decline, fail, hang); the test-only switch `--elevated-launcher=fake:<mode>` only with `--test-window` (FR.32.16; after the Architect's approval)
+- [DONE] Web: the card read-only with "Approve on the PC" (FR.23.31)
+- [ ] Tests TC.ER.01–TC.ER.63: unit, wrapper (real PowerShell, unelevated), contract, view model, WPF E2E, Web E2E (UC.ER.01–UC.ER.09) - worker 1 DONE: unit, wrapper, contract and client tests (TC.ER.01-TC.ER.50, 63; 146 tests); worker 2 DONE: VM and view tests (TC.ER.51-55), Web E2E over the full stack plus web unit tests (TC.ER.62), short id of the requester as list_sessions computes it; open: WPF E2E (TC.ER.56-61: written and compiled, not yet run; needs an elevated shell, `tools\e2e\Run-WpfE2E.ps1 --no-build --filter "FullyQualifiedName~WpfElevatedRunE2ETests"`)
+- [ ] Manual TC.ER.64 and TC.ER.65 by the Architect (real prompt, stop, the E2E suite from a worktree)
+- [ ] Proposal to the Architect: the `CLAUDE.md` E2E paragraph (wording in FR.15.20); `CLAUDE.md` is not edited by this phase
+- [ ] Summary document `docs/features/elevated-runs.md` after the build (offered, not drafted)

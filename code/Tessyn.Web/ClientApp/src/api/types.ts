@@ -107,6 +107,9 @@ export interface SessionEntryDto {
 export interface SessionEntriesResult { nodeId: string; epoch: number; total: number; entries: SessionEntryDto[]; fileId?: string; seq?: number }
 export interface SessionSendResult { accepted: true; queued: boolean }
 
+export type AttentionQuestionType = 'yesNo' | 'single' | 'multi' | 'text';
+export interface AttentionQuestionDto { number: number; type: AttentionQuestionType; text: string; choices: string[]; recommended?: string; recommendedChoices: string[] }
+
 export interface AttentionItemDto {
 	id: string;
 	number: number;
@@ -122,9 +125,35 @@ export interface AttentionItemDto {
 	updatedUtc: string;
 	closedUtc?: string;
 	refs?: AttentionRefDto[];
+	/** The action of the item (tdcp-spec 10.A13): the elevated-run request behind an Ask. Absent on every other item; a client that does not know it shows a plain Ask. */
+	action?: AttentionActionDto;
+	questions?: AttentionQuestionDto[];
 }
+export type ElevatedRunStatus = 'pending' | 'launching' | 'running' | 'completed' | 'declined' | 'declinedAtPrompt' | 'failedToStart' | 'timedOut' | 'cancelled' | 'expired';
+/** An elevated run as the relay shows it: the command whole, the working directory as a folder name only (no path leaves the PC). */
+export interface ElevatedRunDto {
+	id: string;
+	status: ElevatedRunStatus;
+	requester: { nodeId: string; name: string; shortId: string };
+	topLevel?: { nodeId: string; name: string };
+	reason: string;
+	workingDir?: string;
+	workingDirName?: string;
+	command: string;
+	timeoutMinutes: number;
+	createdUtc: string;
+	expiresUtc: string;
+	startedUtc?: string;
+	endedUtc?: string;
+	exitCode?: number;
+	cancelledBy?: 'agent' | 'user';
+	note?: string;
+	failure?: string;
+}
+export interface AttentionActionDto { type: 'elevatedRun' | string; run?: ElevatedRunDto }
 export interface AttentionListResult { nodeId: string; summary: AttentionSummaryDto; items: AttentionItemDto[] }
-export interface AttentionAnswer { itemId: string; text: string }
+export interface AttentionQuestionAnswer { number: number; value?: string; choices?: string[] }
+export interface AttentionAnswer { itemId: string; text: string; questions?: AttentionQuestionAnswer[] }
 export interface AttentionReplyResult { answeredIds: string[]; skippedIds: string[]; turnStarted: boolean }
 
 /** `openAI` for GPT models (the daemon's camelCase enum). */

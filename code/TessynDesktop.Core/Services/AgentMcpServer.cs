@@ -50,6 +50,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 	private readonly TessynDesktop.Codex.ICodexProfileResolver? _codexProfiles;
 	private readonly IModelTierResolver?       _tiers;
 	private readonly TessynDesktop.Codex.CodexProfileNaming _codexNaming = new();
+	private readonly IElevatedRunService?      _elevatedRuns;
+	private readonly IUserMessageChannels      _userChannels;
 	private readonly SessionListFormatter      _listFormatter = new();
 	private readonly SessionListText           _text          = new();
 	private readonly SessionTagSearchPageBuilder _tagSearchBuilder   = new();
@@ -91,7 +93,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		TimeProvider? clock = null,
 		ISessionModelCatalog? sessionModels = null,
 		TessynDesktop.Codex.ICodexProfileResolver? codexProfiles = null,
-		IModelTierResolver? tiers = null)
+		IModelTierResolver? tiers = null,
+		IElevatedRunService? elevatedRuns = null)
 	{
 		_sessionModels = sessionModels;
 		_codexProfiles = codexProfiles;
@@ -116,6 +119,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		_profileSwitch  = profileSwitch;
 		_modelSettings  = modelSettings ?? new SessionModelSettings(appSettings, modelService);
 		_clock          = clock ?? TimeProvider.System;
+		_elevatedRuns   = elevatedRuns;
+		_userChannels   = new UserMessageChannels(telegramBridge, notifications, labelService);
 	}
 
 	public void Start()
@@ -476,6 +481,15 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			BuildToolDef(Constants.Attention.ListToolName,
 				Constants.Attention.ListToolDescription,
 				ListAttentionSchema()),
+			BuildToolDef(Constants.ElevatedRuns.RequestToolName,
+				Constants.ElevatedRuns.RequestToolDescription,
+				RequestElevatedRunSchema()),
+			BuildToolDef(Constants.ElevatedRuns.CancelToolName,
+				Constants.ElevatedRuns.CancelToolDescription,
+				CancelElevatedRunSchema()),
+			BuildToolDef(Constants.ElevatedRuns.ListToolName,
+				Constants.ElevatedRuns.ListToolDescription,
+				ListElevatedRunsSchema()),
 			BuildToolDef(Constants.SessionTags.ToolName,
 				Constants.SessionTags.ToolDescription,
 				TagSessionSchema()),
@@ -522,6 +536,9 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			Constants.Attention.PostToolName    => await PostAttentionAsync(arguments, callerNode),
 			Constants.Attention.ResolveToolName => ResolveAttention(arguments, callerNode),
 			Constants.Attention.ListToolName    => ListAttention(arguments, callerNode),
+			Constants.ElevatedRuns.RequestToolName => await RequestElevatedRunAsync(arguments, callerNode),
+			Constants.ElevatedRuns.CancelToolName  => CancelElevatedRun(arguments, callerNode),
+			Constants.ElevatedRuns.ListToolName    => ListElevatedRuns(arguments, callerNode),
 			Constants.SessionTags.ToolName      => TagSession(arguments, callerNode),
 			Constants.SessionTags.SearchToolName => SearchTags(arguments, callerNode),
 			Constants.Diagnostics.SnapshotToolName => RunDiagnosticsTool(h => h.Snapshot()),
@@ -1316,37 +1333,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 	/// (FR.23.9). Returns the channels that delivered; each is gated as today and a failure in one never
 	/// stops the other.
 	/// </summary>
-	private async Task<List<string>> NotifyChannelsAsync(SessionNodeModel callerNode, string message)
-	{
-		var channels = new List<string>();
-		try
-		{
-			if (await _telegramBridge.NotifyAsync(callerNode.NodeId, message))
-				channels.Add(Constants.Attention.ChannelTelegram);
-		}
-		catch (Exception ex)
-		{
-			_log.Warning(ex, "User notification: Telegram channel failed for node {NodeId}", callerNode.NodeId);
-		}
-
-		try
-		{
-			var title = string.Format(Constants.Attention.NotifyToastTitleFormat,
-				_labelService.GetLabel(callerNode.WorkingDirectory), callerNode.Name);
-			// The toast service may wait up to 3 s for a presenting client's acknowledgement (V3). This method can still be running on the
-			// accept loop's thread when every earlier await completed synchronously, so the blocking call is moved to the pool: one hung client
-			// must not delay the other MCP and TDCP connections (R1).
-			var nodeId = callerNode.NodeId;
-			if (await Task.Run(() => _notifications.ShowUserNotification(nodeId, title, message)).ConfigureAwait(false))
-				channels.Add(Constants.Attention.ChannelDesktop);
-		}
-		catch (Exception ex)
-		{
-			_log.Warning(ex, "User notification: desktop channel failed for node {NodeId}", callerNode.NodeId);
-		}
-
-		return channels;
-	}
+	private async Task<List<string>> NotifyChannelsAsync(SessionNodeModel callerNode, string message) =>
+		[.. await _userChannels.NotifyAsync(callerNode, message)];
 
 	/// <summary>
 	/// FR.23.7 — pins a <c>notify_user</c> message as an Ask (source NotifyUser; title = first non-empty
@@ -1393,7 +1381,8 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 
 		var lines = outcomes.Select(o => string.Format(
 			o.IsCreated ? Constants.Attention.PostedLineFormat : Constants.Attention.AlreadyPinnedLineFormat,
-			o.Item.Id, AttentionFormat.KindName(o.Item.Kind))).ToList();
+			o.Item.Id, AttentionFormat.KindName(o.Item.Kind),
+			o.Item.Questions.Count == 0 ? string.Empty : string.Format(Constants.Attention.PostedWithQuestionsFormat, o.Item.Questions.Count, o.Item.Questions.Count == 1 ? Constants.Attention.QuestionNoun : Constants.Attention.QuestionsNoun))).ToList();
 
 		// FR.23.4: at most one notification per call; only created items count, updates never notify.
 		var created = outcomes.Where(o => o.IsCreated).Select(o => o.Item).ToList();
@@ -1416,7 +1405,14 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		{
 			var item = created[0];
 			var head = string.Format(Constants.Attention.NotifySingleFormat, item.Id, AttentionFormat.KindName(item.Kind), item.Title);
-			return item.Body.Length == 0 ? head : head + "\n\n" + item.Body;
+			var message = item.Body.Length == 0 ? head : head + "\n\n" + item.Body;
+			if (item.Questions.Count == 0)
+				return message;
+
+			// FR.23.38: the first three question texts, so the phone shows what is being asked.
+			var texts = string.Join(Constants.Attention.NotifyQuestionsSeparator,
+				item.Questions.Take(Constants.Attention.NotifyQuestionTexts).Select(q => AttentionQuestionFormat.OneLine(q.Text)));
+			return message + "\n\n" + string.Format(Constants.Attention.NotifyQuestionsFormat, item.Questions.Count, item.Questions.Count == 1 ? Constants.Attention.QuestionNoun : Constants.Attention.QuestionsNoun, texts);
 		}
 
 		var sb = new StringBuilder(string.Format(Constants.Attention.NotifyManyHeaderFormat, created.Count));
@@ -1469,6 +1465,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 				Key            = string.IsNullOrEmpty(key) ? null : Cut(key, Constants.Attention.MaxKeyLength),
 				Source         = AttentionSource.Tool,
 				Refs           = ResolveRefs(item, n, callerNode),
+				Questions      = AttentionQuestionParser.Parse(item, n, kind, options.Count > 0 || !string.IsNullOrEmpty(recommendation)),
 			});
 		}
 
@@ -1587,6 +1584,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		{
 			AttentionResolveOutcome.Unknown => throw new McpToolException(
 				string.Format(Constants.Attention.UnknownItemFormat, id.ToUpperInvariant())),
+			AttentionResolveOutcome.ElevatedRun => string.Format(Constants.ElevatedRuns.ResolveRefusalFormat, result.Item!.Id),
 			AttentionResolveOutcome.AlreadyClosed => string.Format(
 				Constants.Attention.AlreadyClosedFormat, result.Item!.Id, AttentionFormat.StatusName(result.Item.Status)),
 			_ => string.Format(
@@ -1625,6 +1623,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 		var line = $"{item.Id} [{AttentionFormat.KindName(item.Kind)}, {AttentionFormat.StatusName(item.Status)}] {item.Title}";
 		return item.Status switch
 		{
+			AttentionStatus.Open when item.Questions.Count > 0                       => line + string.Format(Constants.Attention.ListQuestionsSuffixFormat, item.Questions.Count, item.Questions.Count == 1 ? Constants.Attention.QuestionNoun : Constants.Attention.QuestionsNoun),
 			AttentionStatus.Answered when !string.IsNullOrEmpty(item.Answer)         => $"{line} - answer: {item.Answer}",
 			AttentionStatus.Resolved when !string.IsNullOrEmpty(item.ResolutionNote) => $"{line} - {item.ResolutionNote}",
 			_ => line,
@@ -2076,6 +2075,23 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 							"options":        { "type": "array", "maxItems": 10, "items": { "type": "string" }, "description": "Answer options the user can pick (each up to 200 characters)." },
 							"recommendation": { "type": "string", "description": "Your recommended answer, up to 1,000 characters." },
 							"key":            { "type": "string", "description": "Stable dedupe key of your choosing, up to 100 characters." },
+							"questions": {
+								"type": "array",
+								"minItems": 1,
+								"maxItems": 20,
+								"description": "A questionnaire (ask or critical items only; not together with options or recommendation): 1-20 questions the user answers all at once, each pre-filled with your recommendation, which they keep or override. Put the context in body and the questions here.",
+								"items": {
+									"type": "object",
+									"properties": {
+										"type":                { "type": "string", "enum": ["yes_no", "single", "multi", "text"], "description": "yes_no: yes or no. single: pick one of the choices. multi: pick any of the choices, including none. text: free text." },
+										"question":            { "type": "string", "maxLength": 500, "description": "The question, up to 500 characters." },
+										"choices":             { "type": "array", "minItems": 2, "maxItems": 4, "items": { "type": "string", "maxLength": 100 }, "description": "single and multi only, 2-4 unique labels." },
+										"recommended":         { "type": "string", "maxLength": 1000, "description": "Your recommended answer: \"yes\" or \"no\" for yes_no, one of the choices for single, the text for text. Not allowed for multi." },
+										"recommended_choices": { "type": "array", "items": { "type": "string" }, "description": "multi only: the recommended choices, a subset of choices." }
+									},
+									"required": ["type", "question"]
+								}
+							},
 							"refs": {
 								"type": "array",
 								"maxItems": 10,

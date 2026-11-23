@@ -36,6 +36,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 	private readonly IDraftService? _drafts;
 	private readonly ISchedulerService? _scheduler;
 	private readonly ISessionResumabilityCache? _resumable;
+	private readonly IElevatedRunService? _elevatedRuns;
 	private readonly object _scheduleGate = new();
 	private Dictionary<string, string> _scheduleOwners = new(StringComparer.Ordinal);
 	private readonly DraftRevisions _revisions = new();
@@ -64,8 +65,10 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 		ISessionAuthErrorTracker? authErrors = null,
 		IDraftService? drafts = null,
 		ISchedulerService? scheduler = null,
-		ISessionResumabilityCache? resumable = null)
+		ISessionResumabilityCache? resumable = null,
+		IElevatedRunService? elevatedRuns = null)
 	{
+		_elevatedRuns = elevatedRuns;
 		_resumable   = resumable;
 		_scheduler   = scheduler;
 		_authErrors  = authErrors;
@@ -101,6 +104,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 				if (_authErrors != null) _authErrors.Changed += OnAuthErrorChanged;
 				if (_resumable != null) _resumable.Changed += OnResumabilityChanged;
 				if (_drafts != null) _drafts.DraftChanged += OnDraftChanged;
+				if (_elevatedRuns != null) _elevatedRuns.Changed += OnElevatedRunChanged;
 				if (_scheduler != null)
 				{
 					lock (_scheduleGate)
@@ -135,6 +139,7 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			if (_authErrors != null) _authErrors.Changed -= OnAuthErrorChanged;
 			if (_resumable != null) _resumable.Changed -= OnResumabilityChanged;
 			if (_drafts != null) _drafts.DraftChanged -= OnDraftChanged;
+			if (_elevatedRuns != null) _elevatedRuns.Changed -= OnElevatedRunChanged;
 			if (_scheduler != null) _daemon.ScheduleChanged -= OnScheduleChanged;
 		}
 	}
@@ -277,14 +282,19 @@ public sealed class RemoteNotificationPublisher : IRemoteNotificationPublisher
 			Constants.Remote.Timings.SessionChangedWindow);
 	});
 
+	// elevated.changed is local-stream only (the relay filters it). Published at once and not coalesced: every status change is its own notification, and the order of
+	// two quick changes (launching, then running) must be the order a client sees.
+	private void OnElevatedRunChanged(object? sender, ElevatedRunChangedEventArgs e) => Guard(() =>
+		_bus.Publish(RemoteProtocol.ElevatedRuns.ChangedEvent, new ElevatedChangedPayload(e.RequestId, e.NodeId, e.Status)));
+
 	private DraftChangedPayload? BuildDraftChangedPayload(string fileName, string? itemId)
 	{
 		var node = _daemon.FindSessionByFileName(fileName);
 		if (node == null || _drafts == null)
 			return null;
 
-		var text = itemId == null ? _drafts.LoadDraft(fileName) : _drafts.LoadItemDraft(fileName, itemId);
-		return new DraftChangedPayload(node.NodeId, _revisions.Of(text), itemId);
+		var revision = itemId == null ? _revisions.Of(_drafts.LoadDraft(fileName)) : _revisions.Of(_drafts.LoadItemDraftFull(fileName, itemId));
+		return new DraftChangedPayload(node.NodeId, revision, itemId);
 	}
 
 	// schedule.changed is local-stream only (the relay filters it). The scheduler event does not say what changed, so when the window ends the schedule ids

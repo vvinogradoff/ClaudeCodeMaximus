@@ -1,0 +1,11 @@
+{
+  "launch": {
+    "requestId": "<run>",
+    "fileName": "powershell.exe",
+    "arguments": "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand <base64>",
+    "workingDirectory": "<root>/Proj/Alpha",
+    "runDir": "<root>/runs/<run>",
+    "verb": "runas",
+    "startTimeoutSeconds": 60
+  }
+}

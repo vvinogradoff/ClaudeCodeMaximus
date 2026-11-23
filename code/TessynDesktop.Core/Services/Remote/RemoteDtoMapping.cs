@@ -26,8 +26,20 @@ public static class RemoteDtoMapping
 			UpdatedUtc     = model.UpdatedUtc,
 			ClosedUtc      = model.ClosedUtc,
 			Refs           = model.Refs.Count == 0 ? null : [.. model.Refs.Select(r => r.ToDto())],
+			Questions      = model.Questions.Count == 0 ? null : [.. model.Questions.Select(q => q.ToDto())],
 		};
 	}
+
+	/// <summary>The wire form of a question (FR.23.38).</summary>
+	public static AttentionQuestionDto ToDto(this AttentionQuestionModel model) => new()
+	{
+		Number             = model.Number,
+		Type               = model.Type,
+		Text               = model.Text,
+		Choices            = [.. model.Choices],
+		Recommended        = model.Recommended,
+		RecommendedChoices = [.. model.RecommendedChoices],
+	};
 
 	/// <summary>The wire form of a reference: no absolute path.</summary>
 	public static AttentionRefDto ToDto(this AttentionRefModel model) => new()

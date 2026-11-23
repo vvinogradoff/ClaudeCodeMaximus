@@ -26,4 +26,9 @@ public sealed record AttentionItemDto
 
 	/// <summary>References to entries, files and URLs (FR.23 amendment, additive); omitted when the item has none.</summary>
 	public IReadOnlyList<AttentionRefDto>? Refs { get; init; }
+
+	/// <summary>The action of the item (tdcp-spec 10.A13, additive): the elevated-run request behind an Ask of FR.23.31. Omitted for every other item.</summary>
+	public AttentionActionDto? Action { get; init; }
+	/// <summary>The questionnaire (FR.23.33, additive); omitted when the item has none.</summary>
+	public IReadOnlyList<AttentionQuestionDto>? Questions { get; init; }
 }

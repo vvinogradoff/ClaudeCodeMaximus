@@ -50,7 +50,8 @@ public sealed class WpfComposerCompletionE2ETests : IDisposable
 			new CodeSymbolModel { Name = "Foo", FullyQualifiedName = "Foo", Namespace = "My.Space", Kind = CodeSymbolKind.Class, FilePath = "Foo.cs", Line = 3 },
 			new CodeSymbolModel { Name = "FooBar", FullyQualifiedName = "FooBar", Namespace = "My.Space", Kind = CodeSymbolKind.Class, FilePath = "FooBar.cs", Line = 9 },
 		];
-		_autocomplete = new AutocompleteRpcModule(_env.Base.Registry, _codeIndex);
+		_autocomplete = new AutocompleteRpcModule(_env.Base.Registry, _codeIndex, _env.Base.Settings);
+		_env.Base.Settings.Settings.CodeReferencesEnabled = true; // these tests cover the symbol mode; the session mode has WpfCodeReferencesE2ETests (TC.CR.23)
 		_env.Base.Settings.Settings.SessionCompletionSoundFile = Path.Combine(_root, "done.wav");
 
 		var activity = new ActivityByNodeService();

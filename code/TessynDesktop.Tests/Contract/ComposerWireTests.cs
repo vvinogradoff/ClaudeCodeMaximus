@@ -400,6 +400,7 @@ public sealed class ComposerWireTests : IDisposable
 	[Fact]
 	public async Task Autocomplete_SymbolMode_HasTheGoldenShape()
 	{
+		_env.Settings.Settings.CodeReferencesEnabled = true;   // the # trigger is symbols only while Code references is on (FR.7.13)
 		_env.CodeIndex.Symbols =
 		[
 			new CodeSymbolModel { Name = "Foo", FullyQualifiedName = "Foo", Namespace = "My.Space", Kind = CodeSymbolKind.Class, FilePath = "Foo.cs", Line = 3 },

@@ -62,6 +62,17 @@ public sealed partial class FakeTessynClient
 	/// <summary>When set, <see cref="ReplyDraftSetAsync"/> throws it.</summary>
 	public Exception? ReplyDraftSetException { get; set; }
 
+	/// <summary>The question values of the reply drafts of the fake daemon (FR.23.37), by (session, item).</summary>
+	public Dictionary<(string NodeId, string ItemId), IReadOnlyList<AttentionQuestionAnswerParams>> ReplyDraftQuestions { get; } = [];
+
+	private string ReplyRevisionOf(string nodeId, string itemId)
+	{
+		ReplyDraftTexts.TryGetValue((nodeId, itemId), out var text);
+		return ReplyDraftQuestions.TryGetValue((nodeId, itemId), out var questions)
+			? "rev-q-" + (text ?? string.Empty).GetHashCode() + "-" + string.Join(";", questions.Select(q => q.Number + "=" + q.Value + "[" + string.Join(",", q.Choices ?? []) + "]")).GetHashCode()
+			: RevisionOf(text);
+	}
+
 	public Task<DraftGetResult> ReplyDraftGetAsync(string nodeId, string itemId, CancellationToken cancellationToken = default)
 	{
 		Record($"draft.get:{nodeId}:{itemId}");
@@ -69,10 +80,11 @@ public sealed partial class FakeTessynClient
 			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, "'itemId' is not an open item of the session");
 
 		ReplyDraftTexts.TryGetValue((nodeId, itemId), out var text);
-		return Task.FromResult(new DraftGetResult(text ?? string.Empty, RevisionOf(text)));
+		ReplyDraftQuestions.TryGetValue((nodeId, itemId), out var kept);
+		return Task.FromResult(new DraftGetResult(text ?? string.Empty, ReplyRevisionOf(nodeId, itemId), kept));
 	}
 
-	public Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, CancellationToken cancellationToken = default)
+	public Task<DraftSetResult> ReplyDraftSetAsync(string nodeId, string itemId, string text, string? baseRevision = null, IReadOnlyList<AttentionQuestionAnswerParams>? questions = null, CancellationToken cancellationToken = default)
 	{
 		Record($"draft.set:{nodeId}:{itemId}:{baseRevision ?? "-"}");
 		if (ReplyDraftSetException != null)
@@ -80,15 +92,18 @@ public sealed partial class FakeTessynClient
 		if (ClosedReplyItems.Contains((nodeId, itemId)))
 			throw new TessynRpcException(RemoteProtocol.ErrorCodes.InvalidParams, "'itemId' is not an open item of the session");
 
-		ReplyDraftTexts.TryGetValue((nodeId, itemId), out var current);
-		if (baseRevision != null && baseRevision != RevisionOf(current))
+		if (baseRevision != null && baseRevision != ReplyRevisionOf(nodeId, itemId))
 			throw DraftChangedConflict();
 
 		if (text.Length == 0)
 			ReplyDraftTexts.Remove((nodeId, itemId));
 		else
 			ReplyDraftTexts[(nodeId, itemId)] = text;
-		return Task.FromResult(new DraftSetResult(RevisionOf(text)));
+		if (questions == null)
+			ReplyDraftQuestions.Remove((nodeId, itemId));
+		else
+			ReplyDraftQuestions[(nodeId, itemId)] = questions;
+		return Task.FromResult(new DraftSetResult(ReplyRevisionOf(nodeId, itemId)));
 	}
 
 	public Task<DraftDeleteResult> DraftDeleteAsync(string nodeId, CancellationToken cancellationToken = default)

@@ -14,6 +14,9 @@ public static partial class Constants
 		/// <summary>Message of the <c>draft.set</c> error for a stale <c>baseRevision</c>; the client re-reads the draft and merges.</summary>
 		public const string DraftChangedMessage = "Draft changed";
 
+		/// <summary>First line of an item draft file that also holds question values (FR.23.37); see <see cref="TessynDesktop.Services.ItemDraftCodec"/>.</summary>
+		public const string ItemDraftEnvelopePrefix = "#tessyn-questionnaire-draft-v1";
+
 		/// <summary>How long the daemon keeps a code index it had to build for <c>autocomplete.suggest</c> after the last request for its directory (ISSUE.016).</summary>
 		public static readonly TimeSpan AutocompleteIndexIdle = TimeSpan.FromMinutes(5);
 
@@ -49,5 +52,17 @@ public static partial class Constants
 
 		/// <summary>Kind of a directory suggestion (path mode).</summary>
 		public const string DirectoryKind = "directory";
+
+		/// <summary>Kind of a session suggestion (session mode, FR.7.14).</summary>
+		public const string SessionKind = "session";
+
+		/// <summary>Insert text of a session suggestion: <c>session "&lt;name&gt;" (&lt;shortid&gt;)</c> (FR.7.14).</summary>
+		public const string SessionInsertFormat = "session \"{0}\" ({1})";
+
+		/// <summary>Separator of the project label and the group path in the detail of a session suggestion (FR.7.14).</summary>
+		public const string SessionDetailSeparator = " / ";
+
+		/// <summary>Session suggestions of other projects are added only while the same-project tiers gave fewer results than this (FR.7.14).</summary>
+		public const int SessionOtherProjectsBelow = 10;
 	}
 }

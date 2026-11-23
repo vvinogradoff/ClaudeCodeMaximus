@@ -84,6 +84,83 @@
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
+            <!-- A link-looking button (the Reset of a question, FR.23.35). -->
+            <Style x:Key="LinkButton" TargetType="Button">
+                <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Padding" Value="4,0" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <TextBlock Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" Padding="{TemplateBinding Padding}" TextDecorations="Underline" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- A choice button of a question (FR.23.35): a toggle in the colour of a button; the selected one takes the accent colour of the accent buttons (FR.23.28). -->
+            <Style x:Key="AnswerToggle" TargetType="ToggleButton" BasedOn="{StaticResource PlainToggle}">
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="Margin" Value="0,0,6,2" />
+                <Setter Property="Padding" Value="10,4" />
+                <Style.Triggers>
+                    <Trigger Property="IsChecked" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <DataTemplate x:Key="ChoiceTemplate" DataType="{x:Type vm:FocusChoiceViewModel}">
+                <ToggleButton Style="{StaticResource AnswerToggle}" IsChecked="{Binding IsSelected, Mode=TwoWay}" AutomationProperties.Name="{Binding AutomationName}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding RecommendedMarker}" FontSize="11" Opacity="0.75" Margin="8,0,0,0" VerticalAlignment="Center"
+                                   Visibility="{Binding IsRecommended, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </ToggleButton>
+            </DataTemplate>
+            <!-- One question of a questionnaire (FR.23.35): Q<n> and the selectable question, its Reset link, then toggles (Yes/No on one line, choices listed) or a text box. -->
+            <DataTemplate x:Key="QuestionTemplate" DataType="{x:Type vm:FocusQuestionViewModel}">
+                <StackPanel Margin="0,8,0,0">
+                    <DockPanel Margin="0,0,0,4">
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding NumberText}" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Top" />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="{Binding ResetText}" Command="{Binding ResetCommand}" VerticalAlignment="Top"
+                                AutomationProperties.Name="{Binding ResetAutomationName}" ToolTip="Back to the recommended answer"
+                                Visibility="{Binding ShowReset, Converter={StaticResource BoolToVis}}" />
+                        <v:SelectableText Text="{Binding Text}" />
+                    </DockPanel>
+                    <ItemsControl ItemsSource="{Binding Choices}" ItemTemplate="{StaticResource ChoiceTemplate}" Focusable="False"
+                                  Visibility="{Binding HasChoices, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl.Style>
+                            <Style TargetType="ItemsControl">
+                                <Setter Property="ItemsPanel">
+                                    <Setter.Value>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Vertical" />
+                                        </ItemsPanelTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsYesNo}" Value="True">
+                                        <Setter Property="ItemsPanel">
+                                            <Setter.Value>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ItemsControl.Style>
+                    </ItemsControl>
+                    <StackPanel Visibility="{Binding IsText, Converter={StaticResource BoolToVis}}">
+                        <TextBox Text="{Binding AnswerText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40" MaxHeight="300"
+                                 VerticalScrollBarVisibility="Auto" AutomationProperties.Name="{Binding TextAutomationName}" />
+                        <TextBlock Text="{Binding RecommendedMarker}" FontSize="11" Margin="2,2,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Visibility="{Binding ShowTextMarker, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </StackPanel>
+            </DataTemplate>
             <DataTemplate x:Key="OpenCardTemplate" DataType="{x:Type vm:FocusItemViewModel}">
 
                     <Border Style="{StaticResource CardBorder}">
@@ -118,6 +195,12 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
+                            <!-- questionnaire (FR.23.35): the questions with their recommended answers pre-filled, then the note -->
+                            <ItemsControl ItemsSource="{Binding Questions}" ItemTemplate="{StaticResource QuestionTemplate}" Margin="0,2,0,6" Focusable="False"
+                                          Visibility="{Binding HasQuestions, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Text="{Binding NoteLabel}" Margin="0,0,0,2" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Visibility="{Binding HasQuestions, Converter={StaticResource BoolToVis}}" />
+
                             <!-- free-text answer: a 2 px accent border and a resize grip at the bottom right (FR.23.28) -->
                             <Border x:Name="ReplyFrame" BorderThickness="2" CornerRadius="4" BorderBrush="{DynamicResource AccentFillColorDefaultBrush}">
                                 <Grid>
@@ -141,6 +224,46 @@
                     </Border>
             </DataTemplate>
 
+            <!-- The card of an elevated run (FR.23.32): header, id and title, then the facts and the state-dependent buttons. No options, no reply box, no Reply and no Dismiss. -->
+            <DataTemplate x:Key="ElevatedCardTemplate" DataType="{x:Type vm:FocusItemViewModel}">
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <DockPanel LastChildFill="False" Margin="0,0,0,6">
+                            <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Tag="{Binding KindKey}">
+                                <TextBlock Style="{StaticResource KindChipText}" Text="{Binding KindText}" />
+                            </Border>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </DockPanel>
+                        <v:FocusCardText Item="{Binding}" />
+                        <v:ElevatedRunFactsView DataContext="{Binding Elevated}" />
+                        <v:ElevatedRunStateView DataContext="{Binding Elevated}" />
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+            <v:FocusCardTemplateSelector x:Key="OpenCardSelector" Standard="{StaticResource OpenCardTemplate}" Elevated="{StaticResource ElevatedCardTemplate}" />
+
+            <!-- The facts of a closed elevated-run card, shown with the expanded header (FR.23.32: the command block and the log path). -->
+            <Style x:Key="ClosedElevatedFacts" TargetType="ContentControl">
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Setter Property="ContentTemplate">
+                    <Setter.Value>
+                        <DataTemplate DataType="{x:Type vm:ElevatedRunCardViewModel}">
+                            <StackPanel>
+                                <v:ElevatedRunFactsView />
+                                <TextBox IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" TextWrapping="Wrap" Margin="0,6,0,0" Text="{Binding LogPathText, Mode=OneWay}"
+                                         Visibility="{Binding HasLogPath, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Log path" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsBodyExpanded}" Value="True">
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
             <!-- Closed card (FR.23.14): compact, header row plus the outcome line; a click on the header shows or hides the body. -->
             <DataTemplate x:Key="ClosedCardTemplate" DataType="{x:Type vm:FocusItemViewModel}">
                 <Border Style="{StaticResource CardBorder}" Padding="12,8" PreviewMouseLeftButtonDown="OnClosedCardDown" PreviewMouseLeftButtonUp="OnClosedCardUp">
@@ -155,6 +278,8 @@
                         <v:FocusCardText Item="{Binding}" />
                         <!-- references only while expanded (FR.23.29) -->
                         <ContentControl Content="{Binding}" Style="{StaticResource ClosedRefs}" />
+                        <!-- an elevated run's facts only while expanded (FR.23.32); Content is null for every other item -->
+                        <ContentControl Content="{Binding Elevated}" Style="{StaticResource ClosedElevatedFacts}" />
                     </StackPanel>
                 </Border>
             </DataTemplate>
@@ -237,7 +362,7 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <ItemsControl ItemsSource="{Binding OpenItems}" ItemTemplate="{StaticResource OpenCardTemplate}" Focusable="False" />
+                <ItemsControl ItemsSource="{Binding OpenItems}" ItemTemplateSelector="{StaticResource OpenCardSelector}" Focusable="False" />
 
                 <Expander Header="{Binding DecisionsHeader}" IsExpanded="{Binding IsDecisionsExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.AutomationId="FocusDecisionsExpander"
                           Visibility="{Binding HasDecisions, Converter={StaticResource BoolToVis}}">

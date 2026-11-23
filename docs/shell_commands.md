@@ -33,3 +33,12 @@ When `core.autocrlf=input` is set, `git add` refuses to stage files with CRLF li
 Large heredocs (`cat > file <<'EOF'`) and `python - <<'PY'` blocks that contain nested quotes, `'''` or C# raw string literals (`"""`) fail with "unexpected EOF while looking for matching quote", and nothing is executed.
 
 **Fix:** write the script or the file with the Write tool (a `.py` file in `%TEMP%`, run with `python <path>`), then run it. Python's text mode reads CRLF files as LF and writes LF back; git normalizes line endings (`core.autocrlf=true` here), so this causes no diff churn. Match tab counts exactly when replacing code (a missed tab fails the `assert old in s` check, which is a good thing).
+
+## sed -i in Git Bash strips CRLF
+In Git Bash, `sed -i` on a CRLF file (for example `docs/requirements/*.md`, `docs/todo.md`) rewrites the whole file with LF endings; `file <path>` no longer says "with CRLF line terminators".
+
+**Fix:** use the Edit tool for docs edits. If it already happened to a file that was all CRLF before, `sed -i -b 's/$/\r/' <file>` restores it; check with `file` and `git diff --stat`.
+
+
+## Python edit scripts through a bash heredoc: backslash escapes and quotes
+In a `python - <<'PY'` block run through the Bash tool, a C# `\n` in a Python string literal arrived as a real line feed, so the `assert old in s` check failed; a long heredoc with quotes can also end with "unexpected EOF". **Fix:** write the script with the Write tool (or build the backslash with `chr(92)`), then run `python <path>`. Prefer the Edit tool for one-line changes in CRLF files; `sed -i` on line 1 of an LF file leaves one CRLF line.
