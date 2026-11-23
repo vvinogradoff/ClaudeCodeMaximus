@@ -175,6 +175,9 @@ public sealed class WpfCodeReferencesE2ETests : IDisposable
 			Assert.True(await _clicker.ClickAsync(process, "Close settings", StepTimeout));
 			Assert.True(await _clicker.WaitForButtonGoneAsync(process, "Close settings", StepTimeout));
 
+			// Retype: setting the very same text again is no edit (the composer asks only when the text or the caret changes), and a test window's
+			// Settings never takes the keyboard focus, so the input's lost-focus close that resets the composer in real use does not happen here.
+			await TypeAsync(process, string.Empty);
 			await TypeAsync(process, "see #Fo");
 			Assert.True(await _clicker.WaitForButtonAsync(process, "FooBar", StepTimeout), "The symbol suggestions did not appear. Log:\n" + _app.ReadLog());
 			Assert.True(await _clicker.ClickAsync(process, "Foo", StepTimeout));
