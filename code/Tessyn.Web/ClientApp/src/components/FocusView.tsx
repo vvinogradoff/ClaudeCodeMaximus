@@ -55,10 +55,14 @@ function ElevatedOpenCard({ item, nodeId, now }: { item: AttentionItemDto; nodeI
 	);
 }
 
-/** Button answers never overwrite typed text: they are appended on a new line. */
-export function appendAnswer(current: string, addition: string): string {
-	if (!current.trim()) return addition;
-	return `${current.replace(/\s+$/, '')}\n${addition}`;
+/**
+ * What a button answer does to the reply box. Text that came from a button and is unchanged since is replaced
+ * (switching between options); empty text is filled; text the user typed or edited is kept and the answer is appended
+ * on a new line. Returns the new text and the button text to remember (null once the box holds the user's own text).
+ */
+export function applyButtonAnswer(current: string, lastButtonText: string | null, addition: string): { text: string; lastButtonText: string | null } {
+	if (!current.trim() || current === lastButtonText) return { text: addition, lastButtonText: addition };
+	return { text: `${current.replace(/\s+$/, '')}\n${addition}`, lastButtonText: null };
 }
 
 /** Questionnaire cards can always be answered: the answers are the reply (FR.23.35). */
@@ -68,6 +72,12 @@ const draftKey = (nodeId: string, itemId: string) => `reply.q.${nodeId}.${itemId
 const SAVE_DEBOUNCE_MS = 400;
 
 function OpenCard({ item, nodeId, text, now, values, onText, onQuestion, onReply, onDismiss }: CardProps) {
+	const lastButtonText = useRef<string | null>(null);
+	const pick = (answer: string) => {
+		const next = applyButtonAnswer(text, lastButtonText.current, answer);
+		lastButtonText.current = next.lastButtonText;
+		onText(next.text);
+	};
 	if (elevatedRunOf(item)) return <ElevatedOpenCard item={item} nodeId={nodeId} now={now} />;
 	const questions = item.questions ?? [];
 	const canReply = hasQuestions(item) || !!text.trim();
@@ -83,11 +93,11 @@ function OpenCard({ item, nodeId, text, now, values, onText, onQuestion, onReply
 			{item.refs && item.refs.length > 0 && <RefList refs={item.refs} />}
 			{item.options.length > 0 && (
 				<div className="options">
-					{item.options.map((o) => <button key={o} type="button" className="btn small" onClick={() => onText(appendAnswer(text, o))}>{o}</button>)}
+					{item.options.map((o) => <button key={o} type="button" className="btn small" onClick={() => pick(o)}>{o}</button>)}
 				</div>
 			)}
 			{item.recommendation && (
-				<button type="button" className="btn small reco" onClick={() => onText(appendAnswer(text, `Accepted your recommendation: ${item.recommendation}`))}>
+				<button type="button" className="btn small reco" onClick={() => pick(`Accepted your recommendation: ${item.recommendation}`)}>
 					Use recommendation: {item.recommendation}
 				</button>
 			)}
