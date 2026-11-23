@@ -198,8 +198,21 @@ describe('safeHttpsUrl', () => {
 	});
 });
 
-import { appendAnswer } from '../components/FocusView';
-describe('appendAnswer', () => {
-	it('fills an empty reply', () => expect(appendAnswer('  ', 'Yes')).toBe('Yes'));
-	it('appends to typed text on a new line, never overwriting', () => expect(appendAnswer('Go ahead, but\n', 'Option B')).toBe('Go ahead, but\nOption B'));
+import { applyButtonAnswer } from '../components/FocusView';
+describe('applyButtonAnswer', () => {
+	const click = (state: { text: string; lastButtonText: string | null }, answer: string) => applyButtonAnswer(state.text, state.lastButtonText, answer);
+	it('fills an empty reply', () => expect(applyButtonAnswer('  ', null, 'Yes').text).toBe('Yes'));
+	it('switches cleanly between untouched button answers', () => {
+		let s = click({ text: '', lastButtonText: null }, 'Variant A');
+		s = click(s, 'Something else (say)');
+		s = click(s, 'Variant B');
+		expect(s.text).toBe('Variant B');
+	});
+	it('appends once the user has edited the text, and keeps appending', () => {
+		let s = click({ text: '', lastButtonText: null }, 'Variant A');
+		s = click({ text: 'Variant A as it looks better', lastButtonText: s.lastButtonText }, 'Something else (say)');
+		s = click(s, 'Variant B');
+		expect(s.text).toBe('Variant A as it looks better\nSomething else (say)\nVariant B');
+	});
+	it('never overwrites typed text', () => expect(applyButtonAnswer('Go ahead, but\n', null, 'Option B').text).toBe('Go ahead, but\nOption B'));
 });

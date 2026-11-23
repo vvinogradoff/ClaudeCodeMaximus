@@ -12,6 +12,18 @@ export function elevatedRunOf(item: AttentionItemDto): ElevatedRunDto | undefine
 	return item.action?.type === ELEVATED_ACTION && item.action.run ? item.action.run : undefined;
 }
 
+/** FR.23.41: an open elevated-run item whose run is launching or running is in progress (approved): it is not an Ask any more. The daemon decides it; the SPA derives it from the payload. */
+export function isInProgress(item: AttentionItemDto): boolean {
+	const run = elevatedRunOf(item);
+	return item.status === 'open' && run !== undefined && (run.status === 'launching' || run.status === 'running');
+}
+
+/** The in-progress items for the Running group, oldest approval first (the start time, else the creation time). */
+export function runningItems(items: AttentionItemDto[]): AttentionItemDto[] {
+	const key = (i: AttentionItemDto) => Date.parse(elevatedRunOf(i)?.startedUtc ?? i.createdUtc) || 0;
+	return items.filter(isInProgress).sort((a, b) => key(a) - key(b) || a.number - b.number);
+}
+
 /** Pending, launching and running are open; every other status is final. */
 export function isFinalStatus(status: ElevatedRunStatus): boolean {
 	return status !== 'pending' && status !== 'launching' && status !== 'running';

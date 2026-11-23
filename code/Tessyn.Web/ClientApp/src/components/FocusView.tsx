@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AttentionAnswer, AttentionItemDto, AttentionKind } from '../api/types';
-import { elevatedRunOf, outcomeLine } from '../lib/elevated';
+import { APPROVE_ON_PC, elevatedRunOf, isInProgress, outcomeLine, runningItems } from '../lib/elevated';
 import { formatSmartTime } from '../lib/format';
 import { recommendedValues, restoreValues, toAnswers } from '../lib/questionnaire';
 import type { QuestionnaireDraft, QuestionValue, QuestionValues } from '../lib/questionnaire';
@@ -55,10 +55,31 @@ function ElevatedOpenCard({ item, nodeId, now }: { item: AttentionItemDto; nodeI
 	);
 }
 
-/** Button answers never overwrite typed text: they are appended on a new line. */
-export function appendAnswer(current: string, addition: string): string {
-	if (!current.trim()) return addition;
-	return `${current.replace(/\s+$/, '')}\n${addition}`;
+/** A card of the Running group (FR.23.42): the elevated-run facts and status line, a neutral Running chip, "Approve on the PC" and no Stop (stopping stays on the PC). */
+function RunningCard({ item, nodeId, now }: { item: AttentionItemDto; nodeId: string; now: number }) {
+	const run = elevatedRunOf(item)!;
+	return (
+		<article className="card kind-border-running elevated" data-testid="running-card" data-item-id={item.id} data-elevated-run={run.id}>
+			<header>
+				<span className="chip-kind kind-running">RUNNING</span>
+				<span className="card-id">A{item.number}</span>
+				<strong className="card-title">{item.title}</strong>
+				<time>{formatSmartTime(item.createdUtc, now)}</time>
+			</header>
+			<ElevatedRunBody run={run} sessionNodeId={nodeId} now={now} />
+			<div className="elev-note" data-testid="running-approve-note">{APPROVE_ON_PC}</div>
+		</article>
+	);
+}
+
+/**
+ * What a button answer does to the reply box. Text that came from a button and is unchanged since is replaced
+ * (switching between options); empty text is filled; text the user typed or edited is kept and the answer is appended
+ * on a new line. Returns the new text and the button text to remember (null once the box holds the user's own text).
+ */
+export function applyButtonAnswer(current: string, lastButtonText: string | null, addition: string): { text: string; lastButtonText: string | null } {
+	if (!current.trim() || current === lastButtonText) return { text: addition, lastButtonText: addition };
+	return { text: `${current.replace(/\s+$/, '')}\n${addition}`, lastButtonText: null };
 }
 
 /** Questionnaire cards can always be answered: the answers are the reply (FR.23.35). */
@@ -68,6 +89,12 @@ const draftKey = (nodeId: string, itemId: string) => `reply.q.${nodeId}.${itemId
 const SAVE_DEBOUNCE_MS = 400;
 
 function OpenCard({ item, nodeId, text, now, values, onText, onQuestion, onReply, onDismiss }: CardProps) {
+	const lastButtonText = useRef<string | null>(null);
+	const pick = (answer: string) => {
+		const next = applyButtonAnswer(text, lastButtonText.current, answer);
+		lastButtonText.current = next.lastButtonText;
+		onText(next.text);
+	};
 	if (elevatedRunOf(item)) return <ElevatedOpenCard item={item} nodeId={nodeId} now={now} />;
 	const questions = item.questions ?? [];
 	const canReply = hasQuestions(item) || !!text.trim();
@@ -83,11 +110,11 @@ function OpenCard({ item, nodeId, text, now, values, onText, onQuestion, onReply
 			{item.refs && item.refs.length > 0 && <RefList refs={item.refs} />}
 			{item.options.length > 0 && (
 				<div className="options">
-					{item.options.map((o) => <button key={o} type="button" className="btn small" onClick={() => onText(appendAnswer(text, o))}>{o}</button>)}
+					{item.options.map((o) => <button key={o} type="button" className="btn small" onClick={() => pick(o)}>{o}</button>)}
 				</div>
 			)}
 			{item.recommendation && (
-				<button type="button" className="btn small reco" onClick={() => onText(appendAnswer(text, `Accepted your recommendation: ${item.recommendation}`))}>
+				<button type="button" className="btn small reco" onClick={() => pick(`Accepted your recommendation: ${item.recommendation}`)}>
 					Use recommendation: {item.recommendation}
 				</button>
 			)}
@@ -165,7 +192,8 @@ export function FocusView() {
 		if (await actions.replyAttention(list.map(answerOf))) list.forEach(dropDraft);
 	};
 
-	const openItems = items.filter((i) => i.status === 'open');
+	const running = runningItems(items);
+	const openItems = items.filter((i) => i.status === 'open' && !isInProgress(i));
 	const actionable = openItems.filter((i) => i.kind !== 'decided');
 	const decisions = openItems.filter((i) => i.kind === 'decided');
 	const closed = items.filter((i) => i.status !== 'open');
@@ -186,6 +214,12 @@ export function FocusView() {
 
 	return (
 		<div className="focus" data-testid="focus">
+			{running.length > 0 && (
+				<section className="running-group" data-testid="running-group" aria-label="Running">
+					<h2 className="group-header" data-testid="running-header">Running ({running.length})</h2>
+					{running.map((i) => <RunningCard key={i.id} item={i} nodeId={nodeId} now={now} />)}
+				</section>
+			)}
 			{items.length === 0 && <div className="empty">Nothing needs your attention in this session.</div>}
 			{items.length > 0 && actionable.length === 0 && decisions.length === 0 && <div className="empty">Nothing needs your attention in this session.</div>}
 			{actionable.map(card)}

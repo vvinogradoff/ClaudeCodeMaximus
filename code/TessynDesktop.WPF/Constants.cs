@@ -48,6 +48,13 @@ public static partial class Constants
 		public const string NoFocusSession = "Open a session to see what needs your attention.";
 		public const string DecisionsHeaderFormat = "Decisions ({0})";
 		public const string ClosedHeaderFormat = "Closed ({0})";
+
+		/// <summary>FR.23.42: the header of the Running group at the top of the Focus view.</summary>
+		public const string RunningHeaderFormat = "Running ({0})";
+
+		/// <summary>FR.23.42: the chip of an approved elevated run in progress, and the key the chip style reads (a neutral colour, not the Ask one).</summary>
+		public const string RunningChipText = "Running";
+		public const string RunningChipKey = "running";
 		public const string OutcomeAnswered = "Answered";
 		public const string OutcomeResolved = "Resolved";
 		public const string OutcomeDismissed = "Dismissed";

@@ -25,6 +25,17 @@ public sealed class AttentionService : IAttentionService
 	private readonly Dictionary<string, AttentionLedgerModel> _cache = new();
 	private readonly Dictionary<string, string> _fileRefIndex = new(StringComparer.Ordinal);   // refId -> nodeId
 	private bool _allLedgersIndexed;
+	private volatile Func<string, bool>? _isRunInProgress;
+
+	public void SetRunProgress(Func<string, bool> isRunInProgress) => _isRunInProgress = isRunInProgress;
+
+	/// <summary>FR.23.41: refreshes the derived in-progress flag of every item of the ledger from the live run status. Under <see cref="_lock"/>.</summary>
+	private void StampLocked(AttentionLedgerModel ledger)
+	{
+		var probe = _isRunInProgress;
+		foreach (var item in ledger.Items)
+			item.IsRunInProgress = probe != null && item.ElevatedRunId != null && probe(item.ElevatedRunId);
+	}
 
 	public event EventHandler<AttentionChangedEventArgs>? AttentionChanged;
 
@@ -181,7 +192,11 @@ public sealed class AttentionService : IAttentionService
 	public IReadOnlyList<AttentionItemModel> GetItems(string nodeId)
 	{
 		lock (_lock)
-			return AttentionOrdering.Sort(LoadLocked(nodeId).Items).Select(Copy).ToList();
+		{
+			var ledger = LoadLocked(nodeId);
+			StampLocked(ledger);
+			return AttentionOrdering.Sort(ledger.Items).Select(Copy).ToList();
+		}
 	}
 
 	public bool IsLedgerReadable(string nodeId)
@@ -194,8 +209,12 @@ public sealed class AttentionService : IAttentionService
 	{
 		lock (_lock)
 		{
-			var open = LoadLocked(nodeId).Items
-				.Where(i => i.Status == AttentionStatus.Open)
+			var ledger = LoadLocked(nodeId);
+			StampLocked(ledger);
+
+			// FR.23.41: an approved elevated run in progress is not waiting for the user, so neither badge counts it.
+			var open = ledger.Items
+				.Where(AttentionOrdering.IsCounted)
 				.ToList();
 			var counted = open.Where(i => i.Kind != AttentionKind.Decided).ToList();
 
@@ -490,6 +509,7 @@ public sealed class AttentionService : IAttentionService
 		ClosedUtc             = item.ClosedUtc,
 		Refs                  = item.Refs.Select(CopyRef).ToList(),
 		ElevatedRunId         = item.ElevatedRunId,
+		IsRunInProgress       = item.IsRunInProgress,
 		Questions             = item.Questions.Select(CopyQuestion).ToList(),
 	};
 

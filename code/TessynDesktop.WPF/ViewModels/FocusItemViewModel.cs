@@ -69,6 +69,36 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	/// <summary>True for the item of an elevated run: it has its own card and no markdown body (the body only serves clients that do not know the action).</summary>
 	public bool IsElevatedRun => Elevated != null;
 
+	/// <summary>
+	/// FR.23.41: the item is open and the run behind it is launching or running, so it is an approved action, not an Ask: it shows in the Running group, not among the
+	/// open cards, and counts for no badge and no "Send answers". Its kind stays Ask.
+	/// </summary>
+	public bool IsInProgress => !IsClosed && Elevated is { IsLaunching: true } or { IsRunning: true };
+
+	/// <summary>The key the kind chip is styled by: the kind, or the neutral <c>running</c> for an item in progress (FR.23.42).</summary>
+	public string ChipKey => IsInProgress ? Constants.Texts.RunningChipKey : KindKey;
+
+	/// <summary>The text of the kind chip: the kind, or <c>Running</c> for an item in progress (FR.23.42).</summary>
+	public string ChipText => IsInProgress ? Constants.Texts.RunningChipText : KindText;
+
+	private bool _wasInProgress;
+
+	/// <summary>The run behind the card changed: when that moves the item into or out of the Running group the owner regroups (FR.23.42).</summary>
+	private void OnElevatedPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RaiseProgressChanged();
+
+	private void RaiseProgressChanged()
+	{
+		var now = IsInProgress;
+		if (now == _wasInProgress)
+			return;
+
+		_wasInProgress = now;
+		OnPropertyChanged(nameof(IsInProgress));
+		OnPropertyChanged(nameof(ChipKey));
+		OnPropertyChanged(nameof(ChipText));
+		_owner.OnProgressChanged(this);
+	}
+
 	public bool HasBody => Elevated == null && !string.IsNullOrWhiteSpace(Body);
 
 	public bool HasOptions => Options.Count > 0;
@@ -141,6 +171,7 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	{
 		ApplyAction(item.Action);
 		_status = item.Status;
+		RaiseProgressChanged();
 		_answer = item.Answer;
 		_resolutionNote = item.ResolutionNote;
 		OnPropertyChanged(nameof(IsClosed));
@@ -187,6 +218,7 @@ public sealed partial class FocusItemViewModel : ObservableObject
 		if (Elevated == null)
 		{
 			Elevated = _owner.CreateElevatedCard(run, NodeId);
+			Elevated.PropertyChanged += OnElevatedPropertyChanged;
 			OnPropertyChanged(nameof(Elevated));
 			OnPropertyChanged(nameof(IsElevatedRun));
 			OnPropertyChanged(nameof(HasBody));
