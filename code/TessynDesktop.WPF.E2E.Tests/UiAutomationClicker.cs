@@ -276,6 +276,36 @@ public sealed class UiAutomationClicker
 		}
 	}
 
+	/// <summary>
+	/// For a failure message: every button in every window of the app whose name contains <paramref name="fragment"/>, with whether it is enabled and
+	/// off-screen and which window it is in (window 0 is the one <see cref="ClickAsync"/> looks in).
+	/// </summary>
+	public string DescribeButtons(Process process, string fragment)
+	{
+		var lines = new List<string>();
+		var windows = new AppWindowFinder().FindAll(process.Id);
+		for (var w = 0; w < windows.Count; w++)
+		{
+			try
+			{
+				var root = AutomationElement.FromHandle(windows[w]);
+				lines.Add($"window {w}: '{root.Current.Name}'");
+				foreach (var button in root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)).Cast<AutomationElement>())
+				{
+					var name = button.Current.Name;
+					if (name.Contains(fragment, StringComparison.Ordinal))
+						lines.Add($"  '{name}' enabled={button.Current.IsEnabled} offscreen={button.Current.IsOffscreen}");
+				}
+			}
+			catch (ElementNotAvailableException)
+			{
+				lines.Add($"window {w}: gone");
+			}
+		}
+
+		return lines.Count == 0 ? "(no windows)" : string.Join("\n", lines);
+	}
+
 	/// <summary>True when a text element whose name contains <paramref name="fragment"/> is currently shown (a notice).</summary>
 	public bool TextExists(Process process, string fragment)
 	{

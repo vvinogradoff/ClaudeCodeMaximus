@@ -176,7 +176,8 @@ public sealed class WpfCodexE2ETests : IAsyncLifetime
 			Assert.True(_clicker.TextExists(process, "ChatGPT Plus"));
 
 			// Sign out keeps the profile listed.
-			Assert.True(await _clicker.ClickAsync(process, $"Sign out: {CodexE2EDaemon.ChatGptName} ({CodexE2EDaemon.ChatGptProfile})", StepTimeout));
+			Assert.True(await _clicker.ClickAsync(process, $"Sign out: {CodexE2EDaemon.ChatGptName} ({CodexE2EDaemon.ChatGptProfile})", StepTimeout),
+				"Sign out could not be invoked. Buttons:\n" + _clicker.DescribeButtons(process, "ChatGPT") + "\nLog:\n" + _app.ReadLog());
 			await WaitForAsync(() => _daemon.ServerOf(CodexE2EDaemon.ChatGptProfile).RequestsOf("account/logout").Count == 1, "account/logout on the profile's host");
 			await WaitForAsync(() => _clicker.TextExists(process, "is signed out."), "the sign-out reported");
 
