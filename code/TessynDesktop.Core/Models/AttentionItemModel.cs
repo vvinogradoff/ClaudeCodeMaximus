@@ -29,6 +29,13 @@ public sealed class AttentionItemModel
 
 	/// <summary>The id of the elevated run this item is the card of (FR.23.31); null for every other item. Ledger files without the field read as none.</summary>
 	public string? ElevatedRunId { get; set; }
+
+	/// <summary>
+	/// True while the elevated run behind this item is <c>launching</c> or <c>running</c> (FR.23.41). Derived by the ledger service from the run's live status
+	/// when it hands the item out; never stored. Read it through <c>AttentionOrdering.IsInProgress</c>.
+	/// </summary>
+	[System.Text.Json.Serialization.JsonIgnore]
+	public bool IsRunInProgress { get; set; }
 	/// <summary>The questionnaire of an ask or critical item (FR.23.33); empty for any other. Ledger files without the field read as none.</summary>
 	public List<AttentionQuestionModel> Questions { get; set; } = [];
 }

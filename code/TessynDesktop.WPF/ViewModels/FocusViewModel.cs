@@ -90,8 +90,15 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	/// <summary>The open items of the session that can carry an answer (open and Decided), newest first. The view shows them split in <see cref="OpenItems"/> and <see cref="DecidedItems"/>.</summary>
 	public ObservableCollection<FocusItemViewModel> Items { get; } = [];
 
-	/// <summary>The open items other than Decided, newest first (FR.23.14).</summary>
+	/// <summary>The open items other than Decided and not in progress, newest first (FR.23.14, FR.23.42).</summary>
 	public ObservableCollection<FocusItemViewModel> OpenItems { get; } = [];
+
+	/// <summary>The Running group (FR.23.42): the approved elevated runs in progress (FR.23.41), oldest first. Not counted, not among <see cref="OpenItems"/>, not in "Send answers".</summary>
+	public ObservableCollection<FocusItemViewModel> RunningItems { get; } = [];
+
+	public bool HasRunning => RunningItems.Count > 0;
+
+	public string RunningHeader => string.Format(Constants.Texts.RunningHeaderFormat, RunningItems.Count);
 
 	/// <summary>The open Decided items, newest first: the collapsed "Decisions (n)" expander (FR.23.14).</summary>
 	public ObservableCollection<FocusItemViewModel> DecidedItems { get; } = [];
@@ -298,14 +305,34 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 				Items.Insert(i, wanted[i]);
 		}
 
-		SyncList(OpenItems, Items.Where(i => i.Kind != AttentionKind.Decided).ToList());
-		SyncList(DecidedItems, Items.Where(i => i.Kind == AttentionKind.Decided).ToList());
+		Regroup();
 		ApplyClosed(dtos);
 
-		OpenCount = OpenItems.Count;
 		RaiseCountsChanged();
 		_logger.LogInformation("Focus: {Count} open item(s) for {NodeId}", Items.Count, nodeId);
 		_logger.LogInformation("Focus: {Closed} closed item(s) for {NodeId}", ClosedItems.Count, nodeId);
+	}
+
+	/// <summary>
+	/// Splits the open items in the Running group (an elevated run in progress, oldest first, FR.23.42), the open cards and the Decisions, and sets the badge count, which skips
+	/// the Running group (FR.23.41).
+	/// </summary>
+	private void Regroup()
+	{
+		SyncList(RunningItems, Items.Where(i => i.IsInProgress).OrderBy(i => i.Elevated!.Run.CreatedUtc).ThenBy(i => i.Number).ToList());
+		SyncList(OpenItems, Items.Where(i => !i.IsInProgress && i.Kind != AttentionKind.Decided).ToList());
+		SyncList(DecidedItems, Items.Where(i => !i.IsInProgress && i.Kind == AttentionKind.Decided).ToList());
+		OpenCount = OpenItems.Count;
+	}
+
+	/// <summary>A card moved into or out of the Running group because its run changed status (<c>elevated.changed</c>, FR.23.42): the groups and the counts follow at once.</summary>
+	internal void OnProgressChanged(FocusItemViewModel item)
+	{
+		if (!_byId.TryGetValue(item.Id, out var tracked) || !ReferenceEquals(tracked, item) || !Items.Contains(item))
+			return;   // a card that is still being built, or one that left the list
+
+		Regroup();
+		RaiseCountsChanged();
 	}
 
 	/// <summary>Closed items, newest closed first. Cards are rebuilt from the daemon's data; they hold no reply text.</summary>
@@ -367,6 +394,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 			card.Elevated?.Dispose();
 		Items.Clear();
 		OpenItems.Clear();
+		RunningItems.Clear();
 		DecidedItems.Clear();
 		ClosedItems.Clear();
 		_closedById.Clear();
@@ -490,7 +518,9 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	private void RaiseCountsChanged()
 	{
 		OnPropertyChanged(nameof(TopOpenKind));
-		AnswerCount = Items.Count(i => i.HasReply);
+		AnswerCount = Items.Count(i => i.HasReply && !i.IsInProgress);
+		OnPropertyChanged(nameof(HasRunning));
+		OnPropertyChanged(nameof(RunningHeader));
 		OnPropertyChanged(nameof(HasItems));
 		OnPropertyChanged(nameof(IsEmpty));
 		OnPropertyChanged(nameof(HasDecisions));
@@ -505,7 +535,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 	/// <summary>A reply box changed: the "Send answers" count follows and the text is saved as the item's draft (unless it came from the daemon).</summary>
 	internal void OnReplyTextChanged(FocusItemViewModel item)
 	{
-		AnswerCount = Items.Count(i => i.HasReply);
+		AnswerCount = Items.Count(i => i.HasReply && !i.IsInProgress);
 		SendAnswersCommand.NotifyCanExecuteChanged();
 		ScheduleDraft(item);
 	}
@@ -545,7 +575,7 @@ public sealed partial class FocusViewModel : ObservableObject, IDisposable
 
 	/// <summary>Sends every non-empty reply box as one answer set (the daemon builds the single prompt and starts the turn).</summary>
 	[RelayCommand(CanExecute = nameof(CanSendAnswers))]
-	private Task SendAnswersAsync() => SendAsync(Items.Where(i => i.HasReply).ToList());
+	private Task SendAnswersAsync() => SendAsync(Items.Where(i => i.HasReply && !i.IsInProgress).ToList());
 
 	internal Task ReplyAsync(FocusItemViewModel item) => SendAsync([item]);
 

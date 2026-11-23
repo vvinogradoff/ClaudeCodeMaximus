@@ -229,8 +229,8 @@
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>
                         <DockPanel LastChildFill="False" Margin="0,0,0,6">
-                            <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Tag="{Binding KindKey}">
-                                <TextBlock Style="{StaticResource KindChipText}" Text="{Binding KindText}" />
+                            <Border DockPanel.Dock="Left" Style="{StaticResource KindChip}" Tag="{Binding ChipKey}">
+                                <TextBlock Style="{StaticResource KindChipText}" Text="{Binding ChipText}" />
                             </Border>
                             <TextBlock DockPanel.Dock="Right" Text="{Binding PostedText}" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                         </DockPanel>
@@ -362,6 +362,11 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
+                <!-- The Running group (FR.23.42): the approved elevated runs in progress, always open, above the open cards; shown only while it has a card. -->
+                <StackPanel Visibility="{Binding HasRunning, Converter={StaticResource BoolToVis}}" AutomationProperties.AutomationId="FocusRunningGroup">
+                    <TextBlock Text="{Binding RunningHeader}" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ItemsControl ItemsSource="{Binding RunningItems}" ItemTemplate="{StaticResource ElevatedCardTemplate}" Focusable="False" />
+                </StackPanel>
                 <ItemsControl ItemsSource="{Binding OpenItems}" ItemTemplateSelector="{StaticResource OpenCardSelector}" Focusable="False" />
 
                 <Expander Header="{Binding DecisionsHeader}" IsExpanded="{Binding IsDecisionsExpanded, Mode=TwoWay}" Margin="0,4,0,0" AutomationProperties.AutomationId="FocusDecisionsExpander"

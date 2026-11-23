@@ -231,6 +231,15 @@ public sealed class WpfElevatedRunE2ETests : IDisposable
 			Assert.True(await _clicker.ClickAsync(process, "Run as administrator", StepTimeout));
 			Assert.NotNull(await _env.WaitForStatusAsync(id, RunTimeout, ElevatedRunStatus.Running));
 
+			// FR.23.42: the approved run is in the Running group (header, Stop, Output) and is not an open Ask any more; the item stays open but counts for nothing (FR.23.41).
+			Assert.NotNull(await _names.WaitForTextAsync(process, n => n == "Running (1)", StepTimeout));
+			Assert.True(_clicker.Exists(process, "Stop"), "The running card has no Stop button. Log:\n" + App.ReadLog());
+			Assert.False(_clicker.Exists(process, "Run as administrator"), "The approved card is still offered for approval.");
+			var inProgress = _env.Refs.Attention.GetItems(_env.Lead.NodeId).Single(i => i.ElevatedRunId == id);
+			Assert.Equal(AttentionStatus.Open, inProgress.Status);
+			Assert.Equal(AttentionKind.Ask, inProgress.Kind);
+			Assert.Equal(0, _env.Refs.Attention.GetSummary(_env.Lead.NodeId).OpenCount);
+
 			Assert.True(await _clicker.ClickAsync(process, "Stop", StepTimeout), "The Stop button was not found on the running card. Log:\n" + App.ReadLog());
 
 			var cancelled = await _env.WaitForStatusAsync(id, TimeSpan.FromSeconds(10), ElevatedRunStatus.Cancelled);

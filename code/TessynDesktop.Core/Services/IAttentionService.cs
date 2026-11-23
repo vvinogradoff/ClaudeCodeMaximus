@@ -43,7 +43,13 @@ public interface IAttentionService
 	/// <summary>Raises <see cref="AttentionChanged"/> for the node without changing a ledger: the run behind an elevated-run item changed (tdcp-spec 10.A13).</summary>
 	void NotifyChanged(string nodeId);
 
-	/// <summary>All items of the node, any status, in FR.23.2 order. Returns copies.</summary>
+	/// <summary>
+	/// Tells the ledger how to see whether an elevated run is launching or running (FR.23.41), by run id. The elevated-run service sets it once, as it cannot be a
+	/// constructor dependency of this service. Without it no item is in progress.
+	/// </summary>
+	void SetRunProgress(Func<string, bool> isRunInProgress) { }
+
+	/// <summary>All items of the node, any status, in FR.23.2 order (in-progress items after the other open ones, FR.23.41). Returns copies.</summary>
 	IReadOnlyList<AttentionItemModel> GetItems(string nodeId);
 
 	/// <summary>

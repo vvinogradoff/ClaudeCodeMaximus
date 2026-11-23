@@ -671,6 +671,8 @@ SESSION TRANSCRIPT TO COMPACT:
 		public const string PinnedHeaderLine =
 			"Pinned in the user's Focus view - they can see these, so don't restate them; refer to them by id, and call `mcp__" + Agent.McpServerName + "__resolve_attention` when one is answered in conversation or no longer applies:";
 		public const string PinnedItemLineFormat = "  - {0} {1}: {2}";
+		/// <summary>FR.23.41: stands where the kind name does, for an approved elevated run in progress, so the session knows not to ask again.</summary>
+		public const string PinnedInProgressKindText = "running as administrator (approved)";
 		public const string PinnedMoreLineFormat = "  - ...and {0} more (call mcp__" + Agent.McpServerName + "__list_attention)";
 		public const string ClosuresLinePrefix = "Closed by the user in the Focus view since your last turn: ";
 		public const string ClosureFormat = "{0} {1} \"{2}\" {3}";

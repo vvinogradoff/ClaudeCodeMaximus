@@ -196,6 +196,7 @@ public sealed class ElevatedRunCardViewTests
 				names.Add(UIElementAutomationPeer.CreatePeerForElement(Named<Button>(shown.Panel, "Decline"))!.GetName());
 
 				_f.Client.SetElevatedStatus("er-1", ElevatedRunStatus.Running, r => r with { StartedUtc = T0 });
+				shown.Layout();   // the card moved to the Running group (FR.23.42)
 				names.Add(UIElementAutomationPeer.CreatePeerForElement(Named<Button>(shown.Panel, "Stop"))!.GetName());
 				shown.Window.Close();
 			}
@@ -302,5 +303,52 @@ public sealed class ElevatedRunCardViewTests
 		var deadline = DateTime.UtcNow.AddSeconds(5);
 		while (!condition() && DateTime.UtcNow < deadline)
 			System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+	}
+
+	// ── FR.23.42 ──────────────────────────────────────────────────────────────
+
+	[Fact]
+	public void FR_23_42_TheRunningGroup_IsAboveTheOpenCards_AndHoldsTheRunningChipStopAndOutput()
+	{
+		var groupShown = false;
+		string? header = null, chip = null;
+		var stopsInGroup = 0;
+		var outputInGroup = false;
+		var groupAbove = false;
+		var hiddenWithoutRuns = false;
+		StaTestRunner.Run(() =>
+		{
+			var f = new ElevatedRunFixture();
+			f.Seed(Run(ElevatedRunStatus.Running, id: "er-1") with { StartedUtc = T0 }, Lead, number: 1);
+			f.Seed(Run(id: "er-2"), Lead, number: 2);
+			var focus = f.CreateFocus();
+			focus.SetSessionAsync(Lead).GetAwaiter().GetResult();
+			using (focus)
+			{
+				var shown = new Shown(focus).Show();
+				var group = Descendants<StackPanel>(shown.Panel).Single(p => AutomationProperties.GetAutomationId(p) == "FocusRunningGroup");
+				groupShown = group.Visibility == Visibility.Visible;
+				header = Descendants<TextBlock>(group).First(t => t.Text.StartsWith("Running (", StringComparison.Ordinal)).Text;
+				chip = Descendants<TextBlock>(group).First(t => t.Text == "Running").Text;
+				stopsInGroup = Descendants<Button>(group).Count(b => AutomationProperties.GetName(b) == "Stop");
+				outputInGroup = Descendants<Expander>(group).Any(e => AutomationProperties.GetName(e) == "Output");
+				var pending = Descendants<Button>(shown.Panel).Single(x => AutomationProperties.GetName(x) == "Run as administrator" && x.IsVisible);
+				groupAbove = group.TranslatePoint(new Point(0, 0), shown.Panel).Y < pending.TranslatePoint(new Point(0, 0), shown.Panel).Y;
+
+				f.Client.SetElevatedStatus("er-1", ElevatedRunStatus.Completed, r => r with { ExitCode = 0, EndedUtc = T0.AddMinutes(2) });
+				focus.WhenIdleAsync().GetAwaiter().GetResult();
+				shown.Layout();
+				hiddenWithoutRuns = group.Visibility == Visibility.Collapsed;
+				shown.Window.Close();
+			}
+		});
+
+		Assert.True(groupShown);
+		Assert.Equal("Running (1)", header);
+		Assert.Equal("Running", chip);
+		Assert.Equal(1, stopsInGroup);
+		Assert.True(outputInGroup);
+		Assert.True(groupAbove);
+		Assert.True(hiddenWithoutRuns);
 	}
 }

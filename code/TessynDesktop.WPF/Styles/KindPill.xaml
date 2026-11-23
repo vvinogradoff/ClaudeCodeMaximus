@@ -26,6 +26,11 @@
                 <Setter Property="Background" Value="{DynamicResource Colour.FocusAlert}" />
                 <Setter Property="TextElement.Foreground" Value="{DynamicResource Colour.FocusAlertText}" />
             </Trigger>
+            <!-- An approved elevated run in progress (FR.23.42): neutral, not a Focus kind. -->
+            <Trigger Property="Tag" Value="running">
+                <Setter Property="Background" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            </Trigger>
             <Trigger Property="Tag" Value="decided">
                 <Setter Property="Background" Value="{DynamicResource Colour.FocusDecided}" />
                 <Setter Property="TextElement.Foreground" Value="{DynamicResource Colour.FocusDecidedText}" />
