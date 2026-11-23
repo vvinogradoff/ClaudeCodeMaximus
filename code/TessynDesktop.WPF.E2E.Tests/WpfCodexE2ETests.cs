@@ -45,11 +45,12 @@ public sealed class WpfCodexE2ETests : IAsyncLifetime
 	}
 
 	/// <param name="sessionOpened">Also wait until the session is open and its page painted (no message is queued behind the page's start).</param>
-	private async Task<Process> StartAsync(bool toolTurns = false, bool sessionOpened = false)
+	/// <param name="dialogs">The <c>--test-dialog</c> answers, in order: a test window opens no dialog and answers each from this script (cancel when none is left).</param>
+	private async Task<Process> StartAsync(bool toolTurns = false, bool sessionOpened = false, params string[] dialogs)
 	{
 		_daemon = await CodexE2EDaemon.StartAsync(toolTurns);
 		_app = new AppProcessHarness(_root, _daemon.WriteDiscovery(_root));
-		var process = _app.Start();
+		var process = _app.Start(dialogs.SelectMany(a => new[] { "--test-dialog", a }).ToArray());
 		string[] ready = sessionOpened
 			? ["Connected to daemon run", $"Session {_daemon.Session.NodeId} opened", "click-to-first-paint"]
 			: ["Connected to daemon run", "Tree loaded:"];
@@ -66,6 +67,11 @@ public sealed class WpfCodexE2ETests : IAsyncLifetime
 
 		Assert.True(condition(), $"Expected: {what}. Log:\n{_app.ReadLog()}");
 	}
+
+	/// <summary>Waits for the log line of the scripted answer to the dialog titled <paramref name="title"/> (see <c>ScriptedDialogPresenter</c>).</summary>
+	private Task WaitForDialogAsync(string title, string answer) =>
+		WaitForAsync(() => _app.ReadLog().Split('\n').Any(l => l.Contains($"Test window: dialog '{title}'", StringComparison.Ordinal)
+			&& l.Contains($"answered with {answer}", StringComparison.Ordinal)), $"the dialog '{title}' answered with {answer}");
 
 	private int MostToolsShown() => ToolCount.Matches(_app.ReadLog()).Select(m => int.Parse(m.Groups[1].Value)).DefaultIfEmpty(0).Max();
 
@@ -166,7 +172,8 @@ public sealed class WpfCodexE2ETests : IAsyncLifetime
 	[Fact]
 	public async Task TC_CX_41_SettingsProfiles_ChatGptGroup_SignOutSignInAgainNewAndDelete()
 	{
-		using var process = await StartAsync();
+		// The three dialogs of this test in order: Sign in again picks the browser, New ChatGPT profile picks the code, Delete is confirmed.
+		using var process = await StartAsync(dialogs: ["choice:browser", "choice:code", "accept"]);
 		try
 		{
 			Assert.True(await _clicker.ClickMainMenuItemAsync(process, "Settings…", StepTimeout), "The Settings entry of the main menu was not found. Log:\n" + _app.ReadLog());
@@ -183,7 +190,7 @@ public sealed class WpfCodexE2ETests : IAsyncLifetime
 
 			// Sign in again by browser: the address goes to the system browser (logged by a test window), then Cancel.
 			Assert.True(await _clicker.ClickAsync(process, $"Sign in again: {CodexE2EDaemon.ChatGptName} ({CodexE2EDaemon.ChatGptProfile})", StepTimeout));
-			Assert.True(await _clicker.ClickInAnyWindowAsync(process, "Sign in with the browser", StepTimeout), "The sign-in choice was not shown. Log:\n" + _app.ReadLog());
+			await WaitForDialogAsync("Sign in to ChatGPT again", "choice:browser");
 			await WaitForAsync(() => _app.ReadLog().Contains("System browser (test window): https://auth.openai.com/oauth/authorize?fake=1", StringComparison.Ordinal),
 				"the sign-in address opened in the system browser");
 			Assert.True(await _clicker.ClickAsync(process, "Cancel sign-in", StepTimeout));
@@ -191,7 +198,7 @@ public sealed class WpfCodexE2ETests : IAsyncLifetime
 
 			// New ChatGPT profile by code: the code, the address and the note; the fake host completes the sign-in.
 			Assert.True(await _clicker.ClickAsync(process, "New ChatGPT profile", StepTimeout));
-			Assert.True(await _clicker.ClickInAnyWindowAsync(process, "Sign in with a code", StepTimeout), "The sign-in choice was not shown. Log:\n" + _app.ReadLog());
+			await WaitForDialogAsync("New ChatGPT profile", "choice:code");
 			await WaitForAsync(() => _clicker.GetText(process, "Sign-in code") == "ABCD-1234", "the device code shown");
 			Assert.Equal("https://auth.openai.com/codex/device", _clicker.GetText(process, "Sign-in address"));
 			Assert.True(_clicker.TextExists(process, "security settings"));
@@ -202,7 +209,7 @@ public sealed class WpfCodexE2ETests : IAsyncLifetime
 			// Delete asks first, then removes the profile.
 			await WaitForAsync(() => _clicker.Exists(process, "Delete: ChatGPT · u@example.com (codex_2)"), "the new profile's row");
 			Assert.True(await _clicker.ClickAsync(process, "Delete: ChatGPT · u@example.com (codex_2)", StepTimeout));
-			Assert.True(await _clicker.ClickInAnyWindowAsync(process, "Delete ChatGPT profile", StepTimeout), "The delete confirmation was not shown. Log:\n" + _app.ReadLog());
+			await WaitForDialogAsync("Delete ChatGPT profile", "accept");
 			await WaitForAsync(() => _daemon.Settings.Settings.CodexProfiles.All(p => p.ProfileId != "codex_2"), "codex_2 deleted");
 			AssertNoErrors();
 		}
