@@ -73,6 +73,14 @@ public sealed partial class ElevatedRunService : IElevatedRunService, IDisposabl
 		_isProcessAlive = isProcessAlive ?? ProcessExists;
 		_log            = log ?? Log.ForContext<ElevatedRunService>();
 		_outcome        = new ElevatedRunOutcomeBuilder(_outputReader);
+		_attention.SetRunProgress(IsInProgress);
+	}
+
+	/// <summary>FR.23.41: the run is launching or running, so its Focus item is in progress. False for an unknown run.</summary>
+	private bool IsInProgress(string runId)
+	{
+		lock (_lock)
+			return _runs.TryGetValue(runId, out var run) && run.Status is ElevatedRunStatus.Launching or ElevatedRunStatus.Running;
 	}
 
 	public bool IsDaemonElevated => _isElevated;
