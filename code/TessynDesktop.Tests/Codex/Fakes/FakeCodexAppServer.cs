@@ -360,6 +360,9 @@ internal sealed class FakeCodexAppServer
 					case FakeCodexStepKind.Hang:
 						await Task.Delay(Timeout.Infinite, cancel).ConfigureAwait(false);
 						return;
+					case FakeCodexStepKind.Delay:
+						await Task.Delay(step.DelayMs, cancel).ConfigureAwait(false);
+						break;
 				}
 			}
 		}

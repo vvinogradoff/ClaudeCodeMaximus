@@ -36,7 +36,7 @@ internal sealed class CodexE2EDaemon : IAsyncDisposable
 
 		Codex = new CodexServicesFixture(Settings);
 		if (toolTurns)
-			Codex.Launcher.Configure = server => server.TurnScript = t => server.Scripts.ToolTurn(t.ThreadId, t.TurnId);
+			Codex.Launcher.Configure = server => server.TurnScript = t => WithPauseBeforeTheAnswer(server.Scripts.ToolTurn(t.ThreadId, t.TurnId));
 		LocatorEnvironment.Files.Add(CodexExe);
 		LocatorEnvironment.VersionOutputs[CodexExe] = "codex-cli 0.171.0";
 		Settings.Settings.CodexPath = CodexExe;
@@ -120,6 +120,21 @@ internal sealed class CodexE2EDaemon : IAsyncDisposable
 	public FixedEngineAvailability Engines { get; } = new() { Available = [Constants.SessionEngines.Claude, Constants.SessionEngines.Codex] };
 	public ClientTestHost Host => _host;
 	public SessionNodeModel Session => Env.Session;
+
+	/// <summary>How long the tool turn waits after its tools, before the answer: the turn is still running with its tool lines for the live row to show.</summary>
+	public static readonly TimeSpan ToolPause = TimeSpan.FromSeconds(3);
+
+	/// <summary>
+	/// The fake plays a whole turn in about 100 ms, so <c>turn.completed</c> reached the app in the same batch as the tool events and the live row was
+	/// gone before the page drew a tool line (TC.CX.40 failed with "0 tool(s)" while the daemon had published all of them). A real model takes seconds
+	/// between items; one pause before the final answer gives the page that time.
+	/// </summary>
+	private static List<FakeCodexStep> WithPauseBeforeTheAnswer(List<FakeCodexStep> steps)
+	{
+		var answer = steps.FindIndex(s => s.Method == "item/started" && s.Params?["item"]?["phase"]?.GetValue<string>() == "final_answer");
+		steps.Insert(answer < 0 ? steps.Count - 1 : answer, FakeCodexStep.Delay((int)ToolPause.TotalMilliseconds));
+		return steps;
+	}
 
 	/// <summary>Builds the daemon, signs <see cref="ChatGptProfile"/> in and loads the GPT catalog from the fake app-server.</summary>
 	/// <param name="toolTurns">Every GPT turn plays the fake's tool turn (commentary, an MCP call, commands, a file change, a plan, then the answer).</param>
