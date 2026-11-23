@@ -137,6 +137,27 @@ public sealed class DockingAreaTestHookTests
 	}
 
 	[Fact]
+	public void BringForward_OfTheSessionView_SelectsItOverAFocusTabbedIntoTheSessionArea()
+	{
+		StaTestRunner.Run(() =>
+		{
+			var (area, window) = Start();
+			var ops = (IDockingTestOperations)area;
+			Assert.True(ops.Tab(Focus, Session).Ok);
+			Assert.True(ops.BringForward(Focus).Ok);
+			Settle(window);
+			Assert.True(Of(area, Focus).Selected);
+			Assert.False(Of(area, Session).Selected);
+
+			Assert.True(ops.BringForward(Session).Ok);   // what the Session button does (FR.6.23.7), TC.DS.49/54 drive it through the hook
+			Settle(window);
+			Assert.True(Of(area, Session).Selected);
+			Assert.False(Of(area, Focus).Selected);
+			window.Close();
+		});
+	}
+
+	[Fact]
 	public void TheSessionView_IsRefusedForEveryMove_AndTheStateIsUnchanged()
 	{
 		StaTestRunner.Run(() =>

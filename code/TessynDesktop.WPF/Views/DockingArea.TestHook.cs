@@ -279,8 +279,12 @@ public partial class DockingArea : IDockingTestOperations
 
 	DockingTestResult IDockingTestOperations.BringForward(string panel)
 	{
+		// The Session view is a document, not a panel, but a panel can be tabbed over it in the session area (FR.6.23): it comes forward as the Session button does.
 		if (panel == Constants.DockedShell.SessionPanelId)
+		{
+			BringForward(panel);
 			return DockingTestResult.Success;
+		}
 
 		var target = Find(panel);
 		if (target == null)
