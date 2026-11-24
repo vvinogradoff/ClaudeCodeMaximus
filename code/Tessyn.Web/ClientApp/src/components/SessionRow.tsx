@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { AttentionKind, SessionStateDto } from '../api/types';
 import { formatDateTime } from '../lib/format';
+import { rowProfileLabel } from '../lib/profileSwitch';
 import { isRecentlyActive, recencyBand } from '../lib/recency';
 
 export function KindPill({ kind, count }: { kind: AttentionKind; count: number }) {
@@ -38,7 +39,7 @@ export function SessionRow(p: Props) {
 	const band = recencyBand(p.state.lastActivityUtc, p.nowMs);
 	const active = isRecentlyActive(p.state.lastActivityUtc, p.nowMs);
 	const cls = ['srow', `rec-${band}`, active ? 'active24' : '', p.selected ? 'selected' : ''].filter(Boolean).join(' ');
-	const profile = p.profileName ?? p.state.profileName;
+	const profile = p.profileName ?? rowProfileLabel(p.state);
 	return (
 		<div className={cls} style={p.indent ? { marginLeft: p.indent * 14 } : undefined} role="button" tabIndex={0}
 			onClick={p.onClick} onKeyDown={(e) => { if (e.key === 'Enter') p.onClick?.(); }} data-session-id={p.state.id}>

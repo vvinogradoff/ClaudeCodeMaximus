@@ -3,7 +3,7 @@ import { LoginError, RpcError, UploadError } from '../api/rpc';
 import type { EventSourceHandle, EventSourceHandlers, LoginResult, Transport, UploadHandle } from '../api/rpc';
 import type {
 	AttachmentResult, AttentionItemDto, AttentionKind, AttentionQuestionAnswer, AttentionQuestionDto, AttentionSummaryDto, EventFrame, SessionEntryDto, SessionStateDto, SessionTagDto, TagKind, TagRefDto,
-	TreeDirectoryDto, TreeGroupDto, TreeSessionDto, UsageResult, EffortId,
+	TreeDirectoryDto, TreeGroupDto, TreeSessionDto, UsageResult, EffortId, ProfileOptionDto, SwitchProfileResult,
 } from '../api/types';
 import { buildMockFiles, readChunk, sizeOf } from './files';
 import type { MockFile } from './files';
@@ -12,6 +12,11 @@ import { ago, LONG_ENTRY_FULL, LONG_ENTRY_PREVIEW, LONG_MARKDOWN, makeAssistantE
 const WORK_PROFILE = 'Work (vitaly@datalabs.example)';
 const SYS_PROFILE = '[Sys] vitaly@example.com';
 const CHATGPT_PROFILE = 'ChatGPT · vitaly@example.com';
+const PROFILES: ProfileOptionDto[] = [
+	{ id: 'default', displayName: SYS_PROFILE, engine: 'claude' }, { id: 'work', displayName: WORK_PROFILE, engine: 'claude' }, { id: 'personal', displayName: 'Personal', engine: 'claude' },
+	{ id: 'sys2', displayName: '[Sys] vvinogradoff@gmail.com', engine: 'claude' }, { id: 'long', displayName: 'another.long.name@example-domain.com', engine: 'claude' },
+	{ id: 'codex_1', displayName: CHATGPT_PROFILE, engine: 'codex', plan: 'plus' },
+];
 const CLAUDE_EFFORTS = [{ id: 'max' }, { id: 'high' }, { id: 'medium' }, { id: 'low' }];
 const LATENCY_MS = 60;
 const FETCH_DEFAULT = 50;
@@ -39,6 +44,10 @@ interface MockSession {
 	fullEntries: Record<number, string>;
 	/** FR.33: `codex` for a GPT session. */
 	engine?: 'claude' | 'codex';
+	/** ISSUE.013: set by a profile switch; the pin follows it at once. */
+	pinned?: { id: string; name: string };
+	/** A switch queued while the session runs; applied when its turn ends. */
+	switchingTo?: { id: string; name: string };
 }
 
 interface MockGroup { id: string; name: string; groups: MockGroup[]; expanded: boolean; sessionIds: string[] }
@@ -62,6 +71,7 @@ export class MockDaemon {
 	private files: Record<string, MockFile> = buildMockFiles();
 	/** refId / preview handle -> file. */
 	private fileRefs = new Map<string, MockFile>();
+	private nextSwitchError: string | null = null;
 	private demoEntry: { session: MockSession; index: number; quote: string } | null = null;
 
 	constructor() {
@@ -364,6 +374,8 @@ ${'const veryLongLine = 1; '.repeat(12)}
 			profileName: s.profileName,
 		};
 		if (s.engine) state.engine = s.engine;
+		if (s.pinned) { state.pinnedProfileId = s.pinned.id; state.pinnedProfileName = s.pinned.name; }
+		if (s.switchingTo) state.switchingToProfileName = s.switchingTo.name;
 		const runningWorkers = this.runningWorkerCount(s.id);
 		if (runningWorkers > 0) state.runningWorkerCount = runningWorkers;
 		if (sum.allOpenCount > 0 && sum.allOpenTopKind) state.attention = { count: sum.allOpenCount, topKind: sum.allOpenTopKind };
@@ -494,6 +506,8 @@ ${'const veryLongLine = 1; '.repeat(12)}
 					content: `Got it - working on: _${text.slice(0, 60)}_.\n\n\`\`\`bash\nnpm test -- --run\n\`\`\`\n\nAll **green**.`,
 				});
 				if (s.id !== this.liveId) s.running = false;
+				const queuedSwitch = s.switchingTo && !s.running ? PROFILES.find((p) => p.id === s.switchingTo!.id) : undefined;
+				if (queuedSwitch) this.applySwitch(s, queuedSwitch);
 				this.touch(s);
 				this.emit('turn.completed', { nodeId: s.id, cancelled: false });
 			}, 3500);
@@ -586,15 +600,46 @@ ${'const veryLongLine = 1; '.repeat(12)}
 				],
 				efforts: ['default', 'max', 'high', 'medium', 'low'],
 				mediaPreviewHosts: ['annielartens.online', '*.githubusercontent.com'],
-				profiles: [
-					{ id: 'default', displayName: SYS_PROFILE, engine: 'claude' }, { id: 'work', displayName: WORK_PROFILE, engine: 'claude' }, { id: 'personal', displayName: 'Personal', engine: 'claude' },
-					{ id: 'sys2', displayName: '[Sys] vvinogradoff@gmail.com', engine: 'claude' }, { id: 'long', displayName: 'another.long.name@example-domain.com', engine: 'claude' },
-					{ id: 'codex_1', displayName: CHATGPT_PROFILE, engine: 'codex', plan: 'plus' },
-				],
+				profiles: PROFILES,
 			};
+			case 'session.switchProfile': return this.switchProfile(params);
 			case 'usage.get': return this.usage(String(params.profileId ?? 'default'));
 			default: throw new RpcError(-32601, `Method not found: ${method}`);
 		}
+	}
+
+	/** Test hook: the next `session.switchProfile` fails with this message. */
+	failNextProfileSwitch(message: string): void { this.nextSwitchError = message; }
+
+	/** ISSUE.013: `session.switchProfile`. A running session is queued and switched when its turn ends; the answer carries no paths. */
+	private switchProfile(params: Record<string, unknown>): SwitchProfileResult {
+		const s = this.get(params.nodeId);
+		if (this.nextSwitchError) { const m = this.nextSwitchError; this.nextSwitchError = null; throw new RpcError(-32602, m); }
+		const profile = PROFILES.find((p) => p.id === params.profileId);
+		if (!profile) throw new RpcError(-32602, `Profile not found: ${String(params.profileId)}`);
+
+		const all = params.includeDescendants === true ? [s, ...this.descendantsOf(s.id)] : [s];
+		const result: SwitchProfileResult = { profileId: profile.id, profileName: profile.displayName, nodeMoved: false, moved: [], queued: [], failed: [] };
+		for (const x of all) {
+			const from = { nodeId: x.id, name: x.name, fromProfileId: x.pinned?.id ?? x.lastUsed.profileId, fromProfileName: x.pinned?.name ?? x.profileName };
+			if (from.fromProfileId === profile.id) { x.switchingTo = undefined; continue; }
+			if (x.running) { x.switchingTo = { id: profile.id, name: profile.displayName }; result.queued.push(from); }
+			else { this.applySwitch(x, profile); if (x === s) result.nodeMoved = true; else result.moved.push(from); }
+			this.touch(x);
+		}
+		return result;
+	}
+
+	private applySwitch(s: MockSession, profile: ProfileOptionDto): void {
+		const isDefault = profile.id === 'default';
+		s.pinned = { id: profile.id, name: isDefault ? 'default' : profile.displayName };
+		s.switchingTo = undefined;
+		s.profileName = profile.displayName;
+		s.lastUsed = { ...s.lastUsed, profileId: profile.id, profileName: isDefault ? 'Default' : profile.displayName };
+	}
+
+	private descendantsOf(id: string): MockSession[] {
+		return this.workersOf(id).flatMap((w) => [w, ...this.descendantsOf(w.id)]);
 	}
 
 	/** FR.25.24: a choice sent with a turn is stored on the session (a sticky pick); a GPT model makes it a GPT session (FR.33.4). */

@@ -25,6 +25,12 @@ export interface SessionStateDto {
 	engine?: EngineId;
 	/** FR.1.28: how many of the session's workers (direct and nested) run right now; omitted when none does. */
 	runningWorkerCount?: number;
+	/** ISSUE.013: the profile the session is pinned to (`default` or a profile id); it follows a profile switch at once, unlike `profileName`. Omitted without a pin. */
+	pinnedProfileId?: string;
+	/** The display name of the pinned profile (`default` for the Default one); omitted without a pin. */
+	pinnedProfileName?: string;
+	/** The profile a queued switch moves the session to when its running turn ends; omitted when none is queued. */
+	switchingToProfileName?: string;
 }
 export interface TreeSessionDto { id: string; name: string; workerCount: number; supervisorId?: string; state: SessionStateDto }
 export interface SessionRowDto { id: string; name: string; state: SessionStateDto }
@@ -227,6 +233,21 @@ export interface UsageResult {
 	engine?: EngineId;
 	/** Codex's `rateLimitReachedType` while the plan is out of credits. */
 	exhausted?: string;
+}
+
+/** One session touched by `session.switchProfile`. */
+export interface ProfileSwitchedSessionDto { nodeId: string; name: string; fromProfileId: string; fromProfileName: string }
+/** A session whose files could not all be moved: the switch stays queued for its next turn. The paths stay on the PC. */
+export interface ProfileSwitchFailureDto { nodeId: string; name: string; fileCount: number }
+/** `session.switchProfile`: counts and names only, no local path. */
+export interface SwitchProfileResult {
+	profileId: string;
+	profileName: string;
+	/** The addressed session itself moved now; false when it is running (queued) or was already on the profile. */
+	nodeMoved: boolean;
+	moved: ProfileSwitchedSessionDto[];
+	queued: ProfileSwitchedSessionDto[];
+	failed: ProfileSwitchFailureDto[];
 }
 
 // Per-turn options sent with session.send / attention.reply / session.compact.

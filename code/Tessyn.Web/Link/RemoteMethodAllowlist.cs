@@ -30,6 +30,7 @@ public sealed class RemoteMethodAllowlist
 		Constants.Remote.Methods.FileRead,
 		Constants.Remote.Methods.FilePreview,
 		Constants.Remote.Methods.AttachmentList,
+		Constants.Remote.Methods.SessionSwitchProfile,
 	];
 
 	private static readonly string[] LongMethods =
@@ -40,6 +41,7 @@ public sealed class RemoteMethodAllowlist
 		Constants.Remote.Methods.TreeSearch,
 		Constants.Remote.Methods.FileRead,
 		Constants.Remote.Methods.FilePreview,
+		Constants.Remote.Methods.SessionSwitchProfile,
 	];
 
 	private readonly HashSet<string> _allowed = new(AllowedMethods, StringComparer.Ordinal);

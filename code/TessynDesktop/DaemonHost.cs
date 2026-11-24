@@ -420,6 +420,7 @@ public sealed class DaemonHost
 		services.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
 		services.AddTransient<IRemoteRpcModule, ElevatedRunRpcModule>(); // tdcp-spec 10.A13: elevated.*, loopback only
 		services.AddTransient<IRemoteRpcModule, ProfileRpcModule>();
+		services.AddTransient<IRemoteRpcModule, SessionProfileRpcModule>(); // session.switchProfile: the remote (web) form of profile.switch, no local paths
 		// Package J3: settings sections, profile administration and sounds. The profile service is shared with the settings modules;
 		// the three modules are loopback only. The section service is a singleton: it owns the per-section versions and the Saved subscription.
 		services.AddSingleton<IProfileAdminService, ProfileAdminService>();

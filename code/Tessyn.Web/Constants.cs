@@ -224,6 +224,7 @@ public static class Constants
 			public const string FilePreview = "file.preview";
 			public const string AttachmentList = "attachment.list";
 			public const string AttachmentFetch = "attachment.fetch";
+			public const string SessionSwitchProfile = "session.switchProfile";
 		}
 	}
 

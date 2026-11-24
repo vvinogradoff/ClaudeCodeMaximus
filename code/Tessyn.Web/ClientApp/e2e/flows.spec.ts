@@ -192,6 +192,45 @@ test.describe('mobile flows', () => {
 		await expect(page.locator('.msg.assistant', { hasText: 'Got it - working on: Hello GPT' })).toBeVisible({ timeout: 10_000 });
 	});
 
+	// ISSUE.013: move a session, and its workers, to another profile from the settings sheet (session.switchProfile).
+	test('settings: move the session and its workers to another profile', async ({ page }) => {
+		await login(page);
+		await openPanel(page);
+		await row(page, 'Orchestrate WPF rewrite').click();
+		await expect(page.locator('.topbar .title-btn')).toHaveText('Orchestrate WPF rewrite');
+		await page.getByRole('button', { name: 'Session settings' }).click();
+		const sheet = page.getByTestId('settings-sheet');
+		const button = page.getByTestId('profile-switch');
+		await expect(button).toBeDisabled(); // the picker shows the session's own profile
+		await page.getByTestId('profile-select').selectOption('work');
+		await expect(button).toBeEnabled();
+
+		// workers: the question offers both ways; two of the four run, so they are switched when their turn ends
+		await button.click();
+		await expect(page.getByTestId('profile-switch-message')).toContainText('has 4 workers');
+		await shot(page, '25-profile-switch-ask');
+		await page.getByTestId('switch-confirm').click();
+		const note = page.getByTestId('profile-switch-result');
+		await expect(note).toContainText('"Orchestrate WPF rewrite" moved to Work');
+		await expect(note).toContainText('2 workers moved');
+		await expect(note).toContainText('2 running, switched when their turn ends');
+		await expect(button).toBeDisabled(); // now on that profile
+		await shot(page, '26-profile-switch-done');
+
+		// a failure is shown in the sheet, nothing changes
+		await page.evaluate(() => (window as unknown as { __mock: { failNextProfileSwitch(m: string): void } }).__mock.failNextProfileSwitch('Profile not found: personal'));
+		await page.getByTestId('profile-select').selectOption('personal');
+		await button.click();
+		await page.getByTestId('switch-only').click();
+		await expect(note).toContainText('Profile not found: personal');
+		await expect(sheet).toBeVisible();
+		await page.getByRole('button', { name: 'Done' }).click();
+
+		// the row shows the new profile
+		await openPanel(page);
+		await expect(row(page, 'Orchestrate WPF rewrite')).toContainText('Work (vitaly@datalabs.example)');
+	});
+
 	test('offline banner, compact, and logout', async ({ page }) => {
 		await login(page);
 		await openPanel(page);

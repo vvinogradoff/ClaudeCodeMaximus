@@ -274,8 +274,11 @@ input, textarea, select { font: inherit; font-size: 16px; color: var(--fg); }
 .dialog p { margin: 0 0 14px; }
 .dialog .field input { font-size: 16px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.dialog-actions.stacked { flex-wrap: wrap; }
+.dialog-actions.stacked .btn { min-width: 0; max-width: 100%; white-space: normal; }
 .sheet-backdrop { align-items: end; padding: 0; place-items: end stretch; grid-template-columns: minmax(0, 1fr); }
 .sheet { background: var(--surface); border-radius: 18px 18px 0 0; padding: 8px 16px calc(16px + var(--sab)); width: 100%; max-width: 560px; min-width: 0; margin: 0 auto; }
+.sheet { max-height: 92dvh; overflow-y: auto; }
 .sheet-grab { width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 4px auto 10px; }
 .sheet .row { min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .sheet .row > span { flex: none; }

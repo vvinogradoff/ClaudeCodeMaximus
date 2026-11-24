@@ -227,6 +227,26 @@ public sealed class ProfileSwitchServiceTests : IDisposable
 	}
 
 	[Fact]
+	public void Migration_ReportedPaths_EndAtAJsonEscapedLineBreak_AndAtProseMarkup()
+	{
+		var o = _env.AddSession("O", profileId: "p1");
+		var memory = Path.Combine(_p1, "projects", "slug", "memory") + Path.DirectorySeparatorChar;
+		var skill = Path.Combine(_p1, "skills", "cmx-orchestration");
+		var jsonl = Path.Combine(_p1, "projects", "slug", "a.jsonl");
+		var escaped = (string path) => path.Replace("\\", "\\\\");
+		var transcript = "{\"text\":\"see `" + escaped(memory) + "` for more\"}\n"
+			+ "{\"text\":\"" + escaped(skill) + "\\n\\n# Skill\"}\n"
+			+ "{\"text\":\"" + escaped(jsonl) + "\\nContinue\"}\n";
+		_env.WriteSession(_p1, o, transcript);
+
+		var result = _env.Switch.Switch(o.NodeId, "p2", includeDescendants: false);
+
+		Assert.Equal(
+			new[] { Path.TrimEndingDirectorySeparator(memory), skill, jsonl }.OrderBy(x => x, StringComparer.OrdinalIgnoreCase),
+			result.OldConfigPaths.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+	}
+
+	[Fact]
 	public void Migration_FromTheDefaultHome_IsMovedToo()
 	{
 		var o = _env.AddSession("O");

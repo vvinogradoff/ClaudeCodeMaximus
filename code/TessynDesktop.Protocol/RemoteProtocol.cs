@@ -51,6 +51,9 @@ public static partial class RemoteProtocol
 		// Attachments (additive). attachment.import is loopback-only; attachment.fetch is called by the web server, never by a browser.
 		public const string AttachmentList = "attachment.list";
 		public const string AttachmentFetch = "attachment.fetch";
+
+		/// <summary>Moves a session, optionally with its workers, to another profile: <c>{ nodeId, profileId, includeDescendants? }</c>. The remote form of the loopback <c>profile.switch</c>, without local paths.</summary>
+		public const string SessionSwitchProfile = "session.switchProfile";
 	}
 
 	/// <summary>

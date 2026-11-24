@@ -6,7 +6,7 @@ import type {
 	AttentionAnswer, AttentionChangedParams, AttentionListResult, AttentionReplyResult, CatalogResult, CreateSessionResult,
 	EventFrame, HelloResult, LinkStatusParams, SessionAppendedParams, SessionChangedParams, SessionDetailDto,
 	AttentionEntryRefDto, AttentionFileRefDto, FilePreviewResult,
-	SessionEntriesResult, SessionEntryDto, SessionSendResult, TreeSnapshotResult, TreeWorkersResult, TurnCompletedParams, TurnOptions,
+	SessionEntriesResult, SessionEntryDto, SessionSendResult, SwitchProfileResult, TreeSnapshotResult, TreeWorkersResult, TurnCompletedParams, TurnOptions,
 } from '../api/types';
 import { effectiveChoice } from '../lib/engines';
 import { anchorEntryId, emptyTranscript, indexOfEntryId, planAppended, staleAnchor } from '../lib/transcript';
@@ -63,12 +63,17 @@ export interface Actions {
 	dismissAttention(itemId: string): Promise<void>;
 	setFavorite(value: boolean): Promise<void>;
 	setStreaming(enabled: boolean, force?: boolean): Promise<boolean>;
+	/** ISSUE.013: moves the open session (and, when asked, its workers) to another profile; the error text is shown by the caller. */
+	switchProfile(profileId: string, includeDescendants: boolean): Promise<SwitchProfileOutcome>;
 	setTurnSettings(patch: Partial<TurnSettings>): void;
 	createSession(anchorId: string, name: string): Promise<boolean>;
 	hideRecent(id: string): Promise<void>;
 	toast(text: string, kind?: 'error' | 'info'): void;
 	dispatch: React.Dispatch<import('./appState').Action>;
 }
+
+/** The answer of a profile switch: the daemon's result, or the reason it failed. */
+export interface SwitchProfileOutcome { result?: SwitchProfileResult; error?: string }
 
 interface Ctx { state: AppState; actions: Actions }
 const AppCtx = createContext<Ctx | null>(null);
@@ -571,6 +576,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
 				dispatch({ type: 'detailPatch', nodeId: id, patch: { isStreamingMode: r.enabled } });
 				return false;
 			} catch (e) { fail(e); return false; }
+		},
+		async switchProfile(profileId, includeDescendants) {
+			const s = stateRef.current.session;
+			if (!s?.detail) return { error: 'No session is open' };
+			const before = s.detail.state;
+			try {
+				const result = await rpc<SwitchProfileResult>('session.switchProfile', { nodeId: s.id, profileId, ...(includeDescendants ? { includeDescendants: true } : {}) });
+				// The daemon's session.changed follows; this shows the result at once.
+				const queued = result.queued.some((q) => q.nodeId === s.id);
+				if (result.nodeMoved) dispatch({ type: 'sessionChanged', state: { ...before, pinnedProfileId: result.profileId, pinnedProfileName: result.profileName, switchingToProfileName: undefined } });
+				else if (queued) dispatch({ type: 'sessionChanged', state: { ...before, switchingToProfileName: result.profileName } });
+				dispatch({ type: 'bumpLists' });
+				return { result };
+			} catch (e) {
+				if (e instanceof RpcError && e.code === 401) return { error: 'Signed out' };
+				return { error: e instanceof Error ? e.message : String(e) };
+			}
 		},
 		setTurnSettings(patch) {
 			const id = openId();

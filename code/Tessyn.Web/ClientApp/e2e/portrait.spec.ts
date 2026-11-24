@@ -76,6 +76,11 @@ test.describe('portrait: nothing is wider than the screen', () => {
 		await dlg.getByRole('combobox').nth(0).selectOption('claude-opus-5-5-1m');
 		await dlg.getByRole('combobox').nth(1).selectOption('sys2');
 		await check('settings sheet long options');
+		await page.getByTestId('profile-switch').click(); // the move question with the long profile name and the workers choice
+		await expect(page.getByTestId('profile-switch-message')).toBeVisible();
+		await check('profile switch question');
+		await shot('profile-switch-question');
+		await page.getByRole('button', { name: 'Cancel' }).click();
 		await page.getByRole('button', { name: 'Done' }).click();
 
 		// menu + compact confirm

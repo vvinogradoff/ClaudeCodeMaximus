@@ -40,6 +40,7 @@ public static partial class Constants
 			public const string FilePreview = RemoteProtocol.Methods.FilePreview;
 			public const string AttachmentList = RemoteProtocol.Methods.AttachmentList;
 			public const string AttachmentFetch = RemoteProtocol.Methods.AttachmentFetch;
+			public const string SessionSwitchProfile = RemoteProtocol.Methods.SessionSwitchProfile;
 		}
 
 		/// <summary>Notification names published on the remote event bus (contract section 4).</summary>

@@ -156,6 +156,7 @@ public sealed class DaemonHarness : IDisposable
 		s.AddSingleton<TdcpDispatcher>();
 		s.AddTransient<IRemoteRpcModule, SessionCompactRpcModule>();
 		s.AddTransient<IRemoteRpcModule, ProfileRpcModule>();
+		s.AddTransient<IRemoteRpcModule, SessionProfileRpcModule>();
 		s.AddSingleton<IRemoteEventBus, RemoteEventBus>();
 		s.AddSingleton<ITreeVersionTracker, TreeVersionTracker>();
 		s.AddSingleton<ISessionEpochTracker, SessionEpochTracker>();

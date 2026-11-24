@@ -35,6 +35,7 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 		"attachment.list", "attachment.fetch",   // Attachments: additive; fetch is called by the web server only (not on the browser allowlist)
 		"catalog.get",
 		"usage.get",
+		"session.switchProfile",   // the web client's remote form of the loopback profile.switch; no local paths in its answer
 	];
 
 	private readonly RemoteTreeTestEnv _env = new();
@@ -85,7 +86,7 @@ public sealed class ResultShapeSnapshotTests : IDisposable
 			.ToArray();
 
 		Assert.Equal(ExpectedRemoteMethods.OrderBy(n => n, StringComparer.Ordinal), names);
-		Assert.Equal(25, names.Length);
+		Assert.Equal(26, names.Length);
 	}
 
 	[Theory]

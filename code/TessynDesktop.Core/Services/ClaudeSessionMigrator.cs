@@ -201,7 +201,9 @@ public sealed class ClaudeSessionMigrator : IClaudeSessionMigrator
 			.SelectMany(root => new[] { root, root.Replace("\\", "\\\\"), root.Replace('\\', '/') })
 			.Distinct()
 			.Select(Regex.Escape);
-		var pattern = new Regex("(?:" + string.Join("|", alternatives) + @")[^""\s]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+		// A transcript line is JSON: a path in a string ends at a JSON escape of a line break or tab (the two characters backslash + n, r or t), which is not
+		// whitespace; an escaped backslash (two of them) belongs to the path. Quote, backtick and markup characters end a path found in prose.
+		var pattern = new Regex("(?:" + string.Join("|", alternatives) + @")(?:\\\\|(?!\\[nrt])[^""\s`'<>|*?])*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
 		var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		foreach (var line in File.ReadLines(transcript))

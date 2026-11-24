@@ -10,5 +10,6 @@ export function installMock(): void {
 		emit: (m: string, p?: unknown) => daemon.emit(m, p),
 		liveId: () => daemon.liveId,
 		compactSilently: (name: string) => daemon.compactSilently(name),
+		failNextProfileSwitch: (message: string) => daemon.failNextProfileSwitch(message),
 	};
 }
