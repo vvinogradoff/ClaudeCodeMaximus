@@ -137,7 +137,8 @@ export class MockDaemon {
 		const sup = put(tessyn, tessyn, undefined, { name: 'Orchestrate WPF rewrite', lastActivityMin: 12, favorite: true, profileName: SYS_PROFILE }, 'wpf', 4);
 		const workerNames = ['Worker: models', 'Worker: view-models', 'Worker: styles', 'Worker: tests'];
 		workerNames.forEach((w, i) => {
-			const rec = this.mk({ name: w, dirId: tessyn.id, groupId: undefined, supervisorId: sup.id, lastActivityMin: 20 + i * 9 });
+			// the first two workers run now: the supervisor row shows the active workers badge (FR.1.28)
+			const rec = this.mk({ name: w, dirId: tessyn.id, groupId: undefined, supervisorId: sup.id, lastActivityMin: 20 + i * 9, running: i < 2 });
 			this.shortTranscript(rec, 2, w);
 			tessyn.sessionIds.push(rec.id);
 		});
@@ -363,6 +364,8 @@ ${'const veryLongLine = 1; '.repeat(12)}
 			profileName: s.profileName,
 		};
 		if (s.engine) state.engine = s.engine;
+		const runningWorkers = this.runningWorkerCount(s.id);
+		if (runningWorkers > 0) state.runningWorkerCount = runningWorkers;
 		if (sum.allOpenCount > 0 && sum.allOpenTopKind) state.attention = { count: sum.allOpenCount, topKind: sum.allOpenTopKind };
 		if (s.lastActivityMin !== null) state.lastActivityUtc = ago(s.lastActivityMin);
 		if (lp !== null) state.lastPromptUtc = ago(lp);
@@ -377,6 +380,11 @@ ${'const veryLongLine = 1; '.repeat(12)}
 
 	private workersOf(id: string): MockSession[] {
 		return [...this.sessions.values()].filter((w) => w.supervisorId === id);
+	}
+
+	/** Workers running right now, direct and nested (the session itself is not counted). */
+	private runningWorkerCount(id: string): number {
+		return this.workersOf(id).reduce((n, w) => n + (w.running ? 1 : 0) + this.runningWorkerCount(w.id), 0);
 	}
 
 	private isTopLevel(s: MockSession): boolean {
@@ -451,6 +459,9 @@ ${'const veryLongLine = 1; '.repeat(12)}
 	private touch(s: MockSession): void {
 		s.lastActivityMin = 0;
 		this.emit('session.changed', { state: this.stateOf(s) });
+		// a worker starting or stopping changes the badge of every supervisor above it
+		for (let sup = s.supervisorId ? this.sessions.get(s.supervisorId) : undefined; sup; sup = sup.supervisorId ? this.sessions.get(sup.supervisorId) : undefined)
+			this.emit('session.changed', { state: this.stateOf(sup) });
 	}
 
 	private appendEntry(s: MockSession, e: Omit<SessionEntryDto, 'index'>): void {

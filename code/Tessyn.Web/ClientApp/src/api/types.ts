@@ -23,6 +23,8 @@ export interface SessionStateDto {
 	resumable?: boolean;
 	/** FR.33: the engine the session runs on; absent means `claude`. */
 	engine?: EngineId;
+	/** FR.1.28: how many of the session's workers (direct and nested) run right now; omitted when none does. */
+	runningWorkerCount?: number;
 }
 export interface TreeSessionDto { id: string; name: string; workerCount: number; supervisorId?: string; state: SessionStateDto }
 export interface SessionRowDto { id: string; name: string; state: SessionStateDto }

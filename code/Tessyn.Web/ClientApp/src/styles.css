@@ -146,6 +146,7 @@ input, textarea, select { font: inherit; font-size: 16px; color: var(--fg); }
 .srow-l2 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .star { color: var(--star); }
 .draft, .sched { font-size: 11px; opacity: 0.6; }
+.workers-badge { flex: none; min-width: 18px; height: 16px; padding: 0 3px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid #8b0000; border-radius: 3px; color: #e5484d; font-size: 11px; font-weight: 600; line-height: 1; }
 .status-block { width: 8px; height: 16px; flex: none; display: inline-block; background: rgba(128, 128, 128, 0.18); border-radius: 1px; position: relative; }
 .status-block i { position: absolute; left: 0; right: 0; top: 0; height: 8px; }
 .status-block i.run { background: #8b0000; }

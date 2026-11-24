@@ -7,6 +7,12 @@ export function KindPill({ kind, count }: { kind: AttentionKind; count: number }
 	return <span className={`pill kind-${kind}`} title={`${count} open (${kind})`}>{count}</span>;
 }
 
+/** FR.1.28: the workers running now (direct and nested) as a red number in a dark-red outlined square; nothing at 0 or when absent. */
+export function ActiveWorkersBadge({ count }: { count?: number }) {
+	if (!count || count <= 0) return null;
+	return <span className="workers-badge" data-testid="active-workers" title={`Workers running now: ${count}`} aria-label={`Workers running now: ${count}`}>{count}</span>;
+}
+
 export function StatusBlock({ running }: { running: boolean }) {
 	return <span className="status-block" aria-hidden="true"><i className={running ? 'run' : ''} /></span>;
 }
@@ -42,6 +48,7 @@ export function SessionRow(p: Props) {
 				<span className="srow-name">{p.name}</span>
 				{p.state.hasDraft && <span className="draft" title="Has a draft">✏</span>}
 				{p.hasSchedules && <span className="sched" title="Has schedules">🕒</span>}
+				<ActiveWorkersBadge count={p.state.runningWorkerCount} />
 				<span className="srow-trailing">{p.trailing ?? (p.state.favorite ? <span className="star" title="Favourite">★</span> : null)}</span>
 			</div>
 			<div className="srow-l2">
