@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
@@ -40,6 +41,17 @@ public sealed class CatalogRpcModule : IRemoteRpcModule
 
 	private async Task<object?> GetAsync()
 	{
+		// FR.12.13: a client that asks while the startup lookup of the Ollama models is still running gets them too, not a list without them.
+		// The lookup is bounded by its own timeouts and answers "none" when Ollama is not running, so this wait is short and only happens once.
+		try
+		{
+			await _models.EnsureModelsLoadedAsync();
+		}
+		catch (Exception ex)
+		{
+			Serilog.Log.ForContext<CatalogRpcModule>().Warning(ex, "Looking up the Ollama models failed; the catalog is sent without them");
+		}
+
 		var claudeEfforts = ClaudeEfforts();
 		var models = new List<ModelOptionDto> { new(Constants.Remote.DefaultOptionId, "Default", null, RemoteProtocol.Engines.Claude, claudeEfforts) };
 		if (_sessionModels != null)

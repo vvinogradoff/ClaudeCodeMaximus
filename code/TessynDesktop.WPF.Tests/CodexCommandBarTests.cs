@@ -80,6 +80,21 @@ public sealed class CodexCommandBarTests
 	}
 
 	[Fact]
+	public async Task ModelPicker_ReadsTheListsAgain_WhenTheDaemonSaysTheCatalogChanged()
+	{
+		// FR.12.13: the Ollama models can arrive after the pane read the catalog (the daemon's lookup finished later, or Settings refreshed the models).
+		_client.Catalog = CodexCatalogs.ClaudeOnly();
+		using var pane = await OpenedAsync();
+		Assert.Equal(["default", "claude-opus-4-8"], pane.Models.Select(m => m.Id));
+
+		_client.Catalog = CodexCatalogs.FixtureC();
+		_client.RaiseRaw(RemoteProtocol.ModelsApi.CatalogChangedEvent, "{}");
+
+		Assert.Contains(pane.Models, m => m.Id == "qwen3");
+		Assert.Contains(pane.Models, m => m.Id == "gpt-x-sol");
+	}
+
+	[Fact]
 	public async Task GptModelTooltip_CarriesCodexsUpgradeHint()
 	{
 		using var pane = await OpenedAsync();

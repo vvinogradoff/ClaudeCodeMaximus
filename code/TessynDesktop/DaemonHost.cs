@@ -86,6 +86,9 @@ public sealed class DaemonHost
 		var selfUpdate = Services.GetRequiredService<ISelfUpdateService>();
 		selfUpdate.Initialize();
 
+		// FR.12.13: the local Ollama models are looked up once on each startup, in the background (the Avalonia window used to start this).
+		_ = Services.GetRequiredService<IClaudeModelService>().EnsureModelsLoadedAsync();
+
 		// Start agent MCP server and scheduler (FR.14, FR.15).
 		if (appSettings.Settings.AgentToolsEnabled)
 		{

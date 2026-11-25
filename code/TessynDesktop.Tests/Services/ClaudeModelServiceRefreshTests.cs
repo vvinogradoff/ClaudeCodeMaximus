@@ -144,4 +144,23 @@ public sealed class ClaudeModelServiceRefreshTests : IDisposable
 
 		Assert.Single(_ollama.Asked);
 	}
+
+	[Fact]
+	public async Task CatalogGet_WhileTheStartupLookupRuns_WaitsForItAndListsTheOllamaModels()
+	{
+		// FR.12.13: the daemon starts the lookup on startup; a client that asks for the catalog before it has answered must still get the local models.
+		var ollamaAnswer = new TaskCompletionSource<IReadOnlyList<ClaudeModelInfo>>(TaskCreationOptions.RunContinuationsAsynchronously);
+		_ollama.Answer = (_, _) => ollamaAnswer.Task;
+		var module = new CatalogRpcModule(_service, _settings, new ProfileLabelService(new FakeProfileServiceForTurnService(), _settings));
+
+		_ = _service.EnsureModelsLoadedAsync();
+		var catalog = RemoteTestHelpers.CallAsync(module, "catalog.get", "{}");
+		Assert.False(catalog.IsCompleted);
+
+		ollamaAnswer.SetResult([Local("qwen3.6:35b-a3b")]);
+		var models = (await catalog)!["models"]!.AsArray();
+
+		Assert.Contains(models, m => (string?)m!["id"] == "qwen3.6:35b-a3b" && (string?)m["provider"] == "ollama");
+		Assert.Single(_ollama.Asked);
+	}
 }

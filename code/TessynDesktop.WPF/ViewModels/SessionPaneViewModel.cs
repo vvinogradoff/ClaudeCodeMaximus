@@ -429,6 +429,13 @@ public sealed partial class SessionPaneViewModel : ObservableObject, IDisposable
 			return;
 		}
 
+		// The daemon refreshed the models (Ollama asked again, the GPT list fetched again): the selectors read the lists again.
+		if (notification.IsCatalogChanged())
+		{
+			_ui.Post(() => _ = LoadCatalogAsync());
+			return;
+		}
+
 		switch (notification.Method)
 		{
 			case RemoteProtocol.Events.SessionAppended:

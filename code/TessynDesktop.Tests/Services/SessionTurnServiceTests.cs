@@ -200,7 +200,7 @@ internal sealed class FakeModelServiceForTurnService : IClaudeModelService
 {
 	public IReadOnlyList<ClaudeModelInfo> Models { get; set; } = Array.Empty<ClaudeModelInfo>();
 	public IReadOnlyList<ClaudeModelInfo> GetCachedModels() => Models;
-	public Task EnsureModelsLoadedAsync() => throw new NotImplementedException();
+	public Task EnsureModelsLoadedAsync() => Task.CompletedTask; // the list is set directly: it is already loaded
 	public event EventHandler? ModelsUpdated { add { } remove { } }
 }
 
