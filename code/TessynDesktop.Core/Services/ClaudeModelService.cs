@@ -17,16 +17,11 @@ public sealed class ClaudeModelService : IClaudeModelService
     // Update when Anthropic releases new models or changes pricing.
     private static readonly IReadOnlyList<ClaudeModelInfo> CuratedAnthropicModels =
     [
-        new("claude-fable-5",            "fable",   "Fable 5",    InputPricePerMillion: 10m, OutputPricePerMillion: 50m),
-        new("claude-opus-5-5",           "opus",    "Opus 5.5",   InputPricePerMillion:  4m, OutputPricePerMillion: 20m),
-        new("claude-opus-5",             "",        "Opus 5",     InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
-        new("claude-opus-4-8",           "",        "Opus 4.8",   InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
-        new("claude-opus-4-7",           "",        "Opus 4.7",   InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
-        new("claude-opus-4-6",           "",        "Opus 4.6",   InputPricePerMillion:  5m, OutputPricePerMillion: 25m),
-        new("claude-sonnet-5-5",         "sonnet",  "Sonnet 5.5", InputPricePerMillion:  2m, OutputPricePerMillion: 10m),
-        new("claude-sonnet-5",           "",        "Sonnet 5",   InputPricePerMillion:  2m, OutputPricePerMillion: 10m), // was introductory pricing; Anthropic made it permanent, no increase on 2026-09-01
-        new("claude-sonnet-4-6",         "",        "Sonnet 4.6", InputPricePerMillion:  3m, OutputPricePerMillion: 15m),
-        new(Constants.ClaudeAssist.PreferredModelId, "haiku", "Haiku 4.5", InputPricePerMillion: 1m, OutputPricePerMillion: 5m),
+        new("claude-fable-5-2",          "fable",   "Fable 5.2",  InputPricePerMillion:  8m,    OutputPricePerMillion: 40m),
+        new("claude-opus-5-5",           "opus",    "Opus 5.5",   InputPricePerMillion:  4m,    OutputPricePerMillion: 20m),
+        new("claude-sonnet-5-5",         "sonnet",  "Sonnet 5.5", InputPricePerMillion:  2m,    OutputPricePerMillion: 10m),
+        // Haiku 5.5 is priced by prompt length: $0.10/$0.50 up to 100K input tokens, $0.50/$2.50 above. The catalog keeps the base tier.
+        new(Constants.ClaudeAssist.PreferredModelId, "haiku", "Haiku 5.5", InputPricePerMillion: 0.10m, OutputPricePerMillion: 0.50m),
     ];
 
     private readonly IOllamaModelService _ollamaService;

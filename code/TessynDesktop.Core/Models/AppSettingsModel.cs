@@ -60,7 +60,7 @@ public sealed class AppSettingsModel
 	public string SourceCodesLocation { get; set; } = string.Empty;
 
 	/// <summary>
-	/// Selected model ID (true model ID string, e.g. "claude-opus-4-7" or "gemma4:26b").
+	/// Selected model ID (true model ID string, e.g. "claude-opus-5-5" or "gemma4:26b").
 	/// Empty string = Default (no --model flag passed to CLI). Persisted globally as last-used;
 	/// per-directory selection is on DirectoryNodeModel.SelectedModelId.
 	/// </summary>

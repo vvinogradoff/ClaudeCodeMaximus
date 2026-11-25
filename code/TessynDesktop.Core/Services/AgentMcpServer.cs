@@ -1977,7 +1977,7 @@ public sealed partial class AgentMcpServer : IAgentMcpServer
 			"type": "object",
 			"properties": {
 				"nodeId": { "type": "string", "description": "Session to update. A full NodeId or a unique prefix of at least 6 characters is accepted." },
-				"model":  { "type": "string", "description": "Model ID to set (e.g. 'claude-sonnet-4-6'). Tier-enforced." }
+				"model":  { "type": "string", "description": "Model ID to set (e.g. 'claude-sonnet-5-5'). Tier-enforced." }
 			},
 			"required": ["nodeId", "model"]
 		}

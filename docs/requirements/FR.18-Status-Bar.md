@@ -36,13 +36,12 @@ A plan without a cap on a given window (e.g. an Ultra-tier plan has no 5-hour se
 
 | Model ID | Display Name | In ($/1M) | Out ($/1M) |
 |---|---|---|---|
-| claude-fable-5 | Fable 5 | 10.00 | 50.00 |
-| claude-opus-4-8 | Opus 4.8 | 5.00 | 25.00 |
-| claude-opus-4-7 | Opus 4.7 | 5.00 | 25.00 |
-| claude-opus-4-6 | Opus 4.6 | 5.00 | 25.00 |
-| claude-sonnet-5 | Sonnet 5 | 3.00 | 15.00 |
-| claude-sonnet-4-6 | Sonnet 4.6 | 3.00 | 15.00 |
-| claude-haiku-4-5-20251001 | Haiku 4.5 | 1.00 | 5.00 |
+| claude-fable-5-2 | Fable 5.2 | 8.00 | 40.00 |
+| claude-opus-5-5 | Opus 5.5 | 4.00 | 20.00 |
+| claude-sonnet-5-5 | Sonnet 5.5 | 2.00 | 10.00 |
+| claude-haiku-5-5 | Haiku 5.5 | 0.10 | 0.50 |
+
+Only the latest model of each family is listed. Haiku 5.5 is priced by prompt length ($0.10/$0.50 up to 100K input tokens, $0.50/$2.50 above); the catalog carries the base tier. A session whose stored model is no longer listed keeps sending that id; its picker shows Default until another model is chosen.
 
 Ollama models are still discovered live (FR.12.13) and appended after the Anthropic entries. They carry no price info (`InputPricePerMillion = 0`, `OutputPricePerMillion = 0`).
 

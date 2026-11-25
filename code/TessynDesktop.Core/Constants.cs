@@ -380,7 +380,7 @@ SESSION TRANSCRIPT TO COMPACT:
 		/// truth for both the catalog entry (ClaudeModelService) and the ANTHROPIC_SMALL_FAST_MODEL
 		/// env var (FR.12.20) — both need the versioned ID, not just the "haiku" alias.
 		/// </summary>
-		public const string PreferredModelId = "claude-haiku-4-5-20251001";
+		public const string PreferredModelId = "claude-haiku-5-5";
 	}
 
 	public static class KeyBindings
