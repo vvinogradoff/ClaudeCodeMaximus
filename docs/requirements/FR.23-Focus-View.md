@@ -382,3 +382,11 @@ Feature: [FR.15.16–FR.15.20](/docs/requirements/FR.15-Agent-Orchestration.md).
 - **Other clients.** The same facts and the read-only note on Tessyn Web; the status changes arrive through `attention.changed` (FR.23.16). WPF also listens to `elevated.changed` (tdcp-spec 10.A13) to move between the states without waiting for a refresh.
 - **Docked shell and previews.** The card lives in the Focus panel like any card (FR.6.16) and works in a floating Focus panel. Auto-close rules of previews (FR.29.9) don't apply.
 - **UI Automation.** The command block's name is `Command`, the reason's `Reason`, the folder's `Working directory`; E2E tests read them (TC.ER.01).
+
+
+**FR.23.44 — Answer buttons never overwrite typed text.** (Amends the button behaviour of FR.23.14 and FR.25.22; desktop and web.) Each open card remembers the text its last answer button put in the reply box.
+- **Replace** when the box is empty (or whitespace only), or when it still holds exactly the text the last button put there: clicking `Variant A`, then `Something else (say)`, then `Variant B` leaves `Variant B`.
+- **Append** once the user has typed or edited the box (it differs from what the last button put there): the button's text is added on a new line (trailing whitespace of the box trimmed first) and the remembered text is forgotten, so every later button click appends too. Example: `Variant A`, edited to `Variant A as it looks better`, then `Something else (say)` and `Variant B` give `Variant A as it looks better` / `Something else (say)` / `Variant B` on three lines.
+- **Applies to** the option buttons and the recommendation button (whose text is `Accepted your recommendation: <text>`). Questionnaire fields have no answer buttons that fill text (their Reset returns the recommendation by design) and are unchanged.
+- **Reply drafts** keep surviving refreshes (FR.23.19); the remembered button text lives in the client for as long as the card is shown.
+- The rule is one pure function per client: web `applyButtonAnswer` (`FocusView.tsx`), desktop `FocusButtonAnswer.Apply`.
