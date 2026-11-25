@@ -58,6 +58,9 @@ public sealed partial class FocusItemViewModel : ObservableObject
 	private readonly List<string> _optionTexts = [];
 	private string? _optionsRecommendation;
 
+	/// <summary>What the last answer button put in the reply box; null once the user's own text is there (FR.23.44). Kept while the card is shown.</summary>
+	private string? _lastButtonText;
+
 	public ObservableCollection<FocusRefViewModel> Refs { get; } = [];
 
 	/// <summary>A path written in this card's title or body was activated (Ctrl+click or Invoke, FR.23.30).</summary>
@@ -189,7 +192,7 @@ public sealed partial class FocusItemViewModel : ObservableObject
 			_optionTexts.AddRange(item.Options);
 			_optionsRecommendation = recommendation;
 			Options.Clear();
-			var pick = new Action<string>(text => ReplyText = text);
+			var pick = new Action<string>(PickAnswer);
 			foreach (var option in item.Options)
 				if (recommendation == null || !string.Equals(option.Trim(), recommendation.Trim(), StringComparison.OrdinalIgnoreCase))
 					Options.Add(new FocusOptionViewModel(option, pick));
@@ -253,11 +256,19 @@ public sealed partial class FocusItemViewModel : ObservableObject
 		_owner.OnReplyTextChanged(this);
 	}
 
+	/// <summary>An answer button was clicked: it replaces its own untouched text, otherwise appends (FR.23.44).</summary>
+	public void PickAnswer(string answer)
+	{
+		var next = FocusButtonAnswer.Apply(ReplyText, _lastButtonText, answer);
+		_lastButtonText = next.LastButtonText;
+		ReplyText = next.Text;
+	}
+
 	[RelayCommand]
 	private void AcceptRecommendation()
 	{
 		if (HasRecommendation)
-			ReplyText = Constants.Texts.AcceptedRecommendation + Recommendation;
+			PickAnswer(Constants.Texts.AcceptedRecommendation + Recommendation);
 	}
 
 	[RelayCommand(CanExecute = nameof(HasReply))]

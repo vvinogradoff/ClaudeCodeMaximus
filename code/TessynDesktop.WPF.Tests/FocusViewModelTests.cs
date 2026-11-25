@@ -170,6 +170,43 @@ public sealed class FocusViewModelTests
 		Assert.Equal("Accepted your recommendation: Maybe", item.ReplyText);
 	}
 
+	/// <summary>FR.23.44: untouched button text is replaced; once edited, every button appends on a new line; the remembered text survives a refresh.</summary>
+	[Fact]
+	public async Task AnswerButtons_ReplaceTheirOwnText_ButAppendToEditedText_AcrossARefresh()
+	{
+		Seed("n", Item(1, options: ["Variant A", "Something else (say)", "Variant B"], recommendation: null));
+		using var focus = Create();
+		await focus.SetSessionAsync("n");
+		var item = focus.Items.Single();
+
+		item.Options[0].PickCommand.Execute(null);
+		item.Options[1].PickCommand.Execute(null);
+		await focus.RefreshAsync();
+		item = focus.Items.Single();
+		item.Options[2].PickCommand.Execute(null);
+		Assert.Equal("Variant B", item.ReplyText);
+
+		item.ReplyText = "Variant B as it looks better";
+		item.Options[1].PickCommand.Execute(null);
+		item.Options[0].PickCommand.Execute(null);
+		Assert.Equal("Variant B as it looks better\nSomething else (say)\nVariant A", item.ReplyText);
+	}
+
+	/// <summary>FR.23.44: the recommendation button follows the same rule.</summary>
+	[Fact]
+	public async Task TheRecommendationButton_AppendsToTypedText()
+	{
+		Seed("n", Item(1, options: ["Yes"], recommendation: "Maybe"));
+		using var focus = Create();
+		await focus.SetSessionAsync("n");
+		var item = focus.Items.Single();
+
+		item.ReplyText = "Go ahead, but\n";
+		item.Options[^1].PickCommand.Execute(null);
+
+		Assert.Equal("Go ahead, but\nAccepted your recommendation: Maybe", item.ReplyText);
+	}
+
 	[Fact]
 	public async Task TheRecommendationIsTheLastButton_MarkedAsRecommended_AndOnlyItIs()
 	{
